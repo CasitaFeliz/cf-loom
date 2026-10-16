@@ -5,16 +5,9 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Where it lives
 
 - `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`.
-- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up as a diff in review. It is built from the source alone, offline, and `cf-loom verify` fails if it is out of date.
+- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source alone, offline, and `cf-loom verify` fails if it is out of date.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
-- The Baseline is always read from the registry, never from the committed file.
-
-## Choosing the Baseline
-
-- By default the Baseline is the highest published version, read from the package's list of versions, never from the `latest` tag.
-- A publish on a maintenance line uses the dist-tag `line-<major>`, so `latest` always points at the newest line.
-- A maintenance line (`cf-loom check --line 2`) compares against the highest published `2.x.y` and may only publish a minor or a patch on that line; a Breaking Change there fails.
-- Whatever the line, retired identities, Subscription tombstones and Rejection codes are also checked against the highest published version, so nothing retired on the newest line is reused on an older one.
+- The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
 ## Canonical form
 
@@ -59,8 +52,6 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 - A declared path must already be canonical, or the check fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
-- When two Endpoints with the same method match one URL, the literal segment wins. Adding a path that shadows an existing param path narrows that Endpoint's Input, so it is a Breaking Change on it.
-- A Message name is a Command or an Event, never both, across the whole Contract and its history.
 
 ## Endpoints
 
@@ -114,7 +105,7 @@ Subjects and stream names are derived from these keys at runtime and are not sto
 
 ```json
 "codes": {
-  "ORDER_LOCKED": { "status": 409, "message": "The order can no longer be changed", "body": {}, "removed": false }
+  "ORDER_LOCKED": { "origin": "local", "status": 409, "message": "The order can no longer be changed", "body": {}, "removed": false }
 }
 ```
 
@@ -147,7 +138,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 
 ## Schemas
 
-Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion: a recursive schema is named with `.meta({ id })` and `z.lazy()` refers to it. Only these nodes exist. A zod construct that does not map to one of them fails `generate`.
+Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion: a recursive schema is named with `.meta({ id })` and `z.lazy()` refers to it. Only these nodes exist. A zod construct that does not map to one of them fails `generate` (see [Not allowed in a Contract](COMPATIBILITY.md#not-allowed-in-a-contract)).
 
 | Node | Fields | From zod |
 | --- | --- | --- |
@@ -171,9 +162,4 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 - A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate.
 - `regex` stores the source and flags; two regexes are equal only if both are identical.
 - A query param whose schema is an `array` is a list; anything else, and every path param, is a single value.
-- `z.unknown()` and `z.any()` are not allowed: opaque data is described with `z.record()` or `z.json()`. Any change to or from a `json` node is Breaking.
-- Open Enums and Open Unions are stored with `open: true`. The reader and writer types are generated from that: readers get the declared values plus a tagged Unknown case carrying the raw value (`{ unknown: 'refunded' }`), writers only the declared values.
-
-## Definitions Packages
-
-A Definitions Package's own check judges each schema in all three positions (Input, Success, Message) and takes the strongest class; a change of object strictness counts only with its Input class. A Guard's demands are judged as Input, its Context is Neutral, and Rejections follow the Rejection rules. The verdict that matters to a Service still comes when it adopts the new version.
+- Open Enums and Open Unions are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums and Open Unions](AUTHORING.md#open-enums-and-open-unions) in AUTHORING.md).

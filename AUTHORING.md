@@ -1,6 +1,6 @@
 # Authoring
 
-How a developer writes a Contract and the code that implements and consumes it. Terms are defined in [CONTEXT.md](CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md). This document will later move into the READMEs of the packages.
+How a developer writes a Contract and the code that implements and consumes it. Terms are defined in [CONTEXT.md](CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Packages
 
@@ -50,24 +50,9 @@ src/
 └── main.ts                                starts HTTP and messaging
 ```
 
-File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. The examples below leave out imports of `zod`, `@cf-loom/contract` and sibling files.
+File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
-Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract can be built and published on its own.
-
-`src/contract/index.ts` is not what gets published, and no source file is bundled. `cf-loom publish` generates the package's code from the Snapshot: zod schemas, the writer and reader types, its entry point and package.json, for the Public and Internal Elements that are not Retired, with the Guards, Rejections and schemas they use, plus the Snapshot itself. What is published is therefore exactly what the Snapshot describes, and no Private code can leak into it:
-
-```ts
-// generated entry point of @org/contract-payments-service
-export default {
-  name: 'payments-service',
-  endpoints: { getPayment, createPayment },          // keyed by Endpoint name
-  events: { paymentSettledV1, paymentSettledV2 },    // name with its first letter lower-cased + 'V' + version
-  standardRejections,                                // resolved codes, statuses and messages
-};
-export { snapshot };
-```
-
-Private Elements, Commands, Subscriptions and Dependencies are never exported. Dependencies are recorded in the Snapshot as data, so a Contract Package never imports another one and installing it never pulls in the Services it uses. Schemas from Definitions Packages are written into the generated code, so a Contract Package does not depend on them at runtime. Its package.json declares only `@cf-loom/contract` and `zod`, as peers with a caret range on the versions it was built with. Contract Packages built on different cf-loom majors therefore conflict in one Consumer, so upgrading to a cf-loom major republishes the Contract Package as a major of its own (see [Versioning](COMPATIBILITY.md#versioning)). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+The examples below leave out imports of `zod`, `@cf-loom/contract` and sibling files.
 
 ## Declaring a Contract
 
@@ -75,7 +60,6 @@ Private Elements, Commands, Subscriptions and Dependencies are never exported. D
 
 ```ts
 // src/contract/index.ts
-import { contract } from '@cf-loom/contract';
 import orgDefinitions from '@org/definitions';
 
 export default contract({
@@ -89,11 +73,9 @@ export default contract({
 });
 ```
 
-The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. The Contract Package carries the code of its Public and Internal Elements only. `name` must equal the unscoped part of the `name` in the Service's package.json.
+The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. At most one listed Definitions Package may declare Standard Rejections.
 
-A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
-
-Names follow fixed grammars, so they are safe in code, subjects and broker names: a Service, Application, Definitions Package or Subscription name is kebab-case (`[a-z0-9-]+`); a Group name is kebab-case; an Endpoint or Guard name is camelCase; a Message name is PascalCase; a Rejection code is UPPER_SNAKE_CASE. At most one listed Definitions Package may declare Standard Rejections; without one, cf-loom's defaults apply.
+Names follow fixed grammars, so they are safe in code, subjects and broker names: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`[a-z0-9-]+`); an Endpoint or Guard name is camelCase; a Message name is PascalCase; a Rejection code is UPPER_SNAKE_CASE. A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
 ### Groups and Endpoints
 
@@ -111,7 +93,6 @@ export const ordersGroup = group({
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
 import { money } from '@org/definitions';
-import { apiKey } from '../../guards/api-key.guard';
 
 export const getOrder = endpoint({
   name: 'getOrder',
@@ -156,9 +137,7 @@ export const orderLocked = rejection({
 });
 ```
 
-The three Standard Rejections, invalid input (400), not found (404) and not implemented (501), take their code, status and message from a Definitions Package or from cf-loom's defaults (`INVALID_INPUT`, `NOT_FOUND`, `NOT_IMPLEMENTED`). They are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@cf-loom/contract`. A Caller receives the codes of the *provider's* Definitions Package, not its own.
-
-Should a future cf-loom version add a Standard Rejection, it would apply to every Endpoint, so adopting that version would be an Additive Change for every Service.
+The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@cf-loom/contract`. Their code, status and message come from the Definitions Package listed on the root that declares them (see [Definitions Packages](#definitions-packages)), or from cf-loom's defaults: `INVALID_INPUT` 400, `NOT_FOUND` 404, `NOT_IMPLEMENTED` 501.
 
 ### Guards
 
@@ -203,16 +182,10 @@ An Event's `visibility` is `internal` or `private`. A Command takes none: it is 
 
 ### Lifecycle
 
-Any Element takes `lifecycle: 'deprecated'`. To retire it, mark it `lifecycle: 'retired'` and publish; this needs the Element Deprecated in the Baseline, no Dependency using it, and, for an Endpoint, a Breaking Change Approval (see [Retirement](COMPATIBILITY.md#retirement)). `handlers.generated.ts` leaves Retired Elements out, so their Handlers may then be deleted.
-
-At runtime:
-
-- A Deprecated Endpoint still works, and every response carries a `Deprecation` header; the client warns once per method.
-- A Retired Endpoint answers 410 with `RETIRED` while it is still declared. Like a Fault, this is outside the Contract: Callers receive it as a Fault with `committed: 'no'` and `retryable: false`.
-- A Retired Message cannot be published or sent (a type error), and its Handler is no longer consumed.
-- Once a published Baseline records an Element as Retired, its declaration may be deleted: `cf-loom publish` carries every Retired Element forward from the Baseline into the new Snapshot, so its identity is never reused. A deleted Endpoint answers like any undeclared method and path: 404 with `NO_SUCH_ENDPOINT`, a Fault for the client, never the not-found Rejection.
+Any Element takes `lifecycle: 'deprecated'`:
 
 ```ts
+// src/contract/events/order-created.v1.event.ts
 export const orderCreatedV1 = event({
   name: 'OrderCreated',
   version: 1,
@@ -221,6 +194,15 @@ export const orderCreatedV1 = event({
   body: z.object({ orderId: z.uuid(), total: z.number() }),
 });
 ```
+
+To retire it, mark it `lifecycle: 'retired'` and publish; this needs the Element Deprecated in the Baseline, no Dependency using it, and, for an Endpoint, a Breaking Change Approval (see [Retirement](COMPATIBILITY.md#retirement)). `handlers.generated.ts` leaves Retired Elements out, so their Handlers may then be deleted. Once a published Baseline records the Element as Retired, its declaration may be deleted too: `cf-loom publish` carries every Retired Element forward from the Baseline as a tombstone, so its identity is never reused (see [Lifecycle and tombstones](SNAPSHOT.md#lifecycle-and-tombstones)).
+
+At runtime:
+
+- A Deprecated Endpoint still works, and every HTTP response carries a `Deprecation` header; the client warns once per method.
+- A Deprecated Event is still published until it is Retired, so Subscribers that have not moved on keep receiving it. A Deprecated Command is not sent, but its CommandHandler keeps running to drain what is already queued.
+- A Retired Endpoint that is still declared answers 410 with `RETIRED`, which Callers receive as a Fault (see [Consuming a Contract](#consuming-a-contract)). Once deleted, it answers like any undeclared method and path: 404 with `NO_SUCH_ENDPOINT`, also a Fault, never the not-found Rejection.
+- A Retired Message cannot be published or sent (a type error), and its Handler is not consumed.
 
 ### Open Enums and Open Unions
 
@@ -264,6 +246,23 @@ export const notifyOnSettled = subscription({
 
 `name` is unique in the Service and names the Subscription's durable queue (`orders-service_notify-on-settled`). The Event is the Service's own or one listed in a Dependency. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
 
+## The Contract Package
+
+`cf-loom publish` generates the Contract Package's code from the Snapshot; no source file is bundled. It writes the zod schemas, the writer and reader types, the entry point and the package.json for the Public and Internal Elements that are not Retired, with the Guards, Rejections and schemas they use, plus the Snapshot itself. What is published is exactly what the Snapshot describes, and no Private code can leak into it:
+
+```ts
+// generated entry point of @org/contract-payments-service
+export default {
+  name: 'payments-service',
+  endpoints: { getPayment, createPayment },          // keyed by Endpoint name
+  events: { paymentSettledV1, paymentSettledV2 },    // name with its first letter lower-cased + 'V' + version
+  standardRejections,                                // resolved codes, statuses and messages
+};
+export { snapshot };
+```
+
+Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@cf-loom/contract` and `zod`, as peers with a caret range on the versions it was built with. Contract Packages built on different cf-loom majors conflict in one Consumer, so a cf-loom major republishes the Contract Package as a major of its own (see [Versioning](COMPATIBILITY.md#versioning)). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+
 ## Implementing a Contract
 
 `cf-loom generate` writes a stub for every Handler that does not exist yet, never overwriting one, and regenerates `handlers.generated.ts`. A stub is `export default handle.stub(getOrder)`, which marks the Handler as not implemented; implementing it means replacing that line with `handle(getOrder, async (…) => …)`. `serve` answers the not-implemented Rejection for an EndpointHandler stub, and for every Endpoint attaching a GuardHandler stub, which never admits. `consume` does not consume a Message Handler stub and logs a warning; its Messages wait in the broker, within the organization's retention, until a Release with the real Handler drains them. Either way a Contract can be merged and published before it is implemented. A missing Handler is a type error.
@@ -273,9 +272,6 @@ export const notifyOnSettled = subscription({
 ```ts
 // src/endpoints/orders/get-order.handler.ts
 import { handle, reject, success } from '@cf-loom/handlers';
-import { notFound } from '@cf-loom/contract';
-import { getOrder } from '../../contract/endpoints/orders/get-order.endpoint';
-import { orderLocked } from '../../contract/rejections/order-locked.rejection';
 
 export default handle(getOrder, async ({ params }, context) => {
   const order = await orders.find(params.orderId, context.apiKey.clientId);
@@ -285,9 +281,9 @@ export default handle(getOrder, async ({ params }, context) => {
 });
 ```
 
-- The first argument is the validated input; the second is the Context, one key per attached Guard.
+- The first argument is the validated Input; the second is the Context, one key per attached Guard.
 - Only the Endpoint's Rejections type-check in `reject`, each with its declared body.
-- Anything thrown becomes a Fault with `committed: 'unknown'` and `retryable: false`, because a Caller cannot know whether it may retry. Message Handlers differ: there a throw has the Message delivered again. A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`.
+- Anything thrown becomes a Fault with `committed: 'unknown'` and `retryable: false`, because a Caller cannot know whether it may retry. A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`. Message Handlers differ: there a throw has the Message delivered again (see [Message Handlers](#message-handlers)).
 
 ### GuardHandler
 
@@ -302,16 +298,7 @@ export default handle(apiKey, async ({ headers }) => {
 
 A GuardHandler receives only what its Guard demands. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them; the first Rejection stops the request.
 
-### Messages
-
-```ts
-// src/subscriptions/notify-on-settled.handler.ts
-export default handle(notifyOnSettled, async (body, { messageId, factId }) => {
-  await notifications.send(body.paymentId);
-});
-```
-
-Returning acknowledges the Message; throwing, or a Fault with `retryable: true`, has it delivered again; a Fault with `retryable: false` ends it without redelivery and logs it. How often and how fast a Message is delivered again, and what happens after the last attempt, belong to the organization's broker configuration. A Message that fails its schema never reaches the Handler: it is ended without redelivery and logged with its subject, ids and the validation errors; where it goes next is the organization's broker configuration. Messages are validated with reader schemas built from the Snapshot, in which every object is open, whatever the author wrote. Delivery is at least once, so every Message Handler must be safe to run again. A CommandHandler has the same shape.
+### Messaging
 
 The EventPublisher and CommandSender are created once, in their own module, and imported where needed:
 
@@ -328,6 +315,10 @@ const broker = jetstream({
 export const { publisher, sender, consume, connect, close } = messaging(contract, broker);
 ```
 
+Creating `messaging` opens no connection, so importing a Handler, in a test for example, has no side effect. The Service calls `connect()` at startup so a broker problem fails there rather than inside a request, and `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
+
+### Publishing and sending
+
 ```ts
 // in any Handler
 import { publisher, sender } from '../../messaging';
@@ -339,26 +330,41 @@ await publisher.publish('OrderCreated', {
 await sender.send('ChargeCard', { orderId });
 ```
 
+`publish` takes an Event's name and one body for each of its Active and Deprecated versions: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. `send` takes a Command's name and sends its one Active version. Both validate the body before it leaves.
+
+All the Messages of one call share a Fact id, which every Message Handler receives to recognize a fact it already handled. The Fact id is random unless the caller passes one:
+
+```ts
+await publisher.publish('OrderCreated', { v1, v2 }, { factId: `${order.id}:created` });
+```
+
+Each Message is sent with `<factId>.v<version>` as its broker message id (JetStream's `Nats-Msg-Id`), so the broker drops a duplicate within its deduplication window. If any version fails, `publish` throws, and the caller retries the whole call with the same Fact id: versions already sent are dropped as duplicates. How long that window lasts is the organization's broker configuration; beyond it, Handlers still recognize the fact by its id.
+
+### Message Handlers
+
+```ts
+// src/subscriptions/notify-on-settled.handler.ts
+export default handle(notifyOnSettled, async (body, { messageId, factId }) => {
+  await notifications.send(body.paymentId);
+});
+```
+
+A CommandHandler has the same shape. Delivery is at least once, so every Message Handler must be safe to run again. Returning acknowledges the Message; throwing, or a Fault with `retryable: true`, has it delivered again; a Fault with `retryable: false` ends it without redelivery and logs it. How often and how fast a Message is delivered again, and what happens after the last attempt, belong to the organization's broker configuration.
+
+Messages are validated with reader schemas built from the Snapshot, in which every object is open. A Message that fails its schema never reaches the Handler: it is ended without redelivery and logged with its subject, ids and the validation errors; where it goes next is the organization's broker configuration.
+
+### The broker
+
 Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one broker.
 
-cf-loom derives what the broker must hold but does not decide how it gets there. `cf-loom broker-plan` prints the desired state from the Snapshots: each stream and its subjects, each Subscription's durable consumer and the stream it reads, each Command Version's consumer (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with), the consumers left over from removed Subscriptions and Retired Command Versions, and which subjects each Service may publish and subscribe to. The organization chooses when and how to apply it, and with which retention, replicas and permissions: with the adapter's `apply`, in a deploy step, or from its own infrastructure tooling. Nothing applies it by default.
+`cf-loom broker-plan` prints the desired state from the Snapshots: each stream and its subjects, each Subscription's durable consumer and the stream it reads, each Command Version's consumer (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with), the consumers left over from removed Subscriptions and Retired Command Versions, and which subjects each Service may publish and subscribe to. Nothing applies it by default (see [Messages](ARCHITECTURE.md#messages) in ARCHITECTURE.md); the organization applies it with the adapter's `apply`, in a deploy step, or from its own infrastructure tooling:
 
 ```ts
 await broker.apply(plan, limits);                    // creates and updates, never removes
 await broker.apply(plan, limits, { prune: true });   // also deletes orphaned consumers
 ```
 
-`plan` is the JSON `cf-loom broker-plan --json` printed; computing it needs the Baseline and the registry, which a running Service does not have. Without `prune`, `apply` only creates streams and consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs. Pruning deletes the consumers of removed Subscriptions and Retired Command Versions, so it runs only once the Release that dropped them is no longer running (see the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md)).
-
-Creating `messaging` opens no connection, so importing a Handler, in a test for example, has no side effect. The Service calls `connect()` at startup so a broker problem fails there rather than inside a request, and `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
-
-`publish` takes an Event's name and one body for each of its Active and Deprecated versions: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. All the Messages of one call share a fact id, which every Message Handler receives (`{ messageId, factId }`) to recognize a fact it already handled. `send` takes a Command's name and sends its one Active version, since a Deprecated Command cannot be sent; it gives its Message a fact id the same way. Both validate the body before it leaves.
-
-```ts
-await publisher.publish('OrderCreated', { v1, v2 }, { factId: `${order.id}:created` });
-```
-
-The fact id is random unless the caller passes one. Each Message is sent with `<factId>.v<version>` as its broker message id (JetStream's `Nats-Msg-Id`), so the broker drops a duplicate within its deduplication window. If any version fails, `publish` throws, and the caller retries the whole call with the same fact id: versions already sent are dropped as duplicates. How long that window lasts is the organization's broker configuration; beyond it, Handlers still recognize the fact by its id.
+`plan` is the JSON `cf-loom broker-plan --json` printed; computing it needs the Baseline and the registry, which a running Service does not have. Without `prune`, `apply` only creates streams and consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs. Pruning deletes the consumers of removed Subscriptions and Retired Command Versions, so it runs only once the Release that dropped them is no longer running (see the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages)).
 
 ### Serving
 
@@ -371,16 +377,14 @@ import handlers from './handlers.generated';
 import { connect, consume, close } from './messaging';
 
 await connect();
-const app = serve(contract, handlers);       // (Request) => Promise<Response>
-nodeHttp(app).listen(3000);
+const http = serve(contract, handlers);      // (Request) => Promise<Response>
+nodeHttp(http).listen(3000);
 await consume(handlers);
 
 process.on('SIGTERM', () => close());
 ```
 
-`serve` refuses a body over 1 MB with `BODY_TOO_LARGE`, a safety default that `serve(contract, handlers, { maxBodyBytes })` overrides. The limit is operational, not part of the Contract.
-
-The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; adapters only connect it to a host.
+`serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](ARCHITECTURE.md#runtime)). It refuses a body over 1 MB with `BODY_TOO_LARGE`, a safety default that `serve(contract, handlers, { maxBodyBytes })` overrides. The limit is operational, not part of the Contract.
 
 ## Consuming a Contract
 
@@ -405,13 +409,13 @@ switch (outcome.kind) {
 }
 ```
 
-The client has one method per declared Endpoint, named after it, and returns an Outcome: it never throws for a Rejection or a Fault. It reads the provider's Standard Rejection codes from the provider's Contract Package.
+The client has one method per Endpoint listed in the Dependency, named after it, and returns an Outcome: it never throws for a Rejection or a Fault. It reads the provider's Standard Rejection codes from the provider's Contract Package, so a Caller receives the provider's codes, not its own.
 
 A Rejection travels with its declared status and a body cf-loom defines, `{ rejection: { code, message, body } }`. Rejection codes are open for Callers. A Rejection Outcome carries `known`: when `true`, `code` is one of the declared codes and `body` its declared type; when `false`, the client did not know the code, and `code` is the raw string and `body` unvalidated. Checking `known` first lets TypeScript narrow by code.
 
-A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404) and `BODY_TOO_LARGE` (413) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. A response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
+A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404) and `BODY_TOO_LARGE` (413) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. An HTTP response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
 
-| Response | Fault |
+| HTTP response | Fault |
 | --- | --- |
 | No connection, or 429 / 503 without a Fault body | `committed: 'no'`, `retryable: true` |
 | Anything else (502, 504, a timeout or reset after sending…) | `committed: 'unknown'`, `retryable: false` |
@@ -485,9 +489,9 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom add-command <Name> [--version n]` | Creates a Command, or its next Message Version |
 | `cf-loom add-subscription <name> [<service>] <Name>@<n>` | Creates a Subscription to an Event, the Service's own unless `<service>` is given, in which case the Event is also added to the Dependencies |
 | `cf-loom add-dependency <service> <element>` | Adds an Element of an installed Contract Package to the Dependencies: an Endpoint by name, an Event as `<Name>@<n>` |
-| `cf-loom generate` | Writes the stub of every missing Handler and regenerates `handlers.generated.ts` |
+| `cf-loom generate` | Writes the stub of every missing Handler, regenerates `handlers.generated.ts` and writes `contract.snapshot.json` |
 | `cf-loom broker-plan [--prefix <p>] [--json]` | Prints the streams, consumers, orphaned consumers and permissions the broker must hold |
 | `cf-loom route-plan [--json]` | Prints every route with its Visibility, and the Retired ones, for the organization's gateway or ingress |
 | `cf-loom verify` | Fails if a generated file was edited or is out of date |
 | `cf-loom check [--line <major>] [--json]` | Runs the Compatibility Check against the Baseline; a distinct exit status means the change needs a Breaking Change Approval |
-| `cf-loom publish [--line <major>] [--force]` | Builds the Contract, writes the Snapshot, derives the version and publishes the Contract Package |
+| `cf-loom publish [--line <major>] [--force]` | Builds the Contract, writes the Snapshot, derives the version and publishes the Contract Package; does nothing when nothing changed unless `--force` |

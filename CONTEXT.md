@@ -51,7 +51,7 @@ _Avoid_: access, exposure, scope (for Visibility)
 ### HTTP
 
 **Endpoint**:
-One HTTP method on one literal path, which identify it, with a name for code, the schemas of its input, its Success and its Rejections, and the Guards it attaches.
+One HTTP method on one literal path, which identify it, with a name for code, the schemas of its Input, its Success and its Rejections, and the Guards it attaches.
 _Avoid_: route, operation, action, call
 
 **Group**:
@@ -62,8 +62,12 @@ _Avoid_: router, family, tag
 A reusable requirement an Endpoint attaches explicitly: what it demands from the request, the Context it provides, and the Rejections it may answer instead of admitting the request.
 _Avoid_: middleware, policy, interceptor
 
+**Input**:
+What the Caller sends to an Endpoint: its path params, query params, headers and body, validated against the Endpoint's schemas.
+_Avoid_: arguments, payload
+
 **Context**:
-What the Guards of an Endpoint provide to its EndpointHandler, as opposed to the input the Caller sent.
+What the Guards of an Endpoint provide to its EndpointHandler, as opposed to the Input the Caller sent.
 _Avoid_: locals, principal, session
 
 **Outcome**:
@@ -87,7 +91,7 @@ A technical failure any Endpoint or Message Handler can produce and none declare
 _Avoid_: error, server error, operation failure
 
 **Open Enum**, **Open Union**:
-An enum, or a discriminated union, declared open: its readers must handle values or variants they do not know.
+An enum, or a discriminated union, declared open: its readers receive values or variants they do not know as a tagged **Unknown** case and must handle it.
 _Avoid_: extensible enum, loose enum
 
 ### Messaging
@@ -105,11 +109,11 @@ A fact a Service publishes about something that already happened, for any number
 _Avoid_: message (covers both kinds), notification, signal
 
 **Message Version**:
-One numbered version of a Command or Event (`PaymentCreated` v2), declared anew to carry an incompatible change and living side by side with the previous one. Each is its own Element.
+One numbered version of a Command or Event (`PaymentCreated@2`), declared anew to carry an incompatible change and living side by side with the previous one. Each is its own Element.
 _Avoid_: schema version, major (that is the Contract Package's version)
 
 **Fact id**:
-The id shared by every Message Version one `publish` call sends for the same fact, so a Handler can recognize a fact it already handled.
+The id shared by every Message one `publish` or `send` call sends for the same fact, so a Handler can recognize a fact it already handled.
 _Avoid_: correlation id, event id
 
 **Release**:
@@ -178,7 +182,7 @@ _Avoid_: patch change, cosmetic change
 The published versions of a Contract Package that share a major. The newest line is the default; an older one is a maintenance line.
 _Avoid_: branch, track
 
-**Breaking Change Approval**:
+**Breaking Change Approval** (an Approval, for short):
 An explicit approval, tied to the exact commit, that lets a Breaking Change merge.
 _Avoid_: authorization, sign-off, label
 
