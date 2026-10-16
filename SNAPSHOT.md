@@ -4,16 +4,16 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 ## Where it lives
 
-- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`.
+- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`. The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
 - `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source alone, offline, and `cf-loom verify` fails if it is out of date.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
 ## Canonical form
 
-- JSON, UTF-8, object keys sorted, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version` and `generator`.
-- Arrays whose order means nothing (Guards' Rejections, an enum's values, Dependencies) are sorted; arrays whose order matters (an Endpoint's Guards, a tuple's items) keep it.
-- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`. `publish` compares it with the Baseline's to tell whether anything changed.
+- JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version` and `generator`.
+- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service and each one's `endpoints` by `id`, `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a tuple's items) keep it.
+- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
 
 ## Top level
 
@@ -37,18 +37,35 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 }
 ```
 
-- `format` is the version of this specification; `generator` the cf-loom CLI that wrote the file.
+- `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file.
 - `kind` is `service`, `application` or `definitions`. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `guards`, `schemas` (its shared schemas by name), `codes`, `standardRejections` and `defs`.
 - `definitions` lists every Definitions Package the Contract uses, at the exact version resolved.
 
+A Definitions Package's Snapshot:
+
+```json
+{
+  "format": 1,
+  "kind": "definitions",
+  "name": "definitions",
+  "version": "4.2.0",
+  "generator": "@cf-loom/cli@2.1.0",
+  "standardRejections": { "invalidInput": {}, "notFound": {}, "notImplemented": {} },
+  "defs": {},
+  "schemas": { "money": {}, "pagination": {} },
+  "guards": {},
+  "codes": {}
+}
+```
+
 ## Identities
 
-| Element | Key | Example |
+| Element | Identity | Example |
 | --- | --- | --- |
 | Endpoint | Method and path, params replaced by `{}` | `GET /orders/{}` |
 | Event, Command | Name and version | `OrderCreated@2` |
 | Subscription | Its name | `notify-on-settled` |
-| Another Service's Element | Service, then the key above | `payments-service:PaymentSettled@1` |
+| Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
 
 - A declared path must already be canonical, or the check fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
@@ -71,7 +88,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
     "body": null
   },
   "success": { "status": 200, "body": { "type": "object", "mode": "open", "fields": {} } },
-  "rejections": ["INVALID_INPUT", "NOT_FOUND", "NOT_IMPLEMENTED", "ORDER_LOCKED", "UNAUTHENTICATED"]
+  "rejections": ["BAD_REQUEST", "NOT_FOUND", "NOT_IMPLEMENTED", "ORDER_LOCKED", "UNAUTHENTICATED"]
 }
 ```
 
@@ -86,7 +103,11 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 "commands": { "ChargeCard@1":   { "lifecycle": "active", "description": "", "body": {} } }
 ```
 
-Subjects and stream names are derived from these keys at runtime and are not stored.
+Subjects and stream names are derived from these identities at runtime and are not stored.
+
+## Origin
+
+`origin`, on a Guard, a code or a schema node, says where it was declared: `"local"`, `"standard"` (a Standard Rejection's code with cf-loom's defaults) or the Definitions Package and version it came from, `"@org/definitions@4.2.0"`, with `#<name>` for a shared schema, `"@org/definitions@4.2.0#money"`. A clone of a shared schema (`money.describe('…')`) is a new schema and carries no `origin`. `origin` is Neutral.
 
 ## Guards
 
@@ -99,8 +120,6 @@ Subjects and stream names are derived from these keys at runtime and are not sto
 }
 ```
 
-`origin` is `local` or the Definitions Package and version it came from.
-
 ## Rejection codes
 
 ```json
@@ -109,14 +128,14 @@ Subjects and stream names are derived from these keys at runtime and are not sto
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin` (`local`, a Definitions Package, or `standard`): the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and origin of each Standard Rejection, and the invalid-input body cf-loom defines.
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. `status` is 4xx (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md). `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](AUTHORING.md#rejections) in AUTHORING.md).
 
 ## Subscriptions and Dependencies
 
 ```json
 "subscriptions": {
   "notify-on-settled": { "event": "payments-service:PaymentSettled@1" },
-  "legacy-sync": { "removedIn": "3.2.0" }
+  "legacy-sync": { "event": "orders-service:OrderCreated@1", "removedIn": "3.2.0" }
 },
 "dependencies": {
   "payments-service": {
@@ -127,8 +146,8 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone; its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)), and tombstones are how `broker-plan` finds consumers to remove.
-- A Dependency records the provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
+- A removed Subscription stays as a tombstone that keeps its Event; its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)), and tombstones are how `broker-plan` finds the consumers to remove and the streams they read.
+- A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones
 
@@ -138,28 +157,40 @@ Every code that ever existed in the Contract stays here, with the status and bod
 
 ## Schemas
 
-Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion: a recursive schema is named with `.meta({ id })` and `z.lazy()` refers to it. Only these nodes exist. A zod construct that does not map to one of them fails `generate` (see [Not allowed in a Contract](COMPATIBILITY.md#not-allowed-in-a-contract)).
+Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion (see [Recursion](#recursion)). `generate` walks each schema's `_zod.def`, never `instanceof`, so `zod/mini` works too, and maps only the nodes and checks below; anything else fails `generate` (see [Not allowed](#not-allowed)).
 
 | Node | Fields | From zod |
 | --- | --- | --- |
-| `string` | `format?`, `regex?`, `min?`, `max?` | `z.string()`, `z.uuid()`, `z.email()`, `z.iso.datetime()`… |
+| `string` | `format?`, `formatOptions?`, `regex?`, `min?`, `max?` | `z.string()`, `z.uuid()`, `z.email()`, `z.iso.datetime()`… |
 | `number` | `int?`, `min?`, `max?`, `exclusiveMin?`, `exclusiveMax?`, `multipleOf?` | `z.number()`, `z.int()` |
 | `boolean` | | `z.boolean()` |
 | `literal` | `value` | `z.literal()` |
 | `enum` | `values`, `open` | `z.enum()`, `openEnum()`, a union of literals |
-| `object` | `mode` (`open` or `strict`), `fields` | `z.object()`, `z.strictObject()`, an intersection of objects, `z.record()` with an enum or literal key (zod requires every key, so each becomes a required field) |
-| `record` | `key`, `value`, `min?`, `max?` | `z.record()` with a string key, `z.partialRecord()` |
+| `object` | `mode` (`open` or `strict`), `fields` | `z.object()`, `z.strictObject()`, an intersection of objects; `z.record()` with an enum or literal key is `strict` with every key a required field, and `z.partialRecord()` is `strict` with every key optional |
+| `record` | `key`, `value`, `min?`, `max?` | `z.record()` with a string key |
 | `array` | `items`, `min?`, `max?` | `z.array()` |
-| `tuple` | `items` | `z.tuple()` |
+| `tuple` | `items`, `rest?` | `z.tuple()` |
 | `union` | `options` | `z.union()` |
-| `tagged` | `discriminator`, `variants` (by value), `open` | `z.discriminatedUnion()`, `openUnion()` |
+| `tagged` | `discriminator`, `variants` (keyed by the canonical JSON of each discriminator value), `open` | `z.discriminatedUnion()`, `openUnion()` |
 | `allOf` | `items` | any other intersection |
 | `json` | | `z.json()`: any JSON value |
-| `ref` | `name` | `z.lazy()` |
+| `ref` | `name` | the schema that closes a cycle |
 
-- `.describe()` and `.meta()` are allowed and only set `description`, `examples` and the recursion `id`.
-- Every node may carry `nullable`, `description`, `examples` and `origin` (the Definitions Package schema it came from). `description`, `examples` and `origin` are Neutral.
+- Only declared checks map to constraints: min and max length, an exact length (`min` equal to `max`), greater and less than (inclusive as `min` and `max`, exclusive as `exclusiveMin` and `exclusiveMax`), `multipleOf`, `int`, a known string format and `regex`. `z.int()` is `int: true` and nothing more: no safe-integer bounds are implied.
+- `format` carries its options as `formatOptions` (`{ "format": "datetime", "formatOptions": { "offset": true, "precision": 3 } }`).
+- `regex` stores `source` and `flags` as `RegExp.prototype.source` and `RegExp.prototype.flags` give them; two regexes are equal only if both are identical.
+- `enum.values` and a `literal`'s `value` keep their JSON type: `true` and `"true"` are different values, and `variants` keys them by their canonical JSON (`true`, `"true"`), so they never collide.
+- An intersection of objects is one `object` only when every item is open and the keys they share have identical schemas; otherwise `generate` fails. Prefer `.extend()`.
+- `.describe()` and `.meta()` are allowed and only set `description`, `examples` and the recursion `id`; any other `.meta()` key fails `generate`.
+- Every node may carry `nullable`, `description`, `examples` and `origin` (see [Origin](#origin)). `description` and `examples` are Neutral.
 - A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate.
-- `regex` stores the source and flags; two regexes are equal only if both are identical.
 - A query param whose schema is an `array` is a list; anything else, and every path param, is a single value.
 - Open Enums and Open Unions are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums and Open Unions](AUTHORING.md#open-enums-and-open-unions) in AUTHORING.md).
+
+### Recursion
+
+A cycle is detected as the same schema instance met again during the walk, through a getter (`get children() { return z.array(node); }`) or `z.lazy()`, which is transparent. The schema that closes the cycle must be named with `.meta({ id })`, or `generate` fails; it is written once under `defs`, keyed by that id, and `ref` points at it. Ids are read from the schema's own `.meta()`, never from zod's global registry, and are unique within the Snapshot: two schemas with the same id, local or from Definitions Packages, fail `generate`. `.meta({ id })` on a schema that closes no cycle is ignored, and the schema stays inline.
+
+### Not allowed
+
+A zod construct that does not map to a node or check above fails `generate`. Among them: `.default()`, `.prefault()`, `.catch()`, `.transform()`, `.preprocess()`, `.pipe()`, `.refine()`, `.superRefine()`, `.check()` and any custom check, `z.custom()`, `z.codec()`, `z.coerce.*`, `z.date()` (use `z.iso.datetime()`), `z.stringbool()`, `z.templateLiteral()`, `z.unknown()` and `z.any()` (use `z.record()` or `z.json()`), `.passthrough()`, `.catchall()` and `z.looseObject()` (use `z.record()` for dynamic keys), the mutating checks `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()` and `.overwrite()`, `.startsWith()`, `.endsWith()` and `.includes()`, `.brand()`, `.readonly()`, numeric `z.enum()` values, `.optional()` anywhere but directly on an object field, a standalone `z.null()`, `z.undefined()` or `z.literal(null)` (use `nullable`), and a discriminated union variant whose discriminator has several values.

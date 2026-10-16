@@ -10,7 +10,7 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 ## Where Contracts live
 
-- One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, next to its `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
+- One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
 - A Contract is published as exactly one Contract Package carrying its Public and Internal Elements and its Snapshot. Its Dependencies are data in the Snapshot, never imports: a Contract Package depends on no other Contract Package. Its code is generated from its Snapshot, with Definitions Packages' schemas written in, so it depends only on `zod` and `@cf-loom/contract`, as peers.
 - The Snapshot also describes Private Elements, so they have a Baseline. Their shapes are readable by anyone with access to the registry; only their code stays out of the package.
 - Applications publish a Contract that holds only Dependencies, so every use of a Service's Elements is known.
@@ -18,15 +18,15 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 ## Shapes, not behavior
 
 - A Contract describes shapes and declarative constraints only: no defaults, transforms, refinements, coercion or custom validation (see [Not allowed in a Contract](COMPATIBILITY.md#not-allowed-in-a-contract)). What happens when an optional input is missing, and any check beyond a declarative constraint, belongs to the Handler and is expressed as a Rejection.
-- The tooling validates what is written before sending it (Success, Rejection bodies, Messages), and whoever reads a Success, a Rejection body or a Message ignores fields it does not know. Only the Service reading its Input enforces a strict object.
-- Path params, query params and headers travel as text; the tooling converts them to their declared types.
+- The tooling validates what is written before sending it (Success, Rejection bodies, Messages) and sends the parsed value, unknown keys stripped, so nothing carries an undeclared field; whoever reads a Success, a Rejection body or a Message ignores fields it does not know. Only the Service reading its Input enforces a strict object.
+- Path params, query params and headers travel as text; how they are converted to their declared types is in [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md.
 
 ## Runtime
 
-- The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; adapters connect it to a host (`node:http` first).
-- Messaging runs behind a broker interface; adapters connect it to a broker (NATS JetStream first). A broker client is an optional peer dependency, installed only where its adapter is used. An in-memory adapter serves tests and local development.
-- Testing support stays within what follows from Contracts: a Service's own code is tested through the public API, and `@cf-loom/testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
-- An EndpointHandler that is not implemented yet answers the not-implemented Standard Rejection, and a Message Handler that is not implemented yet is not consumed, so its Messages wait in the broker. A Contract can be merged and published before its implementation.
+- The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; an adapter connects it to a host, and cf-loom ships one for `node:http`.
+- Messaging runs behind a broker interface; an adapter connects it to a broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development. A broker client is an optional peer dependency, installed only where its adapter is used.
+- Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@cf-loom/handlers`, and `@cf-loom/testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
+- A Contract can be merged and published before its Handlers are implemented; how a stub behaves is in [Implementing a Contract](AUTHORING.md#implementing-a-contract) in AUTHORING.md.
 
 ## Visibility and Guards
 
@@ -39,23 +39,23 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 ## Endpoints
 
 - An Endpoint declares its literal path and everything it requires. Groups only organize; they add no prefix and no Guards.
-- When two Endpoints with the same method match one URL, the literal segment wins.
+- When two Endpoints with the same method match one URL, routing precedence decides (see [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md).
 - A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. Each Service writes its own GuardHandler, even for an imported Guard.
 - An EndpointHandler receives the Caller's Input and the Context its Guards provided, and answers an Outcome.
 
 ## Messages
 
-- Delivery is at least once; a Command is handled by one CommandHandler, and every Handler must be safe to run again.
+- Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [Messages](AUTHORING.md#messages) in AUTHORING.md). A Command is handled by one CommandHandler, and every Handler must be safe to run again.
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract: one stream per Service, and one subject per Message Version made of the Service, the kind, the name and the version (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md).
 - cf-loom derives the broker's desired state (streams, consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization. Visibility is enforced at the broker only if the organization applies the derived permissions.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it. A Service retiring an Event it subscribes to itself keeps that Subscription until the retiring Release. The tools do not know when a Release is deployed; this is an operating rule.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it. The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 
-- A Service or Application reaches another Service only through a Dependency, declared with the tools, which then enable the typed client or the EventHandler stub. Code cannot call what was not declared.
+- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which then enable the typed client or the EventHandler stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
-- Published Dependencies form the dependency graph the Compatibility Check reads before an Element is retired or its Visibility narrowed: the highest published version of each live line of every Contract Package, Applications' included. A live line is the newest line or one still tagged `line-<major>`; a maintenance line ends when that tag is removed. A Consumer whose deployed Release is older than its line's highest publish is covered by the deploy rule.
-- npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. cf-loom ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry, and a fixed list for tests. Versions and Snapshots always come from the standard package metadata.
-- The directory fails closed: any error, paging limit or package whose Snapshot cannot be read fails the check, and `publish` fails if the package it just published is missing from the directory, read with the same credentials the check uses, which must be able to read the whole scope.
+- Published Dependencies form the dependency graph the Compatibility Check reads before an Element is retired or its Visibility narrowed: the highest published version of each live line of every Contract Package, Applications' included. A live line is the newest line or one still tagged `line-<major>`; a maintenance line ends when that tag is removed. A Consumer whose deployed Release is older than its line's highest publish is covered by the deploy rule. The graph is read from each package's `cfLoom` metadata in the registry (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md); only the Baseline's `snapshot.json` is downloaded.
+- npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. cf-loom ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry, and a fixed list for tests. Versions and metadata always come from the standard package metadata.
+- The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. `publish` records the package in the directory before publishing to the registry (the git-repository directory writes and pushes), then re-reads the directory and fails if the package is missing from it; the no-op path of `publish` verifies membership too. The directory is read with the same credentials the check uses, which must be able to read the whole scope.

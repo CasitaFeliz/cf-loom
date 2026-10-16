@@ -1,6 +1,6 @@
 # cf-loom
 
-Tooling for defining, publishing, verifying and consuming the Contracts of services: their HTTP Endpoints, their Messages and what they depend on. A Contract is the single source of truth for what a Service offers and what it requires; Handlers implement it and Consumers use it.
+Tooling for defining, publishing, verifying and consuming the Contracts of Services: their HTTP Endpoints, their Messages and what they depend on. A Contract is the single source of truth for what a Service offers and what it requires; Handlers implement it and Consumers use it.
 
 This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILITY.md) (how a Contract may change) and [ARCHITECTURE.md](ARCHITECTURE.md) (how the pieces fit); [AUTHORING.md](AUTHORING.md) shows how a Contract is written, and [SNAPSHOT.md](SNAPSHOT.md) specifies the Snapshot.
 
@@ -9,11 +9,11 @@ This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILI
 ### Contract and its parties
 
 **Contract**:
-The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints and Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies), and the Guards its Endpoints attach.
+The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints, Internal Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies), and the Guards its Endpoints attach.
 _Avoid_: schema (overloaded with the zod schemas inside a Contract), registry (for the Contract itself), API definition
 
 **Element**:
-A declared part of a Contract that has a Visibility and a lifecycle: an Endpoint, an Event or a Command.
+A declared part of a Contract that has a Visibility and a lifecycle: an Endpoint or a Message Version (of an Event or a Command).
 _Avoid_: item, entry, member
 
 **Contract Package**:
@@ -123,8 +123,12 @@ _Avoid_: deployment, build, instance
 ### Dependencies
 
 **Dependency**:
-A declaration, in a Contract, that its owner uses a Public or Internal Element of another Service: an Endpoint it calls or an Event it subscribes to.
+A declaration, in a Contract, that its owner uses a Public or Internal Element of another Service, the Provider: an Endpoint it calls or an Event it subscribes to.
 _Avoid_: import, integration, upstream
+
+**Provider**:
+The Service whose Element a Dependency targets.
+_Avoid_: upstream, producer, server
 
 **Subscription**:
 A declaration that a Service receives an Event, its own or another Service's. A Subscription to another Service's Event is also a Dependency.
@@ -163,7 +167,7 @@ The Snapshot of the highest published version of a Contract Package or Definitio
 _Avoid_: previous snapshot, reference
 
 **Compatibility Check**:
-The comparison of a Contract against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.
+The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
@@ -179,7 +183,7 @@ A difference that changes nothing a Consumer or another Release relies on or not
 _Avoid_: patch change, cosmetic change
 
 **Line**:
-The published versions of a Contract Package that share a major. The newest line is the default; an older one is a maintenance line.
+The published versions of a Contract Package or Definitions Package that share a major. The newest line is the default; an older one is a maintenance line.
 _Avoid_: branch, track
 
 **Breaking Change Approval** (an Approval, for short):
@@ -198,4 +202,4 @@ _Avoid_: authorizer, reviewer, tech lead
 
 **Active**, **Deprecated**, **Retired**:
 The lifecycle of an Element. Deprecated is still declared and warns its Consumers. Retired no longer works, but stays recorded in every later Snapshot, as a **tombstone** once its declaration is deleted; removed Subscriptions are kept as tombstones too.
-_Avoid_: obsolete, removed, sunset
+_Avoid_: obsolete, removed (for an Element: Elements are Retired; Subscriptions and codes are removed), sunset
