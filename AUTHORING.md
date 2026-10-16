@@ -298,7 +298,7 @@ export default handle(apiKey, async ({ headers }) => {
 });
 ```
 
-A GuardHandler receives only what its Guard demands. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them; the first Rejection stops the request.
+A GuardHandler receives only what its Guard demands. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them, before the Endpoint's own Input is validated: each Guard first validates only what it demands, answering the invalid-input Rejection if that fails, then its GuardHandler runs. The first Rejection stops the request, so an unauthenticated Caller learns nothing about the Endpoint's Input, and the EndpointHandler only runs with valid Input.
 
 ### Messaging
 
@@ -312,7 +312,7 @@ import contract from './contract';
 export const { publisher, sender, consume, connect, close } = messaging(contract);
 ```
 
-`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [Testing](#testing)). Creating `messaging` opens no connection, and publishing or sending before `connect` throws. The Service connects at startup so a broker problem fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
+`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [Testing](#testing)). Creating `messaging` opens no connection. Publishing, sending or consuming before `connect` throws, and so does connecting while connected; `close()` returns to not connected, so a test connects in its setup and closes in its teardown. The Service connects at startup so a broker problem fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
 
 ### Publishing and sending
 
@@ -387,7 +387,7 @@ process.on('SIGTERM', () => close());
 
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](ARCHITECTURE.md#runtime)). It refuses a body over 1 MB with `BODY_TOO_LARGE`, a safety default that `serve(contract, handlers, { maxBodyBytes })` overrides. The limit is operational, not part of the Contract.
 
-`serve` validates every Success and Rejection body before sending it. A Handler's answer that type-checks but breaks a constraint is never sent: the Caller receives a Fault with `INVALID_OUTCOME`, `committed: 'unknown'` and `retryable: false`, and the validation errors go to the Service through `serve(contract, handlers, { onFault })`, never to the Caller. `messaging` takes the same `onFault` option.
+`serve` validates every Success and Rejection body before sending it. A Handler's answer that type-checks but breaks a constraint is never sent: the Caller receives a Fault with `INVALID_OUTCOME`, `committed: 'unknown'` and `retryable: false`, and the validation issues go to the Service through `serve(contract, handlers, { onFault })`, never to the Caller. `messaging(contract, { onFault })` receives what Message Handlers end or fail with: a Message ended for failing its schema, a Fault with `retryable: false`, and anything thrown. Without `onFault`, cf-loom writes them to the console.
 
 ## Consuming a Contract
 
@@ -416,14 +416,14 @@ The client has one method per Endpoint listed in the Dependency, named after it,
 
 A Rejection travels with its declared status and a body cf-loom defines, `{ rejection: { code, message, body } }`. Rejection codes are open for Callers. A Rejection Outcome carries `known`: when `true`, `code` is one of the declared codes and `body` its declared type; when `false`, the client did not know the code, and `code` is the raw string and `body` unvalidated. Checking `known` first lets TypeScript narrow by code.
 
-A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404), `BODY_TOO_LARGE` (413) and `INVALID_OUTCOME` (500) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. An HTTP response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
+A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404) and `BODY_TOO_LARGE` (413) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and `INVALID_OUTCOME` (500) too, with `committed: 'unknown'`; the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. An HTTP response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
 
 | HTTP response | Fault |
 | --- | --- |
 | No connection, or 429 / 503 without a Fault body | `committed: 'no'`, `retryable: true` |
 | Anything else (502, 504, a timeout or reset after sending…) | `committed: 'unknown'`, `retryable: false` |
 
-`client(deps, { fetch })` replaces the global `fetch`, for instrumentation, a runtime without one, or a test (see [Testing](#testing)). Code that calls another Service can depend on the `Client<typeof paymentsDeps>` type rather than on `client()` itself.
+`client(deps, { fetch })` replaces the global `fetch`, for instrumentation, a runtime without one, or a test (see [Testing](#testing)). Code that calls another Service can depend on the `Client<typeof paymentsDeps, 'x-api-key'>` type rather than on `client()` itself; its second parameter names the headers supplied when the client is created, which its methods no longer require.
 
 Headers an Endpoint or its Guards demand are typed, with lower-case names. Those given to `client()`, as values or as a function called per request (which may be async, to refresh a token), need not be passed again; any still missing is a required `headers` field on each call that needs it. Query params, a Guard's included, are always passed per call.
 
@@ -433,7 +433,12 @@ cf-loom keeps its API test-friendly and ships testing helpers only where hand-wr
 
 ### A Service's own code
 
-A Handler returned by `handle()` is a function. Calling it runs the same checks `serve` and `consume` run: Input that breaks the Contract, or an Outcome that breaks a constraint, throws with the validation errors, so a unit test catches what production would answer as `INVALID_OUTCOME`.
+A Handler returned by `handle()` is a function. Calling it runs the same checks `serve` and `consume` run: Input that breaks the Contract, or an Outcome that breaks a constraint, throws with the validation issues, so a unit test catches what production would answer as `INVALID_OUTCOME`. Otherwise a direct call returns what `serve` or `consume` would:
+
+- Anything the Handler throws becomes the Fault `serve` would answer, carrying the original error as `cause` so the test can see it.
+- An Endpoint or Guard stub returns the not-implemented Rejection; a Message Handler stub throws, since `consume` never runs it.
+- A GuardHandler validates only what its Guard demands, and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
+- The Context passed to an EndpointHandler is checked against each attached Guard's `context` schema.
 
 ```ts
 import getOrderHandler from '../src/endpoints/orders/get-order.handler';
@@ -451,7 +456,9 @@ const http = serve(contract, {
   ...handlers,
   guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ clientId: 'c-1' })) },
 });
-const res = await http(new Request(`http://test/orders/${ORDER_ID}`));
+const res = await http(new Request(`http://test/orders/${ORDER_ID}`, {
+  headers: { 'x-api-key': 'any' },          // still demanded by the Contract
+}));
 ```
 
 ### Messages
@@ -460,18 +467,24 @@ const res = await http(new Request(`http://test/orders/${ORDER_ID}`));
 
 ```ts
 import { memory } from '@cf-loom/messaging/memory';
-import { connect } from '../src/messaging';
+import { connect, consume } from '../src/messaging';
+import handlers from '../src/handlers.generated';
 
 const broker = memory();
 await connect(broker);
+await consume(handlers);
 await createOrderHandler({ body: newOrder }, { apiKey: { clientId: 'c-1' } });
 
-broker.messages;   // OrderCreated v1 and v2 with one Fact id, then ChargeCard v1
-await broker.deliver('payments-service.event.PaymentSettled.v1', body, { factId: 'pay-1' });
+await broker.settled();   // every Message published or sent so far has been handled
+broker.messages;          // OrderCreated v1 and v2 with one Fact id, then ChargeCard v1
+
+await broker.deliver(paymentsDeps.events.paymentSettledV1, body, { factId: 'pay-1' });
 // → 'acked' | 'redelivered' | 'ended'
 ```
 
-It records every Message with its subject, Fact id and broker message id, drops a repeated broker message id, and delivers to the Service's Subscriptions and CommandHandlers with the same outcomes as `consume`. It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`: it is not a broker emulator, and tests against a real broker remain the organization's.
+- It records every Message with its subject, body, Fact id and broker message id, and delivers what is published or sent to the Service's consumed Subscriptions and CommandHandlers, acknowledging or ending each Message as `consume` does. `settled()` waits until every Message so far has been handled.
+- A repeated broker message id from `publish` or `send` is dropped, for the adapter's whole lifetime. `deliver(element, body, meta)` always delivers, with a body typed by the Event or Command, so a test can deliver the same fact twice to check that a Handler is safe to run again.
+- It never redelivers on its own: a Message whose Handler asked for redelivery is listed in `broker.pending`. Delivering to a stub, or to an Event no Subscription consumes, throws. It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`: it is not a broker emulator, and tests against a real broker remain the organization's.
 
 ### Other Services
 
@@ -482,20 +495,25 @@ import { fakeProvider, fakeEvent } from '@cf-loom/testing';
 
 const payments = fakeProvider(paymentsDeps);
 payments.on('getPayment')
-  .once(rejection('NOT_FOUND'))                       // a declared code, with its declared body
-  .once(unknownRejection('CARD_EXPIRED'))             // a code the provider does not declare
-  .once(fault({ committed: 'no', retryable: true }))
-  .otherwise(({ params }) => success({ id: params.paymentId, amount }));
+  .once(r => r.reject('NOT_FOUND'))                    // a declared code, with its declared body
+  .once(r => r.reject({ unknown: 'CARD_EXPIRED' }, {})) // a code the provider does not declare
+  .once(r => r.fault({ committed: 'no', retryable: true }))
+  .once(r => r.noConnection())                         // the client infers the Fault
+  .once(r => r.status(502))
+  .otherwise((r, { params }) => r.success({ id: params.paymentId, amount }));
 
-const settlement = new SettlementService(payments.client());
+const settlement = new SettlementService(payments.client({ headers: { 'x-api-key': 'k' } }));
 payments.calls('getPayment');                         // what the code under test called
 
 const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
 await notifyOnSettledHandler(settled, { messageId: 'pay-1.v1', factId: 'pay-1' });
 ```
 
+- `fakeProvider` validates each request as the provider would, its Input and its Guards' demands, and answers the provider's invalid-input Rejection when it fails, so a Consumer that forgets a header fails its test. `payments.client(options)` returns a real client over the fake, and `payments.fetch` serves code that builds its own client with `client(deps, { fetch })`.
+- Each step receives a builder typed by the Endpoint, so codes and bodies autocomplete from the provider's Contract and nothing collides with `@cf-loom/contract` or `@cf-loom/handlers`. A call with no step left and no `otherwise` throws in the test.
 - `fakeProvider` scripts the Outcomes of the Endpoints a Dependency lists and serves them to the real client through `fetch`, so the Consumer's code also runs the client's decoding: unknown codes arrive with `known: false`, and Faults are inferred as from a real response. A Success or Rejection body is checked against the provider's schemas, shapes and constraints alike.
-- `fakeEvent` builds an Event body checked against the provider's schema and returns it as a Subscriber reads it, so an Open Enum value the provider may add later is written `{ unknown: 'refunded' }`.
+- `fakeEvent` builds an Event body as a Subscriber reads it, and the Outcomes scripted in `fakeProvider` are written as a Caller reads them. Declared parts are checked against the provider's schemas, shapes and constraints alike; an Unknown case, `{ unknown: 'refunded' }`, is checked only to make sure `'refunded'` is not a declared value. That is how a test reaches the code that handles values the provider may add later.
+- A Message Handler called directly takes its body the same way, as a Subscriber reads it.
 - The package fakes only other Services. A Service's own Handlers, Guards and Messages are tested with the API above.
 
 ## Applications
