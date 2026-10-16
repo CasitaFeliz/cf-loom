@@ -7,12 +7,14 @@ How a developer writes a Contract and the code that implements and consumes it. 
 | Package | Used by | Provides |
 | --- | --- | --- |
 | `@cf-loom/contract` | Services, Applications, Definitions Packages | Declarations: `contract`, `application`, `definitions`, `group`, `endpoint`, `guard`, `rejection`, `event`, `command`, `subscription`, `dependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| `@cf-loom/handlers` | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault` |
+| `@cf-loom/handlers` | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`; the `Outcome` and `Admission` types |
 | `@cf-loom/server` | Services with Endpoints | `serve` |
 | `@cf-loom/server/node-http` | Services on `node:http` | Adapter |
-| `@cf-loom/client` | Callers | `client` |
+| `@cf-loom/client` | Callers | `client`; the `Client<D>` type |
 | `@cf-loom/messaging` | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
 | `@cf-loom/messaging/jetstream` | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
+| `@cf-loom/messaging/memory` | Tests and local development | In-memory adapter |
+| `@cf-loom/testing` | Tests of Consumers | `fakeProvider`, `fakeEvent` |
 | `@cf-loom/cli` | Everyone | The `cf-loom` command; `config`; Contract directories under `@cf-loom/cli/directories` |
 
 All packages are released together with one version. `zod` and `@cf-loom/contract` are peer dependencies of every cf-loom package and every Contract Package, so each process has one copy of each.
@@ -305,17 +307,12 @@ The EventPublisher and CommandSender are created once, in their own module, and 
 ```ts
 // src/messaging.ts
 import { messaging } from '@cf-loom/messaging';
-import { jetstream } from '@cf-loom/messaging/jetstream';
 import contract from './contract';
 
-const broker = jetstream({
-  servers: process.env.NATS_URL!,
-  prefix: process.env.BROKER_PREFIX,   // optional, e.g. one per environment
-});
-export const { publisher, sender, consume, connect, close } = messaging(contract, broker);
+export const { publisher, sender, consume, connect, close } = messaging(contract);
 ```
 
-Creating `messaging` opens no connection, so importing a Handler, in a test for example, has no side effect. The Service calls `connect()` at startup so a broker problem fails there rather than inside a request, and `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
+`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [Testing](#testing)). Creating `messaging` opens no connection, and publishing or sending before `connect` throws. The Service connects at startup so a broker problem fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
 
 ### Publishing and sending
 
@@ -372,11 +369,15 @@ await broker.apply(plan, limits, { prune: true });   // also deletes orphaned co
 // src/main.ts
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
+import { jetstream } from '@cf-loom/messaging/jetstream';
 import contract from './contract';
 import handlers from './handlers.generated';
 import { connect, consume, close } from './messaging';
 
-await connect();
+await connect(jetstream({
+  servers: process.env.NATS_URL!,
+  prefix: process.env.BROKER_PREFIX,   // optional, e.g. one per environment
+}));
 const http = serve(contract, handlers);      // (Request) => Promise<Response>
 nodeHttp(http).listen(3000);
 await consume(handlers);
@@ -385,6 +386,8 @@ process.on('SIGTERM', () => close());
 ```
 
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](ARCHITECTURE.md#runtime)). It refuses a body over 1 MB with `BODY_TOO_LARGE`, a safety default that `serve(contract, handlers, { maxBodyBytes })` overrides. The limit is operational, not part of the Contract.
+
+`serve` validates every Success and Rejection body before sending it. A Handler's answer that type-checks but breaks a constraint is never sent: the Caller receives a Fault with `INVALID_OUTCOME`, `committed: 'unknown'` and `retryable: false`, and the validation errors go to the Service through `serve(contract, handlers, { onFault })`, never to the Caller. `messaging` takes the same `onFault` option.
 
 ## Consuming a Contract
 
@@ -413,14 +416,87 @@ The client has one method per Endpoint listed in the Dependency, named after it,
 
 A Rejection travels with its declared status and a body cf-loom defines, `{ rejection: { code, message, body } }`. Rejection codes are open for Callers. A Rejection Outcome carries `known`: when `true`, `code` is one of the declared codes and `body` its declared type; when `false`, the client did not know the code, and `code` is the raw string and `body` unvalidated. Checking `known` first lets TypeScript narrow by code.
 
-A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404) and `BODY_TOO_LARGE` (413) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. An HTTP response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
+A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the answer was lost) or `'unknown'`. The server answers it with 503 when it is retryable and 500 otherwise; `RETIRED` (410), `NO_SUCH_ENDPOINT` (404), `BODY_TOO_LARGE` (413) and `INVALID_OUTCOME` (500) use the same body with a `code` (`{ fault: { code, committed: 'no', retryable: false, message } }`), and the client's Fault Outcome exposes that `code`. A malformed body or a wrong content type is the invalid-input Rejection; a request to a declared path with an undeclared method is `NO_SUCH_ENDPOINT`. An HTTP response that is neither the Success, a Rejection body nor a Fault body becomes a Fault inferred from what happened:
 
 | HTTP response | Fault |
 | --- | --- |
 | No connection, or 429 / 503 without a Fault body | `committed: 'no'`, `retryable: true` |
 | Anything else (502, 504, a timeout or reset after sending…) | `committed: 'unknown'`, `retryable: false` |
 
+`client(deps, { fetch })` replaces the global `fetch`, for instrumentation, a runtime without one, or a test (see [Testing](#testing)). Code that calls another Service can depend on the `Client<typeof paymentsDeps>` type rather than on `client()` itself.
+
 Headers an Endpoint or its Guards demand are typed, with lower-case names. Those given to `client()`, as values or as a function called per request (which may be async, to refresh a token), need not be passed again; any still missing is a required `headers` field on each call that needs it. Query params, a Guard's included, are always passed per call.
+
+## Testing
+
+cf-loom keeps its API test-friendly and ships testing helpers only where hand-written test doubles would drift from a Contract. Which test runner, mocking library, fixtures or end-to-end tools a Service uses is the organization's choice; an HTTP test through a host adapter uses that host's own tools, such as supertest.
+
+### A Service's own code
+
+A Handler returned by `handle()` is a function. Calling it runs the same checks `serve` and `consume` run: Input that breaks the Contract, or an Outcome that breaks a constraint, throws with the validation errors, so a unit test catches what production would answer as `INVALID_OUTCOME`.
+
+```ts
+import getOrderHandler from '../src/endpoints/orders/get-order.handler';
+
+const outcome = await getOrderHandler(
+  { params: { orderId: ORDER_ID } },
+  { apiKey: { clientId: 'c-1' } },          // the Context, one key per Guard
+);
+```
+
+The handler map `handlers.generated.ts` exports is plain data, `{ endpoints, guards, commands, subscriptions }`, so a test replaces one Handler, a Guard's for example, by spreading the map:
+
+```ts
+const http = serve(contract, {
+  ...handlers,
+  guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ clientId: 'c-1' })) },
+});
+const res = await http(new Request(`http://test/orders/${ORDER_ID}`));
+```
+
+### Messages
+
+`@cf-loom/messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
+
+```ts
+import { memory } from '@cf-loom/messaging/memory';
+import { connect } from '../src/messaging';
+
+const broker = memory();
+await connect(broker);
+await createOrderHandler({ body: newOrder }, { apiKey: { clientId: 'c-1' } });
+
+broker.messages;   // OrderCreated v1 and v2 with one Fact id, then ChargeCard v1
+await broker.deliver('payments-service.event.PaymentSettled.v1', body, { factId: 'pay-1' });
+// → 'acked' | 'redelivered' | 'ended'
+```
+
+It records every Message with its subject, Fact id and broker message id, drops a repeated broker message id, and delivers to the Service's Subscriptions and CommandHandlers with the same outcomes as `consume`. It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`: it is not a broker emulator, and tests against a real broker remain the organization's.
+
+### Other Services
+
+`@cf-loom/testing` fakes the Services a Consumer depends on, checked against the provider's Snapshot, so a fake can never answer what the provider could not:
+
+```ts
+import { fakeProvider, fakeEvent } from '@cf-loom/testing';
+
+const payments = fakeProvider(paymentsDeps);
+payments.on('getPayment')
+  .once(rejection('NOT_FOUND'))                       // a declared code, with its declared body
+  .once(unknownRejection('CARD_EXPIRED'))             // a code the provider does not declare
+  .once(fault({ committed: 'no', retryable: true }))
+  .otherwise(({ params }) => success({ id: params.paymentId, amount }));
+
+const settlement = new SettlementService(payments.client());
+payments.calls('getPayment');                         // what the code under test called
+
+const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
+await notifyOnSettledHandler(settled, { messageId: 'pay-1.v1', factId: 'pay-1' });
+```
+
+- `fakeProvider` scripts the Outcomes of the Endpoints a Dependency lists and serves them to the real client through `fetch`, so the Consumer's code also runs the client's decoding: unknown codes arrive with `known: false`, and Faults are inferred as from a real response. A Success or Rejection body is checked against the provider's schemas, shapes and constraints alike.
+- `fakeEvent` builds an Event body checked against the provider's schema and returns it as a Subscriber reads it, so an Open Enum value the provider may add later is written `{ unknown: 'refunded' }`.
+- The package fakes only other Services. A Service's own Handlers, Guards and Messages are tested with the API above.
 
 ## Applications
 

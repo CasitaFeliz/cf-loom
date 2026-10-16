@@ -24,7 +24,8 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 ## Runtime
 
 - The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; adapters connect it to a host (`node:http` first).
-- Messaging runs behind a broker interface; adapters connect it to a broker (NATS JetStream first). A broker client is an optional peer dependency, installed only where its adapter is used.
+- Messaging runs behind a broker interface; adapters connect it to a broker (NATS JetStream first). A broker client is an optional peer dependency, installed only where its adapter is used. An in-memory adapter serves tests and local development.
+- Testing support stays within what follows from Contracts: a Service's own code is tested through the public API, and `@cf-loom/testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
 - An EndpointHandler that is not implemented yet answers the not-implemented Standard Rejection, and a Message Handler that is not implemented yet is not consumed, so its Messages wait in the broker. A Contract can be merged and published before its implementation.
 
 ## Visibility and Guards

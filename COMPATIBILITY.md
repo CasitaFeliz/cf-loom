@@ -153,7 +153,7 @@ Codes:
 
 - A code has one HTTP status and one body schema across the whole Contract, Guards and imported Definitions Packages included; two declarations that disagree fail the check.
 - The Snapshot remembers every code that ever existed in the Contract; redeclaring a removed code with another status or body is Breaking.
-- Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them: `RETIRED`, `NO_SUCH_ENDPOINT` and `BODY_TOO_LARGE`. A new reserved code only comes with a cf-loom major.
+- Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them: `RETIRED`, `NO_SUCH_ENDPOINT`, `BODY_TOO_LARGE` and `INVALID_OUTCOME`. A new reserved code only comes with a cf-loom major.
 
 Standard Rejections:
 
