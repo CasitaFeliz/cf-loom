@@ -56,7 +56,7 @@ reviewers read the whole PR in parallel, one lens each, the three lenses of C27:
 | Lens | Checks |
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 |
-| Fidelity | The code against the plan (C22), CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs |
+| Fidelity | The code against the plan; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
 | Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
 
 The main session merges the three reports, removes duplicates, checks each finding against the code and sorts them in
@@ -65,9 +65,10 @@ lens as **fixed**, **asked** (with the user's answer) or **dismissed** (with the
 
 ## 4. Fix
 
-A defect with one evident fix is fixed without asking, removing before adding (C28). A finding that would change a public API, a rule or what a
-document means is put to the user. The implementer agent is resumed with the findings to fix and the user's answers;
-it writes a failing test for each bug before fixing it, then runs `pnpm test` and `pnpm check` and pushes.
+A defect with one evident fix is fixed without asking, removing before adding (C28). A finding that would change a
+public API, a rule or what a document means is put to the user. The implementer agent is resumed with the findings to
+fix and the user's answers; it writes a failing test for each bug before fixing it, then runs `pnpm test` and `pnpm
+check` and pushes.
 
 Once CI passes again, the three lenses review the whole PR again. Round 1 is the first review and round 2 the review
 after its fixes. The loop ends when a round finds nothing to fix. When round 2 still finds something, the main session
@@ -101,8 +102,9 @@ approval.
 An issue that changes only documents or configuration keeps the plan, the Definition of Ready, the fix loop, the
 Definition of Done and the merge, without the items that do not apply (a public API, a test list). The main session
 makes the change itself, since it holds the design context, and one Opus reviewer reads the PR for fidelity,
-consistency across the documents, and links. The main session fixes the findings, and the same reviewer reads the whole
-PR again each round, at most two rounds.
+consistency across the documents, and links. The main session fixes the findings, and the same reviewer reads the
+whole PR again each round, at most two rounds. The main session also makes CI pass, and the reviewer reads once it
+passes.
 
 ## Changesets
 
