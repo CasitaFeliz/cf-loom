@@ -1,7 +1,7 @@
 import type { Endpoint } from './endpoint.ts';
 
 /** What an author writes to declare a Group: a name, what it is for, and at least one Endpoint. */
-export type GroupDeclaration = {
+type GroupDeclaration = {
   readonly name: string;
   readonly description: string;
   readonly endpoints: readonly [Endpoint, ...Endpoint[]];

@@ -13,4 +13,6 @@ export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
 export type { ContextOf, InputOf, RejectionsOf, SuccessOf } from './inference.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
+export type { Application, Contract } from './roots.ts';
+export { defineApplication, defineContract } from './roots.ts';
 export { invalidInput, notFound, notImplemented } from './standard-rejections.ts';

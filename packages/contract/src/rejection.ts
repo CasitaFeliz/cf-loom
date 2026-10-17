@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import type { RejectionStatus } from './http.ts';
 
 /** What an author writes to declare a Rejection; a Rejection without `body` has none. */
-export type RejectionDeclaration = {
+type RejectionDeclaration = {
   readonly code: string;
   readonly status: RejectionStatus;
   readonly message: string;

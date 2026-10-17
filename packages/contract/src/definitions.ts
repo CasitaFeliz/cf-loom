@@ -4,7 +4,7 @@ import type { Rejection } from './rejection.ts';
 import type { StandardRejectionDeclarations } from './standard-rejections.ts';
 
 /** What an author writes to declare a Definitions Package; an absent list is empty. */
-export type DefinitionsDeclaration = {
+type DefinitionsDeclaration = {
   readonly name: string;
   readonly guards?: readonly Guard[];
   readonly schemas?: Readonly<Record<string, core.$ZodType>>;

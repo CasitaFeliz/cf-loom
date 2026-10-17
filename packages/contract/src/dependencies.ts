@@ -3,7 +3,7 @@ import type { Endpoint } from './endpoint.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
 /** An Event as a Contract Package exports it: enough to key it by name and version and to subscribe to it. */
-export type ProvidedEvent = {
+type ProvidedEvent = {
   readonly kind: 'event';
   readonly name: string;
   readonly version: number;
@@ -22,7 +22,7 @@ export type ContractPackage = {
 type ElementOf<Elements> = Elements[keyof Elements];
 
 /** What a Dependency may select: only Elements its Provider's Contract Package exports. */
-export type Selection<Provider extends ContractPackage> = {
+type Selection<Provider extends ContractPackage> = {
   readonly endpoints?: readonly ElementOf<Provider['endpoints']>[];
   readonly events?: readonly ElementOf<Provider['events']>[];
 };

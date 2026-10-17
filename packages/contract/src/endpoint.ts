@@ -7,7 +7,7 @@ import type { Rejection } from './rejection.ts';
 import type { StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
-export type InputDeclaration = {
+type InputDeclaration = {
   readonly params?: core.$ZodObject;
   readonly query?: core.$ZodObject;
   readonly headers?: core.$ZodObject;
@@ -15,7 +15,7 @@ export type InputDeclaration = {
 };
 
 /** What an Endpoint promises when it does what was asked: only a 204 has no body. */
-export type SuccessDeclaration =
+type SuccessDeclaration =
   | { readonly status: 204; readonly headers?: core.$ZodObject; readonly body?: never }
   | {
       readonly status: Exclude<SuccessStatus, 204>;
@@ -24,7 +24,7 @@ export type SuccessDeclaration =
     };
 
 /** What an author writes to declare an Endpoint; `lifecycle` defaults to Active and the lists to empty. */
-export type EndpointDeclaration = {
+type EndpointDeclaration = {
   readonly name: string;
   readonly method: Method;
   readonly path: string;

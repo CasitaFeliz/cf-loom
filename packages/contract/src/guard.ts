@@ -3,7 +3,7 @@ import type { LowerCaseHeaderNames } from './http.ts';
 import type { Rejection } from './rejection.ts';
 
 /** What a Guard may demand from a request: headers and query params, never the body or the path. */
-export type Demands = {
+type Demands = {
   readonly headers?: core.$ZodObject;
   readonly query?: core.$ZodObject;
   readonly params?: never;
@@ -11,7 +11,7 @@ export type Demands = {
 };
 
 /** What an author writes to declare a Guard; an absent part demands or provides nothing. */
-export type GuardDeclaration = {
+type GuardDeclaration = {
   readonly name: string;
   readonly description: string;
   readonly demands?: Demands;
