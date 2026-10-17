@@ -1,7 +1,7 @@
 # Coding standards
 
-How cf-loom's code is written and reviewed. Rules marked **(lint)** are enforced by Biome (see
-[Mechanical and judgement](#mechanical-and-judgement)); the rest are judgement, exercised in review (C27). Terms are
+How cf-loom's code is written and reviewed. Rules marked **(lint)** are enforced by Biome and **(check)** by a script
+(see [Mechanical and judgment](#mechanical-and-judgment)); the rest are judgment, exercised in review (C27). Terms are
 defined in [CONTEXT.md](CONTEXT.md).
 
 ## Design
@@ -60,37 +60,40 @@ place for the same rule (C1) that outlives its reason.
 
 What this repository does not hold alone changes only as its own rules say, never through a shim in the code: a
 Contract, by [COMPATIBILITY.md](COMPATIBILITY.md); the Snapshot format, which the CLI reads in every version it ever
-wrote ([SNAPSHOT.md](SNAPSHOT.md)); the wire protocol ([ARCHITECTURE.md](ARCHITECTURE.md#wire-protocol)); and the
+wrote ([SNAPSHOT.md](SNAPSHOT.md)); the Wire protocol ([ARCHITECTURE.md](ARCHITECTURE.md#wire-protocol)); and the
 packages' public APIs, by semver through Changesets.
 
 **C6. Split a file by responsibility, never by count.** A file holds at most 200 lines, blank lines not counted
 **(lint)**; tests and generated files are exempt. When a file nears the cap, name the two responsibilities it holds
-(walking a schema and checking what it allows, matching a route and converting its text) and give each its own file
-with its own name; a file of one trivial function joins its caller. Never `part-1`, `-helpers`, `-utils`, `-extra`.
-*Why:* the cap is a cohesion check, not a length check; a mechanical split keeps the tangle and hides it across files.
+(walking a schema and checking what it allows, matching an Endpoint and converting its text) and give each its own
+file with its own name; a file of one trivial function joins its caller. Never `part-1`, `-helpers`, `-utils`,
+`-extra`. *Why:* the cap is a cohesion check, not a length check; a mechanical split keeps the tangle and hides it
+across files.
 
 When a file holds ONE responsibility and splitting it would only scatter that responsibility across files that import
-each other, keep it whole and lift the cap for that file alone, with the reason on the directive:
-`// biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: <what it is>; split, it crosses files both ways`.
-The reason names the responsibility; "too long to split" is not one. A reviewer checks every such directive: it stays
-only if the file really does one thing and reads top to bottom (C7). Raising the cap in `biome.json` is never the
-answer.
+each other, keep it whole and lift the cap for that file alone, with the reason on the directive: `// biome-ignore-all
+lint/style/noExcessiveLinesPerFile: one responsibility: <what it is>; split, it crosses files both ways`. The reason
+names the responsibility; "too long to split" is not one. A reviewer checks every such directive: it stays only if the
+file really does one thing and reads top to bottom (C7). Raising the cap in `biome.json` is never the answer.
 
 ## Functions and control flow
 
 **C7. A function reads top to bottom at one level of abstraction.** An orchestrating function names its steps and
-calls them; a step does its work and no orchestration. A function body holds at most 30 lines **(lint)**. *Why:* the
-reader learns what happens from the orchestrator and how from the step, and never both at once.
+calls them; a step does its work and no orchestration. A function body holds at most 30 lines, blank lines not counted
+**(lint)**. A function that makes ONE decision too wide for the cap, such as an exhaustive `switch` over every zod
+type (C16), keeps it whole with the reason on the directive, as C6 does for a file:
+`// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: <what it decides>`. *Why:* the reader
+learns what happens from the orchestrator and how from the step, and never both at once.
 
 ```ts
 // good
-async function answer(endpoints: Routes, request: Request): Promise<Response> {
-  const route = matchRoute(endpoints, request);
-  if (route.kind === 'none') return noSuchEndpoint();
-  const input = await readInput(route, request);
+async function answer(endpoints: Endpoints, request: Request): Promise<Response> {
+  const match = matchEndpoint(endpoints, request);
+  if (match.kind === 'none') return noSuchEndpoint();
+  const input = await readInput(match.endpoint, request);
   if (input.kind === 'invalid') return invalidInput(input.issues);
-  const outcome = await runEndpoint(route, input.value);
-  return responseOf(route, outcome);
+  const outcome = await runEndpoint(match.endpoint, input.value);
+  return responseOf(match.endpoint, outcome);
 }
 ```
 
@@ -114,9 +117,9 @@ const businessCodes = resolved.filter(isBusinessRejection);
 
 ## Expressions and idioms
 
-**C10. Filter with a type guard** **(lint)**. `.filter(isEvent)` with `function isEvent(message: Message): message is Event`;
-never `flatMap((x) => cond ? [x] : [])`, never a `filter` followed by a cast. *Why:* the guard names the subset and
-types it; the `flatMap` trick says neither.
+**C10. Filter with a type guard** **(lint)**. `.filter(isEvent)` with `function isEvent(message: Message): message is
+Event`; never `flatMap((x) => cond ? [x] : [])`, never a `filter` followed by a cast. *Why:* the guard names the
+subset and types it; the `flatMap` trick says neither.
 
 ```ts
 // bad
@@ -147,28 +150,29 @@ shows its state; a fold hides it in the accumulator's shape.
 
 **C13. Names come from the vocabulary.** A thing is called what [CONTEXT.md](CONTEXT.md) calls it, in camelCase or
 PascalCase: a Contract, an Element, an Endpoint, a Guard, an Outcome, a Rejection, a Fault, a Message Version, a Fact
-id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_. A new concept gets its word in
-CONTEXT.md with the change that introduces it. *Why:* one word per concept lets the code, the documents and the people
-say the same thing.
+id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_. A new concept gets its word
+in CONTEXT.md with the change that introduces it. *Why:* one word per concept lets the code, the documents and the
+people say the same thing.
 
 **C14. No vague names.** Not `one`, `entry`, `item`, `common`, `data`, `info`, `result2`, `tmp`; a single letter only
-inside a lambda of one expression **(lint)**. A loop variable is the singular of its collection; a map is `xById`; a derivation is
-`xOf(y)`; a predicate is `isX` or `hasX`. *Why:* a vague name sends the reader to the declaration and back for every
-use.
+inside a lambda of one expression **(lint)**, where an imported name keeps its library's spelling (`z`), `_` marks an
+unused parameter and a `catch` binding may be `e`. A loop variable is the singular of its collection; a map is
+`xById`; a derivation is `xOf(y)`; a predicate is `isX` or `hasX`. *Why:* a vague name sends the reader to the
+declaration and back for every use.
 
 ```ts
 // bad
 for (const entry of endpoints) { const one = codes.get(entry.rejections[0]); … }
 
 // good
-for (const endpoint of endpoints) { const rejection = rejectionsByCode.get(code); … }
+for (const endpoint of endpoints) { const rejection = rejectionsByCode.get(endpoint.rejections[0]); … }
 ```
 
-**C15. A name says the role, not the history** **(lint)**. No `new`, `old`, `legacy`, `fixed`, `real`, `actual` and
-no version suffix in a name: when the old thing is gone (C5), the name is free. A Message Version's name in code
-(`orderCreatedV2`) is the one exception, since its number is part of the Contract. A function that decides is named for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what
-it does (`writeSnapshot`, `applyPlan`). *Why:* a name that refers to another version only means something while both
-exist.
+**C15. A name says the role, not the history.** No `new`, `old`, `legacy`, `fixed`, `real`, `actual` and no version
+suffix in a name: when the old thing is gone (C5), the name is free. A Message Version's name in code
+(`orderCreatedV2`) is the one exception, since its number is part of the Contract. A function that decides is named
+for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what it does (`writeSnapshot`, `applyPlan`).
+*Why:* a name that refers to another version only means something while both exist.
 
 ## Types
 
@@ -177,10 +181,10 @@ is a `switch` over a closed union, with no `default` that swallows a member: Bio
 **(lint)**. A string that can take only a few values is a union of literals, never `string`; no TypeScript `enum`
 (`erasableSyntaxOnly`). *Why:* adding a member then lists every place that must decide about it.
 
-**C17. No boolean flag parameters** **(lint)**. A caller passes a closed value that names the mode, or calls a function named for
-it. A boolean belongs in data (`committed`, `retryable`) and in predicates, not in a parameter that switches a
-function's behaviour. *Why:* `generate(contract, true)` says nothing at the call site, and a flag is a second function
-hiding in the first.
+**C17. No boolean flag parameters** **(lint)** for an exported function. A caller passes a closed value that names the
+mode, or calls a function named for it. A boolean belongs in data (`committed`, `retryable`) and in predicates, not in
+a parameter that switches a function's behavior. *Why:* `generate(contract, true)` says nothing at the call site, and
+a flag is a second function hiding in the first.
 
 ```ts
 // bad
@@ -204,17 +208,17 @@ type Walked =
 ```
 
 **C19. A parameter object has a name and a responsibility.** A function takes at most three parameters **(lint)**: the
-values it needs, or one object that is a thing of the domain (a resolved route, a Baseline and its declared Snapshot).
-A dependency object narrows what it takes (`Pick<Directory, 'list'>`). A twelve-field options bag handed through every
-function is a global under another name. *Why:* the signature is the function's contract; a bag says the contract is
-"everything".
+values it needs, or one object that is a thing of the domain (a matched Endpoint, a Baseline and its declared
+Snapshot). A dependency object narrows what it takes (`Pick<Directory, 'list'>`). A twelve-field options bag handed
+through every function is a global under another name. *Why:* the signature is the function's contract; a bag says the
+contract is "everything".
 
 ## Comments and docs
 
 **C20. A doc comment is one or two sentences of why.** It sits above the declaration as TSDoc; no other comment but a
 lint directive or a `TODO`. It says why the thing exists or what it decides, never what each line does, and never the
-issue number. Every exported declaration carries TSDoc **(check)**, since its users read it in the editor. *Why:* the what is the code; the
-why is the one thing it cannot say.
+issue number. Every exported declaration carries TSDoc **(check)**, since its users read it in the editor. *Why:* the
+what is the code; the why is the one thing it cannot say.
 
 **C21. A comment that chains rules means the code does too much.** When a comment needs dashes, parentheses or a
 third sentence to list the cases a function covers, split the function so each has a one-sentence reason. Simplify
@@ -238,25 +242,25 @@ agree with it, or it is read against nothing.
 
 ## Tests
 
-**C23. Behaviour, through a public seam.** A test drives a package through its entries (`.`, its subpaths, or
+**C23. Behavior, through a public seam.** A test drives a package through its entries (`.`, its subpaths, or
 `./internal` where another cf-loom package uses it) and checks what a user can see: a declaration's Snapshot, the
 `Response` `serve` answers, the Outcome a client returns, the exit status of a command. It imports no private module
-and asserts no call order of mocks. End-to-end behaviour across packages is tested in `examples/`. *Why:* a test of
+and asserts no call order of mocks. *Why:* a test of
 the mechanics fails on every refactor and passes on every bug.
 
-**C24. A test's name states the behaviour in plain English.** `"an optional path param fails generate"`, not
+**C24. A test's name states the behavior in plain English.** `"an optional path param fails generate"`, not
 `"handles params"` or `"walk returns not-allowed"`. The `describe` names the seam; the `test` reads as a sentence
 about the domain. *Why:* the failing test's name is the bug report.
 
-**C25. Arrange, act, assert.** Three visible blocks, one behaviour per test, fixtures from builders with sensible
+**C25. Arrange, act, assert.** Three visible blocks, one behavior per test, fixtures from builders with sensible
 defaults (`anEndpoint({ method: 'GET' })`), and one reason to fail. A focused or skipped test and a test without an
 `expect` are errors **(lint)**. *Why:* a test read in a failure must say what was set up, what was done and what was
 expected, in that order, without scrolling.
 
-**C26. Test the compatibility we have, never one we do not.** Snapshots of every released format, the wire protocol
-and the public APIs are compatibility we have: their fixtures and tests stay. No test of a shim (C5), no "still accepts
-the old shape" for a shape nothing released, no test that a private helper returns a value. *Why:* such a test pins
-the thing the next change must delete.
+**C26. Test the compatibility we have, never one we do not.** Snapshots of every released format, the Wire protocol
+and the public APIs are compatibility we have: their fixtures and tests stay. No test of a shim (C5), no "still
+accepts the old shape" for a shape nothing released, no test that a private helper returns a value. *Why:* such a test
+pins the thing the next change must delete.
 
 ## Reviewing
 
@@ -270,7 +274,7 @@ changing the model where it is not, and by adding a branch only when both fail, 
 every rule here; a fix that needs a cascade or a shim is a design finding to report, not to land. *Why:* the fixes are
 where the special cases came from.
 
-## Mechanical and judgement
+## Mechanical and judgment
 
 Biome enforces, as errors: the file cap of 200 lines (C6, `noExcessiveLinesPerFile`), the function cap of 30 lines
 (C7, `noExcessiveLinesPerFunction`), `noUselessElse` and a cognitive complexity of 15 (C8,
@@ -281,9 +285,11 @@ count toward either cap; tests and generated files are exempt from both. The for
 naming conventions) apply as well.
 
 The GritQL plugins in `lint/` add, as errors: a `flatMap` whose callback returns a conditional array (C10), `reduce`
-(C12), a single-letter name outside a lambda of one expression (C14), a name with `old`, `new`, `legacy`, `fixed`,
-`real` or `actual` (C15), and a `boolean` parameter of an exported function (C17). `scripts/check-tsdoc.ts` fails on
-an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run it.
+and `reduceRight` (C12), a single-letter name outside a lambda of one expression, an import or a `catch` (C14), and a
+`boolean` parameter, by type or by default, of an exported function or arrow function (C17). `scripts/check-tsdoc.ts`
+fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run
+it.
 
-The rest stays judgement, and C27 is where it is exercised: the vague words of C14, a version suffix in a name (C15),
-a boolean parameter of a function that is not exported (C17), and whether a doc comment says why (C20).
+The rest stays judgment, and C27 is where it is exercised: the vague words of C14, every name of C15, a boolean
+parameter of a function that is not exported or is exported through an `export { … }` list (C17), and whether a doc
+comment says why (C20).

@@ -37,4 +37,25 @@ describe('undocumentedExports', () => {
 
     expect(undocumentedExports(source)).toEqual([]);
   });
+
+  it('accepts overloads that follow a documented first signature', () => {
+    const source = [
+      '/** Why it exists. */',
+      'export function statusOf(code: string): number;',
+      'export function statusOf(code: number): number;',
+      'export function statusOf(code: string | number): number {',
+      '  return Number(code);',
+      '}',
+    ].join('\n');
+
+    expect(undocumentedExports(source)).toEqual([]);
+  });
+
+  it('reads CRLF line endings', () => {
+    expect(
+      undocumentedExports(
+        '/** Why. */\r\nexport const status = 200;\r\nexport const bare = 1;\r\n',
+      ),
+    ).toEqual([3]);
+  });
 });

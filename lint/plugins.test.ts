@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,82 +10,115 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 interface Diagnostic {
   readonly category: string;
   readonly message: string;
+  readonly location: { readonly start: { readonly line: number } };
 }
 
-/** The rule ids (C10, C12, …) the repository's GritQL plugins report for one source file. */
-function pluginRulesFor(source: string): string[] {
+/** Each `C<n>@<line>` the repository's GritQL plugins report for one source file. */
+function pluginReportsFor(lines: readonly string[]): string[] {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
-  writeFileSync(join(directory, 'probe.ts'), source);
-  const biome = spawnSync(
-    join(root, 'node_modules/.bin/biome'),
-    ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, 'probe.ts'],
-    { cwd: directory, encoding: 'utf8' },
-  );
-  const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
-  return report.diagnostics
-    .filter((diagnostic) => diagnostic.category === 'plugin')
-    .map((diagnostic) => diagnostic.message.slice(0, diagnostic.message.indexOf(':')));
+  try {
+    writeFileSync(join(directory, 'probe.ts'), `${lines.join('\n')}\n`);
+    const biome = spawnSync(
+      join(root, 'node_modules/.bin/biome'),
+      ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, 'probe.ts'],
+      { cwd: directory, encoding: 'utf8' },
+    );
+    const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
+    return report.diagnostics
+      .filter((diagnostic) => diagnostic.category === 'plugin')
+      .map((diagnostic) => {
+        const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
+        return `${rule}@${diagnostic.location.start.line}`;
+      });
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
 }
 
 describe('lint plugins', () => {
-  it('report reduce (C12)', () => {
-    expect(
-      pluginRulesFor('export const total = [1, 2].reduce((sum, count) => sum + count, 0);\n'),
-    ).toEqual(['C12']);
+  it('report reduce and reduceRight, optional calls included (C12)', () => {
+    const lines = [
+      'const counts = [1, 2];',
+      'export const total = counts.reduce((sum, count) => sum + count, 0);',
+      'export const maybe = counts?.reduce((sum, count) => sum + count, 0);',
+      'export const backwards = counts.reduceRight((sum, count) => sum + count, 0);',
+    ];
+
+    expect(pluginReportsFor(lines)).toEqual(['C12@2', 'C12@3', 'C12@4']);
   });
 
-  it('report a flatMap that returns a conditional array, but not other flatMaps (C10)', () => {
-    const source = [
+  it('report a flatMap whose callback returns a conditional array, but not other flatMaps (C10)', () => {
+    const lines = [
       'const counts = [1, 2];',
       'export const even = counts.flatMap((count) => (count % 2 === 0 ? [count] : []));',
+      'export const odd = counts.flatMap((count) => (count % 2 === 0 ? [] : [count]));',
+      'export const large = counts.flatMap((count) => {',
+      '  if (count > 1) {',
+      '    return [count];',
+      '  }',
+      '  return [];',
+      '});',
+      'export const maybe = counts?.flatMap((count) => (count > 1 ? [count] : []));',
       'export const twice = counts.flatMap((count) => [count, count]);',
-    ].join('\n');
+      'export const nested = counts.flatMap((count) =>',
+      '  [count].map((value) => (value > 1 ? [value] : [])).flat(),',
+      ');',
+    ];
 
-    expect(pluginRulesFor(source)).toEqual(['C10']);
+    expect(pluginReportsFor(lines)).toEqual(['C10@2', 'C10@3', 'C10@4', 'C10@10']);
   });
 
-  it('report a boolean parameter of an exported function only (C17)', () => {
-    const source = [
+  it('report a boolean parameter of an exported function, defaults and unions included (C17)', () => {
+    const lines = [
       'export function generate(contract: string, verify: boolean): string {',
       "  return verify ? contract : '';",
       '}',
-      'function isEmpty(contract: string): boolean {',
-      "  return contract === '';",
+      'export function prune(force = false): boolean {',
+      '  return force;',
       '}',
-      'function keep(kept: boolean): boolean {',
-      '  return kept;',
+      'export const apply = (force: boolean | undefined): boolean => force ?? false;',
+      'export function keep(contract: string): string[] {',
+      "  return [true].map((kept: boolean) => (kept ? contract : ''));",
       '}',
-      "export const empty = isEmpty('') && keep(true);",
-    ].join('\n');
+      'export type OnCommit = (committed: boolean) => void;',
+      'export interface Port {',
+      '  send(urgent: boolean): void;',
+      '}',
+      'function isEmpty(contract: string, strict: boolean): boolean {',
+      "  return strict && contract === '';",
+      '}',
+      "export const empty = isEmpty('', true);",
+    ];
 
-    expect(pluginRulesFor(source)).toEqual(['C17']);
+    expect(pluginReportsFor(lines)).toEqual(['C17@1', 'C17@4', 'C17@7']);
   });
 
   it('report a single-letter name outside a lambda of one expression (C14)', () => {
-    const source = [
+    const lines = [
+      "import { z } from 'zod';",
       'const counts = [1, 2];',
       'export const doubled = counts.map((n) => n * 2);',
+      'export const firsts = [{ k: 1 }].map(({ k }) => k);',
+      'export const indexes = counts.map((_, index) => index);',
+      'try {',
+      '  counts.push(z.string().length);',
+      '} catch (e) {',
+      '  counts.push(Number(e));',
+      '}',
       'export const tripled = counts.map((n) => {',
       '  return n * 3;',
       '});',
-      'for (const c of counts) {',
-      '  doubled.push(c);',
+      'for (let i = 0; i < 2; i += 1) {',
+      '  counts.push(i);',
       '}',
-    ].join('\n');
+      'export const inner = counts.map((count) =>',
+      '  (() => {',
+      '    const q = count;',
+      '    return q;',
+      '  })(),',
+      ');',
+    ];
 
-    expect(pluginRulesFor(source)).toEqual(['C14', 'C14']);
-  });
-
-  it('report a name that refers to history, but not words that merely contain one (C15)', () => {
-    const source = [
-      'export const oldSnapshot = 1;',
-      'export const isFixed = 2;',
-      'export type LegacyOutcome = string;',
-      'export const renewal = 3;',
-      'export const realm = 4;',
-      'export const orderCreatedV2 = 5;',
-    ].join('\n');
-
-    expect(pluginRulesFor(source)).toEqual(['C15', 'C15', 'C15']);
+    expect(pluginReportsFor(lines)).toEqual(['C14@11', 'C14@14', 'C14@19']);
   });
 });

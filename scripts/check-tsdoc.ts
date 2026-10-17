@@ -1,18 +1,37 @@
 import { globSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 const exportedDeclaration =
   /^export\s+(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(?:function\*?|const|let|class|interface|type)\s+[A-Za-z_$]/;
+const exportedFunctionName =
+  /^export\s+(?:declare\s+)?(?:async\s+)?function\*?\s+([A-Za-z_$][\w$]*)/;
+const root = join(import.meta.dirname, '..');
 
 /** The 1-based lines that export a declaration with no TSDoc directly above it (C20). */
 export function undocumentedExports(source: string): number[] {
-  const lines = source.split('\n');
+  const lines = source.split(/\r?\n/);
+  const documentedFunctions = new Set<string>();
   const undocumented: number[] = [];
   for (const [index, line] of lines.entries()) {
-    if (exportedDeclaration.test(line) && !hasDocAbove(lines, index)) {
+    const functionName = exportedFunctionName.exec(line)?.[1];
+    if (!exportedDeclaration.test(line) || isOverload(documentedFunctions, functionName)) {
+      continue;
+    }
+    if (hasDocAbove(lines, index)) {
+      documentedFunctions.add(functionName ?? '');
+    } else {
       undocumented.push(index + 1);
     }
   }
   return undocumented;
+}
+
+/** An overload after the first signature shares that signature's TSDoc. */
+function isOverload(
+  documentedFunctions: ReadonlySet<string>,
+  functionName: string | undefined,
+): boolean {
+  return functionName !== undefined && documentedFunctions.has(functionName);
 }
 
 /** Line comments, such as a lint directive, may sit between the TSDoc and the declaration. */
@@ -36,12 +55,16 @@ function opensDoc(lines: readonly string[], end: number): boolean {
   return false;
 }
 
-/** Every package's source, tests excluded, since what a file exports is read from another file. */
+/** Every package's handwritten source: tests and generated files are not read in the editor as an API. */
 function checkPackages(): void {
-  const sources = globSync('packages/*/src/**/*.ts').filter((path) => !path.endsWith('.test.ts'));
+  const sources = globSync('packages/*/src/**/*.ts', { cwd: root }).filter(
+    (path) => !(path.endsWith('.test.ts') || path.endsWith('.generated.ts')),
+  );
   for (const path of sources) {
-    for (const line of undocumentedExports(readFileSync(path, 'utf8'))) {
-      console.error(`${path}:${line} C20: an exported declaration carries TSDoc.`);
+    for (const line of undocumentedExports(readFileSync(join(root, path), 'utf8'))) {
+      console.error(
+        `${relative(process.cwd(), join(root, path))}:${line} C20: an exported declaration carries TSDoc.`,
+      );
       process.exitCode = 1;
     }
   }

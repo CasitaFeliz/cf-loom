@@ -143,7 +143,6 @@
   "plugins": [
     "./lint/no-boolean-parameter.grit",
     "./lint/no-flatmap-filter.grit",
-    "./lint/no-history-name.grit",
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit"
   ],
