@@ -9,16 +9,29 @@ One issue is one branch and one PR. An issue too large for one reviewable PR is 
 planned. A branch is named `<type>/<issue>-<slug>` (`feat/6-zod-walker`), its PR title is a Conventional Commit, and
 its body says `Closes #<issue>`, links the plan and says what changed.
 
+## Required reading
+
+Every session and agent working on an issue reads these before it starts, and every agent's prompt points here:
+
+| Role | Reads |
+| --- | --- |
+| Every role | [CLAUDE.md](CLAUDE.md), [CONTEXT.md](CONTEXT.md), [CODING_STANDARDS.md](CODING_STANDARDS.md) |
+| Planner (the main session) | The issue and every document it implements |
+| Implementer | This document, the plan, and every document the plan links |
+| Reviewer | The plan, the PR, and the documents its lens checks ([Review](#3-review), [Documentation and chore issues](#documentation-and-chore-issues)) |
+
 ## 1. Plan
 
-The main session reads the issue and the documents it implements and posts the plan as a comment on the issue:
+The main session posts the plan as a comment on the issue:
 
 - the public API: signatures with their TSDoc;
 - every file, with its one responsibility;
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
 - the new terms it adds to [CONTEXT.md](CONTEXT.md);
-- its design questions, put to the user one at a time and answered in the plan.
+- what the documents already settle that the issue relies on, kept apart from what is new;
+- its design questions, put to the user one at a time and answered in the plan. A point the documents already settle,
+  or that follows from a decision already made, is not a question.
 
 The user approves the plan or corrects it. Nothing is implemented before the approval.
 
@@ -33,6 +46,7 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] the test list covers every behavior the issue asks for, each test through a public seam;
 - [ ] the document sections it implements are linked, and every change to them is written in the plan;
 - [ ] its new terms are in the plan's CONTEXT.md changes;
+- [ ] what the documents already settle is listed apart from what is new;
 - [ ] no design question is open;
 - [ ] every issue it depends on is merged to `main`.
 
