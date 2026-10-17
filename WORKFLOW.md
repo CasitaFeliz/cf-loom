@@ -9,6 +9,18 @@ One issue is one branch and one PR. An issue too large for one reviewable PR is 
 planned. A branch is named `<type>/<issue>-<slug>` (`feat/6-zod-walker`), its PR title is a Conventional Commit, and
 its body says `Closes #<issue>`, links the plan and says what changed.
 
+## Required reading
+
+Every session and agent working on an issue reads these before it starts, and every agent's prompt points here:
+
+| Role | Reads |
+| --- | --- |
+| Every role | [CLAUDE.md](CLAUDE.md), [CONTEXT.md](CONTEXT.md), [CODING_STANDARDS.md](CODING_STANDARDS.md) |
+| Planner (the main session) | The issue and every document it implements |
+| Implementer | This document, the plan, and every document the plan links |
+| Reviewer | The plan, the PR, and the documents its lens checks ([Review](#3-review)) |
+| Researcher | The documents its question concerns, cited by file and line |
+
 ## 1. Plan
 
 The main session reads the issue and the documents it implements and posts the plan as a comment on the issue:
@@ -18,7 +30,9 @@ The main session reads the issue and the documents it implements and posts the p
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
 - the new terms it adds to [CONTEXT.md](CONTEXT.md);
-- its design questions, put to the user one at a time and answered in the plan.
+- what the documents already settle that the issue relies on, kept apart from what is new;
+- its design questions, put to the user one at a time and answered in the plan. A point the documents already settle,
+  or that follows from a decision already made, is not a question.
 
 The user approves the plan or corrects it. Nothing is implemented before the approval.
 
