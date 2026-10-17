@@ -4,7 +4,7 @@ export { defineEndpoint } from './endpoint.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
-export type { InputOf, SuccessOf } from './inference.ts';
+export type { ContextOf, InputOf, RejectionsOf, SuccessOf } from './inference.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export { invalidInput, notFound, notImplemented } from './standard-rejections.ts';
