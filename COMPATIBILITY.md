@@ -14,7 +14,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 
 ### The Baseline
 
-- The Baseline is the highest published version of the package, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. Every publish goes on the newest major; there is no publishing on an older one.
+- The Baseline is the highest published version of the package, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. A prerelease (`2.0.0-rc.1`) never counts as the highest published version, for the Baseline or for the dependency graph. Every publish goes on the newest major; there is no publishing on an older one.
 
 ## Versioning
 
