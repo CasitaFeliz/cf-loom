@@ -24,6 +24,9 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - ESM only; built with `tsc -b` and project references; tested with Vitest projects; formatted and linted with Biome.
 - Each package has `tsconfig.build.json` (src to dist, no tests) and `tsconfig.test.json` (type-checks tests); `contract` and `client` build without Node types, since Applications run them in browsers.
 - cf-loom packages depend on each other only as peers (plus a devDependency), never as dependencies.
+- A package shares code with other cf-loom packages only through an undocumented `./internal` export; AUTHORING.md never lists it.
+- Relative imports name the `.ts` file (`./serve.ts`); `tsc` rewrites them to `.js`. Only erasable TypeScript syntax: no enums, namespaces or parameter properties.
+- `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
 - Tests sit next to the code (`*.test.ts`) and import only a package's public entries.
 - Changesets with one fixed group: every package releases together. cf-loom reaches 1.0.0 before any Contract Package is published.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
