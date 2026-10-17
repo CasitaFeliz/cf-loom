@@ -1,0 +1,44 @@
+{
+  "name": "@casitafeliz/loom-cli",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "cf-loom": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./directories": {
+      "types": "./dist/directories/index.d.ts",
+      "default": "./dist/directories/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "peerDependencies": {
+    "zod": "catalog:",
+    "@casitafeliz/loom-contract": "workspace:^"
+  },
+  "devDependencies": {
+    "zod": "catalog:",
+    "@casitafeliz/loom-contract": "workspace:^"
+  }
+}

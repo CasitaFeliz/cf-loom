@@ -17,7 +17,7 @@ How a developer writes a Contract and the code that implements and consumes it. 
 | `@casitafeliz/loom-testing` | Tests of Consumers | `fakeProvider`, `fakeEvent` |
 | `@casitafeliz/loom-cli` | Everyone | The `cf-loom` command; `config`; Contract directories under `@casitafeliz/loom-cli/directories` |
 
-All packages are released together with one version. `zod` and `@casitafeliz/loom-contract` are peer dependencies of every cf-loom package and every Contract Package, so each process has one copy of each.
+All packages are released together with one version. `zod` and `@casitafeliz/loom-contract` are peer dependencies of every cf-loom package and every Contract Package, and every cf-loom package a cf-loom package uses is a peer dependency of it, so each process has one copy of each.
 
 ## Layout of a Service
 

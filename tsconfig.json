@@ -1,0 +1,26 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/contract"
+    },
+    {
+      "path": "./packages/handlers"
+    },
+    {
+      "path": "./packages/server"
+    },
+    {
+      "path": "./packages/client"
+    },
+    {
+      "path": "./packages/messaging"
+    },
+    {
+      "path": "./packages/testing"
+    },
+    {
+      "path": "./packages/cli"
+    }
+  ]
+}

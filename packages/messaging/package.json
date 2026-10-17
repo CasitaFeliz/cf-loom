@@ -1,0 +1,47 @@
+{
+  "name": "@casitafeliz/loom-messaging",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
+    "directory": "packages/messaging"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./memory": {
+      "types": "./dist/memory/index.d.ts",
+      "default": "./dist/memory/index.js"
+    },
+    "./jetstream": {
+      "types": "./dist/jetstream/index.d.ts",
+      "default": "./dist/jetstream/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "peerDependencies": {
+    "zod": "catalog:",
+    "@casitafeliz/loom-contract": "workspace:^",
+    "@casitafeliz/loom-handlers": "workspace:^"
+  },
+  "devDependencies": {
+    "zod": "catalog:",
+    "@casitafeliz/loom-contract": "workspace:^",
+    "@casitafeliz/loom-handlers": "workspace:^"
+  }
+}

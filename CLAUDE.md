@@ -1,6 +1,6 @@
 # cf-loom
 
-Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools only, never a Service's Contract. The design is in documents.
+Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools only, never a Service's Contract. The design is in the documents below; the packages are under `packages/`.
 
 ## Documents
 
@@ -20,10 +20,14 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 
 ## Repository
 
-- pnpm 12 workspaces under `packages/`, with a catalog for zod, TypeScript and Vitest.
-- ESM only; built with `tsc -b` and project references; tested with Vitest projects.
-- Changesets with one fixed group: every package releases together.
+- pnpm 12 workspaces under `packages/`; shared versions in the catalog of `pnpm-workspace.yaml`. Node 24 (`.node-version`).
+- ESM only; built with `tsc -b` and project references; tested with Vitest projects; formatted and linted with Biome.
+- Each package has `tsconfig.build.json` (src to dist, no tests) and `tsconfig.test.json` (type-checks tests); `contract` and `client` build without Node types, since Applications run them in browsers.
+- cf-loom packages depend on each other only as peers (plus a devDependency), never as dependencies.
+- Tests sit next to the code (`*.test.ts`) and import only a package's public entries.
+- Changesets with one fixed group: every package releases together. cf-loom reaches 1.0.0 before any Contract Package is published.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
+- Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 
 ## Design principles
 
