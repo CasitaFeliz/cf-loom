@@ -1,6 +1,6 @@
 # cf-loom
 
-Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools only, never a Service's Contract. The design is in the documents below; the packages are under `packages/`.
+Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools, and in `examples/` fictional Services used as end-to-end tests; never a real Service's Contract. The design is in the documents below; the packages are under `packages/`.
 
 ## Documents
 
@@ -24,7 +24,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 
 ## Repository
 
-- pnpm 12 workspaces under `packages/`; shared versions in the catalog of `pnpm-workspace.yaml`. Node 24 (`.node-version`).
+- pnpm 12 workspaces under `packages/` and `examples/`, every example package `private: true`; shared versions in the catalog of `pnpm-workspace.yaml`. Node 24 (`.node-version`).
 - ESM only; built with `tsc -b` and project references; tested with Vitest projects; formatted and linted with Biome.
 - Each package has `tsconfig.build.json` (src to dist, no tests) and `tsconfig.test.json` (type-checks tests); `contract` and `client` build without Node types, since Applications run them in browsers.
 - cf-loom packages depend on each other only as peers (plus a devDependency), never as dependencies.
@@ -33,7 +33,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
 - `lint/` holds Biome GritQL plugins and `scripts/check-tsdoc.ts` checks TSDoc, both for [CODING_STANDARDS.md](CODING_STANDARDS.md).
 - Tests sit next to the code (`*.test.ts`) and import only a package's entries: `.`, its subpaths and `./internal` (see C23).
-- Changesets with one fixed group: every package releases together. No PR carries a changeset before the first release candidate; from it on, every PR that changes a package carries one. cf-loom reaches 1.0.0 before any Contract Package is published.
+- Changesets with one fixed group: every package releases together. No PR carries a changeset before the first release candidate; from it on, every PR that changes a package carries one. cf-loom reaches 1.0.0 before any Contract Package publishes a version that is not a prerelease; before it, a Contract Package is published only as a prerelease.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
 - Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome and the TSDoc check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 

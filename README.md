@@ -1,6 +1,6 @@
 # cf-loom
 
-Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools only, never a Service's Contract.
+Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools, and in `examples/` fictional Services used as end-to-end tests; never a real Service's Contract.
 
 Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md), how the pieces fit in [ARCHITECTURE.md](ARCHITECTURE.md), and the Snapshot format in [SNAPSHOT.md](SNAPSHOT.md). How each package is used is in its README, below.
 
