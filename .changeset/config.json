@@ -1,10 +1,10 @@
 {
+  "access": "restricted",
+  "baseBranch": "main",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [["@casitafeliz/loom-*"]],
+  "ignore": [],
   "linked": [],
-  "access": "restricted",
-  "baseBranch": "main",
-  "updateInternalDependencies": "patch",
-  "ignore": []
+  "updateInternalDependencies": "patch"
 }

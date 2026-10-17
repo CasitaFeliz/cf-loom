@@ -3,17 +3,13 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "packageManager": "pnpm@12.14.0",
-  "engines": {
-    "node": ">=24"
-  },
   "scripts": {
     "build": "tsc -b",
-    "clean": "tsc -b --clean",
-    "test": "tsc -b && vitest run",
+    "changeset": "changeset",
     "check": "biome check .",
+    "clean": "tsc -b --clean",
     "format": "biome check --write .",
-    "changeset": "changeset"
+    "test": "tsc -b && vitest run"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
@@ -22,5 +18,9 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
   }
 }

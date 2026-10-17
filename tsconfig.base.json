@@ -1,21 +1,21 @@
 {
   "compilerOptions": {
-    "target": "ES2024",
-    "lib": ["ES2024"],
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "noImplicitOverride": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "rootDir": "${configDir}/src",
+    "exactOptionalPropertyTypes": true,
+    "lib": ["ES2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
     "outDir": "${configDir}/dist",
-    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/build.tsbuildinfo"
+    "rootDir": "${configDir}/src",
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "ES2024",
+    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/build.tsbuildinfo",
+    "verbatimModuleSyntax": true
   }
 }

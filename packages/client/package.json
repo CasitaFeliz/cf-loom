@@ -1,14 +1,14 @@
 {
   "name": "@casitafeliz/loom-client",
   "version": "0.0.0",
-  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
     "directory": "packages/client"
   },
-  "type": "module",
+  "license": "UNLICENSED",
   "sideEffects": false,
+  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -20,18 +20,18 @@
     "src",
     "!src/**/*.test.ts"
   ],
+  "devDependencies": {
+    "@casitafeliz/loom-contract": "workspace:^",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@casitafeliz/loom-contract": "workspace:^",
+    "zod": "catalog:"
+  },
   "engines": {
     "node": ">=24"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
-  },
-  "peerDependencies": {
-    "zod": "catalog:",
-    "@casitafeliz/loom-contract": "workspace:^"
-  },
-  "devDependencies": {
-    "zod": "catalog:",
-    "@casitafeliz/loom-contract": "workspace:^"
   }
 }

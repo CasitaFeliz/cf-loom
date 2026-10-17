@@ -23,6 +23,6 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm biome ci .
+      - run: pnpm biome ci --error-on-warnings .
       - run: pnpm tsc -b
       - run: pnpm vitest run
