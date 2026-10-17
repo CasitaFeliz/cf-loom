@@ -1,6 +1,10 @@
+export type { Definitions } from './definitions.ts';
+export { defineDefinitions } from './definitions.ts';
 export type { Lifecycle, Visibility } from './element.ts';
 export type { Endpoint } from './endpoint.ts';
 export { defineEndpoint } from './endpoint.ts';
+export type { Group } from './group.ts';
+export { defineGroup } from './group.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
