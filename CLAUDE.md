@@ -11,6 +11,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 | `ARCHITECTURE.md` | How the pieces fit: packages, runtime, the Wire protocol, what cf-loom leaves to the organization |
 | `SNAPSHOT.md` | The Snapshot format the Compatibility Check compares |
 | `CODING_STANDARDS.md` | How the code is written and reviewed (C1–C28) |
+| `WORKFLOW.md` | How an issue becomes code on `main`: plan, Definition of Ready, implement, review, fix, Definition of Done, merge |
 | `README.md` | What cf-loom is, a first Service, and the packages table |
 | `packages/<pkg>/README.md` | How to use the package: its API, options, examples |
 | `packages/<pkg>/ARCHITECTURE.md` | The package's internal details, repo only (not in the package's `files`) |
@@ -32,7 +33,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
 - `lint/` holds Biome GritQL plugins and `scripts/check-tsdoc.ts` checks TSDoc, both for [CODING_STANDARDS.md](CODING_STANDARDS.md).
 - Tests sit next to the code (`*.test.ts`) and import only a package's entries: `.`, its subpaths and `./internal` (see C23).
-- Changesets with one fixed group: every package releases together. cf-loom reaches 1.0.0 before any Contract Package is published.
+- Changesets with one fixed group: every package releases together. No PR carries a changeset before the first release candidate; from it on, every PR that changes a package carries one. cf-loom reaches 1.0.0 before any Contract Package is published.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
 - Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome and the TSDoc check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 
@@ -45,4 +46,5 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 ## Working here
 
 - Design decisions are the user's: propose options with a recommendation and ask one question at a time.
+- Every issue follows [WORKFLOW.md](WORKFLOW.md).
 - Commits follow Conventional Commits (`docs: …`, `feat(cli): …`).
