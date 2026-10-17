@@ -26,7 +26,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 
 Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch; the peer rule below still applies.
 
-The version also protects Consumers' installs. The Contract Package's peers are `zod` and `@cf-loom/contract`, and their ranges are compared with the Baseline's, read from the registry's package metadata: a peer moving to a new major publishes a major even when the Snapshot did not change, so a Consumer still on the old major never installs it by accident, and that major needs no Breaking Change Approval, since it is packaging, not a Breaking Change; any other change to a peer range with an unchanged Snapshot publishes a minor. A Dependency declared against a newer version of its Provider, or a newer Definitions Package version that changes no shape, changes the Snapshot (see [Canonical form](SNAPSHOT.md#canonical-form) in SNAPSHOT.md) and bumps patch. When neither the Snapshot's hash nor the peer ranges changed, `publish` does nothing unless `--force` is given.
+The version also protects Consumers' installs. The Contract Package's peers are `zod` and `@cf-loom/contract`, and their ranges are compared with the Baseline's, read from the registry's package metadata: a peer moving to a new major publishes a major even when the Snapshot did not change, so a Consumer still on the old major never installs it by accident, and that major needs no Breaking Change Approval, since it is packaging, not a Breaking Change; any other change to a peer range with an unchanged Snapshot publishes a minor. A Dependency declared against a newer version of its Provider, or a newer Definitions Package version that changes no shape, changes the Snapshot (see [Canonical form](SNAPSHOT.md#canonical-form) in SNAPSHOT.md) and bumps patch. When both the Snapshot and a peer range changed, the bump is the highest of the Snapshot's class and the peer rule. When neither the Snapshot's hash nor the peer ranges changed, `publish` does nothing unless `--force` is given.
 
 ## Rules
 
@@ -158,7 +158,7 @@ A Contract describes shapes, not behavior. Only the nodes and checks listed in [
 Codes:
 
 - A code has one HTTP status and one body schema across the whole Contract, Guards and imported Definitions Packages included; two declarations that disagree fail the check.
-- A Rejection's status, a Standard Rejection's included, is 4xx; `generate` fails on any other.
+- A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; redeclaring a removed code with another status or body is Breaking.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md. A new reserved code only comes with a cf-loom major.
 

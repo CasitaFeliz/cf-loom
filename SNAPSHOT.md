@@ -5,14 +5,14 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Where it lives
 
 - `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`. The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
-- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the previous file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it is out of date.
+- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it is out of date.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
 ## Canonical form
 
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
-- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service and each one's `endpoints` by `id`, `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a tuple's items) keep it.
+- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id` and `events` by identity, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, its `params`, a tuple's items) keep it.
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
 
 ## Top level
@@ -66,6 +66,7 @@ A Definitions Package's Snapshot:
 | Event, Command | Name and version | `OrderCreated@2` |
 | Subscription | Its name | `notify-on-settled` |
 | Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
+| A Subscription's Event | Service, then the identity, its own Service's included | `orders-service:OrderCreated@1` |
 
 - A declared path must already be canonical, or the check fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
@@ -95,7 +96,7 @@ A Definitions Package's Snapshot:
 - `params` is always stored `strict` (exactly the path's params) and a `headers` object, `input` or `success`, always `open`, whatever mode the zod object was written with.
 - `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
-- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` stamps it the first time it sees the Endpoint Deprecated and carries it forward from the previous declared Snapshot afterwards, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](AUTHORING.md#lifecycle) in AUTHORING.md).
+- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](AUTHORING.md#lifecycle) in AUTHORING.md).
 
 ## Messages
 
@@ -129,7 +130,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. `status` is 4xx (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md). `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](AUTHORING.md#rejections) in AUTHORING.md).
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](AUTHORING.md#rejections) in AUTHORING.md).
 
 ## Subscriptions and Dependencies
 
@@ -147,7 +148,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event; its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)), and tombstones are how `broker-plan` finds the consumers to remove and the streams they read.
+- A removed Subscription stays as a tombstone that keeps its Event; its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)), and tombstones are how `broker-plan` finds the durable consumers to remove and the streams they read.
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones

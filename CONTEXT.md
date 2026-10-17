@@ -71,7 +71,7 @@ What the Guards of an Endpoint provide to its EndpointHandler, as opposed to the
 _Avoid_: locals, principal, session
 
 **Outcome**:
-What a Caller receives from an Endpoint: exactly one of a Success, a Rejection or a Fault.
+What an Endpoint answers and a Caller receives: exactly one of a Success, a Rejection or a Fault. A Handler builds it with a Rejection's declaration and body; the Caller receives it with the Rejection's code, status and message resolved.
 _Avoid_: result (taken by `Result<T, E>` libraries), response, reply
 
 **Success**:
@@ -145,7 +145,7 @@ The code the runtime invokes with something incoming: a call to an Endpoint, a C
 _Avoid_: controller, listener, resolver, processor
 
 **Plan**:
-A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan (streams, consumers, permissions) and the route plan (routes by Visibility). The organization decides how to apply it.
+A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan (streams, durable consumers, permissions) and the route plan (routes by Visibility). The organization decides how to apply it.
 _Avoid_: manifest, deployment config
 
 **EventPublisher**:

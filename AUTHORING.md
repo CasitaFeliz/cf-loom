@@ -272,15 +272,15 @@ export default {
 export { snapshot };
 ```
 
-Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@cf-loom/contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). Contract Packages built on different majors of a peer conflict in one Consumer, so a new major of either peer republishes the Contract Package as a major of its own (see [Versioning](COMPATIBILITY.md#versioning)). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@cf-loom/contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
 
 Reader schemas and types always come from a Snapshot, the same way for every Visibility, never from a type-level walk of the zod schema: a Contract Package's from its published Snapshot, for Dependencies; a Service's own Events' from its declared Snapshot, written by `generate` to `readers.generated.ts`. Every object in them is open and every Open Enum and Open Union has its Unknown case. The client's validation of what it receives, the Message Handlers and the fakes of `@cf-loom/testing` all use these generated readers.
 
 ## Implementing a Contract
 
-`cf-loom generate` writes a stub for every Handler that does not exist yet, never overwriting one, and regenerates `handlers.generated.ts` and `readers.generated.ts` (see [The Contract Package](#the-contract-package)). A stub is `export default handle.stub(getOrder)`, which marks the Handler as not implemented; implementing it means replacing that line with `handle(getOrder, async (…) => …)`. `serve` answers the not-implemented Rejection for an EndpointHandler stub, and for every Endpoint attaching a GuardHandler stub, which never admits. `consume` does not consume a Message Handler stub and logs a warning; its Messages wait in the broker, within the organization's retention, until a Release with the real Handler drains them, as long as the stream retains them: an interest-retention stream with no consumer drops them. Either way a Contract can be merged and deployed with stubs before it is implemented, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md). A missing Handler is a type error.
+`cf-loom generate` writes a stub for every Handler that does not exist yet, never overwriting one, and regenerates `handlers.generated.ts` and `readers.generated.ts` (see [The Contract Package](#the-contract-package)). A stub is `export default handle.stub(getOrder)`, which marks the Handler as not implemented; implementing it means replacing that line with `handle(getOrder, async (…) => …)`. `serve` answers the not-implemented Rejection for an EndpointHandler stub, and for every Endpoint attaching a GuardHandler stub, which never admits. `consume` does not pull from a Message Handler stub and logs a warning, though it still requires its durable consumer (see [The broker](#the-broker)); its Messages wait in that durable consumer until a Release with the real Handler drains them, unless the stream's retention limits, which are the organization's, drop them first. Either way a Contract can be merged and deployed with stubs before it is implemented, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md). A missing Handler is a type error.
 
-`handlers.generated.ts` exports the handler map, plain data with four keys: `endpoints` by Endpoint name, `guards` by Guard name, `commands` by code name (`chargeCardV1`) and `subscriptions` by Subscription name, a quoted key (`'notify-on-settled'`). Handler types are nominal over their Element (`EndpointHandler<typeof getOrder>`), so the map type-checks by Element, not by inferred payload.
+`handlers.generated.ts` exports the handler map, plain data with four keys: `endpoints` by Endpoint name, `guards` by Guard name, `commands` by the Message Version's name in code (`chargeCardV1`) and `subscriptions` by Subscription name, a quoted key (`'notify-on-settled'`). Handler types are nominal over their Element (`EndpointHandler<typeof getOrder>`), so the map type-checks by Element, not by inferred payload.
 
 ### EndpointHandler
 
@@ -297,7 +297,7 @@ export default handle(getOrder, async ({ params }, context) => {
 ```
 
 - The first argument is the validated Input; the second is the Context, one key per attached Guard.
-- Only the Endpoint's Rejections type-check in `reject`, each with its declared body. A Rejection Outcome carries the declaration and the body, not a resolved code, status or message: `serve` resolves them against the root (see [Rejections](#rejections)). The `Outcome` type of `@cf-loom/handlers` is therefore not the client's (see [Consuming a Contract](#consuming-a-contract)).
+- Only the Endpoint's Rejections type-check in `reject`, each with its declared body. What a Handler builds carries a Rejection as its declaration, `rejection`, and its `body`, not as a resolved code, status or message: `serve` resolves them against the root (see [Rejections](#rejections)). The `Outcome` type of `@cf-loom/handlers` is not the client's (see [Consuming a Contract](#consuming-a-contract)); a direct call returns them resolved too (see [A Service's own code](#a-services-own-code)).
 - When the Endpoint declares `success.headers`, the Handler returns them with the Success, `success({ headers, body })` (`success({ headers })` for 204); otherwise `success(body)`.
 - Anything thrown becomes a Fault with `committed: 'unknown'` and `retryable: false`, since nothing says the same request could succeed later, and the fixed message `Internal error`; the error itself reaches only `onFault`, as `cause` (see [Serving](#serving)). A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`. Message Handlers differ: there a throw has the Message delivered again (see [Message Handlers](#message-handlers)).
 
@@ -326,7 +326,7 @@ import contract from './contract';
 export const { publisher, sender, consume, connect, close } = messaging(contract);
 ```
 
-`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [Testing](#testing)). Creating `messaging` opens no connection. Publishing, sending or consuming before `connect` throws, and so does connecting while connected; `close()` returns to not connected, so a test connects in its setup and closes in its teardown. The Service connects at startup so a broker problem, a missing stream or consumer included (see [The broker](#the-broker)), fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
+`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [Testing](#testing)). Creating `messaging` opens no connection. Publishing, sending or consuming before `connect` throws, and so does connecting while connected; `close()` returns to not connected, so a test connects in its setup and closes in its teardown. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [The broker](#the-broker)), fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
 
 ### Publishing and sending
 
@@ -362,17 +362,17 @@ export default handle(notifyOnSettled, async (body, { messageId, factId, deliver
 });
 ```
 
-A CommandHandler has the same shape. Delivery is at least once (see [Messages](ARCHITECTURE.md#messages) in ARCHITECTURE.md). Returning acknowledges the Message. Throwing, or a Fault with `retryable: true`, leaves it unacknowledged, so the consumer's configuration (ack wait, backoff, max deliveries), the organization's, decides when it comes again and what happens after the last attempt; `deliveryCount` tells the Handler which attempt this is. A Fault with `retryable: false` ends it (JetStream `term`): no redelivery, and it is logged. `headers` are the transport headers the Message was published with (see [Publishing and sending](#publishing-and-sending)). While a Handler runs, the adapter sends in-progress acknowledgements at a fraction of the consumer's ack wait, read from the consumer at `consume`, so a slow Handler's Message is not delivered to a sibling instance meanwhile.
+A CommandHandler has the same shape. Delivery is at least once (see [Messages](ARCHITECTURE.md#messages) in ARCHITECTURE.md). Returning acknowledges the Message. Throwing, or a Fault with `retryable: true`, leaves it unacknowledged, so the durable consumer's configuration (ack wait, backoff, max deliveries), the organization's, decides when it comes again and what happens after the last attempt; `deliveryCount` tells the Handler which attempt this is. A Fault with `retryable: false` ends it (JetStream `term`): no redelivery, and it is logged. `headers` are the transport headers the Message was published with (see [Publishing and sending](#publishing-and-sending)). While a Handler runs, the adapter sends in-progress acknowledgements at a fraction of the durable consumer's ack wait, read from it at `consume`, so a slow Handler's Message is not delivered to a sibling instance meanwhile.
 
 Messages are validated with the generated reader schemas (see [The Contract Package](#the-contract-package)): a Dependency's Event with its Contract Package's, the Service's own with `readers.generated.ts`. A Message that fails its schema never reaches the Handler: it is ended without redelivery and logged with its subject, its ids and the issues (see [Serving](#serving) for what a log carries); where it goes next is the organization's broker configuration.
 
 ### The broker
 
-Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one broker.
+Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and durable consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one broker.
 
 On the wire a Message's body is the UTF-8 JSON of the Message body alone; the Message Version is in the subject, two headers carry the ids, `Nats-Msg-Id`, the broker message id, and `Cf-Loom-Fact-Id`, and the transport headers travel as the broker headers they were given (see [Publishing and sending](#publishing-and-sending)).
 
-`cf-loom broker-plan` prints the desired state from the Snapshots: each stream and its subjects, each Subscription's durable consumer and the stream it reads, each Command Version's consumer (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with), the consumers left over from removed Subscriptions and Retired Command Versions, and which subjects each Service may publish and subscribe to. `--json` prints it in a fixed shape, so the organization's own tooling can read it; names carry the prefix when one is given:
+`cf-loom broker-plan` prints the desired state from the Snapshots: each stream and its subjects, each Subscription's durable consumer and the stream it reads, each Command Version's durable consumer (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with), the durable consumers left over from removed Subscriptions and Retired Command Versions, and which subjects each Service may publish and subscribe to. `--json` prints it in a fixed shape, so the organization's own tooling can read it; names carry the prefix when one is given:
 
 ```json
 {
@@ -397,10 +397,10 @@ Nothing applies it by default (see [Messages](ARCHITECTURE.md#messages) in ARCHI
 
 ```ts
 await broker.apply(plan, limits);                    // creates and updates, never removes
-await broker.apply(plan, limits, { prune: true });   // also deletes orphaned consumers
+await broker.apply(plan, limits, { prune: true });   // also deletes orphaned durable consumers
 ```
 
-`plan` is the JSON above; computing it needs the Baseline and the registry, which a running Service does not have. `limits` holds every setting cf-loom has no opinion on: for each stream `retention`, `maxAge`, `duplicateWindow`, `replicas` and `storage`, for each consumer `deliverPolicy`, `ackWait`, `maxDeliver`, `backoff` and `maxAckPending`, keyed by the names the plan prints; `streamDefaults` and `consumerDefaults` fill in whatever a stream or consumer does not set. `apply` refuses to create a stream or consumer with any setting left unset, naming it and the setting. `cf-loom broker-plan --limits-skeleton` prints the `limits` for the plan with every key empty:
+`plan` is the JSON above; computing it needs the Baseline and the registry, which a running Service does not have. `limits` holds every setting cf-loom has no opinion on: for each stream `retention`, `maxAge`, `duplicateWindow`, `replicas` and `storage`, for each durable consumer `deliverPolicy`, `ackWait`, `maxDeliver`, `backoff` and `maxAckPending`, keyed by the names the plan prints; `streamDefaults` and `consumerDefaults` fill in whatever a stream or durable consumer does not set. `apply` refuses to create a stream or durable consumer with any setting left unset, naming it and the setting. `cf-loom broker-plan --limits-skeleton` prints the `limits` for the plan with every key empty:
 
 ```ts
 await broker.apply(plan, {
@@ -411,9 +411,9 @@ await broker.apply(plan, {
 });
 ```
 
-Without `prune`, `apply` only creates streams and consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs: applying without `prune` is safe before the new Release deploys and while the old one runs. A Release fails fast when the plan was not applied: `connect` checks that the Service's stream covers every subject it publishes or sends, `consume` that every durable consumer it needs exists, and each fails with an error naming what is missing.
+Without `prune`, `apply` only creates streams and durable consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs: applying without `prune` is safe before the new Release deploys and while the old one runs. A Release fails fast when the plan was not applied: `connect` checks that the Service's stream covers every subject it publishes or sends, `consume` that the durable consumer of every Subscription and Command Version it serves exists, one with a stubbed Handler included, and each fails with an error naming what is missing.
 
-Pruning deletes the consumers of removed Subscriptions and Retired Command Versions, so it runs only once the Release that dropped them is no longer running (see the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages)). `apply` refuses to delete a consumer that still has pending or ack-pending Messages, with an error naming the consumer and both counts, unless `{ prune: true, force: true }` is given: the deploy rule has a Command Version's queue drained first. `cf-loom broker-plan --orphans` reads the broker, the one thing `broker-plan` does that needs broker access, read-only, and lists the orphaned consumers with those counts. After a prune, rolling back to a Release before it needs that Release's plan applied again, since its consumers are gone.
+Pruning deletes the durable consumers of removed Subscriptions and Retired Command Versions, so it runs only once the Release that dropped them is no longer running (see the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages)). `apply` refuses to delete a durable consumer that still has pending or ack-pending Messages, with an error naming the durable consumer and both counts, unless `{ prune: true, force: true }` is given: the deploy rule has a Command Version's queue drained first. `cf-loom broker-plan --orphans` reads the broker, the one thing `broker-plan` does that needs broker access, read-only, and lists the orphaned durable consumers with those counts. After a prune, rolling back to a Release before it needs that Release's plan applied again, since its durable consumers are gone.
 
 ### Serving
 
@@ -461,7 +461,7 @@ switch (outcome.kind) {
   case 'success':
     return outcome.value.amount;
   case 'rejection':
-    if (outcome.known && outcome.code === 'NOT_FOUND') return null;
+    if (outcome.known && outcome.code === 'NOT_FOUND') return null;   // getPayment lists notFound
     throw new Error(outcome.message);
   case 'fault':
     if (outcome.committed === 'no' && outcome.retryable) return retry();
@@ -471,7 +471,7 @@ switch (outcome.kind) {
 
 The client has one method per Endpoint listed in the Dependency, named after it, and returns an Outcome: it never throws for a Rejection or a Fault. It reads the Provider's Standard Rejection codes from the Provider's Contract Package, so a Caller receives the Provider's codes, not its own. Every method takes an optional second argument, `{ signal }`, to abort the call; cf-loom sets no timeout, the organization does. How an Outcome travels is in [Wire protocol](#wire-protocol).
 
-A Success Outcome carries `value`, the body, and `headers`, the declared Success headers, typed. The client validates a Success, its headers included, and a Rejection body against the reader schemas of the Provider's Contract Package (see [The Contract Package](#the-contract-package)): open objects, Unknown cases. One that fails them is a Fault with `INVALID_OUTCOME`, `committed: 'yes'` and `retryable: false`: the Service processed the request, but answered something its Contract does not describe.
+A Success Outcome carries `value`, the body, and `headers`, the declared Success headers, typed. The client validates a Success, its headers included, and a Rejection body against the reader schemas of the Provider's Contract Package (see [The Contract Package](#the-contract-package)): open objects, Unknown cases. A Success that fails them is a Fault with `INVALID_OUTCOME`, `committed: 'yes'` and `retryable: false`: the Service processed the request, but answered something its Contract does not describe. A Rejection body that fails them is the same Fault with `committed: 'unknown'`.
 
 A Rejection Outcome carries `known`, `code`, `message` and `body`: when `known` is `true`, `code` is one of the declared codes and `body` its declared type; when `false`, the client did not know the code, and `code` is the raw string and `body` unvalidated. Checking `known` first lets TypeScript narrow by code.
 
@@ -502,15 +502,15 @@ A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, m
 | `RETIRED` | 410 | `'no'` | The Endpoint is Retired and still declared (see [Lifecycle](#lifecycle)) |
 | `NO_SUCH_ENDPOINT` | 404 | `'no'` | No declared Endpoint has that method and path |
 | `BODY_TOO_LARGE` | 413 | `'no'` | The body exceeds `maxBodyBytes` (see [Serving](#serving)) |
-| `INVALID_OUTCOME` | 500 | `'unknown'` | The Handler's Outcome broke a constraint (see [Serving](#serving)). The client produces the same code with `committed: 'yes'`, and no HTTP status of its own, when a Success or Rejection body fails its reader schema (see [Consuming a Contract](#consuming-a-contract)) |
+| `INVALID_OUTCOME` | 500 | `'unknown'` | The Handler's Outcome broke a constraint (see [Serving](#serving)). The client produces the same code, and no HTTP status of its own, when a Success or Rejection body fails its reader schema; its `committed` depends on which (see [Consuming a Contract](#consuming-a-contract)) |
 
-An HTTP response that is neither the Success, a Rejection body nor a Fault body, or no response at all, becomes a Fault the client infers from what happened; `client(deps, { inferFault })` replaces this inference (see [Consuming a Contract](#consuming-a-contract)):
+A response with the declared Success status is decoded as the Success; a response whose body is a `{ rejection }` or `{ fault }` envelope is decoded as such; anything else, or no response at all, becomes a Fault the client infers from what happened. `client(deps, { inferFault })` replaces this inference (see [Consuming a Contract](#consuming-a-contract)):
 
 | What happened | Fault |
 | --- | --- |
 | No connection: a DNS failure or a refused connection (Node's `cause.code` `ENOTFOUND`, `ECONNREFUSED`), an abort before the request was sent, or 429 | `committed: 'no'`, `retryable: true` |
-| A timeout, a reset or abort after the request was sent, or 503 without a Fault body | `committed: 'unknown'`, `retryable: true` |
-| Any other network failure of `fetch`, or any other status without a Fault body (500, 502, 504…) | `committed: 'unknown'`, `retryable: false` |
+| A timeout, a reset or abort after the request was sent, or 503 | `committed: 'unknown'`, `retryable: true` |
+| Any other network failure of `fetch`, or any other status (500, 502, 504…) | `committed: 'unknown'`, `retryable: false` |
 
 ## Testing
 
@@ -521,12 +521,12 @@ cf-loom keeps its API test-friendly and ships testing helpers only where hand-wr
 A Handler returned by `handle()` is a function. Calling it runs the same checks `serve` and `consume` run: Input that breaks the Contract throws with the validation issues, as does an Outcome that breaks a constraint, so a unit test catches what production would answer as the invalid-input Rejection or as `INVALID_OUTCOME`. Otherwise:
 
 - An EndpointHandler or GuardHandler returns what `serve` would answer: anything it throws becomes that Fault, carrying the original error as `cause`.
-- A direct call's Outcome is the handler-side `Outcome` of `@cf-loom/handlers`, not the client's: a Rejection carries its declaration as `rejection` (`outcome.rejection === notFound`) and its `body`, with `code`, `status` and `message` resolved against cf-loom's defaults unless the call is given the root, `getOrderHandler(input, context, { contract })`, which resolves them as `serve` does (see [Rejections](#rejections)).
+- A direct call returns the `Outcome` the Handler built (see [EndpointHandler](#endpointhandler)) plus the Rejection's `code`, `status` and `message`, resolved against cf-loom's defaults unless the call is given the root, `getOrderHandler(input, context, { contract })`, which resolves them as `serve` does (see [Rejections](#rejections)). A Rejection is told by its declaration: `outcome.rejection === notFound`.
 - A Message Handler rethrows what it throws and returns a Fault it returns unchanged, since `consume` answers no Caller.
 - An Endpoint or Guard stub returns the not-implemented Rejection, so a direct call's Outcome type includes it; a Message Handler stub throws, since `consume` never runs it.
 - A GuardHandler validates only what its Guard demands, and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
 - The Context passed to an EndpointHandler is checked against each attached Guard's `context` schema.
-- A Message Handler takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`.
+- A Message Handler takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`. In a direct call its meta (see [Message Handlers](#message-handlers)) defaults `headers` to `{}`.
 
 ```ts
 import getOrderHandler from '../src/endpoints/orders/get-order.handler';
@@ -592,7 +592,7 @@ import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handl
 
 const payments = fakeProvider(paymentsDeps);
 payments.on('getPayment')
-  .once((r) => r.reject('NOT_FOUND'))                    // a declared code, with its declared body
+  .once((r) => r.reject('NOT_FOUND'))                    // getPayment lists notFound: a declared code, with its declared body
   .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, {})) // a code the Provider does not declare
   .once((r) => r.fault({ committed: 'no', retryable: true }))
   .once((r) => r.noConnection())                         // the client infers the Fault: committed 'no'
@@ -672,7 +672,7 @@ export default config({
 });
 ```
 
-`scope` is always required; `registry` and `directory` only by `check` and `publish`, since `generate` and `verify` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
+`scope` is always required; `registry` and `directory` are required by `check`, `publish`, `broker-plan` and `route-plan`; `generate` and `verify` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
 
 A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package `<scope>/<name>`.
 
@@ -689,7 +689,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom add-subscription <name> [<service>] <Name>@<n>` | Creates a Subscription to an Event, the Service's own unless `<service>` is given, in which case the Event is also added to the Dependencies |
 | `cf-loom add-dependency <service> <element>` | Adds an Element of an installed Contract Package to the Dependencies: an Endpoint by name, an Event as `<Name>@<n>` |
 | `cf-loom generate` | Writes the stub of every missing Handler, regenerates `handlers.generated.ts` and `readers.generated.ts`, and writes `contract.snapshot.json`, stamping `deprecatedAt` on an Endpoint it first sees Deprecated |
-| `cf-loom broker-plan [--prefix <p>] [--json] [--limits-skeleton] [--orphans]` | Prints the streams, consumers, orphaned consumers and permissions the broker must hold; `--limits-skeleton` prints the `limits` for `apply` with every key empty, `--orphans` reads the broker and lists the orphaned consumers with their pending counts (see [The broker](#the-broker)) |
+| `cf-loom broker-plan [--prefix <p>] [--json] [--limits-skeleton] [--orphans]` | Prints the streams, durable consumers, orphaned durable consumers and permissions the broker must hold; `--limits-skeleton` prints the `limits` for `apply` with every key empty, `--orphans` reads the broker and lists the orphaned durable consumers with their pending counts (see [The broker](#the-broker)) |
 | `cf-loom route-plan [--json]` | Prints every route with its Visibility, and the Retired ones, for the organization's gateway or ingress |
 | `cf-loom openapi` | Writes an OpenAPI 3.1 document of the Endpoints from the Snapshot (see [JSON Schema](SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
 | `cf-loom asyncapi` | Writes an AsyncAPI document of the Events from the Snapshot (see [JSON Schema](SNAPSHOT.md#json-schema) in SNAPSHOT.md) |

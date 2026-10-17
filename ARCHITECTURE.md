@@ -51,8 +51,8 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract: one stream per Service, and one subject per Message Version made of the Service, the kind, the name and the version (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md).
-- cf-loom derives the broker's desired state (streams, consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization. Visibility is enforced at the broker only if the organization applies the derived permissions.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Command Version's queue is drained before the Release that retired it is pruned from the broker (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md). The tools do not know when a Release is deployed; this is an operating rule.
+- cf-loom derives the broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization. Visibility is enforced at the broker only if the organization applies the derived permissions.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's queue has been drained by the Release that deprecated it (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md). The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 
