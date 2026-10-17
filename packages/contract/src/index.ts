@@ -1,5 +1,7 @@
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
+export type { ContractPackage, Dependencies } from './dependencies.ts';
+export { defineDependencies } from './dependencies.ts';
 export type { Lifecycle, Visibility } from './element.ts';
 export type { Endpoint } from './endpoint.ts';
 export { defineEndpoint } from './endpoint.ts';
