@@ -18,6 +18,13 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - The documents describe the current design only, never the history of decisions. A changed decision replaces the old text.
 - Use the glossary's terms, capitalized, and never its _Avoid_ words.
 
+## Repository
+
+- pnpm 12 workspaces under `packages/`, with a catalog for zod, TypeScript and Vitest.
+- ESM only; built with `tsc -b` and project references; tested with Vitest projects.
+- Changesets with one fixed group: every package releases together.
+- Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
+
 ## Design principles
 
 - **Organization-agnostic.** cf-loom derives what follows from Contracts (plans, reports, interfaces) and exposes it. Infrastructure and process policy (who applies broker or gateway config, limits, permissions, review process) belongs to the organization: offer optional adapters, never defaults that impose a policy.

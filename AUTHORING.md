@@ -6,18 +6,18 @@ How a developer writes a Contract and the code that implements and consumes it. 
 
 | Package | Used by | Provides |
 | --- | --- | --- |
-| `@cf-loom/contract` | Services, Applications, Definitions Packages | Declarations: `contract`, `application`, `definitions`, `group`, `endpoint`, `guard`, `rejection`, `event`, `command`, `subscription`, `dependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| `@cf-loom/handlers` | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`) |
-| `@cf-loom/server` | Services with Endpoints | `serve` |
-| `@cf-loom/server/node-http` | Services on `node:http` | Adapter |
-| `@cf-loom/client` | Callers | `client`; the `Client<D, Configured>` type |
-| `@cf-loom/messaging` | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
-| `@cf-loom/messaging/jetstream` | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
-| `@cf-loom/messaging/memory` | Tests and local development | In-memory adapter |
-| `@cf-loom/testing` | Tests of Consumers | `fakeProvider`, `fakeEvent` |
-| `@cf-loom/cli` | Everyone | The `cf-loom` command; `config`; Contract directories under `@cf-loom/cli/directories` |
+| `@casitafeliz/loom-contract` | Services, Applications, Definitions Packages | Declarations: `contract`, `application`, `definitions`, `group`, `endpoint`, `guard`, `rejection`, `event`, `command`, `subscription`, `dependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
+| `@casitafeliz/loom-handlers` | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`) |
+| `@casitafeliz/loom-server` | Services with Endpoints | `serve` |
+| `@casitafeliz/loom-server/node-http` | Services on `node:http` | Adapter |
+| `@casitafeliz/loom-client` | Callers | `client`; the `Client<D, Configured>` type |
+| `@casitafeliz/loom-messaging` | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
+| `@casitafeliz/loom-messaging/jetstream` | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
+| `@casitafeliz/loom-messaging/memory` | Tests and local development | In-memory adapter |
+| `@casitafeliz/loom-testing` | Tests of Consumers | `fakeProvider`, `fakeEvent` |
+| `@casitafeliz/loom-cli` | Everyone | The `cf-loom` command; `config`; Contract directories under `@casitafeliz/loom-cli/directories` |
 
-All packages are released together with one version. `zod` and `@cf-loom/contract` are peer dependencies of every cf-loom package and every Contract Package, so each process has one copy of each.
+All packages are released together with one version. `zod` and `@casitafeliz/loom-contract` are peer dependencies of every cf-loom package and every Contract Package, so each process has one copy of each.
 
 ## Layout of a Service
 
@@ -53,9 +53,9 @@ src/
 └── main.ts                                starts HTTP and messaging
 ```
 
-File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
+File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
-The examples below leave out imports of `zod`, `@cf-loom/contract` and sibling files.
+The examples below leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files.
 
 ## Declaring a Contract
 
@@ -140,7 +140,7 @@ export const orderLocked = rejection({
 });
 ```
 
-The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@cf-loom/contract`. Their code, status and message come from the Definitions Package listed on the root that declares them (see [Definitions Packages](#definitions-packages)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented".
+The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@casitafeliz/loom-contract`. Their code, status and message come from the Definitions Package listed on the root that declares them (see [Definitions Packages](#definitions-packages)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented".
 
 The body of the invalid-input Rejection is cf-loom's, whatever the Definitions Package declares, and its runtime produces it:
 
@@ -272,9 +272,9 @@ export default {
 export { snapshot };
 ```
 
-Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@cf-loom/contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@casitafeliz/loom-contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
 
-Reader schemas and types always come from a Snapshot, the same way for every Visibility, never from a type-level walk of the zod schema: a Contract Package's from its published Snapshot, for Dependencies; a Service's own Events' from its declared Snapshot, written by `generate` to `readers.generated.ts`. Every object in them is open and every Open Enum and Open Union has its Unknown case. The client's validation of what it receives, the Message Handlers and the fakes of `@cf-loom/testing` all use these generated readers.
+Reader schemas and types always come from a Snapshot, the same way for every Visibility, never from a type-level walk of the zod schema: a Contract Package's from its published Snapshot, for Dependencies; a Service's own Events' from its declared Snapshot, written by `generate` to `readers.generated.ts`. Every object in them is open and every Open Enum and Open Union has its Unknown case. The client's validation of what it receives, the Message Handlers and the fakes of `@casitafeliz/loom-testing` all use these generated readers.
 
 ## Implementing a Contract
 
@@ -286,7 +286,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 ```ts
 // src/endpoints/orders/get-order.handler.ts
-import { handle, reject, success } from '@cf-loom/handlers';
+import { handle, reject, success } from '@casitafeliz/loom-handlers';
 
 export default handle(getOrder, async ({ params }, context) => {
   const order = await orders.find(params.orderId, context.apiKey.clientId);
@@ -297,7 +297,7 @@ export default handle(getOrder, async ({ params }, context) => {
 ```
 
 - The first argument is the validated Input; the second is the Context, one key per attached Guard.
-- Only the Endpoint's Rejections type-check in `reject`, each with its declared body. What a Handler builds carries a Rejection as its declaration, `rejection`, and its `body`, not as a resolved code, status or message: `serve` resolves them against the root (see [Rejections](#rejections)). The `Outcome` type of `@cf-loom/handlers` is not the client's (see [Consuming a Contract](#consuming-a-contract)); a direct call returns them resolved too (see [A Service's own code](#a-services-own-code)).
+- Only the Endpoint's Rejections type-check in `reject`, each with its declared body. What a Handler builds carries a Rejection as its declaration, `rejection`, and its `body`, not as a resolved code, status or message: `serve` resolves them against the root (see [Rejections](#rejections)). The `Outcome` type of `@casitafeliz/loom-handlers` is not the client's (see [Consuming a Contract](#consuming-a-contract)); a direct call returns them resolved too (see [A Service's own code](#a-services-own-code)).
 - When the Endpoint declares `success.headers`, the Handler returns them with the Success, `success({ headers, body })` (`success({ headers })` for 204); otherwise `success(body)`.
 - Anything thrown becomes a Fault with `committed: 'unknown'` and `retryable: false`, since nothing says the same request could succeed later, and the fixed message `Internal error`; the error itself reaches only `onFault`, as `cause` (see [Serving](#serving)). A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`. Message Handlers differ: there a throw has the Message delivered again (see [Message Handlers](#message-handlers)).
 
@@ -320,7 +320,7 @@ The EventPublisher and CommandSender are created once, in their own module, and 
 
 ```ts
 // src/messaging.ts
-import { messaging } from '@cf-loom/messaging';
+import { messaging } from '@casitafeliz/loom-messaging';
 import contract from './contract';
 
 export const { publisher, sender, consume, connect, close } = messaging(contract);
@@ -419,9 +419,9 @@ Pruning deletes the durable consumers of removed Subscriptions and Retired Comma
 
 ```ts
 // src/main.ts
-import { serve } from '@cf-loom/server';
-import { nodeHttp } from '@cf-loom/server/node-http';
-import { jetstream } from '@cf-loom/messaging/jetstream';
+import { serve } from '@casitafeliz/loom-server';
+import { nodeHttp } from '@casitafeliz/loom-server/node-http';
+import { jetstream } from '@casitafeliz/loom-messaging/jetstream';
 import contract from './contract';
 import handlers from './handlers.generated';
 import { connect, consume, close } from './messaging';
@@ -449,7 +449,7 @@ process.on('SIGTERM', () => {
 ## Consuming a Contract
 
 ```ts
-import { client } from '@cf-loom/client';
+import { client } from '@casitafeliz/loom-client';
 
 const payments = client(paymentsDeps, {
   baseUrl,
@@ -551,10 +551,10 @@ const res = await http(new Request(`http://test/orders/${ORDER_ID}`, {
 
 ### Messages
 
-`@cf-loom/messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
+`@casitafeliz/loom-messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
 
 ```ts
-import { memory } from '@cf-loom/messaging/memory';
+import { memory } from '@casitafeliz/loom-messaging/memory';
 import { connect, consume, close } from '../src/messaging';
 import handlers from '../src/handlers.generated';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler';
@@ -583,10 +583,10 @@ await close();
 
 ### Other Services
 
-`@cf-loom/testing` fakes the Providers a Consumer depends on, checked against the Provider's Snapshot, so a fake can never answer what the Provider could not:
+`@casitafeliz/loom-testing` fakes the Providers a Consumer depends on, checked against the Provider's Snapshot, so a fake can never answer what the Provider could not:
 
 ```ts
-import { fakeProvider, fakeEvent } from '@cf-loom/testing';
+import { fakeProvider, fakeEvent } from '@casitafeliz/loom-testing';
 import { paymentsDeps } from '../src/contract/dependencies/payments-service.dependencies';
 import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler';
 
@@ -609,7 +609,7 @@ await notifyOnSettledHandler(settled, { messageId: 'PaymentSettled.v1:pay-1', fa
 ```
 
 - **Requests.** `fakeProvider` validates each request as the Provider would, its Input and its Guards' demands, and answers the Provider's invalid-input Rejection when it fails; that Rejection uses no step. Every request, valid or not, appears in `calls()`.
-- **Steps.** Each step, in `once` or `otherwise`, receives a builder typed by the Endpoint and the request, so codes and bodies autocomplete from the Provider's Contract and nothing collides with `@cf-loom/contract` or `@cf-loom/handlers`.
+- **Steps.** Each step, in `once` or `otherwise`, receives a builder typed by the Endpoint and the request, so codes and bodies autocomplete from the Provider's Contract and nothing collides with `@casitafeliz/loom-contract` or `@casitafeliz/loom-handlers`.
   - `r.success(body)` answers the Success; `r.success({ headers, body })` when the Endpoint declares `success.headers`.
   - `r.reject(code, body?)` answers a declared code with its status; `r.reject({ unknown: code }, body)` answers a code the Provider does not declare, with status 422.
   - `r.fault(…)` may carry a reserved code (see [Wire protocol](#wire-protocol)).
@@ -658,8 +658,8 @@ Each Service, Application or Definitions Package configures the tools in `cf-loo
 
 ```ts
 // cf-loom.config.ts
-import { config } from '@cf-loom/cli';
-import { github } from '@cf-loom/cli/directories';
+import { config } from '@casitafeliz/loom-cli';
+import { github } from '@casitafeliz/loom-cli/directories';
 
 export default config({
   scope: '@org',                     // publishes @org/contract-orders-service

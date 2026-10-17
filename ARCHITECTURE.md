@@ -10,8 +10,8 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 ## Where Contracts live
 
-- One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
-- A Contract is published as exactly one Contract Package carrying its Public and Internal Elements and its Snapshot. Its Dependencies are data in the Snapshot, never imports: a Contract Package depends on no other Contract Package. Its code is generated from its Snapshot, with Definitions Packages' schemas written in, so it depends only on `zod` and `@cf-loom/contract`, as peers.
+- One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
+- A Contract is published as exactly one Contract Package carrying its Public and Internal Elements and its Snapshot. Its Dependencies are data in the Snapshot, never imports: a Contract Package depends on no other Contract Package. Its code is generated from its Snapshot, with Definitions Packages' schemas written in, so it depends only on `zod` and `@casitafeliz/loom-contract`, as peers.
 - The Snapshot also describes Private Elements, so they have a Baseline. Their shapes are readable by anyone with access to the registry; only their code stays out of the package.
 - Applications publish a Contract that holds only Dependencies, so every use of a Service's Elements is known.
 
@@ -26,7 +26,7 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 - The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; an adapter connects it to a host, and cf-loom ships one for `node:http`.
 - Messaging runs behind a broker interface; an adapter connects it to a broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development. A broker client is an optional peer dependency, installed only where its adapter is used.
-- Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@cf-loom/handlers`, and `@cf-loom/testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
+- Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@casitafeliz/loom-handlers`, and `@casitafeliz/loom-testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
 - A Contract can be merged and deployed before its Handlers are implemented, with stubs, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md); how a stub behaves is in [Implementing a Contract](AUTHORING.md#implementing-a-contract) in AUTHORING.md.
 
 ## Visibility and Guards
