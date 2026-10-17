@@ -96,7 +96,7 @@ A Definitions Package's Snapshot:
 - `params` is always stored `strict` (exactly the path's params) and a `headers` object, `input` or `success`, always `open`, whatever mode the zod object was written with.
 - `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
-- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](AUTHORING.md#lifecycle) in AUTHORING.md).
+- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
 
 ## Messages
 
@@ -130,7 +130,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](AUTHORING.md#rejections) in AUTHORING.md).
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](packages/contract/README.md#rejections) in the contract README).
 
 ## Subscriptions and Dependencies
 
@@ -187,12 +187,12 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 - Every node may carry `nullable`, `description`, `examples` and `origin` (see [Origin](#origin)). `description` and `examples` are Neutral.
 - A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate.
 - A query param whose schema is an `array` is a list; anything else, and every path param, is a single value.
-- Open Enums and Open Unions are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums and Open Unions](AUTHORING.md#open-enums-and-open-unions) in AUTHORING.md).
+- Open Enums and Open Unions are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums and Open Unions](packages/contract/README.md#open-enums-and-open-unions) in the contract README).
 - The node names `binary` and `stream` are reserved: bodies are JSON (see [Shapes, not behavior](ARCHITECTURE.md#shapes-not-behavior) in ARCHITECTURE.md).
 
 ### JSON Schema
 
-`cf-loom openapi` and `cf-loom asyncapi` (see [The CLI](AUTHORING.md#the-cli) in AUTHORING.md) read the Snapshot and write each node as JSON Schema 2020-12: `string`, `number`, `boolean`, `array`, `record` (`additionalProperties`) and `object` (`additionalProperties: false` when `strict`) as their counterparts, with the constraints as the matching keywords; `literal` as `const`; a closed `enum` as `enum`, an open one as `anyOf: [enum, string]`; `tuple` as `prefixItems` with `items` for `rest`; `union` as `anyOf`; `tagged` as `oneOf` with a `discriminator` on the variants, an open one with a further variant whose discriminator is any string; `allOf` as `allOf`; `json` as `{}`; `nullable` as a `type` that includes `null`; and `ref` as a `$ref` into `$defs`. The Rejection and Fault envelopes (see [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md) are written once as components. `description` and `examples` are carried over.
+`cf-loom openapi` and `cf-loom asyncapi` (see [Commands](packages/cli/README.md#commands) in the CLI README) read the Snapshot and write each node as JSON Schema 2020-12: `string`, `number`, `boolean`, `array`, `record` (`additionalProperties`) and `object` (`additionalProperties: false` when `strict`) as their counterparts, with the constraints as the matching keywords; `literal` as `const`; a closed `enum` as `enum`, an open one as `anyOf: [enum, string]`; `tuple` as `prefixItems` with `items` for `rest`; `union` as `anyOf`; `tagged` as `oneOf` with a `discriminator` on the variants, an open one with a further variant whose discriminator is any string; `allOf` as `allOf`; `json` as `{}`; `nullable` as a `type` that includes `null`; and `ref` as a `$ref` into `$defs`. The Rejection and Fault envelopes (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md) are written once as components. `description` and `examples` are carried over.
 
 ### Recursion
 

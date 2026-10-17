@@ -2,7 +2,7 @@
 
 Tooling for defining, publishing, verifying and consuming the Contracts of Services: their HTTP Endpoints, their Messages and what they depend on. A Contract is the single source of truth for what a Service offers and what it requires; Handlers implement it and Consumers use it.
 
-This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILITY.md) (how a Contract may change) and [ARCHITECTURE.md](ARCHITECTURE.md) (how the pieces fit); [AUTHORING.md](AUTHORING.md) shows how a Contract is written, and [SNAPSHOT.md](SNAPSHOT.md) specifies the Snapshot.
+This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILITY.md) (how a Contract may change) and [ARCHITECTURE.md](ARCHITECTURE.md) (how the pieces fit); [README.md](README.md) walks through a first Service and links each package's README, and [SNAPSHOT.md](SNAPSHOT.md) specifies the Snapshot.
 
 ## Language
 
