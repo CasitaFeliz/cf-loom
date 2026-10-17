@@ -33,7 +33,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
 - `lint/` holds Biome GritQL plugins and `scripts/check-tsdoc.ts` checks TSDoc, both for [CODING_STANDARDS.md](CODING_STANDARDS.md).
 - Tests sit next to the code (`*.test.ts`) and import only a package's entries: `.`, its subpaths and `./internal` (see C23).
-- Changesets with one fixed group: every package releases together. cf-loom reaches 1.0.0 before any Contract Package is published.
+- Changesets with one fixed group: every package releases together. No PR carries a changeset before the first release candidate; from it on, every PR that changes a package carries one. cf-loom reaches 1.0.0 before any Contract Package is published.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
 - Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome and the TSDoc check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 
