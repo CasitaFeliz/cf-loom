@@ -8,9 +8,11 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 | --- | --- |
 | `CONTEXT.md` | The glossary: every term, with words to avoid |
 | `COMPATIBILITY.md` | How a Contract may change: the Compatibility Check and its rules |
-| `ARCHITECTURE.md` | How the pieces fit: packages, runtime, what cf-loom leaves to the organization |
-| `AUTHORING.md` | The authoring API, layout, examples, configuration and CLI |
+| `ARCHITECTURE.md` | How the pieces fit: packages, runtime, the Wire protocol, what cf-loom leaves to the organization |
 | `SNAPSHOT.md` | The Snapshot format the Compatibility Check compares |
+| `README.md` | What cf-loom is, a first Service, and the packages table |
+| `packages/<pkg>/README.md` | How to use the package: its API, options, examples |
+| `packages/<pkg>/ARCHITECTURE.md` | The package's internal details, repo only (not in the package's `files`) |
 
 - Everything is written in English, code and documents alike.
 - No `docs/` folder: a compatibility rule goes in `COMPATIBILITY.md`, an architecture concern in `ARCHITECTURE.md`.
@@ -24,7 +26,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - ESM only; built with `tsc -b` and project references; tested with Vitest projects; formatted and linted with Biome.
 - Each package has `tsconfig.build.json` (src to dist, no tests) and `tsconfig.test.json` (type-checks tests); `contract` and `client` build without Node types, since Applications run them in browsers.
 - cf-loom packages depend on each other only as peers (plus a devDependency), never as dependencies.
-- A package shares code with other cf-loom packages only through an undocumented `./internal` export; AUTHORING.md never lists it.
+- A package shares code with other cf-loom packages only through an undocumented `./internal` export; no README lists it.
 - Relative imports name the `.ts` file (`./serve.ts`); `tsc` rewrites them to `.js`. Only erasable TypeScript syntax: no enums, namespaces or parameter properties.
 - `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
 - Tests sit next to the code (`*.test.ts`) and import only a package's public entries.

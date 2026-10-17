@@ -1,6 +1,6 @@
 # Architecture
 
-How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md); how a Contract is written, the packages and the CLI are in [AUTHORING.md](AUTHORING.md).
+How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md); how each package is used is in its README, listed in [README.md](README.md#packages), and a package's internal details are in the `ARCHITECTURE.md` next to that README.
 
 ## Tooling, not Contracts
 
@@ -8,26 +8,49 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 - The tools know no organization: package scope, registry and Approvers are configuration of whoever uses them.
 - The tools and every Contract Package are published to an internal registry.
 
+## Packages
+
+All packages are released together with one version. `zod` and `@casitafeliz/loom-contract` are peer dependencies of every cf-loom package and every Contract Package, and every cf-loom package a cf-loom package uses is a peer dependency of it, so each process has one copy of each. What each package provides is listed in [Packages](README.md#packages) in README.md.
+
 ## Where Contracts live
 
 - One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
 - A Contract is published as exactly one Contract Package carrying its Public and Internal Elements and its Snapshot. Its Dependencies are data in the Snapshot, never imports: a Contract Package depends on no other Contract Package. Its code is generated from its Snapshot, with Definitions Packages' schemas written in, so it depends only on `zod` and `@casitafeliz/loom-contract`, as peers.
 - The Snapshot also describes Private Elements, so they have a Baseline. Their shapes are readable by anyone with access to the registry; only their code stays out of the package.
-- Applications publish a Contract that holds only Dependencies, so every use of a Service's Elements is known.
+- Applications publish a Contract that holds only Dependencies, so every use of a Service's Elements is known (see [Applications](packages/contract/README.md#applications) in the contract README).
+
+## The Contract Package
+
+`cf-loom publish` generates the Contract Package's code from the Snapshot; no source file is bundled. It writes the zod schemas, the writer and reader types, the entry point and the package.json for the Public and Internal Elements that are not Retired, with the Guards, Rejections and schemas they use, plus the Snapshot itself. What is published is exactly what the Snapshot describes, and no Private code can leak into it:
+
+```ts
+// generated entry point of @org/contract-payments-service
+export default {
+  name: 'payments-service',
+  endpoints: { getPayment, createPayment },          // keyed by Endpoint name
+  events: { paymentSettledV1, paymentSettledV2 },    // name with its first letter lower-cased + 'V' + version
+  standardRejections,                                // resolved codes, statuses and messages
+};
+export { snapshot };
+```
+
+Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@casitafeliz/loom-contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+
+Reader schemas and types always come from a Snapshot, the same way for every Visibility, never from a type-level walk of the zod schema: a Contract Package's from its published Snapshot, for Dependencies; a Service's own Events' from its declared Snapshot, written by `generate` to `readers.generated.ts`. Every object in them is open and every Open Enum and Open Union has its Unknown case. The client's validation of what it receives (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README), the Message Handlers (see [Message Handlers](packages/messaging/README.md#message-handlers)) and the fakes of `@casitafeliz/loom-testing` (see [Faking Providers](packages/testing/README.md#faking-providers)) all use these generated readers.
 
 ## Shapes, not behavior
 
 - A Contract describes shapes and declarative constraints only: no defaults, transforms, refinements, coercion or custom validation (see [Not allowed in a Contract](COMPATIBILITY.md#not-allowed-in-a-contract)). What happens when an optional input is missing, and any check beyond a declarative constraint, belongs to the Handler and is expressed as a Rejection.
-- The tooling validates what is written before sending it (Success, Rejection bodies, Messages) and sends the parsed value, unknown keys stripped, so nothing carries an undeclared field; whoever reads a Success, a Rejection body or a Message validates it with a reader schema generated from the Snapshot, which ignores fields it does not know (see [The Contract Package](AUTHORING.md#the-contract-package) in AUTHORING.md). Only the Service reading its Input enforces a strict object.
+- The tooling validates what is written before sending it (Success, Rejection bodies, Messages) and sends the parsed value, unknown keys stripped, so nothing carries an undeclared field; whoever reads a Success, a Rejection body or a Message validates it with a reader schema generated from the Snapshot, which ignores fields it does not know (see [The Contract Package](#the-contract-package)). Only the Service reading its Input enforces a strict object.
 - Bodies are JSON. Binary bodies and streaming are not part of a Contract: an upload or a download goes through a pattern of the organization, such as signed URLs, or through a route outside the Contract (see [Endpoints](#endpoints)).
-- Path params, query params and headers travel as text; how they are converted to their declared types is in [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md.
 
 ## Runtime
 
-- The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; an adapter connects it to a host, and cf-loom ships one for `node:http`.
-- Messaging runs behind a broker interface; an adapter connects it to a broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development. A broker client is an optional peer dependency, installed only where its adapter is used.
-- Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@casitafeliz/loom-handlers`, and `@casitafeliz/loom-testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing](AUTHORING.md#testing)).
-- A Contract can be merged and deployed before its Handlers are implemented, with stubs, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md); how a stub behaves is in [Implementing a Contract](AUTHORING.md#implementing-a-contract) in AUTHORING.md.
+- The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; an adapter connects it to a host, and cf-loom ships one for `node:http` (see [node-http](packages/server/README.md#node-http)).
+- Messaging runs behind a broker interface; an adapter connects it to a broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development (see [Adapters](packages/messaging/README.md#adapters)). A broker client is an optional peer dependency, installed only where its adapter is used.
+- Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@casitafeliz/loom-handlers`, and `@casitafeliz/loom-testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code) and the [`@casitafeliz/loom-testing` README](packages/testing/README.md)).
+- A Contract can be merged and deployed before its Handlers are implemented, with stubs, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md); how a stub behaves is in [Stubs and the handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers' README.
+- Without an `onFault` (see [Serving](packages/server/README.md#serving) in the server README and [Connecting](packages/messaging/README.md#connecting) in the messaging README), `serve` and `messaging` write the Faults they answer and the Messages they end to the console; a logged schema failure, a Message body's or an `INVALID_OUTCOME`, carries the issues' paths and codes, never the received values.
 
 ## Visibility and Guards
 
@@ -40,24 +63,59 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 ## Endpoints
 
 - An Endpoint declares its literal path and everything it requires. Groups only organize; they add no prefix and no Guards.
-- When two Endpoints with the same method match one URL, routing precedence decides (see [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md).
+- When two Endpoints with the same method match one URL, routing precedence decides (see [Over HTTP](#over-http)).
 - A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. Each Service writes its own GuardHandler, even for an imported Guard.
 - An EndpointHandler receives the Caller's Input and the Context its Guards provided, and answers an Outcome.
 - A Service may serve routes outside its Contract. cf-loom does not see them: the Compatibility Check, shadowing included, covers only declared Endpoints, so a new Endpoint that takes a URL an outside route served is the organization's to catch. Whatever splits requests between them, the host framework or a gateway, must send every declared Endpoint, Retired ones included, to cf-loom; how `serve` hands back a request that is not its own belongs to each framework adapter.
 
 ## Messages
 
-- Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [Messages](AUTHORING.md#messages) in AUTHORING.md). A Command is handled by one CommandHandler, and every Handler must be safe to run again.
+- Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [In memory](packages/messaging/README.md#in-memory) in the messaging README). A Command is handled by one CommandHandler, and every Handler must be safe to run again.
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
-- Where a Message travels is derived from the Contract: one stream per Service, and one subject per Message Version made of the Service, the kind, the name and the version (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md).
-- cf-loom derives the broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization. Visibility is enforced at the broker only if the organization applies the derived permissions.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's queue has been drained by the Release that deprecated it (see [The broker](AUTHORING.md#the-broker) in AUTHORING.md). The tools do not know when a Release is deployed; this is an operating rule.
+- Where a Message travels is derived from the Contract (see [Over the broker](#over-the-broker)).
+- cf-loom derives the broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README). Visibility is enforced at the broker only if the organization applies the derived permissions.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's queue has been drained by the Release that deprecated it (see [Pruning](packages/messaging/README.md#pruning) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 
 - A Service or Application reaches a Provider only through a Dependency, declared with the tools, which then enable the typed client or the EventHandler stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
-- Published Dependencies form the dependency graph the Compatibility Check reads before an Element is retired or its Visibility narrowed: for every Contract Package, Applications' included, the highest version of each major, unless that version is deprecated in the registry. An organization ends an old major by deprecating it (`npm deprecate @org/contract-web-admin@2 "…"`); until then its Dependencies count, and the check's error names the package and the major that block the retirement. A Consumer whose deployed Release is older than its highest publish is covered by the deploy rule. The graph is read from each package's `cfLoom` metadata in the registry (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md); only the Baseline's `snapshot.json` is downloaded.
-- npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. cf-loom ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry, and a fixed list for tests. Versions and metadata always come from the standard package metadata.
-- The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. `publish` records the package in the directory before publishing to the registry (the git-repository directory writes and pushes), then re-reads the directory and fails if the package is missing from it; the no-op path of `publish` verifies membership too. The directory is read with the same credentials the check uses, which must be able to read the whole scope.
+- Published Dependencies form the dependency graph the Compatibility Check reads before an Element is retired or its Visibility narrowed: for every Contract Package, Applications' included, the highest version of each major, unless that version is deprecated in the registry. An organization ends an old major by deprecating it (`npm deprecate @org/contract-web-admin@2 "…"`); until then its Dependencies count, and the check's error names the package and the major that block the retirement. A Consumer whose deployed Release is older than its highest publish is covered by the deploy rule. How the graph is read is in [Reading the graph](packages/cli/ARCHITECTURE.md#reading-the-graph) in the CLI's ARCHITECTURE.md.
+
+## Wire protocol
+
+How an Endpoint's Input and Outcome travel over HTTP, between `serve` and the client, and how a Message travels through the broker.
+
+### Over HTTP
+
+- Bodies are JSON, sent as `content-type: application/json; charset=utf-8`, and what is sent is the parsed value, unknown keys stripped (see [Shapes, not behavior](#shapes-not-behavior)). A malformed body or a wrong content type is the invalid-input Rejection, with the `malformed` issue code.
+- Path params, query params and headers, a Success's included, travel as text and are converted to their declared types: a number matches `^-?(0|[1-9]\d*)(\.\d+)?$`, a boolean is exactly `true` or `false`. A list query param is a repeated key (`?id=a&id=b`), and one occurrence is a one-item list; a repeated single-value key, or a header given several times, is invalid input. A path param that fails its schema is invalid input, never the not-found Rejection. Headers of an HTTP response that the Endpoint does not declare pass through unread on both sides.
+- Each path segment is percent-decoded on its own, so a decoded value never spans segments: `/orders/a%2Fb` is one param, `a/b`. There is no trailing-slash or case folding; a request path matches a declared path exactly (see [Identities](SNAPSHOT.md#identities) in SNAPSHOT.md).
+- Routing compares segment by segment, left to right: a literal beats a param at the first segment where they differ.
+- An undeclared method or path is `NO_SUCH_ENDPOINT`. `HEAD`, `OPTIONS` and CORS preflight are not answered by cf-loom unless declared; the host, its adapter or the organization's gateway handles them.
+
+A Rejection travels with its declared status and a body cf-loom defines, `{ rejection: { code, message, body } }`; a Rejection that declares no body has no `body` key. Rejection codes are open for Callers.
+
+A Fault travels with a body cf-loom defines, `{ fault: { committed, retryable, message } }`, where `committed` is `'no'`, `'yes'` (done, but the Success was lost) or `'unknown'` (see [Fault](CONTEXT.md#language) in CONTEXT.md). `serve` answers it with 503 when it is retryable and 500 otherwise. The reserved codes (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md) use the same body with a `code`, `{ fault: { code, committed, retryable: false, message } }`, which the client's Fault Outcome exposes:
+
+| Code | Status | `committed` | Answered when |
+| --- | --- | --- | --- |
+| `RETIRED` | 410 | `'no'` | The Endpoint is Retired and still declared (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README) |
+| `NO_SUCH_ENDPOINT` | 404 | `'no'` | No declared Endpoint has that method and path |
+| `BODY_TOO_LARGE` | 413 | `'no'` | The body exceeds `maxBodyBytes` (see [Serving](packages/server/README.md#serving) in the server README) |
+| `INVALID_OUTCOME` | 500 | `'unknown'` | The Handler's Outcome broke a constraint (see [Validation](packages/server/ARCHITECTURE.md#validation) in the server's ARCHITECTURE.md). The client produces the same code, and no HTTP status of its own, when a Success or Rejection body fails its reader schema; its `committed` depends on which (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README) |
+
+A response with the declared Success status is decoded as the Success; a response whose body is a `{ rejection }` or `{ fault }` envelope is decoded as such; anything else, or no response at all, becomes a Fault the client infers from what happened. `client(deps, { inferFault })` replaces this inference (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README):
+
+| What happened | Fault |
+| --- | --- |
+| No connection: a DNS failure or a refused connection (Node's `cause.code` `ENOTFOUND`, `ECONNREFUSED`), an abort before the request was sent, or 429 | `committed: 'no'`, `retryable: true` |
+| A timeout, a reset or abort after the request was sent, or 503 | `committed: 'unknown'`, `retryable: true` |
+| Any other network failure of `fetch`, or any other status (500, 502, 504…) | `committed: 'unknown'`, `retryable: false` |
+
+### Over the broker
+
+Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and durable consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one broker.
+
+On the wire a Message's body is the UTF-8 JSON of the Message body alone; the Message Version is in the subject, two headers carry the ids, `Nats-Msg-Id`, the broker message id, and `Cf-Loom-Fact-Id`, and the transport headers travel as the broker headers they were given (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README).
