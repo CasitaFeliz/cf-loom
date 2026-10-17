@@ -1,0 +1,6 @@
+language js
+
+`$collection.flatMap($callback)` as $call where {
+  $callback <: contains `$condition ? [$element] : []`,
+  register_diagnostic(span=$call, message="C10: filter with a type guard, not a flatMap that returns a conditional array.", severity="error")
+}

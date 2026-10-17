@@ -1,0 +1,6 @@
+language js
+
+JsFormalParameter(type_annotation=TsTypeAnnotation(ty=TsBooleanType())) as $parameter where {
+  $parameter <: within JsExport(),
+  register_diagnostic(span=$parameter, message="C17: pass a closed value that names the mode, or call a function named for it, not a boolean.", severity="error")
+}

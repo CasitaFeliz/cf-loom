@@ -114,7 +114,7 @@ const businessCodes = resolved.filter(isBusinessRejection);
 
 ## Expressions and idioms
 
-**C10. Filter with a type guard.** `.filter(isEvent)` with `function isEvent(message: Message): message is Event`;
+**C10. Filter with a type guard** **(lint)**. `.filter(isEvent)` with `function isEvent(message: Message): message is Event`;
 never `flatMap((x) => cond ? [x] : [])`, never a `filter` followed by a cast. *Why:* the guard names the subset and
 types it; the `flatMap` trick says neither.
 
@@ -139,8 +139,8 @@ function statusOf(outcome: Outcome): number {
 }
 ```
 
-**C12. Plain loops over clever folds.** A `for` loop that pushes into a named array, or a `map`, before a `reduce`
-with an accumulator object; a `Map` built from entries before one built by mutation inside a fold. *Why:* a loop
+**C12. Plain loops over clever folds** **(lint)**. A `for` loop that pushes into a named array, or a `map`; never a
+`reduce`. A `Map` is built from entries, not by mutation inside a fold. *Why:* a loop
 shows its state; a fold hides it in the accumulator's shape.
 
 ## Naming
@@ -152,7 +152,7 @@ CONTEXT.md with the change that introduces it. *Why:* one word per concept lets 
 say the same thing.
 
 **C14. No vague names.** Not `one`, `entry`, `item`, `common`, `data`, `info`, `result2`, `tmp`; a single letter only
-inside a lambda of one expression. A loop variable is the singular of its collection; a map is `xById`; a derivation is
+inside a lambda of one expression **(lint)**. A loop variable is the singular of its collection; a map is `xById`; a derivation is
 `xOf(y)`; a predicate is `isX` or `hasX`. *Why:* a vague name sends the reader to the declaration and back for every
 use.
 
@@ -164,9 +164,9 @@ for (const entry of endpoints) { const one = codes.get(entry.rejections[0]); …
 for (const endpoint of endpoints) { const rejection = rejectionsByCode.get(code); … }
 ```
 
-**C15. A name says the role, not the history.** No `new`, `old`, `legacy`, `v2`, `fixed`, `real`, `actual` in a name:
-when the old thing is gone (C5), the name is free. A Message Version's number is data (`OrderCreated@2`), not a name of
-code. A function that decides is named for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what
+**C15. A name says the role, not the history** **(lint)**. No `new`, `old`, `legacy`, `fixed`, `real`, `actual` and
+no version suffix in a name: when the old thing is gone (C5), the name is free. A Message Version's name in code
+(`orderCreatedV2`) is the one exception, since its number is part of the Contract. A function that decides is named for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what
 it does (`writeSnapshot`, `applyPlan`). *Why:* a name that refers to another version only means something while both
 exist.
 
@@ -177,7 +177,7 @@ is a `switch` over a closed union, with no `default` that swallows a member: Bio
 **(lint)**. A string that can take only a few values is a union of literals, never `string`; no TypeScript `enum`
 (`erasableSyntaxOnly`). *Why:* adding a member then lists every place that must decide about it.
 
-**C17. No boolean flag parameters.** A caller passes a closed value that names the mode, or calls a function named for
+**C17. No boolean flag parameters** **(lint)**. A caller passes a closed value that names the mode, or calls a function named for
 it. A boolean belongs in data (`committed`, `retryable`) and in predicates, not in a parameter that switches a
 function's behaviour. *Why:* `generate(contract, true)` says nothing at the call site, and a flag is a second function
 hiding in the first.
@@ -213,7 +213,7 @@ function is a global under another name. *Why:* the signature is the function's 
 
 **C20. A doc comment is one or two sentences of why.** It sits above the declaration as TSDoc; no other comment but a
 lint directive or a `TODO`. It says why the thing exists or what it decides, never what each line does, and never the
-issue number. Public exports carry TSDoc, since their users read it in the editor. *Why:* the what is the code; the
+issue number. Every exported declaration carries TSDoc **(check)**, since its users read it in the editor. *Why:* the what is the code; the
 why is the one thing it cannot say.
 
 **C21. A comment that chains rules means the code does too much.** When a comment needs dashes, parentheses or a
@@ -280,7 +280,10 @@ count toward either cap; tests and generated files are exempt from both. The for
 (C9). Type and import rules already configured in `biome.json` (`noExplicitAny`, `useImportType`, `noDefaultExport`,
 naming conventions) apply as well.
 
-Worth enforcing and not configured: a `flatMap` whose callback returns a conditional array literal (C10), `reduce`
-(C12), identifiers shorter than two characters outside a one-expression lambda (C14), a `boolean` parameter in an
-exported function (C17), a name with `old`, `new` or `v2` (C15), and a doc comment on a public export (C20). The rest
-stays judgement, and C27 is where it is exercised.
+The GritQL plugins in `lint/` add, as errors: a `flatMap` whose callback returns a conditional array (C10), `reduce`
+(C12), a single-letter name outside a lambda of one expression (C14), a name with `old`, `new`, `legacy`, `fixed`,
+`real` or `actual` (C15), and a `boolean` parameter of an exported function (C17). `scripts/check-tsdoc.ts` fails on
+an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run it.
+
+The rest stays judgement, and C27 is where it is exercised: the vague words of C14, a version suffix in a name (C15),
+a boolean parameter of a function that is not exported (C17), and whether a doc comment says why (C20).

@@ -1,0 +1,9 @@
+language js
+
+or {
+  JsIdentifierBinding(),
+  TsIdentifierBinding()
+} as $name where {
+  $name <: r"^(?:(?:old|new|legacy|fixed|real|actual)[A-Z0-9_].*|.*[a-z0-9](?:Old|New|Legacy|Fixed|Real|Actual)(?:[A-Z0-9_].*)?|(?:Old|New|Legacy|Fixed|Real|Actual)(?:[A-Z0-9_].*)?)$",
+  register_diagnostic(span=$name, message="C15: name the role, not the history (no old, new, legacy, fixed, real or actual).", severity="error")
+}

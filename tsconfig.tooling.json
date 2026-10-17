@@ -6,5 +6,5 @@
     "types": ["node"]
   },
   "extends": "./tsconfig.base.json",
-  "include": ["*.config.ts", "scripts/**/*.ts"]
+  "include": ["*.config.ts", "lint/**/*.ts", "scripts/**/*.ts"]
 }
