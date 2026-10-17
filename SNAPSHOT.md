@@ -68,7 +68,7 @@ A Definitions Package's Snapshot:
 | Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
 | A Subscription's Event | Service, then the identity, its own Service's included | `orders-service:OrderCreated@1` |
 
-- A declared path must already be canonical, or the check fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
+- A declared path must already be canonical, or `generate` fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
 
 ## Endpoints

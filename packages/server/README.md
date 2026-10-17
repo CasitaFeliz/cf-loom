@@ -9,7 +9,7 @@
 import { serve } from '@casitafeliz/loom-server';
 import { nodeHttp } from '@casitafeliz/loom-server/node-http';
 import { jetstream } from '@casitafeliz/loom-messaging/jetstream';
-import contract from './contract';
+import { contract } from './contract';
 import handlers from './handlers.generated';
 import { connect, consume, close } from './messaging';
 

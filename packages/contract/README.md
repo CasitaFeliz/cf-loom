@@ -1,16 +1,22 @@
 # @casitafeliz/loom-contract
 
-The declarations of a Contract: `contract`, `application`, `definitions`, `group`, `endpoint`, `guard`, `rejection`, `event`, `command`, `subscription`, `dependencies`, `openEnum`, `openUnion`; and the Standard Rejections `invalidInput`, `notFound`, `notImplemented`. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
+The declarations of a Contract: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented`; and their types (see [Types](#types)). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
 
-The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files.
+The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files. Every declaration is a named export.
+
+Each declaration returns what was written, frozen and with its `kind`, keeping the author's zod schemas themselves. Its types refuse what TypeScript can state exactly, marked _a type error_ below; `generate` fails on the other rules, and `check` adds those that need the Baseline (see [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
+
+## Required fields
+
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input` and of a Guard's `demands`, and a Guard's `context` left out are none; an Endpoint's `guards` and `rejections` and a root's lists left out are empty. Every other field is required, `description` on Endpoints, Groups and Guards included.
 
 ## The root
 
 ```ts
 // src/contract/index.ts
-import orgDefinitions from '@org/definitions';
+import { definitions as orgDefinitions } from '@org/definitions';
 
-export default contract({
+export const contract = defineContract({
   name: 'orders-service',
   definitions: [orgDefinitions],
   groups: [ordersGroup],
@@ -23,7 +29,7 @@ export default contract({
 
 The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. At most one listed Definitions Package may declare Standard Rejections.
 
-Names follow fixed grammars, so they are safe in code, subjects and broker names: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`[a-z0-9-]+`); an Endpoint or Guard name is camelCase; a Message name is PascalCase; a Rejection code is UPPER_SNAKE_CASE. A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
+Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`); a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
 ## Applications
 
@@ -31,11 +37,13 @@ An Application has the same layout as a Service (see [Layout](https://github.com
 
 ```ts
 // web-admin/src/contract/index.ts
-export default application({
+export const application = defineApplication({
   name: 'web-admin',
   dependencies: [ordersDeps, paymentsDeps],
 });
 ```
+
+A Dependency of an Application on an Endpoint that is not Public, or on any Event, is a type error.
 
 ## Definitions Packages
 
@@ -43,7 +51,7 @@ A Definitions Package lives in its own repository:
 
 ```ts
 // definitions/src/definitions/index.ts, published as @org/definitions
-export default definitions({
+export const definitions = defineDefinitions({
   name: 'definitions',
   guards: [userToken],
   schemas: { money, pagination },
@@ -56,7 +64,7 @@ export default definitions({
 });
 ```
 
-Services import its Guards and schemas directly and list it on their `contract` root (see [The root](#the-root)).
+Services import its Guards and schemas directly and list its `definitions` on their root (see [The root](#the-root)). It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). The status of `invalidInput` and `notFound` is a 4xx and that of `notImplemented` is 501; any other is a type error.
 
 ## Groups and Endpoints
 
@@ -64,18 +72,20 @@ Every Endpoint belongs to exactly one Group.
 
 ```ts
 // src/contract/endpoints/orders/orders.group.ts
-export const ordersGroup = group({
+export const ordersGroup = defineGroup({
   name: 'orders',
   description: 'Order lifecycle',
   endpoints: [getOrder, createOrder],
 });
 ```
 
+A Group lists at least one Endpoint; an empty list is a type error.
+
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
 import { money } from '@org/definitions';
 
-export const getOrder = endpoint({
+export const getOrder = defineEndpoint({
   name: 'getOrder',
   method: 'GET',
   path: '/orders/:orderId',
@@ -98,10 +108,12 @@ export const getOrder = endpoint({
 ```
 
 - `name` is required and unique among the Contract's Endpoints that are not Retired. It is the client's method and the key in the published package; the Endpoint itself is identified by its method and path, and the Snapshot and every Dependency record both.
+- `method` is `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`.
 - `visibility` is required: `public`, `internal` or `private`.
-- `success` declares a 2xx `status`, a `body` and optionally `headers`, an object of the HTTP headers the Endpoint promises with its Success; nothing is implied. Only 204 has no body (`success: { status: 204 }`), and its Handler returns `success()`. Headers follow the text rules of Input headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md).
-- `input` may hold `params`, `query`, `headers` and `body`. `params` must declare exactly the `:names` in the path, and is absent when the path has none. A strict `query` also admits the params its Guards demand; the EndpointHandler receives only the Endpoint's own. `generate` fails on an optional path param, on `nullable` anywhere in params, query or headers, and on a body on `GET` or `HEAD`.
-- `rejections` lists the Endpoint's own Rejections, `notFound` among them when it answers it. Those of its Guards, and the two Rejections cf-loom's runtime produces, invalid input and not implemented, are added without listing them (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md).
+- `success` declares a `status`, 200, 201, 202, 203 or 204, a `body` and optionally `headers`, an object of the HTTP headers the Endpoint promises with its Success; nothing is implied. Only 204 has no body (`success: { status: 204 }`), and its Handler returns `success()`: a 204 with a body, or another status without one, is a type error. Headers follow the text rules of Input headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md).
+- `input` may hold `params`, `query`, `headers` and `body`. `params` must declare exactly the `:names` in the path, and is absent when the path has none; a body on `GET` or `HEAD` is not allowed. Both are type errors, and `generate` checks them again, since a cast bypasses a type. A strict `query` also admits the params its Guards demand; the EndpointHandler receives only the Endpoint's own. `generate` fails on an optional path param and on `nullable` anywhere in params, query or headers.
+- Header names, in `input.headers`, `success.headers` and a Guard's `demands.headers`, are lower-case: headers are case-insensitive, so each has one spelling, and an upper-case letter is a type error.
+- `rejections` lists the Endpoint's own Rejections, `notFound` among them when it answers it. Those of its Guards, and the two Rejections cf-loom's runtime produces, invalid input and not implemented, are added without listing them, so listing `invalidInput` or `notImplemented` is a type error (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md).
 - Only shapes and declarative constraints are allowed: see [Not allowed in a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#not-allowed-in-a-contract).
 
 ## Rejections
@@ -110,7 +122,7 @@ A Rejection is declared once and referenced wherever it can be answered.
 
 ```ts
 // src/contract/rejections/order-locked.rejection.ts
-export const orderLocked = rejection({
+export const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
   status: 409,
   message: 'The order can no longer be changed',
@@ -118,7 +130,9 @@ export const orderLocked = rejection({
 });
 ```
 
-The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@casitafeliz/loom-contract`. Their code, status and message come from the Definitions Package listed on the root that declares them (see [Definitions Packages](#definitions-packages)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented".
+A declared Rejection's status is a 4xx; any other is a type error.
+
+The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@casitafeliz/loom-contract`. Their code, status and message come from the Definitions Package listed on the root that declares them (see [Definitions Packages](#definitions-packages)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented". The not-found and not-implemented Rejections have no body.
 
 The body of the invalid-input Rejection is cf-loom's, whatever the Definitions Package declares, and its runtime produces it:
 
@@ -132,8 +146,9 @@ The body of the invalid-input Rejection is cf-loom's, whatever the Definitions P
 
 ```ts
 // src/contract/guards/api-key.guard.ts
-export const apiKey = guard({
+export const apiKey = defineGuard({
   name: 'apiKey',
+  description: 'An API key per client',
   demands: {
     headers: z.object({ 'x-api-key': z.string() }),
   },
@@ -142,7 +157,7 @@ export const apiKey = guard({
 });
 ```
 
-A Guard states what it demands from the request (`headers` or `query`, never the body), the Context it provides, and the Rejections it may answer. It holds no logic: its GuardHandler lives in each Service that attaches it. Its `name` keys its Context and must be unique across the Contract and every Definitions Package it lists; a duplicate fails the check.
+A Guard states what it demands from the request (`headers` or `query`; a body or path params are a type error), the Context it provides, and the Rejections it may answer. It holds no logic: its GuardHandler lives in each Service that attaches it. Its `name` keys its Context and must be unique across the Contract and every Definitions Package it lists; a duplicate fails `generate`.
 
 ## Events and Commands
 
@@ -150,7 +165,7 @@ Each Message Version is its own declaration and file.
 
 ```ts
 // src/contract/events/order-created.v2.event.ts
-export const orderCreatedV2 = event({
+export const orderCreatedV2 = defineEvent({
   name: 'OrderCreated',
   version: 2,
   visibility: 'internal',
@@ -160,7 +175,7 @@ export const orderCreatedV2 = event({
 
 ```ts
 // src/contract/commands/charge-card.v1.command.ts
-export const chargeCardV1 = command({
+export const chargeCardV1 = defineCommand({
   name: 'ChargeCard',
   version: 1,
   body: z.object({ orderId: z.uuid() }),
@@ -175,7 +190,7 @@ Any Element takes `lifecycle: 'deprecated'`:
 
 ```ts
 // src/contract/events/order-created.v1.event.ts
-export const orderCreatedV1 = event({
+export const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
   version: 1,
   visibility: 'internal',
@@ -202,6 +217,8 @@ payment: openUnion('type', [card, transfer])
 
 Readers get a type with an Unknown case and must handle it: an unknown enum value arrives as `{ unknown: 'refunded' }`, and an unknown union variant as `{ type: { unknown: 'crypto' }, raw }`, so TypeScript can tell them from the declared ones. Writers may only use the declared values. `openEnum()` and `openUnion()` infer the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 
+`openEnum()` takes string values. `openUnion(discriminator, variants)` takes objects whose discriminator is a literal and returns zod's discriminated union. Openness belongs to the schema either one returns: a clone, such as `.describe('…')`, is a new schema and is closed, just as it carries no `origin` (see [Origin](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#origin) in SNAPSHOT.md).
+
 ## Dependencies
 
 Install the Provider's Contract Package, then declare what is used:
@@ -213,24 +230,30 @@ npx cf-loom add-dependency payments-service getPayment
 
 ```ts
 // src/contract/dependencies/payments-service.dependencies.ts
-import payments from '@org/contract-payments-service';
+import { contract as payments } from '@org/contract-payments-service';
 
-export const paymentsDeps = dependencies(payments, {
+export const paymentsDeps = defineDependencies(payments, {
   endpoints: [payments.endpoints.getPayment],
   events: [payments.events.paymentSettledV1],
 });
 ```
 
-The client has methods only for the Endpoints listed, and a Subscription may only reference an Event listed here; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md. An Event listed here that no Subscription uses fails the check, since it would block that Event's retirement for nothing.
+A Dependency records the Provider's name and the `version` of the Contract Package it was declared against, and exposes the Elements it selects by their names in code (`paymentsDeps.endpoints.getPayment`, `paymentsDeps.events.paymentSettledV1`); selecting an Element the Provider's Contract Package does not export is a type error. The client has methods only for the Endpoints listed, and a Subscription may only reference an Event listed here; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md. An Event listed here that no Subscription uses fails `generate`, since it would block that Event's retirement for nothing.
 
 ## Subscriptions
 
 ```ts
 // src/contract/subscriptions/notify-on-settled.subscription.ts
-export const notifyOnSettled = subscription({
+export const notifyOnSettled = defineSubscription({
   name: 'notify-on-settled',
   event: paymentsDeps.events.paymentSettledV1,
 });
 ```
 
 `name` is unique in the Service and names the Subscription's durable consumer (`orders-service_notify-on-settled`). The Event is the Service's own or one listed in a Dependency. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+
+## Types
+
+- `Visibility`, `Lifecycle`, `Method`, `SuccessStatus` and `RejectionStatus`: the values a declaration may take.
+- `Contract`, `Application`, `Definitions`, `Group`, `Endpoint`, `Guard`, `Rejection` and `Dependencies`: what each declaration returns, typed by what was written; `ContractPackage`, the `contract` a Contract Package exports (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
+- `InputOf<typeof getOrder>`, the Input its EndpointHandler receives, one key per declared part; `SuccessOf<typeof getOrder>`, its Success's status, headers and body; `ContextOf<typeof apiKey>`, the Context a Guard provides (`undefined` without a `context`), and `ContextOf<typeof getOrder>`, one key per attached Guard, by name; `RejectionsOf<typeof getOrder>`, every Rejection it may answer: its own, its Guards' and the two cf-loom's runtime adds.

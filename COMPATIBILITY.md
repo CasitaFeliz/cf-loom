@@ -7,9 +7,10 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 - Every change to a Contract is judged against its Baseline, read from the registry (see [The Baseline](#the-baseline)).
 - The Snapshot covers all three Visibilities and resolves every imported Guard and schema from its Definitions Package, so adopting a new Definitions Package version shows up as a change on the Elements that use it.
 - Each difference is a Breaking, Additive or Neutral Change. When the tooling cannot prove a change compatible, it is Breaking. There is no warning level.
+- The types of `@casitafeliz/loom-contract` refuse what TypeScript can state exactly; `generate` fails on every other rule that needs no Baseline, reporting them all at once; `check` adds only the rules that compare with the Baseline or the dependency graph. A declaration never throws.
 - Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The one exception is renaming an Endpoint (see [Elements](#elements)).
 - Additive guarantees that what is already deployed keeps working against the new version, not that a Consumer built on the new version works against an older Release. The Input and Success rules rely on this, so a Contract Package version is published when a Release implementing it is deployed; a Release whose Handlers are stubs counts (see [Stubs and the handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README). How the publish is wired into the deploy is the organization's.
-- With no Baseline, only the shape rules are checked ([Not allowed in a Contract](#not-allowed-in-a-contract)); the package's first version that is not a prerelease is 1.0.0.
+- With no Baseline, `check` has nothing to compare, so only what `generate` enforces applies (such as [Not allowed in a Contract](#not-allowed-in-a-contract)); the package's first version that is not a prerelease is 1.0.0.
 - A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no position until an Element uses it, so each is judged in all three positions and takes the strongest class; a Guard's demands are judged as Input, its Context is Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements.
 
 ### The Baseline
@@ -125,7 +126,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Headers, path and query
 
-- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different schemas fail the check. Header names are compared lower-cased, and a header object, Input or Success, is always open. A strict query object applies to the merged set; a Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
+- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different schemas fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, is always open. A strict query object applies to the merged set; a Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
 - Adding an Input header, optional on the Endpoint or demanded by a newly attached Guard, is Additive only when its schema accepts every text value: a string with no format, regex, min, max or enum. With any other schema it is Breaking, because header names are shared with proxies, gateways and browsers, which may already send one with a value the schema refuses. A required header follows the field rules.
 - A strict query object on a Public Endpoint refuses the params that browsers, analytics and caches append to a URL (`utm_source`, a cache-busting `_`); whether to admit them is the Endpoint's choice, made with an open query object.
 - A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Additive on every Visibility: the URL is the same, params are matched by position, and Dependencies do not record param names. Its type and constraints follow the rules above.
@@ -157,7 +158,7 @@ A Contract describes shapes, not behavior. Only the nodes and checks listed in [
 
 Codes:
 
-- A code has one HTTP status and one body schema across the whole Contract, Guards and imported Definitions Packages included; two declarations that disagree fail the check.
+- A code has one HTTP status and one body schema across the whole Contract, Guards and imported Definitions Packages included; two declarations that disagree fail `generate`.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; redeclaring a removed code with another status or body is Breaking.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new reserved code only comes with a cf-loom major.
@@ -171,7 +172,7 @@ Standard Rejections:
 
 - A Message change takes the stronger of the Input and Success classes, strictness aside (see [Fields](#fields)).
 - An existing Message Version never takes a Breaking Change other than its retirement or the narrowing of its Visibility: any other, a Breaking change to its body for one, fails the check, and no Breaking Change Approval allows it. The change is made as a new Message Version, which is Additive.
-- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or the check fails.
+- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or `generate` fails.
 
 ### Retirement
 
