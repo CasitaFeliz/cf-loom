@@ -18,12 +18,11 @@ Every session and agent working on an issue reads these before it starts, and ev
 | Every role | [CLAUDE.md](CLAUDE.md), [CONTEXT.md](CONTEXT.md), [CODING_STANDARDS.md](CODING_STANDARDS.md) |
 | Planner (the main session) | The issue and every document it implements |
 | Implementer | This document, the plan, and every document the plan links |
-| Reviewer | The plan, the PR, and the documents its lens checks ([Review](#3-review)) |
-| Researcher | The documents its question concerns, cited by file and line |
+| Reviewer | The plan, the PR, and the documents its lens checks ([Review](#3-review), [Documentation and chore issues](#documentation-and-chore-issues)) |
 
 ## 1. Plan
 
-The main session reads the issue and the documents it implements and posts the plan as a comment on the issue:
+The main session posts the plan as a comment on the issue:
 
 - the public API: signatures with their TSDoc;
 - every file, with its one responsibility;
@@ -47,6 +46,7 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] the test list covers every behavior the issue asks for, each test through a public seam;
 - [ ] the document sections it implements are linked, and every change to them is written in the plan;
 - [ ] its new terms are in the plan's CONTEXT.md changes;
+- [ ] what the documents already settle is listed apart from what is new;
 - [ ] no design question is open;
 - [ ] every issue it depends on is merged to `main`.
 
