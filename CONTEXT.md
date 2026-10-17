@@ -75,7 +75,7 @@ What a Caller receives from an Endpoint: exactly one of a Success, a Rejection o
 _Avoid_: result (taken by `Result<T, E>` libraries), response, reply
 
 **Success**:
-What an Endpoint returns when it does what was asked.
+What an Endpoint returns when it does what was asked: its declared status, headers and body.
 _Avoid_: response, answer, data
 
 **Rejection**:
@@ -83,11 +83,11 @@ A declared business decision not to do what was asked, which a Caller is expecte
 _Avoid_: error, refusal, failure, exception
 
 **Standard Rejection**:
-One of the three Rejections every Contract has without declaring them: invalid input, not found and not implemented, whose code, status and message come from a Definitions Package or cf-loom's defaults.
+One of the three Rejections whose code, status and message come from a Definitions Package or cf-loom's defaults, never from a Contract: invalid input and not implemented, which cf-loom's runtime produces, so every Endpoint has them without declaring them; and not found, which an Endpoint lists like any Rejection.
 _Avoid_: generic error, built-in error
 
 **Fault**:
-A technical failure any Endpoint or Message Handler can produce and none declares (a database down, a timeout, a bug). It says whether retrying is safe and whether the change was committed.
+A technical failure any Endpoint or Message Handler can produce and none declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it.
 _Avoid_: error, server error, operation failure
 
 **Open Enum**, **Open Union**:
@@ -163,7 +163,7 @@ A language-neutral description of a Contract or a Definitions Package, frozen wh
 _Avoid_: schema dump, manifest
 
 **Baseline**:
-The Snapshot of the highest published version of a Contract Package or Definitions Package on the line being published, against which every proposed change is judged.
+The Snapshot of the highest published version of a Contract Package or Definitions Package, against which every proposed change is judged.
 _Avoid_: previous snapshot, reference
 
 **Compatibility Check**:
@@ -171,7 +171,7 @@ The comparison of a Contract or a Definitions Package against its Baseline that 
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change.
+A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the one exception is in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:
@@ -181,10 +181,6 @@ _Avoid_: non-breaking change, safe change
 **Neutral Change**:
 A difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
 _Avoid_: patch change, cosmetic change
-
-**Line**:
-The published versions of a Contract Package or Definitions Package that share a major. The newest line is the default; an older one is a maintenance line.
-_Avoid_: branch, track
 
 **Breaking Change Approval** (an Approval, for short):
 An explicit approval, tied to the exact commit, that lets a Breaking Change merge.

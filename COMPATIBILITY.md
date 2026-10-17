@@ -7,15 +7,14 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 - Every change to a Contract is judged against its Baseline, read from the registry (see [The Baseline](#the-baseline)).
 - The Snapshot covers all three Visibilities and resolves every imported Guard and schema from its Definitions Package, so adopting a new Definitions Package version shows up as a change on the Elements that use it.
 - Each difference is a Breaking, Additive or Neutral Change. When the tooling cannot prove a change compatible, it is Breaking. There is no warning level.
-- Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The exceptions are renaming an Endpoint (see [Elements](#elements)) or one of its path params (see [Headers, path and query](#headers-path-and-query)).
+- Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The one exception is renaming an Endpoint (see [Elements](#elements)).
+- Additive guarantees that what is already deployed keeps working against the new version, not that a Consumer built on the new version works against an older Release. The Input and Success rules rely on this, so a Contract Package version is published when a Release implementing it is deployed; a Release whose Handlers are stubs counts (see [Implementing a Contract](AUTHORING.md#implementing-a-contract) in AUTHORING.md). How the publish is wired into the deploy is the organization's.
 - With no Baseline (the first publish), only the shape rules are checked ([Not allowed in a Contract](#not-allowed-in-a-contract)); the package publishes as 1.0.0.
 - A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no position until an Element uses it, so each is judged in all three positions and takes the strongest class; a Guard's demands are judged as Input, its Context is Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements.
 
 ### The Baseline
 
-- The Baseline is the highest published version of the package on the line being published, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository.
-- By default the line is the newest. `--line <major>` selects a maintenance line: `cf-loom check --line 2` compares against the highest published `2.x.y`, only a minor or a patch may be published on that line, and a Breaking Change there fails. A publish on a maintenance line uses the dist-tag `line-<major>`, so `latest` always points at the newest line.
-- Whatever the line, Retired identities, Subscription tombstones and Rejection codes are also checked against the highest published version of the package, so nothing retired on the newest line is reused on an older one.
+- The Baseline is the highest published version of the package, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. Every publish goes on the newest major; there is no publishing on an older one.
 
 ## Versioning
 
@@ -27,7 +26,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 
 Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch; the peer rule below still applies.
 
-The version also protects Consumers' installs: a Contract Package whose `@cf-loom/contract` peer moves to a new major is published as a major even when the Contract did not change, so a Consumer still on the old cf-loom major never installs it by accident. That major needs no Breaking Change Approval. A Dependency declared against a newer version of its Provider, or a newer Definitions Package version that changes no shape, changes the Snapshot (see [Canonical form](SNAPSHOT.md#canonical-form) in SNAPSHOT.md) and bumps patch. When neither the Snapshot's hash nor the peer ranges changed, `publish` does nothing unless `--force` is given.
+The version also protects Consumers' installs. The Contract Package's peers are `zod` and `@cf-loom/contract`, and their ranges are compared with the Baseline's, read from the registry's package metadata: a peer moving to a new major publishes a major even when the Snapshot did not change, so a Consumer still on the old major never installs it by accident, and that major needs no Breaking Change Approval, since it is packaging, not a Breaking Change; any other change to a peer range with an unchanged Snapshot publishes a minor. A Dependency declared against a newer version of its Provider, or a newer Definitions Package version that changes no shape, changes the Snapshot (see [Canonical form](SNAPSHOT.md#canonical-form) in SNAPSHOT.md) and bumps patch. When neither the Snapshot's hash nor the peer ranges changed, `publish` does nothing unless `--force` is given.
 
 ## Rules
 
@@ -47,7 +46,7 @@ The version also protects Consumers' installs: a Contract Package whose `@cf-loo
 | Rename an Endpoint (its `name`; method and path unchanged) | Breaking on a Public or Internal Endpoint, since Callers' generated code uses the name and Dependencies record it; the check lists every Dependency on it. Neutral on a Private one |
 | Make a Breaking Change to an existing Message Version other than retiring it or narrowing its Visibility | Not allowed: the check fails (see [Messages](#messages)) |
 | Turn a Command into an Event, or the reverse | A new Message, under a new name, plus the retirement of the old one: a name belongs to one kind across the whole Contract and its history |
-| Add an Endpoint that takes a URL an existing Endpoint of the same method matched (`/orders/latest` next to `/orders/:id`) | Breaking on the existing one, whose Input loses that value (routing precedence is in [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md). A Retired Endpoint that is still declared shadows too; deleting it is Neutral |
+| Add an Endpoint that takes a URL an existing Endpoint of the same method matched (`/orders/latest` next to `/orders/:id`) | Breaking on the existing one, whose Input loses that value (routing precedence is in [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md). A Retired Endpoint that is still declared shadows too; deleting it is Neutral. Routes outside the Contract are not seen (see [Endpoints](ARCHITECTURE.md#endpoints) in ARCHITECTURE.md) |
 | Widen Visibility (Private → Internal → Public) | Additive |
 | Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking. No Deprecation needed, since the Element stays Active, but no Dependency may lose reach, and an Endpoint also needs a Breaking Change Approval |
 
@@ -59,7 +58,7 @@ Every shape is read in one of three positions:
 - **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes, except for object strictness, which has no effect because Message readers ignore unknown fields.
 
-Readers of a Success, a Rejection body or a Message ignore fields they do not know. A strict object (`z.strictObject`) only has an effect on Input, where the Service reads; any other object (`z.object`) is open.
+Readers of a Success, a Rejection body or a Message ignore fields they do not know. A strict object (`z.strictObject`) only has an effect on Input, where the Service reads; any other object (`z.object`) is open. Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -114,29 +113,32 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 ### Records, arrays, tuples, intersections, recursion, opaque data
 
 - A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)).
-- A tuple's `rest` schema follows the field rules; its `items` follow the plain-union rule.
+- A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
 - An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
 - A recursive schema is compared by following its `ref`s (see [Recursion](SNAPSHOT.md#recursion)).
 - `z.json()` is an opaque JSON value: any change to or from it is Breaking.
 
-### Success status
+### Success status and headers
 
 - Changing a Success's status, or whether it has a body (204 or not), is Breaking: Callers may depend on either.
+- A Success's headers are an open object compared under the Success column of the tables above; their schemas follow the text rule below.
 
 ### Headers, path and query
 
-- Headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different schemas fail the check. Header names are compared lower-cased, and the header object is always open. A strict query object applies to the merged set; a Guard demands no body (see [Guards](AUTHORING.md#guards) in AUTHORING.md).
-- A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Breaking on a Public or Internal Endpoint, since Callers' code names it, and Neutral on a Private one. Its type and constraints follow the rules above.
-- Path params, query params and headers travel as text (see [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.
+- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different schemas fail the check. Header names are compared lower-cased, and a header object, Input or Success, is always open. A strict query object applies to the merged set; a Guard demands no body (see [Guards](AUTHORING.md#guards) in AUTHORING.md).
+- Adding an Input header, optional on the Endpoint or demanded by a newly attached Guard, is Additive only when its schema accepts every text value: a string with no format, regex, min, max or enum. With any other schema it is Breaking, because header names are shared with proxies, gateways and browsers, which may already send one with a value the schema refuses. A required header follows the field rules.
+- A strict query object on a Public Endpoint refuses the params that browsers, analytics and caches append to a URL (`utm_source`, a cache-busting `_`); whether to admit them is the Endpoint's choice, made with an open query object.
+- A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Additive on every Visibility: the URL is the same, params are matched by position, and Dependencies do not record param names. Its type and constraints follow the rules above.
+- Path params, query params and headers, a Success's included, travel as text (see [Wire protocol](AUTHORING.md#wire-protocol) in AUTHORING.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.
 
 ### Guards
 
 - An Endpoint's Input includes its Guards' demands (above) and its Rejections include those of every Guard it attaches.
-- Attaching a Guard that demands something new of the request is Breaking; a Guard gaining a Rejection is Additive; detaching a Guard follows the Input and Rejection rules (usually Additive).
+- Attaching a Guard follows the Input rules for what it demands (a required demand is Breaking; a header, the header rule above) and the Rejection rules for its Rejections; a Guard gaining a Rejection is Additive; detaching a Guard follows the same rules (usually Additive).
 
 ### Neutral
 
-Descriptions, examples, titles, a Rejection's message, key order, which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards. For Dependencies and Subscriptions see [below](#dependencies).
+Descriptions, examples, titles, a Rejection's message, key order, an Endpoint's `deprecatedAt` (see [Endpoints](SNAPSHOT.md#endpoints) in SNAPSHOT.md), which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards. Transport headers on a Message are not part of the Contract (see [Publishing and sending](AUTHORING.md#publishing-and-sending) in AUTHORING.md). For Dependencies and Subscriptions see [below](#dependencies).
 
 ### Not allowed in a Contract
 
@@ -162,7 +164,7 @@ Codes:
 
 Standard Rejections:
 
-- The invalid-input and not-implemented Rejections are implicit on every Endpoint, and the not-found Rejection on every Endpoint with path params. Any other Endpoint may declare the not-found Rejection (for example for an id in the body), but no Contract may redefine a Standard Rejection.
+- The invalid-input and not-implemented Rejections are implicit on every Endpoint, since cf-loom's runtime produces them. The not-found Rejection is listed in an Endpoint's `rejections` like any Rejection, so adding it later is Additive. No Contract may redefine a Standard Rejection.
 - A Definitions Package may declare the code, HTTP status and message of each Standard Rejection; without one, cf-loom's defaults apply, and the body of the invalid-input Rejection is always cf-loom's (see [Rejections](AUTHORING.md#rejections) in AUTHORING.md). The Snapshot carries them resolved, so changing the Definitions Package or upgrading cf-loom shows up in the Compatibility Check.
 
 ### Messages
@@ -191,5 +193,5 @@ Adding or removing a Subscription is Neutral, but a removed Subscription's name 
 - A Breaking Change on a Contract, on any Visibility, merges only with a Breaking Change Approval from an Approver of that Contract, tied to the exact commit: a new commit after the approval needs a new one. The author of a change should not approve it, unless the configuration allows it (`allowSelfApproval`, see [Configuration](AUTHORING.md#configuration) in AUTHORING.md), for example while one person works on it. The one exception is retiring or narrowing a Message, which is gated by its conditions instead.
 - By default cf-loom only says which changes need an Approval: `cf-loom check` reports them and exits with a status of its own for "needs an Approval" (see [The CLI](AUTHORING.md#the-cli) in AUTHORING.md), and the organization enforces the Approval with its own review process (required reviews, owners of `contract.snapshot.json`, dismissing approvals on new commits).
 - An organization that wants cf-loom to verify the Approval configures an Approval source, which tells `check` who approved which commit. cf-loom then checks the commit, the configured Approvers and self-approval itself. cf-loom ships no default source.
-- Publishing never depends on the Approval: a Breaking Change on a Public or Internal Element that is merged still publishes as a major, so the version tells the truth.
+- Publishing never depends on the Approval: a Breaking Change on a Public or Internal Element that is deployed still publishes as a major, so the version tells the truth.
 - A Definitions Package has its own Approver. A Service adopting a new version runs its own Compatibility Check, with its own Approval if the change is Breaking on its Elements.
