@@ -10,6 +10,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 | `COMPATIBILITY.md` | How a Contract may change: the Compatibility Check and its rules |
 | `ARCHITECTURE.md` | How the pieces fit: packages, runtime, the Wire protocol, what cf-loom leaves to the organization |
 | `SNAPSHOT.md` | The Snapshot format the Compatibility Check compares |
+| `CODING_STANDARDS.md` | How the code is written and reviewed (C1–C28) |
 | `README.md` | What cf-loom is, a first Service, and the packages table |
 | `packages/<pkg>/README.md` | How to use the package: its API, options, examples |
 | `packages/<pkg>/ARCHITECTURE.md` | The package's internal details, repo only (not in the package's `files`) |
@@ -29,10 +30,11 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - A package shares code with other cf-loom packages only through an undocumented `./internal` export; no README lists it.
 - Relative imports name the `.ts` file (`./serve.ts`); `tsc` rewrites them to `.js`. Only erasable TypeScript syntax: no enums, namespaces or parameter properties.
 - `tsconfig.tooling.json` type-checks root files (`*.config.ts`, `scripts/`).
-- Tests sit next to the code (`*.test.ts`) and import only a package's public entries.
+- `lint/` holds Biome GritQL plugins and `scripts/check-tsdoc.ts` checks TSDoc, both for [CODING_STANDARDS.md](CODING_STANDARDS.md).
+- Tests sit next to the code (`*.test.ts`) and import only a package's entries: `.`, its subpaths and `./internal` (see C23).
 - Changesets with one fixed group: every package releases together. cf-loom reaches 1.0.0 before any Contract Package is published.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
-- Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome), `pnpm format`, `pnpm clean`, `pnpm changeset`.
+- Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome and the TSDoc check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 
 ## Design principles
 

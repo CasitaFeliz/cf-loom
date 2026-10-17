@@ -1,0 +1,20 @@
+language js
+
+pattern boolean_parameter() {
+  or {
+    JsFormalParameter(type_annotation=TsTypeAnnotation(ty=or {
+      TsBooleanType(),
+      TsUnionType(types=some TsBooleanType())
+    })),
+    JsFormalParameter(initializer=JsInitializerClause(expression=JsBooleanLiteralExpression()))
+  }
+}
+
+JsExport(export_clause=or {
+  JsFunctionDeclaration(parameters=$parameters),
+  JsVariableDeclarationClause(declaration=JsVariableDeclaration(declarators=some JsVariableDeclarator(initializer=JsInitializerClause(expression=JsArrowFunctionExpression(parameters=$parameters)))))
+}) where {
+  $parameters <: JsParameters(items=some bubble boolean_parameter() as $parameter where {
+    register_diagnostic(span=$parameter, message="C17: pass a closed value that names the mode, or call a function named for it, not a boolean.", severity="error")
+  })
+}

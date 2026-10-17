@@ -1,0 +1,10 @@
+language js
+
+or {
+  `$collection.reduce($arguments)`,
+  `$collection?.reduce($arguments)`,
+  `$collection.reduceRight($arguments)`,
+  `$collection?.reduceRight($arguments)`
+} as $call where {
+  register_diagnostic(span=$call, message="C12: use a for loop or a map, not reduce.", severity="error")
+}

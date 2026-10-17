@@ -1,0 +1,22 @@
+language js
+
+pattern conditional_array() {
+  JsConditionalExpression(consequent=JsArrayExpression(), alternate=JsArrayExpression())
+}
+
+pattern returns_empty_array() {
+  JsFunctionBody(statements=contains JsReturnStatement(argument=JsArrayExpression(elements=[])))
+}
+
+JsCallExpression(callee=or {
+  `$collection.flatMap`,
+  `$collection?.flatMap`
+}, arguments=JsCallArguments(args=[$callback])) as $call where {
+  $callback <: or {
+    JsArrowFunctionExpression(body=JsParenthesizedExpression(expression=conditional_array())),
+    JsArrowFunctionExpression(body=conditional_array()),
+    JsArrowFunctionExpression(body=returns_empty_array()),
+    JsFunctionExpression(body=returns_empty_array())
+  },
+  register_diagnostic(span=$call, message="C10: filter with a type guard, not a flatMap that returns a conditional array.", severity="error")
+}

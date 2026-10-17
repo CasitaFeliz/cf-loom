@@ -1,0 +1,75 @@
+import { globSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
+const exportedDeclaration =
+  /^export\s+(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(?:function\*?|const|let|class|interface|type)\s+[A-Za-z_$]/;
+const exportedFunctionName =
+  /^export\s+(?:declare\s+)?(?:async\s+)?function\*?\s+([A-Za-z_$][\w$]*)/;
+const root = join(import.meta.dirname, '..');
+
+/** The 1-based lines that export a declaration with no TSDoc directly above it (C20). */
+export function undocumentedExports(source: string): number[] {
+  const lines = source.split(/\r?\n/);
+  const documentedFunctions = new Set<string>();
+  const undocumented: number[] = [];
+  for (const [index, line] of lines.entries()) {
+    const functionName = exportedFunctionName.exec(line)?.[1];
+    if (!exportedDeclaration.test(line) || isOverload(documentedFunctions, functionName)) {
+      continue;
+    }
+    if (hasDocAbove(lines, index)) {
+      documentedFunctions.add(functionName ?? '');
+    } else {
+      undocumented.push(index + 1);
+    }
+  }
+  return undocumented;
+}
+
+/** An overload after the first signature shares that signature's TSDoc. */
+function isOverload(
+  documentedFunctions: ReadonlySet<string>,
+  functionName: string | undefined,
+): boolean {
+  return functionName !== undefined && documentedFunctions.has(functionName);
+}
+
+/** Line comments, such as a lint directive, may sit between the TSDoc and the declaration. */
+function hasDocAbove(lines: readonly string[], index: number): boolean {
+  for (let above = index - 1; above >= 0; above -= 1) {
+    const line = lines[above]?.trim() ?? '';
+    if (!line.startsWith('//')) {
+      return line.endsWith('*/') && opensDoc(lines, above);
+    }
+  }
+  return false;
+}
+
+function opensDoc(lines: readonly string[], end: number): boolean {
+  for (let above = end; above >= 0; above -= 1) {
+    const line = lines[above] ?? '';
+    if (line.includes('/*')) {
+      return line.includes('/**');
+    }
+  }
+  return false;
+}
+
+/** Every package's handwritten source: tests and generated files are not read in the editor as an API. */
+function checkPackages(): void {
+  const sources = globSync('packages/*/src/**/*.ts', { cwd: root }).filter(
+    (path) => !(path.endsWith('.test.ts') || path.endsWith('.generated.ts')),
+  );
+  for (const path of sources) {
+    for (const line of undocumentedExports(readFileSync(join(root, path), 'utf8'))) {
+      console.error(
+        `${relative(process.cwd(), join(root, path))}:${line} C20: an exported declaration carries TSDoc.`,
+      );
+      process.exitCode = 1;
+    }
+  }
+}
+
+if (import.meta.main) {
+  checkPackages();
+}

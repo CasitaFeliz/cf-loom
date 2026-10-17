@@ -1,0 +1,16 @@
+language js
+
+or {
+  JsIdentifierBinding(),
+  TsIdentifierBinding()
+} as $name where {
+  $name <: r"^[A-Za-z$]$",
+  not $name <: within or {
+    JsImport(),
+    JsCatchClause()
+  },
+  not $name <: within JsArrowFunctionExpression(parameters=$parameters, body=not JsFunctionBody()) where {
+    $parameters <: contains $name
+  },
+  register_diagnostic(span=$name, message="C14: a single-letter name only inside a lambda of one expression.", severity="error")
+}
