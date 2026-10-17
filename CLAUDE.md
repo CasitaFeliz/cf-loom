@@ -11,6 +11,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 | `ARCHITECTURE.md` | How the pieces fit: packages, runtime, the Wire protocol, what cf-loom leaves to the organization |
 | `SNAPSHOT.md` | The Snapshot format the Compatibility Check compares |
 | `CODING_STANDARDS.md` | How the code is written and reviewed (C1–C28) |
+| `WORKFLOW.md` | How an issue becomes code on `main`: plan, Definition of Ready, implement, review, fix, Definition of Done, merge |
 | `README.md` | What cf-loom is, a first Service, and the packages table |
 | `packages/<pkg>/README.md` | How to use the package: its API, options, examples |
 | `packages/<pkg>/ARCHITECTURE.md` | The package's internal details, repo only (not in the package's `files`) |
@@ -45,4 +46,5 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 ## Working here
 
 - Design decisions are the user's: propose options with a recommendation and ask one question at a time.
+- Every issue follows [WORKFLOW.md](WORKFLOW.md).
 - Commits follow Conventional Commits (`docs: …`, `feat(cli): …`).
