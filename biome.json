@@ -29,13 +29,35 @@
       "types": "recommended"
     },
     "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 15
+          }
+        },
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": {
+            "maxLines": 30,
+            "skipBlankLines": true
+          }
+        },
+        "useMaxParams": {
+          "level": "error",
+          "options": {
+            "max": 3
+          }
+        }
+      },
       "correctness": {
         "noUnusedImports": "error"
       },
       "nursery": {
         "noFloatingPromises": "error",
         "noMisusedPromises": "error",
-        "useExhaustiveSwitchCases": "error"
+        "useExhaustiveSwitchCases": "error",
+        "useExpect": "error"
       },
       "performance": {
         "noReExportAll": "error"
@@ -43,12 +65,23 @@
       "preset": "recommended",
       "style": {
         "noDefaultExport": "error",
+        "noExcessiveLinesPerFile": {
+          "level": "error",
+          "options": {
+            "maxLines": 200,
+            "skipBlankLines": true
+          }
+        },
+        "noNestedTernary": "error",
         "noNonNullAssertion": "error",
+        "noUselessElse": "error",
         "useConsistentArrayType": "error",
         "useExportType": "error",
         "useFilenamingConvention": {
           "level": "error",
-          "options": { "filenameCases": ["kebab-case"] }
+          "options": {
+            "filenameCases": ["kebab-case"]
+          }
         },
         "useImportType": "error",
         "useNamingConvention": "error",
@@ -56,22 +89,55 @@
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noImportCycles": "error"
+        "noFocusedTests": "error",
+        "noImportCycles": "error",
+        "noSkippedTests": "error"
       }
     }
   },
   "overrides": [
     {
-      "assist": { "actions": { "source": { "useSortedKeys": "on" } } },
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "on"
+          }
+        }
+      },
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
       "includes": ["**/*.config.ts"],
-      "linter": { "rules": { "style": { "noDefaultExport": "off" } } }
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
     },
     {
       "includes": ["**/*.test.ts"],
-      "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.generated.ts"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": "off"
+          },
+          "style": {
+            "noExcessiveLinesPerFile": "off"
+          }
+        }
+      }
     }
   ],
   "vcs": {
