@@ -1,0 +1,26 @@
+{
+  "name": "cf-loom",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "changeset": "changeset",
+    "check": "biome check .",
+    "clean": "tsc -b --clean",
+    "format": "biome check --write .",
+    "test": "tsc -b && vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM"],
+    "types": []
+  },
+  "exclude": ["src/**/*.test.ts"],
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../contract/tsconfig.build.json"
+    }
+  ]
+}

@@ -1,1 +1,6 @@
 temporal-docs
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.vitest/

@@ -1,0 +1,43 @@
+{
+  "name": "@casitafeliz/loom-testing",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
+    "directory": "packages/testing"
+  },
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "devDependencies": {
+    "@casitafeliz/loom-client": "workspace:^",
+    "@casitafeliz/loom-contract": "workspace:^",
+    "@casitafeliz/loom-handlers": "workspace:^",
+    "@casitafeliz/loom-messaging": "workspace:^",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@casitafeliz/loom-client": "workspace:^",
+    "@casitafeliz/loom-contract": "workspace:^",
+    "@casitafeliz/loom-handlers": "workspace:^",
+    "@casitafeliz/loom-messaging": "workspace:^",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

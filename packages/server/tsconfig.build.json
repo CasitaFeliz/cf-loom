@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "exclude": ["src/**/*.test.ts"],
+  "extends": "../../tsconfig.base.json",
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../contract/tsconfig.build.json"
+    },
+    {
+      "path": "../handlers/tsconfig.build.json"
+    }
+  ]
+}
