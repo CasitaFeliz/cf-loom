@@ -2,19 +2,23 @@ import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
+type ExportedVisibility = Exclude<Visibility, 'private'>;
+
 /** An Event as a Contract Package exports it: enough to key it by name and version and to subscribe to it. */
 type ProvidedEvent = {
   readonly kind: 'event';
   readonly name: string;
   readonly version: number;
-  readonly visibility: Visibility;
+  readonly visibility: ExportedVisibility;
 };
 
 /** The `contract` a Contract Package exports: its Public and Internal Elements, stamped with its version by `publish`. */
 export type ContractPackage = {
   readonly name: string;
   readonly version: string;
-  readonly endpoints: Readonly<Record<string, Endpoint>>;
+  readonly endpoints: Readonly<
+    Record<string, Endpoint & { readonly visibility: ExportedVisibility }>
+  >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: StandardRejections;
 };

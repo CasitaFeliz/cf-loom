@@ -66,6 +66,26 @@ describe('defineDependencies', () => {
     }>();
   });
 
+  test('a Contract Package exports only Public and Internal Elements', () => {
+    const healthCheck = defineEndpoint({
+      name: 'healthCheck',
+      method: 'GET',
+      path: '/health',
+      visibility: 'private',
+      description: 'Whether the Service is up',
+      success: { status: 204 },
+    });
+
+    const declare = () =>
+      defineDependencies(
+        // @ts-expect-error a Private Endpoint is never exported
+        { ...payments, endpoints: { healthCheck } },
+        { endpoints: [healthCheck] },
+      );
+
+    expect(declare).not.toThrow();
+  });
+
   test('a Dependency selects only its Provider’s Elements', () => {
     const getReceipt = defineEndpoint({
       name: 'getReceipt',
