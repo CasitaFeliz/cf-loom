@@ -18,6 +18,12 @@ function refused(construct: string, instead?: string) {
 const mutating = '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()';
 const dynamicValue = 'z.record() or z.json()';
 const nonFinite = 'a number that is not finite (NaN or Infinity)';
+/** A pattern option the types of most formats refuse, as an author could still pass it. */
+function patternOf(pattern: RegExp): object {
+  return { pattern };
+}
+
+const customPattern = 'a format with a custom pattern';
 const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
@@ -64,7 +70,22 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.lowercase()', z.string().lowercase(), '.lowercase()'],
     ['.uppercase()', z.string().uppercase(), '.uppercase()'],
     ['z.stringFormat()', z.stringFormat('sku', () => true), 'z.stringFormat("sku")'],
-    ['z.email({ pattern })', z.email({ pattern: z.regexes.html5Email }), 'z.email({ pattern })'],
+    ['z.email({ pattern })', z.email({ pattern: z.regexes.html5Email }), customPattern],
+    ['z.uuid({ pattern })', z.uuid(patternOf(/^[0-9a-f-]+$/)), customPattern],
+    ['z.cuid({ pattern })', z.cuid({ pattern: /^c/ }), customPattern],
+    ['z.iso.date({ pattern })', z.iso.date(patternOf(/^\d{8}$/)), customPattern],
+    ['z.guid({ pattern })', z.guid(patternOf(/^g/)), customPattern],
+    ['z.ipv4({ pattern })', z.ipv4(patternOf(/^10\./)), customPattern],
+    [
+      'z.stringFormat() of a known name with a regex',
+      z.stringFormat('uuid', /^u/),
+      'z.stringFormat("uuid")',
+    ],
+    [
+      'z.stringFormat() of a known name with a check',
+      z.stringFormat('hex', () => true),
+      'z.stringFormat("hex")',
+    ],
     ['z.url({ normalize })', z.url({ normalize: true }), 'z.url({ normalize })'],
     ['z.int32()', z.int32(), 'z.int32()'],
     ['z.uint32()', z.uint32(), 'z.uint32()'],

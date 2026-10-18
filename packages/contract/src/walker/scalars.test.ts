@@ -47,6 +47,30 @@ describe('walkSchemas: strings', () => {
     );
   });
 
+  test.each([
+    ['z.guid()', z.guid(), 'guid'],
+    ['z.cuid()', z.cuid(), 'cuid'],
+    ['z.ipv4()', z.ipv4(), 'ipv4'],
+    ['z.iso.date()', z.iso.date(), 'date'],
+    ['z.hex()', z.hex(), 'hex'],
+    ['z.hostname()', z.hostname(), 'hostname'],
+    ['z.hash()', z.hash('sha256'), 'sha256_hex'],
+    ['z.hash() with an encoding', z.hash('sha256', { enc: 'base64' }), 'sha256_base64'],
+    ['z.mac()', z.mac(), 'mac'],
+    ['z.mac() with the default delimiter', z.mac({ delimiter: ':' }), 'mac'],
+    ['z.iso.datetime() with the default offset', z.iso.datetime({ offset: false }), 'datetime'],
+    ['a zod/mini z.uuid()', zm.uuid(), 'uuid'],
+    ['a zod/mini z.hex()', zm.hex(), 'hex'],
+  ])('%s is its format with no options', (_name, schema, format) => {
+    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
+  });
+
+  test('an option that differs from zod default is a format option', () => {
+    expect(walkBody(z.uuid({ version: 'v4' }))).toEqual(
+      walkedTo({ type: 'string', format: 'uuid', formatOptions: { version: 'v4' } }),
+    );
+  });
+
   test('a format with its length bounds keeps both', () => {
     expect(walkBody(z.email().max(100))).toEqual(
       walkedTo({ type: 'string', format: 'email', max: 100 }),
