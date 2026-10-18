@@ -24,9 +24,9 @@ export default handle(getOrder, async ({ params }, context) => {
 });
 ```
 
-- The first argument is the validated Input; the second is the Context, one key per attached Guard.
+- The Handler receives the validated Input, then the Context, one key per Guard that provides a Context.
 - Only the Endpoint's Rejections type-check in `reject`, each with its declared body. What a Handler builds carries a Rejection as its declaration, `rejection`, and its `body`, not as a resolved code, status or message: `serve` resolves them against the root (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README). The `Outcome` type of `@casitafeliz/loom-handlers` is not the client's (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README); a direct call returns them resolved too (see [Testing a Service's own code](#testing-a-services-own-code)).
-- When the Endpoint declares `success.headers`, the Handler returns them with the Success, `success({ headers, body })` (`success({ headers })` for 204); otherwise `success(body)`.
+- When the Endpoint declares `success.headers`, the Handler returns them with the Success, `success({ headers, body })` (`success({ headers })` for 204 or a `HEAD` Endpoint); otherwise `success(body)`.
 - Anything thrown becomes a Fault with `committed: 'unknown'` and `retryable: false`, since nothing says the same request could succeed later, and the fixed message `Internal error`; the error itself reaches only `onFault`, as `cause` (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README). A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`. Message Handlers differ: there a throw has the Message delivered again (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README).
 
 ## GuardHandler
@@ -40,7 +40,18 @@ export default handle(apiKey, async ({ headers }) => {
 });
 ```
 
-A GuardHandler receives only what its Guard demands. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them, before the Endpoint's own Input is validated: each Guard first validates only what it demands, answering the invalid-input Rejection if that fails, then its GuardHandler runs. The first Rejection stops the request, so an unauthenticated Caller learns nothing about the Endpoint's Input, and the EndpointHandler only runs with valid Input.
+A Guard that lists other Guards, or declares a `qualifier` (see [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#guards) in the contract README), receives their Context and its Qualifier too:
+
+```ts
+// src/guards/permission.handler.ts
+export default handle(permission, async (_demands, { userToken }, qualifier) => {
+  const held = await permissions.of(userToken.userId);
+  const granted = qualifier.every((code) => held.includes(code));
+  return granted ? admit() : reject(forbidden);
+});
+```
+
+A GuardHandler receives what its Guard demands (`{}` when it demands nothing); the Context of the Guards it lists and no other, one key per Guard that provides a Context (`{}` when none does); and, when the Guard declares a `qualifier`, its Qualifier, typed by that schema. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them, before the Endpoint's own Input is validated: each Guard first validates only what it demands, answering the invalid-input Rejection if that fails, then its GuardHandler runs with the Context of the Guards it lists and the Endpoint's Qualifier for it. The first Rejection stops the request, so an unauthenticated Caller learns nothing about the Endpoint's Input, and the EndpointHandler only runs with valid Input.
 
 ## Testing a Service's own code
 
@@ -50,7 +61,7 @@ A Handler returned by `handle()` is a function. Calling it runs the same checks 
 - A direct call returns the `Outcome` the Handler built (see [EndpointHandler](#endpointhandler)) plus the Rejection's `code`, `status` and `message`, resolved against cf-loom's defaults unless the call is given the root, `getOrderHandler(input, context, { contract })`, which resolves them as `serve` does (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README). A Rejection is told by its declaration: `outcome.rejection === notFound`.
 - A Message Handler rethrows what it throws and returns a Fault it returns unchanged, since `consume` answers no Caller.
 - An Endpoint or Guard stub returns the not-implemented Rejection, so a direct call's Outcome type includes it; a Message Handler stub throws, since `consume` never runs it.
-- A GuardHandler validates only what its Guard demands, and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
+- A GuardHandler validates what its Guard demands, the Context it is given against the `context` schemas of the Guards it lists and its Qualifier against its `qualifier` schema (`permissionHandler({}, { userToken: { userId: 'u-1' } }, ['orders:edit'])`), and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
 - The Context passed to an EndpointHandler is checked against each attached Guard's `context` schema.
 - A Message Handler takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`. In a direct call its meta (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README) defaults `headers` to `{}`.
 
@@ -59,7 +70,7 @@ import getOrderHandler from '../src/endpoints/orders/get-order.handler';
 
 const outcome = await getOrderHandler(
   { params: { orderId: ORDER_ID } },
-  { apiKey: { clientId: 'c-1' } },          // the Context, one key per Guard
+  { apiKey: { clientId: 'c-1' } },          // the Context, one key per Guard that provides one
 );
 ```
 

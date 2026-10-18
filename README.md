@@ -8,7 +8,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 | Package | Used by | Provides |
 | --- | --- | --- |
-| [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `contract`, `application`, `definitions`, `group`, `endpoint`, `guard`, `rejection`, `event`, `command`, `subscription`, `dependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
+| [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
 | [`@casitafeliz/loom-handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`) |
 | [`@casitafeliz/loom-server`](packages/server/README.md) | Services with Endpoints | `serve` |
 | [`@casitafeliz/loom-server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter |
@@ -28,7 +28,7 @@ How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages)
 ```
 src/
 ├── contract/                              declarations only
-│   ├── index.ts                           contract({...})
+│   ├── index.ts                           export const contract = defineContract({...})
 │   ├── endpoints/
 │   │   └── orders/
 │   │       ├── orders.group.ts

@@ -11,7 +11,7 @@ The EventPublisher and CommandSender are created once, in their own module, and 
 ```ts
 // src/messaging.ts
 import { messaging } from '@casitafeliz/loom-messaging';
-import contract from './contract';
+import { contract } from './contract';
 
 export const { publisher, sender, consume, connect, close } = messaging(contract);
 ```

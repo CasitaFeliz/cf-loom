@@ -25,8 +25,9 @@ All packages are released together with one version. `zod` and `@casitafeliz/loo
 
 ```ts
 // generated entry point of @org/contract-payments-service
-export default {
+export const contract = {
   name: 'payments-service',
+  version: '5.1.0',                                  // stamped by publish
   endpoints: { getPayment, createPayment },          // keyed by Endpoint name
   events: { paymentSettledV1, paymentSettledV2 },    // name with its first letter lower-cased + 'V' + version
   standardRejections,                                // resolved codes, statuses and messages
@@ -34,7 +35,7 @@ export default {
 export { snapshot };
 ```
 
-Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@casitafeliz/loom-contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
+A Consumer imports `contract` under the Provider's name (`import { contract as payments } from '@org/contract-payments-service'`), and a Dependency declared on it records its `version` (see [Dependencies](packages/contract/README.md#dependencies) in the contract README). Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@casitafeliz/loom-contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
 
 Reader schemas and types always come from a Snapshot, the same way for every Visibility, never from a type-level walk of the zod schema: a Contract Package's from its published Snapshot, for Dependencies; a Service's own Events' from its declared Snapshot, written by `generate` to `readers.generated.ts`. Every object in them is open and every Open Enum and Open Union has its Unknown case. The client's validation of what it receives (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README), the Message Handlers (see [Message Handlers](packages/messaging/README.md#message-handlers)) and the fakes of `@casitafeliz/loom-testing` (see [Faking Providers](packages/testing/README.md#faking-providers)) all use these generated readers.
 
@@ -64,7 +65,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 - An Endpoint declares its literal path and everything it requires. Groups only organize; they add no prefix and no Guards.
 - When two Endpoints with the same method match one URL, routing precedence decides (see [Over HTTP](#over-http)).
-- A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. Each Service writes its own GuardHandler, even for an imported Guard.
+- A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. A Guard may build on the Guards it lists and take a Qualifier from each Endpoint (see [Guards](packages/contract/README.md#guards) in the contract README). Each Service writes its own GuardHandler, even for an imported Guard.
 - An EndpointHandler receives the Caller's Input and the Context its Guards provided, and answers an Outcome.
 - A Service may serve routes outside its Contract. cf-loom does not see them: the Compatibility Check, shadowing included, covers only declared Endpoints, so a new Endpoint that takes a URL an outside route served is the organization's to catch. Whatever splits requests between them, the host framework or a gateway, must send every declared Endpoint, Retired ones included, to cf-loom; how `serve` hands back a request that is not its own belongs to each framework adapter.
 

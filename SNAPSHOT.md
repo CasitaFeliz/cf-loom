@@ -12,7 +12,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Canonical form
 
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
-- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id` and `events` by identity, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, its `params`, a tuple's items) keep it.
+- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id` and `events` by identity, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a Qualifier's list) keep it.
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
 
 ## Top level
@@ -68,7 +68,7 @@ A Definitions Package's Snapshot:
 | Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
 | A Subscription's Event | Service, then the identity, its own Service's included | `orders-service:OrderCreated@1` |
 
-- A declared path must already be canonical, or the check fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
+- A declared path must already be canonical, or `generate` fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
 
 ## Endpoints
@@ -81,7 +81,7 @@ A Definitions Package's Snapshot:
   "lifecycle": "active",
   "description": "One order by id",
   "params": ["orderId"],
-  "guards": ["apiKey"],
+  "guards": [{ "guard": "apiKey", "qualifier": null }],
   "input": {
     "params": { "type": "object", "mode": "strict", "fields": {} },
     "query": null,
@@ -94,6 +94,7 @@ A Definitions Package's Snapshot:
 ```
 
 - `params` is always stored `strict` (exactly the path's params) and a `headers` object, `input` or `success`, always `open`, whatever mode the zod object was written with.
+- `guards` lists the Endpoint's Attachments in order: each Guard by name, with its Qualifier as canonical JSON, or `null` when the Guard declares no `qualifier`.
 - `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
 - A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
@@ -116,11 +117,15 @@ Subjects and stream names are derived from these identities at runtime and are n
 ```json
 "apiKey": {
   "origin": "local",
+  "guards": [],
+  "qualifier": null,
   "demands": { "headers": {}, "query": null },
   "context": {},
   "rejections": ["UNAUTHENTICATED"]
 }
 ```
+
+`guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README).
 
 ## Rejection codes
 
