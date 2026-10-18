@@ -1,4 +1,5 @@
-import type { NotAllowed, Path, Walked } from './nodes.ts';
+import type { Path } from './nodes.ts';
+import type { Walked } from './walked.ts';
 
 /** A construct as the Not allowed list writes it, and what the documents name instead. */
 export type Refused = { readonly construct: string; readonly instead?: string };
@@ -105,35 +106,4 @@ export function refusedStringFormat(format: string): Refused {
 /** One failure, as the walk of a schema returns it. */
 export function notAllowed(at: Path, construct: Refused): Walked<never> {
   return { kind: 'not-allowed', failures: [{ at, ...construct }] };
-}
-
-/** A walked value, as the walk of a schema returns it. */
-export function walked<Value>(value: Value): Walked<Value> {
-  return { kind: 'walked', value };
-}
-
-/** Every value when each walked, else every failure of all of them, so none hides another. */
-export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonly Value[]> {
-  const failures = failuresOf(list);
-  if (failures.length > 0) {
-    return { kind: 'not-allowed', failures };
-  }
-  return walked(list.filter(isWalked).map((success) => success.value));
-}
-
-/** Every failure among walked values, in order. */
-export function failuresOf(list: readonly Walked<unknown>[]): readonly NotAllowed[] {
-  return list.filter(isNotAllowed).flatMap((failure) => failure.failures);
-}
-
-function isWalked<Value>(
-  result: Walked<Value>,
-): result is { readonly kind: 'walked'; readonly value: Value } {
-  return result.kind === 'walked';
-}
-
-function isNotAllowed(
-  result: Walked<unknown>,
-): result is { readonly kind: 'not-allowed'; readonly failures: readonly NotAllowed[] } {
-  return result.kind === 'not-allowed';
 }

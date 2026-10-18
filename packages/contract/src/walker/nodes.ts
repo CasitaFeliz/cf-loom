@@ -1,5 +1,3 @@
-import type * as core from 'zod/v4/core';
-
 /** Where a schema sits in the Snapshot, so a failure points at what the author wrote. */
 export type Path = readonly (string | number)[];
 
@@ -134,15 +132,4 @@ export type NotAllowed = {
   readonly at: Path;
   readonly construct: string;
   readonly instead?: string;
-};
-
-/** One schema walked: its value, or every construct in it that is not allowed. */
-export type Walked<Value = SchemaNode> =
-  | { readonly kind: 'walked'; readonly value: Value }
-  | { readonly kind: 'not-allowed'; readonly failures: readonly NotAllowed[] };
-
-/** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
-export type Walker = {
-  readonly schema: (schema: core.$ZodType, at: Path) => Walked;
-  readonly field: (schema: core.$ZodType, at: Path) => Walked<Field>;
 };

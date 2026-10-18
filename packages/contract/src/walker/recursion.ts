@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
-import type { Path, SchemaNode, Walked } from './nodes.ts';
-import { notAllowed, refused, refusedDuplicateId, walked } from './not-allowed.ts';
+import type { Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refused, refusedDuplicateId } from './not-allowed.ts';
+import { type Walked, walked } from './walked.ts';
 
 /** Whether the walk goes into a schema, or already has its `ref` (or the failure in its place). */
 export type Entered = { readonly kind: 'entered' } | Walked;

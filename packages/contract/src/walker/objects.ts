@@ -1,15 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
-import type {
-  Field,
-  JsonPrimitive,
-  ObjectNode,
-  Path,
-  SchemaNode,
-  Walked,
-  Walker,
-} from './nodes.ts';
-import { allWalked, failuresOf, notAllowed, refused, walked } from './not-allowed.ts';
+import type { Field, JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refused } from './not-allowed.ts';
+import { allWalked, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** An object, `open` unless it is strict: a catchall lets in keys no field declares. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {

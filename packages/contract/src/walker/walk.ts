@@ -10,17 +10,15 @@ import {
 import { walkEnum, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import { annotated, annotatedBy, type Metadata, metadataOf } from './metadata.ts';
-import type { Field, NotAllowed, Origin, Path, SchemaNode, Walked, Walker } from './nodes.ts';
-import { allWalked, notAllowed, refused, refusedName, walked } from './not-allowed.ts';
+import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refused, refusedName } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import { isJsonUnion, walkBoolean, walkLiteral, walkNumber, walkString } from './scalars.ts';
+import { allWalked, type LocatedSchema, type Walked, type Walker, walked } from './walked.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
-
-/** A schema of a Snapshot, and where it sits in it. */
-export type LocatedSchema = { readonly at: Path; readonly schema: core.$ZodType };
 
 /** Every schema of a Snapshot as nodes, in the order given, with the `defs` their cycles share. */
 export type WalkedSchemas =

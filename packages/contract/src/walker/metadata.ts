@@ -1,7 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { globalRegistry } from 'zod/v4/core';
-import type { Annotations, NotAllowed, Path, SchemaNode, Walked } from './nodes.ts';
-import { failuresOf, notAllowed, refusedExamples, refusedMetaKey, walked } from './not-allowed.ts';
+import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refusedExamples, refusedMetaKey } from './not-allowed.ts';
+import { failuresOf, type Walked, walked } from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };

@@ -1,7 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { regexes } from 'zod/v4/core';
-import type { Path, StringNode, Walked } from './nodes.ts';
-import { notAllowed, type Refused, refused, refusedStringFormat, walked } from './not-allowed.ts';
+import type { Path, StringNode } from './nodes.ts';
+import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
+import { type Walked, walked } from './walked.ts';
 
 const hashFormats = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'].flatMap((algorithm) =>
   ['hex', 'base64', 'base64url'].map((encoding) => `${algorithm}_${encoding}`),

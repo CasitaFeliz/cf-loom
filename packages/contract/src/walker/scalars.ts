@@ -1,7 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { byCanonicalJson } from './canonical-json.ts';
-import type { JsonPrimitive, Path, SchemaNode, Walked } from './nodes.ts';
-import { allWalked, notAllowed, refused, walked } from './not-allowed.ts';
+import type { JsonPrimitive, Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refused } from './not-allowed.ts';
+import { allWalked, type Walked, walked } from './walked.ts';
 
 type Coercible = core.$ZodStringDef | core.$ZodNumberDef | core.$ZodBooleanDef;
 

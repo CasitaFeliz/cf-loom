@@ -1,8 +1,9 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open.ts';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
-import type { JsonPrimitive, ObjectNode, Path, SchemaNode, Walked, Walker } from './nodes.ts';
-import { allWalked, notAllowed, refused, walked } from './not-allowed.ts';
+import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
+import { notAllowed, refused } from './not-allowed.ts';
+import { allWalked, type Walked, type Walker, walked } from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` returned this very schema. */
 export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {

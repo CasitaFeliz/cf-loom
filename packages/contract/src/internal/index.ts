@@ -9,8 +9,9 @@ import type { StandardRejection } from '../standard-rejections.ts';
 
 export { isOpen } from '../open.ts';
 export type { Field, NotAllowed, Origin, Path, SchemaNode } from '../walker/nodes.ts';
-export type { LocatedSchema, OriginOf, WalkedSchemas } from '../walker/walk.ts';
+export type { OriginOf, WalkedSchemas } from '../walker/walk.ts';
 export { walkSchemas } from '../walker/walk.ts';
+export type { LocatedSchema } from '../walker/walked.ts';
 
 /** The `kind` every declaration carries, which the walker switches on to tell them apart. */
 export type Kind =

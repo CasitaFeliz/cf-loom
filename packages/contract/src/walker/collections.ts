@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
-import type { Path, SchemaNode, Walked, Walker } from './nodes.ts';
-import { allWalked, failuresOf, walked } from './not-allowed.ts';
+import type { Path, SchemaNode } from './nodes.ts';
+import { allWalked, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** An array of one item schema, before its length checks. */
 export function walkArray(def: core.$ZodArrayDef, at: Path, walker: Walker): Walked {

@@ -7,7 +7,6 @@ import type {
   Regex,
   SchemaNode,
   StringNode,
-  Walked,
 } from './nodes.ts';
 import {
   notAllowed,
@@ -15,9 +14,9 @@ import {
   refused,
   refusedName,
   refusedRepeatedCheck,
-  walked,
 } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
+import { type Walked, walked } from './walked.ts';
 
 /** A check as zod's def writes it; `describe` and `meta` are how `zod/mini` sets metadata. */
 export type CheckDef =
