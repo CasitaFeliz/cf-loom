@@ -1,5 +1,7 @@
+import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import * as zm from 'zod/mini';
 import {
   type ContractPackage,
   defineApplication,
@@ -249,25 +251,90 @@ describe('validateContract', () => {
     });
   });
 
-  test('a def that names a type but holds garbage checks walks without throwing', () => {
-    const malformed = {
-      _zod: { def: { type: 'string', checks: 'trim' } },
-    } as unknown as z.ZodString;
+  test.each([
+    ['an object def without a shape', { _zod: { def: { type: 'object', shape: null } } }],
+    ['an array def without an element', { _zod: { def: { type: 'array' } } }],
+    ['a string def with garbage checks', { _zod: { def: { type: 'string', checks: [1] } } }],
+  ])('%s is no schema and does not throw', (_name, impostor) => {
     const createOrder = defineEndpoint({
       name: 'createOrder',
       method: 'POST',
       path: '/orders',
       visibility: 'public',
       description: 'Creates an order',
-      input: { body: malformed },
+      input: { body: impostor as unknown as z.ZodString },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validate = () =>
-      validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
 
-    expect(validate).not.toThrow();
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          rule: 'not-a-schema',
+          message: 'body is not a zod schema',
+        },
+      ],
+    });
+  });
+
+  test('a fake schema as a Guard’s qualifier is no schema, and the Qualifier is not judged', () => {
+    const fake = { _zod: { def: { type: 'object', shape: null } } } as unknown as z.ZodString;
+    const quota = defineGuard({ name: 'quota', description: 'A quota', qualifier: fake });
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Every order',
+      guards: [{ guard: quota, qualifier: 'one' }],
+      success: { status: 200, body: z.array(z.object({ id: z.uuid() })) },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders] });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['guards', 'quota', 'qualifier'],
+          rule: 'not-a-schema',
+          message: 'qualifier is not a zod schema',
+        },
+      ],
+    });
+  });
+
+  test('a zod/mini schema and a schema of the built package are schemas', () => {
+    const createOrder = defineEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Creates an order',
+      input: { body: zm.object({ total: zm.int() }) },
+      success: { status: 201, body: z.object({ status: built.openEnum(['pending', 'paid']) }) },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
+
+    expect(validated.kind).toBe('valid');
   });
 
   test('a null body in a schema slot fails once, as no schema', () => {

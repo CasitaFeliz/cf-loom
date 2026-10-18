@@ -1,4 +1,4 @@
-import type * as core from 'zod/v4/core';
+import { $ZodType } from 'zod/v4/core';
 import type { Path, SchemaNode } from '../walker/nodes.ts';
 import type { WalkedSchemas } from '../walker/walk.ts';
 import type { LocatedSchema } from '../walker/walked.ts';
@@ -41,7 +41,7 @@ export type Slot = {
 };
 
 /** A slot that holds a zod schema, so the walk can be given it. */
-export type SchemaSlot = Slot & { readonly value: core.$ZodType };
+export type SchemaSlot = Slot & { readonly value: $ZodType };
 
 /** A slot whose schema walked to a node. */
 export type WalkedSlot = Slot & { readonly node: SchemaNode };
@@ -175,12 +175,10 @@ function isFilled(slot: Slot): boolean {
   return slot.value !== undefined;
 }
 
-/** A zod schema names its type in `_zod.def`; anything that only looks like one is none. */
+/**
+ * A zod schema, from zod, `zod/mini` or any copy: zod's own `instanceof` reads `_zod.traits`,
+ * which a hand-built `_zod` object does not carry, so an impostor never reaches the walker.
+ */
 function holdsSchema(slot: Slot): slot is SchemaSlot {
-  const { value } = slot;
-  if (!isPlainObject(value) || !isPlainObject(value['_zod'])) {
-    return false;
-  }
-  const def = value['_zod']['def'];
-  return isPlainObject(def) && typeof def['type'] === 'string';
+  return slot.value instanceof $ZodType;
 }
