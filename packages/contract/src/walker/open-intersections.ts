@@ -54,6 +54,7 @@ function reachesOpen(node: SchemaNode, search: Search): boolean {
 }
 
 /** The nodes directly inside a node, each with the steps the walker's paths take to it. */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the children of each node type
 function childrenOf(node: SchemaNode): readonly Child[] {
   switch (node.type) {
     case 'object':
