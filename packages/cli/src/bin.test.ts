@@ -737,7 +737,7 @@ describe('cf-loom generate: what the user’s code throws', () => {
   test('a file URL in a thrown message is written relative to the project', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
-      'src/contract/index.ts': 'throw new Error(`broken at ${import.meta.url}`);\n',
+      'src/contract/index.ts': `throw new Error(\`broken at \${import.meta.url}\`);\n`,
     });
 
     const ran = cfLoom(project, 'generate');
