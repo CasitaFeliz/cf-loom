@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import { regexes } from 'zod/v4/core';
 import type { Path, StringNode, Walked } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedStringFormat, walked } from './not-allowed.ts';
 
@@ -89,10 +90,17 @@ function refusalOf(check: core.$ZodCheckStringFormatDef): Refused | undefined {
   if (!knownFormats.has(check.format)) {
     return refusedStringFormat(check.format);
   }
+  if (check.format === 'email' && !isDefaultPattern(check.pattern, regexes.email)) {
+    return refused.emailPattern;
+  }
   if ('normalize' in check && check.normalize === true) {
     return refused.urlNormalize;
   }
   return undefined;
+}
+
+function isDefaultPattern(pattern: RegExp | undefined, zodDefault: RegExp): boolean {
+  return pattern?.source === zodDefault.source && pattern.flags === zodDefault.flags;
 }
 
 function isDeclaredOption([key, value]: [string, unknown]): boolean {

@@ -34,6 +34,7 @@ export const refused = {
   includes: { construct: '.includes()' },
   lowercase: { construct: '.lowercase()' },
   uppercase: { construct: '.uppercase()' },
+  emailPattern: { construct: 'z.email({ pattern })' },
   urlNormalize: { construct: 'z.url({ normalize: true })' },
   readonly: { construct: '.readonly()' },
   numericEnum: { construct: 'numeric z.enum() values' },
