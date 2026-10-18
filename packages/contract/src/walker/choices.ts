@@ -1,7 +1,15 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open.ts';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
-import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
+import { hasAnnotations } from './metadata.ts';
+import type {
+  EnumNode,
+  JsonPrimitive,
+  LiteralNode,
+  ObjectNode,
+  Path,
+  SchemaNode,
+} from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, type Walker, walked } from './walked.ts';
 
@@ -15,15 +23,9 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   return walked({ type: 'enum', values: strings.sort(byCanonicalJson), open: isOpen(schema) });
 }
 
-/**
- * A `tagged` node for a discriminated union, an `enum` for a union of literals, else a
- * `union` of its options in canonical order.
- */
+/** An `enum` for a union of literals, else a `union` of its options in canonical order. */
 export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
-  const def: core.$ZodUnionDef | core.$ZodDiscriminatedUnionDef = schema._zod.def;
-  if ('discriminator' in def) {
-    return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
-  }
+  const def = schema._zod.def;
   if (def.inclusive === false) {
     return notAllowed(at, refused.xor);
   }
@@ -36,7 +38,8 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
   return walked(choiceOf(options.value));
 }
 
-function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker: Walker): Walked {
+/** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
+export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
   const variants = allWalked(
     def.options.map((option, index) => {
@@ -83,15 +86,18 @@ function choiceOf(options: readonly SchemaNode[]): SchemaNode {
   if (literals.length !== options.length) {
     return { type: 'union', options: [...options].sort(byCanonicalJson) };
   }
-  const values = literals.map((literal) => literal.value);
-  const distinct = [...new Map(values.map((value) => [canonicalJson(value), value])).values()];
+  return enumOf(literals.map((literal) => literal.value));
+}
+
+/** An enum of several literal values, each once, in canonical order. */
+export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
+  const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
+  const distinct = [...valueByJson.values()];
   return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
 }
 
-function isBareLiteral(
-  node: SchemaNode,
-): node is { readonly type: 'literal'; readonly value: JsonPrimitive } {
-  return node.type === 'literal' && Object.keys(node).length === 2;
+function isBareLiteral(node: SchemaNode): node is LiteralNode {
+  return node.type === 'literal' && !hasAnnotations(node);
 }
 
 function isString(value: unknown): value is string {

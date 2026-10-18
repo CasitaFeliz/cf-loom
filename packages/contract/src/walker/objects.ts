@@ -63,16 +63,13 @@ export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker
 
 function modeOf(def: core.$ZodObjectDef, at: Path): Walked<ObjectNode['mode']> {
   const catchall = def.catchall?._zod.def.type;
-  switch (catchall) {
-    case undefined:
-      return walked('open');
-    case 'never':
-      return walked('strict');
-    case 'unknown':
-      return notAllowed(at, refused.looseObject);
-    default:
-      return notAllowed(at, refused.catchall);
+  if (catchall === undefined) {
+    return walked('open');
   }
+  if (catchall === 'never') {
+    return walked('strict');
+  }
+  return notAllowed(at, catchall === 'unknown' ? refused.looseObject : refused.catchall);
 }
 
 function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]> {

@@ -39,10 +39,11 @@ export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Pat
 }
 
 /**
- * Whether a union is the one `z.json()` builds: any JSON value, whose arrays and records hold
- * the union itself again.
+ * Whether a union is the one `z.json()` builds, read by mirroring zod's own construction: the
+ * union of string, number, boolean, null, and an array and a string-keyed record of itself.
  */
-export function isJsonUnion(union: core.$ZodType, def: core.$ZodUnionDef): boolean {
+export function isJsonUnion(union: core.$ZodUnion): boolean {
+  const def = union._zod.def;
   const kinds = def.options.map((option) => option._zod.def.type);
   if (kinds.join() !== 'string,number,boolean,null,array,record') {
     return false;

@@ -7,7 +7,7 @@ import {
   constrainString,
   unconstrained,
 } from './checks.ts';
-import { walkEnum, walkUnion } from './choices.ts';
+import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import { annotated, annotatedBy, type Metadata, metadataOf } from './metadata.ts';
 import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
@@ -146,9 +146,7 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'tuple':
       return walkTuple(def, at, walker);
     case 'union':
-      return isJsonUnion(schema, def)
-        ? walked({ type: 'json' })
-        : walkUnion(schema as core.$ZodUnion, at, walker);
+      return unionNodeOf(schema as core.$ZodUnion, at, walker);
     case 'intersection':
       return walkIntersection(def, at, walker);
     case 'lazy':
@@ -186,6 +184,17 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
       return notAllowed(at, refused.templateLiteral);
   }
   return notAllowed(at, refusedName(type));
+}
+
+/** `z.json()`, a discriminated union or any other union, which zod all writes as a union. */
+function unionNodeOf(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
+  if (isJsonUnion(schema)) {
+    return walked({ type: 'json' });
+  }
+  if ('discriminator' in schema._zod.def) {
+    return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
+  }
+  return walkUnion(schema, at, walker);
 }
 
 function pipeRefusal(def: core.$ZodPipeDef) {

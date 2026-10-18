@@ -77,19 +77,19 @@ function constrained<Node extends SchemaNode>(
   at: Path,
 ): Walked {
   const failures: NotAllowed[] = [];
-  let result: SchemaNode = node;
+  let constrainedNode: SchemaNode = node;
   for (const constraint of constraints) {
     if (constraint.kind === 'not-allowed') {
       failures.push(...constraint.failures);
       continue;
     }
-    const repeated = Object.keys(constraint.value).find((key) => key in result);
+    const repeated = Object.keys(constraint.value).find((key) => key in constrainedNode);
     if (repeated !== undefined) {
       failures.push({ at, ...refusedRepeatedCheck(repeated) });
     }
-    result = { ...result, ...constraint.value };
+    constrainedNode = { ...constrainedNode, ...constraint.value };
   }
-  return failures.length > 0 ? { kind: 'not-allowed', failures } : walked(result);
+  return failures.length > 0 ? { kind: 'not-allowed', failures } : walked(constrainedNode);
 }
 
 function stringConstraint(check: CheckDef, at: Path): Constraint<StringNode> {
@@ -110,7 +110,21 @@ function lengthConstraint(check: CheckDef, at: Path): Constraint<Bounds> {
       return walked({ max: check.maximum });
     case 'length_equals':
       return walked({ min: check.length, max: check.length });
-    default:
+    case 'less_than':
+    case 'greater_than':
+    case 'multiple_of':
+    case 'number_format':
+    case 'bigint_format':
+    case 'max_size':
+    case 'min_size':
+    case 'size_equals':
+    case 'string_format':
+    case 'property':
+    case 'mime_type':
+    case 'overwrite':
+    case 'custom':
+    case 'describe':
+    case 'meta':
       return notAllowed(at, refusedCheck(check));
   }
 }
@@ -131,7 +145,20 @@ function numberConstraint(check: CheckDef, at: Path): Constraint<NumberNode> {
       return check.format === 'safeint'
         ? walked({ int: true })
         : notAllowed(at, refusedName(check.format));
-    default:
+    case 'bigint_format':
+    case 'max_size':
+    case 'min_size':
+    case 'size_equals':
+    case 'max_length':
+    case 'min_length':
+    case 'length_equals':
+    case 'string_format':
+    case 'property':
+    case 'mime_type':
+    case 'overwrite':
+    case 'custom':
+    case 'describe':
+    case 'meta':
       return notAllowed(at, refusedCheck(check));
   }
 }

@@ -46,6 +46,12 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
   return annotated(result, metadata.value.annotations);
 }
 
+/** Whether a node carries anything besides its shape. */
+export function hasAnnotations(node: SchemaNode): boolean {
+  const { nullable, description, examples, origin } = node;
+  return [nullable, description, examples, origin].some((annotation) => annotation !== undefined);
+}
+
 function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readonly NotAllowed[] {
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
