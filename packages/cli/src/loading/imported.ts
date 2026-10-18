@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { extname, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -25,11 +26,11 @@ export async function importedModuleOf(path: string, directory: string): Promise
  */
 export function oneLineOf(thrown: unknown, directory: string): string {
   if (!(thrown instanceof Error)) {
-    return relativeTo(firstLineOf(String(thrown)), directory);
+    return relativeTo(firstLineOf(safeTextOf(thrown)), directory);
   }
   const message = relativeTo(firstLineOf(thrown.message), directory);
   const code = 'code' in thrown ? thrown.code : undefined;
-  if (code === 'ERR_MODULE_NOT_FOUND' && isExtensionless(thrown.message)) {
+  if (code === 'ERR_MODULE_NOT_FOUND' && namesTypeScriptOtherwise(thrown.message)) {
     return `${message}: relative imports name the .ts file`;
   }
   return `${projectFrameOf(thrown, directory)}${message}`;
@@ -40,7 +41,7 @@ export function oneLineOf(thrown: unknown, directory: string): string {
  * TypeScript it cannot strip, or where the user's code threw; nothing when no frame is the user's.
  */
 function projectFrameOf(thrown: Error, directory: string): string {
-  const frames = [...(thrown.stack ?? '').matchAll(/(file:\/\/[^\s)]+?):(\d+)(?::\d+)?/g)];
+  const frames = [...(thrown.stack ?? '').matchAll(/(file:\/\/\S+?):(\d+)(?::\d+)?(?=\)?$)/gm)];
   for (const [, url, line] of frames) {
     const path = url === undefined ? '' : relative(directory, fileURLToPath(url));
     if (!path.startsWith('..') && !path.split(sep).includes('node_modules')) {
@@ -59,10 +60,32 @@ function relativeTo(text: string, directory: string): string {
 /** The extensions a module Node imports may have; any other is part of a file's name. */
 const moduleExtensions: readonly string[] = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'];
 
-/** Whether the file Node could not find was named without its extension, as `./get-order.endpoint`. */
-function isExtensionless(message: string): boolean {
+/** The extensions of JavaScript a TypeScript source is compiled to. */
+const compiledExtensions: readonly string[] = ['.js', '.mjs'];
+
+/**
+ * Whether the file Node could not find names a TypeScript source otherwise: without its extension,
+ * as `./get-order.endpoint`, or as the JavaScript it compiles to, as `./get-order.endpoint.js`.
+ */
+function namesTypeScriptOtherwise(message: string): boolean {
   const missing = /^Cannot find module '([^']+)'/.exec(message)?.[1];
-  return missing !== undefined && !moduleExtensions.includes(extname(missing));
+  if (missing === undefined) {
+    return false;
+  }
+  const extension = extname(missing);
+  if (compiledExtensions.includes(extension)) {
+    return existsSync(`${missing.slice(0, -extension.length)}.ts`);
+  }
+  return !moduleExtensions.includes(extension);
+}
+
+/** A thrown value's text; one with none, or whose text throws, still gets a line. */
+function safeTextOf(thrown: unknown): string {
+  try {
+    return String(thrown);
+  } catch {
+    return 'a thrown value with no text';
+  }
 }
 
 function firstLineOf(text: string): string {

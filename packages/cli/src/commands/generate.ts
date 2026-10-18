@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { oneLineOf } from '../loading/index.ts';
 import { declaredSnapshotOf, snapshotFile } from './declared.ts';
@@ -22,11 +22,26 @@ export async function generate(run: Run): Promise<Exit> {
   return written(run.cwd, declared.bytes);
 }
 
+/**
+ * Writes the Snapshot beside the committed file and renames it over it, so a failed write leaves
+ * the committed file as it was; the temporary file a failure leaves is removed.
+ */
 function written(cwd: string, bytes: Uint8Array): Exit {
+  const path = join(cwd, snapshotFile);
+  const temporary = `${path}.tmp`;
   try {
-    writeFileSync(join(cwd, snapshotFile), bytes);
+    writeFileSync(temporary, bytes);
+    renameSync(temporary, path);
     return done(`Wrote ${snapshotFile}`);
   } catch (e) {
+    removeFile(temporary);
     return toolingError(`${snapshotFile} cannot be written: ${oneLineOf(e, cwd)}`);
+  }
+}
+
+/** Removes a file the write left; what is no file there is not the write's and stays. */
+function removeFile(path: string): void {
+  if (existsSync(path) && statSync(path).isFile()) {
+    rmSync(path);
   }
 }

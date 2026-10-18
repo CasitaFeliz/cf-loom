@@ -26,8 +26,8 @@ afterEach(() => {
 });
 
 /** A project in a temporary directory, with cf-loom and zod installed and the files given. */
-function aProject(files: Readonly<Record<string, string>> = {}): string {
-  const project = mkdtempSync(join(tmpdir(), 'cf-loom-'));
+function aProject(files: Readonly<Record<string, string>> = {}, prefix = 'cf-loom-'): string {
+  const project = mkdtempSync(join(tmpdir(), prefix));
   projects.push(project);
   link(join(cliDir, '..', 'contract'), join(project, 'node_modules/@casitafeliz/loom-contract'));
   link(cliDir, join(project, 'node_modules/@casitafeliz/loom-cli'));
@@ -57,6 +57,9 @@ function cfLoom(project: string, ...args: string[]) {
   const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, encoding: 'utf8' });
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
+
+/** Root may write in any folder, so a permission test means nothing when run as root. */
+const isRoot = process.getuid?.() === 0;
 
 const usage = 'Usage: cf-loom init [service | application | definitions] | generate | verify';
 
@@ -734,6 +737,57 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
+  test('a thrown value with no text is still one line', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': 'throw Object.create(null);\n',
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'src/contract/index.ts cannot be loaded: a thrown value with no text\n',
+    });
+  });
+
+  test('a thrown value whose text throws is still one line', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': "throw { toString() { throw new Error('no text'); } };\n",
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(
+      'src/contract/index.ts cannot be loaded: a thrown value with no text\n',
+    );
+  });
+
+  test('a relative import naming the .js file of a .ts file says relative imports name the .ts file', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace("'./ping.endpoint.ts'", "'./ping.endpoint.js'"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/: relative imports name the \.ts file\n$/);
+  });
+
+  test('a project whose path holds a parenthesis still names the file and line', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() }, 'cf-loom (copy)-');
+    edit(project, 'src/contract/ping.endpoint.ts', (text) => `${text}export const broken = ;\n`);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toMatch(
+      /^src\/contract\/index\.ts cannot be loaded: src\/contract\/ping\.endpoint\.ts:13: [^\n]+\n$/,
+    );
+  });
+
   test('a file URL in a thrown message is written relative to the project', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
@@ -765,15 +819,34 @@ describe('cf-loom generate and verify: contract.snapshot.json on disk', () => {
     },
   );
 
-  test('generate reports a contract.snapshot.json that cannot be written in one line', () => {
+  test.skipIf(isRoot)(
+    'generate reports a project it cannot write in in one line (skipped as root, who writes anywhere)',
+    () => {
+      const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+      chmodSync(project, 0o555);
+
+      const ran = cfLoom(project, 'generate');
+
+      chmodSync(project, 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test('a write that fails leaves the committed contract.snapshot.json as it was', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
-    chmodSync(join(project, 'contract.snapshot.json'), 0o444);
+    const committed = read(project, 'contract.snapshot.json');
+    write(project, {
+      ...aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }),
+      'contract.snapshot.json.tmp/kept.txt': '',
+    });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: EACCES[^\n]*\n$/);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: [^\n]+\n$/);
+    expect(read(project, 'contract.snapshot.json')).toBe(committed);
   });
 });
 
