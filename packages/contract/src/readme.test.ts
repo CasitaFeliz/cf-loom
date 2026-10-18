@@ -31,9 +31,16 @@ const userToken = defineGuard({
   rejections: [unauthenticated],
 });
 
+const permission = defineGuard({
+  name: 'permission',
+  description: 'The user holds every listed permission',
+  guards: [userToken],
+  rejections: [forbidden],
+});
+
 const definitions = defineDefinitions({
   name: 'definitions',
-  guards: [userToken],
+  guards: [userToken, permission],
   schemas: { money, pagination },
   rejections: [unauthenticated, forbidden],
   standardRejections: {

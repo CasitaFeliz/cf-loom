@@ -10,11 +10,12 @@ type Demands = {
   readonly body?: never;
 };
 
-/** What an author writes to declare a Guard; an absent part demands or provides nothing. */
+/** What an author writes to declare a Guard; an absent part demands, reads or provides nothing. */
 type GuardDeclaration = {
   readonly name: string;
   readonly description: string;
   readonly demands?: Demands;
+  readonly guards?: readonly Guard[];
   readonly context?: core.$ZodType;
   readonly rejections?: readonly Rejection[];
 };

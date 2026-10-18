@@ -20,18 +20,21 @@ type GuardsOf<Target> = Target extends { readonly guards: readonly (infer Attach
   ? Attached
   : never;
 
-type EndpointContext<Target extends Endpoint> = {
-  readonly [Attached in GuardsOf<Target> as Attached extends Guard
-    ? Attached['name']
-    : never]: GuardContext<Attached>;
+type ContextByName<Guards> = {
+  readonly [Listed in Guards as Listed extends Guard & { readonly context: core.$ZodType }
+    ? Listed['name']
+    : never]: GuardContext<Listed>;
 };
 
-/** A Guard's Context, as its GuardHandler admits it; an Endpoint's, one key per attached Guard by name. */
+/** A Guard's Context, as its GuardHandler admits it; an Endpoint's, one key per Guard that provides a Context, by name. */
 export type ContextOf<Target extends Endpoint | Guard> = Target extends Guard
   ? GuardContext<Target>
   : Target extends Endpoint
-    ? EndpointContext<Target>
+    ? ContextByName<GuardsOf<Target>>
     : never;
+
+/** The Context a dependent Guard's GuardHandler reads: one key per Guard it lists that provides a Context, by name. */
+export type RequiredContextOf<Target extends Guard> = ContextByName<GuardsOf<Target>>;
 
 type ListedRejections<Target> = Target extends {
   readonly rejections: readonly (infer Listed)[];

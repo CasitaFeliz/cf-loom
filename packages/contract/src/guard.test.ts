@@ -72,7 +72,7 @@ describe('defineGuard', () => {
     expectTypeOf<ContextOf<typeof internalOnly>>().toEqualTypeOf<undefined>();
   });
 
-  test('the Context of an Endpoint has one key per attached Guard, by name', () => {
+  test('the Context of an Endpoint has one key per Guard that provides a Context, by name', () => {
     const getOrder = defineEndpoint({
       name: 'getOrder',
       method: 'GET',
@@ -85,7 +85,6 @@ describe('defineGuard', () => {
 
     expectTypeOf<ContextOf<typeof getOrder>>().toEqualTypeOf<{
       readonly apiKey: { clientId: string };
-      readonly internalOnly: undefined;
     }>();
   });
 

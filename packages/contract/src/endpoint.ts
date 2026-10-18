@@ -80,9 +80,31 @@ type HeadersRule<Declaration extends EndpointDeclaration> = {
   };
 };
 
+type RequiredGuardNames<Listed extends Guard> = Listed extends {
+  readonly guards: readonly (infer Required extends Guard)[];
+}
+  ? Required['name']
+  : never;
+
+type GuardOrder<Guards, Earlier extends string = never> = Guards extends readonly [
+  infer First extends Guard,
+  ...infer Rest,
+]
+  ? First['name'] extends Earlier
+    ? `${First['name']} is listed twice`
+    : [Exclude<RequiredGuardNames<First>, Earlier>] extends [never]
+      ? GuardOrder<Rest, Earlier | First['name']>
+      : `${First['name']} requires ${Exclude<RequiredGuardNames<First>, Earlier>} earlier in guards`
+  : unknown;
+
+type GuardsRule<Declaration extends EndpointDeclaration> = {
+  readonly guards?: GuardOrder<Declaration['guards']>;
+};
+
 type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declaration> &
   BodyRule<Declaration> &
-  HeadersRule<Declaration>;
+  HeadersRule<Declaration> &
+  GuardsRule<Declaration>;
 
 /** Declares one HTTP method on one literal path, refusing in its type what TypeScript can state exactly. */
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(

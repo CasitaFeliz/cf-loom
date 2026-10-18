@@ -10,7 +10,13 @@ export { defineGroup } from './group.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
-export type { ContextOf, InputOf, RejectionsOf, SuccessOf } from './inference.ts';
+export type {
+  ContextOf,
+  InputOf,
+  RejectionsOf,
+  RequiredContextOf,
+  SuccessOf,
+} from './inference.ts';
 export { openEnum, openUnion } from './open.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
