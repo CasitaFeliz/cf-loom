@@ -635,6 +635,25 @@ describe('snapshotOf: deprecatedAt', () => {
     );
   });
 
+  test.each([
+    '2026-10-17T09:30:00.000Z',
+    '2026-10-17T09:30:00+00:00',
+    '2026-02-30T09:30:00Z',
+    'yesterday',
+    1760693400,
+  ])(
+    'a committed deprecatedAt that is no UTC instant to the second, %s, is stamped again',
+    (stamp) => {
+      const committed = { endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stamp } } };
+
+      const snapshot = serviceSnapshot(contract, aContext({ committed }));
+
+      expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
+        '2026-10-18T12:00:00Z',
+      );
+    },
+  );
+
   test('an Active Endpoint carries no deprecatedAt, whatever the committed Snapshot says', () => {
     const committed = { endpoints: { 'GET /orders/{}': { deprecatedAt: stampedAt } } };
 
