@@ -3,6 +3,7 @@ import { type OriginOf, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
 import { endpointFailures } from './endpoints.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
+import { undeclaredFieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
@@ -43,6 +44,7 @@ export function validateContract(root: Root, originOf: OriginOf): ValidatedContr
 /** The rules that read declarations alone, so they are judged even when a schema fails the walk. */
 function declarationFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
+    ...undeclaredFieldFailures(declarations),
     ...nameFailures(declarations),
     ...uniquenessFailures(declarations),
     ...groupFailures(declarations),
