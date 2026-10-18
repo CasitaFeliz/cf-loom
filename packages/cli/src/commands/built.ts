@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import {
   canonicalTextOf,
   type RootPackage,
+  type Snapshot,
   type SnapshotContext,
   schemaOriginsOf,
   snapshotOf,
   type ValidatedContract,
+  type ValidContract,
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
 import { oneLineOf } from '../loading/index.ts';
@@ -29,16 +31,26 @@ export type Committed =
  */
 export type Generator = 'running' | 'committed';
 
-/** The declared Snapshot's bytes and the committed file, or the exit that stopped building it. */
-export type Declared =
-  | { readonly kind: 'built'; readonly bytes: Buffer; readonly committed: Committed }
+/**
+ * What every command builds before it writes: the project, its valid root, the declared Snapshot
+ * and its bytes, and the committed file; or the exit that stopped building it.
+ */
+export type Built =
+  | {
+      readonly kind: 'built';
+      readonly project: Project;
+      readonly validated: ValidContract;
+      readonly snapshot: Snapshot;
+      readonly bytes: Buffer;
+      readonly committed: Committed;
+    }
   | Stopped;
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
  * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
  */
-export async function declaredSnapshotOf(run: Run, generator: Generator): Promise<Declared> {
+export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
   if (read.kind === 'stopped') {
     return read;
@@ -55,15 +67,6 @@ export async function declaredSnapshotOf(run: Run, generator: Generator): Promis
     committed: parsed,
     now: run.now,
   };
-  const built = builtOf(project, context);
-  return built.kind === 'stopped' ? built : { ...built, committed };
-}
-
-/** Validates the root and builds its Snapshot. */
-function builtOf(
-  project: Project,
-  context: SnapshotContext,
-): { readonly kind: 'built'; readonly bytes: Buffer } | Stopped {
   const validated = validatedOf(project);
   switch (validated.kind) {
     case 'stopped':
@@ -71,8 +74,9 @@ function builtOf(
     case 'invalid':
       return stopped(checkFailed(validated.failures.map(failureLine)));
     case 'valid': {
-      const text = canonicalTextOf(snapshotOf(validated, context));
-      return { kind: 'built', bytes: Buffer.from(text, 'utf8') };
+      const snapshot = snapshotOf(validated, context);
+      const bytes = Buffer.from(canonicalTextOf(snapshot), 'utf8');
+      return { kind: 'built', project, validated, snapshot, bytes, committed };
     }
   }
 }
@@ -81,7 +85,7 @@ function builtOf(
 function validatedOf(project: Project): ValidatedContract | Stopped {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
   const exportsByDefinitions = new Map(
-    packages.map((installed) => [installed.definitions, installed.exports]),
+    packages.map((installed) => [installed.definitions, Object.values(installed.exports)]),
   );
   const rootPackage: RootPackage = {
     originOf: schemaOriginsOf(packages),
@@ -147,8 +151,9 @@ function runningGeneratorOf(): string {
 }
 
 /** A build stopped by the exit it ends with. */
-type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
+export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
-function stopped(exit: Exit): Stopped {
+/** A build stopped by the exit it ends with. */
+export function stopped(exit: Exit): Stopped {
   return { kind: 'stopped', exit };
 }

@@ -6,8 +6,10 @@ import {
 } from '@casitafeliz/loom-contract/internal';
 import { installedPackageOf, type LookedUp } from './installed-package.ts';
 
-/** A listed Definitions Package as installed, with what its module exports. */
-export type InstalledDefinitions = ResolvedDefinitions & { readonly exports: readonly unknown[] };
+/** A listed Definitions Package as installed, with what its module exports, by name. */
+export type InstalledDefinitions = ResolvedDefinitions & {
+  readonly exports: Readonly<Record<string, unknown>>;
+};
 
 /** The Definitions Packages a root lists as installed, or the first that is not. */
 export type ResolvedPackages =

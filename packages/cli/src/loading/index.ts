@@ -1,5 +1,9 @@
+export type { Exported, ExportedAt, ExportingPackage } from './exported.ts';
+export { exportedOf } from './exported.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
+export type { InstalledVersion } from './installed-package.ts';
+export { installedVersionOf } from './installed-package.ts';
 export type { InstalledDefinitions, ResolvedPackages, Resolving } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';

@@ -13,9 +13,9 @@ export type Exit = {
 /** Where and when a command runs, passed in so a run depends on nothing else. */
 export type Run = { readonly cwd: string; readonly now: number };
 
-/** A command that did what was asked. */
-export function done(line: string): Exit {
-  return { status: 0, stdout: [line], stderr: [] };
+/** A command that did what was asked, with the lines that say what it did. */
+export function done(lines: readonly string[]): Exit {
+  return { status: 0, stdout: lines, stderr: [] };
 }
 
 /** A command whose check failed: something not allowed, or a generated file that differs. */

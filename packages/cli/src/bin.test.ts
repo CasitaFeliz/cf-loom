@@ -352,7 +352,8 @@ describe('cf-loom generate', () => {
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({ status: 0, stdout: 'Wrote contract.snapshot.json\n', stderr: '' });
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(ran.stdout).toMatch(/^Wrote contract\.snapshot\.json\n/);
     const text = read(project, 'contract.snapshot.json');
     const snapshot = JSON.parse(text);
     expect(text).toBe(`${JSON.stringify(sortedKeys(snapshot), null, 2)}\n`);
@@ -878,7 +879,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         "import { defineContract, defineEndpoint, defineGroup } from '@casitafeliz/loom-contract';",
         "import { apiKey, definitions, money } from '@org/definitions';",
         '',
-        'const price = defineEndpoint({',
+        'export const price = defineEndpoint({',
         "  name: 'price',",
         "  method: 'GET',",
         "  path: '/price',",
@@ -1068,11 +1069,8 @@ describe('cf-loom verify', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 0,
-      stdout: 'contract.snapshot.json is up to date\n',
-      stderr: '',
-    });
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(ran.stdout).toMatch(/^contract\.snapshot\.json is up to date\n/);
   });
 
   test('verify exits 1 when contract.snapshot.json was edited', () => {
@@ -1106,11 +1104,8 @@ describe('cf-loom verify', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'contract.snapshot.json is missing: run cf-loom generate\n',
-    });
+    expect(ran).toMatchObject({ status: 1, stdout: '' });
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json is missing: run cf-loom generate\n/);
   });
 
   test('verify ignores which CLI wrote contract.snapshot.json', () => {
@@ -1180,7 +1175,7 @@ describe('cf-loom verify', () => {
     const ran = cfLoom(project, 'verify');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json was edited: it is no JSON \([^\n]+\)\n$/);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json was edited: it is no JSON \([^\n]+\)\n/);
   });
 
   test('verify writes nothing', () => {

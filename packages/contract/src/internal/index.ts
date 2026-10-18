@@ -87,4 +87,4 @@ export type {
   WalkedLocation,
   WalkedSchemas,
 } from '../walker/index.ts';
-export { walkSchemas } from '../walker/index.ts';
+export { byCodePoint, walkSchemas } from '../walker/index.ts';
