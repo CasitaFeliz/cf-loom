@@ -6,8 +6,8 @@ import { notAllowed, refused, refusedDuplicateId, walked } from './not-allowed.t
 export type Entered = { readonly kind: 'entered' } | Walked;
 
 /**
- * The cycles of one walk: a schema met again inside itself closes a cycle, is written once
- * under `defs` by its own id and is a `ref` wherever it is used.
+ * The cycles of one walk: every schema with an id on a cycle is written once under `defs` and
+ * is a `ref` wherever it is used, whichever schema the walk enters the cycle at.
  */
 export type Recursion = {
   readonly enter: (schema: core.$ZodType, id: string | undefined, at: Path) => Entered;
@@ -15,11 +15,15 @@ export type Recursion = {
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
 };
 
-type Ancestor = { readonly id: string | undefined; closed: boolean };
+type Ancestor = {
+  readonly schema: core.$ZodType;
+  readonly id: string | undefined;
+  onCycle: boolean;
+};
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
 export function startRecursion(): Recursion {
-  const ancestors = new Map<core.$ZodType, Ancestor>();
+  const ancestors: Ancestor[] = [];
   const nameBySchema = new Map<core.$ZodType, string>();
   const schemaById = new Map<string, core.$ZodType>();
   const defs: Record<string, SchemaNode> = {};
@@ -29,18 +33,17 @@ export function startRecursion(): Recursion {
     if (name !== undefined) {
       return walked({ type: 'ref', name });
     }
-    const ancestor = ancestors.get(schema);
-    if (ancestor !== undefined) {
-      return closedBy(ancestor, at);
+    const met = ancestors.findLastIndex((ancestor) => ancestor.schema === schema);
+    if (met !== -1) {
+      return cycleClosedAt(ancestors, met, at);
     }
-    ancestors.set(schema, { id, closed: false });
+    ancestors.push({ schema, id, onCycle: false });
     return { kind: 'entered' };
   }
 
   function leave(schema: core.$ZodType, result: Walked, at: Path): Walked {
-    const ancestor = ancestors.get(schema);
-    ancestors.delete(schema);
-    if (result.kind === 'not-allowed' || ancestor?.closed !== true || ancestor.id === undefined) {
+    const ancestor = ancestors.pop();
+    if (result.kind === 'not-allowed' || ancestor?.onCycle !== true || ancestor.id === undefined) {
       return result;
     }
     const owner = schemaById.get(ancestor.id);
@@ -56,10 +59,24 @@ export function startRecursion(): Recursion {
   return { enter, leave, defs: () => defs };
 }
 
-function closedBy(ancestor: Ancestor, at: Path): Walked {
-  ancestor.closed = true;
-  if (ancestor.id === undefined) {
+/** The schema met again: its `ref` if it has an id, else walked again up to one that has. */
+function cycleClosedAt(ancestors: Ancestor[], met: number, at: Path): Entered {
+  const cycle = ancestors.slice(met);
+  const named = cycle.filter(hasId);
+  for (const ancestor of named) {
+    ancestor.onCycle = true;
+  }
+  const [closing] = cycle;
+  if (closing?.id !== undefined) {
+    return walked({ type: 'ref', name: closing.id });
+  }
+  if (named.length === 0 || closing === undefined) {
     return notAllowed(at, refused.unnamedCycle);
   }
-  return walked({ type: 'ref', name: ancestor.id });
+  ancestors.push({ schema: closing.schema, id: undefined, onCycle: false });
+  return { kind: 'entered' };
+}
+
+function hasId(ancestor: Ancestor): boolean {
+  return ancestor.id !== undefined;
 }

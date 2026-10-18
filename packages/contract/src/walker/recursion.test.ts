@@ -142,4 +142,106 @@ describe('walkSchemas: recursion', () => {
       defs: {},
     });
   });
+
+  describe('mutual recursion with an id on one schema', () => {
+    const department = z
+      .object({
+        get teams() {
+          return z.array(team);
+        },
+      })
+      .meta({ id: 'department' });
+    const team = z.object({
+      get department() {
+        return department;
+      },
+    });
+
+    const teamNode = {
+      type: 'object',
+      mode: 'open',
+      fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
+    } as const;
+    const departmentDef = {
+      type: 'object',
+      mode: 'open',
+      fields: { teams: { required: true, schema: { type: 'array', items: teamNode } } },
+    } as const;
+    const expected = {
+      kind: 'walked',
+      nodes: [teamNode, { type: 'ref', name: 'department' }],
+      defs: { department: departmentDef },
+    };
+
+    test('entering at the schema without the id gives the def and refs', () => {
+      const walked = walkSchemas(
+        [
+          { at: ['team'], schema: team },
+          { at: ['department'], schema: department },
+        ],
+        () => undefined,
+      );
+
+      expect(walked).toEqual(expected);
+    });
+
+    test('entering at the schema with the id gives the same nodes and defs', () => {
+      const walked = walkSchemas(
+        [
+          { at: ['department'], schema: department },
+          { at: ['team'], schema: team },
+        ],
+        () => undefined,
+      );
+
+      expect(walked).toEqual({ ...expected, nodes: [...expected.nodes].reverse() });
+    });
+  });
+
+  describe('mutual recursion without an id', () => {
+    const department = z.object({
+      get teams() {
+        return z.array(team);
+      },
+    });
+    const team = z.object({
+      get department() {
+        return department;
+      },
+    });
+
+    test.each([
+      ['department', department, ['body', 'fields', 'teams', 'items', 'fields', 'department']],
+      ['team', team, ['body', 'fields', 'department', 'fields', 'teams', 'items']],
+    ])('entered at the %s, the cycle fails', (_name, schema, at) => {
+      expect(walkBody(schema)).toEqual({
+        kind: 'not-allowed',
+        failures: [{ at, construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' }],
+      });
+    });
+  });
+
+  test('every schema with an id on a cycle is a def, wherever the walk enters', () => {
+    const department = z
+      .object({
+        get teams() {
+          return z.array(team);
+        },
+      })
+      .meta({ id: 'department' });
+    const team = z
+      .object({
+        get department() {
+          return department;
+        },
+      })
+      .meta({ id: 'team' });
+
+    const fromTeam = walkSchemas([{ at: ['body'], schema: team }], () => undefined);
+    const fromDepartment = walkSchemas([{ at: ['body'], schema: department }], () => undefined);
+
+    expect(fromTeam.kind === 'walked' && fromTeam.defs).toEqual(
+      fromDepartment.kind === 'walked' && fromDepartment.defs,
+    );
+  });
 });
