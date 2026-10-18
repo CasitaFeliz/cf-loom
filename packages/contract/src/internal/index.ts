@@ -24,6 +24,7 @@ export type {
 export { canonicalTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
 export type {
   DeclarationFailure,
+  ExportsOf,
   Failure,
   LocatedCode,
   LocatedDefinitions,
@@ -33,6 +34,7 @@ export type {
   LocatedRejection,
   LocatedStandardRejection,
   ResolvedStandard,
+  RootPackage,
   Rule,
   ValidatedCode,
   ValidatedContract,
@@ -41,7 +43,12 @@ export type {
   ValidatedSchemas,
   ValidContract,
 } from '../validation/index.ts';
-export { listedDefinitionsOf, validateContract } from '../validation/index.ts';
+export {
+  follows,
+  kebabCase,
+  listedDefinitionsOf,
+  validateContract,
+} from '../validation/index.ts';
 export type {
   Field,
   LocatedSchema,

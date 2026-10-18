@@ -2,7 +2,7 @@ import { isApplication, isContract, isDefinitions } from '../declarations/index.
 import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
 import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
-import { unlistedFailures } from './definitions.ts';
+import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
@@ -45,9 +45,14 @@ export type NodeLookup = {
 
 /**
  * The package a root sits in: the unscoped name of its package.json, which the root is named as,
- * and where each schema came from, as the Definitions Packages installed beside it tell.
+ * and what the Definitions Packages installed beside it tell: where each schema came from and
+ * what each package's module exports.
  */
-export type RootPackage = { readonly packageName: string; readonly originOf: OriginOf };
+export type RootPackage = {
+  readonly packageName: string;
+  readonly originOf: OriginOf;
+  readonly exportsOf: ExportsOf;
+};
 
 /**
  * A root validated: its schemas walked and its declarations gathered for the Snapshot, or every
@@ -81,6 +86,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
+    ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...new Set(walked.located.flatMap(failuresAt)),
@@ -112,7 +118,6 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...declarations.endpoints.flatMap(attachmentFailures),
     ...rejectionFailures(declarations),
     ...dependencyFailures(declarations),
-    ...unlistedFailures(declarations),
   ];
 }
 

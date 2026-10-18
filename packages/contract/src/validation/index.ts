@@ -1,5 +1,7 @@
 export { listedDefinitionsOf } from './declarations.ts';
+export type { ExportsOf } from './definitions.ts';
 export type { DeclarationFailure, Failure, Rule } from './failures.ts';
+export { follows, kebabCase } from './grammars.ts';
 export { identityOf, paramNamesOf } from './identity.ts';
 export type {
   LocatedCode,

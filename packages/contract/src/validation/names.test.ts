@@ -16,7 +16,8 @@ import { type OriginOf, validateContract } from '../internal/index.ts';
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: OriginOf) {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
 }
 
 function noOrigin() {
@@ -336,7 +337,11 @@ describe('validateContract: the root is named as its package', () => {
   ] as const;
 
   test.each(roots)('%s named as its package.json without the scope is valid', (_, root) => {
-    const validated = validateContract(root, { originOf: noOrigin, packageName: 'orders-service' });
+    const validated = validateContract(root, {
+      originOf: noOrigin,
+      packageName: 'orders-service',
+      exportsOf: () => [],
+    });
 
     expect(validated.kind).toBe('valid');
   });
@@ -345,6 +350,7 @@ describe('validateContract: the root is named as its package', () => {
     const validated = validateContract(root, {
       originOf: noOrigin,
       packageName: 'billing-service',
+      exportsOf: () => [],
     });
 
     expect(validated).toEqual({
@@ -363,7 +369,11 @@ describe('validateContract: the root is named as its package', () => {
   test('a wrong package name is reported with every other failure at once', () => {
     const root = defineContract({ name: 'Orders', groups: [] });
 
-    const validated = validateContract(root, { originOf: noOrigin, packageName: 'orders' });
+    const validated = validateContract(root, {
+      originOf: noOrigin,
+      packageName: 'orders',
+      exportsOf: () => [],
+    });
 
     const rules = validated.kind === 'invalid' ? validated.failures.map(ruleOf) : [];
     expect(rules).toEqual(['name-grammar', 'package-name']);

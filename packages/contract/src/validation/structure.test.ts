@@ -19,7 +19,8 @@ import { type OriginOf, validateContract } from '../internal/index.ts';
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: OriginOf) {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
 }
 
 function noOrigin() {
