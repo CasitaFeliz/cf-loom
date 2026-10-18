@@ -1,0 +1,138 @@
+import type { NotAllowed, Path, Walked } from './nodes.ts';
+
+/** A construct as the Not allowed list writes it, and what the documents name instead. */
+export type Refused = { readonly construct: string; readonly instead?: string };
+
+const nullableInstead = 'nullable';
+const dynamicKeysInstead = 'z.record()';
+
+/** Every construct the walker refuses by name, so each is written once. */
+export const refused = {
+  default: { construct: '.default()' },
+  prefault: { construct: '.prefault()' },
+  catch: { construct: '.catch()' },
+  transform: { construct: '.transform()' },
+  preprocess: { construct: '.preprocess()' },
+  pipe: { construct: '.pipe()' },
+  refine: { construct: '.refine()' },
+  customCheck: { construct: '.check()' },
+  custom: { construct: 'z.custom()' },
+  codec: { construct: 'z.codec()' },
+  coerce: { construct: 'z.coerce.*' },
+  date: { construct: 'z.date()', instead: 'z.iso.datetime()' },
+  stringbool: { construct: 'z.stringbool()' },
+  templateLiteral: { construct: 'z.templateLiteral()' },
+  unknown: { construct: 'z.unknown()', instead: 'z.record() or z.json()' },
+  any: { construct: 'z.any()', instead: 'z.record() or z.json()' },
+  looseObject: { construct: 'z.looseObject()', instead: dynamicKeysInstead },
+  catchall: { construct: '.catchall()', instead: dynamicKeysInstead },
+  looseRecord: { construct: 'z.looseRecord()' },
+  recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
+  mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
+  startsWith: { construct: '.startsWith()' },
+  endsWith: { construct: '.endsWith()' },
+  includes: { construct: '.includes()' },
+  lowercase: { construct: '.lowercase()' },
+  uppercase: { construct: '.uppercase()' },
+  urlNormalize: { construct: 'z.url({ normalize: true })' },
+  readonly: { construct: '.readonly()' },
+  numericEnum: { construct: 'numeric z.enum() values' },
+  optional: { construct: '.optional()' },
+  nonoptional: { construct: '.nonoptional()' },
+  null: { construct: 'z.null()', instead: nullableInstead },
+  undefined: { construct: 'z.undefined()', instead: nullableInstead },
+  literalNull: { construct: 'z.literal(null)', instead: nullableInstead },
+  literalUndefined: { construct: 'z.literal(undefined)', instead: nullableInstead },
+  literalBigint: { construct: 'a bigint z.literal()' },
+  xor: { construct: 'z.xor()' },
+  severalDiscriminatorValues: {
+    construct: 'a discriminated union variant whose discriminator has several values',
+  },
+  duplicateDiscriminatorValue: {
+    construct: 'two discriminated union variants with the same discriminator value',
+  },
+  unliteralDiscriminator: {
+    construct: 'a discriminated union variant whose discriminator is not a literal',
+  },
+  strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
+  differingIntersection: {
+    construct: 'an intersection of objects whose shared keys differ',
+    instead: '.extend()',
+  },
+  unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
+  bigint: { construct: 'z.bigint()' },
+  symbol: { construct: 'z.symbol()' },
+  void: { construct: 'z.void()' },
+  never: { construct: 'z.never()' },
+  nan: { construct: 'z.nan()' },
+  map: { construct: 'z.map()' },
+  set: { construct: 'z.set()' },
+  file: { construct: 'z.file()' },
+  promise: { construct: 'z.promise()' },
+  function: { construct: 'z.function()' },
+  success: { construct: 'z.success()' },
+} as const satisfies Record<string, Refused>;
+
+/** A `.meta()` key other than `description`, `examples` and `id`. */
+export function refusedMetaKey(key: string): Refused {
+  return { construct: `.meta({ ${key} })` };
+}
+
+/** Examples that are not a list, which no JSON Schema reader could take. */
+export const refusedExamples: Refused = { construct: '.meta({ examples }) that is not a list' };
+
+/** A second schema named with an id another schema in the Snapshot already has. */
+export function refusedDuplicateId(id: string): Refused {
+  return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };
+}
+
+/** A check, or a zod type, the walker has no node or constraint for, by its zod name. */
+export function refusedName(name: string): Refused {
+  return { construct: `z.${name}()` };
+}
+
+/** Two checks that set one constraint, which a node holds once. */
+export function refusedRepeatedCheck(constraint: string): Refused {
+  return { construct: `two checks that set ${constraint}` };
+}
+
+/** A `z.stringFormat()` of a name zod does not build itself: a custom check. */
+export function refusedStringFormat(format: string): Refused {
+  return { construct: `z.stringFormat(${JSON.stringify(format)})` };
+}
+
+/** One failure, as the walk of a schema returns it. */
+export function notAllowed(at: Path, construct: Refused): Walked<never> {
+  return { kind: 'not-allowed', failures: [{ at, ...construct }] };
+}
+
+/** A walked value, as the walk of a schema returns it. */
+export function walked<Value>(value: Value): Walked<Value> {
+  return { kind: 'walked', value };
+}
+
+/** Every value when each walked, else every failure of all of them, so none hides another. */
+export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonly Value[]> {
+  const failures = failuresOf(list);
+  if (failures.length > 0) {
+    return { kind: 'not-allowed', failures };
+  }
+  return walked(list.filter(isWalked).map((success) => success.value));
+}
+
+/** Every failure among walked values, in order. */
+export function failuresOf(list: readonly Walked<unknown>[]): readonly NotAllowed[] {
+  return list.filter(isNotAllowed).flatMap((failure) => failure.failures);
+}
+
+function isWalked<Value>(
+  result: Walked<Value>,
+): result is { readonly kind: 'walked'; readonly value: Value } {
+  return result.kind === 'walked';
+}
+
+function isNotAllowed(
+  result: Walked<unknown>,
+): result is { readonly kind: 'not-allowed'; readonly failures: readonly NotAllowed[] } {
+  return result.kind === 'not-allowed';
+}
