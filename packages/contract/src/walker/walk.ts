@@ -56,14 +56,11 @@ export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginO
 }
 
 function walkSchema(schema: core.$ZodType, at: Path, context: Context): Walked {
-  const own = ownMetadata(schema, at, context.originOf);
-  const id = own.kind === 'walked' ? own.value.id : undefined;
-  const entered = context.recursion.enter(schema, id, at);
-  if (entered.kind !== 'entered') {
-    return entered;
-  }
-  const result = annotatedBy(walkDefinition(schema, at, context.walker), own);
-  return context.recursion.leave(schema, result, at);
+  const metadata = ownMetadata(schema, at, context.originOf);
+  const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
+  return context.recursion.within({ schema, at }, id, () =>
+    annotatedBy(walkDefinition(schema, at, context.walker), metadata),
+  );
 }
 
 function walkField(schema: core.$ZodType, at: Path, context: Context): Walked<Field> {
