@@ -386,3 +386,11 @@ describe('defineEndpoint errors', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared Endpoint’s Standard Rejections', () => {
+  test('an Endpoint keeps notFound itself', () => {
+    const endpoint = defineEndpoint({ ...listOrders, rejections: [notFound] });
+
+    expect(endpoint.rejections[0]).toBe(notFound);
+  });
+});
