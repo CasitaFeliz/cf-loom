@@ -8,7 +8,10 @@ export type QualifiedAttachment = {
   readonly qualifier: unknown;
 };
 
-/** An entry of an Endpoint's `guards`: a Guard, or a QualifiedAttachment when it declares a `qualifier`. */
+/**
+ * A Guard as an Endpoint's `guards` lists it: the Guard bare, or a QualifiedAttachment
+ * `{ guard, qualifier }` for a Guard that declares a `qualifier`.
+ */
 export type Attachment = Guard | QualifiedAttachment;
 
 /** The Guard an Attachment names, so every Guard rule reads bare and qualified Attachments alike. */
@@ -25,7 +28,7 @@ type ConstInferred<Value> = Value extends object
 
 type ItemOf<Accepted> = Accepted extends readonly (infer Item)[] ? Item : never;
 
-type FieldsOfEach<Written, Accepted> = Accepted extends unknown
+type FieldsOfAnyMember<Written, Accepted> = Accepted extends unknown
   ? DeclaredFieldsRule<Written, Accepted> & {
       readonly [Key in keyof Written & keyof Accepted]: QualifierFieldsRule<
         Written[Key],
@@ -40,25 +43,26 @@ type QualifierFieldsRule<Written, Accepted> = Written extends readonly unknown[]
   : Written extends object
     ? [Extract<Accepted, object>] extends [never]
       ? unknown
-      : FieldsOfEach<Written, Extract<Accepted, object>>
+      : FieldsOfAnyMember<Written, Extract<Accepted, object>>
     : unknown;
 
 type BareRule<Listed extends Guard> = Listed extends QualifiedGuard
   ? `${Listed['name']} needs a qualifier: { guard, qualifier }`
   : unknown;
 
-type QualifierRule<Listed extends QualifiedAttachment, Qualified extends QualifiedGuard> = {
+type QualifierValueRule<Listed extends QualifiedAttachment, Qualified extends QualifiedGuard> = {
   readonly guard: Qualified;
   readonly qualifier: ConstInferred<core.input<Qualified['qualifier']>> &
     QualifierFieldsRule<Listed['qualifier'], core.input<Qualified['qualifier']>>;
 } & DeclaredFieldsRule<Listed, QualifiedAttachment>;
 
-type QualifiedRule<Listed extends QualifiedAttachment> = Listed['guard'] extends QualifiedGuard
-  ? QualifierRule<Listed, Listed['guard']>
-  : `${Listed['guard']['name']} takes no qualifier`;
+type QualifiedAttachmentRule<Listed extends QualifiedAttachment> =
+  Listed['guard'] extends QualifiedGuard
+    ? QualifierValueRule<Listed, Listed['guard']>
+    : `${Listed['guard']['name']} takes no qualifier`;
 
 type ListedRule<Listed> = Listed extends QualifiedAttachment
-  ? QualifiedRule<Listed>
+  ? QualifiedAttachmentRule<Listed>
   : Listed extends Guard
     ? BareRule<Listed>
     : unknown;
