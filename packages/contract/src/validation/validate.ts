@@ -43,9 +43,9 @@ export type ValidatedContract =
 /**
  * Checks every rule `generate` enforces on a root's declarations and walks every schema of it
  * once, reporting all failures together, since a cast or a widened type skips the rules the
- * types state.
+ * types state; what a module exports as its root is judged whatever it is.
  */
-export function validateContract(root: Root, originOf: OriginOf): ValidatedContract {
+export function validateContract(root: unknown, originOf: OriginOf): ValidatedContract {
   if (!isRoot(root)) {
     const message = 'A root is a Contract, an Application or a Definitions Package';
     return invalid([failure([], 'not-a-root', message)]);
