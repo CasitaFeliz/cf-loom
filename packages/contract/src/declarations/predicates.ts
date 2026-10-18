@@ -8,6 +8,18 @@ import type { Rejection } from './rejection.ts';
 import type { Application, Contract } from './roots.ts';
 import type { StandardRejection } from './standard-rejections.ts';
 
+/** The `kind` every declaration carries, which tells them apart at runtime. */
+export type Kind =
+  | Contract['kind']
+  | Application['kind']
+  | Definitions['kind']
+  | Group['kind']
+  | Endpoint['kind']
+  | Guard['kind']
+  | Rejection['kind']
+  | StandardRejection['kind']
+  | Dependencies['kind'];
+
 /** Whether a value is a declared Contract, from any copy of this package. */
 export function isContract(value: unknown): value is Contract {
   return isDeclaration(value) && value.kind === 'contract';

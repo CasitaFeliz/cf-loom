@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineEndpoint, defineGuard, type RequiredContextOf } from './index.ts';
+import { defineEndpoint, defineGuard, type RequiredContextOf } from '../index.ts';
 
 const userToken = defineGuard({
   name: 'userToken',

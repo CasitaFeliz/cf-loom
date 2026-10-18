@@ -6,8 +6,8 @@ import {
   isGuard,
   isRejection,
   isStandardRejection,
-} from '../predicates.ts';
-import type { Path } from '../walker/nodes.ts';
+} from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { type Readable, readableOf } from './fields.ts';

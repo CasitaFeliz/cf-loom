@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineRejection } from './index.ts';
+import { defineRejection } from '../index.ts';
 
 describe('defineRejection', () => {
   test('a Rejection keeps its body schema by identity', () => {

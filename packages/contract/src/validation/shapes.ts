@@ -1,5 +1,4 @@
-import { canonicalJson } from '../walker/canonical-json.ts';
-import { type Field, neutralAnnotations, type SchemaNode } from '../walker/nodes.ts';
+import { canonicalJson, type Field, neutralAnnotations, type SchemaNode } from '../walker/index.ts';
 
 /**
  * A node's shape alone: what two declarations of one header, query param or code must agree on.

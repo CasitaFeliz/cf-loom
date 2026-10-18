@@ -10,7 +10,7 @@ import {
   type notImplemented,
   type QualifierOf,
   type RejectionsOf,
-} from './index.ts';
+} from '../index.ts';
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 

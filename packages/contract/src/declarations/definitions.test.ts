@@ -8,7 +8,7 @@ import {
   defineGuard,
   defineRejection,
   notFound,
-} from './index.ts';
+} from '../index.ts';
 
 describe('defineDefinitions', () => {
   test('a Definitions Package keeps its Guards, schemas and Rejections by identity', () => {

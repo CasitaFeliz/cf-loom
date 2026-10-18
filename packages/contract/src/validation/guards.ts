@@ -1,9 +1,7 @@
 import { safeParse } from 'zod/v4/core';
-import type { Attachment } from '../attachment.ts';
-import { isDeclaration } from '../freeze-declaration.ts';
-import type { Guard } from '../guard.ts';
-import { isGuard } from '../predicates.ts';
-import type { Path } from '../walker/nodes.ts';
+import type { Attachment, Guard } from '../declarations/index.ts';
+import { isDeclaration, isGuard } from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint, LocatedGuard } from './located.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';

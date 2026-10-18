@@ -1,5 +1,5 @@
-import { isGuard } from '../predicates.ts';
-import type { ObjectNode, Path, SchemaNode } from '../walker/nodes.ts';
+import { isGuard } from '../declarations/index.ts';
+import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
 import { attachedGuardOf } from './references.ts';

@@ -1,6 +1,5 @@
-import { lifecycles, visibilities } from '../element.ts';
-import type { Endpoint } from '../endpoint.ts';
-import { methods, successStatuses } from '../http.ts';
+import type { Endpoint } from '../declarations/index.ts';
+import { lifecycles, methods, successStatuses, visibilities } from '../declarations/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
 import { slotAt } from './schemas.ts';

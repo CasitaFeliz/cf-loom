@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type ContractPackage, defineDependencies, defineEndpoint } from './index.ts';
+import { type ContractPackage, defineDependencies, defineEndpoint } from '../index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',

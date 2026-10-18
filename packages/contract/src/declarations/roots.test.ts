@@ -8,7 +8,7 @@ import {
   defineDependencies,
   defineEndpoint,
   defineGroup,
-} from './index.ts';
+} from '../index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',

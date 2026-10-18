@@ -1,12 +1,12 @@
-import { isRejectionStatus } from '../http.ts';
-import { isStandardRejection } from '../predicates.ts';
 import {
   addedStandardRejectionNames,
+  isRejectionStatus,
+  isStandardRejection,
   type StandardRejectionName,
   standardRejectionDefaults,
   standardRejectionNames,
-} from '../standard-rejections.ts';
-import type { Path } from '../walker/nodes.ts';
+} from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type {

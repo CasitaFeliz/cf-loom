@@ -2,8 +2,8 @@ import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
-import { openEnum, openUnion } from './index.ts';
-import { isOpen } from './internal/index.ts';
+import { openEnum, openUnion } from '../index.ts';
+import { isOpen } from '../internal/index.ts';
 
 type Status = ReturnType<typeof openEnum<readonly ['pending', 'paid']>>;
 
