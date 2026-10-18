@@ -156,3 +156,32 @@ describe('a Definitions Package with a schema named kind', () => {
     expect(definitions.schemas.kind).toBe(kind);
   });
 });
+
+describe('a Definitions Package with containers the author froze', () => {
+  test('an author-frozen standardRejections still gets frozen entries', () => {
+    const standardRejections = Object.freeze({
+      notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' } as const,
+    });
+
+    const definitions = defineDefinitions({ name: 'definitions', standardRejections });
+
+    expect(Object.isFrozen(definitions.standardRejections.notFound)).toBe(true);
+  });
+
+  test('a declaration nested in a container keeps its identity', () => {
+    const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+
+    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
+
+    expect(definitions.rejections[0]).toBe(forbidden);
+  });
+
+  test('a zod schema keeps its identity and still parses', () => {
+    const money = z.object({ amount: z.int() });
+
+    const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });
+
+    expect(definitions.schemas.money).toBe(money);
+    expect(definitions.schemas.money.safeParse({ amount: 5 }).success).toBe(true);
+  });
+});

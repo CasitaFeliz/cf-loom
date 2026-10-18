@@ -1,3 +1,4 @@
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 
 type StandardRejectionName = 'invalidInput' | 'notFound' | 'notImplemented';
@@ -12,22 +13,25 @@ export type StandardRejection<Name extends StandardRejectionName = StandardRejec
     : never;
 
 /** The Rejection cf-loom's runtime answers when the Input breaks the Endpoint's schemas. */
-export const invalidInput: StandardRejection<'invalidInput'> = Object.freeze({
-  kind: 'standard-rejection',
-  name: 'invalidInput',
-});
+export const invalidInput: StandardRejection<'invalidInput'> = freezeDeclaration(
+  'standard-rejection',
+  {
+    name: 'invalidInput',
+  },
+);
 
 /** The Rejection an Endpoint lists, like any of its own, when it may answer that nothing exists. */
-export const notFound: StandardRejection<'notFound'> = Object.freeze({
-  kind: 'standard-rejection',
+export const notFound: StandardRejection<'notFound'> = freezeDeclaration('standard-rejection', {
   name: 'notFound',
 });
 
 /** The Rejection cf-loom's runtime answers for a Handler that is still a stub. */
-export const notImplemented: StandardRejection<'notImplemented'> = Object.freeze({
-  kind: 'standard-rejection',
-  name: 'notImplemented',
-});
+export const notImplemented: StandardRejection<'notImplemented'> = freezeDeclaration(
+  'standard-rejection',
+  {
+    name: 'notImplemented',
+  },
+);
 
 /** What a Definitions Package writes for one Standard Rejection: a code, a status and a message. */
 export type StandardRejectionDeclaration<Status extends number = RejectionStatus> = {
