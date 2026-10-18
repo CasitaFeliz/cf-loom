@@ -1,6 +1,7 @@
 import type { SchemaNode } from '../walker/nodes.ts';
 import { type OriginOf, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
+import { endpointFailures } from './endpoints.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
@@ -39,7 +40,10 @@ export function validateContract(root: Root, originOf: OriginOf): ValidatedContr
 
 /** The rules that read declarations alone, so they are judged even when a schema fails the walk. */
 function declarationFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  return [...declarations.endpoints.flatMap(pathFailures)];
+  return [
+    ...declarations.endpoints.flatMap(pathFailures),
+    ...declarations.endpoints.flatMap(endpointFailures),
+  ];
 }
 
 /** The rules that read the walked nodes, judged once every schema walked. */
