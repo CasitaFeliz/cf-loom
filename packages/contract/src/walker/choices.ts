@@ -71,6 +71,9 @@ function taggedVariant(
     return variant;
   }
   const node = variant.value;
+  if (node.type === 'tagged') {
+    return notAllowed(at, refused.nestedDiscriminatedUnion);
+  }
   const field = node.type === 'object' ? node.fields[discriminator] : undefined;
   if (field?.schema.type === 'enum') {
     return notAllowed(at, refused.severalDiscriminatorValues);

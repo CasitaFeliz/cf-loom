@@ -13,7 +13,7 @@ import { annotated } from './metadata.ts';
 import type { Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedName } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
-import { isJsonUnion, walkBoolean, walkLiteral, walkNumber, walkString } from './scalars.ts';
+import { isJsonUnion, walkLiteral } from './scalars.ts';
 import { type Walked, type Walker, walked } from './walked.ts';
 
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
@@ -56,13 +56,16 @@ export function constrained(node: SchemaNode, checks: readonly CheckDef[], at: P
 function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
   const def = schema._zod.def as Def;
   const type: string = def.type;
+  if ('coerce' in def && def.coerce === true) {
+    return notAllowed(at, refused.coerce);
+  }
   switch (def.type) {
     case 'string':
-      return walkString(def, at);
+      return walked({ type: 'string' });
     case 'number':
-      return walkNumber(def, at);
+      return walked({ type: 'number' });
     case 'boolean':
-      return walkBoolean(def, at);
+      return walked({ type: 'boolean' });
     case 'literal':
       return walkLiteral(def, at);
     case 'enum':

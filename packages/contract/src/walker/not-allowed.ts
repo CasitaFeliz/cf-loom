@@ -36,7 +36,7 @@ export const refused = {
   lowercase: { construct: '.lowercase()' },
   uppercase: { construct: '.uppercase()' },
   emailPattern: { construct: 'z.email({ pattern })' },
-  urlNormalize: { construct: 'z.url({ normalize: true })' },
+  urlNormalize: { construct: 'z.url({ normalize })' },
   readonly: { construct: '.readonly()' },
   numericEnum: { construct: 'numeric z.enum() values' },
   optional: { construct: '.optional()' },
@@ -57,6 +57,7 @@ export const refused = {
   unliteralDiscriminator: {
     construct: 'a discriminated union variant whose discriminator is not a literal',
   },
+  nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
   strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
   differingIntersection: {
     construct: 'an intersection of objects whose shared keys differ',

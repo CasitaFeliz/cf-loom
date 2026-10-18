@@ -1,25 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { enumOf } from './choices.ts';
-import type { JsonPrimitive, Path, SchemaNode } from './nodes.ts';
+import type { JsonPrimitive, Path } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, walked } from './walked.ts';
-
-type Coercible = core.$ZodStringDef | core.$ZodNumberDef | core.$ZodBooleanDef;
-
-/** A string, before its checks: `z.coerce.string()` converts, so it fails. */
-export function walkString(def: core.$ZodStringDef, at: Path): Walked {
-  return uncoerced(def, at, { type: 'string' });
-}
-
-/** A number, before its checks: `z.coerce.number()` converts, so it fails. */
-export function walkNumber(def: core.$ZodNumberDef, at: Path): Walked {
-  return uncoerced(def, at, { type: 'number' });
-}
-
-/** A boolean: `z.coerce.boolean()` converts, so it fails. */
-export function walkBoolean(def: core.$ZodBooleanDef, at: Path): Walked {
-  return uncoerced(def, at, { type: 'boolean' });
-}
 
 /**
  * A `literal` of one JSON value, or an `enum` of several, since a literal of several values is a
@@ -57,13 +40,6 @@ export function isJsonUnion(union: core.$ZodUnion): boolean {
     resolvedLazy(element) === union &&
     resolvedLazy(recordDef?.valueType) === union
   );
-}
-
-function uncoerced(def: Coercible, at: Path, node: SchemaNode): Walked {
-  if (def.coerce) {
-    return notAllowed(at, refused.coerce);
-  }
-  return walked(node);
 }
 
 function jsonValueOf(value: core.util.Literal, at: Path): Walked<JsonPrimitive> {
