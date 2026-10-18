@@ -404,4 +404,124 @@ describe('walkSchemas: recursion', () => {
       });
     });
   });
+
+  describe('determinism whatever the entry', () => {
+    const order: z.ZodType = z
+      .object({
+        get customer(): z.ZodType {
+          return customer;
+        },
+      })
+      .meta({ id: 'order' });
+    const customer: z.ZodType = z
+      .object({
+        get orders(): z.ZodType {
+          return z.array(order);
+        },
+        get address(): z.ZodType {
+          return address;
+        },
+      })
+      .meta({ id: 'customer' });
+    const address: z.ZodType = z
+      .object({
+        get order(): z.ZodType {
+          return order;
+        },
+      })
+      .meta({ id: 'address' });
+
+    test('a ring of three defs behind a written def gives the same defs in either order', () => {
+      const orderFirst = walkSchemas(
+        [
+          { at: ['order'], schema: order },
+          { at: ['customer'], schema: customer },
+        ],
+        () => undefined,
+      );
+      const customerFirst = walkSchemas(
+        [
+          { at: ['customer'], schema: customer },
+          { at: ['order'], schema: order },
+        ],
+        () => undefined,
+      );
+
+      expect(orderFirst.kind === 'walked' && Object.keys(orderFirst.defs).sort()).toEqual([
+        'address',
+        'customer',
+        'order',
+      ]);
+      expect(customerFirst).toEqual({
+        ...orderFirst,
+        nodes: orderFirst.kind === 'walked' ? [...orderFirst.nodes].reverse() : [],
+      });
+    });
+
+    const first: z.ZodType = z
+      .object({
+        get next(): z.ZodType {
+          return second;
+        },
+      })
+      .meta({ id: 'first' });
+    const second: z.ZodType = z.object({
+      get next(): z.ZodType {
+        return third;
+      },
+    });
+    const third: z.ZodType = z
+      .object({
+        get next(): z.ZodType {
+          return fourth;
+        },
+      })
+      .meta({ id: 'third' });
+    const fourth: z.ZodType = z.object({
+      get next(): z.ZodType {
+        return first;
+      },
+    });
+    const fromFirst = walkSchemas([{ at: ['body'], schema: first }], () => undefined);
+
+    test.each([
+      ['second', second],
+      ['third', third],
+      ['fourth', fourth],
+    ])(
+      'a ring of four with two ids entered at the %s schema gives the same defs',
+      (_name, schema) => {
+        const walked = walkSchemas([{ at: ['body'], schema }], () => undefined);
+
+        expect(fromFirst.kind === 'walked' && Object.keys(fromFirst.defs).sort()).toEqual([
+          'first',
+          'third',
+        ]);
+        expect(walked.kind === 'walked' && walked.defs).toEqual(
+          fromFirst.kind === 'walked' && fromFirst.defs,
+        );
+      },
+    );
+  });
+
+  test('a ring of 400 schemas walks fast', () => {
+    const count = 400;
+    const ring: z.ZodType[] = [];
+    for (let index = 0; index < count; index++) {
+      const shape = {};
+      Object.defineProperty(shape, 'next', {
+        enumerable: true,
+        get: () => ring[(index + 1) % count],
+      });
+      const link = z.object(shape);
+      ring.push(index === 0 ? link.meta({ id: 'start' }) : link);
+    }
+
+    const started = performance.now();
+    const walked = walkSchemas([{ at: ['body'], schema: ring[0]! }], () => undefined);
+    const elapsed = performance.now() - started;
+
+    expect(walked.kind).toBe('walked');
+    expect(elapsed).toBeLessThan(1000);
+  });
 });
