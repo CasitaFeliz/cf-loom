@@ -1,4 +1,4 @@
-export { canonicalJson } from './canonical-json.ts';
+export { byCodePoint, canonicalJson, indentedCanonicalJson } from './canonical-json.ts';
 export type {
   Field,
   NotAllowed,

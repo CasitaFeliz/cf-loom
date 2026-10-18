@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 
@@ -63,3 +64,31 @@ export const standardRejectionDefaults: StandardRejections = {
   notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 };
+
+/** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
+const issueCodes = [
+  'required',
+  'invalid_type',
+  'invalid_value',
+  'invalid_format',
+  'too_small',
+  'too_big',
+  'not_multiple',
+  'unrecognized_key',
+  'malformed',
+] as const;
+
+/**
+ * The body of the invalid-input Rejection, cf-loom's whatever a Definitions Package declares, so
+ * every Caller reads the issues one way; an issue never carries the received value.
+ */
+export const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: z.enum(['params', 'query', 'headers', 'body']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: z.enum(issueCodes),
+      message: z.string(),
+    }),
+  ),
+});

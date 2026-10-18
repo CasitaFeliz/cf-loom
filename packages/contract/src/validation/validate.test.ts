@@ -133,6 +133,7 @@ describe('validateContract', () => {
     const validated = validateContract(contract, noOrigin);
 
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
+      root: contract,
       endpoints: [
         {
           at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],
@@ -189,6 +190,7 @@ describe('validateContract', () => {
           declared: undefined,
         },
       ],
+      dependencies: [],
     });
   });
 

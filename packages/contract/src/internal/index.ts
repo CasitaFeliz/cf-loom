@@ -1,6 +1,29 @@
 export type { Kind } from '../declarations/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
+  ApplicationSnapshot,
+  AttachmentSnapshot,
+  CodeSnapshot,
+  CommandSnapshot,
+  DefinitionsSnapshot,
+  DependencySnapshot,
+  EndpointSnapshot,
+  EventSnapshot,
+  GuardSnapshot,
+  InputSnapshot,
+  ResolvedDefinitions,
+  ServiceSnapshot,
+  Snapshot,
+  SnapshotContext,
+  SnapshotFormat,
+  StandardRejectionSnapshot,
+  StandardRejectionsSnapshot,
+  SubscriptionSnapshot,
+  SuccessSnapshot,
+  ValidContract,
+} from '../snapshot/index.ts';
+export { canonicalBytes, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
+export type {
   DeclarationFailure,
   Failure,
   LocatedCode,
