@@ -63,6 +63,42 @@ describe('parseValue', () => {
     expect(codes).toEqual(['required', 'required', 'required']);
   });
 
+  test('a missing discriminator is required at its key', () => {
+    const schema = z.discriminatedUnion('t', [
+      z.object({ t: z.literal('a') }),
+      z.object({ t: z.literal('b') }),
+    ]);
+
+    const parsed = parseValue(schema, {});
+
+    expect(parsed).toMatchObject({ kind: 'issues', issues: [{ path: ['t'], code: 'required' }] });
+  });
+
+  test('a key present with undefined is invalid_type, in an object or a record', () => {
+    const codes = [
+      ...codesOf(z.object({ name: z.string() }), { name: undefined }),
+      ...codesOf(z.record(z.string(), z.string()), { a: undefined }),
+    ];
+
+    expect(codes).toEqual(['invalid_type', 'invalid_type']);
+  });
+
+  test('undefined inside an array, a tuple or a Set is invalid_type', () => {
+    const codes = [
+      ...codesOf(z.array(z.string()), ['a', undefined]),
+      ...codesOf(z.tuple([z.string()]), [undefined]),
+      ...codesOf(z.set(z.string()), new Set([undefined])),
+    ];
+
+    expect(codes).toEqual(['invalid_type', 'invalid_type', 'invalid_type']);
+  });
+
+  test('a missing value is required', () => {
+    const codes = codesOf(z.object({ id: z.string() }), undefined);
+
+    expect(codes).toEqual(['required']);
+  });
+
   test('a value outside an enum, a literal or a union is invalid_value', () => {
     const schema = z.object({
       status: z.enum(['paid']),

@@ -57,15 +57,25 @@ export type EndpointPart = (typeof endpointParts)[number];
 /** A part a Guard may declare a schema in. */
 export type GuardPart = (typeof guardParts)[number];
 
+/** The fields a part names, outermost first: `input.params` is `input`, then `params`. */
+type FieldsOf<Named extends string> = Named extends `${infer Outer}.${infer Inner}`
+  ? readonly [Outer, Inner]
+  : readonly [Named];
+
+/** The fields a part names, outermost first: the one place that reads a part's name. */
+export function fieldsOf<Named extends Exclude<Part, 'schema'>>(part: Named): FieldsOf<Named> {
+  return part.split('.') as readonly string[] as FieldsOf<Named>;
+}
+
 /** Where a part of a declaration sits: the one place that spells a schema's location. */
 export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
-  return [...owner, ...part.split('.')];
+  return [...owner, ...fieldsOf(part)];
 }
 
 /** What a declaration holds at a part, as written, whatever the types said. */
 export function writtenAt(declaration: unknown, part: Exclude<Part, 'schema'>): unknown {
-  const [field = '', inner] = part.split('.');
-  const written = partOf<string>(declaration)[field];
+  const [field, inner]: readonly string[] = fieldsOf(part);
+  const written = partOf<string>(declaration)[field ?? ''];
   return inner === undefined ? written : partOf<string>(written)[inner];
 }
 

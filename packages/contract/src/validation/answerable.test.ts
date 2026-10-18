@@ -48,6 +48,28 @@ describe('answerableRejectionsOf', () => {
     ]);
   });
 
+  test('a Rejection reached by several paths is listed once', () => {
+    const userToken = defineGuard({
+      name: 'userToken',
+      description: 'A signed-in user',
+      rejections: [unauthenticated],
+    });
+    const listedTwice = defineEndpoint({
+      name: 'listedTwice',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'The latest order',
+      guards: [apiKey, userToken],
+      success: { status: 200, body: z.object({ id: z.string() }) },
+      rejections: [unauthenticated, notFound],
+    });
+
+    const answerable = answerableRejectionsOf(listedTwice);
+
+    expect(answerable).toEqual([unauthenticated, notFound, invalidInput, notImplemented]);
+  });
+
   test('a Guard answers its own Rejections and the not-implemented one', () => {
     const answerable = answerableRejectionsOf(apiKey);
 

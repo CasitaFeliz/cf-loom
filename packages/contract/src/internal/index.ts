@@ -58,6 +58,7 @@ export {
   answerableRejectionsOf,
   attachedGuardsOf,
   demandParts,
+  fieldsOf,
   follows,
   inputParts,
   kebabCase,

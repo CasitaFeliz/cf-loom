@@ -18,10 +18,7 @@ export type AnswerableRejection = Rejection | StandardRejection;
 
 const addedByName = { invalidInput, notImplemented };
 
-/**
- * Every Rejection an Endpoint or a Guard may answer, each once: an Endpoint's own, its Guards' and
- * the two the runtime adds; a Guard's own and the not-implemented one its stub answers.
- */
+/** Every Rejection an Endpoint or a Guard may answer, each once (see `RejectionsOf`). */
 export function answerableRejectionsOf(element: Endpoint | Guard): readonly AnswerableRejection[] {
   if (!isEndpoint(element)) {
     return distinct([...listOf(element.rejections), notImplemented]);
