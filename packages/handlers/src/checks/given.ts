@@ -1,100 +1,92 @@
 import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
+import {
+  attachedGuardsOf,
+  demandParts,
+  inputParts,
+  schemaOf,
+} from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
 import {
   type Checked,
-  checkedSlots,
+  checkedAll,
+  checkedPart,
+  fieldNameOf,
   fieldOf,
   type Issue,
-  type Slot,
   withIssues,
 } from './checked.ts';
 
-type Parts = Readonly<Record<string, unknown>>;
+/** What one call of an EndpointHandler is given, before it is checked. */
+export type EndpointGiven = { readonly input: unknown; readonly context: unknown };
 
-const inputParts = ['params', 'query', 'headers', 'body'] as const;
-const demandParts = ['headers', 'query'] as const;
+/** What one call of a GuardHandler is given, before it is checked. */
+export type GuardGiven = {
+  readonly demands: unknown;
+  readonly context: unknown;
+  readonly qualifier: unknown;
+};
 
-/** An Endpoint's Input, each declared part parsed with its schema; an undeclared part is not read. */
-export function checkedInput(endpoint: Endpoint, input: unknown): Checked<Parts> {
-  const declared = endpoint.input ?? {};
-  const parts = inputParts.map((name) => ({
-    name,
-    part: `input.${name}` as const,
-    schema: declared[name],
-  }));
-  return checkedSlots(parts.filter(isDeclared).map((part) => slotOf(part, input)));
+/** Parsed values by the field a Handler reads them under. */
+type ValuesByField = Readonly<Record<string, unknown>>;
+
+/** The Input and Context of one call of an EndpointHandler, as its implementation receives them. */
+export function checkedEndpointCall(
+  endpoint: Endpoint,
+  given: EndpointGiven,
+): Checked<{ readonly input: ValuesByField; readonly context: ValuesByField }> {
+  const schemaAt = (part: (typeof inputParts)[number]) => schemaOf(endpoint, part);
+  return checkedAll({
+    input: checkedDeclaredParts(inputParts, schemaAt, given.input),
+    context: checkedContext(attachedGuardsOf(endpoint), given.context),
+  });
 }
 
-/** What a Guard demands, each declared part parsed with its schema. */
-export function checkedDemands(guard: Guard, demands: unknown): Checked<Parts> {
-  const declared = guard.demands ?? {};
-  const parts = demandParts.map((name) => ({
-    name,
-    part: `demands.${name}` as const,
-    schema: declared[name],
-  }));
-  return checkedSlots(parts.filter(isDeclared).map((part) => slotOf(part, demands)));
+/** The demands, Context and Qualifier of one call of a GuardHandler, as its implementation receives them. */
+export function checkedGuardCall(
+  guard: Guard,
+  given: GuardGiven,
+): Checked<{
+  readonly demands: ValuesByField;
+  readonly context: ValuesByField;
+  readonly qualifier: unknown;
+}> {
+  const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
+  return checkedAll({
+    demands: checkedDeclaredParts(demandParts, schemaAt, given.demands),
+    context: checkedContext(guard.guards ?? [], given.context),
+    qualifier: checkedPart('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
+  });
+}
+
+/** Each part that declares a schema, parsed under its field; a part declaring none is not read. */
+function checkedDeclaredParts<
+  CallPart extends (typeof inputParts)[number] | (typeof demandParts)[number],
+>(
+  parts: readonly CallPart[],
+  schemaAt: (part: CallPart) => core.$ZodType | undefined,
+  given: unknown,
+): Checked<ValuesByField> {
+  const declared = parts.filter((part) => schemaAt(part) !== undefined);
+  const checks = declared.map((part) => {
+    const field = fieldNameOf(part);
+    const value = fieldOf(given, field);
+    return [field, checkedPart(part, schemaAt(part), { value })] as const;
+  });
+  return checkedAll(Object.fromEntries(checks));
 }
 
 /**
  * A Context, one key per Guard that provides one, each parsed with that Guard's `context` schema;
  * any other key is unrecognized.
  */
-export function checkedContext(guards: readonly Guard[], context: unknown): Checked<Parts> {
-  const providers = guards.filter(isContextProvider);
-  const slots = providers.map(
-    (guard): Slot => ({
-      key: guard.name,
-      part: 'context',
-      at: [guard.name],
-      schema: guard.context,
-      value: fieldOf(context, guard.name),
-    }),
-  );
+function checkedContext(guards: readonly Guard[], context: unknown): Checked<ValuesByField> {
+  const providers = guards.filter((guard) => schemaOf(guard, 'context') !== undefined);
+  const checks = providers.map((guard) => {
+    const given = { value: fieldOf(context, guard.name), at: [guard.name] };
+    return [guard.name, checkedPart('context', schemaOf(guard, 'context'), given)] as const;
+  });
   const provided = providers.map((guard) => guard.name);
-  return withIssues(checkedSlots(slots), unrecognizedIssues(context, provided));
-}
-
-/** A Guard's Qualifier, parsed with its `qualifier` schema; nothing for a Guard without one. */
-export function checkedQualifier(guard: Guard, qualifier: unknown): Checked<unknown> {
-  if (guard.qualifier === undefined) {
-    return { kind: 'value', value: undefined };
-  }
-  const slot: Slot = {
-    key: 'qualifier',
-    part: 'qualifier',
-    at: [],
-    schema: guard.qualifier,
-    value: qualifier,
-  };
-  const checked = checkedSlots([slot]);
-  return checked.kind === 'issues' ? checked : { kind: 'value', value: checked.value['qualifier'] };
-}
-
-type ContextProvider = Guard & { readonly context: core.$ZodType };
-
-function isContextProvider(guard: Guard): guard is ContextProvider {
-  return guard.context !== undefined;
-}
-
-/** A part an Element may declare, with its schema when it does. */
-type DeclarablePart = {
-  readonly name: string;
-  readonly part: Slot['part'];
-  readonly schema: core.$ZodType | undefined;
-};
-
-function isDeclared<Declarable extends DeclarablePart>(
-  part: Declarable,
-): part is Declarable & { readonly schema: core.$ZodType } {
-  return part.schema !== undefined;
-}
-
-function slotOf(
-  { name, part, schema }: DeclarablePart & { readonly schema: core.$ZodType },
-  given: unknown,
-): Slot {
-  return { key: name, part, at: [], schema, value: fieldOf(given, name) };
+  return withIssues(checkedAll(Object.fromEntries(checks)), unrecognizedIssues(context, provided));
 }
 
 function unrecognizedIssues(context: unknown, provided: readonly string[]): readonly Issue[] {

@@ -69,6 +69,21 @@ describe('handle', () => {
     expect(findOrderHandler.element).toBe(getOrder);
   });
 
+  test('a Handler of one Guard is not a Handler of another', () => {
+    const tenantKey = defineGuard({
+      name: 'tenantKey',
+      description: 'An API key per tenant',
+      demands: { headers: z.object({ 'x-api-key': z.string() }) },
+      context: z.object({ clientId: z.string() }),
+    });
+    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+
+    // @ts-expect-error a Handler is nominal over its Guard
+    const tenantKeyHandler: GuardHandler<typeof tenantKey> = apiKeyHandler;
+
+    expect(tenantKeyHandler.element).toBe(apiKey);
+  });
+
   test('an implementation that returns no Outcome answers the Fault, a TypeError as cause', async () => {
     const getOrderHandler = handle(getOrder, () => admit() as never);
 

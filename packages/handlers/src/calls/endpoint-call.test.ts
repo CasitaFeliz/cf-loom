@@ -407,9 +407,27 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a Rejection the Endpoint does not answer throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(forbidden) as never);
 
-    const call = getOrderHandler(getInput, getContext);
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
 
-    await expect(call).rejects.toThrow(InvalidOutcomeError);
+    expect(issues).toEqual([
+      {
+        part: 'rejections',
+        path: [],
+        code: 'invalid_value',
+        message: 'FORBIDDEN is not a Rejection getOrder answers',
+      },
+    ]);
+  });
+
+  test('a Rejection body comes back parsed, an unknown key stripped', async () => {
+    const lockedAt = '2026-10-18T10:00:00Z';
+    const body = { lockedAt, by: 'someone' };
+    const getOrderHandler = handle(getOrder, () => reject(orderLocked, body));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toMatchObject({ kind: 'rejection', body: { lockedAt } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toEqual({ lockedAt });
   });
 
   test('the invalid-input Rejection is the runtime’s, never a Handler’s', async () => {
@@ -464,6 +482,89 @@ describe('an EndpointHandler’s Faults', () => {
       committed: 'no',
       retryable: true,
       message: 'Internal error',
+    });
+  });
+});
+
+describe('what an EndpointHandler returns', () => {
+  test('a body on a HEAD Success or a headers-only Success throws InvalidOutcomeError', async () => {
+    const headOrderHandler = handle(
+      headOrder,
+      () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } }) as never,
+    );
+
+    const issues = await issuesOf(() => headOrderHandler(getInput, {}));
+
+    expect(issues).toEqual([
+      { part: 'success.body', path: [], code: 'invalid_type', message: 'Expected no value' },
+    ]);
+  });
+
+  test('a body on a HEAD Success or a headers-only Success is a type error', () => {
+    const write = () => [
+      // @ts-expect-error a HEAD Success has no body
+      handle(headOrder, () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } })),
+      // @ts-expect-error a 204 Success has no body
+      handle(deleteOrder, () => success({ id: ORDER_ID })),
+    ];
+
+    expect(write).not.toThrow();
+  });
+
+  test('the parsed Context reaches the implementation, unknown keys stripped', async () => {
+    const received: unknown[] = [];
+    const getOrderHandler = handle(getOrder, (_input, context) => {
+      received.push(context);
+      return reject(notFound);
+    });
+
+    await getOrderHandler(getInput, { apiKey: { clientId: 'c-1', extra: true } } as never);
+
+    expect(received).toEqual([getContext]);
+  });
+
+  test('fault() given an undefined message says Internal error and has no cause', () => {
+    const built = fault({ committed: 'no', retryable: true, message: undefined, cause: undefined });
+
+    expect(built).toStrictEqual({
+      kind: 'fault',
+      committed: 'no',
+      retryable: true,
+      message: 'Internal error',
+    });
+  });
+
+  test('a returned Fault with its own message and cause comes back with both', async () => {
+    const cause = new Error('replica lagging');
+    const getOrderHandler = handle(getOrder, () =>
+      fault({ committed: 'no', retryable: true, message: 'Try again', cause }),
+    );
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'no',
+      retryable: true,
+      message: 'Try again',
+      cause,
+    });
+  });
+
+  test.each([
+    ['a hand-built Fault without its fields', { kind: 'fault' }, 'the kind fault'],
+    ['null', null, 'null'],
+  ])('%s is no Outcome and answers the Fault Internal error', async (_name, returned, what) => {
+    const getOrderHandler = handle(getOrder, () => returned as never);
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'unknown',
+      retryable: false,
+      message: 'Internal error',
+      cause: new TypeError(`getOrder's Handler returned no Outcome but ${what}`),
     });
   });
 });

@@ -6,8 +6,9 @@ import type {
   StandardRejection,
   SuccessOf,
 } from '@casitafeliz/loom-contract';
+import type { AnswerableRejection } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
-import type { Answerable, BuiltAdmitted, BuiltRejection, BuiltSuccess } from './built.ts';
+import type { BuiltAdmitted, BuiltRejection, BuiltSuccess } from './built.ts';
 import type { Fault } from './fault.ts';
 
 /** The Rejections a Handler of an Endpoint may build: all it answers but invalid input. */
@@ -16,17 +17,24 @@ type BuildableOf<Target extends Endpoint> = Exclude<
   StandardRejection<'invalidInput'>
 >;
 
-/** What `success()` is given: the body, `{ headers, body }` when headers are declared, or nothing. */
+/**
+ * What `success()` is given: the body, `{ headers, body }` when headers are declared, or nothing;
+ * a body where the Endpoint declares none is refused.
+ */
 type SuccessValueOf<Target extends Endpoint> = Target['success'] extends {
   readonly headers: core.$ZodType;
 }
-  ? Omit<SuccessOf<Target>, 'status'>
+  ? Omit<SuccessOf<Target>, 'status'> & NoBodyOf<Target>
   : Target['success'] extends { readonly body: core.$ZodType }
     ? core.output<Target['success']['body']>
     : undefined;
 
+type NoBodyOf<Target extends Endpoint> = Target['success'] extends { readonly body: core.$ZodType }
+  ? unknown
+  : { readonly body?: never };
+
 /** A Rejection as a direct call returns it: as built, its code, status and message resolved. */
-type ResolvedRejection<Answered extends Answerable> = Answered extends unknown
+export type ResolvedRejection<Answered extends AnswerableRejection> = Answered extends unknown
   ? BuiltRejection<Answered> & {
       readonly code: string;
       readonly status: number;

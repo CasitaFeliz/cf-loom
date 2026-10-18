@@ -1,12 +1,14 @@
 import { defineGuard, defineRejection, notImplemented } from '@casitafeliz/loom-contract';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
+  type GuardImplementation,
   handle,
   InvalidInputError,
   InvalidOutcomeError,
   type Issue,
+  type ResolvedAdmission,
   reject,
 } from '../index.ts';
 
@@ -241,5 +243,71 @@ describe('a GuardHandler’s direct call', () => {
     ];
 
     expect(call).toBeDefined();
+  });
+
+  test('a Guard stub given demands that break the Contract throws InvalidInputError', async () => {
+    const stub = handle.stub(apiKey);
+
+    const issues = await issuesOf(() => stub({ headers: {} } as never, {}));
+
+    expect(issues.map(({ part, path }) => ({ part, path }))).toEqual([
+      { part: 'demands.headers', path: ['x-api-key'] },
+    ]);
+  });
+
+  test('the parsed Context and Qualifier reach the implementation, unknown keys stripped', async () => {
+    const scoped = defineGuard({
+      name: 'scoped',
+      description: 'A scope for the user',
+      guards: [userToken],
+      qualifier: z.object({ scope: z.string() }),
+    });
+    const received: unknown[] = [];
+    const scopedHandler = handle(scoped, (_demands, context, qualifier) => {
+      received.push(context, qualifier);
+      return admit();
+    });
+    const context = { userToken: { userId: 'u-1', extra: true } } as never;
+
+    await scopedHandler({}, context, { scope: 'orders', extra: true } as never);
+
+    expect(received).toEqual([userContext, { scope: 'orders' }]);
+  });
+
+  test('a Qualifier given to a Guard that declares none throws InvalidInputError', async () => {
+    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+
+    const issues = await issuesOf(() =>
+      Reflect.apply(apiKeyHandler, undefined, [apiKeyDemands, {}, ['orders:edit']]),
+    );
+
+    expect(issues).toEqual([
+      { part: 'qualifier', path: [], code: 'invalid_type', message: 'Expected no value' },
+    ]);
+  });
+
+  test('admit() without the Context its Guard provides, or with a wrong one, is a type error', () => {
+    const write = () => [
+      // @ts-expect-error apiKey provides a Context
+      handle(apiKey, () => admit()),
+      // @ts-expect-error clientId is a string
+      handle(apiKey, () => admit({ clientId: 7 })),
+    ];
+
+    expect(write).not.toThrow();
+  });
+
+  test('a GuardImplementation receives the Context of the Guards it lists', () => {
+    expectTypeOf<Parameters<GuardImplementation<typeof permission>>[1]>().toEqualTypeOf<{
+      readonly userToken: { userId: string };
+    }>();
+  });
+
+  test('a GuardHandler’s direct call answers the Guard’s Rejections and not-implemented', () => {
+    type Rejected = Extract<ResolvedAdmission<typeof apiKey>, { kind: 'rejection' }>;
+
+    expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
+      typeof unauthenticated | typeof notImplemented
+    >();
   });
 });

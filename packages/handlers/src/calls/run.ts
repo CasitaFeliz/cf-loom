@@ -1,98 +1,98 @@
 import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { attachedGuardsOf } from '@casitafeliz/loom-contract/internal';
 import {
   type Checked,
-  checkedAll,
-  checkedContext,
-  checkedDemands,
-  checkedInput,
-  checkedQualifier,
+  checkedAdmission,
+  checkedEndpointCall,
+  checkedGuardCall,
+  checkedOutcome,
+  type EndpointGiven,
+  type GuardGiven,
   type Issue,
 } from '../checks/index.ts';
-import type { ResolvedAdmission, ResolvedOutcome } from '../outcomes/index.ts';
 import {
-  builtOf,
-  endpointKinds,
-  guardKinds,
-  resolvedAdmissionOf,
-  resolvedOutcomeOf,
-} from './built.ts';
+  type Fault,
+  isAdmission,
+  isOutcome,
+  type ResolvedAdmission,
+  type ResolvedOutcome,
+} from '../outcomes/index.ts';
+import { ranOf } from './implementation.ts';
 
-/** An implementation as the runtime calls it, whatever Element it was written for. */
+/** An implementation as the runtime calls it, whatever Endpoint or Guard it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Element and its implementation. */
-export type Written<Element extends Endpoint | Guard> = {
-  readonly element: Element;
+/** What a Handler was written with: its Endpoint or Guard, its implementation, and whether it is a stub. */
+export type Written<Answering extends Endpoint | Guard> = {
+  readonly element: Answering;
   readonly implementation: Implementation;
+  readonly stub: boolean;
 };
 
-/** What one call of an EndpointHandler is given, before it is checked. */
-export type EndpointCall = { readonly input: unknown; readonly context: unknown };
-
-/** What one call of a GuardHandler is given, before it is checked. */
-export type GuardCall = {
-  readonly demands: unknown;
-  readonly context: unknown;
-  readonly qualifier: unknown;
-};
-
-/** How one call went: given what breaks the Contract, built what breaks it, or answered. */
+/**
+ * How one call went: given what breaks the Contract, built what breaks it, threw or returned no
+ * Outcome, or answered.
+ */
 export type Run<Answer> =
   | { readonly kind: 'invalid-input'; readonly issues: readonly Issue[] }
   | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
-  | { readonly kind: 'answered'; readonly outcome: Answer };
+  | { readonly kind: 'thrown'; readonly fault: Fault }
+  | { readonly kind: 'answered'; readonly answer: Answer };
 
-/** How one call of an EndpointHandler went, as `serve` answers it. */
-export type EndpointRun<Target extends Endpoint = Endpoint> = Run<ResolvedOutcome<Target>>;
+/**
+ * How one call of an EndpointHandler went, as `serve` answers it. Inside `serve`, an Issue at
+ * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onFault`.
+ */
+export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
 
-/** How one call of a GuardHandler went, as `serve` answers it. */
-export type GuardRun<Target extends Guard = Guard> = Run<ResolvedAdmission<Target>>;
+/**
+ * How one call of a GuardHandler went, as `serve` answers it. Inside `serve`, an Issue at
+ * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
+ * to `onFault`.
+ */
+export type GuardRun = Run<ResolvedAdmission<Guard>>;
 
 /** Runs one call of an EndpointHandler: checks what it is given and what it builds, then resolves. */
-export async function endpointRunOf<Target extends Endpoint>(
-  written: Written<Target>,
-  call: EndpointCall,
+export async function endpointRunOf(
+  written: Written<Endpoint>,
+  given: EndpointGiven,
   standards: StandardRejections,
-): Promise<EndpointRun<Target>> {
+): Promise<EndpointRun> {
   const { element: endpoint, implementation } = written;
-  const given = checkedAll({
-    input: checkedInput(endpoint, call.input),
-    context: checkedContext(attachedGuardsOf(endpoint), call.context),
-  });
-  if (given.kind === 'issues') {
-    return { kind: 'invalid-input', issues: given.issues };
+  const checked = checkedEndpointCall(endpoint, given);
+  if (checked.kind === 'issues') {
+    return { kind: 'invalid-input', issues: checked.issues };
   }
-  const { input, context } = given.value;
-  const built = await builtOf(endpoint, () => implementation(input, context), endpointKinds);
-  return answeredRunOf(resolvedOutcomeOf(endpoint, built, standards));
+  const { input, context } = checked.value;
+  const ran = await ranOf(endpoint, () => implementation(input, context), isOutcome);
+  if (ran.kind === 'thrown') {
+    return ran;
+  }
+  return answeredRunOf(checkedOutcome(endpoint, ran.built, standards));
 }
 
 /** Runs one call of a GuardHandler: checks what it is given and what it admits, then resolves. */
-export async function guardRunOf<Target extends Guard>(
-  written: Written<Target>,
-  call: GuardCall,
+export async function guardRunOf(
+  written: Written<Guard>,
+  given: GuardGiven,
   standards: StandardRejections,
-): Promise<GuardRun<Target>> {
+): Promise<GuardRun> {
   const { element: guard, implementation } = written;
-  const given = checkedAll({
-    demands: checkedDemands(guard, call.demands),
-    context: checkedContext(guard.guards ?? [], call.context),
-    qualifier: checkedQualifier(guard, call.qualifier),
-  });
-  if (given.kind === 'issues') {
-    return { kind: 'invalid-input', issues: given.issues };
+  const checked = checkedGuardCall(guard, given);
+  if (checked.kind === 'issues') {
+    return { kind: 'invalid-input', issues: checked.issues };
   }
-  const { demands, context, qualifier } = given.value;
+  const { demands, context, qualifier } = checked.value;
   const run = () => implementation(demands, context, qualifier);
-  const built = await builtOf(guard, run, guardKinds);
-  return answeredRunOf(resolvedAdmissionOf(guard, built, standards));
+  const ran = await ranOf(guard, run, isAdmission);
+  if (ran.kind === 'thrown') {
+    return ran;
+  }
+  return answeredRunOf(checkedAdmission(guard, ran.built, standards));
 }
 
-/** A checked answer as a run; once checked, it is the answer its Element's type describes. */
-function answeredRunOf<Answer>(checked: Checked<unknown>): Run<Answer> {
+function answeredRunOf<Answer>(checked: Checked<Answer>): Run<Answer> {
   if (checked.kind === 'issues') {
     return { kind: 'invalid-outcome', issues: checked.issues };
   }
-  return { kind: 'answered', outcome: checked.value as Answer };
+  return { kind: 'answered', answer: checked.value };
 }

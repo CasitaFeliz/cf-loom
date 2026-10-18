@@ -6,7 +6,7 @@ import {
 } from '@casitafeliz/loom-contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { admit, handle, reject, success } from '../index.ts';
+import { admit, fault, handle, reject, success } from '../index.ts';
 import { isStub, runEndpoint, runGuard } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -82,7 +82,7 @@ describe('runEndpoint', () => {
 
     expect(run).toEqual({
       kind: 'answered',
-      outcome: {
+      answer: {
         kind: 'rejection',
         rejection: notFound,
         code: 'MISSING',
@@ -101,7 +101,7 @@ describe('runGuard', () => {
     const call = { demands: {}, context: { apiKey: {} }, qualifier: 'orders:delete' };
 
     const runs = [
-      await runGuard(apiKeyHandler, { ...call, context: {} }, standards),
+      await runGuard(apiKeyHandler, { ...call, context: {}, qualifier: undefined }, standards),
       await runGuard(permissionHandler, call, standards),
     ];
 
@@ -131,7 +131,62 @@ describe('runGuard', () => {
 
     const run = await runGuard(handle.stub(apiKey), call, standards);
 
-    expect(run).toMatchObject({ kind: 'answered', outcome: { code: 'NOT_YET', status: 501 } });
+    expect(run).toMatchObject({ kind: 'answered', answer: { code: 'NOT_YET', status: 501 } });
+  });
+});
+
+describe('a run of a Handler that throws or returns no Outcome', () => {
+  test('a throw is thrown, its Fault carrying the error, never answered', async () => {
+    const error = new Error('database down');
+    const getOrderHandler = handle(getOrder, () => {
+      throw error;
+    });
+    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+
+    const run = await runEndpoint(getOrderHandler, call, standards);
+
+    expect(run).toEqual({
+      kind: 'thrown',
+      fault: {
+        kind: 'fault',
+        committed: 'unknown',
+        retryable: false,
+        message: 'Internal error',
+        cause: error,
+      },
+    });
+  });
+
+  test('a Guard returning success() is thrown, not a throw of the run', async () => {
+    const apiKeyHandler = handle(apiKey, () => success() as never);
+    const call = { demands: { headers: { 'x-api-key': 'k' } }, context: {}, qualifier: undefined };
+
+    const run = await runGuard(apiKeyHandler, call, standards);
+
+    expect(run).toMatchObject({
+      kind: 'thrown',
+      fault: { cause: new TypeError("apiKey's Handler returned no Outcome but the kind success") },
+    });
+  });
+
+  test('a Fault the Handler returns is answered', async () => {
+    const getOrderHandler = handle(getOrder, () => fault({ committed: 'no', retryable: true }));
+    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+
+    const run = await runEndpoint(getOrderHandler, call, standards);
+
+    expect(run).toMatchObject({ kind: 'answered', answer: { kind: 'fault', committed: 'no' } });
+  });
+});
+
+describe('a Handler of another kind', () => {
+  test('runGuard given an EndpointHandler throws Not a Handler', () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+    const call = { demands: {}, context: {}, qualifier: undefined };
+
+    const run = () => runGuard(getOrderHandler as never, call, standards);
+
+    expect(run).toThrow('Not a Handler');
   });
 });
 
