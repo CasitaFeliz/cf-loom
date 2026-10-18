@@ -2,7 +2,7 @@ import { isRejectionStatus } from '../http.ts';
 import type { Path, SchemaNode } from '../walker/nodes.ts';
 import type { Declarations, LocatedRejection } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { Nodes } from './schemas.ts';
+import { type Nodes, slotAt } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import {
   guardStandardFailures,
@@ -46,12 +46,12 @@ export function rejectionBodyFailures(
   { rejections }: Declarations,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
-  const conflicting = [...groupedByCode(rejections).entries()].filter(([, declared]) =>
-    bodiesDiffer(declared, nodes),
-  );
-  return conflicting.map(([code]) =>
+  const conflicting = [...groupedByCode(rejections).entries()]
+    .map(([code, declared]) => ({ code, first: declared[0], declared }))
+    .filter(({ declared }) => bodiesDiffer(declared, nodes));
+  return conflicting.map(({ code, first }) =>
     failure(
-      ['rejections', code, 'body'],
+      slotAt(first?.at ?? ['rejections', code], 'body'),
       'code-body-conflict',
       `A code has one body schema across the Contract: ${code}`,
     ),

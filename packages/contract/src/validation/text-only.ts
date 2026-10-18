@@ -3,7 +3,7 @@ import type { ObjectNode, Path, SchemaNode } from '../walker/nodes.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { attachedGuardOf, listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { Nodes, Part, WalkedSlot } from './schemas.ts';
+import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 
 /** The parts of a request that travel as text, and a Success's headers with them. */
@@ -29,7 +29,7 @@ const nouns: Readonly<Record<TextPart, string>> = {
   headers: 'A header',
 };
 
-/** Every text part is an object of text fields, header names lower-case, judged on the walked nodes. */
+/** Every text part holds only text, judged on the walked nodes. */
 export function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
   return nodes.slots.flatMap(partFailures);
 }
@@ -46,7 +46,7 @@ export function conflictFailures(
       owner: String(guard.name),
       node: nodes.nodeOf(guard, `demands.${part}`),
     }));
-    return partConflicts([own, ...demanded], { at: [...at, 'input', part], part });
+    return partConflicts([own, ...demanded], { at: slotAt(at, `input.${part}`), part });
   });
 }
 

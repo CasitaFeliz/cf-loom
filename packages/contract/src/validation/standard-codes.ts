@@ -55,7 +55,8 @@ export function listedStandardFailures({
     name: standardNameOf(rejection),
     index,
   }));
-  const added = listed.filter(({ name }) => addedStandardRejectionNames.includes(name));
+  const addedNames: readonly unknown[] = addedStandardRejectionNames;
+  const added = listed.filter(({ name }) => addedNames.includes(name));
   return added.map(({ name, index }) =>
     failure(
       [...at, 'rejections', index],

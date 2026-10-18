@@ -3,6 +3,7 @@ import type { Endpoint } from '../endpoint.ts';
 import { methods, successStatuses } from '../http.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
+import { slotAt } from './schemas.ts';
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */
 type ClosedValue = {
@@ -49,7 +50,7 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     const message = `A Success status is ${oneOf(successStatuses)}: ${String(success.status)}`;
     return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
-  const bodyAt = [...at, 'success', 'body'];
+  const bodyAt = slotAt(at, 'success.body');
   if (endpoint.method === 'HEAD') {
     return success.body === undefined
       ? []
@@ -70,7 +71,8 @@ function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly Declarat
   if (!takesNoBody || endpoint.input?.body === undefined) {
     return [];
   }
-  return [failure([...at, 'input', 'body'], 'input-body', 'A GET or HEAD Endpoint takes no body')];
+  const message = 'A GET or HEAD Endpoint takes no body';
+  return [failure(slotAt(at, 'input.body'), 'input-body', message)];
 }
 
 /** Several allowed values in one sentence: `200, 201 or 204`. */

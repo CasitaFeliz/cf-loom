@@ -3,7 +3,7 @@ import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows } from './grammars.ts';
 import { paramNamesOf, segmentsOf } from './identity.ts';
-import type { Nodes } from './schemas.ts';
+import { type Nodes, slotAt } from './schemas.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;
 
@@ -33,7 +33,7 @@ export function paramsFailures(
   if (!isCanonicalPath(endpoint.path) || (declared && params === undefined)) {
     return [];
   }
-  const paramsAt = [...at, 'input', 'params'];
+  const paramsAt = slotAt(at, 'input.params');
   const names = [...new Set(paramNamesOf(endpoint.path))];
   if (names.length === 0) {
     return declared
