@@ -32,7 +32,7 @@ export type Generator = 'running' | 'committed';
 /** The declared Snapshot's bytes and the committed file, or the exit that stopped building it. */
 export type Declared =
   | { readonly kind: 'built'; readonly bytes: Buffer; readonly committed: Committed }
-  | { readonly kind: 'stopped'; readonly exit: Exit };
+  | Stopped;
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
@@ -145,7 +145,8 @@ function runningGeneratorOf(): string {
   return `${String(name)}@${String(version)}`;
 }
 
-type Stopped = Extract<Declared, { readonly kind: 'stopped' }>;
+/** A build stopped by the exit it ends with. */
+type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
 function stopped(exit: Exit): Stopped {
   return { kind: 'stopped', exit };

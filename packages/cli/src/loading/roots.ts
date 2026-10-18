@@ -8,13 +8,25 @@ export type RootKind = (typeof rootKinds)[number];
 export type RootPlace = {
   readonly file: 'src/contract/index.ts' | 'src/definitions/index.ts';
   readonly exported: 'contract' | 'application' | 'definitions';
+  readonly define: 'defineContract' | 'defineApplication' | 'defineDefinitions';
 };
 
-/** Each kind of root's file and export: the one place `init` writes them and the loader reads them. */
+/**
+ * Each kind of root's file, export and declaration: the one place `init` writes them and the
+ * loader reads them.
+ */
 export const rootPlaces: Readonly<Record<RootKind, RootPlace>> = {
-  service: { file: 'src/contract/index.ts', exported: 'contract' },
-  application: { file: 'src/contract/index.ts', exported: 'application' },
-  definitions: { file: 'src/definitions/index.ts', exported: 'definitions' },
+  service: { file: 'src/contract/index.ts', exported: 'contract', define: 'defineContract' },
+  application: {
+    file: 'src/contract/index.ts',
+    exported: 'application',
+    define: 'defineApplication',
+  },
+  definitions: {
+    file: 'src/definitions/index.ts',
+    exported: 'definitions',
+    define: 'defineDefinitions',
+  },
 };
 
 /** Every file a root may sit in, each once. */
