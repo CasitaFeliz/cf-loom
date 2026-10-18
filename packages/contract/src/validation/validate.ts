@@ -2,7 +2,7 @@ import type { SchemaNode } from '../walker/nodes.ts';
 import { type OriginOf, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
-import { pathFailures } from './paths.ts';
+import { paramsFailures, pathFailures } from './paths.ts';
 import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
 
 /** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
@@ -43,8 +43,8 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
 }
 
 /** The rules that read the walked nodes, judged once every schema walked. */
-function schemaFailures(_declarations: Declarations, _nodes: Nodes): readonly DeclarationFailure[] {
-  return [];
+function schemaFailures(declarations: Declarations, nodes: Nodes): readonly DeclarationFailure[] {
+  return [...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes))];
 }
 
 function invalid(failures: readonly Failure[]): ValidatedContract {

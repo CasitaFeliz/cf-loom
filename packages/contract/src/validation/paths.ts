@@ -1,6 +1,7 @@
-import type { Path } from '../walker/nodes.ts';
+import type { ObjectNode, Path } from '../walker/nodes.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import type { Nodes } from './schemas.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;
 const paramName = /^[a-z][a-zA-Z0-9]*$/;
@@ -30,6 +31,43 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
     return [failure(pathAt, 'canonical-path', 'A path is a string')];
   }
   return canonicalPathFailures(endpoint.path, pathAt);
+}
+
+/** `params` declares exactly the path's `:names`, none of them optional, and none without. */
+export function paramsFailures(
+  { at, endpoint }: LocatedEndpoint,
+  nodes: Nodes,
+): readonly DeclarationFailure[] {
+  if (typeof endpoint.path !== 'string') {
+    return [];
+  }
+  const paramsAt = [...at, 'input', 'params'];
+  const names = [...new Set(paramNamesOf(endpoint.path))];
+  const params = nodes.nodeAt(paramsAt);
+  if (names.length === 0) {
+    return params === undefined
+      ? []
+      : [failure(paramsAt, 'params', 'A path without :names takes no params')];
+  }
+  const exact = `params declares exactly the path's :names: ${names.join(', ')}`;
+  if (params?.type !== 'object') {
+    return [failure(paramsAt, 'params', exact)];
+  }
+  const declared = Object.keys(params.fields);
+  const sameNames =
+    declared.length === names.length && names.every((name) => declared.includes(name));
+  return sameNames ? optionalParamFailures(params, paramsAt) : [failure(paramsAt, 'params', exact)];
+}
+
+function optionalParamFailures(params: ObjectNode, at: Path): readonly DeclarationFailure[] {
+  const optional = Object.entries(params.fields).filter(([, field]) => !field.required);
+  return optional.map(([name]) =>
+    failure(
+      [...at, 'fields', name],
+      'optional-path-param',
+      `A path param is never optional: ${name}`,
+    ),
+  );
 }
 
 function canonicalPathFailures(path: string, at: Path): readonly DeclarationFailure[] {
