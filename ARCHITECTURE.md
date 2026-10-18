@@ -12,6 +12,20 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 All packages are released together with one version. `zod` and `@casitafeliz/loom-contract` are peer dependencies of every cf-loom package and every Contract Package, and every cf-loom package a cf-loom package uses is a peer dependency of it, so each process has one copy of each. What each package provides is listed in [Packages](README.md#packages) in README.md.
 
+## Package layout
+
+Every package lays out its `src/` the same way:
+
+- `src/` holds only entry files: the files the package's `exports` and `bin` point at (`index.ts` for `.`, `internal/index.ts` for `./internal`, one folder per subpath entry such as `node-http/index.ts`, and `bin.ts`), and beside each entry the tests that exercise it as a whole (`src/readme.test.ts`). An entry folder holds its `index.ts` and those tests only.
+- An entry file holds re-exports only (`export … from`), so an entry cannot grow logic; `bin.ts`, a CLI entry that calls the package's API, is the exception.
+- Every other file sits in a module folder named for its one responsibility, with an `index.ts` as the module's only seam; modules import each other only through it.
+- Modules form one direction of dependencies, listed in the package's own ARCHITECTURE.md; no cycles.
+- No grab-bag folders (`utils`, `common`, `shared`, `helpers`; see C14 in [CODING_STANDARDS.md](CODING_STANDARDS.md)); a piece several modules need lives in the lowest module that owns its concept.
+- Modules are one level deep: a module that grows splits into sibling modules, not sub-folders.
+- Tests sit next to the file they test; every test imports only the package's entries (C23).
+
+`scripts/check-layout.ts`, run by `pnpm check` and CI, fails on a file in `src/` or an entry folder that is neither an entry nor a test, a grab-bag folder name, a module nested in a module, an import of another module's file not through its `index.ts`, and an entry file holding more than re-exports. The direction of dependencies stays a review rule.
+
 ## Where Contracts live
 
 - One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own.
