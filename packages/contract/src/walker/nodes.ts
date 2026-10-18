@@ -69,8 +69,6 @@ export type RecordNode = Annotations & {
   readonly type: 'record';
   readonly key: SchemaNode;
   readonly value: SchemaNode;
-  readonly min?: number;
-  readonly max?: number;
 };
 
 /** A list of items of one schema. */
