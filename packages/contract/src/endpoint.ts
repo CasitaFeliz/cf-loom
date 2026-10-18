@@ -1,12 +1,12 @@
 import type * as core from 'zod/v4/core';
 import type { Lifecycle, Visibility } from './element.ts';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule, IsOneLiteral, Listed, LiteralNames } from './rules.ts';
-import type { AddedStandardRejection, StandardRejection } from './standard-rejections.ts';
+import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
+import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
 type InputDeclaration = {
@@ -35,7 +35,7 @@ type EndpointDeclaration = {
   readonly guards?: readonly Guard[];
   readonly rejections?: readonly (
     | Rejection
-    | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejection>>
+    | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejectionName>>
   )[];
   readonly lifecycle?: Lifecycle;
 };
@@ -62,7 +62,7 @@ type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declar
       };
 
 type ExactParamsMessage<Names extends string> =
-  `params declares exactly the path's :names: ${Listed<Names>}`;
+  `params declares exactly the path's :names: ${JoinedNames<Names>}`;
 
 type ExactParamsRule<Params, Names extends string> =
   Params extends core.$ZodObject<infer Shape>
@@ -109,6 +109,11 @@ type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed ex
   ? Exclude<LiteralNames<Required['name']>, Earlier>
   : never;
 
+type RequiresEarlierMessage<
+  Name extends string,
+  Missing extends string,
+> = `${Name} requires ${JoinedNames<Missing>} earlier in guards`;
+
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
   infer First extends Guard,
   ...infer Rest,
@@ -119,7 +124,7 @@ type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends rea
       ? `${First['name']} is listed twice`
       : [MissingGuardNames<First, Earlier>] extends [never]
         ? GuardOrderRule<Rest, Earlier | First['name']>
-        : `${First['name']} requires ${Listed<MissingGuardNames<First, Earlier>>} earlier in guards`
+        : RequiresEarlierMessage<First['name'], MissingGuardNames<First, Earlier>>
   : unknown;
 
 type GuardsRule<Declaration extends EndpointDeclaration> = {
@@ -142,5 +147,5 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(
   declaration: Declaration & EndpointRules<Declaration>,
 ): Endpoint<Declaration> {
-  return frozenDeclaration('endpoint', declaration);
+  return freezeDeclaration('endpoint', declaration);
 }

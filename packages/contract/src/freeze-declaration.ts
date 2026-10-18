@@ -1,5 +1,5 @@
 /** What every declaration returns: what was written, its containers copied and frozen, a kind. */
-export function frozenDeclaration<const Kind extends string, Fields extends object>(
+export function freezeDeclaration<const Kind extends string, Fields extends object>(
   kind: Kind,
   fields: Fields,
 ): Readonly<Fields> & { readonly kind: Kind } {

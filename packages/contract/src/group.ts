@@ -1,5 +1,5 @@
 import type { Endpoint } from './endpoint.ts';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
 /** What an author writes to declare a Group: a name, what it is for, and at least one Endpoint. */
@@ -17,5 +17,5 @@ export type Group<Declaration extends GroupDeclaration = GroupDeclaration> =
 export function defineGroup<const Declaration extends GroupDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, GroupDeclaration>>,
 ): Group<Declaration> {
-  return frozenDeclaration('group', declaration);
+  return freezeDeclaration('group', declaration);
 }

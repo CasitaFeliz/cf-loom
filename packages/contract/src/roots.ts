@@ -1,7 +1,7 @@
 import type { Definitions } from './definitions.ts';
 import type { Dependencies } from './dependencies.ts';
 import type { Endpoint } from './endpoint.ts';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
@@ -39,12 +39,12 @@ export type Application<Declaration extends ApplicationDeclaration = Application
 export function defineContract<const Declaration extends ContractDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ContractDeclaration>>,
 ): Contract<Declaration> {
-  return frozenDeclaration('contract', declaration);
+  return freezeDeclaration('contract', declaration);
 }
 
 /** Declares an Application's Contract, which holds only Dependencies. */
 export function defineApplication<const Declaration extends ApplicationDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ApplicationDeclaration>>,
 ): Application<Declaration> {
-  return frozenDeclaration('application', declaration);
+  return freezeDeclaration('application', declaration);
 }

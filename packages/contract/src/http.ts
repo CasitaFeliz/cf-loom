@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import type { Listed, LiteralNames } from './rules.ts';
+import type { JoinedNames, LiteralNames } from './rules.ts';
 
 /** The HTTP methods an Endpoint may declare; any other is a type error. */
 export type Method = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
@@ -22,4 +22,4 @@ type UpperCaseHeaderNames<Schema> =
 /** What a headers schema must also satisfy: header names have one spelling, lower-case. */
 export type HeaderNamesRule<Schema> = [UpperCaseHeaderNames<Schema>] extends [never]
   ? unknown
-  : `Header names are lower-case: ${Listed<UpperCaseHeaderNames<Schema>>}`;
+  : `Header names are lower-case: ${JoinedNames<UpperCaseHeaderNames<Schema>>}`;

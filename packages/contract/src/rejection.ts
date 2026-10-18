@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
@@ -19,5 +19,5 @@ export type Rejection<Declaration extends RejectionDeclaration = RejectionDeclar
 export function defineRejection<const Declaration extends RejectionDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, RejectionDeclaration>>,
 ): Rejection<Declaration> {
-  return frozenDeclaration('rejection', declaration);
+  return freezeDeclaration('rejection', declaration);
 }

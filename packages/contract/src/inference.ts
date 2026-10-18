@@ -1,7 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { Endpoint } from './endpoint.ts';
 import type { Guard } from './guard.ts';
-import type { AddedStandardRejection, StandardRejection } from './standard-rejections.ts';
+import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : never;
 
@@ -45,7 +45,7 @@ type ListedRejections<Target> = Target extends {
 export type RejectionsOf<Target extends Endpoint> =
   | ListedRejections<Target>
   | ListedRejections<GuardsOf<Target>>
-  | StandardRejection<AddedStandardRejection>;
+  | StandardRejection<AddedStandardRejectionName>;
 
 /** The Success an EndpointHandler returns and a Caller receives: its status, headers and body. */
 export type SuccessOf<Target extends Endpoint> = {

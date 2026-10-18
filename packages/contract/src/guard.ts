@@ -1,15 +1,17 @@
 import type * as core from 'zod/v4/core';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { HeaderNamesRule } from './http.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
+
+type GuardDemandsRefusal = 'A Guard demands only headers and query';
 
 /** What a Guard may demand from a request: headers and query params, never the body or the path. */
 type Demands = {
   readonly headers?: core.$ZodObject;
   readonly query?: core.$ZodObject;
-  readonly params?: 'A Guard demands only headers and query';
-  readonly body?: 'A Guard demands only headers and query';
+  readonly params?: GuardDemandsRefusal;
+  readonly body?: GuardDemandsRefusal;
 };
 
 /** What an author writes to declare a Guard; an absent part demands, reads or provides nothing. */
@@ -42,5 +44,5 @@ export function defineGuard<const Declaration extends GuardDeclaration>(
     DemandedHeadersRule<Declaration> &
     NoInfer<DeclaredFieldsRule<Declaration, GuardDeclaration> & DemandsFieldsRule<Declaration>>,
 ): Guard<Declaration> {
-  return frozenDeclaration('guard', declaration);
+  return freezeDeclaration('guard', declaration);
 }

@@ -22,9 +22,9 @@ type LastOf<Names> =
     : never;
 
 /** Several names in one message, comma-separated, so a refusal reads as one sentence. */
-export type Listed<Names extends string> = [Exclude<Names, LastOf<Names>>] extends [never]
+export type JoinedNames<Names extends string> = [Exclude<Names, LastOf<Names>>] extends [never]
   ? Names
-  : `${Listed<Exclude<Names, LastOf<Names>>>}, ${LastOf<Names> & string}`;
+  : `${JoinedNames<Exclude<Names, LastOf<Names>>>}, ${LastOf<Names> & string}`;
 
 /** The names a rule may judge: a name typed as plain `string` says nothing about itself. */
 export type LiteralNames<Names> = Names extends string

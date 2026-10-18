@@ -1,9 +1,12 @@
 import type * as core from 'zod/v4/core';
-import { frozenDeclaration } from './frozen-declaration.ts';
+import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
-import type { StandardRejectionDeclarations } from './standard-rejections.ts';
+import type {
+  StandardRejectionDeclaration,
+  StandardRejectionDeclarations,
+} from './standard-rejections.ts';
 
 /** What an author writes to declare a Definitions Package; an absent list is empty. */
 type DefinitionsDeclaration = {
@@ -18,13 +21,14 @@ type DefinitionsDeclaration = {
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
   Readonly<Declaration> & { readonly kind: 'definitions' };
 
-type StandardRejectionFields = NonNullable<StandardRejectionDeclarations['notFound']>;
-
 type StandardRejectionsFieldsRule<Declared> = DeclaredFieldsRule<
   Declared,
   StandardRejectionDeclarations
 > & {
-  readonly [Name in keyof Declared]?: DeclaredFieldsRule<Declared[Name], StandardRejectionFields>;
+  readonly [Name in keyof Declared]?: DeclaredFieldsRule<
+    Declared[Name],
+    StandardRejectionDeclaration
+  >;
 };
 
 type NestedFieldsRule<Declaration extends DefinitionsDeclaration> = {
@@ -40,5 +44,5 @@ export function defineDefinitions<const Declaration extends DefinitionsDeclarati
       DeclaredFieldsRule<Declaration, DefinitionsDeclaration> & NestedFieldsRule<Declaration>
     >,
 ): Definitions<Declaration> {
-  return frozenDeclaration('definitions', declaration);
+  return freezeDeclaration('definitions', declaration);
 }
