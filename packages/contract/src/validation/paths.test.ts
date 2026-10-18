@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+}
 
 const listOrders = {
   name: 'listOrders',
@@ -15,7 +22,7 @@ const listOrders = {
 /** The result of validating one Endpoint, written with a cast where the types refuse it. */
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(
+  return validateInPackage(
     defineContract({ name: 'orders-service', groups: [orders] }),
     () => undefined,
   );

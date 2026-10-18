@@ -20,6 +20,19 @@ export type Part =
   | 'body'
   | 'schema';
 
+/** The parts that travel as text and are objects of their fields in a valid root. */
+export const objectParts = [
+  'input.params',
+  'input.query',
+  'input.headers',
+  'success.headers',
+  'demands.headers',
+  'demands.query',
+] as const satisfies readonly Part[];
+
+/** A part a valid root declares as an object of its fields. */
+export type ObjectPart = (typeof objectParts)[number];
+
 /**
  * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared
  * again for a code already written is `compared` with the first and not written itself. The owner
@@ -39,9 +52,6 @@ export type SchemaSlot = Slot & { readonly value: $ZodType };
 
 /** A slot whose schema walked to a node. */
 export type WalkedSlot = Slot & { readonly node: SchemaNode };
-
-/** A schema's node and where it sits in the root, as the walk returned it. */
-export type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
 
 /** Every slot of a root that holds a schema, and the slots a cast filled with no schema. */
 export type SchemaSlots = {

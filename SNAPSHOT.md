@@ -5,7 +5,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Where it lives
 
 - `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`. The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
-- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it is out of date.
+- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
@@ -97,7 +97,7 @@ A Definitions Package's Snapshot:
 - `guards` lists the Endpoint's Attachments in order: each Guard by name, with its Qualifier as canonical JSON, or `null` when the Guard declares no `qualifier`.
 - `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased. Two declarations of one name agree on the shape (see [Headers, path and query](COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md); the `description`, `examples` and `origin` written are the first declaration's, the Endpoint's own before its Guards', in Attachment order.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
-- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
+- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json` when it is written that way, to the second, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
 
 ## Messages
 
@@ -117,6 +117,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 ```json
 "apiKey": {
   "origin": "local",
+  "description": "An API key per client",
   "guards": [],
   "qualifier": null,
   "demands": { "headers": {}, "query": null },
@@ -125,7 +126,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-`guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README). A Service's Snapshot writes the Guards its Endpoints attach, directly or through a Guard's `guards`; a listed Definitions Package's other Guards stay out, while a Definitions Package's own Snapshot writes every Guard it declares.
+`description` is Neutral. `guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README). A Service's Snapshot writes the Guards its Endpoints attach, directly or through a Guard's `guards`; a listed Definitions Package's other Guards stay out, while a Definitions Package's own Snapshot writes every Guard it declares.
 
 ## Rejection codes
 

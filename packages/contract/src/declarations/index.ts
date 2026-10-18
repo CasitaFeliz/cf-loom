@@ -50,6 +50,7 @@ export type {
 export {
   addedStandardRejectionNames,
   invalidInput,
+  invalidInputBody,
   notFound,
   notImplemented,
   standardRejectionDefaults,

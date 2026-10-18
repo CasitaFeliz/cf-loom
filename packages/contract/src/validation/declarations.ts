@@ -1,5 +1,11 @@
-import type { Endpoint } from '../declarations/index.ts';
-import { isDefinitions, isDependencies, isEndpoint, isGroup } from '../declarations/index.ts';
+import type { Definitions, Endpoint } from '../declarations/index.ts';
+import {
+  isContract,
+  isDefinitions,
+  isDependencies,
+  isEndpoint,
+  isGroup,
+} from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { identityOf } from './identity.ts';
 import type {
@@ -84,13 +90,16 @@ type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & 
   readonly declaration: unknown;
 };
 
-function standardRejectionsOf({
-  at,
-  definitions,
-}: LocatedDefinitions): readonly LocatedStandardRejection[] {
+function standardRejectionsOf(listedIn: LocatedDefinitions): readonly LocatedStandardRejection[] {
+  const { at, definitions } = listedIn;
   const entries: readonly WrittenStandardRejection[] = entriesOf(
     definitions.standardRejections,
-  ).map(([name, declaration]) => ({ at: [...at, 'standardRejections', name], name, declaration }));
+  ).map(([name, declaration]) => ({
+    at: [...at, 'standardRejections', name],
+    name,
+    declaration,
+    listedIn,
+  }));
   return entries.filter(isLocatedStandardRejection);
 }
 
@@ -101,13 +110,19 @@ function isLocatedStandardRejection(
   return isPlainObject(entry.declaration);
 }
 
+/**
+ * The Definitions Packages a Contract lists, whatever a root file exported: the CLI resolves them
+ * before validating; what else sits there is the structure rules' to report.
+ */
+export function listedDefinitionsOf(root: unknown): readonly Definitions[] {
+  return isContract(root) ? listOf(root.definitions).filter(isDefinitions) : [];
+}
+
 function definitionsOf(root: Root): readonly LocatedDefinitions[] {
-  if (root.kind !== 'contract') {
-    return [];
-  }
-  return listOf(root.definitions)
-    .filter(isDefinitions)
-    .map((definitions) => ({ at: ['definitions', textOf(definitions.name)], definitions }));
+  return listedDefinitionsOf(root).map((definitions) => ({
+    at: ['definitions', textOf(definitions.name)],
+    definitions,
+  }));
 }
 
 function groupsOf(root: Root): readonly LocatedGroup[] {

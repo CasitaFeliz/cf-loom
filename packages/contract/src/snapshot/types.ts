@@ -1,0 +1,135 @@
+import type { Lifecycle, StandardRejectionName, Visibility } from '../declarations/index.ts';
+import type { ObjectNode, Origin, SchemaNode } from '../walker/index.ts';
+
+/** The version of SNAPSHOT.md a Snapshot follows, so a reader knows every format it ever wrote. */
+export type SnapshotFormat = 1;
+
+/** A Guard as an Endpoint attaches it: by name, with its Qualifier as written, or `null`. */
+export type AttachmentSnapshot = { readonly guard: string; readonly qualifier: unknown };
+
+/** What a Caller sends to an Endpoint, each part `null` when the Endpoint accepts none. */
+export type InputSnapshot = {
+  readonly params: ObjectNode | null;
+  readonly query: ObjectNode | null;
+  readonly headers: ObjectNode | null;
+  readonly body: SchemaNode | null;
+};
+
+/** What an Endpoint answers when it does what was asked. */
+export type SuccessSnapshot = {
+  readonly status: number;
+  readonly headers: ObjectNode | null;
+  readonly body: SchemaNode | null;
+};
+
+/** An Endpoint by its identity, its Input merged with its Guards' demands and its codes resolved. */
+export type EndpointSnapshot = {
+  readonly name: string;
+  readonly group: string;
+  readonly visibility: Visibility;
+  readonly lifecycle: Lifecycle;
+  readonly description: string;
+  readonly params: readonly string[];
+  readonly guards: readonly AttachmentSnapshot[];
+  readonly input: InputSnapshot;
+  readonly success: SuccessSnapshot;
+  readonly rejections: readonly string[];
+  readonly deprecatedAt?: string;
+};
+
+/** A Guard: what it demands, the Guards it reads, its Qualifier's schema and its codes. */
+export type GuardSnapshot = {
+  readonly origin: Origin;
+  readonly description: string;
+  readonly guards: readonly string[];
+  readonly qualifier: SchemaNode | null;
+  readonly demands: { readonly headers: ObjectNode | null; readonly query: ObjectNode | null };
+  readonly context: SchemaNode | null;
+  readonly rejections: readonly string[];
+};
+
+/** A code with its one status and body shape and its first declaration's message. */
+export type CodeSnapshot = {
+  readonly origin: Origin;
+  readonly status: number;
+  readonly message: string;
+  readonly body: SchemaNode | null;
+  readonly removed: boolean;
+};
+
+/** A Standard Rejection as the root resolves it; only the invalid-input one has a body. */
+export type StandardRejectionSnapshot = {
+  readonly origin: Origin;
+  readonly code: string;
+  readonly status: number;
+  readonly message: string;
+  readonly body?: SchemaNode;
+};
+
+/** The three Standard Rejections, resolved, so a change of their source shows in the check. */
+export type StandardRejectionsSnapshot = Readonly<
+  Record<StandardRejectionName, StandardRejectionSnapshot>
+>;
+
+/** A Message Version by its identity. */
+export type EventSnapshot = {
+  readonly visibility: Visibility;
+  readonly lifecycle: Lifecycle;
+  readonly description: string;
+  readonly body: SchemaNode;
+};
+
+/** A Command Version by its identity; a Command is always Private. */
+export type CommandSnapshot = Omit<EventSnapshot, 'visibility'>;
+
+/** A Subscription by its name, with the Event it receives. */
+export type SubscriptionSnapshot = { readonly event: string; readonly removedIn?: string };
+
+/** What a Contract uses of one Provider: the version it relied on and the Elements it selects. */
+export type DependencySnapshot = {
+  readonly against: string;
+  readonly endpoints: readonly { readonly id: string; readonly name: string }[];
+  readonly events: readonly string[];
+};
+
+/** What every Snapshot starts with; `version` is left to `publish`. */
+type Heading<Kind extends string> = {
+  readonly format: SnapshotFormat;
+  readonly kind: Kind;
+  readonly name: string;
+  readonly generator: string;
+};
+
+/** A map of a Snapshot, keyed by identity or name. */
+type ByKey<Value> = Readonly<Record<string, Value>>;
+
+/** The declared Snapshot of a Service's Contract. */
+export type ServiceSnapshot = Heading<'service'> & {
+  readonly definitions: ByKey<string>;
+  readonly standardRejections: StandardRejectionsSnapshot;
+  readonly defs: ByKey<SchemaNode>;
+  readonly endpoints: ByKey<EndpointSnapshot>;
+  readonly events: ByKey<EventSnapshot>;
+  readonly commands: ByKey<CommandSnapshot>;
+  readonly guards: ByKey<GuardSnapshot>;
+  readonly codes: ByKey<CodeSnapshot>;
+  readonly subscriptions: ByKey<SubscriptionSnapshot>;
+  readonly dependencies: ByKey<DependencySnapshot>;
+};
+
+/** The declared Snapshot of an Application, which holds only its Dependencies. */
+export type ApplicationSnapshot = Heading<'application'> & {
+  readonly dependencies: ByKey<DependencySnapshot>;
+};
+
+/** The declared Snapshot of a Definitions Package: everything it declares, reached or not. */
+export type DefinitionsSnapshot = Heading<'definitions'> & {
+  readonly standardRejections: StandardRejectionsSnapshot;
+  readonly defs: ByKey<SchemaNode>;
+  readonly schemas: ByKey<SchemaNode>;
+  readonly guards: ByKey<GuardSnapshot>;
+  readonly codes: ByKey<CodeSnapshot>;
+};
+
+/** A declared Snapshot, as `generate` writes it to `contract.snapshot.json`. */
+export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapshot;

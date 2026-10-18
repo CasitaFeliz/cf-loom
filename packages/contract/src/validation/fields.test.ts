@@ -11,7 +11,14 @@ import {
   defineRejection,
   type Endpoint,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+}
 
 function noOrigin() {
   return undefined;
@@ -51,7 +58,7 @@ function withoutField<Declaration extends object>(
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
 }
 
 function undeclared(at: readonly (string | number)[]) {
@@ -79,13 +86,13 @@ describe('validateContract: undeclared fields', () => {
     });
     const contract = defineContract({ name: 'orders-service', groups: [orders], definitions: [] });
 
-    expect(validateContract(contract, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
   });
 
   test('an undeclared field on a Contract fails', () => {
     const contract = defineContract(withField({ name: 'orders-service' }, 'events'));
 
-    expect(validateContract(contract, noOrigin)).toEqual(undeclared(['events']));
+    expect(validateInPackage(contract, noOrigin)).toEqual(undeclared(['events']));
   });
 
   test('an undeclared field on an Application fails', () => {
@@ -93,20 +100,20 @@ describe('validateContract: undeclared fields', () => {
       withField({ name: 'web-admin', dependencies: [] }, 'groups'),
     );
 
-    expect(validateContract(application, noOrigin)).toEqual(undeclared(['groups']));
+    expect(validateInPackage(application, noOrigin)).toEqual(undeclared(['groups']));
   });
 
   test('an undeclared field on a Definitions Package fails', () => {
     const definitions = defineDefinitions(withField({ name: 'definitions' }, 'endpoints'));
 
-    expect(validateContract(definitions, noOrigin)).toEqual(undeclared(['endpoints']));
+    expect(validateInPackage(definitions, noOrigin)).toEqual(undeclared(['endpoints']));
   });
 
   test('an undeclared field on a listed Definitions Package fails where it is listed', () => {
     const definitions = defineDefinitions(withField({ name: 'definitions' }, 'endpoints'));
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       undeclared(['definitions', 'definitions', 'endpoints']),
     );
   });
@@ -120,7 +127,7 @@ describe('validateContract: undeclared fields', () => {
     );
 
     expect(
-      validateContract(defineContract({ name: 'orders-service', groups: [group] }), noOrigin),
+      validateInPackage(defineContract({ name: 'orders-service', groups: [group] }), noOrigin),
     ).toEqual(undeclared(['groups', 'orders', 'prefix']));
   });
 
@@ -189,7 +196,7 @@ describe('validateContract: undeclared fields', () => {
     } as unknown as { notFound: { code: 'NOT_FOUND'; status: 404; message: 'Not found' } };
     const definitions = defineDefinitions({ name: 'definitions', standardRejections });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       undeclared(['standardRejections', 'notFund']),
     );
   });
@@ -206,7 +213,7 @@ describe('validateContract: undeclared fields', () => {
       standardRejections: { notFound },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       undeclared(['standardRejections', 'notFound', 'body']),
     );
   });
@@ -216,7 +223,7 @@ describe('validateContract: required fields', () => {
   test('a root without a name fails', () => {
     const contract = defineContract(withoutField({ name: 'orders-service' }, 'name'));
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       required(['name'], 'name is a required string'),
     );
   });
@@ -224,7 +231,7 @@ describe('validateContract: required fields', () => {
   test('a name that is not a string fails once', () => {
     const contract = defineContract({ name: 7 as unknown as string });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(['name'], 'not-a-string', 'name is a string'),
     );
   });
@@ -288,7 +295,7 @@ describe('validateContract: required fields', () => {
       standardRejections: { notFound },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       required(['standardRejections', 'notFound', 'status'], 'status is a required field'),
     );
   });
@@ -315,7 +322,7 @@ describe('validateContract: required fields', () => {
       dependencies: null as unknown as readonly never[],
     });
 
-    expect(validateContract(application, noOrigin)).toEqual(
+    expect(validateInPackage(application, noOrigin)).toEqual(
       required(['dependencies'], 'dependencies is a required field'),
     );
   });
@@ -352,7 +359,7 @@ describe('validateContract: required fields', () => {
       withoutField({ name: 'web-admin', dependencies: [] }, 'dependencies'),
     );
 
-    expect(validateContract(application, noOrigin)).toEqual(
+    expect(validateInPackage(application, noOrigin)).toEqual(
       required(['dependencies'], 'dependencies is a required field'),
     );
   });
@@ -366,7 +373,7 @@ describe('validateContract: required fields', () => {
     );
 
     expect(
-      validateContract(defineContract({ name: 'orders-service', groups: [group] }), noOrigin),
+      validateInPackage(defineContract({ name: 'orders-service', groups: [group] }), noOrigin),
     ).toEqual(required(['groups', 'orders', 'description'], 'description is a required string'));
   });
 
@@ -437,7 +444,7 @@ describe('validateContract: required fields', () => {
       standardRejections: { notFound },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       required(['standardRejections', 'notFound', 'code'], 'code is a required string'),
     );
   });

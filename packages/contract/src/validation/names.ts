@@ -6,7 +6,7 @@ import { endpointAt } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows, type Grammar, kebabCase, upperSnakeCase } from './grammars.ts';
 import { identityOf } from './identity.ts';
-import type { LocatedEndpoint, LocatedGroup } from './located.ts';
+import type { LocatedEndpoint, LocatedGroup, Root } from './located.ts';
 import { isCanonicalPath } from './paths.ts';
 import { listOf, textOf } from './written.ts';
 
@@ -35,6 +35,21 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
     ...grammarFailures(camel, camelCase),
     ...grammarFailures(upperSnake, upperSnakeCase),
   ];
+}
+
+/**
+ * A root is named as its package.json without the scope, so its Contract Package's name follows
+ * from it; a name that is no string is another rule's.
+ */
+export function packageNameFailures(
+  root: Root,
+  packageName: string,
+): readonly DeclarationFailure[] {
+  if (typeof root.name !== 'string' || root.name === packageName) {
+    return [];
+  }
+  const message = `A root is named as its package.json, without the scope: ${packageName}`;
+  return [failure(['name'], 'package-name', message)];
 }
 
 /** Definitions Package and Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */

@@ -37,19 +37,16 @@ export function byCanonicalJson(left: unknown, right: unknown): number {
   return byCodePoint(canonicalJson(left), canonicalJson(right));
 }
 
-function canonicalObject(value: object): string {
-  const present = Object.entries(value).filter(hasValue);
-  const keys = present.map(([key]) => key).sort(byCodePoint);
-  const valueByKey = new Map(present);
-  const members = keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(valueByKey.get(key))}`);
-  return `{${members.join(',')}}`;
+/**
+ * A value as a file holds it: canonical JSON indented by two spaces, one member or item per line,
+ * so a change to one value is a change to one line of a review's diff.
+ */
+export function indentedCanonicalJson(value: unknown): string {
+  return indentedAt(value, '');
 }
 
-function hasValue(entry: [string, unknown]): boolean {
-  return entry[1] !== undefined;
-}
-
-function byCodePoint(left: string, right: string): number {
+/** Orders text by code point, as the Snapshot orders keys and the arrays whose order means nothing. */
+export function byCodePoint(left: string, right: string): number {
   const leftPoints = Array.from(left, codePointOf);
   const rightPoints = Array.from(right, codePointOf);
   const length = Math.min(leftPoints.length, rightPoints.length);
@@ -62,6 +59,38 @@ function byCodePoint(left: string, right: string): number {
   return leftPoints.length - rightPoints.length;
 }
 
+function canonicalObject(value: object): string {
+  const members = membersOf(value).map(
+    ([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`,
+  );
+  return `{${members.join(',')}}`;
+}
+
+/** An object's members that have a value, by key in code point order, whatever order JS keeps. */
+function membersOf(value: object): readonly (readonly [string, unknown])[] {
+  const present = Object.entries(value).filter(hasValue);
+  return present.sort(([left], [right]) => byCodePoint(left, right));
+}
+
+function hasValue(entry: [string, unknown]): boolean {
+  return entry[1] !== undefined;
+}
+
 function codePointOf(character: string): number {
   return character.codePointAt(0) ?? 0;
+}
+
+function indentedAt(value: unknown, indent: string): string {
+  const inner = `${indent}  `;
+  if (Array.isArray(value)) {
+    const items = value.map((item) => `${inner}${indentedAt(item, inner)}`);
+    return items.length === 0 ? '[]' : `[\n${items.join(',\n')}\n${indent}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const members = membersOf(value).map(
+      ([key, member]) => `${inner}${JSON.stringify(key)}: ${indentedAt(member, inner)}`,
+    );
+    return members.length === 0 ? '{}' : `{\n${members.join(',\n')}\n${indent}}`;
+  }
+  return JSON.stringify(value);
 }

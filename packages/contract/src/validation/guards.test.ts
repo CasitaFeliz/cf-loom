@@ -10,7 +10,14 @@ import {
   type Endpoint,
   type Guard,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+}
 
 /** What a Guard may demand, so a cast can put a part there the types refuse. */
 type Demands = { readonly headers: core.$ZodObject };
@@ -52,7 +59,7 @@ function validateGuards(guards: readonly Attachment[]) {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(
+  return validateInPackage(
     defineContract({ name: 'orders-service', groups: [orders] }),
     () => undefined,
   );

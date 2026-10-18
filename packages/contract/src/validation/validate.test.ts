@@ -17,15 +17,27 @@ import {
   openEnum,
   openUnion,
 } from '../index.ts';
-import { validateContract, type WalkedLocation, walkSchemas } from '../internal/index.ts';
+import {
+  type OriginOf,
+  validateContract,
+  type WalkedLocation,
+  walkSchemas,
+} from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const packageName = typeof name === 'string' ? name : '';
+  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+}
 
 function noOrigin() {
   return undefined;
 }
 
-/** A walked location as the validation returns it, so a test compares with the walker itself. */
-function nodeOf({ at, walked }: WalkedLocation) {
-  return { at, node: walked.kind === 'walked' ? walked.value : undefined };
+/** A walked location's node, so a test compares with the walker itself. */
+function walkedNodeOf({ walked }: WalkedLocation) {
+  return walked.kind === 'walked' ? walked.value : undefined;
 }
 
 const unauthenticated = defineRejection({
@@ -90,7 +102,7 @@ const payments = {
 } as const satisfies ContractPackage;
 
 describe('validateContract', () => {
-  test('a valid Contract returns its walked schemas by location', () => {
+  test('a valid Contract finds the walked node of each declaration’s part', () => {
     const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
     const located = [
       {
@@ -107,12 +119,17 @@ describe('validateContract', () => {
     ];
     const walked = walkSchemas(located, noOrigin);
 
-    const validated = validateContract(contract, noOrigin);
+    const validated = validateInPackage(contract, noOrigin);
 
-    expect(validated).toMatchObject({
-      kind: 'valid',
-      schemas: { nodes: walked.located.map(nodeOf), defs: {} },
-    });
+    const { nodeOf, defs } = validated.kind === 'valid' ? validated.schemas : unreachable();
+    expect([
+      nodeOf(getOrder, 'input.params'),
+      nodeOf(getOrder, 'success.body'),
+      nodeOf(apiKey, 'demands.headers'),
+      nodeOf(apiKey, 'context'),
+      nodeOf(orderLocked, 'body'),
+    ]).toEqual(walked.located.map(walkedNodeOf));
+    expect(defs).toEqual({});
   });
 
   test('a valid Contract carries its declarations in the root’s order: Endpoints by identity, Guards and codes reached, Standard Rejections resolved', () => {
@@ -130,9 +147,11 @@ describe('validateContract', () => {
       groups: [ordersGroup],
     });
 
-    const validated = validateContract(contract, noOrigin);
+    const validated = validateInPackage(contract, noOrigin);
 
+    const listedIn = { at: ['definitions', 'definitions'], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
+      root: contract,
       endpoints: [
         {
           at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],
@@ -141,22 +160,30 @@ describe('validateContract', () => {
         },
       ],
       guards: [
-        { at: ['guards', 'apiKey'], guard: apiKey, reached: true },
-        { at: ['guards', 'shared'], guard: shared, reached: false },
+        { at: ['guards', 'apiKey'], guard: apiKey, reached: true, listedIn: undefined },
+        { at: ['guards', 'shared'], guard: shared, reached: false, listedIn },
       ],
       codes: [
-        { code: 'UNUSED', at: ['rejections', 'UNUSED'], rejection: unused, reached: false },
+        {
+          code: 'UNUSED',
+          at: ['rejections', 'UNUSED'],
+          rejection: unused,
+          reached: false,
+          listedIn,
+        },
         {
           code: 'UNAUTHENTICATED',
           at: ['rejections', 'UNAUTHENTICATED'],
           rejection: unauthenticated,
           reached: true,
+          listedIn: undefined,
         },
         {
           code: 'ORDER_LOCKED',
           at: ['rejections', 'ORDER_LOCKED'],
           rejection: orderLocked,
           reached: true,
+          listedIn: undefined,
         },
       ],
       standardRejections: [
@@ -178,6 +205,7 @@ describe('validateContract', () => {
             at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
+            listedIn,
           },
         },
         {
@@ -189,6 +217,7 @@ describe('validateContract', () => {
           declared: undefined,
         },
       ],
+      dependencies: [],
     });
   });
 
@@ -196,10 +225,10 @@ describe('validateContract', () => {
     const definitions = defineDefinitions({
       name: 'definitions',
       guards: [apiKey],
-      rejections: [orderLocked],
+      rejections: [orderLocked, unauthenticated],
     });
 
-    const validated = validateContract(definitions, noOrigin);
+    const validated = validateInPackage(definitions, noOrigin);
 
     expect(validated.kind === 'valid' && validated.declarations).toMatchObject({
       endpoints: [],
@@ -215,11 +244,11 @@ describe('validateContract', () => {
     const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
     const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
 
-    const validated = validateContract(application, noOrigin);
+    const validated = validateInPackage(application, noOrigin);
 
     expect(validated).toMatchObject({
       kind: 'valid',
-      schemas: { nodes: [], defs: {} },
+      schemas: { defs: {} },
       declarations: { endpoints: [], guards: [], codes: [] },
     });
   });
@@ -237,7 +266,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -271,7 +300,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -303,7 +332,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -333,7 +362,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -358,7 +387,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -388,7 +417,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -413,7 +442,7 @@ describe('validateContract', () => {
     });
   });
 
-  test('a valid Definitions Package returns its Guards’, Rejections’ and shared schemas by location', () => {
+  test('a valid Definitions Package finds the nodes of its Guards, Rejections and shared schemas', () => {
     const money = z.object({ amount: z.int(), currency: z.string() });
     const definitions = defineDefinitions({
       name: 'definitions',
@@ -429,12 +458,15 @@ describe('validateContract', () => {
     ];
     const walked = walkSchemas(located, noOrigin);
 
-    const validated = validateContract(definitions, noOrigin);
+    const validated = validateInPackage(definitions, noOrigin);
 
-    expect(validated).toMatchObject({
-      kind: 'valid',
-      schemas: { nodes: walked.located.map(nodeOf), defs: {} },
-    });
+    const { nodeOf } = validated.kind === 'valid' ? validated.schemas : unreachable();
+    expect([
+      nodeOf(apiKey, 'demands.headers'),
+      nodeOf(apiKey, 'context'),
+      nodeOf(orderLocked, 'body'),
+      nodeOf(money, 'schema'),
+    ]).toEqual(walked.located.map(walkedNodeOf));
   });
 
   test('a construct that is not allowed fails with the walker’s failure at its location', () => {
@@ -452,7 +484,7 @@ describe('validateContract', () => {
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] })],
     });
 
-    const validated = validateContract(contract, noOrigin);
+    const validated = validateInPackage(contract, noOrigin);
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -491,7 +523,7 @@ describe('validateContract', () => {
     });
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       noOrigin,
     );
@@ -531,7 +563,7 @@ describe('validateContract', () => {
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] })],
     });
 
-    const validated = validateContract(contract, noOrigin);
+    const validated = validateInPackage(contract, noOrigin);
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -645,7 +677,7 @@ describe('validateContract: the README’s examples', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
 
     const validated = [contract, definitions, application].map(
-      (root) => validateContract(root, noOrigin).kind,
+      (root) => validateInPackage(root, noOrigin).kind,
     );
 
     expect(validated).toEqual(['valid', 'valid', 'valid']);
@@ -674,27 +706,19 @@ describe('validateContract: the README’s examples', () => {
       endpoints: [getOrder, retryOrder],
     });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [group] }),
       noOrigin,
     );
 
-    const bodies =
-      validated.kind === 'valid'
-        ? validated.schemas.nodes.filter(
-            (node) => node.at.join('.') === 'rejections.ORDER_LOCKED.body',
-          )
-        : [];
-    expect(bodies).toEqual([
-      {
-        at: ['rejections', 'ORDER_LOCKED', 'body'],
-        node: {
-          type: 'object',
-          mode: 'open',
-          fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
-        },
-      },
-    ]);
+    const { schemas, declarations } = validated.kind === 'valid' ? validated : unreachable();
+    const written = declarations.codes.find(({ code }) => code === 'ORDER_LOCKED');
+    expect(written?.rejection).toBe(orderLocked);
+    expect(schemas.nodeOf(written?.rejection, 'body')).toEqual({
+      type: 'object',
+      mode: 'open',
+      fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
+    });
   });
 
   test('a Contract of 4000 Endpoints validates', () => {
@@ -718,7 +742,7 @@ describe('validateContract: the README’s examples', () => {
       endpoints: [first!, ...rest],
     });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [items] }),
       noOrigin,
     );
@@ -727,9 +751,16 @@ describe('validateContract: the README’s examples', () => {
   });
 
   test('the same root validates to the same result twice', () => {
-    const first = validateContract(contract, noOrigin);
-    const second = validateContract(contract, noOrigin);
+    const first = validateInPackage(contract, noOrigin);
+    const second = validateInPackage(contract, noOrigin);
 
-    expect(second).toEqual(first);
+    const lookup = { nodeOf: expect.any(Function) };
+    const expected =
+      first.kind === 'valid' ? { ...first, schemas: { ...first.schemas, ...lookup } } : first;
+    expect(second).toEqual(expected);
   });
 });
+
+function unreachable(): never {
+  throw new Error('The fixture is invalid');
+}
