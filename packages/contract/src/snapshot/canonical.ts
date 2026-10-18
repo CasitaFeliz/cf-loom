@@ -6,5 +6,18 @@ import type { Snapshot } from './types.ts';
  * code point, two-space indentation and a final newline, so the same Contract gives the same bytes.
  */
 export function canonicalTextOf(snapshot: Snapshot): string {
-  return `${indentedCanonicalJson(snapshot)}\n`;
+  return canonicalFormOf(snapshot);
+}
+
+/**
+ * The canonical text a Snapshot's hash is taken of: without `version` and `generator`, so a new
+ * CLI or a publish alone never changes it.
+ */
+export function hashedTextOf(snapshot: Snapshot): string {
+  const { generator: _generator, ...hashed } = snapshot;
+  return canonicalFormOf(hashed);
+}
+
+function canonicalFormOf(value: unknown): string {
+  return `${indentedCanonicalJson(value)}\n`;
 }
