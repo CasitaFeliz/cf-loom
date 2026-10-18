@@ -8,6 +8,7 @@ import { type Exit, toolingError } from './exit.ts';
 export type Project = {
   readonly packageName: PackageName;
   readonly root: unknown;
+  /** Where the root file sits, relative to the project, as messages name it. */
   readonly rootFile: string;
   readonly packages: readonly ResolvedDefinitions[];
 };
@@ -34,8 +35,8 @@ export async function projectOf(cwd: string): Promise<ReadProject> {
   if (loaded.kind === 'failed') {
     return stopped(loaded.message);
   }
-  const rootFile = join(cwd, loaded.file);
-  const resolved = resolvePackages(loaded.root, { rootFile, scope: config.config.scope });
+  const rootPath = join(cwd, loaded.file);
+  const resolved = resolvePackages(loaded.root, { rootPath, scope: config.config.scope });
   if (resolved.kind === 'failed') {
     return stopped(resolved.message);
   }

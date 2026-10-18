@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { thrownLineOf } from './imported.ts';
 
 /** A project's package as its package.json names it: the scope, when it has one, and the name. */
 export type PackageName = { readonly scope: string | undefined; readonly name: string };
@@ -22,7 +23,7 @@ export function projectPackageOf(directory: string): ProjectPackage {
   if (!existsSync(path)) {
     return failed('package.json not found: cf-loom runs next to the package.json of the project');
   }
-  const manifest = manifestOf(readFileSync(path, 'utf8'));
+  const manifest = manifestOf(path, directory);
   if (manifest.kind === 'failed') {
     return manifest;
   }
@@ -42,21 +43,24 @@ export function projectPackageOf(directory: string): ProjectPackage {
   return { kind: 'read', packageName: { scope, name: unscoped ?? name } };
 }
 
-function manifestOf(text: string):
+function manifestOf(
+  path: string,
+  directory: string,
+):
   | {
       readonly kind: 'parsed';
       readonly manifest: { readonly name?: unknown; readonly type?: unknown };
     }
   | Extract<ProjectPackage, { readonly kind: 'failed' }> {
   try {
-    const manifest: unknown = JSON.parse(text);
+    const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'));
     return {
       kind: 'parsed',
       manifest: typeof manifest === 'object' && manifest !== null ? manifest : {},
     };
   } catch (e) {
-    const reason = e instanceof Error ? e.message.split('\n', 1)[0] : String(e);
-    return failed(`package.json is no JSON: ${reason}`);
+    const problem = e instanceof SyntaxError ? 'is no JSON' : 'cannot be read';
+    return failed(`package.json ${problem}: ${thrownLineOf(e, directory)}`);
   }
 }
 

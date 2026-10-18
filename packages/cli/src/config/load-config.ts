@@ -9,9 +9,9 @@ export const configFile = 'cf-loom.config.ts';
 /** An npm scope, as a Contract Package's and a Definitions Package's names start with. */
 const scopePattern = /^@[a-z0-9][a-z0-9._~-]*$/;
 
-/** The configuration of the project in a directory, or why it is missing or wrong. */
+/** What every command reads of the project's configuration, or why it is missing or wrong. */
 export type LoadedConfig =
-  | { readonly kind: 'loaded'; readonly config: Config }
+  | { readonly kind: 'loaded'; readonly config: Pick<Config, 'scope'> }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
