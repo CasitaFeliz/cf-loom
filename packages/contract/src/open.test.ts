@@ -44,11 +44,21 @@ describe('openUnion', () => {
     >();
   });
 
-  test('each variant of an openUnion is an object whose discriminator is a literal', () => {
+  test('a variant whose discriminator is not a literal is a type error', () => {
     // @ts-expect-error the discriminator is a literal
     const declare = () => openUnion('type', [z.object({ type: z.string() })]);
 
     expect(declare).not.toThrow();
+  });
+
+  test('a variant whose discriminator is not a string literal is a type error', () => {
+    // @ts-expect-error the discriminator is a string literal
+    const declare = () => openUnion('type', [z.object({ type: z.literal(1) })]);
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a variant without the discriminator is a type error', () => {
     // @ts-expect-error every variant has the discriminator
     expectTypeOf(openUnion<'kind', readonly [typeof card]>).toBeFunction();
   });
