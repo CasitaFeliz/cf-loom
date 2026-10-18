@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open.ts';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
+import { innerOfLazy } from './lazy.ts';
 import { hasAnnotations } from './metadata.ts';
 import type {
   EnumNode,
@@ -46,7 +47,7 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
-      const refusal = variantRefusalOf(option);
+      const refusal = variantRefusalOf(option, def.discriminator);
       if (refusal !== undefined) {
         return notAllowed(variantAt, refusal);
       }
@@ -95,16 +96,16 @@ function taggedVariant(
   return walked([canonicalJson(literals[0]), node]);
 }
 
-/** A variant zod itself takes only as an object, so a discriminated union in its place is named. */
-function variantRefusalOf(option: core.$ZodType): Refused | undefined {
-  const def = option._zod.def;
-  if (def.type === 'lazy') {
-    return variantRefusalOf((option as core.$ZodLazy)._zod.innerType);
+/** A variant must be an object whose discriminator is a literal; a discriminated union in its place is named. */
+function variantRefusalOf(option: core.$ZodType, discriminator: string): Refused | undefined {
+  const def = innerOfLazy(option)._zod.def;
+  if (def.type !== 'object') {
+    return 'discriminator' in def ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
   }
-  if (def.type === 'object') {
-    return undefined;
-  }
-  return 'discriminator' in def ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
+  const { shape } = def as core.$ZodObjectDef;
+  const field = Object.hasOwn(shape, discriminator) ? shape[discriminator] : undefined;
+  const isLiteral = field !== undefined && innerOfLazy(field)._zod.def.type === 'literal';
+  return isLiteral ? undefined : refused.unliteralDiscriminator;
 }
 
 function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {

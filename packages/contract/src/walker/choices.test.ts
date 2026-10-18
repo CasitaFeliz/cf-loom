@@ -160,6 +160,17 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
+  test('a variant whose discriminator is a one-value enum fails', () => {
+    const wire = z.object({ type: z.enum(['wire']) });
+
+    expect(walkBody(z.discriminatedUnion('type', [card, wire]))).toEqual(
+      refusedAt(
+        ['body', 'variants', 1],
+        'a discriminated union variant whose discriminator is not a literal',
+      ),
+    );
+  });
+
   test('a discriminated union as a variant of another fails', () => {
     const nested = z.discriminatedUnion('kind', [
       z.object({ type: z.literal('wallet'), kind: z.literal('crypto') }),
