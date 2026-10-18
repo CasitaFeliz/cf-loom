@@ -30,6 +30,9 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   if (key.kind === 'not-allowed' || value.kind === 'not-allowed') {
     return { kind: 'not-allowed', failures: failuresOf([key, value]) };
   }
+  if (key.value.nullable === true) {
+    return notAllowed(at, refused.recordKey);
+  }
   if (key.value.type === 'string') {
     return walked({ type: 'record', key: key.value, value: value.value });
   }
@@ -77,7 +80,7 @@ function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]>
 }
 
 function keysOf(key: SchemaNode): readonly string[] | undefined {
-  const values = key.nullable === true ? [] : keyValuesOf(key);
+  const values = keyValuesOf(key);
   const keys = values.filter(isString);
   if (keys.length === 0 || keys.length !== values.length) {
     return undefined;

@@ -163,6 +163,17 @@ describe('walkSchemas: records', () => {
     );
   });
 
+  test.each([
+    ['string', z.string().nullable()],
+    ['enum', z.enum(['eur']).nullable()],
+  ])('a record with a nullable %s key fails', (_kind, key) => {
+    const keyTypedAsString = key as unknown as z.ZodString;
+
+    expect(walkBody(z.record(keyTypedAsString, z.number()))).toEqual(
+      refusedAt(['body'], 'a z.record() key that is not a string, an enum or a literal'),
+    );
+  });
+
   test('a number-keyed record fails', () => {
     expect(walkBody(z.record(z.number(), z.string()))).toEqual(
       refusedAt(['body'], 'a z.record() key that is not a string, an enum or a literal'),
