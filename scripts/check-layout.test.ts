@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,6 +54,22 @@ function aPackage(files: Record<string, string | undefined> = {}): string {
 /** A package whose `package.json` holds `fields` over the well laid out package's manifest. */
 function aPackageWithManifest(fields: Record<string, unknown>): string {
   return aPackage({ 'package.json': JSON.stringify({ ...manifest, ...fields }) });
+}
+
+/** A repository holding the check's scripts and one package, `packages/tool`, built as `aPackage` builds it. */
+function aRepositoryWith(files: Record<string, string | undefined>): string {
+  const repositoryDir = aPackage(files);
+  const packageDir = join(repositoryDir, 'packages', 'tool');
+  mkdirSync(packageDir, { recursive: true });
+  for (const path of ['package.json', 'src']) {
+    renameSync(join(repositoryDir, path), join(packageDir, path));
+  }
+  writeFileSync(join(repositoryDir, 'package.json'), JSON.stringify({ type: 'module' }));
+  cpSync(import.meta.dirname, join(repositoryDir, 'scripts'), {
+    recursive: true,
+    filter: (path) => !path.endsWith('.test.ts'),
+  });
+  return repositoryDir;
 }
 
 afterEach(() => {
@@ -120,14 +144,14 @@ describe('layoutViolations', () => {
     expect(violations).toEqual([{ path: 'src/walker/walk.ts', rule: 'past-the-index' }]);
   });
 
-  it("accepts a module's index named with .js", () => {
+  it("reports a module's index named with .js", () => {
     const packageDir = aPackage({
       'src/walker/walk.ts': "import { isNode } from '../nodes/index.js';\n",
     });
 
     const violations = layoutViolations(packageDir);
 
-    expect(violations).toEqual([]);
+    expect(violations).toEqual([{ path: 'src/walker/walk.ts', rule: 'past-the-index' }]);
   });
 
   it('ignores an import that is commented out', () => {
@@ -141,6 +165,27 @@ describe('layoutViolations', () => {
     const violations = layoutViolations(packageDir);
 
     expect(violations).toEqual([]);
+  });
+
+  it.each([
+    [
+      'a glob',
+      "const built = 'dist/*';\nimport { isNode } from '../nodes/predicates.ts';\n/** Why. */\n",
+    ],
+    [
+      'a URL',
+      "const home = 'https://example.com'; import { isNode } from '../nodes/predicates.ts';\n",
+    ],
+    [
+      'a double-quoted glob',
+      'const built = "dist/*";\nimport { isNode } from "../nodes/predicates.ts";\n/** Why. */\n',
+    ],
+  ])('reads an import after a string holding %s', (_, source) => {
+    const packageDir = aPackage({ 'src/walker/walk.ts': source });
+
+    const violations = layoutViolations(packageDir);
+
+    expect(violations).toEqual([{ path: 'src/walker/walk.ts', rule: 'past-the-index' }]);
   });
 
   it("reports an entry that re-exports a module's file not through its index.ts", () => {
@@ -170,24 +215,13 @@ describe('layoutViolations', () => {
     ['a declaration', "/** Why. */\nexport type Kind = 'walker';\n"],
     ['an import', "import { walk } from './walker/index.ts';\nexport { walk };\n"],
     ['a local export', "export { walk } from './walker/index.ts';\nexport { local };\n"],
+    ['an export of everything', "export * from './walker/index.ts';\n"],
   ])('reports an entry file holding %s', (_, source) => {
     const packageDir = aPackage({ 'src/internal/index.ts': source });
 
     const violations = layoutViolations(packageDir);
 
     expect(violations).toEqual([{ path: 'src/internal/index.ts', rule: 'not-only-re-exports' }]);
-  });
-
-  it.each([
-    "export * from './walker/index.ts';\n",
-    "export * as walker from './walker/index.ts';\n",
-    "export type * from './walker/index.ts';\n",
-  ])('reports an entry re-exporting everything: %s', (source) => {
-    const packageDir = aPackage({ 'src/index.ts': source });
-
-    const violations = layoutViolations(packageDir);
-
-    expect(violations).toEqual([{ path: 'src/index.ts', rule: 'export-all' }]);
   });
 
   it('accepts a bin entry that calls the API', () => {
@@ -226,7 +260,7 @@ describe('layoutViolations', () => {
     expect(violations).toEqual([{ path: 'package.json', rule: 'wildcard-export' }]);
   });
 
-  it('skips a package with no src/', () => {
+  it('reports every entry of a package with no src/', () => {
     const packageDir = aPackage(
       Object.fromEntries(Object.keys(wellLaidOut).map((path) => [path, undefined])),
     );
@@ -234,7 +268,11 @@ describe('layoutViolations', () => {
 
     const violations = layoutViolations(packageDir);
 
-    expect(violations).toEqual([]);
+    expect(violations).toEqual([
+      { path: 'src/bin.ts', rule: 'missing-entry' },
+      { path: 'src/index.ts', rule: 'missing-entry' },
+      { path: 'src/internal/index.ts', rule: 'missing-entry' },
+    ]);
   });
 
   it('skips a folder with no package.json', () => {
@@ -264,17 +302,17 @@ describe('layoutViolations', () => {
 
 describe('node scripts/check-layout.ts', () => {
   it('names the file and the rule, and exits with status 1', () => {
-    const packageDir = aPackage({ 'src/predicates.ts': 'export const one = 1;\n' });
+    const repositoryDir = aRepositoryWith({ 'src/predicates.ts': 'export const one = 1;\n' });
 
-    const run = spawnSync('node', [join(import.meta.dirname, 'check-layout.ts'), packageDir], {
-      cwd: packageDir,
+    const run = spawnSync('node', ['scripts/check-layout.ts'], {
+      cwd: repositoryDir,
       encoding: 'utf8',
     });
 
     expect({ status: run.status, stderr: run.stderr }).toEqual({
       status: 1,
       stderr:
-        'src/predicates.ts layout: only entries and their tests sit in src/ and an entry folder; move it into a module.\n',
+        'packages/tool/src/predicates.ts layout: only entries and their tests sit in src/ and an entry folder; move it into a module.\n',
     });
   });
 });
