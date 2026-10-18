@@ -17,9 +17,13 @@ export type SchemaSlots = {
   readonly failures: readonly DeclarationFailure[];
 };
 
-/** The walked nodes of a root, looked up by where the schema sits, with the `defs` they share. */
+/**
+ * The walked nodes of a root, looked up by where the schema sits, with the `defs` they share;
+ * two declarations of one Rejection code sit at one location, so a location may hold several.
+ */
 export type Nodes = {
   readonly nodeAt: (at: Path) => SchemaNode | undefined;
+  readonly nodesAt: (at: Path) => readonly SchemaNode[];
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
@@ -43,8 +47,13 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
 
 /** The walked nodes by location, so a rule on schemas finds the node of a declaration. */
 export function nodesOf(nodes: readonly LocatedNode[], defs: Nodes['defs']): Nodes {
-  const nodeByLocation = new Map(nodes.map(({ at, node }) => [JSON.stringify(at), node]));
-  return { nodeAt: (at) => nodeByLocation.get(JSON.stringify(at)), defs };
+  const nodesByLocation = new Map<string, SchemaNode[]>();
+  for (const { at, node } of nodes) {
+    const location = JSON.stringify(at);
+    nodesByLocation.set(location, [...(nodesByLocation.get(location) ?? []), node]);
+  }
+  const nodesAt = (at: Path) => nodesByLocation.get(JSON.stringify(at)) ?? [];
+  return { nodeAt: (at) => nodesAt(at)[0], nodesAt, defs };
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {

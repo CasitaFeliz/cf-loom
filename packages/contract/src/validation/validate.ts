@@ -7,6 +7,7 @@ import { undeclaredFieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
+import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
 
 /** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
@@ -52,6 +53,7 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...declarations.endpoints.flatMap(endpointFailures),
     ...declarations.guards.flatMap(guardFailures),
     ...declarations.endpoints.flatMap(attachmentFailures),
+    ...rejectionFailures(declarations),
   ];
 }
 
@@ -60,6 +62,7 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
   return [
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
+    ...rejectionBodyFailures(declarations, nodes),
   ];
 }
 
