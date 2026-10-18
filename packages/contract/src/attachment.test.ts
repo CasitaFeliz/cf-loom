@@ -52,7 +52,7 @@ const endpoint = {
 } as const;
 
 describe('Attachments', () => {
-  test('a Guard with a qualifier is listed as an Attachment', () => {
+  test('a Guard with a qualifier is listed as a qualified Attachment', () => {
     const updateOrder = defineEndpoint({
       ...endpoint,
       guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],
@@ -90,7 +90,7 @@ describe('Attachments', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Attachment of a Guard without a qualifier is a type error', () => {
+  test('a qualified Attachment of a Guard without a qualifier is a type error', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
@@ -101,7 +101,7 @@ describe('Attachments', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Attachment whose value breaks the schema’s type is a type error', () => {
+  test('a qualified Attachment whose value breaks the schema’s type is a type error', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
@@ -112,7 +112,7 @@ describe('Attachments', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Attachment with an undeclared field is a type error', () => {
+  test('a qualified Attachment with an undeclared field is a type error', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
@@ -123,7 +123,7 @@ describe('Attachments', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Attachment and its Qualifier are frozen copies, and its Guard is kept by identity', () => {
+  test('a qualified Attachment and its Qualifier are frozen copies, its Guard kept by identity', () => {
     const qualifier: ['orders:edit'] = ['orders:edit'];
     const attachment = { guard: permission, qualifier };
 
@@ -160,7 +160,7 @@ describe('Attachments and dependent Guards', () => {
     guards: [userToken, permission],
   });
 
-  test('a dependent Guard needs the Guard it lists earlier, bare or attached', () => {
+  test('a dependent Guard needs the Guard it lists earlier, bare or qualified', () => {
     const updateOrder = defineEndpoint({
       ...endpoint,
       guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }, audit],
@@ -214,11 +214,17 @@ describe('QualifierOf', () => {
 });
 
 describe('Attachments typed wider than declarations', () => {
-  test('a Guard typed as any Guard skips the Attachment rule, bare or attached', () => {
-    const guard: Guard = userToken;
+  const guard: Guard = userToken;
 
-    const listOrders = defineEndpoint({ ...endpoint, guards: [guard, { guard, qualifier: 1 }] });
+  test('a Guard typed as any Guard may be listed bare', () => {
+    const listOrders = defineEndpoint({ ...endpoint, guards: [guard] });
 
-    expect(listOrders.guards).toHaveLength(2);
+    expect(listOrders.guards).toEqual([userToken]);
+  });
+
+  test('a Guard typed as any Guard may be listed with any Qualifier', () => {
+    const listOrders = defineEndpoint({ ...endpoint, guards: [{ guard, qualifier: 1 }] });
+
+    expect(listOrders.guards[0].qualifier).toBe(1);
   });
 });

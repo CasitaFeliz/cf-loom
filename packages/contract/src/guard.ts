@@ -29,6 +29,9 @@ type GuardDeclaration = {
 export type Guard<Declaration extends GuardDeclaration = GuardDeclaration> =
   Readonly<Declaration> & { readonly kind: 'guard' };
 
+/** A Guard that declares a `qualifier`, so every Endpoint lists it with a Qualifier. */
+export type QualifiedGuard = Guard & { readonly qualifier: core.$ZodType };
+
 type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   readonly demands?: {
     readonly headers?: HeaderNamesRule<NonNullable<Declaration['demands']>['headers']>;

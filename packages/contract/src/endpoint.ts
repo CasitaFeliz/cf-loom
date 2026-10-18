@@ -1,12 +1,18 @@
 import type * as core from 'zod/v4/core';
-import type { AttachedGuard, Attachment, AttachmentsRule } from './attachment.ts';
+import type { AttachedGuardOf, Attachment, AttachmentsRule } from './attachment.ts';
 import type { Lifecycle, Visibility } from './element.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
+import type {
+  DeclaredFieldsRule,
+  IsOneLiteral,
+  IsWidenedGuard,
+  JoinedNames,
+  LiteralNames,
+} from './rules.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
@@ -33,7 +39,7 @@ type EndpointDeclaration = {
   readonly description: string;
   readonly input?: InputDeclaration;
   readonly success: SuccessDeclaration;
-  readonly guards?: readonly (Guard | Attachment)[];
+  readonly guards?: readonly Attachment[];
   readonly rejections?: readonly (
     | Rejection
     | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejectionName>>
@@ -119,11 +125,11 @@ type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends rea
   infer First,
   ...infer Rest,
 ]
-  ? ListedOrderRule<AttachedGuard<First>, Rest, Earlier>
+  ? ListedOrderRule<AttachedGuardOf<First>, Rest, Earlier>
   : unknown;
 
 type ListedOrderRule<Listed, Rest, Earlier extends string> = Listed extends Guard
-  ? string extends Listed['name']
+  ? IsWidenedGuard<Listed> extends true
     ? GuardOrderRule<Rest, Earlier>
     : Listed['name'] extends Earlier
       ? `${Listed['name']} is listed twice`

@@ -1,4 +1,4 @@
-export type { Attachment } from './attachment.ts';
+export type { Attachment, QualifiedAttachment } from './attachment.ts';
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
 export type { ContractPackage, Dependencies } from './dependencies.ts';
