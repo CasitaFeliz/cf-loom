@@ -33,6 +33,9 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   if (key.value.nullable === true) {
     return notAllowed(at, refused.nullableRecordKey);
   }
+  if (key.value.type === 'enum' && key.value.open) {
+    return notAllowed(at, refused.openRecordKey);
+  }
   if (key.value.type === 'string') {
     return walked({ type: 'record', key: key.value, value: value.value });
   }

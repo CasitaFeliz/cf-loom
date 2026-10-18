@@ -28,6 +28,10 @@ export const refused = {
   looseObject: { construct: 'z.looseObject() or .passthrough()', instead: dynamicKeysInstead },
   catchall: { construct: '.catchall()', instead: dynamicKeysInstead },
   nullableRecordKey: { construct: 'a nullable z.record() key' },
+  openRecordKey: {
+    construct: 'a z.record() keyed by an openEnum()',
+    instead: 'z.record(z.string(), …)',
+  },
   looseRecord: { construct: 'z.looseRecord()' },
   recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
   mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },

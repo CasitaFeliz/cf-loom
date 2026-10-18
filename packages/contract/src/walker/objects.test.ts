@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { openEnum } from '../index.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
@@ -171,6 +172,12 @@ describe('walkSchemas: records', () => {
 
     expect(walkBody(z.record(keyTypedAsString, z.number()))).toEqual(
       refusedAt(['body'], 'a nullable z.record() key'),
+    );
+  });
+
+  test('a record keyed by an openEnum fails', () => {
+    expect(walkBody(z.record(openEnum(['eur', 'usd']), z.number()))).toEqual(
+      refusedAt(['body'], 'a z.record() keyed by an openEnum()', 'z.record(z.string(), …)'),
     );
   });
 
