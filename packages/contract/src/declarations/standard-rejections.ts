@@ -66,7 +66,7 @@ export const standardRejectionDefaults: StandardRejections = {
 };
 
 /** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
-const issueCodes = [
+export const issueCodes = [
   'required',
   'invalid_type',
   'invalid_value',

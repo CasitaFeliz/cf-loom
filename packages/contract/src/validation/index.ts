@@ -17,6 +17,7 @@ export type {
 export { attachedGuardsOf } from './references.ts';
 export type { ObjectPart, Part } from './schemas.ts';
 export type { ResolvedStandard } from './standard-codes.ts';
+export { standardRejectionsOf } from './standard-codes.ts';
 export type {
   NodeLookup,
   RootPackage,

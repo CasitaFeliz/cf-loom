@@ -1,4 +1,7 @@
-export type { Kind } from '../declarations/index.ts';
+export type { Kind, StandardRejections } from '../declarations/index.ts';
+export { standardRejectionDefaults } from '../declarations/index.ts';
+export type { IssueCode, Parsed, SchemaIssue } from '../issues/index.ts';
+export { parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
   ApplicationSnapshot,
@@ -33,6 +36,7 @@ export type {
   LocatedGuard,
   LocatedRejection,
   LocatedStandardRejection,
+  Part,
   ResolvedStandard,
   RootPackage,
   Rule,
@@ -44,9 +48,11 @@ export type {
   ValidContract,
 } from '../validation/index.ts';
 export {
+  attachedGuardsOf,
   follows,
   kebabCase,
   listedDefinitionsOf,
+  standardRejectionsOf,
   validateContract,
 } from '../validation/index.ts';
 export type {

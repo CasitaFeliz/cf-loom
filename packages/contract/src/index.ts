@@ -5,6 +5,7 @@ export type {
   Contract,
   ContractPackage,
   Definitions,
+  DemandsOf,
   Dependencies,
   Endpoint,
   ExportedElements,

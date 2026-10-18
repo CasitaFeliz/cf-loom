@@ -1,13 +1,15 @@
 import {
   addedStandardRejectionNames,
+  type Contract,
   isRejectionStatus,
   isStandardRejection,
   type StandardRejectionName,
+  type StandardRejections,
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
+import { type Declarations, declarationsOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type {
   LocatedEndpoint,
@@ -112,6 +114,19 @@ export function resolvedStandards({
       declared,
     };
   });
+}
+
+/**
+ * The code, status and message of each Standard Rejection a valid root resolves, as `serve`
+ * answers them; a valid root's statuses are the ones the type allows.
+ */
+export function standardRejectionsOf(root: Contract): StandardRejections {
+  const resolved = resolvedStandards(declarationsOf(root));
+  const entries = resolved.map(({ name, code, status, message }) => [
+    name,
+    { code, status, message },
+  ]);
+  return Object.fromEntries(entries) as StandardRejections;
 }
 
 /** Each Standard Rejection resolves to a code of its own; the ones after the first sharing a code fail. */
