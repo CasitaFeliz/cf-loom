@@ -9,6 +9,7 @@ import {
 } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations } from './declarations.ts';
+import { isStandardRejectionDeclaration, standardRejectionEntriesOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /** A field that holds a list of declarations: where it sits, what it holds, and what belongs in it. */
@@ -19,9 +20,16 @@ type Listing = {
   readonly fits: (item: unknown) => boolean;
 };
 
-/** Every list is a list and every item in it is the declaration that belongs there. */
+/** A field that holds an object: where it sits, what it holds, and whether its kind requires it. */
+type ObjectPart = { readonly at: Path; readonly value: unknown; readonly required: boolean };
+
+/** Every list is a list, every object part an object, and every item the declaration that belongs there. */
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  return [...listingsOf(declarations).flatMap(listingFailures), ...standardFailures(declarations)];
+  return [
+    ...listingsOf(declarations).flatMap(listingFailures),
+    ...objectPartsOf(declarations).flatMap(objectPartFailures),
+    ...standardFailures(declarations),
+  ];
 }
 
 function listingsOf(declarations: Declarations): readonly Listing[] {
@@ -34,12 +42,15 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
       noun: 'an Endpoint',
       fits: isEndpoint,
     })),
-    ...endpoints.map(({ at, endpoint }) => ({
-      at: [...at, 'rejections'],
-      list: endpoint.rejections,
-      noun: 'a Rejection',
-      fits: isListedRejection,
-    })),
+    ...endpoints.flatMap(({ at, endpoint }) => [
+      { at: [...at, 'guards'], list: endpoint.guards, noun: 'an Attachment', fits: isAnything },
+      {
+        at: [...at, 'rejections'],
+        list: endpoint.rejections,
+        noun: 'a Rejection',
+        fits: isListedRejection,
+      },
+    ]),
     ...guards.flatMap(({ at, guard }) => [
       { at: [...at, 'guards'], list: guard.guards, noun: 'a Guard', fits: isGuard },
       {
@@ -93,20 +104,54 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
   }
 }
 
+/** The parts written as objects: an Endpoint's input and success, a Guard's demands, a package's maps. */
+function objectPartsOf({ endpoints, guards, packages }: Declarations): readonly ObjectPart[] {
+  return [
+    ...endpoints.flatMap(({ at, endpoint }) => [
+      { at: [...at, 'input'], value: endpoint.input, required: false },
+      { at: [...at, 'success'], value: endpoint.success, required: true },
+    ]),
+    ...guards.map(({ at, guard }) => ({
+      at: [...at, 'demands'],
+      value: guard.demands,
+      required: false,
+    })),
+    ...packages.flatMap(({ at, definitions }) => [
+      { at: [...at, 'schemas'], value: definitions.schemas, required: false },
+      {
+        at: [...at, 'standardRejections'],
+        value: definitions.standardRejections,
+        required: false,
+      },
+    ]),
+  ];
+}
+
+/** A missing required part is the required-field rule's; anything else present is an object. */
+function objectPartFailures({ at, value, required }: ObjectPart): readonly DeclarationFailure[] {
+  if (
+    value === undefined ||
+    (value === null && required) ||
+    isStandardRejectionDeclaration(value)
+  ) {
+    return [];
+  }
+  return [failure(at, 'not-an-object', `${String(at.at(-1))} is an object`)];
+}
+
 /** Every declared Standard Rejection is an object, as a Definitions Package writes one. */
 function standardFailures({ packages }: Declarations): readonly DeclarationFailure[] {
-  return packages.flatMap(({ at, definitions }) => {
-    const map: object = definitions.standardRejections ?? {};
-    return Object.entries(map)
-      .filter(([, declaration]) => typeof declaration !== 'object' || declaration === null)
+  return packages.flatMap(({ at, definitions }) =>
+    standardRejectionEntriesOf(definitions)
+      .filter(([, declaration]) => !isStandardRejectionDeclaration(declaration))
       .map(([name]) =>
         failure(
           [...at, 'standardRejections', name],
           'not-a-declaration',
           `standardRejections.${name} is not a Standard Rejection declaration`,
         ),
-      );
-  });
+      ),
+  );
 }
 
 function listingFailures({ at, list, noun, fits }: Listing): readonly DeclarationFailure[] {
@@ -129,4 +174,9 @@ function listingFailures({ at, list, noun, fits }: Listing): readonly Declaratio
 /** An Endpoint or a Guard lists Rejections; a Standard Rejection is one, judged by its own rule. */
 function isListedRejection(item: unknown): boolean {
   return isRejection(item) || isStandardRejection(item);
+}
+
+/** An Endpoint's Attachments are judged by the Attachment rules, item by item. */
+function isAnything(): boolean {
+  return true;
 }

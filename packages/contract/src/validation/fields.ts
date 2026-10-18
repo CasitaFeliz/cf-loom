@@ -1,7 +1,7 @@
 import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations } from './declarations.ts';
-import { listOf } from './declarations.ts';
+import { listOf, standardRejectionEntriesOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import {
   attachmentFields,
@@ -57,7 +57,7 @@ function writtenOf(declarations: Declarations): readonly Written[] {
 function attachmentsOf(at: Path, attachments: unknown): readonly Written[] {
   return listOf(attachments as readonly unknown[] | undefined)
     .map((attachment, index) => written([...at, 'guards', index], attachment, attachmentFields))
-    .filter((entry) => !isGuard(entry.value));
+    .filter(({ value }) => !isGuard(value));
 }
 
 /** The `standardRejections` map of a Definitions Package and each declaration in it. */
@@ -65,12 +65,10 @@ function standardRejectionsOf({
   at,
   definitions,
 }: Declarations['packages'][number]): readonly Written[] {
-  const map = definitions.standardRejections;
   const mapAt = [...at, 'standardRejections'];
-  const entries = typeof map === 'object' && map !== null ? Object.entries(map) : [];
   return [
-    written(mapAt, map, standardRejectionsFields),
-    ...entries.map(([name, declaration]) =>
+    written(mapAt, definitions.standardRejections, standardRejectionsFields),
+    ...standardRejectionEntriesOf(definitions).map(([name, declaration]) =>
       written([...mapAt, name], declaration, standardRejectionFields),
     ),
   ];
@@ -81,7 +79,7 @@ function written(at: Path, value: unknown, fields: KnownFields): Written {
 }
 
 function undeclaredFailures({ at, value, fields }: Written): readonly DeclarationFailure[] {
-  if (typeof value !== 'object' || value === null) {
+  if (!isWrittenObject(value)) {
     return [];
   }
   const undeclared = Object.keys(value).filter((field) => !Object.hasOwn(fields.declared, field));
@@ -90,22 +88,34 @@ function undeclaredFailures({ at, value, fields }: Written): readonly Declaratio
   );
 }
 
+/** A required field is present, `null` counting as missing; a string field present is a string. */
 function requiredFailures({ at, value, fields }: Written): readonly DeclarationFailure[] {
-  if (typeof value !== 'object' || value === null) {
+  if (!isWrittenObject(value)) {
     return [];
   }
-  const present = value as Readonly<Record<string, unknown>>;
-  const missing = fields.required.filter((field) => present[field] === undefined);
-  const notStrings = fields.strings.filter(
-    (field) => present[field] !== undefined && typeof present[field] !== 'string',
+  const missing = Object.keys(fields.required).filter((field) => isMissing(value[field]));
+  const notStrings = Object.keys(fields.strings).filter(
+    (field) => !isMissing(value[field]) && typeof value[field] !== 'string',
   );
-  return [...missing, ...notStrings].map((field) =>
-    failure(
-      [...at, field],
-      'required-field',
-      fields.strings.includes(field)
-        ? `${field} is a required string`
-        : `${field} is a required field`,
+  return [
+    ...missing.map((field) =>
+      failure(
+        [...at, field],
+        'required-field',
+        Object.hasOwn(fields.strings, field)
+          ? `${field} is a required string`
+          : `${field} is a required field`,
+      ),
     ),
-  );
+    ...notStrings.map((field) => failure([...at, field], 'not-a-string', `${field} is a string`)),
+  ];
+}
+
+function isMissing(value: unknown): boolean {
+  return value === undefined || value === null;
+}
+
+/** What an author writes as an object; a list or anything else is the structure rule's finding. */
+function isWrittenObject(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

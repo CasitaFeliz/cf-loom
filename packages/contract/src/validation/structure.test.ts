@@ -184,6 +184,89 @@ describe('validateContract: lists and their items', () => {
     );
   });
 
+  test('an Endpoint’s guards that is not a list fails', () => {
+    const endpoint = defineEndpoint({ ...listing, guards: anything<readonly Guard[]>('apiKey') });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards'],
+        'not-a-list',
+        'guards is a list',
+      ),
+    );
+  });
+
+  test('an Endpoint’s success that is no object fails once', () => {
+    const endpoint = defineEndpoint({ ...listing, success: anything<typeof listing.success>('x') });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'success'],
+        'not-an-object',
+        'success is an object',
+      ),
+    );
+  });
+
+  test('an Endpoint’s input that is no object fails', () => {
+    const endpoint = defineEndpoint({ ...listing, input: anything<{ headers: z.ZodObject }>('x') });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'input'],
+        'not-an-object',
+        'input is an object',
+      ),
+    );
+  });
+
+  test('a Guard’s demands that is no object fails', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      demands: anything<{ headers: z.ZodObject }>('x'),
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
+      failed(['guards', 'tenant', 'demands'], 'not-an-object', 'demands is an object'),
+    );
+  });
+
+  test('a Definitions Package’s schemas that is null fails', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      schemas: anything<Record<string, never>>(null),
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(['schemas'], 'not-an-object', 'schemas is an object'),
+    );
+  });
+
+  test('a standardRejections that is a string fails once', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: anything<Record<string, never>>('abc'),
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
+    );
+  });
+
+  test('a standardRejections that is a list fails once', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: anything<Record<string, never>>([
+        { code: 'X', status: 400, message: 'x' },
+      ]),
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
+    );
+  });
+
   test('a malformed root is invalid without throwing', () => {
     const contract = defineContract({
       name: 'orders-service',

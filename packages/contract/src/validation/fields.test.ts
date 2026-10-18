@@ -2,11 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Attachment,
-  type ContractPackage,
   defineApplication,
   defineContract,
   defineDefinitions,
-  defineDependencies,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -34,33 +32,12 @@ const quota = defineGuard({
   qualifier: z.object({ perMinute: z.int() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: { listOrders: defineEndpoint(listing) },
-  events: {},
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
-
 /** A declaration written with a field its kind does not declare, as a cast lets an author. */
 function withField<Declaration extends object>(
   declaration: Declaration,
   field: string,
 ): Declaration {
   return { ...declaration, [field]: 'anything' };
-}
-
-/**
- * A copy of a declaration that still counts as one, as a declaration of another copy of this
- * package does: `defineDependencies` builds its object itself, so no author writes a field on it.
- */
-function branded<Declaration extends object>(declaration: Declaration): Declaration {
-  const brand = Symbol.for('@casitafeliz/loom-contract.declaration');
-  return Object.defineProperty(declaration, brand, { value: true });
 }
 
 /** A declaration written without a field its kind requires, as a cast lets an author. */
@@ -206,16 +183,6 @@ describe('validateContract: undeclared fields', () => {
     );
   });
 
-  test('an undeclared field on a Dependency fails', () => {
-    const paymentsDeps = defineDependencies(payments, {});
-    const dependencies = [branded(withField(paymentsDeps, 'version'))];
-    const contract = defineContract({ name: 'orders-service', dependencies });
-
-    expect(validateContract(contract, noOrigin)).toEqual(
-      undeclared(['dependencies', 'payments-service', 'version']),
-    );
-  });
-
   test('an undeclared Standard Rejection fails', () => {
     const standardRejections = {
       notFund: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -258,7 +225,18 @@ describe('validateContract: required fields', () => {
     const contract = defineContract({ name: 7 as unknown as string });
 
     expect(validateContract(contract, noOrigin)).toEqual(
-      required(['name'], 'name is a required string'),
+      failed(['name'], 'not-a-string', 'name is a string'),
+    );
+  });
+
+  test('a null success counts as missing', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      success: null as unknown as typeof listing.success,
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      required([...endpointAt, 'success'], 'success is a required field'),
     );
   });
 
@@ -316,7 +294,7 @@ describe('validateContract: required fields', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       required(
         ['groups', 'orders', 'endpoints', 'undefined /orders', 'method'],
-        'method is a required field',
+        'method is a required string',
       ),
     );
   });

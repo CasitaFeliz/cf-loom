@@ -28,13 +28,13 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
   ];
 }
 
-/** A value present is one of the allowed; a value absent is the required-field rule's finding. */
+/** A string present is one of the allowed; an absent one or a non-string is the field rules' finding. */
 function closedValueFailures(
   { at, endpoint }: LocatedEndpoint,
   { field, rule, allowed, noun }: ClosedValue,
 ): readonly DeclarationFailure[] {
   const value = endpoint[field];
-  if (value === undefined || allowed.includes(value)) {
+  if (typeof value !== 'string' || allowed.includes(value)) {
     return [];
   }
   return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${String(value)}`)];
