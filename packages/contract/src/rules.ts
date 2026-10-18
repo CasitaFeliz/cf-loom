@@ -32,3 +32,10 @@ export type LiteralNames<Names> = Names extends string
     ? never
     : Names
   : never;
+
+/** Whether a type is one value, not a union: a rule judges only what the author wrote exactly. */
+export type IsOneLiteral<Value> = [Value] extends [never]
+  ? false
+  : [Value] extends [LastOf<Value>]
+    ? true
+    : false;

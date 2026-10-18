@@ -5,7 +5,7 @@ import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule, Listed, LiteralNames } from './rules.ts';
+import type { DeclaredFieldsRule, IsOneLiteral, Listed, LiteralNames } from './rules.ts';
 import type { AddedStandardRejection, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
@@ -77,7 +77,12 @@ type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['metho
   ? { readonly input?: { readonly body?: 'A GET or HEAD Endpoint takes no body' } }
   : unknown;
 
-type SuccessBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'HEAD'
+type SuccessBodyRule<Declaration extends EndpointDeclaration> =
+  IsOneLiteral<Declaration['success']['status']> extends true
+    ? SuccessBodyOf<Declaration>
+    : unknown;
+
+type SuccessBodyOf<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'HEAD'
   ? { readonly success?: { readonly body?: 'A HEAD Endpoint answers no body' } }
   : Declaration['success']['status'] extends 204
     ? { readonly success?: { readonly body?: 'A 204 Success has no body' } }

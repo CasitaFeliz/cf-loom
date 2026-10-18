@@ -352,3 +352,37 @@ describe('defineEndpoint nested fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineEndpoint errors', () => {
+  test('an undeclared input key is the only error its declaration reports', () => {
+    const declare = () =>
+      defineEndpoint({
+        name: 'listOrders',
+        method: 'GET',
+        path: '/orders',
+        visibility: 'public',
+        description: 'Every order',
+        input: {
+          // @ts-expect-error querry is not a part of input
+          querry: z.object({ page: z.int() }),
+        },
+        success: { status: 200, body: z.array(orderBody) },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Success status outside the allowed ones is the only error its declaration reports', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        success: {
+          // @ts-expect-error 299 is not a Success status
+          status: 299,
+          body: z.array(orderBody),
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
