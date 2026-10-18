@@ -30,6 +30,18 @@ const permission = defineGuard({
   rejections: [forbidden],
 });
 
+const tenant = defineGuard({
+  name: 'tenant',
+  description: 'The request targets a tenant',
+  qualifier: z.string(),
+});
+
+const region = defineGuard({
+  name: 'region',
+  description: 'The request is served in a region',
+  qualifier: z.enum(['eu', 'us']),
+});
+
 const endpoint = {
   name: 'updateOrder',
   method: 'PUT',
@@ -47,6 +59,27 @@ describe('Attachments', () => {
     });
 
     expect(updateOrder.guards[1]).toEqual({ guard: permission, qualifier: ['orders:edit'] });
+  });
+
+  test('an Endpoint may list only qualified Attachments', () => {
+    const updateOrder = defineEndpoint({
+      ...endpoint,
+      guards: [{ guard: tenant, qualifier: 'acme' }],
+    });
+
+    expect(updateOrder.guards[0].guard).toBe(tenant);
+  });
+
+  test('an Endpoint may list two different qualified Guards', () => {
+    const updateOrder = defineEndpoint({
+      ...endpoint,
+      guards: [
+        { guard: tenant, qualifier: 'acme' },
+        { guard: region, qualifier: 'eu' },
+      ],
+    });
+
+    expect(updateOrder.guards[1].guard).toBe(region);
   });
 
   test('listing a Guard with a qualifier bare is a type error', () => {
@@ -106,18 +139,13 @@ describe('Attachments', () => {
   });
 
   test('a Guard attached twice is listed twice', () => {
-    const scoped = defineGuard({
-      name: 'scoped',
-      description: 'The client holds a scope',
-      qualifier: z.string(),
-    });
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error scoped is listed twice
+        // @ts-expect-error tenant is listed twice
         guards: [
-          { guard: scoped, qualifier: 'orders' },
-          { guard: scoped, qualifier: 'customers' },
+          { guard: tenant, qualifier: 'acme' },
+          { guard: tenant, qualifier: 'globex' },
         ],
       });
 

@@ -152,8 +152,8 @@ describe('defineGuard fields', () => {
       defineGuard({
         name: 'permission',
         description: 'The user holds a permission',
-        // @ts-expect-error scope is not a declared field
-        scope: z.array(z.string()),
+        // @ts-expect-error audience is not a declared field
+        audience: z.array(z.string()),
       });
 
     expect(declare).not.toThrow();

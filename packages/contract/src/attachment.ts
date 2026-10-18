@@ -30,6 +30,7 @@ type QualifierRule<Listed extends Guard> = Listed extends QualifiedGuard
     : `${Listed['name']} takes no qualifier`;
 
 type AttachedRule<Entry extends Attachment> = {
+  readonly guard: Entry['guard'];
   readonly qualifier: QualifierRule<Entry['guard']>;
 } & DeclaredFieldsRule<Entry, Attachment>;
 
