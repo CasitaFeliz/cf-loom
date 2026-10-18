@@ -145,3 +145,14 @@ describe('defineDefinitions nested fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a Definitions Package with a schema named kind', () => {
+  test('a Definitions Package freezes its schemas even when one is named kind', () => {
+    const kind = z.enum(['retail', 'wholesale']);
+
+    const definitions = defineDefinitions({ name: 'definitions', schemas: { kind } });
+
+    expect(Object.isFrozen(definitions.schemas)).toBe(true);
+    expect(definitions.schemas.kind).toBe(kind);
+  });
+});

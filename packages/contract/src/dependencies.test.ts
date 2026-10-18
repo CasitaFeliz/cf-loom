@@ -127,3 +127,22 @@ describe('a declared Dependency’s containers', () => {
     expect(paymentsDeps.endpoints.getPayment).toBe(getPayment);
   });
 });
+
+describe('a Dependency on an Endpoint named kind', () => {
+  test('a Dependency freezes its map of Endpoints even when an Endpoint is named kind', () => {
+    const kind = defineEndpoint({
+      name: 'kind',
+      method: 'GET',
+      path: '/kinds',
+      visibility: 'public',
+      description: 'Every kind of payment',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+    const provider = { ...payments, endpoints: { kind } } as const satisfies ContractPackage;
+
+    const paymentsDeps = defineDependencies(provider, { endpoints: [kind] });
+
+    expect(Object.isFrozen(paymentsDeps.endpoints)).toBe(true);
+    expect(paymentsDeps.endpoints.kind).toBe(kind);
+  });
+});

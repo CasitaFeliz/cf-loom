@@ -22,9 +22,9 @@ function frozenContainer(value: unknown): unknown {
   return Object.freeze(frozenFields(value));
 }
 
-/** Only plain objects without a `kind` are copied: a zod schema and a declaration keep identity. */
+/** Only plain objects not yet frozen are copied: a zod schema and a declaration keep identity. */
 function isPlainContainer(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null || 'kind' in value) {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) {
     return false;
   }
   return Object.getPrototypeOf(value) === Object.prototype;
