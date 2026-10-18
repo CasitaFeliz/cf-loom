@@ -8,7 +8,7 @@ Each declaration returns what was written, frozen and with its `kind`, keeping t
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input` and of a Guard's `demands`, and a Guard's `context` left out are none; an Endpoint's `guards` and `rejections` and a root's lists left out are empty. Every other field is required, `description` on Endpoints, Groups and Guards included.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input` and of a Guard's `demands`, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections` and a root's lists left out are empty. Every other field is required, `description` on Endpoints, Groups and Guards included.
 
 ## The root
 
@@ -158,6 +158,31 @@ export const apiKey = defineGuard({
 ```
 
 A Guard states what it demands from the request (`headers` or `query`; a body or path params are a type error), the Context it provides, and the Rejections it may answer. It holds no logic: its GuardHandler lives in each Service that attaches it. Its `name` keys its Context and must be unique across the Contract and every Definitions Package it lists; a duplicate fails `generate`.
+
+A Guard may build on others and take a Qualifier:
+
+```ts
+// definitions/src/definitions/guards/permission.guard.ts
+export const permissionCode = z.enum(['orders:read', 'orders:edit', 'customers:read']);
+
+export const permission = defineGuard({
+  name: 'permission',
+  description: 'The user holds every listed permission',
+  guards: [userToken],
+  qualifier: z.array(permissionCode).min(1),
+  rejections: [forbidden],
+});
+```
+
+```ts
+// an Endpoint lists every Guard itself, in order
+guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],
+```
+
+- `guards` lists the Guards whose Context its GuardHandler reads, one key per Guard by name.
+- `qualifier` is the schema of the value each Endpoint attaches the Guard with, its Qualifier, using the schemas allowed in a Contract (see [Not allowed in a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#not-allowed-in-a-contract)). The GuardHandler receives it; a Qualifier enforces nothing by itself and never travels on the wire.
+- An Endpoint's `guards` are its Attachments: a Guard without a `qualifier` is listed bare, one with a `qualifier` as `{ guard, qualifier }` with a value its schema accepts. Every Guard a listed Guard names appears earlier, and a Guard appears once; to require two permissions, the Qualifier is a list. Each of these is a type error, and `generate` repeats it, since a cast bypasses a type.
+- A check that needs the path params or the body, such as whether the Caller owns the order, belongs to the EndpointHandler, which may answer any of its Guards' Rejections.
 
 ## Events and Commands
 

@@ -11,7 +11,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 - Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The one exception is renaming an Endpoint (see [Elements](#elements)).
 - Additive guarantees that what is already deployed keeps working against the new version, not that a Consumer built on the new version works against an older Release. The Input and Success rules rely on this, so a Contract Package version is published when a Release implementing it is deployed; a Release whose Handlers are stubs counts (see [Stubs and the handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README). How the publish is wired into the deploy is the organization's.
 - With no Baseline, `check` has nothing to compare, so only what `generate` enforces applies (such as [Not allowed in a Contract](#not-allowed-in-a-contract)); the package's first version that is not a prerelease is 1.0.0.
-- A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no position until an Element uses it, so each is judged in all three positions and takes the strongest class; a Guard's demands are judged as Input, its Context is Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements.
+- A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no position until an Element uses it, so each is judged in all three positions and takes the strongest class; a Guard's demands are judged as Input, its Context, its `guards` and its `qualifier` are Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements, and its `generate` fails until its Endpoints list every Guard an adopted Guard now names and attach only Qualifiers its `qualifier` accepts.
 
 ### The Baseline
 
@@ -135,11 +135,12 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 ### Guards
 
 - An Endpoint's Input includes its Guards' demands (above) and its Rejections include those of every Guard it attaches.
+- An Endpoint lists every Guard a listed Guard names, before it (see [Guards](packages/contract/README.md#guards) in the contract README); listing it is attaching it, by the rules below.
 - Attaching a Guard follows the Input rules for what it demands (a required demand is Breaking; a header, the header rule above) and the Rejection rules for its Rejections; a Guard gaining a Rejection is Additive; detaching a Guard follows the same rules (usually Additive).
 
 ### Neutral
 
-Descriptions, examples, titles, a Rejection's message, key order, an Endpoint's `deprecatedAt` (see [Endpoints](SNAPSHOT.md#endpoints) in SNAPSHOT.md), which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards. Transport headers on a Message are not part of the Contract (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README). For Dependencies and Subscriptions see [below](#dependencies).
+Descriptions, examples, titles, a Rejection's message, key order, an Endpoint's `deprecatedAt` (see [Endpoints](SNAPSHOT.md#endpoints) in SNAPSHOT.md), which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), a Guard's `guards`, a Guard's `qualifier` and the Qualifier an Endpoint attaches a Guard with (who is admitted is the GuardHandler's decision, which the Check never judged; a change shows in the committed Snapshot's diff), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards, within what their `guards` allow. Transport headers on a Message are not part of the Contract (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README). For Dependencies and Subscriptions see [below](#dependencies).
 
 ### Not allowed in a Contract
 

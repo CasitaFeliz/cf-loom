@@ -40,7 +40,17 @@ export default handle(apiKey, async ({ headers }) => {
 });
 ```
 
-A GuardHandler receives only what its Guard demands. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them, before the Endpoint's own Input is validated: each Guard first validates only what it demands, answering the invalid-input Rejection if that fails, then its GuardHandler runs. The first Rejection stops the request, so an unauthenticated Caller learns nothing about the Endpoint's Input, and the EndpointHandler only runs with valid Input.
+A Guard that lists other Guards, or declares a `qualifier` (see [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#guards) in the contract README), receives their Context and its Qualifier too:
+
+```ts
+// src/guards/permission.handler.ts
+export default handle(permission, async (_demands, { userToken }, qualifier) => {
+  const granted = qualifier.every((code) => userToken.permissions.includes(code));
+  return granted ? admit() : reject(forbidden);
+});
+```
+
+A GuardHandler receives what its Guard demands, then the Context of the Guards it lists, one key per Guard, then its Qualifier when the Guard declares one, typed by the `qualifier` schema. Every attached Guard, declared locally or imported from a Definitions Package, gets its Handler at `src/guards/<guard-name>.handler.ts`, its name in kebab-case. Guards run in the order the Endpoint lists them, before the Endpoint's own Input is validated: each Guard first validates only what it demands, answering the invalid-input Rejection if that fails, then its GuardHandler runs with the Context of the Guards it lists and the Endpoint's Qualifier for it. The first Rejection stops the request, so an unauthenticated Caller learns nothing about the Endpoint's Input, and the EndpointHandler only runs with valid Input.
 
 ## Testing a Service's own code
 
@@ -50,7 +60,7 @@ A Handler returned by `handle()` is a function. Calling it runs the same checks 
 - A direct call returns the `Outcome` the Handler built (see [EndpointHandler](#endpointhandler)) plus the Rejection's `code`, `status` and `message`, resolved against cf-loom's defaults unless the call is given the root, `getOrderHandler(input, context, { contract })`, which resolves them as `serve` does (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README). A Rejection is told by its declaration: `outcome.rejection === notFound`.
 - A Message Handler rethrows what it throws and returns a Fault it returns unchanged, since `consume` answers no Caller.
 - An Endpoint or Guard stub returns the not-implemented Rejection, so a direct call's Outcome type includes it; a Message Handler stub throws, since `consume` never runs it.
-- A GuardHandler validates only what its Guard demands, and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
+- A GuardHandler validates what its Guard demands, the Context it is given against the `context` schemas of the Guards it lists and its Qualifier against its `qualifier` schema (`permissionHandler({}, { userToken }, ['orders:edit'])`), and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
 - The Context passed to an EndpointHandler is checked against each attached Guard's `context` schema.
 - A Message Handler takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`. In a direct call its meta (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README) defaults `headers` to `{}`.
 

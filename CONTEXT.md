@@ -59,15 +59,23 @@ A named set of Endpoints, for organizing code and documentation only; it adds no
 _Avoid_: router, family, tag
 
 **Guard**:
-A reusable requirement an Endpoint attaches explicitly: what it demands from the request, the Context it provides, and the Rejections it may answer instead of admitting the request.
+A reusable requirement an Endpoint attaches explicitly: what it demands from the request, the Guards whose Context it reads, the Context it provides, and the Rejections it may answer instead of admitting the request.
 _Avoid_: middleware, policy, interceptor
+
+**Attachment**:
+A Guard as an Endpoint lists it, with its Qualifier when the Guard declares one.
+_Avoid_: binding, usage
+
+**Qualifier**:
+The value an Endpoint attaches a Guard with, such as the permissions it requires. The Guard's GuardHandler receives it; it enforces nothing by itself.
+_Avoid_: argument, parameter, scope
 
 **Input**:
 What the Caller sends to an Endpoint: its path params, query params, headers and body, validated against the Endpoint's schemas.
 _Avoid_: arguments, payload
 
 **Context**:
-What the Guards of an Endpoint provide to its EndpointHandler, as opposed to the Input the Caller sent.
+What the Guards of an Endpoint provide to its EndpointHandler, and to the Guards that list them, as opposed to the Input the Caller sent.
 _Avoid_: locals, principal, session
 
 **Outcome**:

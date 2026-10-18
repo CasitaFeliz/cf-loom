@@ -65,7 +65,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 - An Endpoint declares its literal path and everything it requires. Groups only organize; they add no prefix and no Guards.
 - When two Endpoints with the same method match one URL, routing precedence decides (see [Over HTTP](#over-http)).
-- A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. Each Service writes its own GuardHandler, even for an imported Guard.
+- A Guard is attached explicitly, declared in the Contract or imported from a Definitions Package. A Guard may build on the Guards it lists and take a Qualifier from each Endpoint (see [Guards](packages/contract/README.md#guards) in the contract README). Each Service writes its own GuardHandler, even for an imported Guard.
 - An EndpointHandler receives the Caller's Input and the Context its Guards provided, and answers an Outcome.
 - A Service may serve routes outside its Contract. cf-loom does not see them: the Compatibility Check, shadowing included, covers only declared Endpoints, so a new Endpoint that takes a URL an outside route served is the organization's to catch. Whatever splits requests between them, the host framework or a gateway, must send every declared Endpoint, Retired ones included, to cf-loom; how `serve` hands back a request that is not its own belongs to each framework adapter.
 
