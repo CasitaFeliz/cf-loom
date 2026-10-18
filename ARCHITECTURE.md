@@ -16,8 +16,8 @@ All packages are released together with one version. `zod` and `@casitafeliz/loo
 
 Every package lays out its `src/` the same way:
 
-- `src/` holds only entry files: the files the package's `exports` and `bin` point at in `dist/` (`index.ts` for `.`, `internal/index.ts` for `./internal`, one folder per subpath entry such as `node-http/index.ts`, and `bin.ts`), each named, never by a wildcard subpath, and beside each entry the tests that exercise it as a whole (`src/readme.test.ts`). An entry folder holds its `index.ts` and those tests only. **(check)**
-- An entry file holds named re-exports only, `export { … } from` and `export type { … } from` (Biome's `noReExportAll` refuses `export *`), so an entry cannot grow logic; `bin.ts`, a CLI entry that calls the package's API, is the exception. **(check)**
+- `src/` holds only entry files: the files the package's `exports` and `bin` point at in `dist/` (`index.ts` for `.`, `internal/index.ts` for `./internal`, one folder per subpath entry such as `node-http/index.ts`, and `bin.ts`), each named, never by a wildcard subpath, with its source file in `src/`, and beside each entry the tests that exercise it as a whole (`src/readme.test.ts`). An entry folder holds its `index.ts` and those tests only. **(check)**
+- An entry file holds named re-exports only, `export { … } from` and `export type { … } from`, or the empty `export {}` of a package not yet written (Biome's `noReExportAll` refuses `export *`), so an entry cannot grow logic; `bin.ts`, a CLI entry that calls the package's API, is the exception. **(check)**
 - Every other file sits in a module folder named for its one responsibility, with an `index.ts` as the module's only seam; modules import each other only through it. **(check)**
 - Modules form one direction of dependencies, listed in the package's own ARCHITECTURE.md; no cycles.
 - No grab-bag folders (`utils`, `common`, `shared`, `helpers`; see C14 in [CODING_STANDARDS.md](CODING_STANDARDS.md)); a piece several modules need lives in the lowest module that owns its concept. **(check)**
