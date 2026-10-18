@@ -241,6 +241,25 @@ describe('validateContract: listed Definitions Packages', () => {
     );
   });
 
+  test('a Definitions Package with Standard Rejections listed twice fails only as a duplicate', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
+    });
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: [definitions, definitions],
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['definitions', 'definitions', 'name'],
+        'duplicate-definitions-name',
+        'A Contract lists each Definitions Package once, under a name of its own: definitions',
+      ),
+    );
+  });
+
   test('two listed Definitions Packages with one name fail', () => {
     const first = defineDefinitions({ name: 'definitions' });
     const second = defineDefinitions({ name: 'definitions' });

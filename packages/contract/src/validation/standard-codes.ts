@@ -137,9 +137,12 @@ export function redefinitionFailures(
     );
 }
 
-/** At most one listed Definitions Package declares Standard Rejections. */
+/** At most one listed Definitions Package declares Standard Rejections; one listed twice is one. */
 export function onceFailures({ listedDefinitions }: Declarations): readonly DeclarationFailure[] {
-  const declaring = listedDefinitions.filter(({ definitions: listed }) =>
+  const once = [
+    ...new Map(listedDefinitions.map((located) => [located.definitions, located])).values(),
+  ];
+  const declaring = once.filter(({ definitions: listed }) =>
     Object.values(listed.standardRejections ?? {}).some((declaration) => declaration !== undefined),
   );
   const [first, ...others] = declaring;
