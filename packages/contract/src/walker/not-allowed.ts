@@ -4,7 +4,7 @@ import type { Walked } from './walked.ts';
 /** A construct as the Not allowed list writes it, and what the documents name instead. */
 export type Refused = { readonly construct: string; readonly instead?: string };
 
-const nullableInstead = 'nullable';
+const nullableInstead = '.nullable()';
 const dynamicKeysInstead = 'z.record()';
 
 /** Every construct the walker refuses by name, so each is written once. */

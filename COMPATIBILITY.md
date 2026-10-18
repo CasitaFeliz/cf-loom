@@ -99,7 +99,7 @@ An Open Enum or Open Union gives its readers a type with an Unknown case, so the
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is compared as an enum, and `T | null` as a nullable `T`, before these rules apply. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
+A union of literals is compared as an enum before these rules apply. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
 
 ### Constraints
 

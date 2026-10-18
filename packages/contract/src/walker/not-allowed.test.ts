@@ -116,9 +116,17 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.passthrough()', z.object({}).passthrough(), refused(looseObject, 'z.record()')],
     ['z.looseObject()', z.looseObject({}), refused(looseObject, 'z.record()')],
     ['.catchall()', z.object({}).catchall(z.string()), refused('.catchall()', 'z.record()')],
-    ['a standalone z.null()', z.null(), refused('z.null()', 'nullable')],
-    ['z.undefined()', z.undefined(), refused('z.undefined()', 'nullable')],
-    ['z.literal(null)', z.literal(null), refused('z.literal(null)', 'nullable')],
+    ['a standalone z.null()', z.null(), refused('z.null()', '.nullable()')],
+    [
+      'a union with a z.null() option',
+      z.union([z.string(), z.null()]),
+      {
+        kind: 'not-allowed',
+        failures: [{ at: ['body', 'options', 1], construct: 'z.null()', instead: '.nullable()' }],
+      },
+    ],
+    ['z.undefined()', z.undefined(), refused('z.undefined()', '.nullable()')],
+    ['z.literal(null)', z.literal(null), refused('z.literal(null)', '.nullable()')],
   ])('%s fails with what to use instead', (_name, schema, failure) => {
     expect(walkBody(schema)).toEqual(failure);
   });
