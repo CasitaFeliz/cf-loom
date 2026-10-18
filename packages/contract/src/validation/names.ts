@@ -1,7 +1,7 @@
 import type { Endpoint } from '../endpoint.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations, LocatedEndpoint, LocatedGroup } from './declarations.ts';
-import { listOf } from './declarations.ts';
+import { endpointAt, listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows, type Grammar, kebabCase, upperSnakeCase } from './grammars.ts';
 import { identityOf } from './identity.ts';
@@ -126,7 +126,7 @@ function membershipFailures(
   if (first === undefined) {
     return [];
   }
-  const at = [...located.at, 'endpoints', identityOf(endpoint.method, endpoint.path)];
+  const at = endpointAt(located.at, endpoint);
   const message = `An Endpoint belongs to exactly one Group: ${String(endpoint.name)} is also in ${String(first.group.name)}`;
   return [failure(at, 'group-membership', message)];
 }

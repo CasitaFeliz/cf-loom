@@ -87,6 +87,26 @@ export function declarationsOf(root: Root): Declarations {
   };
 }
 
+/** Where an Endpoint sits under its Group: the one place that spells an Endpoint's location. */
+export function endpointAt(groupAt: Path, endpoint: Endpoint): Path {
+  return [...groupAt, 'endpoints', identityOf(endpoint.method, endpoint.path)];
+}
+
+/** Whether a value is written as a Standard Rejection declaration is: a plain object. */
+export function isStandardRejectionDeclaration(
+  value: unknown,
+): value is StandardRejectionDeclaration<number> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The `standardRejections` entries of a Definitions Package, none when the map is no object. */
+export function standardRejectionEntriesOf(
+  definitions: Definitions,
+): readonly (readonly [string, unknown])[] {
+  const map: unknown = definitions.standardRejections;
+  return isStandardRejectionDeclaration(map) ? Object.entries(map) : [];
+}
+
 /** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
 export function attachedGuardOf(attachment: Attachment): Guard | undefined {
   if (isGuard(attachment)) {
@@ -120,8 +140,9 @@ function standardRejectionsOf({
   at,
   definitions,
 }: LocatedDefinitions): readonly LocatedStandardRejection[] {
-  const declared: object = definitions.standardRejections ?? {};
-  const entries = Object.entries(declared).filter(([, declaration]) => isObject(declaration));
+  const entries = standardRejectionEntriesOf(definitions).filter(([, declaration]) =>
+    isStandardRejectionDeclaration(declaration),
+  );
   return entries.map(([name, declaration]) => ({
     at: [...at, 'standardRejections', name],
     name,
@@ -150,10 +171,7 @@ function groupsOf(root: Root): readonly LocatedGroup[] {
 function endpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
   return listOf(group.endpoints)
     .filter(isEndpoint)
-    .map((endpoint) => ({
-      at: [...at, 'endpoints', identityOf(endpoint.method, endpoint.path)],
-      endpoint,
-    }));
+    .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint }));
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependencies[] {
@@ -208,8 +226,4 @@ function rejectionsOf(
     at: ['rejections', String(rejection.code)],
     rejection,
   }));
-}
-
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
 }

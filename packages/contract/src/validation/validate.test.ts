@@ -405,6 +405,38 @@ describe('validateContract: the README’s examples', () => {
     ]);
   });
 
+  test('a Contract of 4000 Endpoints validates fast', () => {
+    const endpoints = Array.from({ length: 4000 }, (_, index) =>
+      defineEndpoint({
+        name: `getItem${index}`,
+        method: 'GET',
+        path: `/items-${index}/:itemId`,
+        visibility: 'public',
+        description: 'One item',
+        guards: [apiKey],
+        input: { params: z.object({ itemId: z.uuid() }), query: z.object({ page: z.int() }) },
+        success: { status: 200, body: z.object({ id: z.uuid() }) },
+        rejections: [notFound, orderLocked],
+      }),
+    );
+    const [first, ...rest] = endpoints;
+    const items = defineGroup({
+      name: 'items',
+      description: 'Items',
+      endpoints: [first!, ...rest],
+    });
+
+    const started = performance.now();
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [items] }),
+      noOrigin,
+    );
+    const elapsed = performance.now() - started;
+
+    expect(validated.kind).toBe('valid');
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   test('the same root validates to the same result twice', () => {
     const first = validateContract(contract, noOrigin);
     const second = validateContract(contract, noOrigin);

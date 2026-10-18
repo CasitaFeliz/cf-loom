@@ -80,10 +80,9 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
 
 /** The rules that read the walked nodes, judged on every schema that walked. */
 function schemaFailures(declarations: Declarations, nodes: Nodes): readonly DeclarationFailure[] {
-  const judged = { declarations, nodes };
   return [
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
-    ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, judged)),
+    ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
     ...rejectionBodyFailures(declarations, nodes),
     ...textFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),

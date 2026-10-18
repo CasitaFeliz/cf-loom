@@ -1,3 +1,4 @@
+import type * as core from 'zod/v4/core';
 import type { Path, SchemaNode } from '../walker/nodes.ts';
 import type { WalkedSchemas } from '../walker/walk.ts';
 import type { LocatedSchema } from '../walker/walked.ts';
@@ -37,6 +38,9 @@ export type Slot = {
   readonly role: 'snapshot' | 'compared';
 };
 
+/** A slot that holds a zod schema, so the walk can be given it. */
+export type SchemaSlot = Slot & { readonly value: core.$ZodType };
+
 /** A slot whose schema walked to a node. */
 export type WalkedSlot = Slot & { readonly node: SchemaNode };
 
@@ -45,7 +49,7 @@ export type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
 
 /** Every slot of a root that holds a schema, and the slots a cast filled with no schema. */
 export type SchemaSlots = {
-  readonly slots: readonly Slot[];
+  readonly slots: readonly SchemaSlot[];
   readonly failures: readonly DeclarationFailure[];
 };
 
@@ -78,21 +82,27 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
 }
 
 /** The schemas to walk, one per slot, in slot order. */
-export function locatedSchemasOf(slots: readonly Slot[]): readonly LocatedSchema[] {
-  return slots.filter(holdsSchema).map(({ at, value }) => ({ at, schema: value }));
+export function locatedSchemasOf(slots: readonly SchemaSlot[]): readonly LocatedSchema[] {
+  return slots.map(({ at, value }) => ({ at, schema: value }));
 }
 
 /** The walked nodes by owner and part, zipped with the slots the walk was given, in order. */
-export function nodesOf(slots: readonly Slot[], walked: WalkedSchemas): Nodes {
+export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): Nodes {
   const walkedSlots: WalkedSlot[] = [];
+  const nodesByOwner = new Map<object, Map<Part, SchemaNode>>();
   for (const [index, slot] of slots.entries()) {
     const location = walked.located[index];
-    if (location?.walked.kind === 'walked') {
-      walkedSlots.push({ ...slot, node: location.walked.value });
+    if (location?.walked.kind !== 'walked') {
+      continue;
     }
+    walkedSlots.push({ ...slot, node: location.walked.value });
+    const parts = nodesByOwner.get(slot.owner) ?? new Map<Part, SchemaNode>();
+    if (!parts.has(slot.part)) {
+      parts.set(slot.part, location.walked.value);
+    }
+    nodesByOwner.set(slot.owner, parts);
   }
-  const nodeOf = (owner: object, part: Part) =>
-    walkedSlots.find((slot) => slot.owner === owner && slot.part === part)?.node;
+  const nodeOf = (owner: object, part: Part) => nodesByOwner.get(owner)?.get(part);
   return { slots: walkedSlots, nodeOf, defs: walked.defs };
 }
 
@@ -160,6 +170,6 @@ function isFilled(slot: Slot): boolean {
   return slot.value !== undefined;
 }
 
-function holdsSchema(slot: Slot): slot is Slot & { readonly value: LocatedSchema['schema'] } {
+function holdsSchema(slot: Slot): slot is SchemaSlot {
   return typeof slot.value === 'object' && slot.value !== null && '_zod' in slot.value;
 }

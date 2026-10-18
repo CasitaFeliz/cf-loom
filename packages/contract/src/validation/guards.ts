@@ -3,7 +3,7 @@ import type { Attachment } from '../attachment.ts';
 import type { Guard } from '../guard.ts';
 import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { Declarations, LocatedEndpoint, LocatedGuard } from './declarations.ts';
+import type { LocatedEndpoint, LocatedGuard } from './declarations.ts';
 import { attachedGuardOf, listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
@@ -57,11 +57,11 @@ export function attachmentFailures({
 /** A Qualifier is a value its schema accepts whose objects hold only the keys it declares. */
 export function qualifierFailures(
   located: LocatedEndpoint,
-  judged: { readonly declarations: Declarations; readonly nodes: Nodes },
+  nodes: Nodes,
 ): readonly DeclarationFailure[] {
   return listedOf(located.at, located.endpoint)
     .filter(isQualified)
-    .flatMap((qualified) => valueFailures(qualified, judged));
+    .flatMap((qualified) => valueFailures(qualified, nodes));
 }
 
 function listedOf(at: Path, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
@@ -74,7 +74,7 @@ function listedOf(at: Path, endpoint: LocatedEndpoint['endpoint']): readonly Lis
 
 function valueFailures(
   { at, attachment, guard }: Qualified,
-  { nodes }: { readonly declarations: Declarations; readonly nodes: Nodes },
+  nodes: Nodes,
 ): readonly DeclarationFailure[] {
   const node = nodes.nodeOf(guard, 'qualifier');
   if (guard.qualifier === undefined || node === undefined || attachment.qualifier === undefined) {
