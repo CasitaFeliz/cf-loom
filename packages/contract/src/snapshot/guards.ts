@@ -23,6 +23,7 @@ function guardSnapshotOf(
 ): GuardSnapshot {
   return {
     origin: declaredOriginOf(packages, (definitions) => (definitions.guards ?? []).includes(guard)),
+    description: guard.description,
     guards: (guard.guards ?? []).map(({ name }) => name),
     qualifier: nodeOf(guard, 'qualifier'),
     demands: {

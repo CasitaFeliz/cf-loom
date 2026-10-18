@@ -117,6 +117,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 ```json
 "apiKey": {
   "origin": "local",
+  "description": "An API key per client",
   "guards": [],
   "qualifier": null,
   "demands": { "headers": {}, "query": null },
@@ -125,7 +126,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-`guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README). A Service's Snapshot writes the Guards its Endpoints attach, directly or through a Guard's `guards`; a listed Definitions Package's other Guards stay out, while a Definitions Package's own Snapshot writes every Guard it declares.
+`description` is Neutral. `guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README). A Service's Snapshot writes the Guards its Endpoints attach, directly or through a Guard's `guards`; a listed Definitions Package's other Guards stay out, while a Definitions Package's own Snapshot writes every Guard it declares.
 
 ## Rejection codes
 

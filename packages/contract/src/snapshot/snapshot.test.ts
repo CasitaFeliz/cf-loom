@@ -391,6 +391,7 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.guards).toEqual({
       apiKey: {
         origin: 'local',
+        description: 'An API key per client',
         guards: [],
         qualifier: null,
         demands: {
@@ -411,6 +412,7 @@ describe('snapshotOf: a Service', () => {
       userToken: expect.objectContaining({ origin: '@org/definitions@4.2.0', guards: [] }),
       permission: {
         origin: '@org/definitions@4.2.0',
+        description: 'The user holds every listed permission',
         guards: ['userToken'],
         qualifier: {
           type: 'array',

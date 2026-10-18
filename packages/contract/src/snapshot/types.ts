@@ -40,6 +40,7 @@ export type EndpointSnapshot = {
 /** A Guard: what it demands, the Guards it reads, its Qualifier's schema and its codes. */
 export type GuardSnapshot = {
   readonly origin: Origin;
+  readonly description: string;
   readonly guards: readonly string[];
   readonly qualifier: SchemaNode | null;
   readonly demands: { readonly headers: ObjectNode | null; readonly query: ObjectNode | null };
