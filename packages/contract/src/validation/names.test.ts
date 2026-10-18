@@ -224,6 +224,38 @@ describe('validateContract: unique names and identities', () => {
   });
 });
 
+describe('validateContract: listed Definitions Packages', () => {
+  test('a Definitions Package listed twice fails', () => {
+    const definitions = defineDefinitions({ name: 'definitions' });
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: [definitions, definitions],
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['definitions', 'definitions', 'name'],
+        'duplicate-definitions-name',
+        'A Contract lists each Definitions Package once, under a name of its own: definitions',
+      ),
+    );
+  });
+
+  test('two listed Definitions Packages with one name fail', () => {
+    const first = defineDefinitions({ name: 'definitions' });
+    const second = defineDefinitions({ name: 'definitions' });
+    const contract = defineContract({ name: 'orders-service', definitions: [first, second] });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['definitions', 'definitions', 'name'],
+        'duplicate-definitions-name',
+        'A Contract lists each Definitions Package once, under a name of its own: definitions',
+      ),
+    );
+  });
+});
+
 describe('validateContract: Groups', () => {
   test('an Endpoint listed in two Groups fails', () => {
     expect(validateGroups([aGroup('orders', [listOrders]), aGroup('sales', [listOrders])])).toEqual(

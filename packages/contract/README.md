@@ -88,7 +88,7 @@ export const ordersGroup = defineGroup({
 });
 ```
 
-A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract; a duplicate fails `generate`.
+A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract, and a Contract lists each Definitions Package once, under a name of its own; a duplicate of either fails `generate`.
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts

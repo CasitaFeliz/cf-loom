@@ -1,22 +1,23 @@
 import type { Endpoint } from '../endpoint.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations, LocatedEndpoint, LocatedGroup } from './declarations.ts';
-import { endpointAt, listOf } from './declarations.ts';
+import { endpointAt } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows, type Grammar, kebabCase, upperSnakeCase } from './grammars.ts';
 import { identityOf } from './identity.ts';
 import { isCanonicalPath } from './paths.ts';
+import { listOf, textOf } from './written.ts';
 
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
 type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
 
 /** Every name of a root follows the grammar of its kind; a name that is no string is another rule's. */
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, groups, definitions, endpoints, guards, rejections, standardRejections } =
+  const { root, groups, listedDefinitions, endpoints, guards, rejections, standardRejections } =
     declarations;
   const kebab = [
     { at: ['name'], value: root.name, noun: rootNoun(root.kind) },
-    ...named(definitions, (listed) => listed.definitions.name, 'A Definitions Package name'),
+    ...named(listedDefinitions, (listed) => listed.definitions.name, 'A Definitions Package name'),
     ...named(groups, (listed) => listed.group.name, 'A Group name'),
   ];
   const camel = [
@@ -34,9 +35,10 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   ];
 }
 
-/** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
+/** Definitions Package and Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
 export function uniquenessFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
+    ...uniqueDefinitionsNames(declarations),
     ...uniqueGroupNames(declarations),
     ...uniqueEndpointNames(declarations),
     ...uniqueEndpointIdentities(declarations),
@@ -45,23 +47,37 @@ export function uniquenessFailures(declarations: Declarations): readonly Declara
   ];
 }
 
+function uniqueDefinitionsNames({
+  listedDefinitions,
+}: Declarations): readonly DeclarationFailure[] {
+  const nameOf = (located: Declarations['listedDefinitions'][number]) =>
+    textOf(located.definitions.name);
+  return repeated(listedDefinitions, nameOf).map(({ at, definitions }) =>
+    failure(
+      [...at, 'name'],
+      'duplicate-definitions-name',
+      `A Contract lists each Definitions Package once, under a name of its own: ${textOf(definitions.name)}`,
+    ),
+  );
+}
+
 function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure[] {
-  return repeated(groups, (located) => String(located.group.name)).map(({ at, group }) =>
+  return repeated(groups, (located) => textOf(located.group.name)).map(({ at, group }) =>
     failure(
       [...at, 'name'],
       'duplicate-group-name',
-      `A Group name is unique in the Contract: ${String(group.name)}`,
+      `A Group name is unique in the Contract: ${textOf(group.name)}`,
     ),
   );
 }
 
 function uniqueEndpointNames({ endpoints }: Declarations): readonly DeclarationFailure[] {
   const active = endpoints.filter((located) => located.endpoint.lifecycle !== 'retired');
-  return repeated(active, (located) => String(located.endpoint.name)).map(({ at, endpoint }) =>
+  return repeated(active, (located) => textOf(located.endpoint.name)).map(({ at, endpoint }) =>
     failure(
       [...at, 'name'],
       'duplicate-endpoint-name',
-      `An Endpoint name is unique among the Endpoints that are not Retired: ${String(endpoint.name)}`,
+      `An Endpoint name is unique among the Endpoints that are not Retired: ${textOf(endpoint.name)}`,
     ),
   );
 }
@@ -78,23 +94,23 @@ function uniqueEndpointIdentities({ endpoints }: Declarations): readonly Declara
 }
 
 function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure[] {
-  return repeated(guards, (located) => String(located.guard.name)).map(({ at, guard }) =>
+  return repeated(guards, (located) => textOf(located.guard.name)).map(({ at, guard }) =>
     failure(
       [...at, 'name'],
       'duplicate-guard-name',
-      `A Guard name is unique across the Contract and its Definitions Packages: ${String(guard.name)}`,
+      `A Guard name is unique across the Contract and its Definitions Packages: ${textOf(guard.name)}`,
     ),
   );
 }
 
 function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFailure[] {
   const providerOf = (located: Declarations['dependencies'][number]) =>
-    String(located.dependencies.provider);
+    textOf(located.dependencies.provider);
   return repeated(dependencies, providerOf).map(({ at, dependencies: listed }) =>
     failure(
       at,
       'duplicate-dependency',
-      `A Contract lists one Dependency per Provider: ${String(listed.provider)}`,
+      `A Contract lists one Dependency per Provider: ${textOf(listed.provider)}`,
     ),
   );
 }
@@ -127,7 +143,7 @@ function membershipFailures(
     return [];
   }
   const at = endpointAt(located.at, endpoint);
-  const message = `An Endpoint belongs to exactly one Group: ${String(endpoint.name)} is also in ${String(first.group.name)}`;
+  const message = `An Endpoint belongs to exactly one Group: ${textOf(endpoint.name)} is also in ${textOf(first.group.name)}`;
   return [failure(at, 'group-membership', message)];
 }
 
@@ -155,7 +171,7 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
     ({ value }) => typeof value === 'string' && !follows(grammar, value),
   );
   return breaking.map(({ at, value, noun }) =>
-    failure(at, 'name-grammar', `${noun} is ${grammar.name}: ${String(value)}`),
+    failure(at, 'name-grammar', `${noun} is ${grammar.name}: ${textOf(value)}`),
   );
 }
 
