@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { LowerCaseHeaderNames } from './http.ts';
 import type { Rejection } from './rejection.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 
 /** What a Guard may demand from a request: headers and query params, never the body or the path. */
 type Demands = {
@@ -32,7 +33,9 @@ type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
 
 /** Declares a reusable requirement that Endpoints attach explicitly. */
 export function defineGuard<const Declaration extends GuardDeclaration>(
-  declaration: Declaration & DemandedHeadersRule<Declaration>,
+  declaration: Declaration &
+    DemandedHeadersRule<Declaration> &
+    NoInfer<DeclaredFieldsRule<Declaration, GuardDeclaration>>,
 ): Guard<Declaration> {
   return Object.freeze({ ...declaration, kind: 'guard' });
 }

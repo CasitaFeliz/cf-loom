@@ -35,3 +35,18 @@ describe('defineGroup', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineGroup fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      defineGroup({
+        name: 'orders',
+        description: 'Order lifecycle',
+        endpoints: [listOrders],
+        // @ts-expect-error a Group adds no prefix
+        prefix: '/orders',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});

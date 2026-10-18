@@ -90,3 +90,20 @@ describe('defineApplication', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('the roots’ fields', () => {
+  test('an undeclared field on a Contract is a type error', () => {
+    // @ts-expect-error events come with the messaging declarations
+    const declare = () => defineContract({ name: 'orders-service', events: [] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared field on an Application is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error an Application offers no Endpoints
+      defineApplication({ name: 'web-admin', dependencies: [], groups: [] });
+
+    expect(declare).not.toThrow();
+  });
+});

@@ -103,3 +103,13 @@ describe('defineDependencies', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineDependencies fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error a Dependency selects Endpoints and Events only
+      defineDependencies(payments, { endpoints: [getPayment], commands: [] });
+
+    expect(declare).not.toThrow();
+  });
+});

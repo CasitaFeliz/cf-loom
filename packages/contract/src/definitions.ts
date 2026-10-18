@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { Guard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 import type { StandardRejectionDeclarations } from './standard-rejections.ts';
 
 /** What an author writes to declare a Definitions Package; an absent list is empty. */
@@ -18,7 +19,7 @@ export type Definitions<Declaration extends DefinitionsDeclaration = Definitions
 
 /** Declares the Guards, schemas and Rejections several Contracts share, and their Standard Rejections. */
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(
-  declaration: Declaration,
+  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, DefinitionsDeclaration>>,
 ): Definitions<Declaration> {
   return Object.freeze({ ...declaration, kind: 'definitions' });
 }

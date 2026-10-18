@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { RejectionStatus } from './http.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 
 /** What an author writes to declare a Rejection; a Rejection without `body` has none. */
 type RejectionDeclaration = {
@@ -15,7 +16,7 @@ export type Rejection<Declaration extends RejectionDeclaration = RejectionDeclar
 
 /** Declares a Rejection once, to be referenced wherever it can be answered. */
 export function defineRejection<const Declaration extends RejectionDeclaration>(
-  declaration: Declaration,
+  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, RejectionDeclaration>>,
 ): Rejection<Declaration> {
   return Object.freeze({ ...declaration, kind: 'rejection' });
 }

@@ -67,3 +67,13 @@ describe('defineDefinitions', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineDefinitions fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error a Definitions Package owns no Endpoints
+      defineDefinitions({ name: 'definitions', endpoints: [] });
+
+    expect(declare).not.toThrow();
+  });
+});

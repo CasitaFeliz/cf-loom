@@ -29,3 +29,13 @@ describe('defineRejection', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineRejection fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error bogus is not a field of a Rejection
+      defineRejection({ code: 'GONE', status: 410, message: 'Gone', bogus: 1 });
+
+    expect(declare).not.toThrow();
+  });
+});

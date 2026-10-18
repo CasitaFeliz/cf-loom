@@ -1,5 +1,6 @@
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
 type ExportedVisibility = Exclude<Visibility, 'private'>;
@@ -70,7 +71,7 @@ export function defineDependencies<
   const Chosen extends Selection<Provider>,
 >(
   provider: Provider,
-  selection: Chosen,
+  selection: Chosen & NoInfer<DeclaredFieldsRule<Chosen, Selection<Provider>>>,
 ): Dependencies<
   EndpointsByName<Selected<Chosen, 'endpoints'>>,
   EventsByName<Selected<Chosen, 'events'>>

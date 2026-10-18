@@ -2,6 +2,7 @@ import type { Definitions } from './definitions.ts';
 import type { Dependencies } from './dependencies.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Group } from './group.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 
 /** What a Service's root lists: exactly what its Snapshot describes; an absent list is empty. */
 type ContractDeclaration = {
@@ -35,14 +36,14 @@ export type Application<Declaration extends ApplicationDeclaration = Application
 
 /** Declares a Service's Contract from everything it offers, keeps and requires. */
 export function defineContract<const Declaration extends ContractDeclaration>(
-  declaration: Declaration,
+  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ContractDeclaration>>,
 ): Contract<Declaration> {
   return Object.freeze({ ...declaration, kind: 'contract' });
 }
 
 /** Declares an Application's Contract, which holds only Dependencies. */
 export function defineApplication<const Declaration extends ApplicationDeclaration>(
-  declaration: Declaration,
+  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ApplicationDeclaration>>,
 ): Application<Declaration> {
   return Object.freeze({ ...declaration, kind: 'application' });
 }

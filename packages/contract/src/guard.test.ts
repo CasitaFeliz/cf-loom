@@ -105,3 +105,17 @@ describe('defineGuard', () => {
     >();
   });
 });
+
+describe('defineGuard fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'permission',
+        description: 'The user holds a permission',
+        // @ts-expect-error a Qualifier is not declared yet
+        qualifier: z.array(z.string()),
+      });
+
+    expect(declare).not.toThrow();
+  });
+});

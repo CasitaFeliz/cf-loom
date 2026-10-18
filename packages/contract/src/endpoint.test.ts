@@ -246,3 +246,21 @@ describe('defineEndpoint', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('defineEndpoint fields', () => {
+  test('an undeclared field is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        name: 'listOrders',
+        method: 'GET',
+        path: '/orders',
+        visibility: 'public',
+        description: 'Every order',
+        success: { status: 200, body: orderBody },
+        // @ts-expect-error group is not a field of an Endpoint
+        group: 'orders',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
