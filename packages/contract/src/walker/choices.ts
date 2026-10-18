@@ -84,7 +84,7 @@ function taggedVariant(
   }
   const node = variant.value;
   if (!isTaggable(node)) {
-    return notAllowed(at, refused.objectlessVariant);
+    throw new Error('A variant already found to be an object walked to another node: a bug.');
   }
   const literals = [...(values ?? [])];
   if (literals.length === 0 || !literals.every(isJsonPrimitive)) {

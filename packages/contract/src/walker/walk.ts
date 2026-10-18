@@ -25,7 +25,8 @@ export type WalkedSchemas =
     }
   | { readonly kind: 'not-allowed'; readonly failures: readonly [NotAllowed, ...NotAllowed[]] };
 
-type Context = {
+/** What every schema of one walk shares: how to walk inside, the recursion, and origins. */
+type WalkState = {
   readonly walker: Walker;
   readonly recursion: Recursion;
   readonly originOf: OriginOf;
@@ -38,10 +39,10 @@ type Context = {
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
   const recursion = startRecursion();
   const walker: Walker = {
-    schema: (schema, at) => walkSchema(schema, at, context),
-    field: (schema, at) => walkField(schema, at, context),
+    schema: (schema, at) => walkSchema(schema, at, state),
+    field: (schema, at) => walkField(schema, at, state),
   };
-  const context: Context = { walker, recursion, originOf };
+  const state: WalkState = { walker, recursion, originOf };
   const nodes = allWalked(located.map(({ at, schema }) => walker.schema(schema, at)));
   if (nodes.kind === 'not-allowed') {
     return { kind: 'not-allowed', failures: distinctFailures(nodes.failures) };
@@ -49,42 +50,42 @@ export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginO
   return { kind: 'walked', nodes: nodes.value, defs: recursion.defs() };
 }
 
-function walkSchema(schema: core.$ZodType, at: Path, context: Context): Walked {
-  const metadata = ownMetadata(schema, at, context.originOf);
+function walkSchema(schema: core.$ZodType, at: Path, state: WalkState): Walked {
+  const metadata = ownMetadata(schema, at, state.originOf);
   const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
-  return context.recursion.within({ schema, at, id }, () =>
-    annotatedBy(walkDefinition(schema, at, context.walker), metadata),
+  return state.recursion.within({ schema, at, id }, () =>
+    annotatedBy(walkDefinition(schema, at, state.walker), metadata),
   );
 }
 
 /** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
-function walkField(schema: core.$ZodType, at: Path, context: Context): Walked<Field> {
+function walkField(schema: core.$ZodType, at: Path, state: WalkState): Walked<Field> {
   const def = schema._zod.def as Def;
   if (def.type === 'optional') {
-    const inner = walkSchema(def.innerType, at, context);
-    return optionalField(throughWrapper({ schema, at }, inner, context));
+    const inner = walkSchema(def.innerType, at, state);
+    return optionalField(throughWrapper({ schema, at }, inner, state));
   }
   if (def.type === 'nonoptional') {
-    const inner = walkRequired(def.innerType, at, context);
-    return requiredField(throughWrapper({ schema, at }, inner, context));
+    const inner = walkRequired(def.innerType, at, state);
+    return requiredField(throughWrapper({ schema, at }, inner, state));
   }
-  return requiredField(walkSchema(schema, at, context));
+  return requiredField(walkSchema(schema, at, state));
 }
 
-function walkRequired(schema: core.$ZodType, at: Path, context: Context): Walked {
+function walkRequired(schema: core.$ZodType, at: Path, state: WalkState): Walked {
   const def = schema._zod.def as Def;
   if (def.type !== 'optional') {
-    return walkSchema(schema, at, context);
+    return walkSchema(schema, at, state);
   }
-  return throughWrapper({ schema, at }, walkSchema(def.innerType, at, context), context);
+  return throughWrapper({ schema, at }, walkSchema(def.innerType, at, state), state);
 }
 
 /** A field's wrapper says what any schema does: its checks and its own metadata apply. */
-function throughWrapper(wrapper: LocatedSchema, inner: Walked, context: Context): Walked {
+function throughWrapper(wrapper: LocatedSchema, inner: Walked, state: WalkState): Walked {
   const { schema, at } = wrapper;
   const checks = checksOf(schema);
   const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
-  return annotatedBy(checked, ownMetadata(schema, at, context.originOf));
+  return annotatedBy(checked, ownMetadata(schema, at, state.originOf));
 }
 
 function requiredField(result: Walked): Walked<Field> {

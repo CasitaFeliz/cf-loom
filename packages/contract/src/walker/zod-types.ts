@@ -50,6 +50,10 @@ export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], 
   }
 }
 
+/**
+ * The node or refusal of each zod type; a type zod adds after this walker was written reaches
+ * the end and is refused by its name, never walked as something it is not.
+ */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the node or refusal of each zod type
 function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
   const def = schema._zod.def as Def;
