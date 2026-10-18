@@ -113,6 +113,7 @@ describe('walkSchemas: the Not allowed list', () => {
       z.stringFormat('hex', () => true),
       'z.stringFormat("hex")',
     ],
+    ['a regex-built format with its own regex', z.stringFormat('hex', /^[a-f]+$/), customPattern],
     ['z.url({ normalize })', z.url({ normalize: true }), 'z.url({ normalize })'],
     ['z.int32()', z.int32(), 'z.int32()'],
     ['z.uint32()', z.uint32(), 'z.uint32()'],

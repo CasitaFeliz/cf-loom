@@ -85,6 +85,33 @@ describe('walkSchemas: strings', () => {
     );
   });
 
+  test.each([
+    ['z.hex()', z.hex(), 'hex'],
+    ['z.hostname()', z.hostname(), 'hostname'],
+    ['z.currencyCode()', z.currencyCode(), 'currency_code'],
+    ['z.hash()', z.hash('sha256'), 'sha256_hex'],
+  ])('%s walked by the built package is its format', (_name, schema, format) => {
+    expect(built.walkSchemas([{ at: ['body'], schema }], () => undefined)).toEqual(
+      walkedTo({ type: 'string', format }),
+    );
+  });
+
+  test.each([
+    ['zm.hex()', zm.hex(), 'hex'],
+    ['zm.hostname()', zm.hostname(), 'hostname'],
+    ['zm.currencyCode()', zm.currencyCode(), 'currency_code'],
+    ['zm.hash()', zm.hash('sha256'), 'sha256_hex'],
+  ])('a zod/mini %s is its format', (_name, schema, format) => {
+    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
+  });
+
+  test('a regex-built format is judged by its pattern alone, whatever function checks it', () => {
+    const zodPattern = { pattern: z.regexes.hex } as object;
+    const hex = z.stringFormat('hex', (value) => z.regexes.hex.test(value), zodPattern);
+
+    expect(walkBody(hex)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
+  });
+
   test('the built package walks a format like the source', () => {
     const placedAt = z.iso.datetime({ offset: true, precision: 3 });
 
