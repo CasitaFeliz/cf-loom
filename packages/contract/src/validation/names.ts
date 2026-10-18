@@ -1,11 +1,12 @@
 import type { Endpoint } from '../endpoint.ts';
 import { isEndpoint } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { Declarations, LocatedEndpoint, LocatedGroup } from './declarations.ts';
+import type { Declarations } from './declarations.ts';
 import { endpointAt } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows, type Grammar, kebabCase, upperSnakeCase } from './grammars.ts';
 import { identityOf } from './identity.ts';
+import type { LocatedEndpoint, LocatedGroup } from './located.ts';
 import { isCanonicalPath } from './paths.ts';
 import { listOf, textOf } from './written.ts';
 

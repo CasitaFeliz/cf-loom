@@ -8,15 +8,16 @@ import type { Application, Contract } from '../roots.ts';
 import type { StandardRejection } from '../standard-rejections.ts';
 
 export { isOpen } from '../open.ts';
+export type { DeclarationFailure, Failure, Rule } from '../validation/failures.ts';
 export type {
+  LocatedCode,
   LocatedDefinitions,
   LocatedEndpoint,
   LocatedGroup,
   LocatedGuard,
   LocatedRejection,
   LocatedStandardRejection,
-} from '../validation/declarations.ts';
-export type { DeclarationFailure, Failure, Rule } from '../validation/failures.ts';
+} from '../validation/located.ts';
 export type { LocatedNode } from '../validation/schemas.ts';
 export type { ResolvedStandard } from '../validation/standard-codes.ts';
 export type { ValidatedContract, ValidatedSchemas } from '../validation/validate.ts';

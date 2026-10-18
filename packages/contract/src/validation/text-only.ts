@@ -1,8 +1,8 @@
 import { isGuard } from '../predicates.ts';
 import type { ObjectNode, Path, SchemaNode } from '../walker/nodes.ts';
-import type { LocatedEndpoint } from './declarations.ts';
-import { attachedGuardOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import type { LocatedEndpoint } from './located.ts';
+import { attachedGuardOf } from './references.ts';
 import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import { listOf, textOf } from './written.ts';

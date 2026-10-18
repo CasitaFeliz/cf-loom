@@ -2,14 +2,10 @@ import { $ZodType } from 'zod/v4/core';
 import type { Path, SchemaNode } from '../walker/nodes.ts';
 import type { WalkedSchemas } from '../walker/walk.ts';
 import type { LocatedSchema } from '../walker/walked.ts';
-import type {
-  Declarations,
-  LocatedEndpoint,
-  LocatedGuard,
-  LocatedRejection,
-} from './declarations.ts';
+import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { entriesOf, isPlainObject, partOf, textOf } from './written.ts';
+import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';
+import { entriesOf, partOf, textOf } from './written.ts';
 
 /** A slot of a declaration that holds a schema, as the Snapshot names it. */
 export type Part =
@@ -27,14 +23,14 @@ export type Part =
   | 'schema';
 
 /**
- * A schema slot: where it sits, the declaration that owns it and which part it is; a Rejection body
- * declared again for a code already written is `compared` with the first and not written itself.
- * The owner is the declaration itself, since two declarations may sit at one location; a shared
- * schema of a Definitions Package owns its own slot.
+ * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared
+ * again for a code already written is `compared` with the first and not written itself. The owner
+ * is the declaration itself, since two declarations may sit at one location; a shared schema of a
+ * Definitions Package owns its own slot.
  */
 export type Slot = {
   readonly at: Path;
-  readonly owner: object;
+  readonly owner: unknown;
   readonly part: Part;
   readonly value: unknown;
   readonly role: 'snapshot' | 'compared';
@@ -58,7 +54,7 @@ export type SchemaSlots = {
 /** The walked nodes of a root, by the declaration that owns them and the part, with their `defs`. */
 export type Nodes = {
   readonly slots: readonly WalkedSlot[];
-  readonly nodeOf: (owner: object, part: Part) => SchemaNode | undefined;
+  readonly nodeOf: (owner: unknown, part: Part) => SchemaNode | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
@@ -67,12 +63,21 @@ export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
   return [...owner, ...part.split('.')];
 }
 
+/**
+ * Whether a value is a zod schema, by zod's own `instanceof`: it reads the traits in `_zod`, which
+ * zod, `zod/mini` and any copy of either set and a hand-built `_zod` object lacks, so an impostor
+ * never reaches the walker, which reads `_zod.def`.
+ */
+export function isSchema(value: unknown): value is $ZodType {
+  return value instanceof $ZodType;
+}
+
 /** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
 export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
   const slots = [
     ...declarations.endpoints.flatMap(endpointSlots),
     ...declarations.guards.flatMap(guardSlots),
-    ...rejectionSlots(declarations.rejections),
+    ...declarations.codes.flatMap(codeSlots),
     ...sharedSlots(declarations),
   ].filter(isFilled);
   const failures = slots
@@ -94,7 +99,7 @@ export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): No
     throw new Error('The walk returned a result for a number of schemas other than given: a bug.');
   }
   const walkedSlots: WalkedSlot[] = [];
-  const nodesByOwner = new Map<object, Map<Part, SchemaNode>>();
+  const nodesByOwner = new Map<unknown, Map<Part, SchemaNode>>();
   for (const [index, slot] of slots.entries()) {
     const location = walked.located[index];
     if (location?.walked.kind !== 'walked') {
@@ -107,7 +112,7 @@ export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): No
     }
     nodesByOwner.set(slot.owner, parts);
   }
-  const nodeOf = (owner: object, part: Part) => nodesByOwner.get(owner)?.get(part);
+  const nodeOf = (owner: unknown, part: Part) => nodesByOwner.get(owner)?.get(part);
   return { slots: walkedSlots, nodeOf, defs: walked.defs };
 }
 
@@ -137,16 +142,14 @@ function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
 }
 
 /** One body per code is written, the first declaration's; every other is compared with it. */
-function rejectionSlots(rejections: readonly LocatedRejection[]): readonly Slot[] {
-  const written = new Set<string>();
-  const slots: Slot[] = [];
-  for (const { at, rejection } of rejections) {
-    const code = textOf(rejection.code);
-    const role = written.has(code) ? 'compared' : 'snapshot';
-    written.add(code);
-    slots.push({ ...slot({ at, owner: rejection }, 'body', rejection.body), role });
-  }
-  return slots;
+function codeSlots({ rejections: [first, ...others] }: LocatedCode): readonly Slot[] {
+  return [
+    slot({ at: first.at, owner: first.rejection }, 'body', first.rejection.body),
+    ...others.map(({ at, rejection }) => ({
+      ...slot({ at, owner: rejection }, 'body', rejection.body),
+      role: 'compared' as const,
+    })),
+  ];
 }
 
 /** A shared schema sits under `schemas` by name and owns its slot, being no declaration's part. */
@@ -156,7 +159,7 @@ function sharedSlots({ root }: Declarations): readonly Slot[] {
   }
   return entriesOf(root.schemas).map(([name, value]) => ({
     at: ['schemas', name],
-    owner: isPlainObject(value) ? value : { name },
+    owner: value,
     part: 'schema' as const,
     value,
     role: 'snapshot' as const,
@@ -164,7 +167,7 @@ function sharedSlots({ root }: Declarations): readonly Slot[] {
 }
 
 function slot(
-  { at, owner }: { readonly at: Path; readonly owner: object },
+  { at, owner }: { readonly at: Path; readonly owner: unknown },
   part: Exclude<Part, 'schema'>,
   value: unknown,
 ): Slot {
@@ -175,10 +178,6 @@ function isFilled(slot: Slot): boolean {
   return slot.value !== undefined;
 }
 
-/**
- * A zod schema, from zod, `zod/mini` or any copy: zod's own `instanceof` reads `_zod.traits`,
- * which a hand-built `_zod` object does not carry, so an impostor never reaches the walker.
- */
 function holdsSchema(slot: Slot): slot is SchemaSlot {
-  return slot.value instanceof $ZodType;
+  return isSchema(slot.value);
 }

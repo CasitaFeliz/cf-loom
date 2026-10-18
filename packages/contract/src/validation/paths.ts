@@ -1,8 +1,8 @@
 import type { ObjectNode, Path } from '../walker/nodes.ts';
-import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows } from './grammars.ts';
 import { paramNamesOf, segmentsOf } from './identity.ts';
+import type { LocatedEndpoint } from './located.ts';
 import { type Nodes, slotAt } from './schemas.ts';
 import { isPlainObject, partOf } from './written.ts';
 

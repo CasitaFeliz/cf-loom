@@ -1,7 +1,8 @@
 import { isEndpoint, isEvent } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { Declarations, LocatedDependencies, Root } from './declarations.ts';
+import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import type { LocatedDependencies, Root } from './located.ts';
 import { entriesOf, partOf, textOf } from './written.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';

@@ -1,12 +1,13 @@
 import { isApplication, isContract, isDefinitions } from '../predicates.ts';
 import type { NotAllowed, SchemaNode } from '../walker/nodes.ts';
 import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/walk.ts';
-import { type Declarations, declarationsOf, type Root } from './declarations.ts';
+import { type Declarations, declarationsOf } from './declarations.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
+import type { Root } from './located.ts';
 import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
