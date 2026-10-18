@@ -1,5 +1,11 @@
 export type { Kind, StandardRejections } from '../declarations/index.ts';
-export { standardRejectionDefaults } from '../declarations/index.ts';
+export {
+  isEndpoint,
+  isGuard,
+  isRejection,
+  isStandardRejection,
+  standardRejectionDefaults,
+} from '../declarations/index.ts';
 export type { IssueCode, Parsed, SchemaIssue } from '../issues/index.ts';
 export { parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
