@@ -10,17 +10,20 @@ import {
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
+import { type Readable, readableOf } from './fields.ts';
+import { isPlainObject, listOf, textOf } from './written.ts';
 
 /**
  * A field that holds a list of declarations: where it sits, what it holds, and what belongs in it;
- * a list whose items another rule judges one by one names no `fits`.
+ * a list whose items another rule judges one by one names no `fits`, and a required list left
+ * `null` is the required-field rule's.
  */
 type Listing = {
   readonly at: Path;
   readonly list: unknown;
   readonly noun: string;
   readonly fits?: (item: unknown) => boolean;
+  readonly required?: true;
 };
 
 /** A field that holds an object: where it sits, what it holds, and whether its kind requires it. */
@@ -30,8 +33,7 @@ type ObjectPart = { readonly at: Path; readonly value: unknown; readonly require
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
     ...listingsOf(declarations).flatMap(listingFailures),
-    ...objectPartsOf(declarations).flatMap(objectPartFailures),
-    ...standardFailures(declarations),
+    ...readableOf(declarations).flatMap(objectPartsOf).flatMap(objectPartFailures),
   ];
 }
 
@@ -44,6 +46,7 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
       list: group.endpoints,
       noun: 'an Endpoint',
       fits: isEndpoint,
+      required: true as const,
     })),
     ...endpoints.flatMap(({ at, endpoint }) => [
       { at: [...at, 'guards'], list: endpoint.guards, noun: 'an Attachment' },
@@ -100,6 +103,7 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           list: root.dependencies,
           noun: 'a Dependency',
           fits: isDependencies,
+          required: true,
         },
       ];
     case 'definitions':
@@ -107,30 +111,16 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
   }
 }
 
-/** The parts written as objects: an Endpoint's input and success, a Guard's demands, a package's maps. */
-function objectPartsOf({ endpoints, guards, allPackages }: Declarations): readonly ObjectPart[] {
-  return [
-    ...endpoints.flatMap(({ at, endpoint }) => [
-      { at: [...at, 'input'], value: endpoint.input, required: false },
-      { at: [...at, 'success'], value: endpoint.success, required: true },
-    ]),
-    ...guards.map(({ at, guard }) => ({
-      at: [...at, 'demands'],
-      value: guard.demands,
-      required: false,
-    })),
-    ...allPackages.flatMap(({ at, definitions }) => [
-      { at: [...at, 'schemas'], value: definitions.schemas, required: false },
-      {
-        at: [...at, 'standardRejections'],
-        value: definitions.standardRejections,
-        required: false,
-      },
-    ]),
-  ];
+/** The parts of a written object its kind types as objects, as the field tables say. */
+function objectPartsOf({ at, value, fields }: Readable): readonly ObjectPart[] {
+  return Object.keys(fields.objects).map((field) => ({
+    at: [...at, field],
+    value: value[field],
+    required: Object.hasOwn(fields.required, field),
+  }));
 }
 
-/** A missing required part is the required-field rule's; anything else present is an object. */
+/** A required part without a value is the required-field rule's; anything else present is an object. */
 function objectPartFailures({ at, value, required }: ObjectPart): readonly DeclarationFailure[] {
   if (value === undefined || (value === null && required) || isPlainObject(value)) {
     return [];
@@ -138,23 +128,14 @@ function objectPartFailures({ at, value, required }: ObjectPart): readonly Decla
   return [failure(at, 'not-an-object', `${textOf(at.at(-1))} is an object`)];
 }
 
-/** Every declared Standard Rejection is an object, as a Definitions Package writes one. */
-function standardFailures({ allPackages }: Declarations): readonly DeclarationFailure[] {
-  return allPackages.flatMap(({ at, definitions }) =>
-    entriesOf(definitions.standardRejections)
-      .filter(([, declaration]) => !isPlainObject(declaration))
-      .map(([name]) =>
-        failure(
-          [...at, 'standardRejections', name],
-          'not-a-declaration',
-          `standardRejections.${name} is not a Standard Rejection declaration`,
-        ),
-      ),
-  );
-}
-
-function listingFailures({ at, list, noun, fits }: Listing): readonly DeclarationFailure[] {
-  if (list === undefined) {
+function listingFailures({
+  at,
+  list,
+  noun,
+  fits,
+  required,
+}: Listing): readonly DeclarationFailure[] {
+  if (list === undefined || (list === null && required === true)) {
     return [];
   }
   const field = textOf(at.at(-1));

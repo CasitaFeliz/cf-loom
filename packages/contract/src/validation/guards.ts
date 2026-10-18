@@ -3,11 +3,11 @@ import type { Attachment } from '../attachment.ts';
 import type { Guard } from '../guard.ts';
 import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { LocatedEndpoint, LocatedGuard } from './declarations.ts';
-import { attachedGuardOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import type { LocatedEndpoint, LocatedGuard } from './located.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
-import type { Nodes } from './schemas.ts';
+import { attachedGuardOf } from './references.ts';
+import { isSchema, type Nodes } from './schemas.ts';
 import { listOf, textOf } from './written.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
@@ -94,8 +94,12 @@ function valueFailures(
   return [failure(qualifierAt, 'qualifier-keys', message)];
 }
 
+/** A Guard whose `qualifier` is no schema is the schema rule's; its Attachments are not judged. */
 function shapeFailures({ at, attachment, guard }: Attached): readonly DeclarationFailure[] {
   const declaresQualifier = guard.qualifier !== undefined;
+  if (declaresQualifier && !isSchema(guard.qualifier)) {
+    return [];
+  }
   if (isGuard(attachment) && declaresQualifier) {
     const message = `${textOf(guard.name)} needs a qualifier: { guard, qualifier }`;
     return [failure(at, 'attachment-needs-qualifier', message)];

@@ -177,11 +177,7 @@ describe('validateContract: lists and their items', () => {
     });
 
     expect(validateContract(definitions, noOrigin)).toEqual(
-      failed(
-        ['standardRejections', 'notFound'],
-        'not-a-declaration',
-        'standardRejections.notFound is not a Standard Rejection declaration',
-      ),
+      failed(['standardRejections', 'notFound'], 'not-an-object', 'notFound is an object'),
     );
   });
 

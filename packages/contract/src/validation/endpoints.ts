@@ -1,10 +1,10 @@
 import { lifecycles, visibilities } from '../element.ts';
 import type { Endpoint } from '../endpoint.ts';
 import { methods, successStatuses } from '../http.ts';
-import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
+import type { LocatedEndpoint } from './located.ts';
 import { slotAt } from './schemas.ts';
-import { isMissing, textOf } from './written.ts';
+import { isMissing, isWithoutValue, textOf } from './written.ts';
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */
 type ClosedValue = {
@@ -41,10 +41,10 @@ function closedValueFailures(
   return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${textOf(value)}`)];
 }
 
-/** A Success declares an allowed status; HEAD and 204 answer no body, every other status one; a `null` body is the schema rule's. */
+/** A Success declares an allowed status; HEAD and 204 answer no body, every other status one. */
 function successFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
   const success: Partial<Endpoint['success']> | undefined = endpoint.success;
-  if (typeof success !== 'object' || success === null || isMissing(success.status)) {
+  if (typeof success !== 'object' || success === null || isWithoutValue(success.status)) {
     return [];
   }
   if (!successStatuses.includes(success.status)) {
@@ -52,9 +52,6 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');
-  if (success.body === null) {
-    return [];
-  }
   if (endpoint.method === 'HEAD') {
     return success.body === undefined
       ? []

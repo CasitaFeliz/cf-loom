@@ -309,6 +309,44 @@ describe('validateContract: required fields', () => {
     );
   });
 
+  test('an Application whose dependencies is null fails once, as a required field', () => {
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: null as unknown as readonly never[],
+    });
+
+    expect(validateContract(application, noOrigin)).toEqual(
+      required(['dependencies'], 'dependencies is a required field'),
+    );
+  });
+
+  test('a null lifecycle fails once, as no string', () => {
+    const endpoint = defineEndpoint({ ...listing, lifecycle: null as unknown as 'active' });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed([...endpointAt, 'lifecycle'], 'not-a-string', 'lifecycle is a string'),
+    );
+  });
+
+  test('a null optional list fails once, as no list', () => {
+    const endpoint = defineEndpoint({ ...listing, guards: null as unknown as readonly never[] });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed([...endpointAt, 'guards'], 'not-a-list', 'guards is a list'),
+    );
+  });
+
+  test('a null optional object part fails once, as no object', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: null as unknown as { headers: z.ZodObject },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed([...endpointAt, 'input'], 'not-an-object', 'input is an object'),
+    );
+  });
+
   test('an Application without dependencies fails', () => {
     const application = defineApplication(
       withoutField({ name: 'web-admin', dependencies: [] }, 'dependencies'),

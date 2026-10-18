@@ -18,23 +18,33 @@ import {
   standardRejectionsFields,
   successFields,
 } from './field-tables.ts';
-import { entriesOf, isMissing, isPlainObject, listOf, type WrittenObject } from './written.ts';
+import {
+  entriesOf,
+  isMissing,
+  isPlainObject,
+  isWithoutValue,
+  listOf,
+  type WrittenObject,
+} from './written.ts';
 
 /** An object an author wrote, where it sits, and the fields its kind declares. */
-type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };
+export type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };
 
-/** A written object the rule can read field by field. */
-type Readable = Written & { readonly value: WrittenObject };
+/** A written object the rules can read field by field. */
+export type Readable = Written & { readonly value: WrittenObject };
 
 /** Every object an author writes holds only the fields its kind declares, every one it requires, and strings where typed so. */
 export function fieldFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  return writtenOf(declarations)
-    .filter(isReadable)
-    .flatMap((written) => [
-      ...undeclaredFailures(written),
-      ...requiredFailures(written),
-      ...stringFailures(written),
-    ]);
+  return readableOf(declarations).flatMap((written) => [
+    ...undeclaredFailures(written),
+    ...requiredFailures(written),
+    ...stringFailures(written),
+  ]);
+}
+
+/** Every object an author wrote that the field rules can read, with its kind's fields. */
+export function readableOf(declarations: Declarations): readonly Readable[] {
+  return writtenOf(declarations).filter(isReadable);
 }
 
 function writtenOf(declarations: Declarations): readonly Written[] {
@@ -68,7 +78,10 @@ function writtenOf(declarations: Declarations): readonly Written[] {
   ];
 }
 
-/** A qualified Attachment is a plain object that is no declaration; anything else is the Attachment rule's. */
+/**
+ * A qualified Attachment is a plain object that is no declaration: a declaration here is no
+ * Attachment, which the Attachment rule reports once.
+ */
 function attachmentsOf(at: Path, attachments: unknown): readonly Written[] {
   return listOf(attachments)
     .map((attachment, index) => written([...at, 'guards', index], attachment, attachmentFields))
@@ -100,9 +113,9 @@ function undeclaredFailures({ at, value, fields }: Readable): readonly Declarati
   );
 }
 
-/** A required field is present; `null` counts as missing. */
+/** A required field has a value; written `null` or left out, it has none. */
 function requiredFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
-  const missing = Object.keys(fields.required).filter((field) => isMissing(value[field]));
+  const missing = Object.keys(fields.required).filter((field) => isWithoutValue(value[field]));
   return missing.map((field) =>
     failure(
       [...at, field],
@@ -114,11 +127,13 @@ function requiredFailures({ at, value, fields }: Readable): readonly Declaration
   );
 }
 
-/** A field typed as a string holds one when it is present. */
+/** A field typed as a string holds one when it is not left out; a required one without a value is the required rule's. */
 function stringFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
-  const notStrings = Object.keys(fields.strings).filter(
-    (field) => !isMissing(value[field]) && typeof value[field] !== 'string',
-  );
+  const notStrings = Object.keys(fields.strings).filter((field) => {
+    const isRequiredWithoutValue =
+      Object.hasOwn(fields.required, field) && isWithoutValue(value[field]);
+    return !isRequiredWithoutValue && !isMissing(value[field]) && typeof value[field] !== 'string';
+  });
   return notStrings.map((field) => failure([...at, field], 'not-a-string', `${field} is a string`));
 }
 
