@@ -31,10 +31,13 @@ const userToken = defineGuard({
   rejections: [unauthenticated],
 });
 
+const permissionCode = z.enum(['orders:read', 'orders:edit', 'customers:read']);
+
 const permission = defineGuard({
   name: 'permission',
   description: 'The user holds every listed permission',
   guards: [userToken],
+  qualifier: z.array(permissionCode).min(1),
   rejections: [forbidden],
 });
 
@@ -179,5 +182,22 @@ describe('the README’s declaration examples', () => {
     });
 
     expect(application.dependencies[1].endpoints.getPayment).toBe(getPayment);
+  });
+});
+
+describe('the README’s Guard examples', () => {
+  test('an Endpoint lists every Guard itself, in order', () => {
+    const updateOrder = defineEndpoint({
+      name: 'updateOrder',
+      method: 'PUT',
+      path: '/orders/:orderId',
+      visibility: 'public',
+      description: 'Replaces one order',
+      guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],
+      input: { params: z.object({ orderId: z.uuid() }), body: z.object({ total: money }) },
+      success: { status: 204 },
+    });
+
+    expect(updateOrder.guards[1].qualifier).toEqual(['orders:edit']);
   });
 });

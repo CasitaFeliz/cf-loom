@@ -21,12 +21,23 @@ type GuardDeclaration = {
   readonly demands?: Demands;
   readonly guards?: readonly Guard[];
   readonly context?: core.$ZodType;
+  readonly qualifier?: core.$ZodType;
   readonly rejections?: readonly Rejection[];
 };
 
 /** A declared Guard, which Endpoints attach and each Service implements with a GuardHandler. */
 export type Guard<Declaration extends GuardDeclaration = GuardDeclaration> =
   Readonly<Declaration> & { readonly kind: 'guard' };
+
+/** A Guard that declares a `qualifier`, so every Endpoint lists it with a Qualifier. */
+export type QualifiedGuard = Guard & { readonly qualifier: core.$ZodType };
+
+/** Whether a Guard's type leaves open if it declares a `qualifier`, so no rule can say how to list it. */
+export type IsWidenedGuard<Listed extends Guard> = Listed extends QualifiedGuard
+  ? false
+  : 'qualifier' extends keyof Listed
+    ? true
+    : false;
 
 type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   readonly demands?: {

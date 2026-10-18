@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
+import type { AttachedGuardOf } from './attachment.ts';
 import type { Endpoint } from './endpoint.ts';
-import type { Guard } from './guard.ts';
+import type { Guard, QualifiedGuard } from './guard.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : never;
@@ -14,13 +15,18 @@ export type InputOf<Target extends Endpoint> = Target extends { readonly input: 
 
 type ContextProvider = Guard & { readonly context: core.$ZodType };
 
-type GuardsOf<Target> = Target extends { readonly guards: readonly (infer Attached)[] }
-  ? Attached
+type GuardsOf<Target> = Target extends { readonly guards: readonly (infer Listed)[] }
+  ? AttachedGuardOf<Listed>
   : never;
 
 /** The Context one Guard provides, as its GuardHandler admits it; `undefined` without a context. */
 export type ProvidedContextOf<Target extends Guard> = Target extends ContextProvider
   ? Output<Target['context']>
+  : undefined;
+
+/** The Qualifier a Guard's GuardHandler receives, typed by its schema; `undefined` without one. */
+export type QualifierOf<Target extends Guard> = Target extends QualifiedGuard
+  ? Output<Target['qualifier']>
   : undefined;
 
 type ContextByName<Guards> = {
