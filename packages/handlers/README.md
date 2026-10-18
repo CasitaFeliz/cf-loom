@@ -4,11 +4,13 @@
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations and sibling files.
 
-## Stubs and the handler map
+## Stubs and the Handler map
 
 `cf-loom generate` writes a stub for every Handler that does not exist yet, never overwriting one, and regenerates `handlers.generated.ts` and `readers.generated.ts` (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). A stub is `export default handle.stub(getOrder)`, which marks the Handler as not implemented; implementing it means replacing that line with `handle(getOrder, async (…) => …)`. `serve` answers the not-implemented Rejection for an EndpointHandler stub, and for every Endpoint attaching a GuardHandler stub once that Guard's demands are valid, since the stub never admits. `consume` does not pull from a Message Handler stub and logs a warning, though it still requires its durable consumer (see [Applying the plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#applying-the-plan) in the messaging README); its Messages wait in that durable consumer until a Release with the real Handler drains them, unless the stream's retention limits, which are the organization's, drop them first. Either way a Contract can be merged and deployed with stubs before it is implemented, and is published with that Release (see [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md). A missing Handler is a type error.
 
-`handlers.generated.ts` exports the handler map, plain data with four keys: `endpoints` by Endpoint name, `guards` by Guard name, `commands` by the Message Version's name in code (`chargeCardV1`) and `subscriptions` by Subscription name, a quoted key (`'notify-on-settled'`). Handler types are nominal over the Endpoint, Guard, Command's Message Version or Subscription they were written for (`EndpointHandler<typeof getOrder>`), so the map type-checks by declaration, not by the shape it receives.
+A stub's path comes from names alone: an EndpointHandler's is `src/endpoints/<group>/<endpoint-name>.handler.ts`, a GuardHandler's `src/guards/<guard-name>.handler.ts`, each name in kebab-case. It imports its Endpoint or Guard from where it is exported, under that export's name: from the first file under `src/contract/` exporting it, files and names in code point order, with a relative import naming the `.ts` file, or from a Definitions Package by the package's name. `generate` fails on an Endpoint or attached Guard that nothing exports, since its stub could not import it. A `*.handler.ts` under `src/endpoints/`, `src/guards/`, `src/commands/` or `src/subscriptions/` that no declared Endpoint or Guard names, a Retired one still declared included, fails `generate` and `verify`: after a Group is renamed or a Handler moved, the map would import a fresh stub and the Endpoint would answer the not-implemented Rejection. `verify` also fails when a Handler the map imports is missing.
+
+`handlers.generated.ts` exports the Handler map, plain data with four keys: `endpoints` by Endpoint name, `guards` by Guard name, `commands` by the Message Version's name in code (`chargeCardV1`) and `subscriptions` by Subscription name, a quoted key (`'notify-on-settled'`). Handler types are nominal over the Endpoint, Guard, Command's Message Version or Subscription they were written for (`EndpointHandler<typeof getOrder>`), so the map type-checks by declaration, not by the shape it receives.
 
 ## EndpointHandler
 
@@ -75,7 +77,7 @@ const outcome = await getOrderHandler(
 );
 ```
 
-The handler map `handlers.generated.ts` exports is plain data (see [Stubs and the handler map](#stubs-and-the-handler-map)), so a test replaces one Handler, a Guard's for example, by spreading the map:
+The Handler map `handlers.generated.ts` exports is plain data (see [Stubs and the Handler map](#stubs-and-the-handler-map)), so a test replaces one Handler, a Guard's for example, by spreading the map:
 
 ```ts
 const http = serve(contract, {

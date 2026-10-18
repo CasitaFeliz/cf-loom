@@ -5,7 +5,7 @@ import { writeFiles } from './writing.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
- * review, and for a Service its handler map, its readers and the stub of every missing Handler;
+ * review, and for a Service its Handler map, its readers and the stub of every missing Handler;
  * a committed file that is no JSON is left for its author to restore or delete.
  */
 export async function generate(run: Run): Promise<Exit> {

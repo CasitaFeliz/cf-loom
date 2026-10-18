@@ -33,7 +33,7 @@ export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 
 /**
  * The files a project regenerates, compared by `verify`: `contract.snapshot.json`, and for a
- * Service its handler map and readers.
+ * Service its Handler map and readers.
  */
 export function regeneratedFilesOf(built: BuiltProject): readonly GeneratedFile[] {
   const snapshotWritten: GeneratedFile = {
@@ -52,7 +52,7 @@ export function regeneratedFilesOf(built: BuiltProject): readonly GeneratedFile[
   ];
 }
 
-/** The Handler files the handler map imports, which must exist. */
+/** The Handler files the Handler map imports, which must exist. */
 export function handlerFilesOf(built: BuiltProject): readonly string[] {
   return built.snapshot.kind === 'service' ? handledOf(built.snapshot).map(handlerPathOf) : [];
 }

@@ -29,7 +29,7 @@ export function handlerPathOf(handled: Handled): string {
 }
 
 /**
- * What the handler map holds: every Endpoint that is not Retired, then every Guard those attach,
+ * What the Handler map holds: every Endpoint that is not Retired, then every Guard those attach,
  * each in code point order of its name.
  */
 export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {

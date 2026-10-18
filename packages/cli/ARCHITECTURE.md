@@ -9,11 +9,15 @@ The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/directories/i
 | Module | Holds | Depends on |
 | --- | --- | --- |
 | `contract-directory/` | the `ContractDirectory` type, which `./directories` exports | none |
-| `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, and the Definitions Packages a root lists as the root file resolves them | none |
+| `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, the Definitions Packages a root lists as the root file resolves them, the version of an installed package, and where each declaration is exported | none |
 | `config/` | `defineConfig`, `Config`, `ApprovalSource`, and loading `cf-loom.config.ts` | `contract-directory`, `loading` |
-| `commands/` | `init`, `generate` and `verify`, each ending with its exit status and the lines it prints | `config`, `loading` |
+| `source-text/` | spelling generated TypeScript: the header line, string and JSON literals, identifiers, import lines and relative `.ts` specifiers, a module from its imports and body | none |
+| `schema-code/` | a Snapshot node as a zod expression, `declared` or `reader`, the Unknown cases of readers, and the recursive defs with their types | `source-text` |
+| `service-code/` | what `generate` writes into a Service: the Handler map, the readers, each stub, and the Handler paths its declarations name | `source-text` |
+| `contract-package/` | the Contract Package's files from a Snapshot: package.json with `cfLoom` and the hash, `snapshot.json`, tsconfig, the entry and one file per exported Endpoint, reached Guard and code | `source-text`, `schema-code` |
+| `commands/` | `init`, `generate`, `verify` and `package`, each ending with its exit status and the lines it prints | `config`, `loading`, `service-code`, `contract-package` |
 
-A command takes where and when it runs (the working directory and the clock) from `bin.ts`; `generate` and `verify` build the declared Snapshot with `@casitafeliz/loom-contract/internal` and only read and write the files.
+A command takes where and when it runs (the working directory and the clock) from `bin.ts`. Every command but `init` first builds the project: its valid root and the declared Snapshot, with `@casitafeliz/loom-contract/internal`; then `generate` and `verify` write or compare the generated files and `package` writes the Contract Package, each from that Snapshot.
 
 ## Reading the graph
 

@@ -9,10 +9,10 @@ import {
 } from '../source-text/index.ts';
 import { type Handled, handlerPathOf } from './handled.ts';
 
-/** The file of the handler map, under the Service's `src/`. */
+/** The file of the Handler map, under the Service's `src/`. */
 export const handlerMapFile = 'src/handlers.generated.ts';
 
-/** The file of the reader schemas of the Service's own Events. */
+/** The file of the Reader schemas of the Service's own Events. */
 export const readersFile = 'src/readers.generated.ts';
 
 /**
@@ -21,7 +21,7 @@ export const readersFile = 'src/readers.generated.ts';
  */
 export type ElementExport = { readonly specifier: string; readonly name: string };
 
-/** The handler map: plain data importing each Handler, which `serve` takes as it is. */
+/** The Handler map: plain data importing each Handler, which `serve` takes as it is. */
 export function handlerMapTextOf(handled: readonly Handled[]): string {
   const imports = handled
     .map((element) => ({ local: localNameOf(element), path: handlerPathOf(element) }))
