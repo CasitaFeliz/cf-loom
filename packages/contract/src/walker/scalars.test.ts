@@ -61,6 +61,10 @@ describe('walkSchemas: strings', () => {
     );
   });
 
+  test('.brand() changes no shape, so a branded string is a string', () => {
+    expect(walkBody(z.string().brand<'OrderId'>())).toEqual(walkedTo({ type: 'string' }));
+  });
+
   test('a zod/mini string with checks walks like a zod one', () => {
     const name = zm.string().check(zm.minLength(1), zm.maxLength(50));
 

@@ -38,6 +38,7 @@ describe('walkSchemas: the Not allowed list', () => {
     ['z.coerce.date()', z.coerce.date(), 'z.coerce.*'],
     ['z.coerce.bigint()', z.coerce.bigint(), 'z.coerce.*'],
     ['z.stringbool()', z.stringbool(), 'z.stringbool()'],
+    ['a zod/mini z.stringbool()', zm.stringbool(), 'z.stringbool()'],
     ['z.templateLiteral()', z.templateLiteral(['order-', z.number()]), 'z.templateLiteral()'],
     ['.trim()', z.string().trim(), mutating],
     ['.toLowerCase()', z.string().toLowerCase(), mutating],
@@ -71,7 +72,16 @@ describe('walkSchemas: the Not allowed list', () => {
     ['z.float64()', z.float64(), 'z.float64()'],
     ['z.looseRecord()', z.looseRecord(z.string(), z.string()), 'z.looseRecord()'],
     ['z.xor()', z.xor([z.string(), z.number()]), 'z.xor()'],
-    ['two checks that set one constraint', z.string().min(1).min(2), 'two checks that set min'],
+    ['two checks that set min', z.string().min(1).min(2), 'two checks that set min'],
+    ['two checks that set max', z.array(z.string()).max(1).max(2), 'two checks that set max'],
+    ['a length and a max', z.string().length(2).max(5), 'two checks that set max'],
+    [
+      'two checks that set multipleOf',
+      z.number().multipleOf(2).multipleOf(3),
+      'two checks that set multipleOf',
+    ],
+    ['two regexes', z.string().regex(/a/).regex(/b/), 'two checks that set regex'],
+    ['two formats', z.string().email().uuid(), 'two checks that set format'],
   ])('%s fails', (_name, schema, construct) => {
     expect(walkBody(schema)).toEqual(refused(construct));
   });
