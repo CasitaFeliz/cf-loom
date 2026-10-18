@@ -1,68 +1,57 @@
 import type { ObjectNode, Path } from '../walker/nodes.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { camelCase, follows } from './grammars.ts';
+import { paramNamesOf, segmentsOf } from './identity.ts';
 import type { Nodes } from './schemas.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;
-const paramName = /^[a-z][a-zA-Z0-9]*$/;
 
 /** Whether a declared path is already canonical, so its identity and its params can be read. */
 export function isCanonicalPath(path: unknown): path is string {
   return typeof path === 'string' && canonicalPathFailures(path, []).length === 0;
 }
 
-/** The `:names` of a path, in order, as its params must declare them. */
-export function paramNamesOf(path: string): readonly string[] {
-  return segmentsOf(path)
-    .filter((segment) => segment.startsWith(':'))
-    .map((segment) => segment.slice(1));
-}
-
-/** An Endpoint's identity: its method and its path with every param replaced by `{}`. */
-export function identityOf(method: unknown, path: string): string {
-  const segments = segmentsOf(path).map((segment) => (segment.startsWith(':') ? '{}' : segment));
-  return `${String(method)} /${segments.join('/')}`;
-}
-
 /** A path that is not canonical fails, every way it breaks the grammar named. */
 export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
-  const pathAt = [...at, 'path'];
   if (typeof endpoint.path !== 'string') {
-    return [failure(pathAt, 'canonical-path', 'A path is a string')];
+    return [];
   }
-  return canonicalPathFailures(endpoint.path, pathAt);
+  return canonicalPathFailures(endpoint.path, [...at, 'path']);
 }
 
 /**
- * `params` declares exactly the path's `:names`, none of them optional, and none without; a
- * `params` that is no object is the text rule's finding.
+ * `params` declares exactly the `:names` of a canonical path, none of them optional, and none
+ * without; a `params` that is no object or no schema is another rule's finding.
  */
 export function paramsFailures(
   { at, endpoint }: LocatedEndpoint,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
-  if (typeof endpoint.path !== 'string') {
+  const params = nodes.nodeOf(endpoint, 'input.params');
+  const declared = endpoint.input?.params !== undefined;
+  if (!isCanonicalPath(endpoint.path) || (declared && params === undefined)) {
     return [];
   }
   const paramsAt = [...at, 'input', 'params'];
   const names = [...new Set(paramNamesOf(endpoint.path))];
-  const params = nodes.nodeAt(paramsAt);
   if (names.length === 0) {
-    return params === undefined
-      ? []
-      : [failure(paramsAt, 'params', 'A path without :names takes no params')];
+    return declared
+      ? [failure(paramsAt, 'exact-params', 'A path without :names takes no params')]
+      : [];
   }
   const exact = `params declares exactly the path's :names: ${names.join(', ')}`;
   if (params === undefined) {
-    return [failure(paramsAt, 'params', exact)];
+    return [failure(paramsAt, 'exact-params', exact)];
   }
   if (params.type !== 'object') {
     return [];
   }
-  const declared = Object.keys(params.fields);
-  const sameNames =
-    declared.length === names.length && names.every((name) => declared.includes(name));
-  return sameNames ? optionalParamFailures(params, paramsAt) : [failure(paramsAt, 'params', exact)];
+  const fields = Object.keys(params.fields);
+  const sameNames = fields.length === names.length && names.every((name) => fields.includes(name));
+  return sameNames
+    ? optionalParamFailures(params, paramsAt)
+    : [failure(paramsAt, 'exact-params', exact)];
 }
 
 function optionalParamFailures(params: ObjectNode, at: Path): readonly DeclarationFailure[] {
@@ -100,7 +89,7 @@ function segmentFailures(segment: string, path: string, at: Path): readonly Decl
     return [failure(at, 'canonical-path', `A path has no empty segment: ${path}`)];
   }
   if (segment.startsWith(':')) {
-    return paramName.test(segment.slice(1))
+    return follows(camelCase, segment.slice(1))
       ? []
       : [failure(at, 'canonical-path', `A path param is written :camelCase: ${segment}`)];
   }
@@ -124,10 +113,4 @@ function duplicateParamFailures(
   return [...new Set(repeated)].map((name) =>
     failure(at, 'duplicate-path-param', `A path param appears once: ${name}`),
   );
-}
-
-/** The segments between the slashes of a path, a leading or trailing slash dropped. */
-function segmentsOf(path: string): readonly string[] {
-  const inner = path.replace(/^\//, '').replace(/\/$/, '');
-  return inner === '' ? [] : inner.split('/');
 }

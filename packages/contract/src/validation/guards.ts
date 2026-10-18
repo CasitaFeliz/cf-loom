@@ -1,9 +1,10 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment } from '../attachment.ts';
 import type { Guard } from '../guard.ts';
+import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { LocatedEndpoint, LocatedGuard } from './declarations.ts';
-import { attachedGuardOf, isGuard, listOf } from './declarations.ts';
+import type { Declarations, LocatedEndpoint, LocatedGuard } from './declarations.ts';
+import { attachedGuardOf, listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
 import type { Nodes } from './schemas.ts';
@@ -40,45 +41,48 @@ export function attachmentFailures({
 }: LocatedEndpoint): readonly DeclarationFailure[] {
   const failures: DeclarationFailure[] = [];
   const earlier: string[] = [];
-  for (const [index, attachment] of listOf(endpoint.guards).entries()) {
-    const attachedAt = [...at, 'guards', index];
-    const guard = attachedGuardOf(attachment);
+  for (const { at: attachedAt, attachment, guard } of listedOf(at, endpoint)) {
     if (guard === undefined) {
       const message = 'An Attachment is a Guard or { guard, qualifier }';
-      failures.push(failure(attachedAt, 'attachment', message));
+      failures.push(failure(attachedAt, 'not-an-attachment', message));
       continue;
     }
     failures.push(...shapeFailures({ at: attachedAt, attachment, guard }));
     failures.push(...orderFailures({ at: attachedAt, attachment, guard }, earlier));
-    earlier.push(guard.name);
+    earlier.push(String(guard.name));
   }
   return failures;
 }
 
 /** A Qualifier is a value its schema accepts whose objects hold only the keys it declares. */
 export function qualifierFailures(
-  { at, endpoint }: LocatedEndpoint,
-  nodes: Nodes,
+  located: LocatedEndpoint,
+  judged: { readonly declarations: Declarations; readonly nodes: Nodes },
 ): readonly DeclarationFailure[] {
-  const listed: readonly Listed[] = listOf(endpoint.guards).map((attachment, index) => ({
+  return listedOf(located.at, located.endpoint)
+    .filter(isQualified)
+    .flatMap((qualified) => valueFailures(qualified, judged));
+}
+
+function listedOf(at: Path, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
+  return listOf(endpoint.guards).map((attachment, index) => ({
     at: [...at, 'guards', index],
     attachment,
     guard: attachedGuardOf(attachment),
   }));
-  return listed.filter(isQualified).flatMap((qualified) => valueFailures(qualified, nodes));
 }
 
 function valueFailures(
   { at, attachment, guard }: Qualified,
-  nodes: Nodes,
+  { nodes }: { readonly declarations: Declarations; readonly nodes: Nodes },
 ): readonly DeclarationFailure[] {
-  const node = nodes.nodeAt(['guards', guard.name, 'qualifier']);
-  if (guard.qualifier === undefined || node === undefined) {
+  const node = nodes.nodeOf(guard, 'qualifier');
+  if (guard.qualifier === undefined || node === undefined || attachment.qualifier === undefined) {
     return [];
   }
   const qualifierAt = [...at, 'qualifier'];
   if (!safeParse(guard.qualifier, attachment.qualifier).success) {
-    const message = `${guard.name} takes a Qualifier its schema accepts`;
+    const message = `${String(guard.name)} takes a Qualifier its schema accepts`;
     return [failure(qualifierAt, 'qualifier-value', message)];
   }
   const undeclared = undeclaredKeysOf(attachment.qualifier, node, nodes.defs);
@@ -92,11 +96,12 @@ function valueFailures(
 function shapeFailures({ at, attachment, guard }: Attached): readonly DeclarationFailure[] {
   const declaresQualifier = guard.qualifier !== undefined;
   if (isGuard(attachment) && declaresQualifier) {
-    const message = `${guard.name} needs a qualifier: { guard, qualifier }`;
-    return [failure(at, 'attachment', message)];
+    const message = `${String(guard.name)} needs a qualifier: { guard, qualifier }`;
+    return [failure(at, 'attachment-needs-qualifier', message)];
   }
   if (!isGuard(attachment) && !declaresQualifier) {
-    return [failure(at, 'attachment', `${guard.name} takes no qualifier`)];
+    const message = `${String(guard.name)} takes no qualifier`;
+    return [failure(at, 'attachment-takes-no-qualifier', message)];
   }
   return [];
 }
@@ -105,17 +110,17 @@ function orderFailures(
   { at, guard }: Attached,
   earlier: readonly string[],
 ): readonly DeclarationFailure[] {
-  if (earlier.includes(guard.name)) {
-    return [failure(at, 'guard-once', `${guard.name} is listed twice`)];
+  if (earlier.includes(String(guard.name))) {
+    return [failure(at, 'guard-once', `${String(guard.name)} is listed twice`)];
   }
   const required = listOf(guard.guards)
     .filter(isGuard)
-    .map((listed) => listed.name);
+    .map((listed) => String(listed.name));
   const missing = required.filter((name) => !earlier.includes(name));
   if (missing.length === 0) {
     return [];
   }
-  const message = `${guard.name} requires ${missing.join(', ')} earlier in guards`;
+  const message = `${String(guard.name)} requires ${missing.join(', ')} earlier in guards`;
   return [failure(at, 'guard-order', message)];
 }
 

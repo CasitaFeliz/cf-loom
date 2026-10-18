@@ -1,112 +1,111 @@
+import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
-import type { Declarations, Root } from './declarations.ts';
-import { isGuard, listOf } from './declarations.ts';
+import type { Declarations } from './declarations.ts';
+import { listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import {
+  attachmentFields,
+  definitionsFields,
+  demandsFields,
+  dependenciesFields,
+  endpointFields,
+  groupFields,
+  guardFields,
+  inputFields,
+  type KnownFields,
+  rejectionFields,
+  rootFields,
+  standardRejectionFields,
+  standardRejectionsFields,
+  successFields,
+} from './field-tables.ts';
 
 /** An object an author wrote, where it sits, and the fields its kind declares. */
-type Written = {
-  readonly at: Path;
-  readonly value: unknown;
-  readonly declared: readonly string[];
-};
+type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };
 
-const rootFields: Record<Root['kind'], readonly string[]> = {
-  contract: ['kind', 'name', 'definitions', 'groups', 'dependencies'],
-  application: ['kind', 'name', 'dependencies'],
-  definitions: ['kind', 'name', 'guards', 'schemas', 'rejections', 'standardRejections'],
-};
-const groupFields = ['kind', 'name', 'description', 'endpoints'];
-const endpointFields = [
-  'kind',
-  'name',
-  'method',
-  'path',
-  'visibility',
-  'description',
-  'input',
-  'success',
-  'guards',
-  'rejections',
-  'lifecycle',
-];
-const inputFields = ['params', 'query', 'headers', 'body'];
-const successFields = ['status', 'headers', 'body'];
-const guardFields = [
-  'kind',
-  'name',
-  'description',
-  'demands',
-  'guards',
-  'context',
-  'qualifier',
-  'rejections',
-];
-/** The parts the Guard demands rule judges stay out of this one, so each is reported once. */
-const demandsFields = ['headers', 'query', 'params', 'body'];
-const rejectionFields = ['kind', 'code', 'status', 'message', 'body'];
-const attachmentFields = ['guard', 'qualifier'];
-const standardRejectionsFields = ['invalidInput', 'notFound', 'notImplemented'];
-const standardRejectionFields = ['code', 'status', 'message'];
+/** Every object an author writes holds only the fields its kind declares and every one it requires. */
+export function fieldFailures(declarations: Declarations): readonly DeclarationFailure[] {
+  return writtenOf(declarations).flatMap((written) => [
+    ...undeclaredFailures(written),
+    ...requiredFailures(written),
+  ]);
+}
 
-/** Every object an author writes holds only the fields its kind declares, at every level. */
-export function undeclaredFieldFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, groups, definitions, endpoints, guards, rejections, standardRejections } =
+function writtenOf(declarations: Declarations): readonly Written[] {
+  const { root, packages, groups, definitions, endpoints, guards, rejections, dependencies } =
     declarations;
-  const written: readonly Written[] = [
-    { at: [], value: root, declared: rootFields[root.kind] },
-    ...definitions.map(({ at, definitions: listed }) => ({
-      at,
-      value: listed,
-      declared: rootFields.definitions,
-    })),
-    ...groups.map(({ at, group }) => ({ at, value: group, declared: groupFields })),
+  return [
+    { at: [], value: root, fields: rootFields[root.kind] },
+    ...definitions.map(({ at, definitions: listed }) => written(at, listed, definitionsFields)),
+    ...groups.map(({ at, group }) => written(at, group, groupFields)),
     ...endpoints.flatMap(({ at, endpoint }) => [
-      { at, value: endpoint, declared: endpointFields },
-      { at: [...at, 'input'], value: endpoint.input, declared: inputFields },
-      { at: [...at, 'success'], value: endpoint.success, declared: successFields },
+      written(at, endpoint, endpointFields),
+      written([...at, 'input'], endpoint.input, inputFields),
+      written([...at, 'success'], endpoint.success, successFields),
       ...attachmentsOf(at, endpoint.guards),
     ]),
     ...guards.flatMap(({ at, guard }) => [
-      { at, value: guard, declared: guardFields },
-      { at: [...at, 'demands'], value: guard.demands, declared: demandsFields },
+      written(at, guard, guardFields),
+      written([...at, 'demands'], guard.demands, demandsFields),
     ]),
-    ...rejections.map(({ at, rejection }) => ({ at, value: rejection, declared: rejectionFields })),
-    ...standardRejectionsOf(declarations),
-    ...standardRejections.map(({ at, declaration }) => ({
-      at,
-      value: declaration,
-      declared: standardRejectionFields,
-    })),
+    ...rejections.map(({ at, rejection }) => written(at, rejection, rejectionFields)),
+    ...dependencies.map(({ at, dependencies: listed }) => written(at, listed, dependenciesFields)),
+    ...packages.flatMap(standardRejectionsOf),
   ];
-  return written.flatMap(undeclaredFieldsOf);
 }
 
 function attachmentsOf(at: Path, attachments: unknown): readonly Written[] {
   return listOf(attachments as readonly unknown[] | undefined)
-    .map((attachment, index) => ({
-      at: [...at, 'guards', index],
-      value: attachment,
-      declared: attachmentFields,
-    }))
-    .filter((written) => !isGuard(written.value));
+    .map((attachment, index) => written([...at, 'guards', index], attachment, attachmentFields))
+    .filter((entry) => !isGuard(entry.value));
 }
 
-/** The `standardRejections` map of the root or of each listed Definitions Package. */
-function standardRejectionsOf({ root, definitions }: Declarations): readonly Written[] {
-  const packages = root.kind === 'definitions' ? [{ at: [], definitions: root }] : definitions;
-  return packages.map(({ at, definitions: listed }) => ({
-    at: [...at, 'standardRejections'],
-    value: listed.standardRejections,
-    declared: standardRejectionsFields,
-  }));
+/** The `standardRejections` map of a Definitions Package and each declaration in it. */
+function standardRejectionsOf({
+  at,
+  definitions,
+}: Declarations['packages'][number]): readonly Written[] {
+  const map = definitions.standardRejections;
+  const mapAt = [...at, 'standardRejections'];
+  const entries = typeof map === 'object' && map !== null ? Object.entries(map) : [];
+  return [
+    written(mapAt, map, standardRejectionsFields),
+    ...entries.map(([name, declaration]) =>
+      written([...mapAt, name], declaration, standardRejectionFields),
+    ),
+  ];
 }
 
-function undeclaredFieldsOf({ at, value, declared }: Written): readonly DeclarationFailure[] {
+function written(at: Path, value: unknown, fields: KnownFields): Written {
+  return { at, value, fields };
+}
+
+function undeclaredFailures({ at, value, fields }: Written): readonly DeclarationFailure[] {
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-  const undeclared = Object.keys(value).filter((field) => !declared.includes(field));
+  const undeclared = Object.keys(value).filter((field) => !Object.hasOwn(fields.declared, field));
   return undeclared.map((field) =>
     failure([...at, field], 'undeclared-field', `${field} is not a declared field`),
+  );
+}
+
+function requiredFailures({ at, value, fields }: Written): readonly DeclarationFailure[] {
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+  const present = value as Readonly<Record<string, unknown>>;
+  const missing = fields.required.filter((field) => present[field] === undefined);
+  const notStrings = fields.strings.filter(
+    (field) => present[field] !== undefined && typeof present[field] !== 'string',
+  );
+  return [...missing, ...notStrings].map((field) =>
+    failure(
+      [...at, field],
+      'required-field',
+      fields.strings.includes(field)
+        ? `${field} is a required string`
+        : `${field} is a required field`,
+    ),
   );
 }

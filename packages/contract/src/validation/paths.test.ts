@@ -21,18 +21,13 @@ function validateEndpoint(endpoint: Endpoint) {
   );
 }
 
-function failedPath(message: string, rule = 'canonical-path') {
-  return {
-    kind: 'invalid',
-    failures: [
-      {
-        kind: 'declaration',
-        at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
-        rule,
-        message,
-      },
-    ],
-  };
+/** A path failure of the Endpoint of that identity: a path that is not canonical still has one. */
+function failedPath(identity: string, message: string, rule = 'canonical-path') {
+  return failedAt(['groups', 'orders', 'endpoints', identity, 'path'], rule, message);
+}
+
+function failedAt(at: readonly (string | number)[], rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 describe('validateContract: canonical paths', () => {
@@ -55,42 +50,40 @@ describe('validateContract: canonical paths', () => {
 
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path }));
 
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'listOrders', 'input', 'params'],
-          rule: 'params',
-          message: "params declares exactly the path's :names: orderId",
-        },
-      ],
-    });
+    expect(validated).toEqual(
+      failedAt(
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'],
+        'exact-params',
+        "params declares exactly the path's :names: orderId",
+      ),
+    );
   });
 
   test('a path without a leading slash fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: 'orders' }));
 
-    expect(validated).toEqual(failedPath('A path starts with /: orders'));
+    expect(validated).toEqual(failedPath('GET /orders', 'A path starts with /: orders'));
   });
 
   test('a path with a trailing slash fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders/' }));
 
-    expect(validated).toEqual(failedPath('A path has no trailing slash: /orders/'));
+    expect(validated).toEqual(failedPath('GET /orders', 'A path has no trailing slash: /orders/'));
   });
 
   test('a path with an empty segment fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders//latest' }));
 
-    expect(validated).toEqual(failedPath('A path has no empty segment: /orders//latest'));
+    expect(validated).toEqual(
+      failedPath('GET /orders//latest', 'A path has no empty segment: /orders//latest'),
+    );
   });
 
   test('a path with an upper-case letter fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/Orders' }));
 
     expect(validated).toEqual(
-      failedPath('A path segment is lower-case letters, digits and dashes: Orders'),
+      failedPath('GET /Orders', 'A path segment is lower-case letters, digits and dashes: Orders'),
     );
   });
 
@@ -98,7 +91,10 @@ describe('validateContract: canonical paths', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders.json' }));
 
     expect(validated).toEqual(
-      failedPath('A path segment is lower-case letters, digits and dashes: orders.json'),
+      failedPath(
+        'GET /orders.json',
+        'A path segment is lower-case letters, digits and dashes: orders.json',
+      ),
     );
   });
 
@@ -106,7 +102,10 @@ describe('validateContract: canonical paths', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders/id-:id' }));
 
     expect(validated).toEqual(
-      failedPath('A path segment is lower-case letters, digits and dashes: id-:id'),
+      failedPath(
+        'GET /orders/id-:id',
+        'A path segment is lower-case letters, digits and dashes: id-:id',
+      ),
     );
   });
 
@@ -119,7 +118,9 @@ describe('validateContract: canonical paths', () => {
       }),
     );
 
-    expect(validated).toEqual(failedPath('A path param is written :camelCase: :file.json'));
+    expect(validated).toEqual(
+      failedPath('GET /files/{}', 'A path param is written :camelCase: :file.json'),
+    );
   });
 
   test('an empty param fails', () => {
@@ -131,7 +132,9 @@ describe('validateContract: canonical paths', () => {
       }),
     );
 
-    expect(validated).toEqual(failedPath('A path param is written :camelCase: :'));
+    expect(validated).toEqual(
+      failedPath('GET /orders/{}', 'A path param is written :camelCase: :'),
+    );
   });
 
   test('a param written in PascalCase fails', () => {
@@ -144,7 +147,9 @@ describe('validateContract: canonical paths', () => {
       }),
     );
 
-    expect(validated).toEqual(failedPath('A path param is written :camelCase: :OrderId'));
+    expect(validated).toEqual(
+      failedPath('GET /orders/{}', 'A path param is written :camelCase: :OrderId'),
+    );
   });
 
   test('a path with the same param twice fails', () => {
@@ -156,30 +161,43 @@ describe('validateContract: canonical paths', () => {
       }),
     );
 
-    expect(validated).toEqual(failedPath('A path param appears once: :id', 'duplicate-path-param'));
+    expect(validated).toEqual(
+      failedPath(
+        'GET /orders/{}/items/{}',
+        'A path param appears once: :id',
+        'duplicate-path-param',
+      ),
+    );
   });
 
-  test('every way a path breaks the grammar is named', () => {
-    const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: 'Orders/' }));
+  test('every way a path breaks the grammar is named, and params are not judged against it', () => {
+    const validated = validateEndpoint(
+      defineEndpoint({
+        ...listOrders,
+        path: 'Orders/:id/',
+        input: { params: z.object({ id: z.string() }) },
+      }),
+    );
 
+    const pathAt = ['groups', 'orders', 'endpoints', 'GET /Orders/{}', 'path'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
+          at: pathAt,
           rule: 'canonical-path',
-          message: 'A path starts with /: Orders/',
+          message: 'A path starts with /: Orders/:id/',
         },
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
+          at: pathAt,
           rule: 'canonical-path',
-          message: 'A path has no trailing slash: Orders/',
+          message: 'A path has no trailing slash: Orders/:id/',
         },
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
+          at: pathAt,
           rule: 'canonical-path',
           message: 'A path segment is lower-case letters, digits and dashes: Orders',
         },
@@ -189,7 +207,7 @@ describe('validateContract: canonical paths', () => {
 });
 
 describe('validateContract: params against the path', () => {
-  const paramsAt = ['groups', 'orders', 'endpoints', 'listOrders', 'input', 'params'];
+  const paramsAt = ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'];
 
   test('params with exactly the path’s :names validate', () => {
     const getOrder = defineEndpoint({
@@ -212,17 +230,13 @@ describe('validateContract: params against the path', () => {
       input: { params },
     });
 
-    expect(validateEndpoint(getItem)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: paramsAt,
-          rule: 'params',
-          message: "params declares exactly the path's :names: orderId, itemId",
-        },
-      ],
-    });
+    expect(validateEndpoint(getItem)).toEqual(
+      failedAt(
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}/items/{}', 'input', 'params'],
+        'exact-params',
+        "params declares exactly the path's :names: orderId, itemId",
+      ),
+    );
   });
 
   test('a param that is not a :name of the path fails', () => {
@@ -231,33 +245,17 @@ describe('validateContract: params against the path', () => {
     }>;
     const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });
 
-    expect(validateEndpoint(getOrder)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: paramsAt,
-          rule: 'params',
-          message: "params declares exactly the path's :names: orderId",
-        },
-      ],
-    });
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(paramsAt, 'exact-params', "params declares exactly the path's :names: orderId"),
+    );
   });
 
   test('a path with :names and no params fails', () => {
     const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId' as string });
 
-    expect(validateEndpoint(getOrder)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: paramsAt,
-          rule: 'params',
-          message: "params declares exactly the path's :names: orderId",
-        },
-      ],
-    });
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(paramsAt, 'exact-params', "params declares exactly the path's :names: orderId"),
+    );
   });
 
   test('params on a path without :names fail', () => {
@@ -267,17 +265,13 @@ describe('validateContract: params against the path', () => {
       input: { params: z.object({ orderId: z.uuid() }) },
     });
 
-    expect(validateEndpoint(getOrder)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: paramsAt,
-          rule: 'params',
-          message: 'A path without :names takes no params',
-        },
-      ],
-    });
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'input', 'params'],
+        'exact-params',
+        'A path without :names takes no params',
+      ),
+    );
   });
 
   test('an optional path param fails', () => {
@@ -287,17 +281,13 @@ describe('validateContract: params against the path', () => {
       input: { params: z.object({ orderId: z.uuid().optional() }) },
     });
 
-    expect(validateEndpoint(getOrder)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: [...paramsAt, 'fields', 'orderId'],
-          rule: 'optional-path-param',
-          message: 'A path param is never optional: orderId',
-        },
-      ],
-    });
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(
+        [...paramsAt, 'fields', 'orderId'],
+        'optional-path-param',
+        'A path param is never optional: orderId',
+      ),
+    );
   });
 
   test('params that are not an object fail once, as a part that is no object', () => {
@@ -307,16 +297,20 @@ describe('validateContract: params against the path', () => {
       input: { params: z.string() as unknown as z.ZodObject<{ orderId: z.ZodUUID }> },
     });
 
-    expect(validateEndpoint(getOrder)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: paramsAt,
-          rule: 'text-only',
-          message: 'params is an object of its fields',
-        },
-      ],
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(paramsAt, 'not-an-object', 'params is an object of its fields'),
+    );
+  });
+
+  test('params that are no schema fail once, as a slot with no schema', () => {
+    const getOrder = defineEndpoint({
+      ...listOrders,
+      path: '/orders/:orderId',
+      input: { params: 'orderId' as unknown as z.ZodObject<{ orderId: z.ZodUUID }> },
     });
+
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(paramsAt, 'not-a-schema', 'params is not a zod schema'),
+    );
   });
 });

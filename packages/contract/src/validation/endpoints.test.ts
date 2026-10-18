@@ -73,7 +73,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'method'],
+        ['TRACE /orders', 'method'],
         'method',
         'A method is GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS: TRACE',
       ),
@@ -87,7 +87,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'visibility'],
+        ['GET /orders', 'visibility'],
         'visibility',
         'A Visibility is public, internal or private: protected',
       ),
@@ -107,7 +107,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'lifecycle'],
+        ['GET /orders', 'lifecycle'],
         'lifecycle',
         'A lifecycle is active, deprecated or retired: sunset',
       ),
@@ -125,7 +125,23 @@ describe('validateContract: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['createOrder', 'success', 'status'],
+        ['POST /orders', 'success', 'status'],
+        'success-status',
+        'A Success status is 200, 201, 202, 203 or 204: 205',
+      ),
+    );
+  });
+
+  test('a HEAD Endpoint’s Success status is checked like any other', () => {
+    const status = 205 as SuccessStatus;
+
+    const validated = validateEndpoint(
+      defineEndpoint({ ...listOrders, method: 'HEAD', success: { status } }),
+    );
+
+    expect(validated).toEqual(
+      failedAt(
+        ['HEAD /orders', 'success', 'status'],
         'success-status',
         'A Success status is 200, 201, 202, 203 or 204: 205',
       ),
@@ -146,7 +162,7 @@ describe('validateContract: a Success’s status and body', () => {
     );
 
     expect(validated).toEqual(
-      failedAt(['createOrder', 'success', 'body'], 'success-body', 'A 204 Success has no body'),
+      failedAt(['POST /orders', 'success', 'body'], 'success-body', 'A 204 Success has no body'),
     );
   });
 
@@ -157,7 +173,7 @@ describe('validateContract: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'success', 'body'],
+        ['HEAD /orders', 'success', 'body'],
         'success-body',
         'A HEAD Endpoint answers no body',
       ),
@@ -170,7 +186,7 @@ describe('validateContract: a Success’s status and body', () => {
     const validated = validateEndpoint(defineEndpoint({ ...createOrder, success: { status } }));
 
     expect(validated).toEqual(
-      failedAt(['createOrder', 'success', 'body'], 'success-body', 'A 201 Success has a body'),
+      failedAt(['POST /orders', 'success', 'body'], 'success-body', 'A 201 Success has a body'),
     );
   });
 });
@@ -193,7 +209,7 @@ describe('validateContract: an Input body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'input', 'body'],
+        ['GET /orders', 'input', 'body'],
         'input-body',
         'A GET or HEAD Endpoint takes no body',
       ),
@@ -214,10 +230,77 @@ describe('validateContract: an Input body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['listOrders', 'input', 'body'],
+        ['HEAD /orders', 'input', 'body'],
         'input-body',
         'A GET or HEAD Endpoint takes no body',
       ),
     );
+  });
+});
+
+describe('validateContract: where Endpoints sit', () => {
+  test('a Retired and an Active Endpoint of one name sit at their own identities', () => {
+    const retired = defineEndpoint({
+      ...listOrders,
+      path: '/orders/all',
+      lifecycle: 'retired',
+      input: { query: z.object({ page: z.object({ size: z.int() }) }) },
+    });
+    const active = defineEndpoint({
+      ...listOrders,
+      path: '/orders/:orderId',
+      input: {
+        params: z.object({ orderId: z.uuid() }),
+        query: z.object({ page: z.array(z.object({ size: z.int() })) }),
+      },
+    });
+    const orders = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [retired, active],
+    });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      () => undefined,
+    );
+
+    const nonText =
+      'A query param travels as text: a string, number, boolean, literal or enum, or a list of those: page';
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: [
+            'groups',
+            'orders',
+            'endpoints',
+            'GET /orders/all',
+            'input',
+            'query',
+            'fields',
+            'page',
+          ],
+          rule: 'not-text',
+          message: nonText,
+        },
+        {
+          kind: 'declaration',
+          at: [
+            'groups',
+            'orders',
+            'endpoints',
+            'GET /orders/{}',
+            'input',
+            'query',
+            'fields',
+            'page',
+          ],
+          rule: 'not-text',
+          message: nonText,
+        },
+      ],
+    });
   });
 });

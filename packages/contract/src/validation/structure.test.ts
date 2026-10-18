@@ -1,0 +1,211 @@
+import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import {
+  type Contract,
+  type Definitions,
+  defineContract,
+  defineDefinitions,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  type Endpoint,
+  type Group,
+  type Guard,
+  type Rejection,
+} from '../index.ts';
+import { validateContract } from '../internal/index.ts';
+
+function noOrigin() {
+  return undefined;
+}
+
+const listing = {
+  name: 'listOrders',
+  method: 'GET',
+  path: '/orders',
+  visibility: 'public',
+  description: 'Every order',
+  success: { status: 200, body: z.array(z.object({ id: z.uuid() })) },
+} as const;
+
+/** What a cast lets an author put where a declaration belongs. */
+function anything<Wanted>(value: unknown): Wanted {
+  return value as Wanted;
+}
+
+function validateEndpoint(endpoint: Endpoint) {
+  const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
+  return validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+}
+
+function failed(at: readonly (string | number)[], rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+}
+
+describe('validateContract: a root that is not one', () => {
+  test('a null root is invalid, not an exception', () => {
+    expect(validateContract(anything<Contract>(null), noOrigin)).toEqual(
+      failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
+    );
+  });
+
+  test('a root with an unknown kind fails', () => {
+    const root = anything<Contract>({ kind: 'service', name: 'orders-service' });
+
+    expect(validateContract(root, noOrigin)).toEqual(
+      failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
+    );
+  });
+
+  test('an unbranded object with a root kind is not a declaration', () => {
+    const root = anything<Contract>({ kind: 'contract', name: 'orders-service' });
+
+    expect(validateContract(root, noOrigin)).toEqual(
+      failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
+    );
+  });
+});
+
+describe('validateContract: lists and their items', () => {
+  test('a root list that is not a list fails', () => {
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: anything<readonly Group[]>('orders'),
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(['groups'], 'not-a-list', 'groups is a list'),
+    );
+  });
+
+  test('a null Group fails as not a declaration', () => {
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: anything<readonly Group[]>([null]),
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
+    );
+  });
+
+  test('a null Definitions Package and a null Dependency fail as not declarations', () => {
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: anything<readonly Definitions[]>([null]),
+      dependencies: anything<readonly never[]>([null]),
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['definitions', 0],
+          rule: 'not-a-declaration',
+          message: 'definitions.0 is not a Definitions Package',
+        },
+        {
+          kind: 'declaration',
+          at: ['dependencies', 0],
+          rule: 'not-a-declaration',
+          message: 'dependencies.0 is not a Dependency',
+        },
+      ],
+    });
+  });
+
+  test('a Group’s Endpoint that is not one fails', () => {
+    const orders = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: anything<readonly [Endpoint]>([{ name: 'listOrders' }]),
+    });
+
+    expect(
+      validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin),
+    ).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 0],
+        'not-a-declaration',
+        'endpoints.0 is not an Endpoint',
+      ),
+    );
+  });
+
+  test('an Endpoint’s rejections item that is no Rejection fails', () => {
+    const rejections = anything<readonly Rejection[]>([{ code: 'ORDER_LOCKED', status: 409 }]);
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections }))).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'rejections', 0],
+        'not-a-declaration',
+        'rejections.0 is not a Rejection',
+      ),
+    );
+  });
+
+  test('a Guard’s guards item that is no Guard fails', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      guards: anything<readonly Guard[]>(['userToken']),
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
+      failed(['guards', 'tenant', 'guards', 0], 'not-a-declaration', 'guards.0 is not a Guard'),
+    );
+  });
+
+  test('a Guard’s rejections that is not a list fails', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      rejections: anything<readonly Rejection[]>({}),
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
+      failed(['guards', 'tenant', 'rejections'], 'not-a-list', 'rejections is a list'),
+    );
+  });
+
+  test('a null Standard Rejection entry fails', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: anything<Record<string, never>>({ notFound: null }),
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(
+        ['standardRejections', 'notFound'],
+        'not-a-declaration',
+        'standardRejections.notFound is not a Standard Rejection declaration',
+      ),
+    );
+  });
+
+  test('a malformed root is invalid without throwing', () => {
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: anything<readonly Group[]>([
+        null,
+        defineGroup({
+          name: 'orders',
+          description: 'Orders',
+          endpoints: anything<readonly [Endpoint]>([
+            'listOrders',
+            defineEndpoint({
+              ...listing,
+              guards: anything<readonly Guard[]>([null, 'x']),
+              rejections: anything<readonly Rejection[]>([null]),
+            }),
+          ]),
+        }),
+      ]),
+      definitions: anything<readonly Definitions[]>('definitions'),
+      dependencies: anything<readonly never[]>([{}]),
+    });
+
+    expect(validateContract(contract, noOrigin).kind).toBe('invalid');
+  });
+});

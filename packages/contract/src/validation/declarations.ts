@@ -4,27 +4,40 @@ import type { Dependencies } from '../dependencies.ts';
 import type { Endpoint } from '../endpoint.ts';
 import type { Group } from '../group.ts';
 import type { Guard } from '../guard.ts';
+import {
+  isDefinitions,
+  isDependencies,
+  isEndpoint,
+  isGroup,
+  isGuard,
+  isRejection,
+} from '../predicates.ts';
 import type { Rejection } from '../rejection.ts';
 import type { Application, Contract } from '../roots.ts';
 import type { StandardRejectionDeclaration } from '../standard-rejections.ts';
 import type { Path } from '../walker/nodes.ts';
+import { identityOf } from './identity.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
 export type Root = Contract | Application | Definitions;
 
-/** A Group and where it sits in its root. */
+/** A Group and where it sits in its root: `['groups', <name>]`. */
 export type LocatedGroup = { readonly at: Path; readonly group: Group };
 
-/** An Endpoint and where it sits in its root, under its Group. */
+/**
+ * An Endpoint and where it sits in its root, under its Group and by its identity, since a
+ * Retired Endpoint may share its name with an Active one: `['groups', <group>, 'endpoints',
+ * 'GET /orders/{}']`. A Snapshot's reader finds an Endpoint's schemas under that location.
+ */
 export type LocatedEndpoint = { readonly at: Path; readonly endpoint: Endpoint };
 
-/** A Guard and where it sits: by name, since Endpoints and other Guards only reference it. */
+/** A Guard and where it sits, by name, since Endpoints and other Guards only reference it. */
 export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
 
-/** A Rejection and where it sits: by code, since Endpoints and Guards only reference it. */
+/** A Rejection and where it sits, by code, since Endpoints and Guards only reference it. */
 export type LocatedRejection = { readonly at: Path; readonly rejection: Rejection };
 
-/** A listed Definitions Package and where it sits in its root. */
+/** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
 export type LocatedDefinitions = { readonly at: Path; readonly definitions: Definitions };
 
 /** A Dependency and where it sits in its root, by Provider. */
@@ -37,9 +50,13 @@ export type LocatedStandardRejection = {
   readonly declaration: StandardRejectionDeclaration<number>;
 };
 
-/** Every declaration of a root, each once, with where it sits, so each rule reads one list. */
+/**
+ * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
+ * sits where a declaration belongs and is none is left out here and reported by the structure rules.
+ */
 export type Declarations = {
   readonly root: Root;
+  readonly packages: readonly LocatedDefinitions[];
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly LocatedGuard[];
@@ -55,10 +72,11 @@ export function declarationsOf(root: Root): Declarations {
   const groups = groupsOf(root);
   const endpoints = distinctEndpoints(groups.flatMap(endpointsOf));
   const packages = root.kind === 'definitions' ? [{ at: [], definitions: root }] : definitions;
-  const guards = guardsOf(packages.map(packageOf), endpoints);
-  const rejections = rejectionsOf({ packages: packages.map(packageOf), guards, endpoints });
+  const guards = guardsOf(packages, endpoints);
+  const rejections = rejectionsOf({ packages, guards, endpoints });
   return {
     root,
+    packages,
     groups,
     endpoints,
     guards,
@@ -67,6 +85,22 @@ export function declarationsOf(root: Root): Declarations {
     standardRejections: packages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
   };
+}
+
+/** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
+export function attachedGuardOf(attachment: Attachment): Guard | undefined {
+  if (isGuard(attachment)) {
+    return attachment;
+  }
+  if (typeof attachment === 'object' && attachment !== null && isGuard(attachment.guard)) {
+    return attachment.guard;
+  }
+  return undefined;
+}
+
+/** A list a declaration may leave out is empty; what a cast put there that is no list is too. */
+export function listOf<Item>(list: readonly Item[] | undefined): readonly Item[] {
+  return Array.isArray(list) ? list : [];
 }
 
 /** An Endpoint listed twice is one Endpoint, where first met; the Groups rule reports the repeat. */
@@ -86,89 +120,60 @@ function standardRejectionsOf({
   at,
   definitions,
 }: LocatedDefinitions): readonly LocatedStandardRejection[] {
-  const declared = definitions.standardRejections ?? {};
-  const entries = Object.entries(declared).filter(([, declaration]) => declaration !== undefined);
+  const declared: object = definitions.standardRejections ?? {};
+  const entries = Object.entries(declared).filter(([, declaration]) => isObject(declaration));
   return entries.map(([name, declaration]) => ({
     at: [...at, 'standardRejections', name],
     name,
-    declaration,
+    declaration: declaration as StandardRejectionDeclaration<number>,
   }));
-}
-
-/** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
-export function attachedGuardOf(attachment: Attachment): Guard | undefined {
-  if (isGuard(attachment)) {
-    return attachment;
-  }
-  if (typeof attachment === 'object' && attachment !== null && isGuard(attachment.guard)) {
-    return attachment.guard;
-  }
-  return undefined;
-}
-
-/** Whether a value is a declared Guard, from any copy of this package. */
-export function isGuard(value: unknown): value is Guard {
-  return isDeclaration(value) && value.kind === 'guard';
-}
-
-/** Whether a value is a declared Rejection, from any copy of this package. */
-export function isRejection(value: unknown): value is Rejection {
-  return isDeclaration(value) && value.kind === 'rejection';
-}
-
-/** Whether a value is a declared Endpoint, from any copy of this package. */
-export function isEndpoint(value: unknown): value is Endpoint {
-  return isDeclaration(value) && value.kind === 'endpoint';
-}
-
-function isDeclaration(value: unknown): value is { readonly kind: unknown } {
-  return typeof value === 'object' && value !== null && 'kind' in value;
 }
 
 function definitionsOf(root: Root): readonly LocatedDefinitions[] {
   if (root.kind !== 'contract') {
     return [];
   }
-  return listOf(root.definitions).map((definitions) => ({
-    at: ['definitions', definitions.name],
-    definitions,
-  }));
+  return listOf(root.definitions)
+    .filter(isDefinitions)
+    .map((definitions) => ({ at: ['definitions', String(definitions.name)], definitions }));
 }
 
 function groupsOf(root: Root): readonly LocatedGroup[] {
   if (root.kind !== 'contract') {
     return [];
   }
-  return listOf(root.groups).map((group) => ({ at: ['groups', group.name], group }));
+  return listOf(root.groups)
+    .filter(isGroup)
+    .map((group) => ({ at: ['groups', String(group.name)], group }));
 }
 
 function endpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
-  return listOf(group.endpoints).map((endpoint) => ({
-    at: [...at, 'endpoints', endpoint.name],
-    endpoint,
-  }));
+  return listOf(group.endpoints)
+    .filter(isEndpoint)
+    .map((endpoint) => ({
+      at: [...at, 'endpoints', identityOf(endpoint.method, endpoint.path)],
+      endpoint,
+    }));
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependencies[] {
   if (root.kind === 'definitions') {
     return [];
   }
-  return listOf(root.dependencies).map((dependencies) => ({
-    at: ['dependencies', dependencies.provider],
-    dependencies,
-  }));
-}
-
-function packageOf(located: LocatedDefinitions): Definitions {
-  return located.definitions;
+  return listOf(root.dependencies)
+    .filter(isDependencies)
+    .map((dependencies) => ({
+      at: ['dependencies', String(dependencies.provider)],
+      dependencies,
+    }));
 }
 
 /** Every Guard a root reaches, each once, the Guards one lists before it. */
 function guardsOf(
-  packages: readonly Definitions[],
+  packages: readonly LocatedDefinitions[],
   endpoints: readonly LocatedEndpoint[],
 ): readonly LocatedGuard[] {
-  const listed = packages.flatMap((definitions) => listOf(definitions.guards));
+  const listed = packages.flatMap((located) => listOf(located.definitions.guards));
   const attached = endpoints.flatMap((located) => listOf(located.endpoint.guards));
   const named = attached.map(attachedGuardOf).filter(isGuard);
   const gathered: LocatedGuard[] = [];
@@ -187,24 +192,24 @@ function gatherGuard(guard: Guard, seen: Set<Guard>, gathered: LocatedGuard[]): 
   for (const listed of listOf(guard.guards)) {
     gatherGuard(listed, seen, gathered);
   }
-  gathered.push({ at: ['guards', guard.name], guard });
+  gathered.push({ at: ['guards', String(guard.name)], guard });
 }
 
 /** Every Rejection a root reaches, each once: a Definitions Package's, a Guard's, an Endpoint's. */
 function rejectionsOf(
-  declared: Pick<Declarations, 'guards' | 'endpoints'> & {
-    readonly packages: readonly Definitions[];
-  },
+  declared: Pick<Declarations, 'packages' | 'guards' | 'endpoints'>,
 ): readonly LocatedRejection[] {
-  const listed = declared.packages.flatMap((definitions) => listOf(definitions.rejections));
+  const listed = declared.packages.flatMap((located) => listOf(located.definitions.rejections));
   const ofGuards = declared.guards.flatMap((located) => listOf(located.guard.rejections));
   const ofEndpoints = declared.endpoints.flatMap((located) => listOf(located.endpoint.rejections));
   const rejections = [...listed, ...ofGuards, ...ofEndpoints].filter(isRejection);
   const distinct = [...new Set(rejections)];
-  return distinct.map((rejection) => ({ at: ['rejections', rejection.code], rejection }));
+  return distinct.map((rejection) => ({
+    at: ['rejections', String(rejection.code)],
+    rejection,
+  }));
 }
 
-/** A list a declaration may leave out is empty; what a cast put there that is no list is too. */
-export function listOf<Item>(list: readonly Item[] | undefined): readonly Item[] {
-  return Array.isArray(list) ? list : [];
+function isObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
 }

@@ -1,15 +1,23 @@
+import { isApplication, isContract, isDefinitions } from '../predicates.ts';
 import type { NotAllowed, SchemaNode } from '../walker/nodes.ts';
 import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
-import type { DeclarationFailure, Failure } from './failures.ts';
-import { undeclaredFieldFailures } from './fields.ts';
+import { type DeclarationFailure, type Failure, failure } from './failures.ts';
+import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
+import {
+  type LocatedNode,
+  locatedSchemasOf,
+  type Nodes,
+  nodesOf,
+  schemaSlotsOf,
+} from './schemas.ts';
+import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 
 /** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
@@ -29,29 +37,35 @@ export type ValidatedContract =
  * types state.
  */
 export function validateContract(root: Root, originOf: OriginOf): ValidatedContract {
+  if (!isRoot(root)) {
+    const message = 'A root is a Contract, an Application or a Definitions Package';
+    return invalid([failure([], 'not-a-root', message)]);
+  }
   const declarations = declarationsOf(root);
   const slots = schemaSlotsOf(declarations);
-  const declared = [...declarationFailures(declarations), ...slots.failures];
-  const walked = walkSchemas(slots.located, originOf);
-  const nodes = walked.located
-    .filter(hasNode)
-    .map(({ at, walked: node }) => ({ at, node: node.value }));
-  const notAllowed = [...new Set(walked.located.flatMap(failuresAt))];
+  const walked = walkSchemas(locatedSchemasOf(slots.slots), originOf);
+  const nodes = nodesOf(slots.slots, walked);
   const failures = [
-    ...declared,
-    ...schemaFailures(declarations, nodesOf(nodes, walked.defs)),
-    ...notAllowed,
+    ...declarationFailures(declarations),
+    ...slots.failures,
+    ...schemaFailures(declarations, nodes),
+    ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {
     return invalid(failures);
   }
-  return { kind: 'valid', schemas: { nodes, defs: walked.defs } };
+  const written = nodes.slots.filter((slot) => slot.role === 'snapshot');
+  return {
+    kind: 'valid',
+    schemas: { nodes: written.map(({ at, node }) => ({ at, node })), defs: nodes.defs },
+  };
 }
 
 /** The rules that read declarations alone, so they are judged even when a schema fails the walk. */
 function declarationFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
-    ...undeclaredFieldFailures(declarations),
+    ...structureFailures(declarations),
+    ...fieldFailures(declarations),
     ...nameFailures(declarations),
     ...uniquenessFailures(declarations),
     ...groupFailures(declarations),
@@ -64,15 +78,20 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
   ];
 }
 
-/** The rules that read the walked nodes, judged once every schema walked. */
+/** The rules that read the walked nodes, judged on every schema that walked. */
 function schemaFailures(declarations: Declarations, nodes: Nodes): readonly DeclarationFailure[] {
+  const judged = { declarations, nodes };
   return [
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
-    ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
+    ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, judged)),
     ...rejectionBodyFailures(declarations, nodes),
-    ...textFailures(declarations, nodes),
+    ...textFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];
+}
+
+function isRoot(value: unknown): value is Root {
+  return isContract(value) || isApplication(value) || isDefinitions(value);
 }
 
 function invalid(failures: readonly Failure[]): ValidatedContract {
@@ -81,12 +100,6 @@ function invalid(failures: readonly Failure[]): ValidatedContract {
     throw new Error('An invalid root must name at least one failure.');
   }
   return { kind: 'invalid', failures: [first, ...others] };
-}
-
-function hasNode(
-  location: WalkedLocation,
-): location is WalkedLocation & { readonly walked: { readonly kind: 'walked' } } {
-  return location.walked.kind === 'walked';
 }
 
 /** A cycle's failure comes back wherever the cycle is met, so the same failure may repeat. */

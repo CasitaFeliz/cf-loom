@@ -1,83 +1,80 @@
+import { isEndpoint, isEvent } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations, LocatedDependencies, Root } from './declarations.ts';
-import { isEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';
 
-/** A Service reaches Public and Internal Elements; an Application, outside the network, Public only. */
+/** An Element a Dependency selected, by its name in code, and where it sits. */
+type Selected = { readonly at: Path; readonly name: string; readonly element: unknown };
+
+/** A Service reaches the Elements its Provider exports; an Application, outside the network, Public Endpoints only. */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, dependencies } = declarations;
   return dependencies.flatMap((located) => [
-    ...endpointFailures(located, root.kind),
-    ...eventFailures(located, root.kind),
+    ...selectedOf(located, 'endpoints').flatMap((selected) =>
+      endpointFailures(selected, located, root.kind),
+    ),
+    ...selectedOf(located, 'events').flatMap((selected) =>
+      eventFailures(selected, located, root.kind),
+    ),
   ]);
 }
 
-function endpointFailures(
+function selectedOf(
   { at, dependencies }: LocatedDependencies,
-  rootKind: Root['kind'],
-): readonly DeclarationFailure[] {
-  return Object.entries(dependencies.endpoints ?? {}).flatMap(([name, endpoint]) => {
-    const endpointAt = [...at, 'endpoints', name];
-    if (!isEndpoint(endpoint)) {
-      return [
-        failure(endpointAt, 'dependency-selection', `${selection}: ${name} is not an Endpoint`),
-      ];
-    }
-    if (endpoint.visibility === 'private') {
-      return [failure(endpointAt, 'dependency-selection', `${selection}: ${name} is private`)];
-    }
-    const selected = { at: endpointAt, name, visibility: endpoint.visibility };
-    return rootKind === 'application' ? applicationEndpointFailures(selected) : [];
-  });
+  part: 'endpoints' | 'events',
+): readonly Selected[] {
+  const elements: object = dependencies[part] ?? {};
+  return Object.entries(elements).map(([name, element]) => ({
+    at: [...at, part, name],
+    name,
+    element,
+  }));
 }
 
-function applicationEndpointFailures({
-  at,
-  name,
-  visibility,
-}: {
-  readonly at: Path;
-  readonly name: string;
-  readonly visibility: unknown;
-}): readonly DeclarationFailure[] {
-  if (visibility === 'public') {
+function endpointFailures(
+  { at, name, element }: Selected,
+  { dependencies }: LocatedDependencies,
+  rootKind: Root['kind'],
+): readonly DeclarationFailure[] {
+  if (!isEndpoint(element)) {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Endpoint`)];
+  }
+  const exported: object = dependencies.exported?.endpoints ?? {};
+  if (!Object.values(exported).includes(element)) {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
+  }
+  if (rootKind !== 'application' || element.visibility === 'public') {
     return [];
   }
-  const message = `An Application depends on Public Endpoints only: ${name} is ${String(visibility)}`;
+  const message = `An Application depends on Public Endpoints only: ${name} is ${String(element.visibility)}`;
   return [failure(at, 'application-dependency', message)];
 }
 
+/**
+ * An Event is one the Provider exports when it has the same name and version: a Contract
+ * Package's Events are plain objects until `defineEvent` brands them (milestone 2), and a
+ * declaration copies plain objects, so identity cannot tell them apart.
+ */
 function eventFailures(
-  { at, dependencies }: LocatedDependencies,
-  rootKind: Root['kind'],
-): readonly DeclarationFailure[] {
-  return Object.entries(dependencies.events ?? {}).flatMap(([name, event]) =>
-    selectedEventFailures({ at: [...at, 'events', name], name, event }, rootKind),
-  );
-}
-
-function selectedEventFailures(
-  { at, name, event }: { readonly at: Path; readonly name: string; readonly event: unknown },
+  { at, name, element }: Selected,
+  { dependencies }: LocatedDependencies,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
   if (rootKind === 'application') {
-    const message = `An Application subscribes to no Event: ${name}`;
-    return [failure(at, 'application-dependency', message)];
+    return [
+      failure(at, 'application-dependency', `An Application subscribes to no Event: ${name}`),
+    ];
   }
-  if (!isEvent(event)) {
+  if (!isEvent(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
   }
-  const visibility: unknown = event.visibility;
-  if (visibility === 'private') {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
-  }
-  return [];
-}
-
-function isEvent(
-  value: unknown,
-): value is { readonly kind: 'event'; readonly visibility: unknown } {
-  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'event';
+  const exported: object = dependencies.exported?.events ?? {};
+  const isExported = Object.values(exported).some(
+    (event) => isEvent(event) && event.name === element.name && event.version === element.version,
+  );
+  return isExported
+    ? []
+    : [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
 }

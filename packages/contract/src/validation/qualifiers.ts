@@ -34,7 +34,7 @@ function undeclaredKeys(value: unknown, node: SchemaNode, within: Within): reado
     case 'tagged':
       return taggedKeys(value, node, within);
     case 'allOf':
-      return [...new Set(node.items.flatMap((item) => undeclaredKeys(value, item, within)))];
+      return intersectionKeys(value, node.items, within);
     case 'ref':
       return refKeys(value, node.name, within);
     case 'string':
@@ -81,14 +81,36 @@ function recordKeys(value: unknown, node: SchemaNode, within: Within): readonly 
   );
 }
 
-/** A value fits a union when one option declares every key; else the first option's keys stand. */
+/** A value fits the option that declares most of its keys: the fewest undeclared ones stand. */
 function unionKeys(
   value: unknown,
   options: readonly SchemaNode[],
   within: Within,
 ): readonly string[] {
   const byOption = options.map((option) => undeclaredKeys(value, option, within));
-  return byOption.find((keys) => keys.length === 0) ?? byOption[0] ?? [];
+  const [closest, ...others] = byOption;
+  if (closest === undefined) {
+    return [];
+  }
+  let fewest = closest;
+  for (const keys of others) {
+    fewest = keys.length < fewest.length ? keys : fewest;
+  }
+  return fewest;
+}
+
+/** An intersection declares a key when any of its items does, so only keys no item declares stand. */
+function intersectionKeys(
+  value: unknown,
+  items: readonly SchemaNode[],
+  within: Within,
+): readonly string[] {
+  const byItem = items.map((item) => undeclaredKeys(value, item, within));
+  const [first, ...others] = byItem;
+  if (first === undefined) {
+    return [];
+  }
+  return first.filter((key) => others.every((keys) => keys.includes(key)));
 }
 
 function taggedKeys(

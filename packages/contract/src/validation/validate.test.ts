@@ -91,11 +91,11 @@ describe('validateContract', () => {
     const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
     const located = [
       {
-        at: ['groups', 'orders', 'endpoints', 'getOrder', 'input', 'params'],
+        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'],
         schema: getOrder.input.params,
       },
       {
-        at: ['groups', 'orders', 'endpoints', 'getOrder', 'success', 'body'],
+        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'success', 'body'],
         schema: getOrder.success.body,
       },
       { at: ['guards', 'apiKey', 'demands', 'headers'], schema: apiKey.demands.headers },
@@ -171,7 +171,7 @@ describe('validateContract', () => {
             'groups',
             'orders',
             'endpoints',
-            'createOrder',
+            'POST /orders',
             'input',
             'body',
             'fields',
@@ -204,14 +204,14 @@ describe('validateContract', () => {
       noOrigin,
     );
 
-    const endpointAt = ['groups', 'orders', 'endpoints', 'createOrder'];
+    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
           at: [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
-          rule: 'text-only',
+          rule: 'not-text',
           message: 'A header travels as text: a string, number, boolean, literal or enum: x-tenant',
         },
         {
@@ -246,7 +246,7 @@ describe('validateContract', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'createOrder', 'path'],
+          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'path'],
           rule: 'canonical-path',
           message: 'A path has no trailing slash: /orders/',
         },
@@ -256,7 +256,7 @@ describe('validateContract', () => {
             'groups',
             'orders',
             'endpoints',
-            'createOrder',
+            'POST /orders',
             'input',
             'body',
             'fields',
@@ -357,6 +357,52 @@ describe('validateContract: the README’s examples', () => {
     );
 
     expect(validated).toEqual(['valid', 'valid', 'valid']);
+  });
+
+  test('a code declared twice is written once, as its first declaration, and compared from both', () => {
+    const lockedAgain = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body: z.object({ lockedAt: z.iso.datetime().describe('When it locked') }),
+    });
+    const retryOrder = defineEndpoint({
+      name: 'retryOrder',
+      method: 'POST',
+      path: '/orders/:orderId/retry',
+      visibility: 'public',
+      description: 'Retries one order',
+      input: { params: z.object({ orderId: z.uuid() }) },
+      success: { status: 204 },
+      rejections: [lockedAgain],
+    });
+    const group = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [getOrder, retryOrder],
+    });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [group] }),
+      noOrigin,
+    );
+
+    const bodies =
+      validated.kind === 'valid'
+        ? validated.schemas.nodes.filter(
+            (node) => node.at.join('.') === 'rejections.ORDER_LOCKED.body',
+          )
+        : [];
+    expect(bodies).toEqual([
+      {
+        at: ['rejections', 'ORDER_LOCKED', 'body'],
+        node: {
+          type: 'object',
+          mode: 'open',
+          fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
+        },
+      },
+    ]);
   });
 
   test('the same root validates to the same result twice', () => {

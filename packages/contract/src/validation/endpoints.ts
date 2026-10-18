@@ -1,11 +1,8 @@
+import { lifecycles, visibilities } from '../element.ts';
 import type { Endpoint } from '../endpoint.ts';
+import { methods, successStatuses } from '../http.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
-
-const methods: readonly unknown[] = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
-const visibilities: readonly unknown[] = ['public', 'internal', 'private'];
-const lifecycles: readonly unknown[] = ['active', 'deprecated', 'retired'];
-const successStatuses: readonly unknown[] = [200, 201, 202, 203, 204];
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */
 type ClosedValue = {
@@ -30,12 +27,13 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
   ];
 }
 
+/** A value present is one of the allowed; a value absent is the required-field rule's finding. */
 function closedValueFailures(
   { at, endpoint }: LocatedEndpoint,
   { field, rule, allowed, noun }: ClosedValue,
 ): readonly DeclarationFailure[] {
   const value = endpoint[field];
-  if (allowed.includes(value) || (field === 'lifecycle' && value === undefined)) {
+  if (value === undefined || allowed.includes(value)) {
     return [];
   }
   return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${String(value)}`)];
@@ -43,16 +41,19 @@ function closedValueFailures(
 
 /** A Success declares an allowed status; HEAD and 204 answer no body, every other status one. */
 function successFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
-  const success: Partial<Endpoint['success']> = endpoint.success ?? {};
+  const success: Partial<Endpoint['success']> | undefined = endpoint.success;
+  if (typeof success !== 'object' || success === null || success.status === undefined) {
+    return [];
+  }
+  if (!successStatuses.includes(success.status)) {
+    const message = `A Success status is ${oneOf(successStatuses)}: ${String(success.status)}`;
+    return [failure([...at, 'success', 'status'], 'success-status', message)];
+  }
   const bodyAt = [...at, 'success', 'body'];
   if (endpoint.method === 'HEAD') {
     return success.body === undefined
       ? []
       : [failure(bodyAt, 'success-body', 'A HEAD Endpoint answers no body')];
-  }
-  if (!successStatuses.includes(success.status)) {
-    const message = `A Success status is ${oneOf(successStatuses)}: ${String(success.status)}`;
-    return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
   if (success.status === 204) {
     return success.body === undefined

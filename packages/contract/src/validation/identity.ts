@@ -1,0 +1,23 @@
+/** The segments between the slashes of a path, a leading or trailing slash dropped. */
+export function segmentsOf(path: string): readonly string[] {
+  const inner = path.replace(/^\//, '').replace(/\/$/, '');
+  return inner === '' ? [] : inner.split('/');
+}
+
+/** The `:names` of a path, in order, as its params must declare them. */
+export function paramNamesOf(path: string): readonly string[] {
+  return segmentsOf(path)
+    .filter((segment) => segment.startsWith(':'))
+    .map((segment) => segment.slice(1));
+}
+
+/**
+ * An Endpoint's identity: its method and its path with every param replaced by `{}`. A path that
+ * is not canonical still gets one, so every failure of the Endpoint has a location.
+ */
+export function identityOf(method: unknown, path: unknown): string {
+  const segments = segmentsOf(String(path)).map((segment) =>
+    segment.startsWith(':') ? '{}' : segment,
+  );
+  return `${String(method)} /${segments.join('/')}`;
+}

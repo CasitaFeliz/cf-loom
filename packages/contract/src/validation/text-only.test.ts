@@ -37,7 +37,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-const endpointAt = ['groups', 'orders', 'endpoints', 'listOrders'];
+const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
 const text = 'travels as text: a string, number, boolean, literal or enum';
 
 describe('validateContract: text-only headers, query and path params', () => {
@@ -71,7 +71,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'headers', 'fields', 'x-client'],
-        'text-only',
+        'not-text',
         `A header ${text}: x-client`,
       ),
     );
@@ -86,7 +86,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'headers', 'fields', 'x-tags'],
-        'text-only',
+        'not-text',
         `A header ${text}: x-tags`,
       ),
     );
@@ -101,7 +101,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'success', 'headers', 'fields', 'x-page'],
-        'text-only',
+        'not-text',
         `A header ${text}: x-page`,
       ),
     );
@@ -116,7 +116,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'query', 'fields', 'filter'],
-        'text-only',
+        'not-text',
         `A query param ${text}, or a list of those: filter`,
       ),
     );
@@ -131,7 +131,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'query', 'fields', 'filters'],
-        'text-only',
+        'not-text',
         `A query param ${text}, or a list of those: filters`,
       ),
     );
@@ -146,8 +146,8 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'params', 'fields', 'orderId'],
-        'text-only',
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'not-text',
         `A path param ${text}: orderId`,
       ),
     );
@@ -162,7 +162,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'query', 'fields', 'page'],
-        'text-only',
+        'nullable-text',
         'A query param is never nullable: page',
       ),
     );
@@ -177,8 +177,8 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'params', 'fields', 'orderId'],
-        'text-only',
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'nullable-text',
         'A path param is never nullable: orderId',
       ),
     );
@@ -193,7 +193,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
         [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
-        'text-only',
+        'nullable-text',
         'A header is never nullable: x-tenant',
       ),
     );
@@ -209,7 +209,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
       failed(
         ['guards', 'signed', 'demands', 'headers', 'fields', 'x-signature'],
-        'text-only',
+        'not-text',
         `A header ${text}: x-signature`,
       ),
     );
@@ -221,9 +221,27 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
       failed(
         [...endpointAt, 'input', 'headers'],
-        'text-only',
+        'not-an-object',
         'headers is an object of its fields',
       ),
+    );
+  });
+});
+
+describe('validateContract: a text part that is itself nullable', () => {
+  test('a nullable headers object fails', () => {
+    const headers = z.object({ 'x-tenant': z.string() }).nullable() as unknown as z.ZodObject;
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
+      failed([...endpointAt, 'input', 'headers'], 'nullable-text', 'headers is never nullable'),
+    );
+  });
+
+  test('a nullable query object fails', () => {
+    const query = z.object({ page: z.int() }).nullable() as unknown as z.ZodObject;
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, input: { query } }))).toEqual(
+      failed([...endpointAt, 'input', 'query'], 'nullable-text', 'query is never nullable'),
     );
   });
 });
@@ -313,6 +331,16 @@ describe('validateContract: one schema per header or query name on an Endpoint',
         'A header has one schema across an Endpoint and its Guards: authorization differs between listOrders and userToken',
       ),
     );
+  });
+
+  test('an Endpoint and its Guard declaring one header with different annotations agree', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      guards: [userToken],
+      input: { headers: z.object({ authorization: z.string().describe('A bearer token') }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
 
   test('two Guards declaring one query param with different schemas fail', () => {

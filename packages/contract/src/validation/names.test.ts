@@ -81,7 +81,7 @@ describe('validateContract: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'list_orders', 'name'],
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
         'An Endpoint name is camelCase: list_orders',
       ),
@@ -140,7 +140,7 @@ describe('validateContract: unique names and identities', () => {
 
     expect(validateGroups([aGroup('orders', [listOrders, listAgain])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'listOrders', 'name'],
+        ['groups', 'orders', 'endpoints', 'GET /orders/latest', 'name'],
         'duplicate-endpoint-name',
         'An Endpoint name is unique among the Endpoints that are not Retired: listOrders',
       ),
@@ -169,7 +169,7 @@ describe('validateContract: unique names and identities', () => {
 
     expect(validateGroups([aGroup('orders', [getLatest, getOrder])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'getOrder', 'path'],
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'path'],
         'duplicate-endpoint-identity',
         'An Endpoint is identified by its method and path, once: GET /orders/{}',
       ),
@@ -228,7 +228,7 @@ describe('validateContract: Groups', () => {
   test('an Endpoint listed in two Groups fails', () => {
     expect(validateGroups([aGroup('orders', [listOrders]), aGroup('sales', [listOrders])])).toEqual(
       failed(
-        ['groups', 'sales', 'endpoints', 'listOrders'],
+        ['groups', 'sales', 'endpoints', 'GET /orders'],
         'group-membership',
         'An Endpoint belongs to exactly one Group: listOrders is also in orders',
       ),
@@ -238,9 +238,21 @@ describe('validateContract: Groups', () => {
   test('an Endpoint listed twice in one Group fails', () => {
     expect(validateGroups([aGroup('orders', [listOrders, listOrders])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'listOrders'],
+        ['groups', 'orders', 'endpoints', 'GET /orders'],
         'group-membership',
         'An Endpoint belongs to exactly one Group: listOrders is also in orders',
+      ),
+    );
+  });
+
+  test('two Groups with one name fail', () => {
+    expect(
+      validateGroups([aGroup('orders', [listOrders]), aGroup('orders', [createOrder])]),
+    ).toEqual(
+      failed(
+        ['groups', 'orders', 'name'],
+        'duplicate-group-name',
+        'A Group name is unique in the Contract: orders',
       ),
     );
   });

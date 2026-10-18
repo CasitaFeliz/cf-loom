@@ -62,7 +62,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-const guardsAt = ['groups', 'orders', 'endpoints', 'listOrders', 'guards'];
+const guardsAt = ['groups', 'orders', 'endpoints', 'GET /orders', 'guards'];
 
 describe('validateContract: what a Guard demands', () => {
   test('a Guard demanding headers and query validates', () => {
@@ -146,7 +146,11 @@ describe('validateContract: bare and qualified Attachments', () => {
     const guards: readonly Attachment[] = [userToken, permission];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 1], 'attachment', 'permission needs a qualifier: { guard, qualifier }'),
+      failed(
+        [...guardsAt, 1],
+        'attachment-needs-qualifier',
+        'permission needs a qualifier: { guard, qualifier }',
+      ),
     );
   });
 
@@ -154,7 +158,7 @@ describe('validateContract: bare and qualified Attachments', () => {
     const guards: readonly Attachment[] = [{ guard: userToken, qualifier: 'anything' }];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0], 'attachment', 'userToken takes no qualifier'),
+      failed([...guardsAt, 0], 'attachment-takes-no-qualifier', 'userToken takes no qualifier'),
     );
   });
 
@@ -162,7 +166,11 @@ describe('validateContract: bare and qualified Attachments', () => {
     const guards = ['userToken'] as unknown as readonly Attachment[];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0], 'attachment', 'An Attachment is a Guard or { guard, qualifier }'),
+      failed(
+        [...guardsAt, 0],
+        'not-an-attachment',
+        'An Attachment is a Guard or { guard, qualifier }',
+      ),
     );
   });
 });
@@ -269,6 +277,54 @@ describe('validateContract: a Qualifier against its schema', () => {
     );
   });
 
+  test('a Qualifier that fits no option of a union is judged by the closest option', () => {
+    const scope = defineGuard({
+      name: 'scope',
+      description: 'What the token may reach',
+      qualifier: z.union([
+        z.object({ tenantId: z.string() }),
+        z.object({ region: z.string(), zone: z.string().optional() }),
+      ]),
+    });
+    const guards: readonly Attachment[] = [
+      { guard: scope, qualifier: { region: 'eu', zone: 'west', extra: true } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        [...guardsAt, 0, 'qualifier'],
+        'qualifier-keys',
+        'A Qualifier holds only the keys its schema declares: extra',
+      ),
+    );
+  });
+
+  test('a Qualifier of an intersection holds the keys any of its items declares', () => {
+    const scope = defineGuard({
+      name: 'scope',
+      description: 'What the token may reach',
+      qualifier: z.intersection(
+        z.object({ tenantId: z.string() }).describe('The tenant'),
+        z.object({ region: z.string() }).describe('The region'),
+      ),
+    });
+    const accepted = validateGuards([
+      { guard: scope, qualifier: { tenantId: 'acme', region: 'eu' } },
+    ]);
+    const guards: readonly Attachment[] = [
+      { guard: scope, qualifier: { tenantId: 'acme', region: 'eu', extra: true } },
+    ];
+
+    expect(accepted.kind).toBe('valid');
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        [...guardsAt, 0, 'qualifier'],
+        'qualifier-keys',
+        'A Qualifier holds only the keys its schema declares: extra',
+      ),
+    );
+  });
+
   test('a Qualifier of a recursive schema is judged through its refs', () => {
     type Node = { name: string; children: Node[] };
     const node: z.ZodType<Node> = z
@@ -314,7 +370,11 @@ describe('validateContract: Guards typed wider than their declarations', () => {
     const guards: readonly Attachment[] = [userToken, guard];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 1], 'attachment', 'permission needs a qualifier: { guard, qualifier }'),
+      failed(
+        [...guardsAt, 1],
+        'attachment-needs-qualifier',
+        'permission needs a qualifier: { guard, qualifier }',
+      ),
     );
   });
 });
