@@ -222,6 +222,24 @@ describe('validateContract: one status and one body per code', () => {
     });
   });
 
+  test('a null body beside a bodiless declaration of one code fails once, as no schema', () => {
+    const locked = defineRejection({ code: 'LOCKED', status: 423, message: 'Locked' });
+    const lockedNull = defineRejection({
+      code: 'LOCKED',
+      status: 423,
+      message: 'Locked',
+      body: null as unknown as z.ZodString,
+    });
+    const endpoints = [
+      defineEndpoint({ ...listing, rejections: [locked] }),
+      defineEndpoint({ ...creating, rejections: [lockedNull] }),
+    ] as const;
+
+    expect(validateEndpoints(endpoints)).toEqual(
+      failed(['rejections', 'LOCKED', 'body'], 'not-a-schema', 'body is not a zod schema'),
+    );
+  });
+
   test('a Guard’s Rejection disagreeing with an Endpoint’s on one code fails', () => {
     const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
     const forbiddenWithBody = defineRejection({

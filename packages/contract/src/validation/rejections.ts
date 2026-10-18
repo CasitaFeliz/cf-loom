@@ -126,7 +126,7 @@ function distinctStatuses(
 
 /** Bodies differ when some declarations have one and others none, or two walked to different shapes. */
 function bodiesDiffer(declared: CodeGroup, nodes: Nodes): boolean {
-  const withBody = declared.filter(({ rejection }) => rejection.body !== undefined);
+  const withBody = declared.filter(({ rejection }) => !isMissing(rejection.body));
   const someWithout = withBody.length > 0 && withBody.length < declared.length;
   const bodies = declared.map(({ rejection }) => nodes.nodeOf(rejection, 'body'));
   const shapes = bodies.filter(isNode).map(shapeKey);
