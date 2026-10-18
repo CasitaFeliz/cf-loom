@@ -280,7 +280,7 @@ describe('validateContract: params against the path', () => {
     });
   });
 
-  test('params that are not an object fail', () => {
+  test('params that are not an object fail once, as a part that is no object', () => {
     const getOrder = defineEndpoint({
       ...listOrders,
       path: '/orders/:orderId',
@@ -289,13 +289,7 @@ describe('validateContract: params against the path', () => {
 
     expect(validateEndpoint(getOrder)).toEqual({
       kind: 'invalid',
-      failures: [
-        {
-          at: paramsAt,
-          rule: 'params',
-          message: "params declares exactly the path's :names: orderId",
-        },
-      ],
+      failures: [{ at: paramsAt, rule: 'text-only', message: 'params is an object of its fields' }],
     });
   });
 });

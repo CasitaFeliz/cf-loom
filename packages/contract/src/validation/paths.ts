@@ -33,7 +33,10 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
   return canonicalPathFailures(endpoint.path, pathAt);
 }
 
-/** `params` declares exactly the path's `:names`, none of them optional, and none without. */
+/**
+ * `params` declares exactly the path's `:names`, none of them optional, and none without; a
+ * `params` that is no object is the text rule's finding.
+ */
 export function paramsFailures(
   { at, endpoint }: LocatedEndpoint,
   nodes: Nodes,
@@ -50,8 +53,11 @@ export function paramsFailures(
       : [failure(paramsAt, 'params', 'A path without :names takes no params')];
   }
   const exact = `params declares exactly the path's :names: ${names.join(', ')}`;
-  if (params?.type !== 'object') {
+  if (params === undefined) {
     return [failure(paramsAt, 'params', exact)];
+  }
+  if (params.type !== 'object') {
+    return [];
   }
   const declared = Object.keys(params.fields);
   const sameNames =

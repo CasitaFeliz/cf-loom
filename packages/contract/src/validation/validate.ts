@@ -1,6 +1,7 @@
 import type { SchemaNode } from '../walker/nodes.ts';
 import { type OriginOf, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
+import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
 import { undeclaredFieldFailures } from './fields.ts';
@@ -9,6 +10,7 @@ import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
+import { conflictFailures, textFailures } from './text-only.ts';
 
 /** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
 export type ValidatedSchemas = {
@@ -54,6 +56,7 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...declarations.guards.flatMap(guardFailures),
     ...declarations.endpoints.flatMap(attachmentFailures),
     ...rejectionFailures(declarations),
+    ...dependencyFailures(declarations),
   ];
 }
 
@@ -63,6 +66,8 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
     ...rejectionBodyFailures(declarations, nodes),
+    ...textFailures(declarations, nodes),
+    ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];
 }
 
