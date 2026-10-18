@@ -207,6 +207,34 @@ function serviceSnapshot(root: unknown = contract, context: SnapshotContext = aC
   return snapshot;
 }
 
+/** The merged query of an Endpoint with its own query and a Guard's demanded one. */
+function searchQueryOf({
+  own,
+  demanded,
+}: {
+  readonly own?: z.ZodObject;
+  readonly demanded: z.ZodObject;
+}) {
+  const tenant = defineGuard({
+    name: 'tenant',
+    description: 'A tenant by query',
+    demands: { query: demanded },
+  });
+  const search = defineEndpoint({
+    name: 'search',
+    method: 'GET',
+    path: '/search',
+    visibility: 'public',
+    description: 'Search',
+    guards: [tenant],
+    input: own === undefined ? {} : { query: own },
+    success: { status: 200, body: z.object({ count: z.int() }) },
+  });
+  const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
+  const root = defineContract({ name: 'search-service', groups: [group] });
+  return serviceSnapshot(root, aContext({ packages: [] })).endpoints['GET /search']?.input.query;
+}
+
 function textOf(snapshot: Snapshot): string {
   return canonicalTextOf(snapshot);
 }
@@ -288,28 +316,13 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('query params merge the same way, under the Endpoint’s own mode', () => {
-    const tenant = defineGuard({
-      name: 'tenant',
-      description: 'A tenant by query',
-      demands: { query: z.object({ tenant: z.string() }) },
+  test('query params merge the Endpoint’s own with its Guards’ demands', () => {
+    const query = searchQueryOf({
+      own: z.strictObject({ text: z.string() }),
+      demanded: z.object({ tenant: z.string() }),
     });
-    const search = defineEndpoint({
-      name: 'search',
-      method: 'GET',
-      path: '/search',
-      visibility: 'public',
-      description: 'Search',
-      guards: [tenant],
-      input: { query: z.strictObject({ text: z.string() }) },
-      success: { status: 200, body: z.object({ count: z.int() }) },
-    });
-    const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
-    const root = defineContract({ name: 'search-service', groups: [group] });
 
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
-
-    expect(snapshot.endpoints['GET /search']?.input.query).toEqual({
+    expect(query).toEqual({
       type: 'object',
       mode: 'strict',
       fields: {
@@ -317,6 +330,30 @@ describe('snapshotOf: a Service', () => {
         tenant: { required: true, schema: { type: 'string' } },
       },
     });
+  });
+
+  test('the merged query is strict when a Guard demands it strict', () => {
+    const query = searchQueryOf({
+      own: z.object({ text: z.string() }),
+      demanded: z.strictObject({ tenant: z.string() }),
+    });
+
+    expect(query?.mode).toBe('strict');
+  });
+
+  test('the merged query is strict when only a Guard declares it, strict', () => {
+    const query = searchQueryOf({ demanded: z.strictObject({ tenant: z.string() }) });
+
+    expect(query?.mode).toBe('strict');
+  });
+
+  test('the merged query is open when every declaration of it is open', () => {
+    const query = searchQueryOf({
+      own: z.object({ text: z.string() }),
+      demanded: z.object({ tenant: z.string() }),
+    });
+
+    expect(query?.mode).toBe('open');
   });
 
   test('Attachments keep their order, each with its Qualifier as written or null', () => {

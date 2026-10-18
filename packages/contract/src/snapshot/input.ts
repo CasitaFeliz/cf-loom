@@ -17,11 +17,10 @@ export function inputOf(
   const own = (part: 'input.query' | 'input.headers') => objectOf(nodeAt(slotAt(at, part)));
   const demanded = (part: 'demands.query' | 'demands.headers') =>
     guards.map((guard) => objectOf(nodeAt(slotAt(guardAt(guard), part))));
-  const query = own('input.query');
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
     params: inMode(objectOf(nodeAt(slotAt(at, 'input.params'))), 'strict'),
-    query: inMode(mergedOf([query, ...demanded('demands.query')]), query?.mode ?? 'open'),
+    query: mergedOf([own('input.query'), ...demanded('demands.query')]),
     headers: inMode(headers, 'open'),
     body: nodeAt(slotAt(at, 'input.body')),
   };
@@ -30,7 +29,7 @@ export function inputOf(
 /**
  * One object of every field the declarations name, in declaration order: a field declared twice
  * keeps the first declaration's schema, since the validation proved their shapes equal, and is
- * required when either requires it.
+ * required when either requires it; a strict declaration applies to the merged set.
  */
 function mergedOf(objects: readonly (ObjectNode | null)[]): ObjectNode | null {
   const declared = objects.filter(isDeclared);
@@ -46,7 +45,8 @@ function mergedOf(objects: readonly (ObjectNode | null)[]): ObjectNode | null {
       fieldByName.set(name, { ...(known ?? field), required });
     }
   }
-  return { ...first, fields: Object.fromEntries(fieldByName) };
+  const mode = declared.some((object) => object.mode === 'strict') ? 'strict' : 'open';
+  return { ...first, mode, fields: Object.fromEntries(fieldByName) };
 }
 
 function isDeclared(object: ObjectNode | null): object is ObjectNode {
