@@ -98,4 +98,14 @@ describe('walkSchemas', () => {
       defs: {},
     });
   });
+
+  test('a check without a constructor is a zod this walker does not support, a bug to report', () => {
+    const name = z.string().min(1);
+    const [check] = name._zod.def.checks ?? [];
+    Reflect.deleteProperty(check?._zod ?? {}, 'constr');
+
+    expect(() => walkSchemas([{ at: ['body'], schema: name }], noOrigin)).toThrow(
+      /newer than cf-loom supports/,
+    );
+  });
 });

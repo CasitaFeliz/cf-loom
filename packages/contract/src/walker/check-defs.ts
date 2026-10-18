@@ -92,14 +92,17 @@ export function refusedCheck(check: CheckDef): Refused {
 }
 
 function declaredCheckOf(instance: CheckInstance): DeclaredCheck {
-  const constr = instance._zod.constr;
-  return {
-    def: instance._zod.def as CheckDef,
-    rebuilt: (def) => (constr === undefined ? undefined : rebuiltDef(constr, def)),
-  };
+  return { def: instance._zod.def as CheckDef, rebuilt: (def) => rebuiltDef(instance, def) };
 }
 
-function rebuiltDef(constr: NonNullable<CheckInstance['_zod']['constr']>, def: object) {
+/** A built-in check zod made without a constructor is a zod newer than this walker: a bug. */
+function rebuiltDef(instance: CheckInstance, def: object): BuiltDef | undefined {
+  const constr = instance._zod.constr;
+  if (constr === undefined) {
+    throw new Error(
+      'A zod check has no constructor: this zod is newer than cf-loom supports; report it to cf-loom.',
+    );
+  }
   try {
     return new constr({ ...def })._zod.def as BuiltDef;
   } catch {

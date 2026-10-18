@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type * as core from 'zod/v4/core';
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
 import { formatOptionsOf } from './format-options.ts';
 import type { Path, StringNode } from './nodes.ts';
@@ -57,12 +58,14 @@ const refusedByFormat: ReadonlyMap<string, Refused> = new Map<string, Refused>([
 ]);
 
 /** The formats zod builds from a regex, which a function of the author's could pose as. */
-const regexFormats: ReadonlyMap<string, () => unknown> = new Map<string, () => unknown>([
-  ['hex', () => z.hex()],
-  ['hostname', () => z.hostname()],
-  ['currency_code', () => z.currencyCode()],
-  ...hashFormats.map((format): [string, () => unknown] => [format, () => hashOf(format)]),
-]);
+const regexFormats: ReadonlyMap<string, () => core.$ZodType> = new Map<string, () => core.$ZodType>(
+  [
+    ['hex', () => z.hex()],
+    ['hostname', () => z.hostname()],
+    ['currency_code', () => z.currencyCode()],
+    ...hashFormats.map((format): [string, () => core.$ZodType] => [format, () => hashOf(format)]),
+  ],
+);
 
 /**
  * The `format` and `formatOptions` a string format check declares: only a format zod builds
@@ -128,15 +131,11 @@ function regexFormatOf(def: FormatDef, at: Path): Walked<Partial<StringNode>> {
 }
 
 function referenceOf(format: string): FormatDef | undefined {
-  try {
-    const schema = regexFormats.get(format)?.() as { _zod: { def: unknown } } | undefined;
-    return schema?._zod.def as FormatDef | undefined;
-  } catch {
-    return undefined;
-  }
+  const schema = regexFormats.get(format)?.();
+  return schema?._zod.def as FormatDef | undefined;
 }
 
-function hashOf(format: string): unknown {
+function hashOf(format: string): core.$ZodType {
   const [algorithm, encoding] = format.split('_') as [
     'md5' | 'sha1' | 'sha256' | 'sha384' | 'sha512',
     'hex' | 'base64' | 'base64url',
