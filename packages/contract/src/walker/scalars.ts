@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { byCanonicalJson } from './canonical-json.ts';
+import { enumOf } from './choices.ts';
 import type { JsonPrimitive, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, walked } from './walked.ts';
@@ -34,8 +34,7 @@ export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Pat
   if (only !== undefined && others.length === 0) {
     return walked({ type: 'literal', value: only });
   }
-  const sorted = [...values.value].sort(byCanonicalJson);
-  return walked({ type: 'enum', values: sorted, open: false });
+  return walked(enumOf(values.value));
 }
 
 /**

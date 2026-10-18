@@ -121,6 +121,12 @@ describe('walkSchemas: booleans, literals and JSON', () => {
     );
   });
 
+  test('a literal of several values holds each value once', () => {
+    expect(walkBody(z.literal(['a', 'a']))).toEqual(
+      walkedTo({ type: 'enum', values: ['a'], open: false }),
+    );
+  });
+
   test('z.json() is any JSON value', () => {
     expect(walkBody(z.json())).toEqual(walkedTo({ type: 'json' }));
   });
