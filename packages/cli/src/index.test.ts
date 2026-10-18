@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
-import * as entry from './index.ts';
+import { defineConfig } from './index.ts';
 
-test('entry loads', () => {
-  expect(entry).toBeDefined();
+test('defineConfig returns the configuration it is given', () => {
+  const config = { scope: '@org' };
+
+  const defined = defineConfig(config);
+
+  expect(defined).toEqual({ scope: '@org' });
 });
