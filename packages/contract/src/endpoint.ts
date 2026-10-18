@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { AttachedGuard, Attachment, AttachmentsRule } from './attachment.ts';
 import type { Lifecycle, Visibility } from './element.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
@@ -32,7 +33,7 @@ type EndpointDeclaration = {
   readonly description: string;
   readonly input?: InputDeclaration;
   readonly success: SuccessDeclaration;
-  readonly guards?: readonly Guard[];
+  readonly guards?: readonly (Guard | Attachment)[];
   readonly rejections?: readonly (
     | Rejection
     | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejectionName>>
@@ -115,20 +116,25 @@ type RequiresEarlierMessage<
 > = `${Name} requires ${JoinedNames<Missing>} earlier in guards`;
 
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
-  infer First extends Guard,
+  infer First,
   ...infer Rest,
 ]
-  ? string extends First['name']
+  ? ListedOrderRule<AttachedGuard<First>, Rest, Earlier>
+  : unknown;
+
+type ListedOrderRule<Listed, Rest, Earlier extends string> = Listed extends Guard
+  ? string extends Listed['name']
     ? GuardOrderRule<Rest, Earlier>
-    : First['name'] extends Earlier
-      ? `${First['name']} is listed twice`
-      : [MissingGuardNames<First, Earlier>] extends [never]
-        ? GuardOrderRule<Rest, Earlier | First['name']>
-        : RequiresEarlierMessage<First['name'], MissingGuardNames<First, Earlier>>
+    : Listed['name'] extends Earlier
+      ? `${Listed['name']} is listed twice`
+      : [MissingGuardNames<Listed, Earlier>] extends [never]
+        ? GuardOrderRule<Rest, Earlier | Listed['name']>
+        : RequiresEarlierMessage<Listed['name'], MissingGuardNames<Listed, Earlier>>
   : unknown;
 
 type GuardsRule<Declaration extends EndpointDeclaration> = {
-  readonly guards?: GuardOrderRule<Declaration['guards']>;
+  readonly guards?: GuardOrderRule<Declaration['guards']> &
+    AttachmentsRule<NonNullable<Declaration['guards']>>;
 };
 
 type NestedFieldsRule<Declaration extends EndpointDeclaration> = {

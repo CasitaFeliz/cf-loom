@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { AttachedGuard } from './attachment.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Guard } from './guard.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
@@ -23,6 +24,13 @@ export type ProvidedContextOf<Target extends Guard> = Target extends ContextProv
   ? Output<Target['context']>
   : undefined;
 
+type QualifiedGuard = Guard & { readonly qualifier: core.$ZodType };
+
+/** The Qualifier a Guard's GuardHandler receives, typed by its schema; `undefined` without one. */
+export type QualifierOf<Target extends Guard> = Target extends QualifiedGuard
+  ? Output<Target['qualifier']>
+  : undefined;
+
 type ContextByName<Guards> = {
   readonly [Listed in Guards as Listed extends ContextProvider
     ? Listed['name']
@@ -30,7 +38,7 @@ type ContextByName<Guards> = {
 };
 
 /** An Endpoint's Context: one key per attached Guard that provides a Context, by name. */
-export type ContextOf<Target extends Endpoint> = ContextByName<GuardsOf<Target>>;
+export type ContextOf<Target extends Endpoint> = ContextByName<AttachedGuard<GuardsOf<Target>>>;
 
 /** What a dependent Guard reads: one key per Guard it lists that provides a Context, by name. */
 export type RequiredContextOf<Target extends Guard> = ContextByName<GuardsOf<Target>>;
@@ -44,7 +52,7 @@ type ListedRejections<Target> = Target extends {
 /** Every Rejection an Endpoint may answer: its own, its Guards' and the two the runtime adds. */
 export type RejectionsOf<Target extends Endpoint> =
   | ListedRejections<Target>
-  | ListedRejections<GuardsOf<Target>>
+  | ListedRejections<AttachedGuard<GuardsOf<Target>>>
   | StandardRejection<AddedStandardRejectionName>;
 
 /** The Success an EndpointHandler returns and a Caller receives: its status, headers and body. */
