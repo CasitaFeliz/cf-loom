@@ -26,17 +26,18 @@ export const notImplemented: StandardRejection<'notImplemented'> = Object.freeze
   name: 'notImplemented',
 });
 
-type Resolved<Status extends number> = {
+type StandardRejectionDeclaration<Status extends number> = {
   readonly code: string;
   readonly status: Status;
   readonly message: string;
+  readonly body?: never;
 };
 
-/** The code, status and message a Definitions Package may give each Standard Rejection; none has a body to declare. */
+/** What a Definitions Package may give each Standard Rejection: never a body, which is cf-loom's. */
 export type StandardRejectionDeclarations = {
-  readonly invalidInput?: Resolved<RejectionStatus>;
-  readonly notFound?: Resolved<RejectionStatus>;
-  readonly notImplemented?: Resolved<501>;
+  readonly invalidInput?: StandardRejectionDeclaration<RejectionStatus>;
+  readonly notFound?: StandardRejectionDeclaration<RejectionStatus>;
+  readonly notImplemented?: StandardRejectionDeclaration<501>;
 };
 
 /** Every Standard Rejection resolved, as a Contract Package carries them for its Callers. */

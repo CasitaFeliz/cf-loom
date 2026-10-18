@@ -48,4 +48,22 @@ describe('defineDefinitions', () => {
 
     expect(declare).not.toThrow();
   });
+
+  test('a Standard Rejection declares no body', () => {
+    const declare = () =>
+      defineDefinitions({
+        name: 'definitions',
+        standardRejections: {
+          notFound: {
+            code: 'NOT_FOUND',
+            status: 404,
+            message: 'Not found',
+            // @ts-expect-error cf-loom owns the Standard Rejections' bodies
+            body: z.object({ resource: z.string() }),
+          },
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
 });
