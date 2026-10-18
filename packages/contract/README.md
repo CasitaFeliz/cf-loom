@@ -4,7 +4,7 @@ The declarations of a Contract: `defineContract`, `defineApplication`, `defineDe
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files. Every declaration is a named export.
 
-Each declaration returns what was written with its `kind`: the object and every list and map in it are copies, frozen, while the author's zod schemas are kept themselves. A field a declaration does not declare is a type error. The types refuse what TypeScript can state exactly, marked _a type error_ below, and `generate` repeats every one of these rules, since a cast, or a list or path typed wider than a literal, skips the types; where every other rule is enforced is in [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md.
+Each declaration returns what was written with its `kind`: the object and every list and map in it are copies, frozen, while the author's zod schemas are kept themselves. A field a declaration does not declare is a type error. The types refuse what TypeScript can state exactly, marked _a type error_ below; where each rule is enforced is in [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md.
 
 ## Required fields
 
