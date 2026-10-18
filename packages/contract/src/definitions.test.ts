@@ -185,3 +185,48 @@ describe('a Definitions Package with containers the author froze', () => {
     expect(definitions.schemas.money.safeParse({ amount: 5 }).success).toBe(true);
   });
 });
+
+describe('declarations from another copy of loom-contract', () => {
+  const brand = Symbol.for('@casitafeliz/loom-contract.declaration');
+
+  test('a value branded by another copy keeps its identity', () => {
+    const forbidden = Object.freeze(
+      Object.defineProperty(
+        { code: 'FORBIDDEN', status: 403, message: 'Forbidden', kind: 'rejection' } as const,
+        brand,
+        { value: true },
+      ),
+    );
+
+    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
+
+    expect(definitions.rejections[0]).toBe(forbidden);
+  });
+
+  test('an unbranded plain object with a kind is copied', () => {
+    const forbidden = {
+      code: 'FORBIDDEN',
+      status: 403,
+      message: 'Forbidden',
+      kind: 'rejection',
+    } as const;
+
+    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
+
+    expect(definitions.rejections[0]).not.toBe(forbidden);
+    expect(definitions.rejections[0]).toEqual(forbidden);
+  });
+
+  test('a declaration shows no brand in its keys or its JSON', () => {
+    const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+
+    expect(Object.keys(forbidden)).toEqual(['code', 'status', 'message', 'kind']);
+    expect(JSON.parse(JSON.stringify(forbidden))).toEqual({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: 'Forbidden',
+      kind: 'rejection',
+    });
+    expect(Reflect.ownKeys(forbidden)).toContain(brand);
+  });
+});

@@ -1,13 +1,13 @@
-const declarations = new WeakSet<object>();
+const declarationBrand = Symbol.for('@casitafeliz/loom-contract.declaration');
 
 /** What every declaration returns: what was written, its containers copied and frozen, a kind. */
 export function freezeDeclaration<const Kind extends string, Fields extends object>(
   kind: Kind,
   fields: Fields,
 ): Readonly<Fields> & { readonly kind: Kind } {
-  const declaration = Object.freeze({ ...frozenFields(fields), kind });
-  declarations.add(declaration);
-  return declaration as Readonly<Fields> & { readonly kind: Kind };
+  const declaration = { ...frozenFields(fields), kind };
+  Object.defineProperty(declaration, declarationBrand, { value: true });
+  return Object.freeze(declaration) as Readonly<Fields> & { readonly kind: Kind };
 }
 
 function frozenFields(fields: object): object {
@@ -25,9 +25,9 @@ function frozenContainer(value: unknown): unknown {
   return Object.freeze(frozenFields(value));
 }
 
-/** A declaration and a zod schema keep their identity; every other plain object is copied. */
+/** A declaration, from any copy of this package, and a zod schema keep their identity. */
 function isPlainContainer(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null || declarations.has(value)) {
+  if (typeof value !== 'object' || value === null || declarationBrand in value) {
     return false;
   }
   return Object.getPrototypeOf(value) === Object.prototype;
