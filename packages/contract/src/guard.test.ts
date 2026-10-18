@@ -8,6 +8,7 @@ import {
   type invalidInput,
   notFound,
   type notImplemented,
+  type ProvidedContextOf,
   type RejectionsOf,
 } from './index.ts';
 
@@ -31,26 +32,50 @@ const internalOnly = defineGuard({
 });
 
 describe('defineGuard', () => {
-  test('a Guard demands only headers and query', () => {
-    const declare = () => [
-      defineGuard({
-        name: 'paged',
-        description: 'A page of results',
-        demands: { query: z.object({ page: z.int() }) },
-      }),
+  test('a Guard may demand query params', () => {
+    const query = z.object({ page: z.int() });
+
+    const paged = defineGuard({
+      name: 'paged',
+      description: 'A page of results',
+      demands: { query },
+    });
+
+    expect(paged.demands.query).toBe(query);
+  });
+
+  test('a Guard demanding the body is a type error', () => {
+    const declare = () =>
       defineGuard({
         name: 'signed',
         description: 'A signed body',
-        // @ts-expect-error a Guard never demands the body
+        // @ts-expect-error a Guard demands only headers and query
         demands: { body: z.object({ signature: z.string() }) },
-      }),
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Guard demanding path params is a type error', () => {
+    const declare = () =>
       defineGuard({
         name: 'tenant',
         description: 'A tenant in the path',
-        // @ts-expect-error a Guard never demands path params
+        // @ts-expect-error a Guard demands only headers and query
         demands: { params: z.object({ tenantId: z.string() }) },
-      }),
-    ];
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Standard Rejection on a Guard is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'tenant',
+        description: 'The tenant the client acts for',
+        // @ts-expect-error a Guard lists declared Rejections only
+        rejections: [notFound],
+      });
 
     expect(declare).not.toThrow();
   });
@@ -67,9 +92,12 @@ describe('defineGuard', () => {
     expect(declare).not.toThrow();
   });
 
-  test('a Guard’s Context type is inferred from its context schema', () => {
-    expectTypeOf<ContextOf<typeof apiKey>>().toEqualTypeOf<{ clientId: string }>();
-    expectTypeOf<ContextOf<typeof internalOnly>>().toEqualTypeOf<undefined>();
+  test('a Guard’s provided Context is typed by its context schema', () => {
+    expectTypeOf<ProvidedContextOf<typeof apiKey>>().toEqualTypeOf<{ clientId: string }>();
+  });
+
+  test('a Guard without a context schema provides undefined', () => {
+    expectTypeOf<ProvidedContextOf<typeof internalOnly>>().toEqualTypeOf<undefined>();
   });
 
   test('the Context of an Endpoint has one key per Guard that provides a Context, by name', () => {

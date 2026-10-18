@@ -8,8 +8,8 @@ import type { DeclaredFieldsRule } from './rules.ts';
 type Demands = {
   readonly headers?: core.$ZodObject;
   readonly query?: core.$ZodObject;
-  readonly params?: never;
-  readonly body?: never;
+  readonly params?: 'A Guard demands only headers and query';
+  readonly body?: 'A Guard demands only headers and query';
 };
 
 /** What an author writes to declare a Guard; an absent part demands, reads or provides nothing. */

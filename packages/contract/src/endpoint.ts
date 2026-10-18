@@ -6,7 +6,7 @@ import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule, Listed, LiteralNames } from './rules.ts';
-import type { StandardRejection } from './standard-rejections.ts';
+import type { AddedStandardRejection, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
 type InputDeclaration = {
@@ -33,7 +33,10 @@ type EndpointDeclaration = {
   readonly input?: InputDeclaration;
   readonly success: SuccessDeclaration;
   readonly guards?: readonly Guard[];
-  readonly rejections?: readonly (Rejection | StandardRejection<'notFound'>)[];
+  readonly rejections?: readonly (
+    | Rejection
+    | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejection>>
+  )[];
   readonly lifecycle?: Lifecycle;
 };
 

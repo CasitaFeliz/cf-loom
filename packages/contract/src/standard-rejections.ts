@@ -2,11 +2,14 @@ import type { RejectionStatus } from './http.ts';
 
 type StandardRejectionName = 'invalidInput' | 'notFound' | 'notImplemented';
 
-/** One of the three Rejections whose code, status and message are resolved from the root, never declared by a Contract. */
-export type StandardRejection<Name extends StandardRejectionName = StandardRejectionName> = {
-  readonly kind: 'standard-rejection';
-  readonly name: Name;
-};
+/** The Standard Rejections cf-loom's runtime adds to every Endpoint, so none lists them. */
+export type AddedStandardRejection = 'invalidInput' | 'notImplemented';
+
+/** A Rejection whose code, status and message the root resolves; no Contract declares one. */
+export type StandardRejection<Name extends StandardRejectionName = StandardRejectionName> =
+  Name extends StandardRejectionName
+    ? { readonly kind: 'standard-rejection'; readonly name: Name }
+    : never;
 
 /** The Rejection cf-loom's runtime answers when the Input breaks the Endpoint's schemas. */
 export const invalidInput: StandardRejection<'invalidInput'> = Object.freeze({
