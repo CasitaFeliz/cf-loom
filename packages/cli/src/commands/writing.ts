@@ -11,7 +11,16 @@ import {
 import { dirname, join } from 'node:path';
 import { oneLineOf } from '../loading/index.ts';
 import { type Exit, toolingError } from './exit.ts';
-import type { GeneratedFile } from './generated-files.ts';
+
+/**
+ * A file a command generates, relative to the project: one regenerated `always`, or a stub
+ * written `once`, never over a Handler that exists.
+ */
+export type GeneratedFile = {
+  readonly path: string;
+  readonly text: string | Uint8Array;
+  readonly written: 'always' | 'once';
+};
 
 /** The files written, by path, or the tooling error that stopped at one of them. */
 export type Written =

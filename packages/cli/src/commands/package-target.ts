@@ -1,5 +1,6 @@
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -15,7 +16,16 @@ import { oneLineOf } from '../loading/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
 
 /** What sits where the package is to be written. */
-type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder';
+type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
+
+/** What a folder `package` wrote may hold: what it writes, and the `dist/` a build adds. */
+const outputEntries: ReadonlySet<string> = new Set([
+  'package.json',
+  'snapshot.json',
+  'tsconfig.json',
+  'src',
+  'dist',
+]);
 
 /**
  * Writes the Contract Package to `out`, relative to the project: a missing or empty folder, or a
@@ -35,6 +45,8 @@ export function writeContractPackageTo(
       );
     case 'no-folder':
       return toolingError(`${out} is no folder: package writes a folder`);
+    case 'link':
+      return toolingError(`${out} is a symbolic link: package writes a folder of its own`);
     case 'missing':
     case 'empty':
     case 'previous-output':
@@ -43,6 +55,9 @@ export function writeContractPackageTo(
 }
 
 function targetOf(target: string): Target {
+  if (isLink(target)) {
+    return 'link';
+  }
   if (!existsSync(target)) {
     return 'missing';
   }
@@ -55,8 +70,22 @@ function targetOf(target: string): Target {
   return isPreviousOutput(target) ? 'previous-output' : 'other-files';
 }
 
-/** A folder `package` wrote: its package.json carries the `cfLoom` metadata. */
+function isLink(target: string): boolean {
+  try {
+    return lstatSync(target).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A folder `package` wrote: it holds only what `package` writes and a build adds, and its
+ * package.json carries the `cfLoom` metadata.
+ */
 function isPreviousOutput(target: string): boolean {
+  if (readdirSync(target).some((entry) => !outputEntries.has(entry))) {
+    return false;
+  }
   try {
     const manifest: unknown = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8'));
     return typeof manifest === 'object' && manifest !== null && 'cfLoom' in manifest;

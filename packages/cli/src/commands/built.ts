@@ -2,8 +2,10 @@ import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  canonicalSnapshotOf,
   canonicalTextOf,
   type RootPackage,
+  type ServiceSnapshot,
   type Snapshot,
   type SnapshotContext,
   schemaOriginsOf,
@@ -26,14 +28,15 @@ export type Committed =
   | { readonly kind: 'no-json'; readonly reason: string };
 
 /**
- * Which CLI the declared Snapshot names: the one running, as `generate` writes it, or the
- * committed file's, as `verify` compares, so upgrading cf-loom alone never fails `verify`.
+ * Which CLI the declared Snapshot names: the one running, as `generate` and `package` write it,
+ * which stop on a committed file that is no JSON; or the committed file's, as `verify` compares,
+ * so upgrading cf-loom alone never fails `verify`.
  */
 export type Generator = 'running' | 'committed';
 
 /**
  * What every command builds before it writes: the project, its valid root, the declared Snapshot
- * and its bytes, and the committed file; or the exit that stopped building it.
+ * in canonical order and its bytes, and the committed file; or the exit that stopped building it.
  */
 export type Built =
   | {
@@ -45,6 +48,17 @@ export type Built =
       readonly committed: Committed;
     }
   | Stopped;
+
+/** A project as built, valid. */
+export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
+
+/** A Service's project as built, the one kind of root that offers Elements. */
+export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
+
+/** Whether a built project is a Service's. */
+export function isBuiltService(built: BuiltProject): built is BuiltService {
+  return built.snapshot.kind === 'service';
+}
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
@@ -60,6 +74,10 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   if (committed.kind === 'stopped') {
     return committed;
   }
+  if (committed.kind === 'no-json' && generator === 'running') {
+    const message = `${snapshotFile} is no JSON (${committed.reason}): restore it or delete it, then run cf-loom generate`;
+    return stopped(toolingError(message));
+  }
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
   const context: SnapshotContext = {
     generator: generatorOf(generator, parsed),
@@ -74,7 +92,7 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
     case 'invalid':
       return stopped(checkFailed(validated.failures.map(failureLine)));
     case 'valid': {
-      const snapshot = snapshotOf(validated, context);
+      const snapshot = canonicalSnapshotOf(snapshotOf(validated, context));
       const bytes = Buffer.from(canonicalTextOf(snapshot), 'utf8');
       return { kind: 'built', project, validated, snapshot, bytes, committed };
     }

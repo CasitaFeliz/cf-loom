@@ -1,18 +1,13 @@
 import type { ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
-import { noNeeds } from '../schema-code/index.ts';
-import { stringLiteralOf } from '../source-text/index.ts';
-import { type PackageFile, packageModuleOf } from './modules.ts';
-import { endpointFileOf } from './names.ts';
+import { keyOf, stringLiteralOf } from '../source-text/index.ts';
+import { localVersion } from './manifest.ts';
+import { loomNeeds, type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
+import { endpointBindingOf, endpointFileOf } from './names.ts';
 import type { ExportedEndpoint } from './reached.ts';
 
-/** The entry of the package, as its `exports` names it once built. */
 const entryFile = 'src/index.ts';
-
 const snapshotModule = 'src/snapshot.ts';
 const standardRejectionsModule = 'src/standard-rejections.ts';
-
-/** The version a Contract Package carries until `publish` derives one. */
-export const localVersion = '0.0.0';
 
 /**
  * A Service's entry: `contract`, its Endpoints by name, its Events by name in code and its
@@ -20,10 +15,11 @@ export const localVersion = '0.0.0';
  */
 export function serviceEntryOf(name: string, endpoints: readonly ExportedEndpoint[]): PackageFile {
   const names = endpoints.map(({ endpoint }) => endpoint.name);
+  const entries = names.map(
+    (endpoint) => `    ${keyOf(endpoint)}: ${endpointBindingOf(endpoint)},`,
+  );
   const endpointsLines =
-    names.length === 0
-      ? ['  endpoints: {},']
-      : ['  endpoints: {', ...names.map((endpoint) => `    ${endpoint},`), '  },'];
+    entries.length === 0 ? ['  endpoints: {},'] : ['  endpoints: {', ...entries, '  },'];
   const body = [
     'export const contract = {',
     `  name: ${stringLiteralOf(name)},`,
@@ -31,35 +27,29 @@ export function serviceEntryOf(name: string, endpoints: readonly ExportedEndpoin
     ...endpointsLines,
     '  events: {},',
     '  standardRejections,',
-    '} satisfies ContractPackage;',
+    '} satisfies loom.ContractPackage;',
     '',
     'export { snapshot };',
   ];
   const siblings = [
-    ...names.map((endpoint) => ({ name: endpoint, path: endpointFileOf(endpoint) })),
+    ...names.map(
+      (endpoint): Sibling => ({
+        name: endpointBindingOf(endpoint),
+        path: endpointFileOf(endpoint),
+      }),
+    ),
     { name: 'snapshot', path: snapshotModule },
     { name: 'standardRejections', path: standardRejectionsModule },
   ];
-  return packageModuleOf({
-    path: entryFile,
-    contractNames: [],
-    contractTypes: ['ContractPackage'],
-    needs: noNeeds(),
-    writesSchemas: false,
-    siblings,
-    body,
-  });
+  return packageModuleOf({ path: entryFile, body, siblings, needs: loomNeeds() });
 }
 
 /** An Application's entry: its `snapshot` only, since it offers no Elements. */
 export function applicationEntryOf(): PackageFile {
   return packageModuleOf({
     path: entryFile,
-    contractNames: [],
-    needs: noNeeds(),
-    writesSchemas: false,
-    siblings: [{ name: 'snapshot', path: snapshotModule }],
     body: ['export { snapshot };'],
+    siblings: [{ name: 'snapshot', path: snapshotModule }],
   });
 }
 
@@ -67,10 +57,6 @@ export function applicationEntryOf(): PackageFile {
 export function snapshotModuleOf(text: string): PackageFile {
   return packageModuleOf({
     path: snapshotModule,
-    contractNames: [],
-    needs: noNeeds(),
-    writesSchemas: false,
-    siblings: [],
     body: [`export const snapshot = ${text.trimEnd()};`],
   });
 }
@@ -85,15 +71,11 @@ export function standardRejectionsModuleOf(snapshot: ServiceSnapshot): PackageFi
   });
   return packageModuleOf({
     path: standardRejectionsModule,
-    contractNames: [],
-    contractTypes: ['StandardRejections'],
-    needs: noNeeds(),
-    writesSchemas: false,
-    siblings: [],
     body: [
       'export const standardRejections = {',
       ...lines,
-      '} as const satisfies StandardRejections;',
+      '} as const satisfies loom.StandardRejections;',
     ],
+    needs: loomNeeds(),
   });
 }

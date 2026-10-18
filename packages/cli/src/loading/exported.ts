@@ -7,46 +7,49 @@ import { importedModuleOf } from './imported.ts';
 const contractFolder = 'src/contract';
 
 /**
- * Where a declaration is exported: a file by its path relative to the project, starting with
- * `./`, or a package by its name, and the name it is exported under.
+ * Where a declaration is exported, under the name it is exported as: a file by its path relative
+ * to the project, or a package by its name.
  */
-export type ExportedAt = { readonly specifier: string; readonly name: string };
+export type ExportedAt =
+  | { readonly kind: 'file'; readonly path: string; readonly name: string }
+  | { readonly kind: 'package'; readonly packageName: string; readonly name: string };
 
-/** Where each declaration is exported, by identity, or the file that could not be imported. */
-export type Exported =
+/** A file of the Contract exporting a declaration. */
+export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
+
+/**
+ * The files of the Contract that export each declaration, by identity, in code point order of
+ * file and name; or the file that could not be imported.
+ */
+export type ContractExports =
   | {
       readonly kind: 'exported';
-      readonly exportedAt: (declaration: unknown) => ExportedAt | undefined;
+      readonly exportsOf: (declaration: unknown) => readonly FileExport[];
     }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** A package whose `.` entry may export declarations, by its name, with its exports by name. */
-export type ExportingPackage = {
-  readonly packageName: string;
-  readonly exports: Readonly<Record<string, unknown>>;
-};
-
 /**
- * Finds where each declaration is exported, by identity, so a stub imports it from there: every
- * `.ts` under `src/contract/` but tests, each file and named export taken in code point order,
- * then each listed package's `.` entry; the first place wins.
+ * Imports every `.ts` under `src/contract/`, tests aside, so a stub imports its declaration from
+ * where it is exported: Node gives each the instance the root already holds.
  */
-export async function exportedOf(
-  directory: string,
-  packages: readonly ExportingPackage[],
-): Promise<Exported> {
-  const places = new Map<unknown, ExportedAt>();
-  for (const file of contractFilesOf(directory)) {
-    const imported = await importedModuleOf(join(directory, file), directory);
+export async function contractExportsOf(directory: string): Promise<ContractExports> {
+  const exportsByDeclaration = new Map<unknown, FileExport[]>();
+  for (const path of contractFilesOf(directory)) {
+    const imported = await importedModuleOf(join(directory, path), directory);
     if (imported.kind === 'failed') {
-      return { kind: 'failed', message: `${file} cannot be loaded: ${imported.message}` };
+      return { kind: 'failed', message: `${path} cannot be loaded: ${imported.message}` };
     }
-    addPlaces(places, `./${file}`, imported.exports);
+    for (const name of namesOf(imported.exports)) {
+      const declaration = imported.exports[name];
+      const found = exportsByDeclaration.get(declaration) ?? [];
+      found.push({ kind: 'file', path, name });
+      exportsByDeclaration.set(declaration, found);
+    }
   }
-  for (const { packageName, exports } of packages) {
-    addPlaces(places, packageName, exports);
-  }
-  return { kind: 'exported', exportedAt: (declaration) => places.get(declaration) };
+  return {
+    kind: 'exported',
+    exportsOf: (declaration) => exportsByDeclaration.get(declaration) ?? [],
+  };
 }
 
 function contractFilesOf(directory: string): readonly string[] {
@@ -59,16 +62,9 @@ function isContractSource(file: string): boolean {
   return !file.endsWith('.test.ts') && !file.endsWith('.d.ts');
 }
 
-function addPlaces(
-  places: Map<unknown, ExportedAt>,
-  specifier: string,
-  exports: Readonly<Record<string, unknown>>,
-): void {
-  const names = Object.keys(exports).filter((name) => name !== 'default');
-  for (const name of names.sort(byCodePoint)) {
-    const declaration = exports[name];
-    if (!places.has(declaration)) {
-      places.set(declaration, { specifier, name });
-    }
-  }
+/** A module's named exports, in code point order. */
+function namesOf(exports: Readonly<Record<string, unknown>>): readonly string[] {
+  return Object.keys(exports)
+    .filter((name) => name !== 'default')
+    .sort(byCodePoint);
 }

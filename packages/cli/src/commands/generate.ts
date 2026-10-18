@@ -1,33 +1,43 @@
-import { builtOf, snapshotFile } from './built.ts';
-import { checkFailed, done, type Exit, type Run, toolingError } from './exit.ts';
-import { orphanLinesOf, regeneratedFilesOf, stubsOf } from './generated-files.ts';
-import { writeFiles } from './writing.ts';
+import { type BuiltService, builtOf, isBuiltService } from './built.ts';
+import { checkFailed, done, type Exit, type Run } from './exit.ts';
+import { noFileLinesOf, orphanLinesOf, serviceFilesOf, snapshotFileOf } from './handler-files.ts';
+import { stubsOf } from './stubs.ts';
+import { type GeneratedFile, writeFiles } from './writing.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
- * review, and for a Service its Handler map, its readers and the stub of every missing Handler;
- * a committed file that is no JSON is left for its author to restore or delete.
+ * review; a Service also gets its Handler map, its readers and its missing Handlers' stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
   const built = await builtOf(run, 'running');
   if (built.kind === 'stopped') {
     return built.exit;
   }
-  if (built.committed.kind === 'no-json') {
-    const reason = built.committed.reason;
-    return toolingError(
-      `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
-    );
+  if (!isBuiltService(built)) {
+    return writtenExit(run, [snapshotFileOf(built)]);
   }
-  const stubs = await stubsOf(built);
+  return await generateService(run, built);
+}
+
+/**
+ * A Service's files, or every line that stops them: an Element no stub could import, a Handler
+ * file nothing names, a Handler path that is no file.
+ */
+async function generateService(run: Run, service: BuiltService): Promise<Exit> {
+  const stubs = await stubsOf(service);
   if (stubs.kind === 'stopped') {
     return stubs.exit;
   }
-  const failures = [...stubs.unexportedLines, ...orphanLinesOf(built)];
+  const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphanLinesOf(service)];
   if (failures.length > 0) {
     return checkFailed(failures);
   }
-  const written = writeFiles(run.cwd, [...regeneratedFilesOf(built), ...stubs.stubs]);
+  const files = [snapshotFileOf(service), ...serviceFilesOf(service), ...stubs.stubs];
+  return writtenExit(run, files);
+}
+
+function writtenExit(run: Run, files: readonly GeneratedFile[]): Exit {
+  const written = writeFiles(run.cwd, files);
   if (written.kind === 'stopped') {
     return written.exit;
   }

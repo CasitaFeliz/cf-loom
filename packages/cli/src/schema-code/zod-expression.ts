@@ -1,11 +1,11 @@
-import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
-import { keyOf, stringLiteralOf } from '../source-text/index.ts';
+import type { Field, SchemaNode } from '@casitafeliz/loom-contract/internal';
+import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
 import type { Needs, SchemaMode } from './needs.ts';
+import { entriesOf, type NodeOf } from './nodes.ts';
 import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
-
-type NodeOf<Type extends SchemaNode['type']> = Extract<SchemaNode, { readonly type: Type }>;
+import { variantsTypeOf } from './type-text.ts';
 
 /** Where a schema is written: its mode, and what the module writing it must import. */
 export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
@@ -15,6 +15,7 @@ export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
  * generated schema walks back to the same node.
  */
 export function zodExpressionOf(node: SchemaNode, writing: Writing): string {
+  writing.needs.modules.add('zod');
   const shape = shapeOf(node, writing);
   const nullable = node.nullable === true ? `${shape}.nullable()` : shape;
   return `${nullable}${metaOf(node)}`;
@@ -29,7 +30,7 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
     case 'boolean':
       return 'z.boolean()';
     case 'literal':
-      return `z.literal(${valueTextOf(node.value)})`;
+      return `z.literal(${literalOf(node.value)})`;
     case 'enum':
       return enumOf(node, writing);
     case 'object':
@@ -49,7 +50,7 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
     case 'json':
       return 'z.json()';
     case 'ref':
-      return refOf(node.name, writing);
+      return refOf(node, writing);
   }
 }
 
@@ -80,7 +81,7 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
 
 /** An enum: an Open Enum's reader has its Unknown case; values that are not all strings are literals. */
 function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
-  const values = node.values.map(valueTextOf).join(', ');
+  const values = node.values.map(literalOf).join(', ');
   const allStrings = node.values.every((value) => typeof value === 'string');
   if (!node.open) {
     return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
@@ -88,19 +89,33 @@ function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
   if (writing.mode === 'reader') {
     return openEnumReaderOf(`z.enum([${values}])`);
   }
-  writing.needs.helpers.add('openEnum');
-  return `openEnum([${values}])`;
+  writing.needs.modules.add('loom');
+  return `loom.openEnum([${values}])`;
 }
 
 /** An object: strict only as declared, since readers ignore fields they do not know. */
 function objectOf(node: NodeOf<'object'>, writing: Writing): string {
-  const fields = Object.entries(node.fields).map(([name, field]) => {
-    const schema = zodExpressionOf(field.schema, writing);
-    return `${keyOf(name)}: ${field.required ? schema : `${schema}.optional()`}`;
-  });
+  const fields = entriesOf(node.fields).map(
+    ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
+  );
   const call =
     node.mode === 'strict' && writing.mode === 'declared' ? 'z.strictObject' : 'z.object';
   return fields.length === 0 ? `${call}({})` : `${call}({ ${fields.join(', ')} })`;
+}
+
+/**
+ * A field's schema; an annotated reference to a recursive def carries its annotations on the
+ * field's wrapper, since `.meta()` on the def itself would clone it without its id.
+ */
+function fieldOf(field: Field, writing: Writing): string {
+  const { schema, required } = field;
+  const isAnnotatedRef = schema.type === 'ref' && schema.nullable !== true && metaOf(schema) !== '';
+  if (!isAnnotatedRef) {
+    const expression = zodExpressionOf(schema, writing);
+    return required ? expression : `${expression}.optional()`;
+  }
+  const reference = zodExpressionOf({ type: 'ref', name: schema.name }, writing);
+  return `${reference}${required ? '.nonoptional()' : '.optional()'}${metaOf(schema)}`;
 }
 
 function tupleOf(node: NodeOf<'tuple'>, writing: Writing): string {
@@ -113,18 +128,45 @@ function tupleOf(node: NodeOf<'tuple'>, writing: Writing): string {
 
 /** A discriminated union: an Open Union's reader has its Unknown case. */
 function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
-  const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
-  const discriminator = stringLiteralOf(node.discriminator);
-  const union = `z.discriminatedUnion(${discriminator}, [${variants.join(', ')}])`;
-  if (!node.open) {
-    return union;
+  const declared = declaredUnionOf(node, writing);
+  if (!node.open || writing.mode === 'declared') {
+    return declared;
   }
-  if (writing.mode === 'reader') {
-    const known = Object.keys(node.variants).map((key) => JSON.parse(key));
-    return openUnionReaderOf(union, node.discriminator, known);
+  const knownValues = Object.keys(node.variants);
+  return openUnionReaderOf(declared, node.discriminator, knownValues);
+}
+
+/**
+ * The declared variants as zod's discriminated union, or `loom.openUnion` for an Open Union as
+ * declared. A recursive variant's def is typed by its discriminator alone, which is what the
+ * union reads of it, and the union by its variants' types, which zod cannot infer through it.
+ */
+function declaredUnionOf(node: NodeOf<'tagged'>, writing: Writing): string {
+  const variants = entriesOf(node.variants).map(([value, variant]) =>
+    variant.type === 'ref'
+      ? recursiveVariantOf(node.discriminator, { value, variant }, writing)
+      : zodExpressionOf(variant, writing),
+  );
+  const isOpenAsDeclared = node.open && writing.mode === 'declared';
+  if (isOpenAsDeclared) {
+    writing.needs.modules.add('loom');
   }
-  writing.needs.helpers.add('openUnion');
-  return `openUnion(${discriminator}, [${variants.join(', ')}])`;
+  const call = isOpenAsDeclared ? 'loom.openUnion' : 'z.discriminatedUnion';
+  const union = `${call}(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
+  const isRecursive = Object.values(node.variants).some((variant) => variant.type === 'ref');
+  return isRecursive
+    ? `(${union} as z.ZodType<${variantsTypeOf(node, writing.mode, writing.needs)}>)`
+    : union;
+}
+
+/** A variant that is a recursive def, typed as the object of its discriminator, `value` its canonical JSON. */
+function recursiveVariantOf(
+  discriminator: string,
+  { value, variant }: { readonly value: string; readonly variant: NodeOf<'ref'> },
+  writing: Writing,
+): string {
+  const shape = `{ ${keyOf(discriminator)}: z.ZodLiteral<${value}> }`;
+  return `(${zodExpressionOf(variant, writing)} as unknown as z.ZodObject<${shape}>)`;
 }
 
 /** An intersection of every item, nested from the left, as zod intersects two at a time. */
@@ -140,14 +182,11 @@ function allOfOf(items: readonly string[]): string {
   return intersection;
 }
 
-function refOf(name: string, writing: Writing): string {
-  const identifier = defIdentifierOf(name, writing.mode);
+/** A recursive def by its identifier. */
+function refOf(node: NodeOf<'ref'>, writing: Writing): string {
+  const identifier = defIdentifierOf(node.name, writing.mode);
   writing.needs.defs.add(identifier);
   return identifier;
-}
-
-function valueTextOf(value: string | number | boolean): string {
-  return typeof value === 'string' ? stringLiteralOf(value) : String(value);
 }
 
 /** The annotations a schema's `.meta()` carries: its description and examples; `origin` is not code's. */
@@ -156,5 +195,5 @@ function metaOf(node: SchemaNode): string {
     ...(node.description !== undefined && { description: node.description }),
     ...(node.examples !== undefined && { examples: node.examples }),
   };
-  return Object.keys(meta).length === 0 ? '' : `.meta(${JSON.stringify(meta)})`;
+  return Object.keys(meta).length === 0 ? '' : `.meta(${jsonLiteralOf(meta)})`;
 }

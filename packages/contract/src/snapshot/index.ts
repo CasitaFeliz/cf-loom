@@ -1,4 +1,4 @@
-export { canonicalTextOf, hashedTextOf } from './canonical.ts';
+export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
 export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
 export { schemaOriginsOf } from './origins.ts';
 export { snapshotOf } from './snapshot.ts';

@@ -1,20 +1,30 @@
 import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
-import { keyOf, stringLiteralOf } from '../source-text/index.ts';
+import { keyOf, literalOf } from '../source-text/index.ts';
 import { defTypeNameOf } from './def-names.ts';
-import type { SchemaMode } from './needs.ts';
-
-type NodeOf<Type extends SchemaNode['type']> = Extract<SchemaNode, { readonly type: Type }>;
+import { type Needs, noNeeds, type SchemaMode } from './needs.ts';
+import { entriesOf, type NodeOf } from './nodes.ts';
 
 /**
- * The TypeScript type of what a generated schema returns, written out only for a recursive def,
- * whose `z.lazy` needs it; it agrees with zod's output type of the same node in the same mode.
+ * The TypeScript type of what a generated schema returns, written out only where zod cannot
+ * infer it, a recursive def or a union with a recursive variant; it agrees with zod's output type
+ * of the same node in the same mode.
  */
-export function typeTextOf(node: SchemaNode, mode: SchemaMode): string {
-  const shape = shapeTypeOf(node, mode);
+export function typeTextOf(node: SchemaNode, mode: SchemaMode, needs: Needs = noNeeds()): string {
+  const typing = { mode, needs };
+  const shape = shapeTypeOf(node, typing);
   return node.nullable === true ? `(${shape} | null)` : shape;
 }
 
-function shapeTypeOf(node: SchemaNode, mode: SchemaMode): string {
+/** The mode a type is written in, and where the def types it names are recorded. */
+type Typing = { readonly mode: SchemaMode; readonly needs: Needs };
+
+function typeOf(node: SchemaNode, typing: Typing): string {
+  return typeTextOf(node, typing.mode, typing.needs);
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the type of each node type
+function shapeTypeOf(node: SchemaNode, typing: Typing): string {
+  const { mode } = typing;
   switch (node.type) {
     case 'string':
       return 'string';
@@ -23,62 +33,66 @@ function shapeTypeOf(node: SchemaNode, mode: SchemaMode): string {
     case 'boolean':
       return 'boolean';
     case 'literal':
-      return valueTypeOf(node.value);
+      return literalOf(node.value);
     case 'enum':
       return enumTypeOf(node, mode);
     case 'object':
-      return objectTypeOf(node, mode);
+      return objectTypeOf(node, typing);
     case 'record':
-      return `Record<${typeTextOf(node.key, mode)}, ${typeTextOf(node.value, mode)}>`;
+      return `Record<${typeOf(node.key, typing)}, ${typeOf(node.value, typing)}>`;
     case 'array':
-      return `Array<${typeTextOf(node.items, mode)}>`;
+      return `Array<${typeOf(node.items, typing)}>`;
     case 'tuple':
-      return tupleTypeOf(node, mode);
+      return tupleTypeOf(node, typing);
     case 'union':
-      return `(${node.options.map((option) => typeTextOf(option, mode)).join(' | ')})`;
+      return `(${node.options.map((option) => typeOf(option, typing)).join(' | ')})`;
     case 'tagged':
-      return taggedTypeOf(node, mode);
+      return taggedTypeOf(node, typing);
     case 'allOf':
-      return `(${node.items.map((item) => typeTextOf(item, mode)).join(' & ')})`;
+      return `(${node.items.map((item) => typeOf(item, typing)).join(' & ')})`;
     case 'json':
       return 'z.core.util.JSONType';
-    case 'ref':
-      return defTypeNameOf(node.name, mode);
+    case 'ref': {
+      const typeName = defTypeNameOf(node.name, mode);
+      typing.needs.defTypes.add(typeName);
+      return typeName;
+    }
   }
 }
 
 function enumTypeOf(node: NodeOf<'enum'>, mode: SchemaMode): string {
-  const values = node.values.map(valueTypeOf);
+  const values = node.values.map(literalOf);
   const unknownCase = node.open && mode === 'reader' ? ['{ unknown: string }'] : [];
   return `(${[...values, ...unknownCase].join(' | ')})`;
 }
 
-function objectTypeOf(node: NodeOf<'object'>, mode: SchemaMode): string {
-  const fields = Object.entries(node.fields).map(([name, field]) => {
+function objectTypeOf(node: NodeOf<'object'>, typing: Typing): string {
+  const fields = entriesOf(node.fields).map(([name, field]) => {
     const optional = field.required ? '' : '?';
-    return `${keyOf(name)}${optional}: ${typeTextOf(field.schema, mode)}`;
+    return `${keyOf(name)}${optional}: ${typeOf(field.schema, typing)}`;
   });
   return fields.length === 0 ? '{}' : `{ ${fields.join('; ')} }`;
 }
 
-function tupleTypeOf(node: NodeOf<'tuple'>, mode: SchemaMode): string {
-  const items = node.items.map((item) => typeTextOf(item, mode));
-  const rest = node.rest === undefined ? [] : [`...Array<${typeTextOf(node.rest, mode)}>`];
+function tupleTypeOf(node: NodeOf<'tuple'>, typing: Typing): string {
+  const items = node.items.map((item) => typeOf(item, typing));
+  const rest = node.rest === undefined ? [] : [`...Array<${typeOf(node.rest, typing)}>`];
   return `[${[...items, ...rest].join(', ')}]`;
 }
 
 /** A discriminated union's variants; an Open Union's reader adds its Unknown case. */
-function taggedTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode): string {
-  const variants = Object.values(node.variants).map((variant) => typeTextOf(variant, mode));
-  if (!node.open || mode === 'declared') {
-    return `(${variants.join(' | ')})`;
+function taggedTypeOf(node: NodeOf<'tagged'>, typing: Typing): string {
+  const variants = variantsTypeOf(node, typing.mode, typing.needs);
+  if (!node.open || typing.mode === 'declared') {
+    return variants;
   }
   const key = keyOf(node.discriminator);
   const raw = `{ ${key}: string; [key: string]: unknown }`;
-  const unknownCase = `{ ${key}: { unknown: string }; raw: ${raw} }`;
-  return `(${[...variants, unknownCase].join(' | ')})`;
+  return `(${variants} | { ${key}: { unknown: string }; raw: ${raw} })`;
 }
 
-function valueTypeOf(value: string | number | boolean): string {
-  return typeof value === 'string' ? stringLiteralOf(value) : String(value);
+/** The type of a discriminated union's declared variants. */
+export function variantsTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode, needs: Needs): string {
+  const variants = entriesOf(node.variants).map(([, variant]) => typeTextOf(variant, mode, needs));
+  return `(${variants.join(' | ')})`;
 }

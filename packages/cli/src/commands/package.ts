@@ -1,9 +1,8 @@
 import { join } from 'node:path';
 import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
-import { builtOf, snapshotFile } from './built.ts';
+import { type BuiltProject, builtOf } from './built.ts';
 import { type Exit, type Run, toolingError } from './exit.ts';
-import type { BuiltProject } from './generated-files.ts';
 import { writeContractPackageTo } from './package-target.ts';
 
 /** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`. */
@@ -25,12 +24,6 @@ export async function writeContractPackage(run: Run, out: string): Promise<Exit>
       'A Definitions Package has no Contract Package: it is published from its own source',
     );
   }
-  if (built.committed.kind === 'no-json') {
-    const reason = built.committed.reason;
-    return toolingError(
-      `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom package`,
-    );
-  }
   const peers = peersOf(built);
   if (peers.kind === 'failed') {
     return toolingError(peers.message);
@@ -39,11 +32,8 @@ export async function writeContractPackage(run: Run, out: string): Promise<Exit>
     scope: built.project.scope,
     peers: peers.peers,
   });
-  if (files.kind === 'colliding-defs') {
-    const [first, second] = files.ids;
-    return toolingError(
-      `The recursion ids ${first} and ${second} are one name in code: rename one of them`,
-    );
+  if (files.kind === 'unnamed') {
+    return toolingError(files.line);
   }
   return writeContractPackageTo(run.cwd, out, files.files);
 }
@@ -58,10 +48,10 @@ function peersOf(
   const contract = installedVersionOf('@casitafeliz/loom-contract', rootPath);
   const zod = installedVersionOf('zod', rootPath);
   if (contract.kind === 'failed') {
-    return { kind: 'failed', message: `${contract.message}: a Contract Package is built with it` };
+    return contract;
   }
   if (zod.kind === 'failed') {
-    return { kind: 'failed', message: `${zod.message}: a Contract Package is built with it` };
+    return zod;
   }
   return { kind: 'found', peers: { contract: contract.version, zod: zod.version } };
 }

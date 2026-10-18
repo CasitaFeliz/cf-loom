@@ -1,7 +1,9 @@
 import type { ApplicationSnapshot, ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
-import { localVersion } from './entry-code.ts';
 import { snapshotHashOf } from './hash.ts';
 import type { PackageFile } from './modules.ts';
+
+/** The version a Contract Package carries until `publish` derives one. */
+export const localVersion = '0.0.0';
 
 /** The versions of the two peers the package is built with, as installed beside the root. */
 export type Peers = { readonly contract: string; readonly zod: string };

@@ -1,4 +1,5 @@
 import {
+  addedStandardRejectionNames,
   byCodePoint,
   type EndpointSnapshot,
   type ServiceSnapshot,
@@ -6,6 +7,11 @@ import {
 
 /** An Endpoint the package exports, with the identity the Snapshot keys it by. */
 export type ExportedEndpoint = { readonly id: string; readonly endpoint: EndpointSnapshot };
+
+/** A Rejection an Endpoint lists itself: the Standard not-found one, or a declared one by its code. */
+export type ListedRejection =
+  | { readonly kind: 'not-found' }
+  | { readonly kind: 'declared'; readonly code: string };
 
 /**
  * What a Contract Package carries of a Service, and nothing else, so nothing Private leaks: its
@@ -26,28 +32,40 @@ export function reachedOf(snapshot: ServiceSnapshot): Reached {
     .sort((left, right) => byCodePoint(left.endpoint.name, right.endpoint.name));
   const guards = new Set(endpoints.flatMap(({ endpoint }) => attachedOf(endpoint)));
   const guardCodes = [...guards].flatMap((guard) => snapshot.guards[guard]?.rejections ?? []);
-  const endpointCodes = endpoints.flatMap(({ endpoint }) => ownCodesOf(endpoint, snapshot));
-  const standardCode = snapshot.standardRejections.notFound.code;
-  const codes = new Set([...guardCodes, ...endpointCodes].filter((code) => code !== standardCode));
+  const listed = endpoints.flatMap(({ endpoint }) => ownRejectionsOf(endpoint, snapshot));
+  const endpointCodes = listed.filter(isDeclared).map(({ code }) => code);
+  const codes = new Set([...guardCodes, ...endpointCodes]);
   return { endpoints, guards: [...guards].sort(byCodePoint), codes: [...codes].sort(byCodePoint) };
 }
 
 /**
- * The codes an Endpoint lists itself, `notFound`'s included: its resolved codes but its Guards'
- * and the two cf-loom's runtime adds, which the Endpoint gets again by attaching its Guards.
+ * The Rejections an Endpoint lists itself: its resolved codes but its Guards' and those
+ * cf-loom's runtime adds, which it gets again by attaching its Guards.
  */
-export function ownCodesOf(
+export function ownRejectionsOf(
   endpoint: EndpointSnapshot,
   snapshot: ServiceSnapshot,
-): readonly string[] {
-  const { invalidInput, notImplemented } = snapshot.standardRejections;
-  const added = new Set([invalidInput.code, notImplemented.code]);
+): readonly ListedRejection[] {
+  const { standardRejections } = snapshot;
+  const added = new Set(addedStandardRejectionNames.map((name) => standardRejections[name].code));
   for (const guard of attachedOf(endpoint)) {
     for (const code of snapshot.guards[guard]?.rejections ?? []) {
       added.add(code);
     }
   }
-  return endpoint.rejections.filter((code) => !added.has(code));
+  const own = endpoint.rejections.filter((code) => !added.has(code));
+  const notFoundCode = standardRejections.notFound.code;
+  return own.map(
+    (code): ListedRejection =>
+      code === notFoundCode ? { kind: 'not-found' } : { kind: 'declared', code },
+  );
+}
+
+/** Whether a listed Rejection is a declared one, which the package writes a file for. */
+export function isDeclared(
+  rejection: ListedRejection,
+): rejection is Extract<ListedRejection, { readonly kind: 'declared' }> {
+  return rejection.kind === 'declared';
 }
 
 function attachedOf(endpoint: EndpointSnapshot): readonly string[] {

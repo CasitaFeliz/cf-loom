@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -236,6 +237,55 @@ const service: Readonly<Record<string, string>> = {
   ]),
 };
 
+/** A Service whose one Endpoint, `ping`, holds the declarations, rejections and body given. */
+function withDeclarations(
+  declarations: readonly string[],
+  rejections: string,
+  body = 'z.object({})',
+): Readonly<Record<string, string>> {
+  return {
+    'package.json': JSON.stringify({ name: '@org/orders-service', type: 'module' }),
+    'cf-loom.config.ts': config,
+    'src/contract/index.ts': lines([
+      "import { defineContract, defineEndpoint, defineGroup, defineRejection } from '@casitafeliz/loom-contract';",
+      "import { z } from 'zod';",
+      ...declarations,
+      'export const ping = defineEndpoint({',
+      "  name: 'ping',",
+      "  method: 'GET',",
+      "  path: '/ping',",
+      "  visibility: 'public',",
+      "  description: 'Ping',",
+      `  success: { status: 200, body: ${body} },`,
+      `  ${rejections}`,
+      '});',
+      "const pings = defineGroup({ name: 'pings', description: 'Pings', endpoints: [ping] });",
+      "export const contract = defineContract({ name: 'orders-service', groups: [pings] });",
+    ]),
+  };
+}
+
+/** Rewrites one file of a folder from what it holds. */
+function edit(folder: string, path: string, change: (text: string) => string): void {
+  write(folder, { [path]: change(read(folder, path)) });
+}
+
+/** A Contract Package of a Service with one Public Endpoint, `ping`, built in a folder of its own. */
+function aProviderPackage(name: string): string {
+  const project = aProject({
+    ...withDeclarations([], ''),
+    'package.json': JSON.stringify({ name: `@org/${name}`, type: 'module' }),
+  });
+  edit(project, 'src/contract/index.ts', (text) =>
+    text.replace("name: 'orders-service'", `name: '${name}'`),
+  );
+  const out = join(aFolder(), `contract-${name}`);
+  expect(cfLoom(project, 'package', '--out', out).status).toBe(0);
+  linkPeers(out);
+  expect(typeCheck(out).status).toBe(0);
+  return out;
+}
+
 /** The Contract Package built in a folder of its own, where only its two peers are installed. */
 function builtPackage(): string {
   const project = aProject(service);
@@ -362,6 +412,53 @@ describe('cf-loom package: the files', () => {
       'total: z.object({ amount: z.int(), currency: z.string() })',
     );
   });
+  test('every binding is suffixed by its kind, and the entry keys Endpoints by name', () => {
+    const project = aProject(service);
+
+    cfLoom(project, 'package');
+
+    const out = join(project, 'contract-package');
+    expect(read(out, 'src/index.ts')).toContain(
+      [
+        '  endpoints: {',
+        '    getOrder: getOrderEndpoint,',
+        '    listOrders: listOrdersEndpoint,',
+        '  },',
+      ].join('\n'),
+    );
+    const getOrder = read(out, 'src/endpoints/get-order.ts');
+    expect(getOrder).toContain("import * as loom from '@casitafeliz/loom-contract';");
+    expect(getOrder).toContain('export const getOrderEndpoint = loom.defineEndpoint({');
+    expect(getOrder).toContain(
+      '  guards: [userTokenGuard, { guard: permissionGuard, qualifier: ["orders:read"] }],',
+    );
+    expect(getOrder).toContain('  rejections: [loom.notFound, orderLockedRejection],');
+    expect(read(out, 'src/guards/permission.ts')).toContain(
+      'export const permissionGuard = loom.defineGuard({',
+    );
+    expect(read(out, 'src/rejections/order-locked.ts')).toContain(
+      'export const orderLockedRejection = loom.defineRejection({',
+    );
+  });
+
+  test('the files are a function of the canonical Snapshot, whatever order the Contract declares', () => {
+    const swapped = (service['src/contract/index.ts'] ?? '')
+      .replace(
+        "body: z.object({ id: z.uuid(), status: openEnum(['pending', 'paid']), total: money }),",
+        "body: z.object({ total: money, status: openEnum(['paid', 'pending']), id: z.uuid() }),",
+      )
+      .replace('guards: [userToken, permission],', 'guards: [permission, userToken],');
+    const first = aProject(service);
+    const second = aProject({ ...service, 'src/contract/index.ts': swapped });
+
+    cfLoom(first, 'package');
+    cfLoom(second, 'package');
+
+    const out = 'contract-package';
+    for (const file of filesIn(join(first, out)).filter((path) => path.includes('.'))) {
+      expect(read(second, join(out, file))).toBe(read(first, join(out, file)));
+    }
+  });
 });
 
 describe('cf-loom package: the built package', () => {
@@ -437,6 +534,40 @@ describe('cf-loom package: the built package', () => {
     });
   });
 
+  test('cfLoom.dependencies is in canonical order, whatever order the root lists them in', () => {
+    const alpha = aProviderPackage('alpha-service');
+    const beta = aProviderPackage('beta-service');
+    const applicationOf = (listed: string) => {
+      const project = aProject({
+        'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
+        'cf-loom.config.ts': config,
+        'src/contract/index.ts': lines([
+          "import { defineApplication, defineDependencies } from '@casitafeliz/loom-contract';",
+          "import { contract as alpha } from '@org/contract-alpha-service';",
+          "import { contract as beta } from '@org/contract-beta-service';",
+          'export const alphaDeps = defineDependencies(alpha, { endpoints: [alpha.endpoints.ping] });',
+          'export const betaDeps = defineDependencies(beta, { endpoints: [beta.endpoints.ping] });',
+          `export const application = defineApplication({ name: 'web-admin', dependencies: [${listed}] });`,
+        ]),
+      });
+      link(alpha, join(project, 'node_modules/@org/contract-alpha-service'));
+      link(beta, join(project, 'node_modules/@org/contract-beta-service'));
+      return project;
+    };
+    const first = applicationOf('alphaDeps, betaDeps');
+    const second = applicationOf('betaDeps, alphaDeps');
+
+    cfLoom(first, 'package');
+    cfLoom(second, 'package');
+
+    expect(read(second, 'contract-package/package.json')).toBe(
+      read(first, 'contract-package/package.json'),
+    );
+    expect(read(first, 'contract-package/package.json')).toMatch(
+      /"alpha-service"[\s\S]*"beta-service"/,
+    );
+  });
+
   test('an Application’s package exports its Snapshot only, and builds', async () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
@@ -501,6 +632,52 @@ describe('cf-loom package: where it writes', () => {
     expect(ran).toEqual({ status: 0, stdout: 'Wrote out\n', stderr: '' });
     expect(existsSync(join(project, 'out/package.json'))).toBe(true);
   });
+  test('a previous output holding a build is replaced', () => {
+    const project = aProject(service);
+    cfLoom(project, 'package');
+    write(project, { 'contract-package/dist/index.js': 'export {};\n' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(0);
+    expect(existsSync(join(project, 'contract-package/dist'))).toBe(false);
+  });
+
+  test('a previous output holding a file package does not write is refused and kept', () => {
+    const project = aProject(service);
+    cfLoom(project, 'package');
+    write(project, { 'contract-package/notes.txt': 'mine' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(read(project, 'contract-package/notes.txt')).toBe('mine');
+  });
+
+  test('the project itself is refused, and nothing in it is deleted', () => {
+    const project = aProject(service);
+    edit(project, 'package.json', (text) => JSON.stringify({ ...JSON.parse(text), cfLoom: {} }));
+
+    const ran = cfLoom(project, 'package', '--out', '.');
+
+    expect(ran.status).toBe(3);
+    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(true);
+  });
+
+  test('a symbolic link is refused, not replaced', () => {
+    const project = aProject(service);
+    cfLoom(project, 'package', '--out', 'real');
+    symlinkSync(join(project, 'real'), join(project, 'linked'));
+
+    const ran = cfLoom(project, 'package', '--out', 'linked');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'linked is a symbolic link: package writes a folder of its own\n',
+    });
+    expect(lstatSync(join(project, 'linked')).isSymbolicLink()).toBe(true);
+  });
 });
 
 describe('cf-loom package: what it refuses', () => {
@@ -539,6 +716,94 @@ describe('cf-loom package: what it refuses', () => {
     expect(ran.status).toBe(1);
     expect(ran.stderr).toBe(cfLoom(project, 'generate').stderr);
     expect(existsSync(join(project, 'contract-package'))).toBe(false);
+  });
+
+  test('two codes that are one name in code are a tooling error naming both', () => {
+    const project = aProject(
+      withDeclarations(
+        [
+          "export const first = defineRejection({ code: 'ORDER_1', status: 409, message: 'One' });",
+          "export const second = defineRejection({ code: 'ORDER1', status: 422, message: 'Other' });",
+        ],
+        'rejections: [first, second],',
+      ),
+    );
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'The codes ORDER1 and ORDER_1 are one name in code: rename one of them\n',
+    });
+  });
+
+  test.each([
+    ['1tree', 'The recursion id 1tree is no name in code: rename it'],
+    ['!!', 'The recursion id !! is no name in code: rename it'],
+  ])('a recursion id %s that gives no name in code is a tooling error', (id, line) => {
+    const project = aProject(
+      withDeclarations(
+        [
+          `export const tree = z.object({ get children() { return z.array(tree); } }).meta({ id: '${id}' });`,
+        ],
+        '',
+        'tree',
+      ),
+    );
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
+  });
+
+  test('two recursion ids whose names in code meet in any mode are a tooling error naming both', () => {
+    const project = aProject(
+      withDeclarations(
+        [
+          "export const tree = z.object({ get next() { return tree.optional(); } }).meta({ id: 'tree' });",
+          "export const other = z.object({ get next() { return other.optional(); } }).meta({ id: 'tree-reader' });",
+        ],
+        '',
+        'z.object({ tree, other })',
+      ),
+    );
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'The recursion ids tree and tree-reader are one name in code: rename one of them\n',
+    });
+  });
+
+  test('a local code NOT_FOUND beside the Standard not-found Rejection builds', () => {
+    const project = aProject({
+      ...service,
+      'node_modules/@org/definitions/index.js': (
+        service['node_modules/@org/definitions/index.js'] ?? ''
+      ).replace(
+        '  schemas: { money },\n  rejections: [forbidden],\n});',
+        "  schemas: { money },\n  rejections: [forbidden],\n  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },\n});",
+      ),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace(
+          'export const adminOnly',
+          "export const localNotFound = defineRejection({ code: 'NOT_FOUND', status: 404, message: 'Gone' });\nexport const adminOnly",
+        )
+        .replace(
+          'rejections: [notFound, orderLocked],',
+          'rejections: [notFound, orderLocked, localNotFound],',
+        ),
+    });
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(cfLoom(project, 'package', '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+
+    const built = typeCheck(out);
+
+    expect(built).toEqual({ status: 0, stdout: '' });
   });
 
   test('package takes no argument but --out', () => {

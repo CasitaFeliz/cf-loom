@@ -1,5 +1,5 @@
-export type { Exported, ExportedAt, ExportingPackage } from './exported.ts';
-export { exportedOf } from './exported.ts';
+export type { ContractExports, ExportedAt, FileExport } from './exported.ts';
+export { contractExportsOf } from './exported.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
 export type { InstalledVersion } from './installed-package.ts';

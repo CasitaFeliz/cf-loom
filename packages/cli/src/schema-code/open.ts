@@ -9,20 +9,24 @@ export function openEnumReaderOf(declared: string): string {
 }
 
 /**
- * An Open Union's reader: a declared variant as itself, an object whose discriminator is a string
- * no variant declares as its Unknown case, `{ type: { unknown: 'crypto' }, raw }`, with `raw` the
- * object as received; a declared variant that breaks its schema is still refused.
+ * An Open Union's reader: a declared variant as itself, and an object whose discriminator is a
+ * string no variant declares as its Unknown case, `{ type: { unknown: 'crypto' }, raw }`.
  */
 export function openUnionReaderOf(
   declared: string,
   discriminator: string,
-  known: readonly unknown[],
+  knownValues: readonly string[],
 ): string {
+  return `z.union([${declared}, ${unknownVariantOf(discriminator, knownValues)}])`;
+}
+
+/**
+ * The Unknown case of an Open Union, refusing a declared value so a declared variant that breaks
+ * its schema is still refused; `raw` is the object as received.
+ */
+function unknownVariantOf(discriminator: string, knownValues: readonly string[]): string {
   const key = keyOf(discriminator);
-  const name = stringLiteralOf(discriminator);
-  const values = known.map((value) => JSON.stringify(value)).join(', ');
-  const isUnknown = `(value) => ![${values}].includes(value)`;
-  const unknownVariant = `z.looseObject({ ${key}: z.string().refine(${isUnknown}) })`;
-  const unknownCase = `(raw) => ({ ${key}: { unknown: raw[${name}] }, raw })`;
-  return `z.union([${declared}, ${unknownVariant}.transform(${unknownCase})])`;
+  const isUnknown = `(value) => ![${knownValues.join(', ')}].includes(value)`;
+  const unknownCase = `(raw) => ({ ${key}: { unknown: raw[${stringLiteralOf(discriminator)}] }, raw })`;
+  return `z.looseObject({ ${key}: z.string().refine(${isUnknown}) }).transform(${unknownCase})`;
 }

@@ -1,7 +1,10 @@
-import type { StringFormat } from '@casitafeliz/loom-contract/internal';
-
-/** A hash format, its algorithm and encoding in its name. */
-type HashFormat = Extract<StringFormat, `${string}_${'hex' | 'base64' | 'base64url'}`>;
+import {
+  type HashFormat,
+  hashPartsOf,
+  isHashFormat,
+  type StringFormat,
+} from '@casitafeliz/loom-contract/internal';
+import { jsonLiteralOf, keyOf, stringLiteralOf } from '../source-text/index.ts';
 
 /** The zod constructor of each format zod builds by name, as generated code calls it. */
 const constructorByFormat: Readonly<Record<Exclude<StringFormat, HashFormat>, string>> = {
@@ -38,8 +41,6 @@ const constructorByFormat: Readonly<Record<Exclude<StringFormat, HashFormat>, st
   currency_code: 'z.currencyCode',
 };
 
-const hashFormat = /^(md5|sha1|sha256|sha384|sha512)_(hex|base64|base64url)$/;
-
 /**
  * The zod call that builds a format with the options the Snapshot records, so the generated
  * schema checks exactly what the author's did.
@@ -49,28 +50,23 @@ export function formatCallOf(
   options: Readonly<Record<string, unknown>> | undefined,
 ): string {
   if (isHashFormat(format)) {
-    const [algorithm, encoding] = format.split('_');
-    return `z.hash('${algorithm}', { enc: '${encoding}' })`;
+    const { algorithm, encoding } = hashPartsOf(format);
+    return `z.hash(${stringLiteralOf(algorithm)}, { enc: ${stringLiteralOf(encoding)} })`;
   }
   const call = constructorByFormat[format];
   return options === undefined ? `${call}()` : `${call}(${optionsTextOf(options)})`;
 }
 
-function isHashFormat(format: StringFormat): format is HashFormat {
-  return hashFormat.test(format);
-}
-
 function optionsTextOf(options: Readonly<Record<string, unknown>>): string {
-  const entries = Object.entries(options).map(([key, value]) => `${key}: ${optionTextOf(value)}`);
+  const entries = Object.entries(options).map(
+    ([key, value]) => `${keyOf(key)}: ${optionTextOf(value)}`,
+  );
   return `{ ${entries.join(', ')} }`;
 }
 
 /** An option's value: a regex the Snapshot records as its source and flags, or its JSON. */
 function optionTextOf(value: unknown): string {
-  if (isRegex(value)) {
-    return `new RegExp(${JSON.stringify(value.source)}, ${JSON.stringify(value.flags)})`;
-  }
-  return JSON.stringify(value);
+  return isRegex(value) ? regexTextOf(value) : jsonLiteralOf(value);
 }
 
 /** A regex as the Snapshot records it. */
@@ -80,7 +76,12 @@ function isRegex(value: unknown): value is RegexText {
   return typeof value === 'object' && value !== null && 'source' in value && 'flags' in value;
 }
 
-/** A regex check, built from its source and flags so no escaping can change it. */
+/** A regex check. */
 export function regexCallOf(regex: RegexText): string {
-  return `.regex(new RegExp(${JSON.stringify(regex.source)}, ${JSON.stringify(regex.flags)}))`;
+  return `.regex(${regexTextOf(regex)})`;
+}
+
+/** A regex built from its source and flags, so no escaping can change it. */
+function regexTextOf(regex: RegexText): string {
+  return `new RegExp(${jsonLiteralOf(regex.source)}, ${jsonLiteralOf(regex.flags)})`;
 }

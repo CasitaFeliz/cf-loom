@@ -31,7 +31,13 @@ export type {
   SubscriptionSnapshot,
   SuccessSnapshot,
 } from '../snapshot/index.ts';
-export { canonicalTextOf, hashedTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
+export {
+  canonicalSnapshotOf,
+  canonicalTextOf,
+  hashedTextOf,
+  schemaOriginsOf,
+  snapshotOf,
+} from '../snapshot/index.ts';
 export type {
   AnswerableRejection,
   DeclarationFailure,

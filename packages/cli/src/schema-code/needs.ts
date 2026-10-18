@@ -5,16 +5,20 @@
  */
 export type SchemaMode = 'declared' | 'reader';
 
-/** A helper of `@casitafeliz/loom-contract` a generated schema calls. */
-export type Helper = 'openEnum' | 'openUnion';
+/** A module generated code imports: `zod` as `z`, or `@casitafeliz/loom-contract` as `loom`. */
+export type ImportedModule = 'zod' | 'loom';
 
 /**
- * What generated schemas need imported besides `z`, gathered while they are written: the
- * helpers they call and the recursive defs they reference, by identifier.
+ * What generated code needs imported, gathered while it is written: the modules it calls, and the
+ * recursive defs and their types it references, by identifier.
  */
-export type Needs = { readonly helpers: Set<Helper>; readonly defs: Set<string> };
+export type Needs = {
+  readonly modules: Set<ImportedModule>;
+  readonly defs: Set<string>;
+  readonly defTypes: Set<string>;
+};
 
 /** Nothing needed yet. */
 export function noNeeds(): Needs {
-  return { helpers: new Set(), defs: new Set() };
+  return { modules: new Set(), defs: new Set(), defTypes: new Set() };
 }

@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { walkSchemas } from '@casitafeliz/loom-contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 
 const cliDir = join(import.meta.dirname, '..');
@@ -40,13 +41,40 @@ function lines(written: readonly string[]): string {
 /** A schema of every node a Snapshot has, used as an Input body and as a Success body. */
 const everything = [
   "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+  'const forest = z',
+  '  .object({',
+  '    strict: z.strictObject({ a: z.string() }),',
+  "    status: openEnum(['a', \"it's\"]),",
+  "    pick: openUnion('the-type', [z.object({ 'the-type': z.literal('x') })]),",
+  '    note: z.string().nullable(),',
+  '    maybe: z.string().optional(),',
+  '    tuple: z.tuple([z.string()], z.number()),',
+  '    tree,',
+  '    get parent() {',
+  "      return forest.optional().describe('the parent');",
+  '    },',
+  '  })',
+  "  .meta({ id: 'forest' });",
+  'const leaf = z',
+  "  .object({ type: z.literal('leaf'), get parent() { return node.optional(); } })",
+  "  .meta({ id: 'leaf' });",
+  "const node = openUnion('type', [leaf, z.object({ type: z.literal('branch') })]);",
+  'const twig = z',
+  "  .object({ kind: z.literal('twig'), get up() { return stem.optional(); } })",
+  "  .meta({ id: 'twig' });",
+  "const stem = z.discriminatedUnion('kind', [twig, z.object({ kind: z.literal('stem') })]);",
   'const everything = z.object({',
-  "  plain: z.string().min(1).max(10).describe('A text'),",
+  '  plain: z.string().min(1).max(10).describe("It\'s a text"),',
   '  email: z.email(),',
   '  at: z.iso.datetime({ offset: true, precision: 3 }),',
   '  site: z.url({ protocol: /^https$/ }),',
   "  id: z.uuid({ version: 'v4' }),",
   "  digest: z.hash('sha256'),",
+  "  digest2: z.hash('md5', { enc: 'base64' }),",
+  "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
+  '  forest,',
+  '  node,',
+  '  stem,',
   '  color: z.hex(),',
   '  pattern: z.string().regex(/^[a-z]+$/i),',
   '  count: z.int().min(0).lt(100).multipleOf(5),',
@@ -77,6 +105,40 @@ const everything = [
   '});',
 ];
 
+/** An Endpoint with two params, a query, Success headers, a Guard listing another, and a Rejection body. */
+const richEndpoint = [
+  "const base = defineGuard({ name: 'base', description: 'Base', context: z.object({ userId: z.string() }) });",
+  "const denied = defineRejection({ code: 'DENIED', status: 403, message: 'Denied' });",
+  'const session = defineGuard({',
+  "  name: 'session',",
+  "  description: 'Session',",
+  '  guards: [base],',
+  '  demands: { query: z.object({ token: z.string() }) },',
+  '  context: z.object({ sessionId: z.uuid() }),',
+  '  rejections: [denied],',
+  '});',
+  'const goneForGood = defineRejection({',
+  "  code: 'GONE_FOR_GOOD',",
+  '  status: 410,',
+  '  message: "It\'s gone",',
+  "  body: z.object({ reason: openEnum(['moved']) }),",
+  '});',
+  'export const rich = defineEndpoint({',
+  "  name: 'rich',",
+  "  method: 'GET',",
+  "  path: '/orders/:orderId/items/:itemId',",
+  "  visibility: 'internal',",
+  "  description: 'Rich',",
+  '  guards: [base, session],',
+  '  input: {',
+  '    params: z.object({ orderId: z.string(), itemId: z.string() }),',
+  '    query: z.object({ page: z.number().optional() }),',
+  '  },',
+  "  success: { status: 200, headers: z.object({ 'x-state': openEnum(['ok']) }), body: z.object({}) },",
+  '  rejections: [goneForGood],',
+  '});',
+];
+
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
@@ -88,6 +150,8 @@ const service: Readonly<Record<string, string>> = {
     '  defineContract,',
     '  defineEndpoint,',
     '  defineGroup,',
+    '  defineGuard,',
+    '  defineRejection,',
     '  openEnum,',
     '  openUnion,',
     "} from '@casitafeliz/loom-contract';",
@@ -103,7 +167,17 @@ const service: Readonly<Record<string, string>> = {
     '  input: { body: everything },',
     '  success: { status: 200, body: everything },',
     '});',
-    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });",
+    ...richEndpoint,
+    'export const proto = defineEndpoint({',
+    "  name: 'proto',",
+    "  method: 'POST',",
+    "  path: '/proto',",
+    "  visibility: 'public',",
+    "  description: 'Proto',",
+    "  input: { body: z.object({ ['__proto__']: z.string(), b: z.string() }) },",
+    '  success: { status: 204 },',
+    '});',
+    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto] });",
     "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
@@ -116,6 +190,27 @@ const sample = {
   site: 'https://example.com',
   id: '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00',
   digest: 'a'.repeat(64),
+  digest2: `${'a'.repeat(22)}==`,
+  keyed: { a: 1, b: 2 },
+  forest: {
+    strict: { a: 'x' },
+    status: 'a',
+    pick: { 'the-type': 'x' },
+    note: null,
+    tuple: ['a', 1, 2],
+    tree: { label: 'root', children: [] },
+    parent: {
+      strict: { a: 'y' },
+      status: "it's",
+      pick: { 'the-type': 'x' },
+      note: 'n',
+      maybe: 'm',
+      tuple: ['b'],
+      tree: { label: 'leaf', children: [] },
+    },
+  },
+  node: { type: 'leaf', parent: { type: 'branch' } },
+  stem: { kind: 'twig', up: { kind: 'stem' } },
   color: 'ff00aa',
   pattern: 'Abc',
   count: 15,
@@ -139,17 +234,36 @@ const sample = {
   extra: 'dropped',
 };
 
+type Reader = core.$ZodType & { safeParse(value: unknown): Parsed };
 type Endpoint = {
   readonly input: { readonly body: core.$ZodType };
-  readonly success: { readonly body: core.$ZodType & { safeParse(value: unknown): Parsed } };
+  readonly success: { readonly body: Reader & { readonly shape: Record<string, core.$ZodType> } };
+};
+type RichGuard = { readonly context: core.$ZodType; readonly guards?: readonly unknown[] };
+type Rich = {
+  readonly path: string;
+  readonly description: string;
+  readonly guards: readonly RichGuard[];
+  readonly input: { readonly query: core.$ZodType };
+  readonly success: { readonly headers: Reader };
+  readonly rejections: readonly {
+    readonly code: string;
+    readonly message: string;
+    readonly body: Reader;
+  }[];
 };
 type Parsed = { readonly success: boolean; readonly data?: Record<string, unknown> };
 
 let folder = '';
 let echo: Endpoint;
+let rich: Rich;
+let proto: { readonly input: { readonly body: core.$ZodType } };
 let snapshot: {
   readonly defs: Readonly<Record<string, unknown>>;
-  readonly endpoints: Readonly<Record<string, { readonly input: { readonly body: unknown } }>>;
+  readonly endpoints: Readonly<
+    Record<string, { readonly input: { readonly body: unknown; readonly query: unknown } }>
+  >;
+  readonly guards: Readonly<Record<string, { readonly context: unknown }>>;
 };
 
 beforeAll(async () => {
@@ -171,6 +285,8 @@ beforeAll(async () => {
   expect(built.stdout).toBe('');
   const entry = await import(pathToFileURL(join(out, 'dist/index.js')).href);
   echo = entry.contract.endpoints.echo;
+  rich = entry.contract.endpoints.rich;
+  proto = entry.contract.endpoints.proto;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
 
@@ -180,6 +296,11 @@ afterAll(() => {
 
 function read(value: unknown): Parsed {
   return echo.success.body.safeParse(value);
+}
+
+/** The node a schema walks back to, so a test compares it with the Snapshot's. */
+function walkedOf(schema: core.$ZodType): unknown {
+  return walkSchemas([{ at: ['body'], schema }], () => undefined).located[0]?.walked;
 }
 
 describe('cf-loom package: the schemas it writes', () => {
@@ -242,5 +363,118 @@ describe('cf-loom package: the schemas it writes', () => {
     const parsed = read({ ...sample, tree });
 
     expect(parsed.data?.['tree']).toEqual(tree);
+  });
+  test.each([
+    ['an array longer than its bounds', { list: ['a', 'b', 'c', 'd'] }],
+    ['a number at an exclusive bound', { ratio: 0 }],
+    ['a number past its upper bound', { count: 100 }],
+    ['a number that is not a multiple', { count: 7 }],
+    ['a value outside a closed enum', { level: 'mid' }],
+    ['an intersection whose right item is broken', { both: { a: 'x', n: 1 } }],
+    ['a hash of the wrong encoding', { digest2: 'a'.repeat(32) }],
+  ])('the Success reader refuses %s', (_name, change) => {
+    const parsed = read({ ...sample, ...change });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test('the Success reader keeps the annotations the Snapshot records', () => {
+    const plain = echo.success.body.shape['plain'];
+
+    expect(plain === undefined ? undefined : z.globalRegistry.get(plain)).toEqual({
+      description: "It's a text",
+    });
+  });
+
+  test('the Success reader reads an enum-keyed record as the object it is, unknown keys stripped', () => {
+    const parsed = read({ ...sample, keyed: { a: 1, b: 2, c: 3 } });
+
+    expect(parsed.data?.['keyed']).toEqual({ a: 1, b: 2 });
+  });
+
+  test('a recursive def reads its Unknown cases, optional, nullable and tuple fields, and another def', () => {
+    const forest = {
+      ...sample.forest,
+      strict: { a: 'x', b: 2 },
+      status: 'new',
+      pick: { 'the-type': 'y', more: 1 },
+    };
+
+    const parsed = read({ ...sample, forest });
+
+    expect(parsed.data?.['forest']).toEqual({
+      ...sample.forest,
+      strict: { a: 'x' },
+      status: { unknown: 'new' },
+      pick: { 'the-type': { unknown: 'y' }, raw: { 'the-type': 'y', more: 1 } },
+    });
+  });
+
+  test('an Open Union with a recursive variant reads an unknown variant as its Unknown case', () => {
+    const parsed = read({ ...sample, node: { type: 'leaf', parent: { type: 'vine' } } });
+
+    expect(parsed.data?.['node']).toEqual({
+      type: 'leaf',
+      parent: { type: { unknown: 'vine' }, raw: { type: 'vine' } },
+    });
+  });
+
+  test('a discriminated union with a recursive variant reads a nested value', () => {
+    const parsed = read(sample);
+
+    expect(parsed.data?.['stem']).toEqual(sample.stem);
+  });
+
+  test('a field named __proto__ walks back to the Snapshot’s node', () => {
+    expect(walkedOf(proto.input.body)).toEqual({
+      kind: 'walked',
+      value: snapshot.endpoints['POST /proto']?.input.body,
+    });
+  });
+});
+
+describe('cf-loom package: an exported Endpoint’s slots', () => {
+  test('it lists only its own Rejections, its Guards’ left to them', () => {
+    expect(rich.rejections.map(({ code }) => code)).toEqual(['GONE_FOR_GOOD']);
+  });
+
+  test('its path puts its params back in order', () => {
+    expect(rich.path).toBe('/orders/:orderId/items/:itemId');
+  });
+
+  test('its description and its Rejection’s message are as declared', () => {
+    expect([rich.description, rich.rejections[0]?.message]).toEqual(['Rich', "It's gone"]);
+  });
+
+  test('its Success headers are a reader', () => {
+    const parsed = rich.success.headers.safeParse({ 'x-state': 'new', other: 'x' });
+
+    expect(parsed.data).toEqual({ 'x-state': { unknown: 'new' } });
+  });
+
+  test('its Rejection’s body is a reader', () => {
+    const parsed = rich.rejections[0]?.body.safeParse({ reason: 'lost' });
+
+    expect(parsed?.data).toEqual({ reason: { unknown: 'lost' } });
+  });
+
+  test('its Guard lists the Guard it reads, as attached', () => {
+    expect(rich.guards[1]?.guards?.[0]).toBe(rich.guards[0]);
+  });
+
+  test('its Guard’s Context walks back to the Snapshot’s node', () => {
+    const context = rich.guards[1]?.context;
+
+    expect(context === undefined ? undefined : walkedOf(context)).toEqual({
+      kind: 'walked',
+      value: snapshot.guards['session']?.context,
+    });
+  });
+
+  test('its query, the Guard’s demand merged, walks back to the Snapshot’s node', () => {
+    expect(walkedOf(rich.input.query)).toEqual({
+      kind: 'walked',
+      value: snapshot.endpoints['GET /orders/{}/items/{}']?.input.query,
+    });
   });
 });

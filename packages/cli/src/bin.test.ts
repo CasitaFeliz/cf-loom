@@ -397,6 +397,24 @@ describe('cf-loom generate', () => {
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
+  test('an intersection reaching an Open Union exits 1 in one line, since no reader can merge it', () => {
+    const body =
+      "z.intersection(z.object({ type: z.string() }), openUnion('type', [z.object({ type: z.literal('card') })]))";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openUnion }'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() or an openUnion() (use .extend())\n',
+    });
+  });
+
   test('a broken rule exits 1 with its location, rule and message', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     write(project, {

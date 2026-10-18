@@ -33,8 +33,11 @@ export async function installedPackageOf(
   { rootPath, directory }: LookedUp,
 ): Promise<InstalledPackage> {
   const found = foundOf(packageName, rootPath);
-  if (found.kind === 'failed') {
-    return found;
+  if (found.kind !== 'found') {
+    return {
+      kind: 'failed',
+      message: missingMessageOf(packageName, found, 'install it to list it'),
+    };
   }
   const { manifestPath, manifest, version } = found;
   const imported = await entryModuleOf(join(dirname(manifestPath), entryOf(manifest)), directory);
@@ -49,12 +52,12 @@ export async function installedPackageOf(
  * built with; nothing of it is loaded.
  */
 export function installedVersionOf(packageName: string, rootPath: string): InstalledVersion {
-  const manifestPath = manifestPathOf(packageName, rootPath);
-  const version = manifestPath === undefined ? undefined : manifestIn(manifestPath)?.['version'];
-  if (typeof version !== 'string') {
-    return { kind: 'failed', message: `${packageName} is not installed` };
+  const found = foundOf(packageName, rootPath);
+  if (found.kind !== 'found') {
+    const why = 'a Contract Package is built with it';
+    return { kind: 'failed', message: missingMessageOf(packageName, found, why) };
   }
-  return { kind: 'installed', version };
+  return { kind: 'installed', version: found.version };
 }
 
 /** A package's package.json as found from the root file, with its version. */
@@ -65,17 +68,29 @@ type Found =
       readonly manifest: Readonly<Record<string, unknown>>;
       readonly version: string;
     }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'not-installed' }
+  | { readonly kind: 'no-version' };
+
+/** Why a package cannot be used, in one line, with what to do when it is not installed. */
+function missingMessageOf(
+  packageName: string,
+  missing: Exclude<Found, { readonly kind: 'found' }>,
+  todo: string,
+): string {
+  return missing.kind === 'not-installed'
+    ? `${packageName} is not installed: ${todo}`
+    : `${packageName} has no version in its package.json`;
+}
 
 function foundOf(packageName: string, rootPath: string): Found {
   const manifestPath = manifestPathOf(packageName, rootPath);
   const manifest = manifestPath === undefined ? undefined : manifestIn(manifestPath);
   if (manifestPath === undefined || manifest === undefined) {
-    return { kind: 'failed', message: `${packageName} is not installed: install it to list it` };
+    return { kind: 'not-installed' };
   }
   const version = manifest['version'];
   if (typeof version !== 'string') {
-    return { kind: 'failed', message: `${packageName} has no version in its package.json` };
+    return { kind: 'no-version' };
   }
   return { kind: 'found', manifestPath, manifest, version };
 }
