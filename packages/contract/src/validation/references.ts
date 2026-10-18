@@ -39,17 +39,34 @@ export function attachedGuardOf(attachment: Attachment): Guard | undefined {
  * Definitions root.
  */
 export function guardsOf({ root, allPackages, endpoints }: Sources): readonly LocatedGuard[] {
-  const attached = endpoints.flatMap((located) => attachedGuardsOf(located.endpoint));
-  const listed = allPackages.flatMap((located) => listOf(located.definitions.guards));
-  const gathered: LocatedGuard[] = [];
+  const attached = reachedGuardsOf(endpoints.flatMap(({ endpoint }) => attachedGuardsOf(endpoint)));
+  const listed = reachedGuardsOf(
+    allPackages.flatMap(({ definitions }) => listOf(definitions.guards)),
+  );
+  const listedOnly = listed.filter((guard) => !attached.includes(guard));
+  return [
+    ...attached.map((guard) => locatedGuardOf(guard, true)),
+    ...listedOnly.map((guard) => locatedGuardOf(guard, root.kind === 'definitions')),
+  ];
+}
+
+/**
+ * Every Guard the given ones reach, each once, the Guards one lists before it: themselves and,
+ * through `guards`, the ones they name; what names no Guard is left out.
+ */
+export function reachedGuardsOf(guards: readonly unknown[]): readonly Guard[] {
   const seen = new Set<Guard>();
-  for (const guard of attached) {
-    gatherGuard({ guard, reached: true }, seen, gathered);
-  }
-  for (const guard of listed) {
-    gatherGuard({ guard, reached: root.kind === 'definitions' }, seen, gathered);
-  }
-  return gathered;
+  const reached: Guard[] = [];
+  const visit = (guard: unknown): void => {
+    if (!isGuard(guard) || seen.has(guard)) {
+      return;
+    }
+    seen.add(guard);
+    listOf(guard.guards).forEach(visit);
+    reached.push(guard);
+  };
+  guards.forEach(visit);
+  return reached;
 }
 
 /** Every Rejection a root reaches, each once: a Definitions Package's, a Guard's, an Endpoint's. */
@@ -92,19 +109,8 @@ export function codesOf(
   return [...byCode.values()];
 }
 
-function gatherGuard(
-  { guard, reached }: Pick<LocatedGuard, 'guard' | 'reached'>,
-  seen: Set<Guard>,
-  gathered: LocatedGuard[],
-): void {
-  if (!isGuard(guard) || seen.has(guard)) {
-    return;
-  }
-  seen.add(guard);
-  for (const listed of listOf(guard.guards)) {
-    gatherGuard({ guard: listed, reached }, seen, gathered);
-  }
-  gathered.push({ at: ['guards', textOf(guard.name)], guard, reached });
+function locatedGuardOf(guard: Guard, reached: boolean): LocatedGuard {
+  return { at: ['guards', textOf(guard.name)], guard, reached };
 }
 
 function reachedCodesOf(
