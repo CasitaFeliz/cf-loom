@@ -7,6 +7,7 @@ import {
   type RootKind,
   rootFiles,
   rootPlaces,
+  thrownLineOf,
 } from '../loading/index.ts';
 import { done, type Exit, type Run, toolingError } from './exit.ts';
 import { configTemplateOf, rootTemplateOf } from './templates.ts';
@@ -62,7 +63,7 @@ function plannedOf(
     return { kind: 'refused', message: `package.json names no scope to write ${configFile} with` };
   }
   const config = { path: configFile, text: configTemplateOf(packageName.scope) };
-  return { kind: 'planned', written: [config, root] };
+  return { kind: 'planned', written: [root, config] };
 }
 
 /** The folders a file sits in under the project, outermost first. */
@@ -75,20 +76,25 @@ function isNoFolder(path: string): boolean {
   return existsSync(path) && !statSync(path).isDirectory();
 }
 
-/** Writes every file in order; on a failure removes the ones it wrote and says why. */
+/**
+ * Writes every file in order; on a failure removes the files it wrote and the folders it created,
+ * innermost first, and says why.
+ */
 function writeAll(cwd: string, written: Written): string | undefined {
-  const done: string[] = [];
+  const writtenPaths: string[] = [];
   try {
     for (const { path, text } of written) {
+      const created = foldersOf(path).filter((folder) => !existsSync(join(cwd, folder)));
+      writtenPaths.push(...created);
       mkdirSync(dirname(join(cwd, path)), { recursive: true });
       writeFileSync(join(cwd, path), text, { flag: 'wx' });
-      done.push(path);
+      writtenPaths.push(path);
     }
     return undefined;
   } catch (e) {
-    for (const path of done) {
-      rmSync(join(cwd, path), { force: true });
+    for (const path of writtenPaths.reverse()) {
+      rmSync(join(cwd, path), { force: true, recursive: true });
     }
-    return e instanceof Error ? e.message : String(e);
+    return thrownLineOf(e, cwd);
   }
 }

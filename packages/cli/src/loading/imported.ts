@@ -6,12 +6,6 @@ export type Imported =
   | { readonly kind: 'imported'; readonly exports: Readonly<Record<string, unknown>> }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** Node's codes for TypeScript it cannot strip, whose stack starts at the file and line. */
-const syntaxCodes: readonly unknown[] = [
-  'ERR_INVALID_TYPESCRIPT_SYNTAX',
-  'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX',
-];
-
 /**
  * Imports a user's TypeScript file with Node's own type stripping, so a broken file is one line
  * naming what broke, relative to the project in `directory`, and never a stack trace.
@@ -25,29 +19,41 @@ export async function importedModuleOf(path: string, directory: string): Promise
   }
 }
 
-/** What a user's code threw, as one line with the project's paths relative to it. */
+/**
+ * What a user's code threw, as one line: where in the project it threw when its stack says so,
+ * and the project's paths relative to it.
+ */
 export function thrownLineOf(thrown: unknown, directory: string): string {
   if (!(thrown instanceof Error)) {
-    return String(thrown);
+    return relativeTo(firstLineOf(String(thrown)), directory);
   }
-  const message = firstLineOf(thrown.message).replaceAll(`${directory}${sep}`, '');
+  const message = relativeTo(firstLineOf(thrown.message), directory);
   const code = 'code' in thrown ? thrown.code : undefined;
-  if (syntaxCodes.includes(code)) {
-    return `${syntaxLocationOf(thrown, directory)}${message}`;
-  }
   if (code === 'ERR_MODULE_NOT_FOUND' && isExtensionless(thrown.message)) {
     return `${message}: relative imports name the .ts file`;
   }
-  return message;
+  return `${projectFrameOf(thrown, directory)}${message}`;
 }
 
-/** Where Node found TypeScript it cannot strip: the first line of its stack, `file:///…:line`. */
-function syntaxLocationOf(thrown: Error, directory: string): string {
-  const located = /^(file:\/\/\S+?):(\d+)/.exec(thrown.stack ?? '');
-  if (located?.[1] === undefined) {
-    return '';
+/**
+ * The first place of the stack in the project's own files, `file:line: `: where Node found
+ * TypeScript it cannot strip, or where the user's code threw; nothing when no frame is the user's.
+ */
+function projectFrameOf(thrown: Error, directory: string): string {
+  const frames = [...(thrown.stack ?? '').matchAll(/(file:\/\/[^\s)]+?):(\d+)(?::\d+)?/g)];
+  for (const [, url, line] of frames) {
+    const path = url === undefined ? '' : relative(directory, fileURLToPath(url));
+    if (!path.startsWith('..') && !path.split(sep).includes('node_modules')) {
+      return `${path}:${line}: `;
+    }
   }
-  return `${relative(directory, fileURLToPath(located[1]))}:${located[2]}: `;
+  return '';
+}
+
+/** A text with the project's paths, as file URLs or paths, relative to the project. */
+function relativeTo(text: string, directory: string): string {
+  const url = `${pathToFileURL(directory).href}/`;
+  return text.replaceAll(url, '').replaceAll(`${directory}${sep}`, '');
 }
 
 /** The extensions a module Node imports may have; any other is part of a file's name. */

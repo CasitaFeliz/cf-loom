@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -292,6 +293,17 @@ describe('cf-loom init', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toBe('cf-loom.config.ts is no file\n');
     expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
+  });
+
+  test('init removes what it wrote, folders included, when a write fails', () => {
+    const project = aProject();
+    symlinkSync('missing/config.ts', join(project, 'cf-loom.config.ts'));
+
+    const ran = cfLoom(project, 'init');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^init cannot write: EEXIST[^\n]*\n$/);
+    expect(existsSync(join(project, 'src'))).toBe(false);
   });
 
   test('init refuses a package.json whose type is not module', () => {
@@ -606,7 +618,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a schema that throws while it is read is a tooling error naming the root file', () => {
+  test('a schema that throws while it is read is a tooling error naming the file and line', () => {
     const body = [
       'z.object({ name: z.string(), get children() { return z.array(categry); } })',
     ].join('');
@@ -616,7 +628,7 @@ describe('cf-loom generate: what it refuses', () => {
 
     expect(ran.status).toBe(3);
     expect(ran.stderr).toBe(
-      'src/contract/index.ts threw while it was read: categry is not defined\n',
+      'src/contract/index.ts threw while it was read: src/contract/ping.endpoint.ts:11: categry is not defined\n',
     );
   });
 
@@ -629,7 +641,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: 'cf-loom.config.ts threw while it was read: not yet\n',
+      stderr: 'cf-loom.config.ts threw while it was read: cf-loom.config.ts:1: not yet\n',
     });
   });
 
@@ -703,6 +715,123 @@ describe('cf-loom generate: what it refuses', () => {
       stdout: '',
       stderr: '@org/definitions has no version in its package.json\n',
     });
+  });
+});
+
+describe('cf-loom generate: what the user’s code throws', () => {
+  test('a root file that throws what is no Error reports its first line', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': "throw 'first line\\nsecond line';\n",
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'src/contract/index.ts cannot be loaded: first line\n',
+    });
+  });
+
+  test('a file URL in a thrown message is written relative to the project', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': 'throw new Error(`broken at ${import.meta.url}`);\n',
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(
+      'src/contract/index.ts cannot be loaded: src/contract/index.ts:1: broken at src/contract/index.ts\n',
+    );
+  });
+});
+
+describe('cf-loom generate and verify: contract.snapshot.json on disk', () => {
+  test.each(['generate', 'verify'])(
+    '%s reports a contract.snapshot.json that cannot be read in one line',
+    (command) => {
+      const project = aProject({
+        'cf-loom.config.ts': config,
+        ...aRoot(),
+        'contract.snapshot.json/kept.txt': '',
+      });
+
+      const ran = cfLoom(project, command);
+
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be read: EISDIR[^\n]*\n$/);
+    },
+  );
+
+  test('generate reports a contract.snapshot.json that cannot be written in one line', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    chmodSync(join(project, 'contract.snapshot.json'), 0o444);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: EACCES[^\n]*\n$/);
+  });
+});
+
+describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {
+  test('its Guards and shared schemas carry the origin of the version installed', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'node_modules/@org/definitions/package.json': JSON.stringify({
+        name: '@org/definitions',
+        version: '4.2.0',
+        type: 'module',
+        exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
+      }),
+      'node_modules/@org/definitions/dist/index.d.ts':
+        'export declare const definitions: unknown;\nexport declare const apiKey: unknown;\nexport declare const money: unknown;\n',
+      'node_modules/@org/definitions/dist/index.js': [
+        "import { defineDefinitions, defineGuard } from '@casitafeliz/loom-contract';",
+        "import { z } from 'zod';",
+        'export const money = z.object({ amount: z.int() });',
+        "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+        'export const definitions = defineDefinitions({',
+        "  name: 'definitions',",
+        '  guards: [apiKey],',
+        '  schemas: { money },',
+        '});',
+        '',
+      ].join('\n'),
+      'src/contract/index.ts': [
+        "import { defineContract, defineEndpoint, defineGroup } from '@casitafeliz/loom-contract';",
+        "import { apiKey, definitions, money } from '@org/definitions';",
+        '',
+        'const price = defineEndpoint({',
+        "  name: 'price',",
+        "  method: 'GET',",
+        "  path: '/price',",
+        "  visibility: 'public',",
+        "  description: 'The price',",
+        '  guards: [apiKey],',
+        '  success: { status: 200, body: money },',
+        '});',
+        "const prices = defineGroup({ name: 'prices', description: 'Prices', endpoints: [price] });",
+        'export const contract = defineContract({',
+        "  name: 'orders-service',",
+        '  definitions: [definitions],',
+        '  groups: [prices],',
+        '});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.guards.apiKey.origin).toBe('@org/definitions@4.2.0');
+    expect(snapshot.endpoints['GET /price'].success.body.origin).toBe(
+      '@org/definitions@4.2.0#money',
+    );
   });
 });
 
@@ -790,6 +919,19 @@ describe('cf-loom verify', () => {
     const ran = cfLoom(project, 'verify');
 
     expect(ran.status).toBe(0);
+  });
+
+  test('verify exits 1 when the Contract changed, whichever CLI wrote the file', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+    );
+    write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(1);
   });
 
   test('generate writes the CLI that runs it', () => {
