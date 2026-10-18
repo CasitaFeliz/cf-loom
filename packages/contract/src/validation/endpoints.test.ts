@@ -41,10 +41,10 @@ function validateEndpoint(endpoint: Endpoint) {
   );
 }
 
-function failedAt(name: string, at: readonly string[], rule: string, message: string) {
+function failedAt(at: readonly string[], rule: string, message: string) {
   return {
     kind: 'invalid',
-    failures: [{ at: ['groups', 'orders', 'endpoints', name, ...at], rule, message }],
+    failures: [{ at: ['groups', 'orders', 'endpoints', ...at], rule, message }],
   };
 }
 
@@ -71,8 +71,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['method'],
+        ['listOrders', 'method'],
         'method',
         'A method is GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS: TRACE',
       ),
@@ -86,8 +85,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['visibility'],
+        ['listOrders', 'visibility'],
         'visibility',
         'A Visibility is public, internal or private: protected',
       ),
@@ -107,8 +105,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['lifecycle'],
+        ['listOrders', 'lifecycle'],
         'lifecycle',
         'A lifecycle is active, deprecated or retired: sunset',
       ),
@@ -126,8 +123,7 @@ describe('validateContract: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        'createOrder',
-        ['success', 'status'],
+        ['createOrder', 'success', 'status'],
         'success-status',
         'A Success status is 200, 201, 202, 203 or 204: 205',
       ),
@@ -148,7 +144,7 @@ describe('validateContract: a Success’s status and body', () => {
     );
 
     expect(validated).toEqual(
-      failedAt('createOrder', ['success', 'body'], 'success-body', 'A 204 Success has no body'),
+      failedAt(['createOrder', 'success', 'body'], 'success-body', 'A 204 Success has no body'),
     );
   });
 
@@ -159,8 +155,7 @@ describe('validateContract: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['success', 'body'],
+        ['listOrders', 'success', 'body'],
         'success-body',
         'A HEAD Endpoint answers no body',
       ),
@@ -173,7 +168,7 @@ describe('validateContract: a Success’s status and body', () => {
     const validated = validateEndpoint(defineEndpoint({ ...createOrder, success: { status } }));
 
     expect(validated).toEqual(
-      failedAt('createOrder', ['success', 'body'], 'success-body', 'A 201 Success has a body'),
+      failedAt(['createOrder', 'success', 'body'], 'success-body', 'A 201 Success has a body'),
     );
   });
 });
@@ -196,8 +191,7 @@ describe('validateContract: an Input body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['input', 'body'],
+        ['listOrders', 'input', 'body'],
         'input-body',
         'A GET or HEAD Endpoint takes no body',
       ),
@@ -218,8 +212,7 @@ describe('validateContract: an Input body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        'listOrders',
-        ['input', 'body'],
+        ['listOrders', 'input', 'body'],
         'input-body',
         'A GET or HEAD Endpoint takes no body',
       ),

@@ -131,6 +131,7 @@ describe('validateContract: canonical paths', () => {
       defineEndpoint({
         ...listOrders,
         path: '/orders/:OrderId',
+        // biome-ignore lint/style/useNamingConvention: the param under test is PascalCase
         input: { params: z.object({ OrderId: z.string() }) },
       }),
     );

@@ -6,6 +6,7 @@ import type { Group } from '../group.ts';
 import type { Guard } from '../guard.ts';
 import type { Rejection } from '../rejection.ts';
 import type { Application, Contract } from '../roots.ts';
+import type { StandardRejectionDeclaration } from '../standard-rejections.ts';
 import type { Path } from '../walker/nodes.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
@@ -29,6 +30,13 @@ export type LocatedDefinitions = { readonly at: Path; readonly definitions: Defi
 /** A Dependency and where it sits in its root, by Provider. */
 export type LocatedDependencies = { readonly at: Path; readonly dependencies: Dependencies };
 
+/** A Standard Rejection as a Definitions Package declares it, by name, and where it sits. */
+export type LocatedStandardRejection = {
+  readonly at: Path;
+  readonly name: string;
+  readonly declaration: StandardRejectionDeclaration<number>;
+};
+
 /** Every declaration of a root, each once, with where it sits, so each rule reads one list. */
 export type Declarations = {
   readonly root: Root;
@@ -37,6 +45,7 @@ export type Declarations = {
   readonly guards: readonly LocatedGuard[];
   readonly rejections: readonly LocatedRejection[];
   readonly definitions: readonly LocatedDefinitions[];
+  readonly standardRejections: readonly LocatedStandardRejection[];
   readonly dependencies: readonly LocatedDependencies[];
 };
 
@@ -44,10 +53,10 @@ export type Declarations = {
 export function declarationsOf(root: Root): Declarations {
   const definitions = definitionsOf(root);
   const groups = groupsOf(root);
-  const endpoints = groups.flatMap(endpointsOf);
-  const packages = root.kind === 'definitions' ? [root] : definitions.map(packageOf);
-  const guards = guardsOf(packages, endpoints);
-  const rejections = rejectionsOf({ packages, guards, endpoints });
+  const endpoints = distinctEndpoints(groups.flatMap(endpointsOf));
+  const packages = root.kind === 'definitions' ? [{ at: [], definitions: root }] : definitions;
+  const guards = guardsOf(packages.map(packageOf), endpoints);
+  const rejections = rejectionsOf({ packages: packages.map(packageOf), guards, endpoints });
   return {
     root,
     groups,
@@ -55,8 +64,35 @@ export function declarationsOf(root: Root): Declarations {
     guards,
     rejections,
     definitions,
+    standardRejections: packages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
   };
+}
+
+/** An Endpoint listed twice is one Endpoint, where first met; the Groups rule reports the repeat. */
+function distinctEndpoints(endpoints: readonly LocatedEndpoint[]): readonly LocatedEndpoint[] {
+  const seen = new Set<Endpoint>();
+  const distinct: LocatedEndpoint[] = [];
+  for (const located of endpoints) {
+    if (!seen.has(located.endpoint)) {
+      seen.add(located.endpoint);
+      distinct.push(located);
+    }
+  }
+  return distinct;
+}
+
+function standardRejectionsOf({
+  at,
+  definitions,
+}: LocatedDefinitions): readonly LocatedStandardRejection[] {
+  const declared = definitions.standardRejections ?? {};
+  const entries = Object.entries(declared).filter(([, declaration]) => declaration !== undefined);
+  return entries.map(([name, declaration]) => ({
+    at: [...at, 'standardRejections', name],
+    name,
+    declaration,
+  }));
 }
 
 /** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
