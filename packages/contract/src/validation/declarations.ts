@@ -90,13 +90,16 @@ type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & 
   readonly declaration: unknown;
 };
 
-function standardRejectionsOf({
-  at,
-  definitions,
-}: LocatedDefinitions): readonly LocatedStandardRejection[] {
+function standardRejectionsOf(listedIn: LocatedDefinitions): readonly LocatedStandardRejection[] {
+  const { at, definitions } = listedIn;
   const entries: readonly WrittenStandardRejection[] = entriesOf(
     definitions.standardRejections,
-  ).map(([name, declaration]) => ({ at: [...at, 'standardRejections', name], name, declaration }));
+  ).map(([name, declaration]) => ({
+    at: [...at, 'standardRejections', name],
+    name,
+    declaration,
+    listedIn,
+  }));
   return entries.filter(isLocatedStandardRejection);
 }
 

@@ -20,6 +20,19 @@ export type Part =
   | 'body'
   | 'schema';
 
+/** The parts that travel as text and are objects of their fields in a valid root. */
+export const objectParts = [
+  'input.params',
+  'input.query',
+  'input.headers',
+  'success.headers',
+  'demands.headers',
+  'demands.query',
+] as const satisfies readonly Part[];
+
+/** A part a valid root declares as an object of its fields. */
+export type ObjectPart = (typeof objectParts)[number];
+
 /**
  * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared
  * again for a code already written is `compared` with the first and not written itself. The owner

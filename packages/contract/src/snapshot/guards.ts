@@ -1,6 +1,8 @@
 import type { ValidatedGuard } from '../validation/index.ts';
 import { sortedCodes } from './codes.ts';
-import { declaredOriginOf, inMode, objectOf, type SnapshotSources } from './context.ts';
+import type { SnapshotSources } from './context.ts';
+import { listedOriginOf } from './origins.ts';
+import { inMode } from './text-parts.ts';
 import type { GuardSnapshot } from './types.ts';
 
 /**
@@ -13,24 +15,24 @@ export function guardSnapshotsOf(
 ): Readonly<Record<string, GuardSnapshot>> {
   const reached = guards.filter((located) => located.reached);
   return Object.fromEntries(
-    reached.map(({ guard }) => [guard.name, guardSnapshotOf(guard, sources)]),
+    reached.map((located) => [located.guard.name, guardSnapshotOf(located, sources)]),
   );
 }
 
 function guardSnapshotOf(
-  guard: ValidatedGuard['guard'],
+  { guard, listedIn }: ValidatedGuard,
   { nodeOf, packages }: SnapshotSources,
 ): GuardSnapshot {
   return {
-    origin: declaredOriginOf(packages, (definitions) => (definitions.guards ?? []).includes(guard)),
+    origin: listedOriginOf(listedIn, packages),
     description: guard.description,
     guards: (guard.guards ?? []).map(({ name }) => name),
-    qualifier: nodeOf(guard, 'qualifier'),
+    qualifier: nodeOf(guard, 'qualifier') ?? null,
     demands: {
-      headers: inMode(objectOf(nodeOf(guard, 'demands.headers')), 'open'),
-      query: objectOf(nodeOf(guard, 'demands.query')),
+      headers: inMode(nodeOf(guard, 'demands.headers'), 'open'),
+      query: nodeOf(guard, 'demands.query') ?? null,
     },
-    context: nodeOf(guard, 'context'),
+    context: nodeOf(guard, 'context') ?? null,
     rejections: sortedCodes((guard.rejections ?? []).map(({ code }) => code)),
   };
 }

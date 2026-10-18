@@ -56,9 +56,10 @@ export type LocatedDefinitions = { readonly at: Path; readonly definitions: Defi
 /** A Dependency and where it sits in its root, by Provider. */
 export type LocatedDependencies = { readonly at: Path; readonly dependencies: Dependencies };
 
-/** A Standard Rejection as a Definitions Package declares it, by name, and where it sits. */
+/** A Standard Rejection as a Definitions Package declares it, by name, where it sits and the package. */
 export type LocatedStandardRejection = {
   readonly at: Path;
   readonly name: string;
   readonly declaration: StandardRejectionDeclaration<number>;
+  readonly listedIn: LocatedDefinitions;
 };

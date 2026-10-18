@@ -4,8 +4,9 @@ import {
   standardRejectionNames,
 } from '../declarations/index.ts';
 import type { ResolvedStandard, ValidatedCode } from '../validation/index.ts';
-import { byCodePoint, type Origin, type SchemaNode, walkSchemas } from '../walker/index.ts';
-import { declaredOriginOf, type ResolvedDefinitions, type SnapshotSources } from './context.ts';
+import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
+import type { ResolvedDefinitions, SnapshotSources } from './context.ts';
+import { listedOriginOf, standardOriginOf } from './origins.ts';
 import type {
   CodeSnapshot,
   StandardRejectionSnapshot,
@@ -65,14 +66,13 @@ function standardNamed(
 }
 
 function codeOf(
-  { code, rejection }: ValidatedCode,
+  { code, rejection, listedIn }: ValidatedCode,
   { nodeOf, packages }: SnapshotSources,
 ): readonly [string, CodeSnapshot] {
-  const origin = declaredOriginOf(packages, (definitions) =>
-    (definitions.rejections ?? []).includes(rejection),
-  );
+  const origin = listedOriginOf(listedIn, packages);
   const { status, message } = rejection;
-  return [code, { origin, status, message, body: nodeOf(rejection, 'body'), removed: false }];
+  const body = nodeOf(rejection, 'body') ?? null;
+  return [code, { origin, status, message, body, removed: false }];
 }
 
 function standardRejectionOf(
@@ -85,20 +85,6 @@ function standardRejectionOf(
     return { origin, code, status, message };
   }
   return { origin, code, status, message, body: invalidInputNode() };
-}
-
-/** cf-loom's defaults are `standard`; a declared one comes from the Definitions Package declaring it. */
-function standardOriginOf(
-  { declared }: ResolvedStandard,
-  packages: readonly ResolvedDefinitions[],
-): Origin {
-  if (declared === undefined) {
-    return 'standard';
-  }
-  return declaredOriginOf(packages, (definitions) => {
-    const declarations: readonly unknown[] = Object.values(definitions.standardRejections ?? {});
-    return declarations.includes(declared.declaration);
-  });
 }
 
 function invalidInputNode(): SchemaNode {

@@ -1,5 +1,5 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
-import type { NotAllowed, SchemaNode } from '../walker/index.ts';
+import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
 import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
 import { unlistedFailures } from './definitions.ts';
@@ -12,7 +12,15 @@ import type { Root } from './located.ts';
 import { groupFailures, nameFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import { locatedSchemasOf, type Nodes, nodesOf, type Part, schemaSlotsOf } from './schemas.ts';
+import {
+  locatedSchemasOf,
+  type Nodes,
+  nodesOf,
+  type ObjectPart,
+  objectParts,
+  type Part,
+  schemaSlotsOf,
+} from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
@@ -22,8 +30,17 @@ import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated
  * part, a shared schema being its own declaration.
  */
 export type ValidatedSchemas = {
-  readonly nodeOf: (declaration: unknown, part: Part) => SchemaNode | undefined;
+  readonly nodeOf: NodeLookup;
   readonly defs: Readonly<Record<string, SchemaNode>>;
+};
+
+/**
+ * The node of a declaration's part, if it declares that part: an object for a part that travels as
+ * text, since the validation refuses any other there.
+ */
+export type NodeLookup = {
+  (declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  (declaration: unknown, part: Part): SchemaNode | undefined;
 };
 
 /**
@@ -74,7 +91,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
   return {
     kind: 'valid',
     schemas: {
-      nodeOf: nodes.nodeOf,
+      nodeOf: nodeLookupOf(nodes),
       defs: nodes.defs,
     },
     declarations: validatedDeclarationsOf(declarations),
@@ -125,4 +142,20 @@ function invalid(failures: readonly Failure[]): ValidatedContract {
 /** A cycle's failure comes back wherever the cycle is met, so the same failure may repeat. */
 function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
   return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
+}
+
+/** Finds a valid root's nodes by declaration and part, a text part's typed as the object it is. */
+function nodeLookupOf(nodes: Nodes): NodeLookup {
+  function nodeOf(declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined {
+    const node = nodes.nodeOf(declaration, part);
+    return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
+  }
+  return nodeOf;
+}
+
+function isObjectPart(part: Part): part is ObjectPart {
+  const parts: readonly Part[] = objectParts;
+  return parts.includes(part);
 }

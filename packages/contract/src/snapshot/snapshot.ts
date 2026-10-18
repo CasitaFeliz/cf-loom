@@ -86,7 +86,7 @@ function sourcesOf(
   context: SnapshotContext,
 ): SnapshotSources {
   return {
-    nodeOf: (declaration, part) => schemas.nodeOf(declaration, part) ?? null,
+    nodeOf: schemas.nodeOf,
     standards: declarations.standardRejections,
     packages: context.packages,
   };

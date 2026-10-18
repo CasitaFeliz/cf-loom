@@ -148,6 +148,7 @@ describe('validateContract', () => {
 
     const validated = validateInPackage(contract, noOrigin);
 
+    const listedIn = { at: ['definitions', 'definitions'], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
       endpoints: [
@@ -158,22 +159,30 @@ describe('validateContract', () => {
         },
       ],
       guards: [
-        { at: ['guards', 'apiKey'], guard: apiKey, reached: true },
-        { at: ['guards', 'shared'], guard: shared, reached: false },
+        { at: ['guards', 'apiKey'], guard: apiKey, reached: true, listedIn: undefined },
+        { at: ['guards', 'shared'], guard: shared, reached: false, listedIn },
       ],
       codes: [
-        { code: 'UNUSED', at: ['rejections', 'UNUSED'], rejection: unused, reached: false },
+        {
+          code: 'UNUSED',
+          at: ['rejections', 'UNUSED'],
+          rejection: unused,
+          reached: false,
+          listedIn,
+        },
         {
           code: 'UNAUTHENTICATED',
           at: ['rejections', 'UNAUTHENTICATED'],
           rejection: unauthenticated,
           reached: true,
+          listedIn: undefined,
         },
         {
           code: 'ORDER_LOCKED',
           at: ['rejections', 'ORDER_LOCKED'],
           rejection: orderLocked,
           reached: true,
+          listedIn: undefined,
         },
       ],
       standardRejections: [
@@ -195,6 +204,7 @@ describe('validateContract', () => {
             at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
+            listedIn,
           },
         },
         {

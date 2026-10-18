@@ -1,6 +1,7 @@
 import type { Endpoint, Guard } from '../declarations/index.ts';
 import type { Field, ObjectNode } from '../walker/index.ts';
-import { inMode, objectOf, type SnapshotSources } from './context.ts';
+import type { SnapshotSources } from './context.ts';
+import { inMode } from './text-parts.ts';
 import type { InputSnapshot } from './types.ts';
 
 /**
@@ -12,15 +13,15 @@ export function inputOf(
   guards: readonly Guard[],
   { nodeOf }: SnapshotSources,
 ): InputSnapshot {
-  const own = (part: 'input.query' | 'input.headers') => objectOf(nodeOf(endpoint, part));
+  const own = (part: 'input.query' | 'input.headers') => nodeOf(endpoint, part);
   const demanded = (part: 'demands.query' | 'demands.headers') =>
-    guards.map((guard) => objectOf(nodeOf(guard, part)));
+    guards.map((guard) => nodeOf(guard, part));
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
-    params: inMode(objectOf(nodeOf(endpoint, 'input.params')), 'strict'),
-    query: mergedOf([own('input.query'), ...demanded('demands.query')]),
+    params: inMode(nodeOf(endpoint, 'input.params'), 'strict'),
+    query: mergedOf([own('input.query'), ...demanded('demands.query')]) ?? null,
     headers: inMode(headers, 'open'),
-    body: nodeOf(endpoint, 'input.body'),
+    body: nodeOf(endpoint, 'input.body') ?? null,
   };
 }
 
@@ -29,11 +30,11 @@ export function inputOf(
  * keeps the first declaration's schema, since the validation proved their shapes equal, and is
  * required when either requires it; a strict declaration applies to the merged set.
  */
-function mergedOf(objects: readonly (ObjectNode | null)[]): ObjectNode | null {
+function mergedOf(objects: readonly (ObjectNode | undefined)[]): ObjectNode | undefined {
   const declared = objects.filter(isDeclared);
   const [first] = declared;
   if (first === undefined) {
-    return null;
+    return undefined;
   }
   const fieldByName = new Map<string, Field>();
   for (const object of declared) {
@@ -47,6 +48,6 @@ function mergedOf(objects: readonly (ObjectNode | null)[]): ObjectNode | null {
   return { ...first, mode, fields: Object.fromEntries(fieldByName) };
 }
 
-function isDeclared(object: ObjectNode | null): object is ObjectNode {
-  return object !== null;
+function isDeclared(object: ObjectNode | undefined): object is ObjectNode {
+  return object !== undefined;
 }
