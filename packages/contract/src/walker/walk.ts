@@ -58,13 +58,13 @@ function walkField(schema: core.$ZodType, at: Path, context: Context): Walked<Fi
     return optionalField(throughWrapper({ schema, at }, inner, context));
   }
   if (def.type === 'nonoptional') {
-    const inner = walkUnlessOptional(def.innerType, at, context);
+    const inner = walkRequired(def.innerType, at, context);
     return requiredField(throughWrapper({ schema, at }, inner, context));
   }
   return requiredField(walkSchema(schema, at, context));
 }
 
-function walkUnlessOptional(schema: core.$ZodType, at: Path, context: Context): Walked {
+function walkRequired(schema: core.$ZodType, at: Path, context: Context): Walked {
   const def = schema._zod.def as Def;
   if (def.type !== 'optional') {
     return walkSchema(schema, at, context);

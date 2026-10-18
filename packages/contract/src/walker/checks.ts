@@ -18,7 +18,7 @@ type Bounds = { readonly min?: number; readonly max?: number };
 
 /** A string node with the constraint of each check, or the checks a string does not take. */
 export function constrainString(node: StringNode, checks: readonly CheckDef[], at: Path): Walked {
-  return constrained(
+  return withConstraints(
     node,
     checks.map((check) => stringConstraint(check, at)),
     at,
@@ -27,7 +27,7 @@ export function constrainString(node: StringNode, checks: readonly CheckDef[], a
 
 /** A number node with the constraint of each check; `z.int()` is `int: true` and nothing more. */
 export function constrainNumber(node: NumberNode, checks: readonly CheckDef[], at: Path): Walked {
-  return constrained(
+  return withConstraints(
     node,
     checks.map((check) => numberConstraint(check, at)),
     at,
@@ -36,7 +36,7 @@ export function constrainNumber(node: NumberNode, checks: readonly CheckDef[], a
 
 /** An array node with the length bound of each check. */
 export function constrainArray(node: ArrayNode, checks: readonly CheckDef[], at: Path): Walked {
-  return constrained(
+  return withConstraints(
     node,
     checks.map((check) => lengthConstraint(check, at)),
     at,
@@ -45,14 +45,14 @@ export function constrainArray(node: ArrayNode, checks: readonly CheckDef[], at:
 
 /** A node that takes no check: each declared check fails. */
 export function unconstrained(node: SchemaNode, checks: readonly CheckDef[], at: Path): Walked {
-  return constrained(
+  return withConstraints(
     node,
     checks.map((check) => notAllowed(at, refusedCheck(check))),
     at,
   );
 }
 
-function constrained<Node extends SchemaNode>(
+function withConstraints<Node extends SchemaNode>(
   node: Node,
   constraints: readonly Constraint<Node>[],
   at: Path,
