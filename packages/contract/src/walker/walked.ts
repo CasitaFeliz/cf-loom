@@ -47,9 +47,9 @@ export function distinctFailures(failures: Failures): Failures {
   return [first, ...distinctOthers];
 }
 
-/** Every failure among walked values, in order. */
+/** Every failure among walked values, each once, in order. */
 export function failuresOf(list: readonly Walked<unknown>[]): readonly NotAllowed[] {
-  return list.filter(isNotAllowed).flatMap((failure) => failure.failures);
+  return [...new Set(list.filter(isNotAllowed).flatMap((failure) => failure.failures))];
 }
 
 function isWalked<Value>(

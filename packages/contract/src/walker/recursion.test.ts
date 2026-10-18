@@ -526,7 +526,7 @@ describe('walkSchemas: recursion', () => {
   });
 
   test('a failing def met by many paths is reported once and walked once', () => {
-    const count = 18;
+    const count = 26;
     const steps: z.ZodType[] = [];
     const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
     for (let index = 0; index <= count; index++) {
