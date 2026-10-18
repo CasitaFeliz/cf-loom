@@ -1,5 +1,6 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment } from '../attachment.ts';
+import { isDeclaration } from '../freeze-declaration.ts';
 import type { Guard } from '../guard.ts';
 import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
@@ -8,7 +9,7 @@ import type { LocatedEndpoint, LocatedGuard } from './located.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
 import { attachedGuardOf } from './references.ts';
 import { isSchema, type Nodes } from './schemas.ts';
-import { listOf, textOf } from './written.ts';
+import { isPlainObject, isWithoutValue, listOf, textOf } from './written.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
 type Listed = {
@@ -44,8 +45,7 @@ export function attachmentFailures({
   const earlier: string[] = [];
   for (const { at: attachedAt, attachment, guard } of listedOf(at, endpoint)) {
     if (guard === undefined) {
-      const message = 'An Attachment is a Guard or { guard, qualifier }';
-      failures.push(failure(attachedAt, 'not-an-attachment', message));
+      failures.push(...noAttachmentFailures(attachedAt, attachment));
       continue;
     }
     failures.push(...shapeFailures({ at: attachedAt, attachment, guard }));
@@ -53,6 +53,16 @@ export function attachmentFailures({
     earlier.push(textOf(guard.name));
   }
   return failures;
+}
+
+/** What names no Guard is no Attachment, unless it is an object whose `guard` the field rule reports. */
+function noAttachmentFailures(at: Path, attachment: unknown): readonly DeclarationFailure[] {
+  const judgedByFields =
+    isPlainObject(attachment) && !isDeclaration(attachment) && isWithoutValue(attachment['guard']);
+  if (judgedByFields) {
+    return [];
+  }
+  return [failure(at, 'not-an-attachment', 'An Attachment is a Guard or { guard, qualifier }')];
 }
 
 /** A Qualifier is a value its schema accepts whose objects hold only the keys it declares. */
@@ -78,7 +88,7 @@ function valueFailures(
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
   const node = nodes.nodeOf(guard, 'qualifier');
-  if (guard.qualifier === undefined || node === undefined || attachment.qualifier === undefined) {
+  if (guard.qualifier === undefined || node === undefined || isWithoutValue(attachment.qualifier)) {
     return [];
   }
   const qualifierAt = [...at, 'qualifier'];

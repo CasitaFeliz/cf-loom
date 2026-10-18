@@ -175,6 +175,44 @@ describe('validateContract: bare and qualified Attachments', () => {
   });
 });
 
+describe('validateContract: Attachments written without a Guard or a Qualifier', () => {
+  test('a qualified Attachment whose guard is null fails once, as a required field', () => {
+    const guards = [{ guard: null, qualifier: 'acme' }] as unknown as readonly Attachment[];
+
+    expect(validateGuards(guards)).toEqual(
+      failed([...guardsAt, 0, 'guard'], 'required-field', 'guard is a required field'),
+    );
+  });
+
+  test('a qualified Attachment without a guard fails once, as a required field', () => {
+    const guards = [{ qualifier: 'acme' }] as unknown as readonly Attachment[];
+
+    expect(validateGuards(guards)).toEqual(
+      failed([...guardsAt, 0, 'guard'], 'required-field', 'guard is a required field'),
+    );
+  });
+
+  test('a qualified Attachment whose guard is no Guard still fails as no Attachment', () => {
+    const guards = [{ guard: 'tenant', qualifier: 'acme' }] as unknown as readonly Attachment[];
+
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        [...guardsAt, 0],
+        'not-an-attachment',
+        'An Attachment is a Guard or { guard, qualifier }',
+      ),
+    );
+  });
+
+  test('a Qualifier written null fails once, as a required field', () => {
+    const guards = [{ guard: quota, qualifier: null }] as unknown as readonly Attachment[];
+
+    expect(validateGuards(guards)).toEqual(
+      failed([...guardsAt, 0, 'qualifier'], 'required-field', 'qualifier is a required field'),
+    );
+  });
+});
+
 describe('validateContract: a Qualifier against its schema', () => {
   test('a Qualifier its schema accepts validates', () => {
     expect(validateGuards([{ guard: quota, qualifier: { perMinute: 60 } }]).kind).toBe('valid');
