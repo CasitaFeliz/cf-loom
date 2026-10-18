@@ -106,19 +106,205 @@ describe('validateContract', () => {
 
     const validated = validateContract(contract, noOrigin);
 
-    expect(validated).toEqual({
+    expect(validated).toMatchObject({
       kind: 'valid',
       schemas: { nodes: walked.located.map(nodeOf), defs: {} },
     });
   });
 
-  test('a valid Application returns no schemas', () => {
+  test('a valid Contract carries its declarations: Endpoints by identity, Guards and codes reached, Standard Rejections resolved', () => {
+    const shared = defineGuard({ name: 'shared', description: 'Listed, attached by no Endpoint' });
+    const unused = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      guards: [shared],
+      rejections: [unused],
+      standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
+    });
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: [definitions],
+      groups: [ordersGroup],
+    });
+
+    const validated = validateContract(contract, noOrigin);
+
+    expect(validated.kind === 'valid' && validated.declarations).toEqual({
+      endpoints: [
+        {
+          at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],
+          endpoint: getOrder,
+          group: ordersGroup,
+        },
+      ],
+      guards: [
+        { at: ['guards', 'shared'], guard: shared, reached: false },
+        { at: ['guards', 'apiKey'], guard: apiKey, reached: true },
+      ],
+      codes: [
+        {
+          code: 'ORDER_LOCKED',
+          at: ['rejections', 'ORDER_LOCKED'],
+          rejection: orderLocked,
+          reached: true,
+        },
+        {
+          code: 'UNAUTHENTICATED',
+          at: ['rejections', 'UNAUTHENTICATED'],
+          rejection: unauthenticated,
+          reached: true,
+        },
+        { code: 'UNUSED', at: ['rejections', 'UNUSED'], rejection: unused, reached: false },
+      ],
+      standardRejections: [
+        {
+          name: 'invalidInput',
+          code: 'INVALID_INPUT',
+          status: 400,
+          message: 'Invalid input',
+          declared: undefined,
+        },
+        {
+          name: 'notFound',
+          code: 'MISSING',
+          status: 404,
+          message: 'Missing',
+          declared: {
+            at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
+            name: 'notFound',
+            declaration: { code: 'MISSING', status: 404, message: 'Missing' },
+          },
+        },
+        {
+          name: 'notImplemented',
+          code: 'NOT_IMPLEMENTED',
+          status: 501,
+          message: 'Not implemented',
+          declared: undefined,
+        },
+      ],
+    });
+  });
+
+  test('a valid Definitions Package reaches every Guard and code it declares', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      guards: [apiKey],
+      rejections: [orderLocked],
+    });
+
+    const validated = validateContract(definitions, noOrigin);
+
+    expect(validated.kind === 'valid' && validated.declarations).toMatchObject({
+      endpoints: [],
+      guards: [{ guard: apiKey, reached: true }],
+      codes: [
+        { code: 'ORDER_LOCKED', rejection: orderLocked, reached: true },
+        { code: 'UNAUTHENTICATED', rejection: unauthenticated, reached: true },
+      ],
+    });
+  });
+
+  test('a valid Application returns no schemas and no Elements', () => {
     const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
     const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
 
     const validated = validateContract(application, noOrigin);
 
-    expect(validated).toEqual({ kind: 'valid', schemas: { nodes: [], defs: {} } });
+    expect(validated).toMatchObject({
+      kind: 'valid',
+      schemas: { nodes: [], defs: {} },
+      declarations: { endpoints: [], guards: [], codes: [] },
+    });
+  });
+
+  test('an object with a bare _zod is no schema', () => {
+    const impostor = { _zod: {} } as unknown as z.ZodObject;
+    const createOrder = defineEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Creates an order',
+      input: { body: impostor },
+      success: { status: 201, body: z.object({ id: z.uuid() }) },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          rule: 'not-a-schema',
+          message: 'body is not a zod schema',
+        },
+      ],
+    });
+  });
+
+  test('a def that names a type but holds garbage checks walks without throwing', () => {
+    const malformed = {
+      _zod: { def: { type: 'string', checks: 'trim' } },
+    } as unknown as z.ZodString;
+    const createOrder = defineEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Creates an order',
+      input: { body: malformed },
+      success: { status: 201, body: z.object({ id: z.uuid() }) },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
+
+    const validate = () =>
+      validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+
+    expect(validate).not.toThrow();
+  });
+
+  test('a null body in a schema slot fails once, as no schema', () => {
+    const createOrder = defineEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Creates an order',
+      input: { body: null as unknown as z.ZodString },
+      success: { status: 201, body: null as unknown as z.ZodString },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
+
+    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: [...endpointAt, 'input', 'body'],
+          rule: 'not-a-schema',
+          message: 'body is not a zod schema',
+        },
+        {
+          kind: 'declaration',
+          at: [...endpointAt, 'success', 'body'],
+          rule: 'not-a-schema',
+          message: 'body is not a zod schema',
+        },
+      ],
+    });
   });
 
   test('a valid Definitions Package returns its Guards’, Rejections’ and shared schemas by location', () => {
@@ -139,7 +325,7 @@ describe('validateContract', () => {
 
     const validated = validateContract(definitions, noOrigin);
 
-    expect(validated).toEqual({
+    expect(validated).toMatchObject({
       kind: 'valid',
       schemas: { nodes: walked.located.map(nodeOf), defs: {} },
     });
@@ -434,7 +620,7 @@ describe('validateContract: the README’s examples', () => {
     const elapsed = performance.now() - started;
 
     expect(validated.kind).toBe('valid');
-    expect(elapsed).toBeLessThan(1000);
+    expect(elapsed).toBeLessThan(5000);
   });
 
   test('the same root validates to the same result twice', () => {

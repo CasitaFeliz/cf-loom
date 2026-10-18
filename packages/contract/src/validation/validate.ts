@@ -19,6 +19,7 @@ import {
 } from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
+import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
 /** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
 export type ValidatedSchemas = {
@@ -26,9 +27,16 @@ export type ValidatedSchemas = {
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
-/** A root validated: its schemas walked, or every failure in it, declarations and schemas alike. */
+/**
+ * A root validated: its schemas walked and its declarations gathered for the Snapshot, or every
+ * failure in it, declarations and schemas alike.
+ */
 export type ValidatedContract =
-  | { readonly kind: 'valid'; readonly schemas: ValidatedSchemas }
+  | {
+      readonly kind: 'valid';
+      readonly schemas: ValidatedSchemas;
+      readonly declarations: ValidatedDeclarations;
+    }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
 
 /**
@@ -58,6 +66,7 @@ export function validateContract(root: Root, originOf: OriginOf): ValidatedContr
   return {
     kind: 'valid',
     schemas: { nodes: written.map(({ at, node }) => ({ at, node })), defs: nodes.defs },
+    declarations: validatedDeclarationsOf(declarations),
   };
 }
 
