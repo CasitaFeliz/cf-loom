@@ -89,11 +89,6 @@ export function fieldOf(given: unknown, key: string): unknown {
   return Reflect.get(given, key);
 }
 
-/** The field a part's value sits under in what a Handler is given: `input.params` is `params`. */
-export function fieldNameOf(part: `${string}.${string}`): string {
-  return part.slice(part.indexOf('.') + 1);
-}
-
 function isIssues(check: Checked<unknown>): check is Extract<Checked<unknown>, { kind: 'issues' }> {
   return check.kind === 'issues';
 }

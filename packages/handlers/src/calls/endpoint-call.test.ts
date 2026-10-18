@@ -104,6 +104,7 @@ const headOrder = defineEndpoint({
 });
 
 const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' } as const;
+const { note: _note, ...withoutNote } = validOrder;
 const createInput = { headers: { 'x-request-id': 'r-1' }, body: validOrder };
 const getInput = { params: { orderId: ORDER_ID } };
 const getContext = { apiKey: { clientId: 'c-1' } };
@@ -162,16 +163,17 @@ describe('an EndpointHandler’s Input', () => {
   });
 
   test.each([
-    ['required', { note: undefined }],
-    ['invalid_type', { note: 7 }],
-    ['invalid_value', { channel: 'fax' }],
-    ['invalid_format', { email: 'nope' }],
-    ['too_small', { quantity: 0 }],
-    ['too_big', { quantity: 12 }],
-    ['not_multiple', { quantity: 3 }],
-    ['unrecognized_key', { extra: true }],
+    ['required', withoutNote],
+    ['invalid_type', { ...validOrder, note: undefined }],
+    ['invalid_type', { ...validOrder, note: 7 }],
+    ['invalid_value', { ...validOrder, channel: 'fax' }],
+    ['invalid_format', { ...validOrder, email: 'nope' }],
+    ['too_small', { ...validOrder, quantity: 0 }],
+    ['too_big', { ...validOrder, quantity: 12 }],
+    ['not_multiple', { ...validOrder, quantity: 3 }],
+    ['unrecognized_key', { ...validOrder, extra: true }],
   ])('a body that fails as %s gets that code', async (code, broken) => {
-    const body = { ...validOrder, ...broken } as never;
+    const body = broken as never;
 
     const issues = await issuesOf(() => created({ ...createInput, body }, {}));
 
@@ -566,6 +568,19 @@ describe('what an EndpointHandler returns', () => {
       message: 'Internal error',
       cause: new TypeError(`getOrder's Handler returned no Outcome but ${what}`),
     });
+  });
+});
+
+describe('a Standard Rejection from another copy of loom-contract', () => {
+  test('the not-implemented Rejection of the contract source resolves', async () => {
+    const sourceUrl = new URL('../../../contract/src/index.ts', import.meta.url).href;
+    const source: { readonly notImplemented: unknown } = await import(sourceUrl);
+    const getOrderHandler = handle(getOrder, () => reject(source.notImplemented as never));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(source.notImplemented).not.toBe(notImplemented);
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'NOT_IMPLEMENTED', status: 501 });
   });
 });
 

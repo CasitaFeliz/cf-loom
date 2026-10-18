@@ -2,6 +2,7 @@ import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
 import {
   attachedGuardsOf,
   demandParts,
+  fieldsOf,
   inputParts,
   schemaOf,
 } from '@casitafeliz/loom-contract/internal';
@@ -10,7 +11,6 @@ import {
   type Checked,
   checkedAll,
   checkedPart,
-  fieldNameOf,
   fieldOf,
   type Issue,
   withIssues,
@@ -68,7 +68,7 @@ function checkedDeclaredParts<
 ): Checked<ValuesByField> {
   const declared = parts.filter((part) => schemaAt(part) !== undefined);
   const checks = declared.map((part) => {
-    const field = fieldNameOf(part);
+    const field = fieldsOf(part)[1];
     const value = fieldOf(given, field);
     return [field, checkedPart(part, schemaAt(part), { value })] as const;
   });

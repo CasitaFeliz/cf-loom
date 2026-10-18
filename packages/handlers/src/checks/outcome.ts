@@ -1,37 +1,14 @@
-import type {
-  Endpoint,
-  Guard,
-  StandardRejection,
-  StandardRejections,
-} from '@casitafeliz/loom-contract';
-import {
-  type AnswerableRejection,
-  answerableRejectionsOf,
-  isStandardRejection,
-  schemaOf,
-  successParts,
-} from '@casitafeliz/loom-contract/internal';
+import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
+import { fieldsOf, schemaOf, successParts } from '@casitafeliz/loom-contract/internal';
 import type {
   AnyAdmission,
   AnyOutcome,
-  AnyRejection,
   BuiltSuccess,
   ResolvedAdmission,
   ResolvedOutcome,
-  ResolvedRejection,
 } from '../outcomes/index.ts';
-import {
-  type Checked,
-  checkedAll,
-  checkedPart,
-  fieldNameOf,
-  fieldOf,
-  mapValue,
-} from './checked.ts';
-import { resolutionOf } from './resolution.ts';
-
-/** A Rejection a Handler may build: any it answers but invalid input, which is the runtime's. */
-type Buildable = Exclude<AnswerableRejection, StandardRejection<'invalidInput'>>;
+import { type Checked, checkedAll, checkedPart, fieldOf, mapValue } from './checked.ts';
+import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
 
 /**
  * What an EndpointHandler built, checked against its Endpoint and resolved, as `serve` sends it.
@@ -47,17 +24,13 @@ export function checkedOutcome(
     case 'success':
       return checkedSuccess(endpoint, built);
     case 'rejection':
-      return checkedRejection(endpoint, built, standards);
+      return checkedEndpointRejection(endpoint, built, standards);
     case 'fault':
       return { kind: 'value', value: built };
   }
 }
 
-/**
- * What a GuardHandler built, checked against its Guard and resolved, its admitted Context parsed
- * as an Outcome is. The Rejection check knows only that it answers for a Guard, which never
- * answers not found, so its result is narrowed to the Guard's.
- */
+/** What a GuardHandler built, checked against its Guard and resolved, its admitted Context parsed as an Outcome is. */
 export function checkedAdmission(
   guard: Guard,
   built: AnyAdmission,
@@ -69,7 +42,7 @@ export function checkedAdmission(
       return mapValue(context, (parsed) => ({ kind: 'admitted', context: parsed }));
     }
     case 'rejection':
-      return checkedRejection(guard, built, standards) as Checked<ResolvedAdmission<Guard>>;
+      return checkedGuardRejection(guard, built, standards);
     case 'fault':
       return { kind: 'value', value: built };
   }
@@ -84,66 +57,17 @@ function checkedSuccess(
   { value }: BuiltSuccess<unknown>,
 ): Checked<ResolvedOutcome<Endpoint>> {
   const given = schemaOf(endpoint, 'success.headers') === undefined ? { body: value } : value;
-  const checks = successParts.map((part) => {
-    const field = fieldNameOf(part);
-    return [field, checkedPart(part, schemaOf(endpoint, part), { value: fieldOf(given, field) })];
+  const parts = successParts.map((part) => ({
+    part,
+    field: fieldsOf(part)[1],
+    schema: schemaOf(endpoint, part),
+  }));
+  const checks = parts.map(({ part, field, schema }) => {
+    return [field, checkedPart(part, schema, { value: fieldOf(given, field) })] as const;
   });
-  const declared = successParts.filter((part) => schemaOf(endpoint, part) !== undefined);
-  return mapValue(checkedAll(Object.fromEntries(checks)), (parts) => {
-    const entries = declared.map((part) => [fieldNameOf(part), parts[fieldNameOf(part)]]);
+  const declared = parts.filter(({ schema }) => schema !== undefined);
+  return mapValue(checkedAll(Object.fromEntries(checks)), (parsed) => {
+    const entries = declared.map(({ field }) => [field, parsed[field]]);
     return { kind: 'success', status: endpoint.success.status, ...Object.fromEntries(entries) };
   });
-}
-
-/** A Rejection a Handler built: one its Endpoint or Guard answers, with the body it declares and no other. */
-function checkedRejection(
-  answering: Endpoint | Guard,
-  built: AnyRejection,
-  standards: StandardRejections,
-): Checked<ResolvedRejection<Buildable>> {
-  const { rejection } = built;
-  if (!isBuildableBy(answering, rejection)) {
-    const message = `${codeOf(rejection)} is not a Rejection ${answering.name} answers`;
-    const issue = { part: 'rejections', path: [], code: 'invalid_value', message } as const;
-    return { kind: 'issues', issues: [issue] };
-  }
-  const value = fieldOf(built, 'body');
-  if (isStandardRejection(rejection)) {
-    const body = checkedPart('body', undefined, { value });
-    return mapValue(body, () => resolvedStandardOf(rejection, standards));
-  }
-  const resolution = resolutionOf(rejection, standards);
-  const body = checkedPart('body', schemaOf(rejection, 'body'), { value });
-  return mapValue(body, (parsed) =>
-    parsed === undefined
-      ? { kind: 'rejection', rejection, ...resolution }
-      : { kind: 'rejection', rejection, body: parsed, ...resolution },
-  );
-}
-
-/** A Standard Rejection a Handler may build, by its name, resolved against the root's. */
-function resolvedStandardOf(
-  rejection: Extract<Buildable, StandardRejection>,
-  standards: StandardRejections,
-): ResolvedRejection<Buildable> {
-  const resolution = resolutionOf(rejection, standards);
-  switch (rejection.name) {
-    case 'notFound':
-      return { kind: 'rejection', rejection, ...resolution };
-    case 'notImplemented':
-      return { kind: 'rejection', rejection, ...resolution };
-  }
-}
-
-function isBuildableBy(answering: Endpoint | Guard, rejection: unknown): rejection is Buildable {
-  const isInvalidInput = isStandardRejection(rejection) && rejection.name === 'invalidInput';
-  const answerable: readonly unknown[] = answerableRejectionsOf(answering);
-  return answerable.includes(rejection) && !isInvalidInput;
-}
-
-function codeOf(rejection: unknown): string {
-  if (isStandardRejection(rejection)) {
-    return rejection.name;
-  }
-  return String(fieldOf(rejection, 'code') ?? 'A value that is no Rejection');
 }

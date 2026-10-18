@@ -179,6 +179,46 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
   });
 });
 
+describe('what a run tells to be no Outcome', () => {
+  const endpointCall = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+  const guardCall = {
+    demands: { headers: { 'x-api-key': 'k' } },
+    context: {},
+    qualifier: undefined,
+  };
+  const fields = { committed: 'no', retryable: true, message: 'Try again' };
+
+  test.each([
+    ['a Fault with a bad committed', { kind: 'fault', ...fields, committed: 'maybe' }],
+    ['a Fault with a bad retryable', { kind: 'fault', ...fields, retryable: 'yes' }],
+    ['a Fault with a bad message', { kind: 'fault', ...fields, message: 7 }],
+    ['a Success without its value', { kind: 'success' }],
+    ['a Rejection without its declaration', { kind: 'rejection' }],
+  ])('an EndpointHandler returning %s is thrown', async (_name, returned) => {
+    const getOrderHandler = handle(getOrder, () => returned as never);
+
+    const run = await runEndpoint(getOrderHandler, endpointCall, standards);
+
+    expect(run.kind).toBe('thrown');
+  });
+
+  test('a GuardHandler returning an admission without its Context is thrown', async () => {
+    const apiKeyHandler = handle(apiKey, () => ({ kind: 'admitted' }) as never);
+
+    const run = await runGuard(apiKeyHandler, guardCall, standards);
+
+    expect(run.kind).toBe('thrown');
+  });
+
+  test('a Fault a GuardHandler returns is answered', async () => {
+    const apiKeyHandler = handle(apiKey, () => fault({ committed: 'no', retryable: true }));
+
+    const run = await runGuard(apiKeyHandler, guardCall, standards);
+
+    expect(run).toMatchObject({ kind: 'answered', answer: { kind: 'fault', committed: 'no' } });
+  });
+});
+
 describe('a Handler of another kind', () => {
   test('runGuard given an EndpointHandler throws Not a Handler', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));

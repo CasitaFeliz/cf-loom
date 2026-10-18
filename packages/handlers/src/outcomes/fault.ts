@@ -1,10 +1,10 @@
-/** Whether the change was committed, as values, so a built Fault is told from a hand-built one. */
+/** Whether the change was committed, as values, so a returned value is told to be a Fault. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
 
 /** Whether the change was committed, which alone decides whether retrying is safe. */
 export type Committed = (typeof committedValues)[number];
 
-/** A technical failure no Element declares, as a Handler builds it and a direct call returns it. */
+/** A technical failure no Endpoint, Guard or Message declares, as a Handler builds it and a direct call returns it. */
 export type Fault = {
   readonly kind: 'fault';
   readonly committed: Committed;
