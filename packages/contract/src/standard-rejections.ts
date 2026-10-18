@@ -33,10 +33,9 @@ type StandardRejectionDeclaration<Status extends number> = {
   readonly code: string;
   readonly status: Status;
   readonly message: string;
-  readonly body?: never;
 };
 
-/** What a Definitions Package may give each Standard Rejection: never a body, which is cf-loom's */
+/** What a Definitions Package may give each Standard Rejection: never a body, cf-loom's own. */
 export type StandardRejectionDeclarations = {
   readonly invalidInput?: StandardRejectionDeclaration<RejectionStatus>;
   readonly notFound?: StandardRejectionDeclaration<RejectionStatus>;
