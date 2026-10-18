@@ -69,7 +69,15 @@ function walkField(schema: core.$ZodType, at: Path, context: Context): Walked<Fi
     return requiredField(walkSchema(schema, at, context));
   }
   const inner = walkSchema(def.innerType, at, context);
-  return optionalField(annotatedBy(inner, ownMetadata(schema, at, context.originOf)));
+  return optionalField(throughWrapper({ schema, at }, inner, context));
+}
+
+/** A field's wrapper says what any schema does: its checks and its own metadata apply. */
+function throughWrapper(wrapper: LocatedSchema, inner: Walked, context: Context): Walked {
+  const { schema, at } = wrapper;
+  const checks = checksOf(schema._zod.def);
+  const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
+  return annotatedBy(checked, ownMetadata(schema, at, context.originOf));
 }
 
 function requiredField(result: Walked): Walked<Field> {
