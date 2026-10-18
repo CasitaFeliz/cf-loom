@@ -152,6 +152,18 @@ _Avoid_: catalog, index (one kind of directory)
 The code the runtime invokes with something incoming: a call to an Endpoint, a Command, an Event through a Subscription, or a request a Guard must judge (the GuardHandler decides whether it passes). CommandHandlers and EventHandlers together are Message Handlers.
 _Avoid_: controller, listener, resolver, processor
 
+**Admission**:
+What a GuardHandler answers: the request admitted with the Context its Guard provides, or a Rejection or a Fault instead.
+_Avoid_: verdict, pass, result
+
+**Stub**:
+A Handler `generate` writes for an Element not implemented yet, which answers the not-implemented Rejection until it is replaced.
+_Avoid_: placeholder, mock
+
+**Issue**:
+One way a value broke a schema: the part and path, cf-loom's code and a message, never the received value.
+_Avoid_: error, violation
+
 **Plan**:
 A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan (streams, durable consumers, permissions) and the route plan (routes by Visibility). The organization decides how to apply it.
 _Avoid_: manifest, deployment config
