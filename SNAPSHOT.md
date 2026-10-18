@@ -5,7 +5,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Where it lives
 
 - `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`. The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
-- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it is out of date.
+- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
