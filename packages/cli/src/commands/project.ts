@@ -14,6 +14,8 @@ export type Project = {
   readonly directory: string;
   readonly packageName: PackageName;
   readonly root: unknown;
+  /** Everything the root file exports, which a Definitions root lists. */
+  readonly rootExports: readonly unknown[];
   /** Where the root file sits, relative to the project, as messages name it. */
   readonly rootFile: string;
   readonly packages: readonly InstalledDefinitions[];
@@ -48,8 +50,9 @@ export async function projectOf(directory: string): Promise<ReadProject> {
     return stopped(resolved.message);
   }
   const { packageName } = projectPackage;
-  const { root, file: rootFile } = loaded;
-  const project = { directory, packageName, root, rootFile, packages: resolved.packages };
+  const { root, file: rootFile, exports: rootExports } = loaded;
+  const { packages } = resolved;
+  const project = { directory, packageName, root, rootExports, rootFile, packages };
   return { kind: 'read', project };
 }
 

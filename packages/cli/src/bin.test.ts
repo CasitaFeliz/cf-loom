@@ -908,6 +908,81 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
   });
 });
 
+describe('cf-loom generate: a Definitions Package whose entry is missing', () => {
+  const guards = [
+    "import { defineDefinitions, defineGuard } from '@casitafeliz/loom-contract';",
+    "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+    "export const definitions = defineDefinitions({ name: 'definitions', guards: [apiKey] });",
+    '',
+  ].join('\n');
+
+  test.each([
+    ['only subpaths in its exports', { exports: { './guards': './guards.js' } }],
+    [
+      'a main that does not exist',
+      {
+        exports: { '.': { types: './index.d.ts' }, './guards': './guards.js' },
+        main: './dist/index.js',
+      },
+    ],
+  ])('a package with %s is a tooling error in one line', (_, manifest) => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'node_modules/@org/definitions/package.json': JSON.stringify({
+        name: '@org/definitions',
+        version: '4.2.0',
+        type: 'module',
+        ...manifest,
+      }),
+      'node_modules/@org/definitions/guards.js': guards,
+    });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text
+        .replace(
+          "import { ping } from './ping.endpoint.ts';",
+          "import { ping } from './ping.endpoint.ts';\nimport { definitions } from '@org/definitions/guards';",
+        )
+        .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^@org\/definitions [^\n]+\n$/);
+  });
+});
+
+describe('cf-loom generate: a Definitions Package root', () => {
+  test('a Guard the root file exports and its root does not list fails definitions-unlisted', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'cf-loom.config.ts': config,
+      'src/definitions/index.ts': [
+        "import { defineDefinitions, defineGuard, defineRejection } from '@casitafeliz/loom-contract';",
+        '',
+        "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+        "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
+        'export const definitions = defineDefinitions({',
+        "  name: 'definitions',",
+        '  guards: [],',
+        '  rejections: [gone],',
+        '});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'guards definitions-unlisted: A Definitions Package lists every Guard it exports or its Guards reach: apiKey\n',
+    });
+  });
+});
+
 describe('cf-loom generate: what a listed Definitions Package lists', () => {
   test('a Rejection the package exports and does not list fails with every other failure', () => {
     const project = aProject({

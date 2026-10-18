@@ -79,14 +79,15 @@ function builtOf(
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
 function validatedOf(project: Project): ValidatedContract | Stopped {
-  const { directory, packageName, root, rootFile, packages } = project;
+  const { directory, packageName, root, rootExports, rootFile, packages } = project;
   const exportsByDefinitions = new Map(
     packages.map((installed) => [installed.definitions, installed.exports]),
   );
   const rootPackage: RootPackage = {
     originOf: schemaOriginsOf(packages),
     packageName: packageName.name,
-    exportsOf: (definitions) => exportsByDefinitions.get(definitions) ?? [],
+    exportsOf: (definitions) =>
+      definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? []),
   };
   try {
     return validateContract(root, rootPackage);

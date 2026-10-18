@@ -6,9 +6,17 @@ import { rootFiles, rootPlaces } from './roots.ts';
 /** The names a root file may export its root under. */
 const rootExports = [...new Set(Object.values(rootPlaces).map(({ exported }) => exported))];
 
-/** What a project's root file exports as its root, and the file, or why it could not be loaded. */
+/**
+ * What a project's root file exports as its root, the file, and everything the file exports, which
+ * a Definitions Package lists; or why it could not be loaded.
+ */
 export type LoadedRoot =
-  | { readonly kind: 'loaded'; readonly root: unknown; readonly file: string }
+  | {
+      readonly kind: 'loaded';
+      readonly root: unknown;
+      readonly file: string;
+      readonly exports: readonly unknown[];
+    }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
@@ -36,7 +44,8 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (more.length > 0) {
     return failed(`${file} exports one root, not ${names.join(' and ')}`);
   }
-  return { kind: 'loaded', root: imported.exports[name], file };
+  const exports = Object.values(imported.exports);
+  return { kind: 'loaded', root: imported.exports[name], file, exports };
 }
 
 function failed(message: string): LoadedRoot {
