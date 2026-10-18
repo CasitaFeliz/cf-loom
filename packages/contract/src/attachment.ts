@@ -23,13 +23,34 @@ type ConstInferred<Value> = Value extends object
   ? { readonly [Key in keyof Value]: ConstInferred<Value[Key]> }
   : Value;
 
+type ItemOf<Accepted> = Accepted extends readonly (infer Item)[] ? Item : never;
+
+type FieldsOfEach<Written, Accepted> = Accepted extends unknown
+  ? DeclaredFieldsRule<Written, Accepted> & {
+      readonly [Key in keyof Written & keyof Accepted]: QualifierFieldsRule<
+        Written[Key],
+        Accepted[Key]
+      >;
+    }
+  : never;
+
+/** What a written Qualifier must also satisfy: each object in it holds only the keys its schema declares. */
+type QualifierFieldsRule<Written, Accepted> = Written extends readonly unknown[]
+  ? { readonly [Index in keyof Written]: QualifierFieldsRule<Written[Index], ItemOf<Accepted>> }
+  : Written extends object
+    ? [Extract<Accepted, object>] extends [never]
+      ? unknown
+      : FieldsOfEach<Written, Extract<Accepted, object>>
+    : unknown;
+
 type BareRule<Listed extends Guard> = Listed extends QualifiedGuard
   ? `${Listed['name']} needs a qualifier: { guard, qualifier }`
   : unknown;
 
 type QualifierRule<Listed extends QualifiedAttachment, Qualified extends QualifiedGuard> = {
   readonly guard: Qualified;
-  readonly qualifier: ConstInferred<core.input<Qualified['qualifier']>>;
+  readonly qualifier: ConstInferred<core.input<Qualified['qualifier']>> &
+    QualifierFieldsRule<Listed['qualifier'], core.input<Qualified['qualifier']>>;
 } & DeclaredFieldsRule<Listed, QualifiedAttachment>;
 
 type QualifiedRule<Listed extends QualifiedAttachment> = Listed['guard'] extends QualifiedGuard

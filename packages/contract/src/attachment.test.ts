@@ -153,6 +153,75 @@ describe('Attachments', () => {
   });
 });
 
+describe('an object Qualifier', () => {
+  const quota = defineGuard({
+    name: 'quota',
+    description: 'The client stays within a quota',
+    qualifier: z.object({ perMinute: z.int() }),
+  });
+
+  test('an object Qualifier with its declared keys type-checks', () => {
+    const updateOrder = defineEndpoint({
+      ...endpoint,
+      guards: [{ guard: quota, qualifier: { perMinute: 60 } }],
+    });
+
+    expect(updateOrder.guards[0].qualifier).toEqual({ perMinute: 60 });
+  });
+
+  test('an undeclared key in a Qualifier listed alone is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...endpoint,
+        // @ts-expect-error extra is not a declared field
+        guards: [{ guard: quota, qualifier: { perMinute: 60, extra: true } }],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared key in a Qualifier listed after a bare Guard is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...endpoint,
+        // @ts-expect-error extra is not a declared field
+        guards: [userToken, { guard: quota, qualifier: { perMinute: 60, extra: true } }],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared key in a Qualifier listed after a qualified Attachment is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...endpoint,
+        guards: [
+          { guard: tenant, qualifier: 'acme' },
+          // @ts-expect-error extra is not a declared field
+          { guard: quota, qualifier: { perMinute: 60, extra: true } },
+        ],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared key in an object nested in a Qualifier is a type error', () => {
+    const roles = defineGuard({
+      name: 'roles',
+      description: 'The user holds one of the roles',
+      qualifier: z.array(z.object({ role: z.string() })),
+    });
+    const declare = () =>
+      defineEndpoint({
+        ...endpoint,
+        // @ts-expect-error extra is not a declared field
+        guards: [{ guard: roles, qualifier: [{ role: 'admin', extra: true }] }],
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('Attachments and dependent Guards', () => {
   const audit = defineGuard({
     name: 'audit',
