@@ -10,7 +10,7 @@ import {
   type notImplemented,
   type ProvidedContextOf,
   type RejectionsOf,
-} from './index.ts';
+} from '../index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',

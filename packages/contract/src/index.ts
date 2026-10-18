@@ -1,29 +1,42 @@
-export type { Attachment, QualifiedAttachment } from './attachment.ts';
-export type { Definitions } from './definitions.ts';
-export { defineDefinitions } from './definitions.ts';
-export type { ContractPackage, Dependencies, ExportedElements } from './dependencies.ts';
-export { defineDependencies } from './dependencies.ts';
-export type { Lifecycle, Visibility } from './element.ts';
-export type { Endpoint } from './endpoint.ts';
-export { defineEndpoint } from './endpoint.ts';
-export type { Group } from './group.ts';
-export { defineGroup } from './group.ts';
-export type { Guard } from './guard.ts';
-export { defineGuard } from './guard.ts';
-export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
 export type {
+  Application,
+  Attachment,
   ContextOf,
+  Contract,
+  ContractPackage,
+  Definitions,
+  Dependencies,
+  Endpoint,
+  ExportedElements,
+  Group,
+  Guard,
   InputOf,
+  Lifecycle,
+  Method,
   ProvidedContextOf,
+  QualifiedAttachment,
   QualifierOf,
+  Rejection,
+  RejectionStatus,
   RejectionsOf,
   RequiredContextOf,
+  StandardRejection,
+  StandardRejections,
   SuccessOf,
-} from './inference.ts';
-export { openEnum, openUnion } from './open.ts';
-export type { Rejection } from './rejection.ts';
-export { defineRejection } from './rejection.ts';
-export type { Application, Contract } from './roots.ts';
-export { defineApplication, defineContract } from './roots.ts';
-export type { StandardRejection, StandardRejections } from './standard-rejections.ts';
-export { invalidInput, notFound, notImplemented } from './standard-rejections.ts';
+  SuccessStatus,
+  Visibility,
+} from './declarations/index.ts';
+export {
+  defineApplication,
+  defineContract,
+  defineDefinitions,
+  defineDependencies,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  defineRejection,
+  invalidInput,
+  notFound,
+  notImplemented,
+} from './declarations/index.ts';
+export { openEnum, openUnion } from './open/index.ts';

@@ -1,6 +1,6 @@
-import type { Endpoint } from '../endpoint.ts';
-import { isEndpoint } from '../predicates.ts';
-import type { Path } from '../walker/nodes.ts';
+import type { Endpoint } from '../declarations/index.ts';
+import { isEndpoint } from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { endpointAt } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';

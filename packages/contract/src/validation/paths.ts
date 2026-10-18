@@ -1,4 +1,4 @@
-import type { ObjectNode, Path } from '../walker/nodes.ts';
+import type { ObjectNode, Path } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows } from './grammars.ts';
 import { paramNamesOf, segmentsOf } from './identity.ts';

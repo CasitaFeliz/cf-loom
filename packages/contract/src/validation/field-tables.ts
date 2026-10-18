@@ -1,15 +1,17 @@
-import type { QualifiedAttachment } from '../attachment.ts';
-import type { Definitions } from '../definitions.ts';
-import type { Dependencies, ExportedElements } from '../dependencies.ts';
-import type { Endpoint } from '../endpoint.ts';
-import type { Group } from '../group.ts';
-import type { Guard } from '../guard.ts';
-import type { Rejection } from '../rejection.ts';
-import type { Application, Contract } from '../roots.ts';
 import type {
+  Application,
+  Contract,
+  Definitions,
+  Dependencies,
+  Endpoint,
+  ExportedElements,
+  Group,
+  Guard,
+  QualifiedAttachment,
+  Rejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,
-} from '../standard-rejections.ts';
+} from '../declarations/index.ts';
 import type { Declarations } from './declarations.ts';
 
 /** The keys a shape requires: the ones an empty object lacks. */

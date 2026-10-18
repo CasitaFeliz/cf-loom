@@ -1,5 +1,5 @@
-import { isRejectionStatus } from '../http.ts';
-import type { Path, SchemaNode } from '../walker/nodes.ts';
+import { isRejectionStatus } from '../declarations/index.ts';
+import type { Path, SchemaNode } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedRejection } from './located.ts';

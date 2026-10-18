@@ -1,4 +1,4 @@
-import type { Path } from '../walker/nodes.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import type { LocatedEndpoint, LocatedGuard, LocatedRejection } from './located.ts';
 import { type ResolvedStandard, resolvedStandards } from './standard-codes.ts';

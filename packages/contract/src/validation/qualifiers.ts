@@ -1,5 +1,5 @@
-import { canonicalJson } from '../walker/canonical-json.ts';
-import type { ObjectNode, SchemaNode, TupleNode } from '../walker/nodes.ts';
+import type { ObjectNode, SchemaNode, TupleNode } from '../walker/index.ts';
+import { canonicalJson } from '../walker/index.ts';
 import { isPlainObject } from './written.ts';
 
 /** Where in a value the judgement is, and the `defs` its schema's refs resolve through. */

@@ -1,12 +1,15 @@
-import type { Definitions } from '../definitions.ts';
-import type { Dependencies } from '../dependencies.ts';
-import type { Endpoint } from '../endpoint.ts';
-import type { Group } from '../group.ts';
-import type { Guard } from '../guard.ts';
-import type { Rejection } from '../rejection.ts';
-import type { Application, Contract } from '../roots.ts';
-import type { StandardRejectionDeclaration } from '../standard-rejections.ts';
-import type { Path } from '../walker/nodes.ts';
+import type {
+  Application,
+  Contract,
+  Definitions,
+  Dependencies,
+  Endpoint,
+  Group,
+  Guard,
+  Rejection,
+  StandardRejectionDeclaration,
+} from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
 export type Root = Contract | Application | Definitions;

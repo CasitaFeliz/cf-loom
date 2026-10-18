@@ -1,6 +1,5 @@
-import type { Attachment } from '../attachment.ts';
-import type { Guard } from '../guard.ts';
-import { isGuard, isRejection } from '../predicates.ts';
+import type { Attachment, Guard } from '../declarations/index.ts';
+import { isGuard, isRejection } from '../declarations/index.ts';
 import type {
   LocatedCode,
   LocatedDefinitions,

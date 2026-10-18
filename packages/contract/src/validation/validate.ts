@@ -1,6 +1,6 @@
-import { isApplication, isContract, isDefinitions } from '../predicates.ts';
-import type { NotAllowed, SchemaNode } from '../walker/nodes.ts';
-import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/walk.ts';
+import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
+import type { NotAllowed, SchemaNode } from '../walker/index.ts';
+import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';

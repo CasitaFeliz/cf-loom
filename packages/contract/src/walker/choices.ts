@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { isOpen } from '../open.ts';
+import { isOpen } from '../open/index.ts';
 import { byCanonicalJson, canonicalJson, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
 import type {

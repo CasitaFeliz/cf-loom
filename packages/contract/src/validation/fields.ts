@@ -1,5 +1,5 @@
-import { isDeclaration } from '../freeze-declaration.ts';
-import type { Path } from '../walker/nodes.ts';
+import { isDeclaration } from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import {

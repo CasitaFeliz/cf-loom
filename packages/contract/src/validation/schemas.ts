@@ -1,7 +1,5 @@
 import { $ZodType } from 'zod/v4/core';
-import type { Path, SchemaNode } from '../walker/nodes.ts';
-import type { WalkedSchemas } from '../walker/walk.ts';
-import type { LocatedSchema } from '../walker/walked.ts';
+import type { LocatedSchema, Path, SchemaNode, WalkedSchemas } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';

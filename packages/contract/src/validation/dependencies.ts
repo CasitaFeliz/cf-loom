@@ -1,5 +1,5 @@
-import { isEndpoint, isEvent } from '../predicates.ts';
-import type { Path } from '../walker/nodes.ts';
+import { isEndpoint, isEvent } from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedDependencies, Root } from './located.ts';

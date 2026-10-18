@@ -8,7 +8,7 @@ import {
   notFound,
   notImplemented,
   type SuccessOf,
-} from './index.ts';
+} from '../index.ts';
 
 const orderBody = z.object({ id: z.uuid() });
 const orderParams = z.object({ orderId: z.uuid() });
