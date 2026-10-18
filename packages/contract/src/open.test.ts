@@ -1,3 +1,4 @@
+import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { openEnum, openUnion } from './index.ts';
@@ -61,5 +62,19 @@ describe('openUnion', () => {
   test('a variant without the discriminator is a type error', () => {
     // @ts-expect-error every variant has the discriminator
     expectTypeOf(openUnion<'kind', readonly [typeof card]>).toBeFunction();
+  });
+});
+
+describe('openness from another copy of loom-contract', () => {
+  test('an openEnum from another copy is open', () => {
+    const status = built.openEnum(['pending', 'paid']);
+
+    expect(isOpen(status)).toBe(true);
+  });
+
+  test('an openUnion from another copy is open', () => {
+    const payment = built.openUnion('type', [card, transfer]);
+
+    expect(isOpen(payment)).toBe(true);
   });
 });
