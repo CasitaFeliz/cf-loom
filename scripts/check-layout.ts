@@ -1,71 +1,65 @@
-import { type Dirent, globSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, posix, relative, resolve, sep } from 'node:path';
+import { type Dirent, existsSync, globSync, readdirSync, readFileSync } from 'node:fs';
+import { join, posix, relative, resolve, sep } from 'node:path';
+import { type Entries, entriesOf } from './package-entries.ts';
 
-/** A rule of the package layout (ARCHITECTURE.md, Package layout) that a path breaks. */
+/** A rule of [Package layout](../ARCHITECTURE.md#package-layout) that a path breaks. */
 export type LayoutRule =
   | 'not-an-entry'
   | 'grab-bag'
   | 'nested-module'
   | 'past-the-index'
-  | 'not-only-re-exports';
+  | 'not-only-re-exports'
+  | 'export-all'
+  | 'missing-entry'
+  | 'wildcard-export';
 
 /** A path of a package, relative to the package's directory, and the layout rule it breaks. */
-export type LayoutViolation = { readonly path: string; readonly kind: LayoutRule };
-
-type Entries = {
-  readonly files: ReadonlySet<string>;
-  readonly bins: ReadonlySet<string>;
-  readonly folders: ReadonlySet<string>;
-};
+export type LayoutViolation = { readonly path: string; readonly rule: LayoutRule };
 
 const grabBagNames = new Set(['utils', 'common', 'shared', 'helpers']);
-const importSpecifier = /(?:\bfrom|^\s*import)\s*['"]([^'"]+)['"]/gm;
-const reExport = /^export\s+(?:type\s+)?\{[^}]*\}(?:\s+from\s+['"][^'"]+['"])?$/;
+const comment = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
+const importSpecifier = /\b(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g;
+const namedReExport = /^export\s+(?:type\s+)?\{[^}]*\}\s*from\s*['"][^'"]+['"]$/;
+const emptyExport = /^export\s*\{\s*\}$/;
+const exportAll = /^export\s+(?:type\s+)?\*/;
+const moduleIndex = /^index\.(?:ts|js)$/;
 const root = join(import.meta.dirname, '..');
 
-/** Every way the package in `packageDir` breaks the layout its `src/` must follow. */
+/**
+ * Every way the package in `packageDir` breaks the layout its `src/` must follow, sorted by path.
+ * A folder with no `package.json` is no package and one with no `src/` has nothing to lay out.
+ */
 export function layoutViolations(packageDir: string): LayoutViolation[] {
-  const srcDir = join(packageDir, 'src');
-  const entries = entriesOf(JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')));
-  const violations = [
-    ...folderViolations(srcDir, entries),
-    ...importViolations(srcDir, entries),
-    ...entryViolations(srcDir, entries),
-  ];
-  return violations.map((violation) => ({ ...violation, path: `src/${violation.path}` }));
-}
-
-/** The files a package's `exports` and `bin` point at, read as their sources under `src/`. */
-function entriesOf(manifest: { exports?: unknown; bin?: unknown }): Entries {
-  const exported = targetsOf(manifest.exports).map(sourceOf);
-  const bins = targetsOf(manifest.bin).map(sourceOf);
-  const files = new Set([...exported, ...bins]);
-  const folders = new Set([...files].map((file) => posix.dirname(file)));
-  return { files, bins: new Set(bins), folders };
-}
-
-function targetsOf(field: unknown): string[] {
-  if (typeof field === 'string') {
-    return [field];
-  }
-  if (typeof field !== 'object' || field === null) {
+  const manifestPath = join(packageDir, 'package.json');
+  if (!(existsSync(manifestPath) && existsSync(join(packageDir, 'src')))) {
     return [];
   }
-  return Object.values(field).flatMap(targetsOf);
+  const packageEntries = entriesOf(JSON.parse(readFileSync(manifestPath, 'utf8')));
+  if (packageEntries.kind === 'wildcard') {
+    return [{ path: 'package.json', rule: 'wildcard-export' }];
+  }
+  const { entries } = packageEntries;
+  const violations = [
+    ...folderViolations(packageDir, entries),
+    ...importViolations(packageDir, entries),
+    ...entryViolations(packageDir, entries),
+  ];
+  return violations.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function sourceOf(target: string): string {
-  return target.replace(/^\.\/dist\//, '').replace(/(?:\.d\.ts|\.js)$/, '.ts');
+function posixPathOf(packageDir: string, path: string): string {
+  return relative(packageDir, path).split(sep).join('/');
 }
 
 /** What sits in `src/` and in each of its folders: entries, their tests and modules one level deep. */
-function folderViolations(srcDir: string, entries: Entries): LayoutViolation[] {
+function folderViolations(packageDir: string, entries: Entries): LayoutViolation[] {
   const violations: LayoutViolation[] = [];
-  for (const dirent of readdirSync(srcDir, { withFileTypes: true, recursive: true })) {
-    const path = posix.join(relative(srcDir, dirent.parentPath).split(sep).join('/'), dirent.name);
-    const kind = folderRuleBroken(path, dirent, entries);
-    if (kind !== undefined) {
-      violations.push({ path, kind });
+  const dirents = readdirSync(join(packageDir, 'src'), { withFileTypes: true, recursive: true });
+  for (const dirent of dirents) {
+    const path = posixPathOf(packageDir, join(dirent.parentPath, dirent.name));
+    const rule = folderRuleBroken(path, dirent, entries);
+    if (rule !== undefined) {
+      violations.push({ path, rule });
     }
   }
   return violations;
@@ -88,60 +82,91 @@ function directoryRuleBroken(
   if (entries.folders.has(path)) {
     return undefined;
   }
-  if (parent === '.') {
-    return grabBagNames.has(path) ? 'grab-bag' : undefined;
+  if (parent === 'src') {
+    return grabBagNames.has(posix.basename(path)) ? 'grab-bag' : undefined;
   }
   if (entries.folders.has(parent)) {
     return 'not-an-entry';
   }
-  return parent.includes('/') ? undefined : 'nested-module';
+  return posix.dirname(parent) === 'src' ? 'nested-module' : undefined;
 }
 
-/** Each import that reaches into another module past its `index.ts`. */
-function importViolations(srcDir: string, entries: Entries): LayoutViolation[] {
+/**
+ * The code of a source without its comments. Strings are not read, so a `//` or `/*` inside a
+ * string literal is taken for a comment: a known gap, harmless in the import and export lines read.
+ */
+function codeOf(source: string): string {
+  return source.replace(comment, '');
+}
+
+/** Each file whose imports reach into another module past its `index.ts`. */
+function importViolations(packageDir: string, entries: Entries): LayoutViolation[] {
   const violations: LayoutViolation[] = [];
-  for (const path of globSync('**/*.ts', { cwd: srcDir })) {
-    const source = readFileSync(join(srcDir, path), 'utf8');
-    const specifiers = [...source.matchAll(importSpecifier)].map((match) => match[1] ?? '');
+  const sources = globSync('src/**/*.ts', { cwd: packageDir });
+  for (const path of sources.map((source) => source.split(sep).join('/'))) {
+    const code = codeOf(readFileSync(join(packageDir, path), 'utf8'));
+    const specifiers = [...code.matchAll(importSpecifier)].map((match) => match[1] ?? '');
     const imported = specifiers.filter((specifier) => specifier.startsWith('.'));
     const targets = imported.map((specifier) =>
-      relative(srcDir, resolve(srcDir, dirname(path), specifier)),
+      posixPathOf(packageDir, resolve(packageDir, posix.dirname(path), specifier)),
     );
     if (targets.some((target) => isPastTheIndex(path, target, entries))) {
-      violations.push({ path: path.split(sep).join('/'), kind: 'past-the-index' });
+      violations.push({ path, rule: 'past-the-index' });
     }
   }
   return violations;
 }
 
 function isPastTheIndex(importer: string, target: string, entries: Entries): boolean {
-  const [module, ...rest] = target.split(sep);
-  if (module === undefined || rest.length === 0 || module === '..' || entries.folders.has(module)) {
+  const [folder, name, ...rest] = target.split('/');
+  const targetModule = `${folder}/${name}`;
+  if (folder !== 'src' || rest.length === 0 || entries.folders.has(targetModule)) {
     return false;
   }
-  const importerModule = importer.split(sep)[0];
-  return importerModule !== module && rest.join('/') !== 'index.ts';
+  const importerModule = importer.split('/').slice(0, 2).join('/');
+  return importerModule !== targetModule && !(rest.length === 1 && moduleIndex.test(rest[0] ?? ''));
 }
 
-/** Entry files other than a `bin` hold re-exports only, so an entry cannot grow logic. */
-function entryViolations(srcDir: string, entries: Entries): LayoutViolation[] {
+/** Each entry with no source, and each entry other than a `bin` holding more than named re-exports. */
+function entryViolations(packageDir: string, entries: Entries): LayoutViolation[] {
   const violations: LayoutViolation[] = [];
   for (const path of entries.files) {
-    if (!(entries.bins.has(path) || isOnlyReExports(readFileSync(join(srcDir, path), 'utf8')))) {
-      violations.push({ path, kind: 'not-only-re-exports' });
+    const rule = entryRuleBroken(packageDir, path, entries);
+    if (rule !== undefined) {
+      violations.push({ path, rule });
     }
   }
   return violations;
 }
 
-function isOnlyReExports(source: string): boolean {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  const statements = code.split(';').map((statement) => statement.trim());
-  return statements.every((statement) => statement === '' || reExport.test(statement));
+function entryRuleBroken(
+  packageDir: string,
+  path: string,
+  entries: Entries,
+): LayoutRule | undefined {
+  if (!existsSync(join(packageDir, path))) {
+    return 'missing-entry';
+  }
+  if (entries.bins.has(path)) {
+    return undefined;
+  }
+  const code = codeOf(readFileSync(join(packageDir, path), 'utf8'));
+  const statements = code
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  if (statements.some((statement) => exportAll.test(statement))) {
+    return 'export-all';
+  }
+  return statements.every(isReExport) ? undefined : 'not-only-re-exports';
 }
 
-function messageOf(kind: LayoutRule): string {
-  switch (kind) {
+function isReExport(statement: string): boolean {
+  return namedReExport.test(statement) || emptyExport.test(statement);
+}
+
+function messageOf(rule: LayoutRule): string {
+  switch (rule) {
     case 'not-an-entry':
       return 'only entries and their tests sit in src/ and an entry folder; move it into a module.';
     case 'grab-bag':
@@ -151,21 +176,30 @@ function messageOf(kind: LayoutRule): string {
     case 'past-the-index':
       return "imports another module's file; a module is imported only through its index.ts.";
     case 'not-only-re-exports':
-      return 'an entry file holds re-exports only.';
+      return 'an entry file holds named re-exports only, `export { … } from`.';
+    case 'export-all':
+      return "an entry re-exports by name, `export { … } from`; Biome's noReExportAll refuses `export *`.";
+    case 'missing-entry':
+      return 'an entry that `exports` or `bin` points at has no source file.';
+    case 'wildcard-export':
+      return 'a wildcard subpath makes every file an entry; export each entry by name.';
   }
 }
 
-/** Every package under `packages/`, each checked against the layout. */
-function checkPackages(): void {
-  for (const packageDir of globSync('packages/*/', { cwd: root })) {
-    for (const violation of layoutViolations(join(root, packageDir))) {
-      const path = relative(process.cwd(), join(root, packageDir, violation.path));
-      console.error(`${path} layout: ${messageOf(violation.kind)}`);
+/** The package directories named on the command line, or every package under `packages/`. */
+function checkPackages(packageDirs: readonly string[]): void {
+  for (const packageDir of packageDirs) {
+    for (const violation of layoutViolations(packageDir)) {
+      const path = posixPathOf(process.cwd(), join(packageDir, violation.path));
+      console.error(`${path} layout: ${messageOf(violation.rule)}`);
       process.exitCode = 1;
     }
   }
 }
 
 if (import.meta.main) {
-  checkPackages();
+  const named = process.argv.slice(2);
+  checkPackages(
+    named.length > 0 ? named : globSync('packages/*/', { cwd: root }).map((dir) => join(root, dir)),
+  );
 }
