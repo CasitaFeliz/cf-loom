@@ -5,6 +5,8 @@ import * as zm from 'zod/mini';
 import { openEnum, openUnion } from './index.ts';
 import { isOpen } from './internal/index.ts';
 
+type Status = ReturnType<typeof openEnum<readonly ['pending', 'paid']>>;
+
 const card = z.object({ type: z.literal('card'), last4: z.string() });
 const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
 
@@ -18,18 +20,15 @@ describe('openEnum', () => {
     expectTypeOf<z.output<typeof status>>().toEqualTypeOf<'pending' | 'paid'>();
   });
 
-  test('an openEnum described with .describe() or .meta() stays open', () => {
+  test.each([
+    ['.describe()', (status: Status) => status.describe('The order status')],
+    ['.meta()', (status: Status) => status.meta({ description: 'The order status' })],
+    ['zod/mini describe', (status: Status) => status.check(zm.describe('The order status'))],
+    ['zod/mini meta', (status: Status) => status.check(zm.meta({ description: 'Status' }))],
+  ])('an openEnum described with %s stays open', (_name, described) => {
     const status = openEnum(['pending', 'paid']);
 
-    expect(isOpen(status.describe('The order status'))).toBe(true);
-    expect(isOpen(status.meta({ description: 'The order status' }))).toBe(true);
-  });
-
-  test('an openEnum described with zod/mini metadata stays open', () => {
-    const status = openEnum(['pending', 'paid']);
-
-    expect(isOpen(status.check(zm.describe('The order status')))).toBe(true);
-    expect(isOpen(status.check(zm.meta({ description: 'The order status' })))).toBe(true);
+    expect(isOpen(described(status))).toBe(true);
   });
 
   test('a described z.enum() stays closed', () => {
@@ -77,10 +76,15 @@ describe('openUnion', () => {
 });
 
 describe('openUnion metadata', () => {
-  test('an openUnion described with .describe() or .meta() stays open', () => {
+  test('an openUnion described with .describe() stays open', () => {
     const payment = openUnion('type', [card, transfer]);
 
     expect(isOpen(payment.describe('A payment'))).toBe(true);
+  });
+
+  test('an openUnion described with zod/mini meta stays open', () => {
+    const payment = openUnion('type', [card, transfer]);
+
     expect(isOpen(payment.check(zm.meta({ description: 'A payment' })))).toBe(true);
   });
 });
