@@ -1,6 +1,14 @@
+import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineDefinitions, defineGuard, defineRejection } from './index.ts';
+import {
+  defineDefinitions,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  defineRejection,
+  notFound,
+} from './index.ts';
 
 describe('defineDefinitions', () => {
   test('a Definitions Package keeps its Guards, schemas and Rejections by identity', () => {
@@ -187,20 +195,59 @@ describe('a Definitions Package with containers the author froze', () => {
 });
 
 describe('declarations from another copy of loom-contract', () => {
-  const brand = Symbol.for('@casitafeliz/loom-contract.declaration');
+  const ordersBody = z.array(z.object({ id: z.uuid() }));
 
-  test('a value branded by another copy keeps its identity', () => {
-    const forbidden = Object.freeze(
-      Object.defineProperty(
-        { code: 'FORBIDDEN', status: 403, message: 'Forbidden', kind: 'rejection' } as const,
-        brand,
-        { value: true },
-      ),
-    );
+  test('a Group keeps an Endpoint declared by another copy', () => {
+    const listOrders = built.defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: ordersBody },
+    });
 
-    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
+    const ordersGroup = defineGroup({
+      name: 'orders',
+      description: 'Order lifecycle',
+      endpoints: [listOrders],
+    });
 
-    expect(definitions.rejections[0]).toBe(forbidden);
+    expect(ordersGroup.endpoints[0]).toBe(listOrders);
+  });
+
+  test('another copy’s Group keeps an Endpoint declared by this copy', () => {
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: ordersBody },
+    });
+
+    const ordersGroup = built.defineGroup({
+      name: 'orders',
+      description: 'Order lifecycle',
+      endpoints: [listOrders],
+    });
+
+    expect(ordersGroup.endpoints[0]).toBe(listOrders);
+  });
+
+  test('an Endpoint keeps a Standard Rejection from another copy', () => {
+    const getOrder = defineEndpoint({
+      name: 'getOrder',
+      method: 'GET',
+      path: '/orders/latest',
+      visibility: 'public',
+      description: 'The latest order',
+      success: { status: 200, body: ordersBody },
+      rejections: [built.notFound],
+    });
+
+    expect(built.notFound).not.toBe(notFound);
+    expect(getOrder.rejections[0]).toBe(built.notFound);
   });
 
   test('an unbranded plain object with a kind is copied', () => {
@@ -227,6 +274,5 @@ describe('declarations from another copy of loom-contract', () => {
       message: 'Forbidden',
       kind: 'rejection',
     });
-    expect(Reflect.ownKeys(forbidden)).toContain(brand);
   });
 });
