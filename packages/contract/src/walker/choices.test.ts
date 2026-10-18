@@ -84,6 +84,20 @@ describe('walkSchemas: unions', () => {
     );
   });
 
+  test('a union of described literals is an enum, without their descriptions', () => {
+    const flag = z.union([z.literal('on').describe('Switched on'), z.literal('off')]);
+
+    expect(walkBody(flag)).toEqual(walkedTo({ type: 'enum', values: ['off', 'on'], open: false }));
+  });
+
+  test('a union of literals with a nullable one is a nullable enum', () => {
+    const flag = z.union([z.literal('on').nullable(), z.literal('off')]);
+
+    expect(walkBody(flag)).toEqual(
+      walkedTo({ type: 'enum', values: ['off', 'on'], open: false, nullable: true }),
+    );
+  });
+
   test('a union of literals is an enum whose values keep their JSON type', () => {
     const flag = z.union([z.literal('true'), z.literal(true), z.literal(1)]);
 

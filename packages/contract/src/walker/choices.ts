@@ -2,7 +2,6 @@ import type * as core from 'zod/v4/core';
 import { isOpen } from '../open.ts';
 import { byCanonicalJson, canonicalJson, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
-import { hasAnnotations } from './metadata.ts';
 import type {
   EnumNode,
   JsonPrimitive,
@@ -112,12 +111,19 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
   return node.type === 'object' || node.type === 'ref';
 }
 
+/**
+ * A union of literals is always an enum: it carries only its own annotations, like a merged
+ * intersection, and is nullable when any of its literals is.
+ */
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
-  const literals = options.filter(isBareLiteral);
+  const literals = options.filter(isLiteral);
   if (literals.length !== options.length) {
     return { type: 'union', options: [...options].sort(byCanonicalJson) };
   }
-  return enumOf(literals.map((literal) => literal.value));
+  const values = enumOf(literals.map((literal) => literal.value));
+  return literals.some((literal) => literal.nullable === true)
+    ? { ...values, nullable: true }
+    : values;
 }
 
 /** An enum of several literal values, each once, in canonical order. */
@@ -127,8 +133,8 @@ export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
   return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
 }
 
-function isBareLiteral(node: SchemaNode): node is LiteralNode {
-  return node.type === 'literal' && !hasAnnotations(node);
+function isLiteral(node: SchemaNode): node is LiteralNode {
+  return node.type === 'literal';
 }
 
 function isString(value: unknown): value is string {
