@@ -27,7 +27,7 @@ export const contract = defineContract({
 });
 ```
 
-The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. At most one listed Definitions Package may declare Standard Rejections.
+The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections.
 
 Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`); a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
@@ -88,7 +88,7 @@ export const ordersGroup = defineGroup({
 });
 ```
 
-A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract, and a Contract lists each Definitions Package once, under a name of its own; a duplicate of either fails `generate`.
+A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract; a duplicate fails `generate`.
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
