@@ -50,7 +50,12 @@ function undeclared(at: readonly (string | number)[]) {
   return {
     kind: 'invalid',
     failures: [
-      { at, rule: 'undeclared-field', message: `${String(at.at(-1))} is not a declared field` },
+      {
+        kind: 'declaration',
+        at,
+        rule: 'undeclared-field',
+        message: `${String(at.at(-1))} is not a declared field`,
+      },
     ],
   };
 }

@@ -82,14 +82,14 @@ function withConstraints<Node extends SchemaNode>(
       continue;
     }
     if (Object.values(constraint.value).some(isNonFinite)) {
-      failures.push({ at, ...refused.nonFinite });
+      failures.push({ kind: 'not-allowed', at, ...refused.nonFinite });
     }
     const taken = new Set(Object.keys(constrainedNode).map(slotOf));
     const repeated = Object.keys(constraint.value)
       .map(slotOf)
       .find((slot) => taken.has(slot));
     if (repeated !== undefined) {
-      failures.push({ at, ...refusedRepeatedCheck(repeated) });
+      failures.push({ kind: 'not-allowed', at, ...refusedRepeatedCheck(repeated) });
     }
     constrainedNode = { ...constrainedNode, ...constraint.value };
   }

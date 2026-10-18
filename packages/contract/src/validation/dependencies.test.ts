@@ -70,7 +70,7 @@ function dependingOn(selection: { endpoints?: object; events?: object }): Depend
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ at, rule, message }] };
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 describe('validateContract: a Service’s Dependencies', () => {

@@ -59,7 +59,7 @@ function validateEndpoint(endpoint: Endpoint) {
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ at, rule, message }] };
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 const guardsAt = ['groups', 'orders', 'endpoints', 'listOrders', 'guards'];
@@ -301,7 +301,9 @@ describe('validateContract: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual({
       kind: 'invalid',
-      failures: [{ at: ['guards', 'refined', 'qualifier'], construct: '.refine()' }],
+      failures: [
+        { kind: 'not-allowed', at: ['guards', 'refined', 'qualifier'], construct: '.refine()' },
+      ],
     });
   });
 });

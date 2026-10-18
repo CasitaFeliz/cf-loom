@@ -1,10 +1,9 @@
 import type * as core from 'zod/v4/core';
 import { checksOf } from './check-defs.ts';
 import { annotatedBy, type Metadata, metadataOf } from './metadata.ts';
-import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
+import type { Field, Origin, Path, SchemaNode } from './nodes.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
-  allWalked,
   distinctFailures,
   type LocatedSchema,
   type Walked,
@@ -16,14 +15,17 @@ import { constrained, type Def, walkDefinition } from './zod-types.ts';
 /** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
 
-/** Every schema of a Snapshot as nodes, in the order given, with the `defs` their cycles share. */
-export type WalkedSchemas =
-  | {
-      readonly kind: 'walked';
-      readonly nodes: readonly SchemaNode[];
-      readonly defs: Readonly<Record<string, SchemaNode>>;
-    }
-  | { readonly kind: 'not-allowed'; readonly failures: readonly [NotAllowed, ...NotAllowed[]] };
+/** One schema walked where it sits: its node, or every construct in it that is not allowed. */
+export type WalkedLocation = { readonly at: Path; readonly walked: Walked };
+
+/**
+ * Every schema of a Snapshot walked, each at its location in the order given, with the `defs`
+ * their cycles share; one schema's failure hides nothing of the others.
+ */
+export type WalkedSchemas = {
+  readonly located: readonly WalkedLocation[];
+  readonly defs: Readonly<Record<string, SchemaNode>>;
+};
 
 /** What every schema of one walk shares: how to walk inside, the recursion, and origins. */
 type WalkState = {
@@ -34,7 +36,8 @@ type WalkState = {
 
 /**
  * Walks every schema of one Snapshot at once, since recursion ids are unique and `defs` shared
- * across it; every construct that is not allowed is reported, each where it was written.
+ * across it; every construct that is not allowed is reported where it was written, and a cycle's
+ * failure comes back as the same failure wherever the cycle is met.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
   const recursion = startRecursion();
@@ -43,11 +46,18 @@ export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginO
     field: (schema, at) => walkField(schema, at, state),
   };
   const state: WalkState = { walker, recursion, originOf };
-  const nodes = allWalked(located.map(({ at, schema }) => walker.schema(schema, at)));
-  if (nodes.kind === 'not-allowed') {
-    return { kind: 'not-allowed', failures: distinctFailures(nodes.failures) };
+  const walkedLocations = located.map(({ at, schema }) => ({
+    at,
+    walked: distinct(walker.schema(schema, at)),
+  }));
+  return { located: walkedLocations, defs: recursion.defs() };
+}
+
+function distinct(walked: Walked): Walked {
+  if (walked.kind === 'walked') {
+    return walked;
   }
-  return { kind: 'walked', nodes: nodes.value, defs: recursion.defs() };
+  return { kind: 'not-allowed', failures: distinctFailures(walked.failures) };
 }
 
 function walkSchema(schema: core.$ZodType, at: Path, state: WalkState): Walked {

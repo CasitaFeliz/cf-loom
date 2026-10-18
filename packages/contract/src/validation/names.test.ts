@@ -46,7 +46,7 @@ function validateGroups(groups: readonly Group[]) {
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ at, rule, message }] };
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 describe('validateContract: name grammars', () => {

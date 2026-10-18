@@ -14,10 +14,15 @@ import {
   openEnum,
   openUnion,
 } from '../index.ts';
-import { validateContract, walkSchemas } from '../internal/index.ts';
+import { validateContract, type WalkedLocation, walkSchemas } from '../internal/index.ts';
 
 function noOrigin() {
   return undefined;
+}
+
+/** A walked location as the validation returns it, so a test compares with the walker itself. */
+function nodeOf({ at, walked }: WalkedLocation) {
+  return { at, node: walked.kind === 'walked' ? walked.value : undefined };
 }
 
 const unauthenticated = defineRejection({
@@ -101,14 +106,9 @@ describe('validateContract', () => {
 
     const validated = validateContract(contract, noOrigin);
 
-    expect(walked.kind).toBe('walked');
-    const nodes = walked.kind === 'walked' ? walked.nodes : [];
     expect(validated).toEqual({
       kind: 'valid',
-      schemas: {
-        nodes: located.map(({ at }, index) => ({ at, node: nodes[index] })),
-        defs: {},
-      },
+      schemas: { nodes: walked.located.map(nodeOf), defs: {} },
     });
   });
 
@@ -139,14 +139,9 @@ describe('validateContract', () => {
 
     const validated = validateContract(definitions, noOrigin);
 
-    expect(walked.kind).toBe('walked');
-    const nodes = walked.kind === 'walked' ? walked.nodes : [];
     expect(validated).toEqual({
       kind: 'valid',
-      schemas: {
-        nodes: located.map(({ at }, index) => ({ at, node: nodes[index] })),
-        defs: {},
-      },
+      schemas: { nodes: walked.located.map(nodeOf), defs: {} },
     });
   });
 
@@ -171,6 +166,7 @@ describe('validateContract', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'not-allowed',
           at: [
             'groups',
             'orders',
@@ -181,6 +177,46 @@ describe('validateContract', () => {
             'fields',
             'placedAt',
           ],
+          construct: 'z.date()',
+          instead: 'z.iso.datetime()',
+        },
+      ],
+    });
+  });
+
+  test('a construct that is not allowed in one schema hides no failure of another', () => {
+    const createOrder = defineEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Creates an order',
+      input: {
+        body: z.object({ placedAt: z.date() }),
+        headers: z.object({ 'x-tenant': z.object({ id: z.string() }) }),
+      },
+      success: { status: 201, body: z.object({ id: z.uuid() }) },
+    });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
+
+    const validated = validateContract(
+      defineContract({ name: 'orders-service', groups: [orders] }),
+      noOrigin,
+    );
+
+    const endpointAt = ['groups', 'orders', 'endpoints', 'createOrder'];
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
+          rule: 'text-only',
+          message: 'A header travels as text: a string, number, boolean, literal or enum: x-tenant',
+        },
+        {
+          kind: 'not-allowed',
+          at: [...endpointAt, 'input', 'body', 'fields', 'placedAt'],
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
         },
@@ -209,11 +245,13 @@ describe('validateContract', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: ['groups', 'orders', 'endpoints', 'createOrder', 'path'],
           rule: 'canonical-path',
           message: 'A path has no trailing slash: /orders/',
         },
         {
+          kind: 'not-allowed',
           at: [
             'groups',
             'orders',

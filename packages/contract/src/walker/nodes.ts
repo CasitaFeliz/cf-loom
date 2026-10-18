@@ -132,6 +132,7 @@ export type SchemaNode =
 
 /** A zod construct no node or check maps, where it was written, and what to use instead. */
 export type NotAllowed = {
+  readonly kind: 'not-allowed';
   readonly at: Path;
   readonly construct: string;
   readonly instead?: string;

@@ -44,7 +44,9 @@ function validateEndpoint(endpoint: Endpoint) {
 function failedAt(at: readonly string[], rule: string, message: string) {
   return {
     kind: 'invalid',
-    failures: [{ at: ['groups', 'orders', 'endpoints', ...at], rule, message }],
+    failures: [
+      { kind: 'declaration', at: ['groups', 'orders', 'endpoints', ...at], rule, message },
+    ],
   };
 }
 

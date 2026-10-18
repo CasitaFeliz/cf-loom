@@ -51,7 +51,7 @@ function validateEndpoints(endpoints: readonly [Endpoint, ...Endpoint[]]) {
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ at, rule, message }] };
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 describe('validateContract: Rejection statuses', () => {
@@ -134,11 +134,13 @@ describe('validateContract: one status and one body per code', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: ['rejections', 'ORDER_LOCKED', 'status'],
           rule: 'code-conflict',
           message: 'A code has one HTTP status across the Contract: ORDER_LOCKED is 409 and 423',
         },
         {
+          kind: 'declaration',
           at: ['rejections', 'ORDER_LOCKED', 'body'],
           rule: 'code-conflict',
           message: 'A code has one body schema across the Contract: ORDER_LOCKED',
@@ -313,11 +315,13 @@ describe('validateContract: Standard Rejections', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: ['rejections', 'BAD_REQUEST', 'code'],
           rule: 'standard-rejection',
           message: 'No Contract redefines a Standard Rejection: BAD_REQUEST',
         },
         {
+          kind: 'declaration',
           at: ['rejections', 'NOT_FOUND', 'code'],
           rule: 'standard-rejection',
           message: 'No Contract redefines a Standard Rejection: NOT_FOUND',

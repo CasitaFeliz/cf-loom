@@ -10,11 +10,15 @@ function walkBody(schema: core.$ZodType) {
 }
 
 function walkedTo(node: SchemaNode) {
-  return { kind: 'walked', nodes: [node], defs: {} };
+  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
 }
 
 function refusedAt(at: readonly (string | number)[], construct: string, instead?: string) {
-  return { kind: 'not-allowed', failures: [{ at, construct, ...(instead && { instead }) }] };
+  const failure = { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
+  return {
+    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
+    defs: {},
+  };
 }
 
 const text = { type: 'string' } as const;

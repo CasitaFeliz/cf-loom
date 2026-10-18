@@ -34,7 +34,7 @@ function validateEndpoint(endpoint: Endpoint) {
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ at, rule, message }] };
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
 const endpointAt = ['groups', 'orders', 'endpoints', 'listOrders'];

@@ -39,6 +39,7 @@ export type Rule =
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */
 export type DeclarationFailure = {
+  readonly kind: 'declaration';
   readonly at: Path;
   readonly rule: Rule;
   readonly message: string;
@@ -49,5 +50,5 @@ export type Failure = DeclarationFailure | NotAllowed;
 
 /** One declaration failure, as every rule returns it. */
 export function failure(at: Path, rule: Rule, message: string): DeclarationFailure {
-  return { at, rule, message };
+  return { kind: 'declaration', at, rule, message };
 }

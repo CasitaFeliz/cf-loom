@@ -24,7 +24,14 @@ function validateEndpoint(endpoint: Endpoint) {
 function failedPath(message: string, rule = 'canonical-path') {
   return {
     kind: 'invalid',
-    failures: [{ at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'], rule, message }],
+    failures: [
+      {
+        kind: 'declaration',
+        at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
+        rule,
+        message,
+      },
+    ],
   };
 }
 
@@ -52,6 +59,7 @@ describe('validateContract: canonical paths', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: ['groups', 'orders', 'endpoints', 'listOrders', 'input', 'params'],
           rule: 'params',
           message: "params declares exactly the path's :names: orderId",
@@ -158,16 +166,19 @@ describe('validateContract: canonical paths', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
           rule: 'canonical-path',
           message: 'A path starts with /: Orders/',
         },
         {
+          kind: 'declaration',
           at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
           rule: 'canonical-path',
           message: 'A path has no trailing slash: Orders/',
         },
         {
+          kind: 'declaration',
           at: ['groups', 'orders', 'endpoints', 'listOrders', 'path'],
           rule: 'canonical-path',
           message: 'A path segment is lower-case letters, digits and dashes: Orders',
@@ -205,6 +216,7 @@ describe('validateContract: params against the path', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: paramsAt,
           rule: 'params',
           message: "params declares exactly the path's :names: orderId, itemId",
@@ -223,6 +235,7 @@ describe('validateContract: params against the path', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: paramsAt,
           rule: 'params',
           message: "params declares exactly the path's :names: orderId",
@@ -238,6 +251,7 @@ describe('validateContract: params against the path', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: paramsAt,
           rule: 'params',
           message: "params declares exactly the path's :names: orderId",
@@ -256,7 +270,12 @@ describe('validateContract: params against the path', () => {
     expect(validateEndpoint(getOrder)).toEqual({
       kind: 'invalid',
       failures: [
-        { at: paramsAt, rule: 'params', message: 'A path without :names takes no params' },
+        {
+          kind: 'declaration',
+          at: paramsAt,
+          rule: 'params',
+          message: 'A path without :names takes no params',
+        },
       ],
     });
   });
@@ -272,6 +291,7 @@ describe('validateContract: params against the path', () => {
       kind: 'invalid',
       failures: [
         {
+          kind: 'declaration',
           at: [...paramsAt, 'fields', 'orderId'],
           rule: 'optional-path-param',
           message: 'A path param is never optional: orderId',
@@ -289,7 +309,14 @@ describe('validateContract: params against the path', () => {
 
     expect(validateEndpoint(getOrder)).toEqual({
       kind: 'invalid',
-      failures: [{ at: paramsAt, rule: 'text-only', message: 'params is an object of its fields' }],
+      failures: [
+        {
+          kind: 'declaration',
+          at: paramsAt,
+          rule: 'text-only',
+          message: 'params is an object of its fields',
+        },
+      ],
     });
   });
 });

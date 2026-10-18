@@ -9,7 +9,15 @@ function walkBody(schema: core.$ZodType) {
 }
 
 function walkedTo(node: SchemaNode) {
-  return { kind: 'walked', nodes: [node], defs: {} };
+  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+}
+
+function refusedAt(at: readonly (string | number)[], construct: string) {
+  const failure = { kind: 'not-allowed', at, construct };
+  return {
+    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
+    defs: {},
+  };
 }
 
 function cyclic(): Record<string, unknown> {
@@ -56,17 +64,15 @@ describe('walkSchemas: metadata', () => {
     ['a cyclic value', [cyclic()]],
     ['a function', [() => 'Ada']],
   ])('examples holding %s fail', (_name, examples) => {
-    expect(walkBody(z.string().meta({ examples }))).toEqual({
-      kind: 'not-allowed',
-      failures: [{ at: ['body'], construct: 'examples that are not JSON values' }],
-    });
+    expect(walkBody(z.string().meta({ examples }))).toEqual(
+      refusedAt(['body'], 'examples that are not JSON values'),
+    );
   });
 
   test('any other .meta() key fails', () => {
-    expect(walkBody(z.string().meta({ title: 'Name' }))).toEqual({
-      kind: 'not-allowed',
-      failures: [{ at: ['body'], construct: '.meta({ title })' }],
-    });
+    expect(walkBody(z.string().meta({ title: 'Name' }))).toEqual(
+      refusedAt(['body'], '.meta({ title })'),
+    );
   });
 });
 

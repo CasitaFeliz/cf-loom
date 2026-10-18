@@ -1,5 +1,5 @@
-import type { SchemaNode } from '../walker/nodes.ts';
-import { type OriginOf, walkSchemas } from '../walker/walk.ts';
+import type { NotAllowed, SchemaNode } from '../walker/nodes.ts';
+import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
@@ -33,11 +33,15 @@ export function validateContract(root: Root, originOf: OriginOf): ValidatedContr
   const slots = schemaSlotsOf(declarations);
   const declared = [...declarationFailures(declarations), ...slots.failures];
   const walked = walkSchemas(slots.located, originOf);
-  if (walked.kind === 'not-allowed') {
-    return invalid([...declared, ...walked.failures]);
-  }
-  const nodes = slots.located.map(({ at }, index) => ({ at, node: nodeAt(walked.nodes, index) }));
-  const failures = [...declared, ...schemaFailures(declarations, nodesOf(nodes, walked.defs))];
+  const nodes = walked.located
+    .filter(hasNode)
+    .map(({ at, walked: node }) => ({ at, node: node.value }));
+  const notAllowed = [...new Set(walked.located.flatMap(failuresAt))];
+  const failures = [
+    ...declared,
+    ...schemaFailures(declarations, nodesOf(nodes, walked.defs)),
+    ...notAllowed,
+  ];
   if (failures.length > 0) {
     return invalid(failures);
   }
@@ -79,11 +83,13 @@ function invalid(failures: readonly Failure[]): ValidatedContract {
   return { kind: 'invalid', failures: [first, ...others] };
 }
 
-/** The walk returns one node per schema given, in order; fewer is a bug of the walker. */
-function nodeAt(nodes: readonly SchemaNode[], index: number): SchemaNode {
-  const node = nodes[index];
-  if (node === undefined) {
-    throw new Error('The walk returned fewer nodes than schemas: a bug.');
-  }
-  return node;
+function hasNode(
+  location: WalkedLocation,
+): location is WalkedLocation & { readonly walked: { readonly kind: 'walked' } } {
+  return location.walked.kind === 'walked';
+}
+
+/** A cycle's failure comes back wherever the cycle is met, so the same failure may repeat. */
+function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
+  return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
 }

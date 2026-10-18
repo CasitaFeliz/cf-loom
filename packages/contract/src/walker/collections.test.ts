@@ -8,7 +8,7 @@ function walkBody(schema: core.$ZodType) {
 }
 
 function walkedTo(node: SchemaNode) {
-  return { kind: 'walked', nodes: [node], defs: {} };
+  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
 }
 
 describe('walkSchemas: arrays and tuples', () => {
