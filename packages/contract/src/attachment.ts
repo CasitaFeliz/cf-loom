@@ -23,16 +23,16 @@ type BareRule<Listed extends Guard> = Listed extends QualifiedGuard
   ? `${Listed['name']} needs a qualifier: { guard, qualifier }`
   : unknown;
 
-type QualifierRule<Listed extends Guard> = Listed extends QualifiedGuard
-  ? Written<core.input<Listed['qualifier']>>
-  : 'qualifier' extends keyof Listed
-    ? unknown
-    : `${Listed['name']} takes no qualifier`;
-
-type AttachedRule<Entry extends Attachment> = {
+type QualifiedRule<Entry extends Attachment> = {
   readonly guard: Entry['guard'];
-  readonly qualifier: QualifierRule<Entry['guard']>;
+  readonly qualifier: Written<core.input<Entry['guard']['qualifier']>>;
 } & DeclaredFieldsRule<Entry, Attachment>;
+
+type AttachedRule<Entry extends Attachment> = Entry['guard'] extends QualifiedGuard
+  ? QualifiedRule<Entry>
+  : 'qualifier' extends keyof Entry['guard']
+    ? unknown
+    : `${Entry['guard']['name']} takes no qualifier`;
 
 type EntryRule<Entry> = Entry extends Attachment
   ? AttachedRule<Entry>

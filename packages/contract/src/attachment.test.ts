@@ -95,7 +95,7 @@ describe('Attachments', () => {
       defineEndpoint({
         ...endpoint,
         // @ts-expect-error userToken takes no qualifier
-        guards: [{ guard: userToken, qualifier: ['orders:edit'] }],
+        guards: [{ guard: userToken, qualifier: undefined }],
       });
 
     expect(declare).not.toThrow();
