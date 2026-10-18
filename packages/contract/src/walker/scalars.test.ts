@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
-import { type SchemaNode, walkSchemas } from '../internal/index.ts';
+import { type SchemaNode, type StringFormat, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
   return walkSchemas([{ at: ['body'], schema }], () => undefined);
@@ -48,7 +48,7 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each([
+  test.each<[string, core.$ZodType, StringFormat]>([
     ['z.guid()', z.guid(), 'guid'],
     ['z.cuid()', z.cuid(), 'cuid'],
     ['z.ipv4()', z.ipv4(), 'ipv4'],
@@ -85,7 +85,7 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each([
+  test.each<[string, core.$ZodType, StringFormat]>([
     ['z.hex()', z.hex(), 'hex'],
     ['z.hostname()', z.hostname(), 'hostname'],
     ['z.currencyCode()', z.currencyCode(), 'currency_code'],
@@ -96,7 +96,7 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each([
+  test.each<[string, core.$ZodType, StringFormat]>([
     ['zm.hex()', zm.hex(), 'hex'],
     ['zm.hostname()', zm.hostname(), 'hostname'],
     ['zm.currencyCode()', zm.currencyCode(), 'currency_code'],

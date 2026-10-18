@@ -9,6 +9,7 @@ export type {
   TupleNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
+export type { StringFormat } from './string-formats.ts';
 export type { OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkSchemas } from './walk.ts';
 export type { LocatedSchema } from './walked.ts';

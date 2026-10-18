@@ -1,3 +1,5 @@
+import type { StringFormat } from './string-formats.ts';
+
 /** Where a schema sits in the Snapshot, so a failure points at what the author wrote. */
 export type Path = readonly (string | number)[];
 
@@ -24,7 +26,7 @@ export type JsonPrimitive = string | number | boolean;
 /** A string, with a known format, a regex and length bounds when declared. */
 export type StringNode = Annotations & {
   readonly type: 'string';
-  readonly format?: string;
+  readonly format?: StringFormat;
   readonly formatOptions?: Readonly<Record<string, unknown>>;
   readonly regex?: Regex;
   readonly min?: number;

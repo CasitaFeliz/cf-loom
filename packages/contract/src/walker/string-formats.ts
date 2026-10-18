@@ -14,12 +14,18 @@ type FormatDef = BuiltDef & {
   readonly normalize?: boolean | undefined;
 };
 
-const hashFormats = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'].flatMap((algorithm) =>
-  ['hex', 'base64', 'base64url'].map((encoding) => `${algorithm}_${encoding}`),
+const hashAlgorithms = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'] as const;
+const hashEncodings = ['hex', 'base64', 'base64url'] as const;
+
+/** A hash format, its algorithm and encoding in its name, as `z.hash()` builds it. */
+type HashFormat = `${(typeof hashAlgorithms)[number]}_${(typeof hashEncodings)[number]}`;
+
+const hashFormats: readonly HashFormat[] = hashAlgorithms.flatMap((algorithm) =>
+  hashEncodings.map((encoding): HashFormat => `${algorithm}_${encoding}`),
 );
 
 /** The formats zod builds itself, each by its own constructor from its options. */
-const builtFormats: ReadonlySet<string> = new Set([
+const builtFormats = [
   'guid',
   'uuid',
   'email',
@@ -46,7 +52,30 @@ const builtFormats: ReadonlySet<string> = new Set([
   'credit_card',
   'iban',
   'jwt',
+] as const;
+
+/** The formats zod builds from a regex alone. */
+const regexFormatNames = ['hex', 'hostname', 'currency_code'] as const;
+
+/** A known string format, as SNAPSHOT.md names them: the ones zod builds itself. */
+export type StringFormat =
+  | (typeof builtFormats)[number]
+  | (typeof regexFormatNames)[number]
+  | HashFormat;
+
+const knownFormats: ReadonlySet<string> = new Set<StringFormat>([
+  ...builtFormats,
+  ...regexFormatNames,
+  ...hashFormats,
 ]);
+
+/** A format check of a format SNAPSHOT.md knows. */
+type KnownFormatDef = FormatDef & { readonly format: StringFormat };
+
+/** Whether a format check names a format SNAPSHOT.md knows. */
+function isKnownFormat(def: FormatDef): def is KnownFormatDef {
+  return knownFormats.has(def.format);
+}
 
 /** The string checks zod writes as formats, which the Not allowed list names. */
 const refusedByFormat: ReadonlyMap<string, Refused> = new Map<string, Refused>([
@@ -77,10 +106,13 @@ export function formatOf(check: DeclaredCheck, at: Path): Walked<Partial<StringN
   if (refusal !== undefined) {
     return notAllowed(at, refusal);
   }
+  if (!isKnownFormat(def)) {
+    return notAllowed(at, refusedStringFormat(def.format));
+  }
   if (regexFormats.has(def.format)) {
     return regexFormatOf(def, at);
   }
-  return builtFormatOf(check, at);
+  return builtFormatOf(check, def, at);
 }
 
 function namedRefusalOf(def: FormatDef): Refused | undefined {
@@ -88,15 +120,15 @@ function namedRefusalOf(def: FormatDef): Refused | undefined {
   if (named !== undefined) {
     return named;
   }
-  if (!builtFormats.has(def.format) && !regexFormats.has(def.format)) {
-    return refusedStringFormat(def.format);
-  }
   return def.normalize === true ? refused.urlNormalize : undefined;
 }
 
 /** A format zod builds from its options: the pattern must be the one zod builds for them. */
-function builtFormatOf(check: DeclaredCheck, at: Path): Walked<Partial<StringNode>> {
-  const def = check.def as unknown as FormatDef;
+function builtFormatOf(
+  check: DeclaredCheck,
+  def: KnownFormatDef,
+  at: Path,
+): Walked<Partial<StringNode>> {
   if (def.fn !== undefined) {
     return notAllowed(at, refusedStringFormat(def.format));
   }
@@ -118,7 +150,7 @@ function builtFormatOf(check: DeclaredCheck, at: Path): Walked<Partial<StringNod
  * format, by source and flags, whatever function checks it, so any copy of zod compares alike;
  * one checked by a function alone is the author's `z.stringFormat()`.
  */
-function regexFormatOf(def: FormatDef, at: Path): Walked<Partial<StringNode>> {
+function regexFormatOf(def: KnownFormatDef, at: Path): Walked<Partial<StringNode>> {
   if (def.pattern === undefined) {
     return notAllowed(at, refusedStringFormat(def.format));
   }
