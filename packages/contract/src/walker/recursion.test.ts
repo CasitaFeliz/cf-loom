@@ -7,6 +7,20 @@ function walkBody(schema: core.$ZodType) {
   return walkSchemas([{ at: ['body'], schema }], () => undefined);
 }
 
+function walkedAt(at: readonly (string | number)[], value: unknown) {
+  return { at, walked: { kind: 'walked', value } };
+}
+
+function refusedAt(
+  at: readonly (string | number)[],
+  failures: readonly { readonly at: readonly (string | number)[]; readonly construct: string }[],
+) {
+  const named = failures.map((failure) => ({ kind: 'not-allowed', ...failure }));
+  return { at, walked: { kind: 'not-allowed', failures: named } };
+}
+
+const unnamedCycle = { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' };
+
 const categoryDef = {
   type: 'object',
   mode: 'open',
@@ -31,8 +45,7 @@ describe('walkSchemas: recursion', () => {
       .meta({ id: 'category' });
 
     expect(walkBody(category)).toEqual({
-      kind: 'walked',
-      nodes: [{ type: 'ref', name: 'category' }],
+      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
       defs: { category: categoryDef },
     });
   });
@@ -44,8 +57,7 @@ describe('walkSchemas: recursion', () => {
       .meta({ id: 'category' });
 
     expect(walkBody(category)).toEqual({
-      kind: 'walked',
-      nodes: [{ type: 'ref', name: 'category' }],
+      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
       defs: { category: categoryDef },
     });
   });
@@ -69,10 +81,9 @@ describe('walkSchemas: recursion', () => {
     );
 
     expect(walked).toEqual({
-      kind: 'walked',
-      nodes: [
-        { type: 'ref', name: 'category' },
-        { type: 'array', items: { type: 'ref', name: 'category' } },
+      located: [
+        walkedAt(['body'], { type: 'ref', name: 'category' }),
+        walkedAt(['success'], { type: 'array', items: { type: 'ref', name: 'category' } }),
       ],
       defs: { category: categoryDef },
     });
@@ -86,18 +97,14 @@ describe('walkSchemas: recursion', () => {
     });
 
     expect(walkBody(category)).toEqual({
-      kind: 'not-allowed',
-      failures: [
-        {
-          at: ['body', 'fields', 'children', 'items'],
-          construct: 'a cycle without .meta({ id })',
-          instead: '.meta({ id })',
-        },
+      located: [
+        refusedAt(['body'], [{ at: ['body', 'fields', 'children', 'items'], ...unnamedCycle }]),
       ],
+      defs: {},
     });
   });
 
-  test('a cycle without an id used at two locations is reported once', () => {
+  test('a cycle without an id used at two locations is the same failure at both', () => {
     const category = z.object({
       get children() {
         return z.array(category);
@@ -112,16 +119,15 @@ describe('walkSchemas: recursion', () => {
       () => undefined,
     );
 
+    const failure = { at: ['body', 'fields', 'children', 'items'], ...unnamedCycle };
     expect(walked).toEqual({
-      kind: 'not-allowed',
-      failures: [
-        {
-          at: ['body', 'fields', 'children', 'items'],
-          construct: 'a cycle without .meta({ id })',
-          instead: '.meta({ id })',
-        },
-      ],
+      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+      defs: {},
     });
+    const [first, second] = walked.located;
+    const failuresOf = (location: typeof first) =>
+      location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
+    expect(failuresOf(first)[0]).toBe(failuresOf(second)[0]);
   });
 
   test('two cyclic schemas with one id fail', () => {
@@ -131,14 +137,14 @@ describe('walkSchemas: recursion', () => {
           return z.array(category);
         },
       })
-      .meta({ id: 'Node' });
+      .meta({ id: 'node' });
     const folder = z
       .object({
         get folders() {
           return z.array(folder);
         },
       })
-      .meta({ id: 'Node' });
+      .meta({ id: 'node' });
 
     const walked = walkSchemas(
       [
@@ -149,8 +155,25 @@ describe('walkSchemas: recursion', () => {
     );
 
     expect(walked).toEqual({
-      kind: 'not-allowed',
-      failures: [{ at: ['success'], construct: 'two schemas with .meta({ id: "Node" })' }],
+      located: [
+        walkedAt(['body'], { type: 'ref', name: 'node' }),
+        refusedAt(
+          ['success'],
+          [{ at: ['success'], construct: 'two schemas with .meta({ id: "node" })' }],
+        ),
+      ],
+      defs: {
+        node: {
+          type: 'object',
+          mode: 'open',
+          fields: {
+            children: {
+              required: true,
+              schema: { type: 'array', items: { type: 'ref', name: 'node' } },
+            },
+          },
+        },
+      },
     });
   });
 
@@ -164,8 +187,7 @@ describe('walkSchemas: recursion', () => {
       .meta({ id: '__proto__' });
 
     expect(walkBody(node)).toEqual({
-      kind: 'walked',
-      nodes: [{ type: 'ref', name: '__proto__' }],
+      located: [walkedAt(['body'], { type: 'ref', name: '__proto__' })],
       defs: {
         ['__proto__']: {
           type: 'object',
@@ -185,13 +207,12 @@ describe('walkSchemas: recursion', () => {
     const money = z.object({ amount: z.int() }).meta({ id: 'Money' });
 
     expect(walkBody(money)).toEqual({
-      kind: 'walked',
-      nodes: [
-        {
+      located: [
+        walkedAt(['body'], {
           type: 'object',
           mode: 'open',
           fields: { amount: { required: true, schema: { type: 'number', int: true } } },
-        },
+        }),
       ],
       defs: {},
     });
@@ -222,8 +243,10 @@ describe('walkSchemas: recursion', () => {
       fields: { teams: { required: true, schema: { type: 'array', items: teamNode } } },
     } as const;
     const expected = {
-      kind: 'walked',
-      nodes: [teamNode, { type: 'ref', name: 'department' }],
+      located: [
+        walkedAt(['team'], teamNode),
+        walkedAt(['department'], { type: 'ref', name: 'department' }),
+      ],
       defs: { department: departmentDef },
     };
 
@@ -248,7 +271,7 @@ describe('walkSchemas: recursion', () => {
         () => undefined,
       );
 
-      expect(walked).toEqual({ ...expected, nodes: [...expected.nodes].reverse() });
+      expect(walked).toEqual({ ...expected, located: [...expected.located].reverse() });
     });
   });
 
@@ -269,8 +292,8 @@ describe('walkSchemas: recursion', () => {
       ['team', team, ['body', 'fields', 'department', 'fields', 'teams', 'items']],
     ])('entered at the %s, the cycle fails', (_name, schema, at) => {
       expect(walkBody(schema)).toEqual({
-        kind: 'not-allowed',
-        failures: [{ at, construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' }],
+        located: [refusedAt(['body'], [{ at, ...unnamedCycle }])],
+        defs: {},
       });
     });
   });
@@ -307,10 +330,12 @@ describe('walkSchemas: recursion', () => {
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     };
     const defs = { department: departmentDef, team: teamDef };
-    expect(fromTeam).toEqual({ kind: 'walked', nodes: [{ type: 'ref', name: 'team' }], defs });
+    expect(fromTeam).toEqual({
+      located: [walkedAt(['body'], { type: 'ref', name: 'team' })],
+      defs,
+    });
     expect(fromDepartment).toEqual({
-      kind: 'walked',
-      nodes: [{ type: 'ref', name: 'department' }],
+      located: [walkedAt(['body'], { type: 'ref', name: 'department' })],
       defs,
     });
   });
@@ -331,8 +356,9 @@ describe('walkSchemas: recursion', () => {
 
     const walked = walkSchemas([{ at: ['body'], schema: schemas[0]! }], () => undefined);
 
-    const failures = walked.kind === 'not-allowed' ? walked.failures : [];
-    expect(walked.kind).toBe('not-allowed');
+    const [body] = walked.located;
+    const failures = body?.walked.kind === 'not-allowed' ? body.walked.failures : [];
+    expect(body?.walked.kind).toBe('not-allowed');
     expect(failures.length).toBeLessThanOrEqual(count);
   });
 
@@ -382,8 +408,10 @@ describe('walkSchemas: recursion', () => {
       );
 
       expect(walked).toEqual({
-        kind: 'walked',
-        nodes: [treeNode, { type: 'ref', name: 'branch' }],
+        located: [
+          walkedAt(['tree'], treeNode),
+          walkedAt(['branch'], { type: 'ref', name: 'branch' }),
+        ],
         defs: { branch: branchDef },
       });
     });
@@ -398,8 +426,10 @@ describe('walkSchemas: recursion', () => {
       );
 
       expect(walked).toEqual({
-        kind: 'walked',
-        nodes: [{ type: 'ref', name: 'branch' }, treeNode],
+        located: [
+          walkedAt(['branch'], { type: 'ref', name: 'branch' }),
+          walkedAt(['tree'], treeNode),
+        ],
         defs: { branch: branchDef },
       });
     });
@@ -447,15 +477,8 @@ describe('walkSchemas: recursion', () => {
         () => undefined,
       );
 
-      expect(orderFirst.kind === 'walked' && Object.keys(orderFirst.defs).sort()).toEqual([
-        'address',
-        'customer',
-        'order',
-      ]);
-      expect(customerFirst).toEqual({
-        ...orderFirst,
-        nodes: orderFirst.kind === 'walked' ? [...orderFirst.nodes].reverse() : [],
-      });
+      expect(Object.keys(orderFirst.defs).sort()).toEqual(['address', 'customer', 'order']);
+      expect(customerFirst).toEqual({ ...orderFirst, located: [...orderFirst.located].reverse() });
     });
 
     const first: z.ZodType = z
@@ -493,13 +516,8 @@ describe('walkSchemas: recursion', () => {
       (_name, schema) => {
         const walked = walkSchemas([{ at: ['body'], schema }], () => undefined);
 
-        expect(fromFirst.kind === 'walked' && Object.keys(fromFirst.defs).sort()).toEqual([
-          'first',
-          'third',
-        ]);
-        expect(walked.kind === 'walked' && walked.defs).toEqual(
-          fromFirst.kind === 'walked' && fromFirst.defs,
-        );
+        expect(Object.keys(fromFirst.defs).sort()).toEqual(['first', 'third']);
+        expect(walked.defs).toEqual(fromFirst.defs);
       },
     );
   });
@@ -521,7 +539,7 @@ describe('walkSchemas: recursion', () => {
     const walked = walkSchemas([{ at: ['body'], schema: ring[0]! }], () => undefined);
     const elapsed = performance.now() - started;
 
-    expect(walked.kind).toBe('walked');
+    expect(walked.located[0]?.walked.kind).toBe('walked');
     expect(elapsed).toBeLessThan(1000);
   });
 
@@ -545,7 +563,10 @@ describe('walkSchemas: recursion', () => {
     const walked = walkSchemas([{ at: ['body'], schema: steps[0]! }], () => undefined);
     const elapsed = performance.now() - started;
 
-    expect(walked).toMatchObject({ kind: 'not-allowed', failures: [{ construct: 'z.date()' }] });
+    expect(walked.located[0]?.walked).toMatchObject({
+      kind: 'not-allowed',
+      failures: [{ construct: 'z.date()' }],
+    });
     expect(elapsed).toBeLessThan(1000);
   });
 });

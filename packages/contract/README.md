@@ -27,7 +27,7 @@ export const contract = defineContract({
 });
 ```
 
-The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. At most one listed Definitions Package may declare Standard Rejections.
+The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. `name` must equal the unscoped part of the `name` in the Service's package.json. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections.
 
 Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`); a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
@@ -88,7 +88,7 @@ export const ordersGroup = defineGroup({
 });
 ```
 
-A Group lists at least one Endpoint; an empty list is a type error.
+A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract; a duplicate fails `generate`.
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
@@ -272,7 +272,7 @@ export const paymentsDeps = defineDependencies(payments, {
 });
 ```
 
-A Contract Package's Elements are its declarations, which a Dependency keeps by identity. A Dependency records the Provider's name as `provider`, the `version` of the Contract Package it was declared against as `against`, and the Provider's resolved Standard Rejections as `standardRejections`, and exposes the Elements it selects by their names in code (`paymentsDeps.endpoints.getPayment`, `paymentsDeps.events.paymentSettledV1`); selecting an Element the Provider's Contract Package does not export is a type error. The client has methods only for the Endpoints listed, and a Subscription may only reference an Event listed here; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md. An Event listed here that no Subscription uses fails `generate`, since it would block that Event's retirement for nothing.
+A Contract Package's Elements are its declarations: a Dependency keeps the Endpoints it selects by identity, and its Events by name and version, their identity in the Snapshot (see [Identities](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#identities) in SNAPSHOT.md). A Dependency records the Provider's name as `provider`, the `version` of the Contract Package it was declared against as `against`, the Provider's resolved Standard Rejections as `standardRejections` and the Elements the Provider exports as `exported`, and exposes the Elements it selects by their names in code (`paymentsDeps.endpoints.getPayment`, `paymentsDeps.events.paymentSettledV1`); selecting an Element the Provider's Contract Package does not export is a type error, and `generate` checks each selected Element against `exported`. A Contract lists at most one Dependency per Provider; a second fails `generate`. The client has methods only for the Endpoints listed, and a Subscription may only reference an Event listed here; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md. An Event listed here that no Subscription uses fails `generate`, since it would block that Event's retirement for nothing.
 
 ## Subscriptions
 
@@ -290,5 +290,5 @@ export const notifyOnSettled = defineSubscription({
 
 - `Visibility`, `Lifecycle`, `Method`, `SuccessStatus` and `RejectionStatus`: the values a declaration may take.
 - `StandardRejection`, the type of `invalidInput`, `notFound` and `notImplemented`; `StandardRejections`, their codes, statuses and messages resolved, as a Contract Package carries them.
-- `Contract`, `Application`, `Definitions`, `Group`, `Endpoint`, `Guard`, `Rejection` and `Dependencies`: what each declaration returns, typed by what was written; `Attachment`, a Guard as an Endpoint's `guards` lists it: the Guard bare, or a `QualifiedAttachment` `{ guard, qualifier }` for a Guard that declares a `qualifier`; `ContractPackage`, the `contract` a Contract Package exports (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
+- `Contract`, `Application`, `Definitions`, `Group`, `Endpoint`, `Guard`, `Rejection` and `Dependencies`: what each declaration returns, typed by what was written; `Attachment`, a Guard as an Endpoint's `guards` lists it: the Guard bare, or a `QualifiedAttachment` `{ guard, qualifier }` for a Guard that declares a `qualifier`; `ContractPackage`, the `contract` a Contract Package exports, and `ExportedElements`, the Endpoints and Events of it a Dependency keeps (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 - `InputOf<typeof getOrder>`, the Input its EndpointHandler receives, one key per declared part; `SuccessOf<typeof getOrder>`, its Success's status, headers and body; `ContextOf<typeof getOrder>`, its Context, one key per Guard that provides a Context, by name; `ProvidedContextOf<typeof apiKey>`, the Context one Guard provides (`undefined` without a `context`); `QualifierOf<typeof permission>`, the Qualifier its GuardHandler receives, typed by its `qualifier` schema (`undefined` without a `qualifier`); `RequiredContextOf<typeof permission>`, the Context a Guard's GuardHandler reads from the Guards it lists, keyed like `ContextOf`; `RejectionsOf<typeof getOrder>`, every Rejection it may answer: its own, its Guards' and the two cf-loom's runtime adds.

@@ -1,10 +1,17 @@
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 
-type StandardRejectionName = 'invalidInput' | 'notFound' | 'notImplemented';
+/** The three Standard Rejections by name, as values, so the runtime resolves each. */
+export const standardRejectionNames = ['invalidInput', 'notFound', 'notImplemented'] as const;
+
+/** One of the three Standard Rejections, by name. */
+export type StandardRejectionName = (typeof standardRejectionNames)[number];
+
+/** The Standard Rejections cf-loom's runtime adds to every Endpoint, as values, so none lists them. */
+export const addedStandardRejectionNames = ['invalidInput', 'notImplemented'] as const;
 
 /** The Standard Rejections cf-loom's runtime adds to every Endpoint, so none lists them. */
-export type AddedStandardRejectionName = 'invalidInput' | 'notImplemented';
+export type AddedStandardRejectionName = (typeof addedStandardRejectionNames)[number];
 
 /** A Rejection whose code, status and message the root resolves; no Contract declares one. */
 export type StandardRejection<Name extends StandardRejectionName = StandardRejectionName> =
@@ -49,3 +56,10 @@ export type StandardRejectionDeclarations = {
 
 /** Every Standard Rejection resolved, as a Contract Package carries them for its Callers. */
 export type StandardRejections = Required<StandardRejectionDeclarations>;
+
+/** cf-loom's own code, status and message of each Standard Rejection, where no Definitions Package declares one. */
+export const standardRejectionDefaults: StandardRejections = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+};

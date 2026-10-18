@@ -1,0 +1,125 @@
+import { isGuard } from '../predicates.ts';
+import type { ObjectNode, Path, SchemaNode } from '../walker/nodes.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
+import type { LocatedEndpoint } from './located.ts';
+import { attachedGuardOf } from './references.ts';
+import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
+import { shapeKey } from './shapes.ts';
+import { listOf, textOf } from './written.ts';
+
+/** The parts of a request that travel as text, and a Success's headers with them. */
+type TextPart = 'params' | 'query' | 'headers';
+
+/** What one Endpoint or Guard declares for a header or query name. */
+type Declared = { readonly owner: string; readonly shape: string };
+
+const textPartOf: Readonly<Partial<Record<Part, TextPart>>> = {
+  'input.params': 'params',
+  'input.query': 'query',
+  'input.headers': 'headers',
+  'success.headers': 'headers',
+  'demands.headers': 'headers',
+  'demands.query': 'query',
+};
+
+const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
+
+const nouns: Readonly<Record<TextPart, string>> = {
+  params: 'A path param',
+  query: 'A query param',
+  headers: 'A header',
+};
+
+/** Every text part holds only text, judged on the walked nodes. */
+export function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
+  return nodes.slots.flatMap(partFailures);
+}
+
+/** Across an Endpoint and its Guards, one header or query name has one shape. */
+export function conflictFailures(
+  { at, endpoint }: LocatedEndpoint,
+  nodes: Nodes,
+): readonly DeclarationFailure[] {
+  const guards = [...new Set(listOf(endpoint.guards).map(attachedGuardOf).filter(isGuard))];
+  return (['headers', 'query'] as const).flatMap((part) => {
+    const own = { owner: textOf(endpoint.name), node: nodes.nodeOf(endpoint, `input.${part}`) };
+    const demanded = guards.map((guard) => ({
+      owner: textOf(guard.name),
+      node: nodes.nodeOf(guard, `demands.${part}`),
+    }));
+    return partConflicts([own, ...demanded], { at: slotAt(at, `input.${part}`), part });
+  });
+}
+
+function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
+  const part = textPartOf[slot.part];
+  if (part === undefined) {
+    return [];
+  }
+  const { at, node } = slot;
+  const name = textOf(at.at(-1));
+  if (node.type !== 'object') {
+    return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
+  }
+  if (node.nullable === true) {
+    return [failure(at, 'nullable-text', `${name} is never nullable`)];
+  }
+  return Object.entries(node.fields).flatMap(([field, { schema }]) => [
+    ...headerNameFailures(at, part, field),
+    ...fieldFailures({ at, part }, field, schema),
+  ]);
+}
+
+function headerNameFailures(at: Path, part: TextPart, name: string): readonly DeclarationFailure[] {
+  if (part !== 'headers' || name === name.toLowerCase()) {
+    return [];
+  }
+  const message = `Header names are lower-case: ${name}`;
+  return [failure([...at, 'fields', name], 'header-names', message)];
+}
+
+function fieldFailures(
+  { at, part }: { readonly at: Path; readonly part: TextPart },
+  name: string,
+  schema: SchemaNode,
+): readonly DeclarationFailure[] {
+  const fieldAt = [...at, 'fields', name];
+  const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
+  if (schema.nullable === true || items.nullable === true) {
+    return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
+  }
+  if (textTypes.includes(items.type)) {
+    return [];
+  }
+  const lists = part === 'query' ? ', or a list of those' : '';
+  const message = `${nouns[part]} travels as text: a string, number, boolean, literal or enum${lists}: ${name}`;
+  return [failure(fieldAt, 'not-text', message)];
+}
+
+function partConflicts(
+  sources: readonly { readonly owner: string; readonly node: SchemaNode | undefined }[],
+  { at, part }: { readonly at: Path; readonly part: 'headers' | 'query' },
+): readonly DeclarationFailure[] {
+  const declaredByName = new Map<string, Declared>();
+  const failures: DeclarationFailure[] = [];
+  for (const { owner, node } of sources.filter(hasObject)) {
+    for (const [name, field] of Object.entries(node.fields)) {
+      const key = part === 'headers' ? name.toLowerCase() : name;
+      const shape = shapeKey(field.schema);
+      const first = declaredByName.get(key);
+      if (first !== undefined && first.shape !== shape) {
+        const message = `${nouns[part]} has one schema across an Endpoint and its Guards: ${name} differs between ${first.owner} and ${owner}`;
+        failures.push(failure(at, 'input-conflict', message));
+      }
+      declaredByName.set(key, first ?? { owner, shape });
+    }
+  }
+  return failures;
+}
+
+function hasObject(source: {
+  readonly owner: string;
+  readonly node: SchemaNode | undefined;
+}): source is { readonly owner: string; readonly node: ObjectNode } {
+  return source.node?.type === 'object';
+}

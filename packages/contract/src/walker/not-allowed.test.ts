@@ -9,9 +9,14 @@ function walkBody(schema: core.$ZodType) {
 }
 
 function refused(construct: string, instead?: string) {
+  return refusedAt(['body'], construct, instead);
+}
+
+function refusedAt(at: readonly (string | number)[], construct: string, instead?: string) {
+  const failure = { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
   return {
-    kind: 'not-allowed',
-    failures: [{ at: ['body'], construct, ...(instead && { instead }) }],
+    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
+    defs: {},
   };
 }
 
@@ -156,10 +161,7 @@ describe('walkSchemas: the Not allowed list', () => {
     [
       'a union with a z.null() option',
       z.union([z.string(), z.null()]),
-      {
-        kind: 'not-allowed',
-        failures: [{ at: ['body', 'options', 1], construct: 'z.null()', instead: '.nullable()' }],
-      },
+      refusedAt(['body', 'options', 1], 'z.null()', '.nullable()'),
     ],
     ['z.undefined()', z.undefined(), refused('z.undefined()', '.nullable()')],
     ['z.literal(null)', z.literal(null), refused('z.literal(null)', '.nullable()')],

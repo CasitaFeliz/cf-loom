@@ -10,11 +10,15 @@ function walkBody(schema: core.$ZodType) {
 }
 
 function walkedTo(node: SchemaNode) {
-  return { kind: 'walked', nodes: [node], defs: {} };
+  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
 }
 
 function refusedAt(at: readonly (string | number)[], construct: string) {
-  return { kind: 'not-allowed', failures: [{ at, construct }] };
+  const failure = { kind: 'not-allowed', at, construct };
+  return {
+    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
+    defs: {},
+  };
 }
 
 const card = z.object({ type: z.literal('card'), last4: z.string() });
@@ -133,8 +137,11 @@ describe('walkSchemas: discriminated unions', () => {
 
     const walked = walkBody(z.discriminatedUnion('ok', [yes, quoted]));
 
-    expect(walked.kind === 'walked' && walked.nodes[0]).toMatchObject({
-      variants: { true: {}, '"true"': {} },
+    expect(walked.located[0]?.walked).toMatchObject({
+      kind: 'walked',
+      value: {
+        variants: { true: {}, '"true"': {} },
+      },
     });
   });
 

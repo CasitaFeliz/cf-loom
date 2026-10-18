@@ -50,6 +50,16 @@ describe('defineDependencies', () => {
     expect(paymentsDeps.standardRejections).toEqual(payments.standardRejections);
   });
 
+  test('a Dependency keeps the Elements its Provider exports, by identity', () => {
+    const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
+
+    const { getPayment: exportedGetPayment, refundPayment: exportedRefund } =
+      paymentsDeps.exported.endpoints;
+    expect(exportedGetPayment).toBe(getPayment);
+    expect(exportedRefund).toBe(refundPayment);
+    expect(paymentsDeps.exported.events).toEqual({ paymentSettledV1 });
+  });
+
   test('a Dependency exposes the selected Endpoints and Events by name', () => {
     const paymentsDeps = defineDependencies(payments, {
       endpoints: [payments.endpoints.getPayment],

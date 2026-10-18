@@ -115,5 +115,5 @@ export function refusedStringFormat(format: string): Refused {
 
 /** One failure, as the walk of a schema returns it. */
 export function notAllowed(at: Path, construct: Refused): Walked<never> {
-  return { kind: 'not-allowed', failures: [{ at, ...construct }] };
+  return { kind: 'not-allowed', failures: [{ kind: 'not-allowed', at, ...construct }] };
 }

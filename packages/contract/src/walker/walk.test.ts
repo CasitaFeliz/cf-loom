@@ -6,36 +6,66 @@ function noOrigin() {
   return undefined;
 }
 
+function walkedAt(at: readonly (string | number)[], value: unknown) {
+  return { at, walked: { kind: 'walked', value } };
+}
+
 describe('walkSchemas', () => {
-  test('several failures in one walk are all reported, each with its location', () => {
+  test('every location walks on its own: one that fails hides nothing of the others', () => {
     const order = z.object({ placedAt: z.date(), tags: z.array(z.string().trim()) });
+    const inputAt = ['endpoints', 'POST /orders', 'input', 'body'];
+    const successAt = ['endpoints', 'POST /orders', 'success', 'body'];
 
     const walked = walkSchemas(
       [
-        { at: ['endpoints', 'POST /orders', 'input', 'body'], schema: order },
-        { at: ['endpoints', 'POST /orders', 'success', 'body'], schema: z.any() },
+        { at: inputAt, schema: order },
+        { at: successAt, schema: z.any() },
+        { at: ['endpoints', 'GET /orders', 'success', 'body'], schema: z.array(z.uuid()) },
       ],
       noOrigin,
     );
 
     expect(walked).toEqual({
-      kind: 'not-allowed',
-      failures: [
+      located: [
         {
-          at: ['endpoints', 'POST /orders', 'input', 'body', 'fields', 'placedAt'],
-          construct: 'z.date()',
-          instead: 'z.iso.datetime()',
+          at: inputAt,
+          walked: {
+            kind: 'not-allowed',
+            failures: [
+              {
+                kind: 'not-allowed',
+                at: [...inputAt, 'fields', 'placedAt'],
+                construct: 'z.date()',
+                instead: 'z.iso.datetime()',
+              },
+              {
+                kind: 'not-allowed',
+                at: [...inputAt, 'fields', 'tags', 'items'],
+                construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()',
+              },
+            ],
+          },
         },
         {
-          at: ['endpoints', 'POST /orders', 'input', 'body', 'fields', 'tags', 'items'],
-          construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()',
+          at: successAt,
+          walked: {
+            kind: 'not-allowed',
+            failures: [
+              {
+                kind: 'not-allowed',
+                at: successAt,
+                construct: 'z.any()',
+                instead: 'z.record() or z.json()',
+              },
+            ],
+          },
         },
-        {
-          at: ['endpoints', 'POST /orders', 'success', 'body'],
-          construct: 'z.any()',
-          instead: 'z.record() or z.json()',
-        },
+        walkedAt(['endpoints', 'GET /orders', 'success', 'body'], {
+          type: 'array',
+          items: { type: 'string', format: 'uuid' },
+        }),
       ],
+      defs: {},
     });
   });
 
@@ -58,7 +88,10 @@ describe('walkSchemas', () => {
         currency: { required: true, schema: { type: 'enum', values: ['eur', 'usd'], open: false } },
       },
     };
-    expect(walked).toEqual({ kind: 'walked', nodes: [moneyNode, moneyNode], defs: {} });
+    expect(walked).toEqual({
+      located: [walkedAt(['body'], moneyNode), walkedAt(['success'], moneyNode)],
+      defs: {},
+    });
   });
 
   test('enum values, union options and allOf items are in canonical order', () => {
@@ -76,24 +109,23 @@ describe('walkSchemas', () => {
     );
 
     expect(walked).toEqual({
-      kind: 'walked',
-      nodes: [
-        { type: 'enum', values: ['paid', 'pending', 'shipped'], open: false },
-        {
+      located: [
+        walkedAt(['status'], { type: 'enum', values: ['paid', 'pending', 'shipped'], open: false }),
+        walkedAt(['reference'], {
           type: 'union',
           options: [
             { type: 'string', format: 'email' },
             { type: 'string', format: 'uuid' },
             { type: 'number', int: true },
           ],
-        },
-        {
+        }),
+        walkedAt(['code'], {
           type: 'allOf',
           items: [
             { type: 'string', max: 8 },
             { type: 'string', regex: { source: '^[A-Z]', flags: '' } },
           ],
-        },
+        }),
       ],
       defs: {},
     });

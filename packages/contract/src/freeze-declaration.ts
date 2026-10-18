@@ -10,6 +10,11 @@ export function freezeDeclaration<const Kind extends string, Fields extends obje
   return Object.freeze(declaration) as Readonly<Fields> & { readonly kind: Kind };
 }
 
+/** Whether a value came out of a `define*` of this package, from any copy of it: it carries the brand. */
+export function isDeclaration(value: unknown): value is { readonly kind: unknown } {
+  return typeof value === 'object' && value !== null && declarationBrand in value;
+}
+
 function frozenFields(fields: object): object {
   const entries = Object.entries(fields).map(([field, value]) => [field, frozenContainer(value)]);
   return Object.fromEntries(entries);

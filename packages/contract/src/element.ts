@@ -1,5 +1,11 @@
+/** The Visibilities an Element may declare, as values, so the runtime repeats the type's rule. */
+export const visibilities = ['public', 'internal', 'private'] as const;
+
 /** How far on the network an Element reaches; the route plan and the check read it. */
-export type Visibility = 'public' | 'internal' | 'private';
+export type Visibility = (typeof visibilities)[number];
+
+/** The lifecycles an Element may declare, as values, so the runtime repeats the type's rule. */
+export const lifecycles = ['active', 'deprecated', 'retired'] as const;
 
 /** Where an Element is in its life; an Element that declares none is Active. */
-export type Lifecycle = 'active' | 'deprecated' | 'retired';
+export type Lifecycle = (typeof lifecycles)[number];

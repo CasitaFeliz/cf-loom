@@ -68,7 +68,7 @@ A Definitions Package's Snapshot:
 | Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
 | A Subscription's Event | Service, then the identity, its own Service's included | `orders-service:OrderCreated@1` |
 
-- A declared path must already be canonical, or `generate` fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
+- A declared path must already be canonical, or `generate` fails: it starts with `/`, has no trailing slash (except `/` itself), literal segments match `[a-z0-9-]+`, a param is a whole segment written `:camelCase`, each name once, and there is no `//`, `.`, percent-encoding or query. At runtime a request path must match exactly.
 - A path param's name is not part of the identity; the Endpoint stores its param names separately.
 
 ## Endpoints
@@ -95,7 +95,7 @@ A Definitions Package's Snapshot:
 
 - `params` is always stored `strict` (exactly the path's params) and a `headers` object, `input` or `success`, always `open`, whatever mode the zod object was written with.
 - `guards` lists the Endpoint's Attachments in order: each Guard by name, with its Qualifier as canonical JSON, or `null` when the Guard declares no `qualifier`.
-- `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased.
+- `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased. Two declarations of one name agree on the shape (see [Headers, path and query](COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md); the `description`, `examples` and `origin` written are the first declaration's, the Endpoint's own before its Guards', in Attachment order.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
 - A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json`, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
 
@@ -125,7 +125,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-`guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README).
+`guards` names the Guards whose Context its GuardHandler reads, in declared order; `qualifier` is the schema node of its Qualifier, or `null` (see [Guards](packages/contract/README.md#guards) in the contract README). A Service's Snapshot writes the Guards its Endpoints attach, directly or through a Guard's `guards`; a listed Definitions Package's other Guards stay out, while a Definitions Package's own Snapshot writes every Guard it declares.
 
 ## Rejection codes
 
@@ -135,7 +135,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](packages/contract/README.md#rejections) in the contract README).
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. A code declared more than once has one body shape (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md); the `message`, `description`, `examples` and `origin` written are the first declaration's, in the root's order: a listed Definitions Package's, then the Guards', then the Endpoints'. A Service's Snapshot writes the codes its Endpoints answer, themselves or through the Guards they reach, and every code a Standard Rejection has had; a listed Definitions Package's other codes stay out; a Definitions Package's own Snapshot writes every code it declares. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](packages/contract/README.md#rejections) in the contract README).
 
 ## Subscriptions and Dependencies
 

@@ -4,6 +4,9 @@ export type Path = readonly (string | number)[];
 /** Where a schema was declared: `"local"`, or a Definitions Package and version with `#name`. */
 export type Origin = string;
 
+/** The annotations that are Neutral: they change nothing a Consumer relies on, so no shape compares them. */
+export const neutralAnnotations = ['description', 'examples', 'origin'] as const;
+
 /** What every node may carry besides its shape; `description`, `examples` and `origin` are Neutral. */
 export type Annotations = {
   readonly nullable?: true;
@@ -132,6 +135,7 @@ export type SchemaNode =
 
 /** A zod construct no node or check maps, where it was written, and what to use instead. */
 export type NotAllowed = {
+  readonly kind: 'not-allowed';
   readonly at: Path;
   readonly construct: string;
   readonly instead?: string;
