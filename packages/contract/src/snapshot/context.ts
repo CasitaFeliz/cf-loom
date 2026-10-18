@@ -1,13 +1,6 @@
-import type { Definitions, Guard } from '../declarations/index.ts';
-import type { ResolvedStandard, ValidatedSchemas } from '../validation/index.ts';
-import {
-  canonicalJson,
-  type ObjectNode,
-  type Origin,
-  type OriginOf,
-  type Path,
-  type SchemaNode,
-} from '../walker/index.ts';
+import type { Definitions } from '../declarations/index.ts';
+import type { Part, ResolvedStandard } from '../validation/index.ts';
+import type { ObjectNode, Origin, OriginOf, SchemaNode } from '../walker/index.ts';
 
 /**
  * A Definitions Package a Contract lists, as installed where its Snapshot is built: the package
@@ -32,9 +25,8 @@ export type SnapshotContext = {
 };
 
 /** What every entry of a Snapshot reads besides its own declaration. */
-export type Sources = {
-  readonly nodeAt: (at: Path) => SchemaNode | null;
-  readonly guardAt: (guard: Guard) => Path;
+export type SnapshotSources = {
+  readonly nodeOf: (declaration: unknown, part: Part) => SchemaNode | null;
   readonly standards: readonly ResolvedStandard[];
   readonly packages: readonly ResolvedDefinitions[];
 };
@@ -62,12 +54,6 @@ export function declaredOriginOf(
 ): Origin {
   const listing = packages.find(({ definitions }) => lists(definitions));
   return listing === undefined ? 'local' : packageOriginOf(listing);
-}
-
-/** Finds a walked node by where it sits, as the validation located it; `null` where none was declared. */
-export function nodeLookupOf(schemas: ValidatedSchemas): (at: Path) => SchemaNode | null {
-  const nodeByAt = new Map(schemas.nodes.map(({ at, node }) => [canonicalJson(at), node]));
-  return (at) => nodeByAt.get(canonicalJson(at)) ?? null;
 }
 
 /** A text part's node in the mode the Snapshot stores it, whatever mode the zod object was written with. */

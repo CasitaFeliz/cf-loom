@@ -1,21 +1,20 @@
 import type { Lifecycle } from '../declarations/index.ts';
 
-/** What decides an Endpoint's `deprecatedAt`: its identity, its lifecycle and the stamping inputs. */
-type Deprecated = {
-  readonly identity: string;
-  readonly lifecycle: Lifecycle;
-  readonly committed: unknown;
-  readonly now: number;
-};
+/** What `deprecatedAt` is stamped from: the committed Snapshot's content and the clock. */
+export type Stamping = { readonly committed: unknown; readonly now: number };
+
+/** An Endpoint as its `deprecatedAt` is decided: by its identity and its lifecycle. */
+type Deprecated = { readonly identity: string; readonly lifecycle: Lifecycle };
 
 /**
  * A Deprecated Endpoint's `deprecatedAt`: the committed Snapshot's when it is a UTC instant to
  * the second, else the clock's, so the `Deprecation` header names the instant it was first seen
  * Deprecated and an edited stamp shows up as a change.
  */
-export function deprecationOf({ identity, lifecycle, committed, now }: Deprecated): {
-  readonly deprecatedAt?: string;
-} {
+export function deprecationOf(
+  { identity, lifecycle }: Deprecated,
+  { committed, now }: Stamping,
+): { readonly deprecatedAt?: string } {
   if (lifecycle !== 'deprecated') {
     return {};
   }

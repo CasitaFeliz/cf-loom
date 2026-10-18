@@ -1,4 +1,4 @@
-import type { Attachment, Guard } from '../declarations/index.ts';
+import type { Attachment, Endpoint, Guard } from '../declarations/index.ts';
 import { isGuard, isRejection } from '../declarations/index.ts';
 import type {
   LocatedCode,
@@ -17,6 +17,11 @@ type Sources = {
   readonly endpoints: readonly LocatedEndpoint[];
 };
 
+/** The Guards an Endpoint attaches, each once, in Attachment order; what names no Guard is left out. */
+export function attachedGuardsOf(endpoint: Endpoint): readonly Guard[] {
+  return [...new Set(listOf(endpoint.guards).map(attachedGuardOf).filter(isGuard))];
+}
+
 /** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
 export function attachedGuardOf(attachment: Attachment): Guard | undefined {
   if (isGuard(attachment)) {
@@ -34,11 +39,11 @@ export function attachedGuardOf(attachment: Attachment): Guard | undefined {
  * Definitions root.
  */
 export function guardsOf({ root, allPackages, endpoints }: Sources): readonly LocatedGuard[] {
-  const attached = endpoints.flatMap((located) => listOf(located.endpoint.guards));
+  const attached = endpoints.flatMap((located) => attachedGuardsOf(located.endpoint));
   const listed = allPackages.flatMap((located) => listOf(located.definitions.guards));
   const gathered: LocatedGuard[] = [];
   const seen = new Set<Guard>();
-  for (const guard of attached.map(attachedGuardOf).filter(isGuard)) {
+  for (const guard of attached) {
     gatherGuard({ guard, reached: true }, seen, gathered);
   }
   for (const guard of listed) {

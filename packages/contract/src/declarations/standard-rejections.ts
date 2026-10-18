@@ -79,8 +79,8 @@ const issueCodes = [
 ] as const;
 
 /**
- * The body of the invalid-input Rejection, cf-loom's whatever a Definitions Package declares, so
- * every Caller reads the issues one way; an issue never carries the received value.
+ * The body of the invalid-input Rejection: always cf-loom's, whatever a Definitions Package
+ * declares, so every Caller reads the issues one way. An issue never carries the received value.
  */
 export const invalidInputBody = z.object({
   issues: z.array(

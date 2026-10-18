@@ -5,59 +5,50 @@ import {
   type Guard,
 } from '../declarations/index.ts';
 import {
-  attachedGuardOf,
+  attachedGuardsOf,
   identityOf,
   type LocatedEndpoint,
   paramNamesOf,
-  slotAt,
 } from '../validation/index.ts';
 import { codeOfStandard, sortedCodes } from './codes.ts';
-import { inMode, objectOf, type Sources } from './context.ts';
-import { deprecationOf } from './deprecation.ts';
+import { inMode, objectOf, type SnapshotSources } from './context.ts';
+import { deprecationOf, type Stamping } from './deprecation.ts';
 import { inputOf } from './input.ts';
 import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './types.ts';
 
 /** Every Endpoint by its identity, its Input merged and its codes resolved. */
-export function endpointsOf(
+export function endpointSnapshotsOf(
   endpoints: readonly LocatedEndpoint[],
-  sources: Sources,
-  stamping: { readonly committed: unknown; readonly now: number },
+  sources: SnapshotSources,
+  stamping: Stamping,
 ): Readonly<Record<string, EndpointSnapshot>> {
-  const entries = endpoints.map((located) => {
-    const identity = identityOf(located.endpoint.method, located.endpoint.path);
-    const lifecycle = located.endpoint.lifecycle ?? 'active';
-    const deprecation = deprecationOf({ identity, lifecycle, ...stamping });
-    return [identity, { ...endpointOf(located, sources), lifecycle, ...deprecation }] as const;
+  const entries = endpoints.map(({ endpoint, group }) => {
+    const identity = identityOf(endpoint.method, endpoint.path);
+    const lifecycle = endpoint.lifecycle ?? 'active';
+    const deprecation = deprecationOf({ identity, lifecycle }, stamping);
+    const snapshot = { ...endpointOf(endpoint, group.name, sources), lifecycle, ...deprecation };
+    return [identity, snapshot] as const;
   });
   return Object.fromEntries(entries);
 }
 
 function endpointOf(
-  located: LocatedEndpoint,
-  sources: Sources,
+  endpoint: Endpoint,
+  group: string,
+  sources: SnapshotSources,
 ): Omit<EndpointSnapshot, 'lifecycle' | 'deprecatedAt'> {
-  const { endpoint, group } = located;
-  const guards = guardsOf(endpoint);
+  const guards = attachedGuardsOf(endpoint);
   return {
     name: endpoint.name,
-    group: group.name,
+    group,
     visibility: endpoint.visibility,
     description: endpoint.description,
     params: paramNamesOf(endpoint.path),
     guards: (endpoint.guards ?? []).map(attachmentOf),
-    input: inputOf(located, guards, sources),
-    success: successOf(located, sources),
+    input: inputOf(endpoint, guards, sources),
+    success: successOf(endpoint, sources),
     rejections: rejectionsOf(endpoint, guards, sources),
   };
-}
-
-/** The Guards an Endpoint attaches, in Attachment order. */
-function guardsOf(endpoint: Endpoint): readonly Guard[] {
-  return (endpoint.guards ?? []).map(attachedGuardOf).filter(isAttached);
-}
-
-function isAttached(guard: Guard | undefined): guard is Guard {
-  return guard !== undefined;
 }
 
 function attachmentOf(attachment: Attachment): AttachmentSnapshot {
@@ -67,11 +58,11 @@ function attachmentOf(attachment: Attachment): AttachmentSnapshot {
   return { guard: attachment.name, qualifier: null };
 }
 
-function successOf({ at, endpoint }: LocatedEndpoint, { nodeAt }: Sources): SuccessSnapshot {
+function successOf(endpoint: Endpoint, { nodeOf }: SnapshotSources): SuccessSnapshot {
   return {
     status: endpoint.success.status,
-    headers: inMode(objectOf(nodeAt(slotAt(at, 'success.headers'))), 'open'),
-    body: nodeAt(slotAt(at, 'success.body')),
+    headers: inMode(objectOf(nodeOf(endpoint, 'success.headers')), 'open'),
+    body: nodeOf(endpoint, 'success.body'),
   };
 }
 
@@ -79,7 +70,7 @@ function successOf({ at, endpoint }: LocatedEndpoint, { nodeAt }: Sources): Succ
 function rejectionsOf(
   endpoint: Endpoint,
   guards: readonly Guard[],
-  { standards }: Sources,
+  { standards }: SnapshotSources,
 ): readonly string[] {
   const own = (endpoint.rejections ?? []).map((rejection) =>
     rejection.kind === 'standard-rejection'

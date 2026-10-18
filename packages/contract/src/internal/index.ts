@@ -1,5 +1,4 @@
 export type { Kind } from '../declarations/index.ts';
-export { isDefinitions } from '../declarations/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
   ApplicationSnapshot,
@@ -21,7 +20,6 @@ export type {
   StandardRejectionsSnapshot,
   SubscriptionSnapshot,
   SuccessSnapshot,
-  ValidContract,
 } from '../snapshot/index.ts';
 export { canonicalTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
 export type {
@@ -42,8 +40,9 @@ export type {
   ValidatedDeclarations,
   ValidatedGuard,
   ValidatedSchemas,
+  ValidContract,
 } from '../validation/index.ts';
-export { validateContract } from '../validation/index.ts';
+export { listedDefinitionsOf, validateContract } from '../validation/index.ts';
 export type {
   Field,
   LocatedSchema,

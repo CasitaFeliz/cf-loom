@@ -1,19 +1,11 @@
 import type { Contract, Definitions } from '../declarations/index.ts';
-import type { ValidatedContract } from '../validation/index.ts';
-import { codesOf, standardRejectionsOf } from './codes.ts';
-import { nodeLookupOf, type SnapshotContext, type Sources } from './context.ts';
-import { dependenciesOf } from './dependencies.ts';
-import { endpointsOf } from './endpoints.ts';
-import { guardsOf } from './guards.ts';
-import type {
-  ApplicationSnapshot,
-  DefinitionsSnapshot,
-  ServiceSnapshot,
-  Snapshot,
-} from './types.ts';
-
-/** A root the validation found valid: the only input a Snapshot is built from. */
-export type ValidContract = Extract<ValidatedContract, { readonly kind: 'valid' }>;
+import type { ValidContract } from '../validation/index.ts';
+import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
+import type { SnapshotContext, SnapshotSources } from './context.ts';
+import { dependencySnapshotsOf } from './dependencies.ts';
+import { endpointSnapshotsOf } from './endpoints.ts';
+import { guardSnapshotsOf } from './guards.ts';
+import type { DefinitionsSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
 
 /**
  * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
@@ -23,25 +15,27 @@ export function snapshotOf(validated: ValidContract, context: SnapshotContext): 
   const { root } = validated.declarations;
   switch (root.kind) {
     case 'contract':
-      return serviceSnapshotOf(validated, { root, context });
+      return serviceSnapshotOf(validated, root, context);
     case 'application':
       return {
         format: 1,
         kind: 'application',
         name: root.name,
         generator: context.generator,
-        dependencies: dependenciesOf(validated.declarations.dependencies),
-      } satisfies ApplicationSnapshot;
+        dependencies: dependencySnapshotsOf(validated.declarations.dependencies),
+      };
     case 'definitions':
-      return definitionsSnapshotOf(validated, { root, context });
+      return definitionsSnapshotOf(validated, root, context);
   }
 }
 
 function serviceSnapshotOf(
-  { schemas, declarations }: ValidContract,
-  { root, context }: { readonly root: Contract; readonly context: SnapshotContext },
+  validated: ValidContract,
+  root: Contract,
+  context: SnapshotContext,
 ): ServiceSnapshot {
-  const sources = sourcesOf({ schemas, declarations }, context);
+  const { schemas, declarations } = validated;
+  const sources = sourcesOf(validated, context);
   const standardRejections = standardRejectionsOf(sources);
   const definitions = context.packages.map(({ packageName, version }) => [packageName, version]);
   return {
@@ -52,25 +46,27 @@ function serviceSnapshotOf(
     definitions: Object.fromEntries(definitions),
     standardRejections,
     defs: schemas.defs,
-    endpoints: endpointsOf(declarations.endpoints, sources, context),
+    endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
     events: {},
     commands: {},
-    guards: guardsOf(declarations.guards, sources),
-    codes: codesOf(declarations.codes, standardRejections, sources),
+    guards: guardSnapshotsOf(declarations.guards, sources),
+    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
     subscriptions: {},
-    dependencies: dependenciesOf(declarations.dependencies),
+    dependencies: dependencySnapshotsOf(declarations.dependencies),
   };
 }
 
 function definitionsSnapshotOf(
-  { schemas, declarations }: ValidContract,
-  { root, context }: { readonly root: Definitions; readonly context: SnapshotContext },
+  validated: ValidContract,
+  root: Definitions,
+  context: SnapshotContext,
 ): DefinitionsSnapshot {
-  const sources = sourcesOf({ schemas, declarations }, context);
+  const { schemas, declarations } = validated;
+  const sources = sourcesOf(validated, context);
   const standardRejections = standardRejectionsOf(sources);
-  const shared = Object.keys(root.schemas ?? {}).map((name) => [
+  const shared = Object.entries(root.schemas ?? {}).map(([name, schema]) => [
     name,
-    sources.nodeAt(['schemas', name]),
+    sources.nodeOf(schema, 'schema'),
   ]);
   return {
     format: 1,
@@ -80,27 +76,17 @@ function definitionsSnapshotOf(
     standardRejections,
     defs: schemas.defs,
     schemas: Object.fromEntries(shared),
-    guards: guardsOf(declarations.guards, sources),
-    codes: codesOf(declarations.codes, standardRejections, sources),
+    guards: guardSnapshotsOf(declarations.guards, sources),
+    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
   };
 }
 
 function sourcesOf(
-  { schemas, declarations }: Omit<ValidContract, 'kind'>,
+  { schemas, declarations }: ValidContract,
   context: SnapshotContext,
-): Sources {
-  const atByGuard = new Map(declarations.guards.map(({ at, guard }) => [guard, at]));
+): SnapshotSources {
   return {
-    nodeAt: nodeLookupOf(schemas),
-    guardAt: (guard) => {
-      const at = atByGuard.get(guard);
-      if (at === undefined) {
-        throw new Error(
-          `A valid root gathers every Guard it attaches: ${guard.name} is missing, a bug.`,
-        );
-      }
-      return at;
-    },
+    nodeOf: (declaration, part) => schemas.nodeOf(declaration, part) ?? null,
     standards: declarations.standardRejections,
     packages: context.packages,
   };

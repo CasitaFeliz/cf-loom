@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { isDefinitions, type ResolvedDefinitions } from '@casitafeliz/loom-contract/internal';
+import { listedDefinitionsOf, type ResolvedDefinitions } from '@casitafeliz/loom-contract/internal';
 
 /** The Definitions Packages a root lists as installed, or the first that is not. */
 export type ResolvedPackages =
@@ -25,15 +25,6 @@ export function resolvePackages(
     packages.push({ definitions, packageName, version });
   }
   return { kind: 'resolved', packages };
-}
-
-/** The Definitions Packages a Contract lists; what else sits there is the validation's to report. */
-function listedDefinitionsOf(root: unknown) {
-  if (typeof root !== 'object' || root === null || !('definitions' in root)) {
-    return [];
-  }
-  const listed: unknown = root.definitions;
-  return Array.isArray(listed) ? listed.filter(isDefinitions) : [];
 }
 
 /** The version of a package as Node resolves it from `directory`: the nearest `node_modules` holding it. */

@@ -732,6 +732,9 @@ describe('validateContract: the README’s examples', () => {
     const first = validateContract(contract, noOrigin);
     const second = validateContract(contract, noOrigin);
 
-    expect(second).toEqual(first);
+    const lookup = { nodeOf: expect.any(Function) };
+    const expected =
+      first.kind === 'valid' ? { ...first, schemas: { ...first.schemas, ...lookup } } : first;
+    expect(second).toEqual(expected);
   });
 });

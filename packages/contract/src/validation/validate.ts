@@ -16,15 +16,20 @@ import {
   locatedSchemasOf,
   type Nodes,
   nodesOf,
+  type Part,
   schemaSlotsOf,
 } from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
-/** The walked schemas of a valid root, each where its declaration sits, and their `defs`. */
+/**
+ * The walked schemas of a valid root, each where its declaration sits, and their `defs`; `nodeOf`
+ * finds the node of a declaration's part, a shared schema being its own declaration.
+ */
 export type ValidatedSchemas = {
   readonly nodes: readonly LocatedNode[];
+  readonly nodeOf: (declaration: unknown, part: Part) => SchemaNode | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
@@ -39,6 +44,9 @@ export type ValidatedContract =
       readonly declarations: ValidatedDeclarations;
     }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
+
+/** A root the validation found valid: the only input a Snapshot is built from. */
+export type ValidContract = Extract<ValidatedContract, { readonly kind: 'valid' }>;
 
 /**
  * Checks every rule `generate` enforces on a root's declarations and walks every schema of it
@@ -66,7 +74,11 @@ export function validateContract(root: unknown, originOf: OriginOf): ValidatedCo
   const written = nodes.slots.filter((slot) => slot.role === 'snapshot');
   return {
     kind: 'valid',
-    schemas: { nodes: written.map(({ at, node }) => ({ at, node })), defs: nodes.defs },
+    schemas: {
+      nodes: written.map(({ at, node }) => ({ at, node })),
+      nodeOf: nodes.nodeOf,
+      defs: nodes.defs,
+    },
     declarations: validatedDeclarationsOf(declarations),
   };
 }

@@ -1,11 +1,10 @@
-import { isGuard } from '../declarations/index.ts';
 import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
-import { attachedGuardOf } from './references.ts';
+import { attachedGuardsOf } from './references.ts';
 import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
-import { listOf, textOf } from './written.ts';
+import { textOf } from './written.ts';
 
 /** The parts of a request that travel as text, and a Success's headers with them. */
 type TextPart = 'params' | 'query' | 'headers';
@@ -40,7 +39,7 @@ export function conflictFailures(
   { at, endpoint }: LocatedEndpoint,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
-  const guards = [...new Set(listOf(endpoint.guards).map(attachedGuardOf).filter(isGuard))];
+  const guards = attachedGuardsOf(endpoint);
   return (['headers', 'query'] as const).flatMap((part) => {
     const own = { owner: textOf(endpoint.name), node: nodes.nodeOf(endpoint, `input.${part}`) };
     const demanded = guards.map((guard) => ({

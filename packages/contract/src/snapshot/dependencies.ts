@@ -6,7 +6,7 @@ import type { DependencySnapshot } from './types.ts';
  * The Dependencies by Provider, each with the version it was declared against, its Endpoints by
  * identity with their names and its Events by identity, sorted since their order means nothing.
  */
-export function dependenciesOf(
+export function dependencySnapshotsOf(
   located: readonly LocatedDependencies[],
 ): Readonly<Record<string, DependencySnapshot>> {
   const entries = located.map(({ dependencies }) => {

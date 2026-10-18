@@ -41,19 +41,8 @@ export function byCanonicalJson(left: unknown, right: unknown): number {
  * A value as a file holds it: canonical JSON indented by two spaces, one member or item per line,
  * so a change to one value is a change to one line of a review's diff.
  */
-export function indentedCanonicalJson(value: unknown, indent = ''): string {
-  const inner = `${indent}  `;
-  if (Array.isArray(value)) {
-    const items = value.map((item) => `${inner}${indentedCanonicalJson(item, inner)}`);
-    return items.length === 0 ? '[]' : `[\n${items.join(',\n')}\n${indent}]`;
-  }
-  if (typeof value === 'object' && value !== null) {
-    const members = membersOf(value).map(
-      ([key, member]) => `${inner}${JSON.stringify(key)}: ${indentedCanonicalJson(member, inner)}`,
-    );
-    return members.length === 0 ? '{}' : `{\n${members.join(',\n')}\n${indent}}`;
-  }
-  return JSON.stringify(value);
+export function indentedCanonicalJson(value: unknown): string {
+  return indentedAt(value, '');
 }
 
 /** Orders text by code point, as the Snapshot orders keys and the arrays whose order means nothing. */
@@ -89,4 +78,19 @@ function hasValue(entry: [string, unknown]): boolean {
 
 function codePointOf(character: string): number {
   return character.codePointAt(0) ?? 0;
+}
+
+function indentedAt(value: unknown, indent: string): string {
+  const inner = `${indent}  `;
+  if (Array.isArray(value)) {
+    const items = value.map((item) => `${inner}${indentedAt(item, inner)}`);
+    return items.length === 0 ? '[]' : `[\n${items.join(',\n')}\n${indent}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const members = membersOf(value).map(
+      ([key, member]) => `${inner}${JSON.stringify(key)}: ${indentedAt(member, inner)}`,
+    );
+    return members.length === 0 ? '{}' : `{\n${members.join(',\n')}\n${indent}}`;
+  }
+  return JSON.stringify(value);
 }

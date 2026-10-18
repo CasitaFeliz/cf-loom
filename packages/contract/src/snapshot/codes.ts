@@ -3,9 +3,9 @@ import {
   type StandardRejectionName,
   standardRejectionNames,
 } from '../declarations/index.ts';
-import { type ResolvedStandard, slotAt, type ValidatedCode } from '../validation/index.ts';
+import type { ResolvedStandard, ValidatedCode } from '../validation/index.ts';
 import { byCodePoint, type Origin, type SchemaNode, walkSchemas } from '../walker/index.ts';
-import { declaredOriginOf, type ResolvedDefinitions, type Sources } from './context.ts';
+import { declaredOriginOf, type ResolvedDefinitions, type SnapshotSources } from './context.ts';
 import type {
   CodeSnapshot,
   StandardRejectionSnapshot,
@@ -26,7 +26,10 @@ export function codeOfStandard(
 }
 
 /** Each Standard Rejection resolved with its origin; only the invalid-input one has a body. */
-export function standardRejectionsOf({ standards, packages }: Sources): StandardRejectionsSnapshot {
+export function standardRejectionsOf({
+  standards,
+  packages,
+}: SnapshotSources): StandardRejectionsSnapshot {
   const entries = standardRejectionNames.map(
     (name) => [name, standardRejectionOf(standardNamed(standards, name), packages)] as const,
   );
@@ -37,10 +40,10 @@ export function standardRejectionsOf({ standards, packages }: Sources): Standard
  * The codes a root reaches with their first declaration, then every Standard Rejection's code;
  * none is removed, since only the Baseline knows a removed code.
  */
-export function codesOf(
+export function codeSnapshotsOf(
   codes: readonly ValidatedCode[],
   standardRejections: StandardRejectionsSnapshot,
-  sources: Sources,
+  sources: SnapshotSources,
 ): Readonly<Record<string, CodeSnapshot>> {
   const declared = codes.filter(({ reached }) => reached).map((code) => codeOf(code, sources));
   const standard = Object.values(standardRejections).map(
@@ -62,14 +65,14 @@ function standardNamed(
 }
 
 function codeOf(
-  { code, at, rejection }: ValidatedCode,
-  { nodeAt, packages }: Sources,
+  { code, rejection }: ValidatedCode,
+  { nodeOf, packages }: SnapshotSources,
 ): readonly [string, CodeSnapshot] {
   const origin = declaredOriginOf(packages, (definitions) =>
     (definitions.rejections ?? []).includes(rejection),
   );
   const { status, message } = rejection;
-  return [code, { origin, status, message, body: nodeAt(slotAt(at, 'body')), removed: false }];
+  return [code, { origin, status, message, body: nodeOf(rejection, 'body'), removed: false }];
 }
 
 function standardRejectionOf(

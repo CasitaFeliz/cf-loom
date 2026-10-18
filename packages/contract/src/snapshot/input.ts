@@ -1,7 +1,6 @@
-import type { Guard } from '../declarations/index.ts';
-import { type LocatedEndpoint, slotAt } from '../validation/index.ts';
+import type { Endpoint, Guard } from '../declarations/index.ts';
 import type { Field, ObjectNode } from '../walker/index.ts';
-import { inMode, objectOf, type Sources } from './context.ts';
+import { inMode, objectOf, type SnapshotSources } from './context.ts';
 import type { InputSnapshot } from './types.ts';
 
 /**
@@ -9,20 +8,19 @@ import type { InputSnapshot } from './types.ts';
  * attached Guard's demands, since the Caller sends them all on one request.
  */
 export function inputOf(
-  { at }: LocatedEndpoint,
+  endpoint: Endpoint,
   guards: readonly Guard[],
-  sources: Sources,
+  { nodeOf }: SnapshotSources,
 ): InputSnapshot {
-  const { nodeAt, guardAt } = sources;
-  const own = (part: 'input.query' | 'input.headers') => objectOf(nodeAt(slotAt(at, part)));
+  const own = (part: 'input.query' | 'input.headers') => objectOf(nodeOf(endpoint, part));
   const demanded = (part: 'demands.query' | 'demands.headers') =>
-    guards.map((guard) => objectOf(nodeAt(slotAt(guardAt(guard), part))));
+    guards.map((guard) => objectOf(nodeOf(guard, part)));
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
-    params: inMode(objectOf(nodeAt(slotAt(at, 'input.params'))), 'strict'),
+    params: inMode(objectOf(nodeOf(endpoint, 'input.params')), 'strict'),
     query: mergedOf([own('input.query'), ...demanded('demands.query')]),
     headers: inMode(headers, 'open'),
-    body: nodeAt(slotAt(at, 'input.body')),
+    body: nodeOf(endpoint, 'input.body'),
   };
 }
 
