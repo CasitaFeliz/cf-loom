@@ -93,6 +93,49 @@ describe('validateContract: a Service’s Dependencies', () => {
     );
   });
 
+  test('a Dependency on a Private Endpoint fails, even one the Provider exported', () => {
+    const healthCheck = defineEndpoint({
+      name: 'healthCheck',
+      method: 'GET',
+      path: '/health',
+      visibility: 'private',
+      description: 'Whether the Service is up',
+      success: { status: 204 },
+    });
+    const provider = { ...payments, endpoints: { healthCheck } } as unknown as ContractPackage;
+    const selection = { endpoints: [healthCheck] } as unknown as AnySelection;
+    const paymentsDeps = defineDependencies(provider, selection);
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'endpoints', 'healthCheck'],
+        'dependency-selection',
+        'A Dependency selects Elements its Provider exports: healthCheck is private',
+      ),
+    );
+  });
+
+  test('a Dependency on a Private Event fails, even one the Provider exported', () => {
+    const privateEvent = { ...paymentSettledV1, visibility: 'private' };
+    const provider = {
+      ...payments,
+      events: { paymentSettledV1: privateEvent },
+    } as unknown as ContractPackage;
+    const paymentsDeps = defineDependencies(provider, {
+      events: [privateEvent],
+    } as unknown as AnySelection);
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'events', 'paymentSettledV1'],
+        'dependency-selection',
+        'A Dependency selects Elements its Provider exports: paymentSettledV1 is private',
+      ),
+    );
+  });
+
   test('a Dependency on something that is not an Endpoint fails', () => {
     const selection = { endpoints: [{ name: 'getPayment' }] } as unknown as AnySelection;
     const paymentsDeps = defineDependencies(payments, selection);

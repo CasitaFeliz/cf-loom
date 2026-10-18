@@ -57,8 +57,11 @@ export function isDependencies(value: unknown): value is Dependencies {
  * Whether a value is an Event as a Contract Package exports it. A kind check until `defineEvent`
  * brands Events (milestone 2): a Contract Package's Events are plain objects for now.
  */
-export function isEvent(
-  value: unknown,
-): value is { readonly kind: 'event'; readonly name: unknown; readonly version: unknown } {
+export function isEvent(value: unknown): value is {
+  readonly kind: 'event';
+  readonly name: unknown;
+  readonly version: unknown;
+  readonly visibility: unknown;
+} {
   return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'event';
 }

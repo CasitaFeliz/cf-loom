@@ -8,7 +8,10 @@ const selection = 'A Dependency selects Elements its Provider exports';
 /** An Element a Dependency selected, by its name in code, and where it sits. */
 type Selected = { readonly at: Path; readonly name: string; readonly element: unknown };
 
-/** A Service reaches the Elements its Provider exports; an Application, outside the network, Public Endpoints only. */
+/**
+ * A Service reaches the Elements its Provider exports, and never a Private one; an Application,
+ * outside the network, Public Endpoints only.
+ */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, dependencies } = declarations;
   return dependencies.flatMap((located) => [
@@ -41,6 +44,9 @@ function endpointFailures(
   if (!isEndpoint(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Endpoint`)];
   }
+  if (element.visibility === 'private') {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
+  }
   const exported: object = dependencies.exported?.endpoints ?? {};
   if (!Object.values(exported).includes(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
@@ -69,6 +75,9 @@ function eventFailures(
   }
   if (!isEvent(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
+  }
+  if (element.visibility === 'private') {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
   const exported: object = dependencies.exported?.events ?? {};
   const isExported = Object.values(exported).some(
