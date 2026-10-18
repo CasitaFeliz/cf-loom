@@ -169,4 +169,22 @@ describe('walkSchemas: discriminated unions', () => {
       refusedAt(['body', 'variants', 1], 'a discriminated union as a variant of another'),
     );
   });
+
+  test.each([
+    [
+      'an intersection',
+      z.intersection(z.object({ type: z.literal('wire') }), z.object({ iban: z.string() })),
+    ],
+    [
+      'a union',
+      z.union([z.object({ type: z.literal('wire') }), z.object({ type: z.literal('sepa') })]),
+    ],
+    ['a nullable object', z.object({ type: z.literal('wire') }).nullable()],
+  ])('%s as a variant fails, as zod rejects it', (_name, variant) => {
+    const variants = [card, variant] as unknown as [typeof card];
+
+    expect(walkBody(z.discriminatedUnion('type', variants))).toEqual(
+      refusedAt(['body', 'variants', 1], 'a discriminated union variant that is not an object'),
+    );
+  });
 });

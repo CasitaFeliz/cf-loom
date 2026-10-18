@@ -31,7 +31,7 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
     return { kind: 'not-allowed', failures: failuresOf([key, value]) };
   }
   if (key.value.nullable === true) {
-    return notAllowed(at, refused.recordKey);
+    return notAllowed(at, refused.nullableRecordKey);
   }
   if (key.value.type === 'string') {
     return walked({ type: 'record', key: key.value, value: value.value });

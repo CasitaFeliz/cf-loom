@@ -12,7 +12,7 @@ import type {
   SchemaNode,
   TaggedNode,
 } from './nodes.ts';
-import { notAllowed, refused } from './not-allowed.ts';
+import { notAllowed, type Refused, refused } from './not-allowed.ts';
 import { allWalked, type Walked, type Walker, walked } from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` returned this very schema. */
@@ -46,6 +46,10 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
+      const refusal = variantRefusalOf(option);
+      if (refusal !== undefined) {
+        return notAllowed(variantAt, refusal);
+      }
       const values = option._zod.propValues?.[def.discriminator];
       return taggedVariant(walker.schema(option, variantAt), values, variantAt);
     }),
@@ -78,17 +82,29 @@ function taggedVariant(
     return variant;
   }
   const node = variant.value;
-  if (node.type === 'tagged') {
-    return notAllowed(at, refused.nestedDiscriminatedUnion);
+  if (!isTaggable(node)) {
+    return notAllowed(at, refused.objectlessVariant);
   }
   const literals = [...(values ?? [])];
-  if (!isTaggable(node) || literals.length === 0 || !literals.every(isJsonPrimitive)) {
+  if (literals.length === 0 || !literals.every(isJsonPrimitive)) {
     return notAllowed(at, refused.unliteralDiscriminator);
   }
   if (literals.length > 1) {
     return notAllowed(at, refused.severalDiscriminatorValues);
   }
   return walked([canonicalJson(literals[0]), node]);
+}
+
+/** A variant zod itself takes only as an object, so a discriminated union in its place is named. */
+function variantRefusalOf(option: core.$ZodType): Refused | undefined {
+  const def = option._zod.def;
+  if (def.type === 'lazy') {
+    return variantRefusalOf((option as core.$ZodLazy)._zod.innerType);
+  }
+  if (def.type === 'object') {
+    return undefined;
+  }
+  return 'discriminator' in def ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
 }
 
 function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {

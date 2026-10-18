@@ -152,10 +152,10 @@ function numberConstraint(check: CheckDef, at: Path): Constraint<NumberNode> {
 
 /** The constraint a key sets: an exclusive bound is the same lower or upper bound. */
 function slotOf(key: string): string {
-  if (key === 'exclusiveMin') {
-    return 'min';
+  if (key === 'min' || key === 'exclusiveMin') {
+    return 'a lower bound';
   }
-  return key === 'exclusiveMax' ? 'max' : key;
+  return key === 'max' || key === 'exclusiveMax' ? 'an upper bound' : key;
 }
 
 function isNonFinite(value: unknown): boolean {

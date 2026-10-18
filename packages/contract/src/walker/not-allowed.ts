@@ -27,6 +27,7 @@ export const refused = {
   any: { construct: 'z.any()', instead: 'z.record() or z.json()' },
   looseObject: { construct: 'z.looseObject() or .passthrough()', instead: dynamicKeysInstead },
   catchall: { construct: '.catchall()', instead: dynamicKeysInstead },
+  nullableRecordKey: { construct: 'a nullable z.record() key' },
   looseRecord: { construct: 'z.looseRecord()' },
   recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
   mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
@@ -57,6 +58,7 @@ export const refused = {
   unliteralDiscriminator: {
     construct: 'a discriminated union variant whose discriminator is not a literal',
   },
+  objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
   strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
   differingIntersection: {

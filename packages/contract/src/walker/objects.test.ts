@@ -170,7 +170,7 @@ describe('walkSchemas: records', () => {
     const keyTypedAsString = key as unknown as z.ZodString;
 
     expect(walkBody(z.record(keyTypedAsString, z.number()))).toEqual(
-      refusedAt(['body'], 'a z.record() key that is not a string, an enum or a literal'),
+      refusedAt(['body'], 'a nullable z.record() key'),
     );
   });
 
