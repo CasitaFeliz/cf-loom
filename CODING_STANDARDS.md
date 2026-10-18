@@ -288,7 +288,8 @@ The GritQL plugins in `lint/` add, as errors: a `flatMap` whose callback returns
 and `reduceRight` (C12), a single-letter name outside a lambda of one expression, an import or a `catch` (C14), and a
 `boolean` parameter, by type or by default, of an exported function or arrow function (C17). `scripts/check-tsdoc.ts`
 fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run
-it.
+it. `scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout);
+`pnpm check` and CI run it.
 
 The rest stays judgment, and C27 is where it is exercised: the vague words of C14, every name of C15, a boolean
 parameter of a function that is not exported or is exported through an `export { … }` list (C17), and whether a doc
