@@ -1,4 +1,1 @@
-export type {
-  ContractDirectory,
-  ContractDirectoryListing,
-} from '../contract-directory/index.ts';
+export type { ContractDirectory } from '../contract-directory/index.ts';

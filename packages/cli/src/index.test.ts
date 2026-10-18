@@ -4,7 +4,7 @@ import { type ApprovalSource, defineConfig } from './index.ts';
 
 /** A Contract directory as the README's example builds one, standing in for `github()`. */
 function github(_options: { readonly org: string }): ContractDirectory {
-  return { list: async () => ({ kind: 'listed', packages: [] }) };
+  return { kind: 'contract-directory' };
 }
 
 const myApprovalSource: ApprovalSource = {
