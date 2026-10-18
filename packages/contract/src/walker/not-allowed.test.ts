@@ -80,6 +80,8 @@ describe('walkSchemas: the Not allowed list', () => {
       z.number().multipleOf(2).multipleOf(3),
       'two checks that set multipleOf',
     ],
+    ['.positive().nonnegative()', z.number().positive().nonnegative(), 'two checks that set min'],
+    ['.max() and .lt()', z.number().max(5).lt(10), 'two checks that set max'],
     ['two regexes', z.string().regex(/a/).regex(/b/), 'two checks that set regex'],
     ['two formats', z.string().email().uuid(), 'two checks that set format'],
   ])('%s fails', (_name, schema, construct) => {

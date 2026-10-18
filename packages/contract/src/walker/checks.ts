@@ -1,4 +1,4 @@
-import type * as core from 'zod/v4/core';
+import { type CheckDef, refusedCheck } from './check-defs.ts';
 import type {
   ArrayNode,
   NotAllowed,
@@ -8,32 +8,13 @@ import type {
   SchemaNode,
   StringNode,
 } from './nodes.ts';
-import {
-  notAllowed,
-  type Refused,
-  refused,
-  refusedName,
-  refusedRepeatedCheck,
-} from './not-allowed.ts';
+import { notAllowed, refused, refusedName, refusedRepeatedCheck } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
 import { type Walked, walked } from './walked.ts';
-
-/** A check as zod's def writes it; `describe` and `meta` are how `zod/mini` sets metadata. */
-export type CheckDef =
-  | (core.$ZodChecks | core.$ZodStringFormatChecks)['_zod']['def']
-  | { readonly check: 'custom'; readonly type?: 'custom' }
-  | { readonly check: 'describe' | 'meta' };
 
 type Constraint<Node> = Walked<Partial<Node>>;
 
 type Bounds = { readonly min?: number; readonly max?: number };
-
-/** The checks a schema declares, its own first: a format schema such as `z.email()` is a check. */
-export function checksOf(def: core.$ZodTypeDef): readonly CheckDef[] {
-  const own = 'check' in def ? [def as CheckDef] : [];
-  const listed = (def.checks ?? []).map((check) => check._zod.def as CheckDef);
-  return [...own, ...listed].filter(isConstraintCheck);
-}
 
 /** A string node with the constraint of each check, or the checks a string does not take. */
 export function constrainString(node: StringNode, checks: readonly CheckDef[], at: Path): Walked {
@@ -86,7 +67,10 @@ function constrained<Node extends SchemaNode>(
     if (Object.values(constraint.value).some(isNonFinite)) {
       failures.push({ at, ...refused.nonFinite });
     }
-    const repeated = Object.keys(constraint.value).find((key) => key in constrainedNode);
+    const taken = new Set(Object.keys(constrainedNode).map(slotOf));
+    const repeated = Object.keys(constraint.value)
+      .map(slotOf)
+      .find((slot) => taken.has(slot));
     if (repeated !== undefined) {
       failures.push({ at, ...refusedRepeatedCheck(repeated) });
     }
@@ -166,54 +150,18 @@ function numberConstraint(check: CheckDef, at: Path): Constraint<NumberNode> {
   }
 }
 
+/** The constraint a key sets: an exclusive bound is the same lower or upper bound. */
+function slotOf(key: string): string {
+  if (key === 'exclusiveMin') {
+    return 'min';
+  }
+  return key === 'exclusiveMax' ? 'max' : key;
+}
+
 function isNonFinite(value: unknown): boolean {
   return typeof value === 'number' && !Number.isFinite(value);
 }
 
 function regexOf(pattern: RegExp): Regex {
   return { source: pattern.source, flags: pattern.flags };
-}
-
-function isConstraintCheck(check: CheckDef): boolean {
-  return check.check !== 'describe' && check.check !== 'meta';
-}
-
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the name of each check zod has
-function refusedCheck(check: CheckDef): Refused {
-  switch (check.check) {
-    case 'custom':
-      return check.type === 'custom' ? refused.refine : refused.customCheck;
-    case 'overwrite':
-      return refused.mutating;
-    case 'string_format':
-      return refusedName(check.format);
-    case 'less_than':
-      return refusedName('lt');
-    case 'greater_than':
-      return refusedName('gt');
-    case 'multiple_of':
-      return refusedName('multipleOf');
-    case 'number_format':
-    case 'bigint_format':
-      return refusedName(check.format);
-    case 'max_size':
-      return refusedName('maxSize');
-    case 'min_size':
-      return refusedName('minSize');
-    case 'size_equals':
-      return refusedName('size');
-    case 'max_length':
-      return refusedName('maxLength');
-    case 'min_length':
-      return refusedName('minLength');
-    case 'length_equals':
-      return refusedName('length');
-    case 'property':
-      return refusedName('property');
-    case 'mime_type':
-      return refusedName('mime');
-    case 'describe':
-    case 'meta':
-      return refusedName(check.check);
-  }
 }

@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { checksOf } from './checks.ts';
+import { checksOf } from './check-defs.ts';
 import { annotatedBy, type Metadata, metadataOf } from './metadata.ts';
 import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
 import { type Recursion, startRecursion } from './recursion.ts';

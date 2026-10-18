@@ -1,12 +1,6 @@
 import type * as core from 'zod/v4/core';
-import {
-  type CheckDef,
-  checksOf,
-  constrainArray,
-  constrainNumber,
-  constrainString,
-  unconstrained,
-} from './checks.ts';
+import { type CheckDef, checksOf } from './check-defs.ts';
+import { constrainArray, constrainNumber, constrainString, unconstrained } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import { annotated } from './metadata.ts';
