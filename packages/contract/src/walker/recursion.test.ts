@@ -97,6 +97,33 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('a cycle without an id used at two locations is reported once', () => {
+    const category = z.object({
+      get children() {
+        return z.array(category);
+      },
+    });
+
+    const walked = walkSchemas(
+      [
+        { at: ['body'], schema: category },
+        { at: ['success'], schema: z.array(category) },
+      ],
+      () => undefined,
+    );
+
+    expect(walked).toEqual({
+      kind: 'not-allowed',
+      failures: [
+        {
+          at: ['body', 'fields', 'children', 'items'],
+          construct: 'a cycle without .meta({ id })',
+          instead: '.meta({ id })',
+        },
+      ],
+    });
+  });
+
   test('two cyclic schemas with one id fail', () => {
     const category = z
       .object({

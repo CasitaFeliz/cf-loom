@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { Path, SchemaNode } from './nodes.ts';
-import { allWalked, failuresOf, type Walked, type Walker, walked } from './walked.ts';
+import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** An array of one item schema, before its length checks. */
 export function walkArray(def: core.$ZodArrayDef, at: Path, walker: Walker): Walked {
@@ -18,7 +18,7 @@ export function walkTuple(def: core.$ZodTupleDef, at: Path, walker: Walker): Wal
   const rest: Walked<SchemaNode | undefined> =
     def.rest === null ? walked(undefined) : walker.schema(def.rest, [...at, 'rest']);
   if (items.kind === 'not-allowed' || rest.kind === 'not-allowed') {
-    return { kind: 'not-allowed', failures: failuresOf([items, rest]) };
+    return failed(failuresOf([items, rest]));
   }
   if (rest.value === undefined) {
     return walked({ type: 'tuple', items: items.value });

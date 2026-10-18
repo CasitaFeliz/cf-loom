@@ -22,7 +22,7 @@ type State = {
   readonly nameBySchema: Map<core.$ZodType, string>;
   readonly schemaById: Map<string, core.$ZodType>;
   readonly defById: Map<string, SchemaNode>;
-  readonly reported: Set<core.$ZodType>;
+  readonly reportedBySchema: Map<core.$ZodType, Walked>;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
@@ -32,7 +32,7 @@ export function startRecursion(): Recursion {
     nameBySchema: new Map(),
     schemaById: new Map(),
     defById: new Map(),
-    reported: new Set(),
+    reportedBySchema: new Map(),
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
@@ -53,16 +53,17 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
 }
 
 /**
- * What a schema the walk already knows gives: its `ref`, nothing again for one on a cycle
- * already reported, or what the cycle it closes gives.
+ * What a schema the walk already knows gives: its `ref`, the very failure already reported for
+ * a cycle it lies on, or what the cycle it closes gives.
  */
 function metBefore(state: State, entering: Entering): Walked | undefined {
   const name = state.nameBySchema.get(entering.schema);
   if (name !== undefined) {
     return walked({ type: 'ref', name });
   }
-  if (state.reported.has(entering.schema)) {
-    return { kind: 'not-allowed', failures: [] };
+  const reported = state.reportedBySchema.get(entering.schema);
+  if (reported !== undefined) {
+    return reported;
   }
   const closingIndex = state.ancestors.findLastIndex(
     (ancestor) => ancestor.schema === entering.schema,
@@ -74,7 +75,7 @@ function metBefore(state: State, entering: Entering): Walked | undefined {
   const closed = closedCycle(cycle, entering);
   if (closed?.kind === 'not-allowed') {
     for (const ancestor of cycle) {
-      state.reported.add(ancestor.schema);
+      state.reportedBySchema.set(ancestor.schema, closed);
     }
   }
   return closed;

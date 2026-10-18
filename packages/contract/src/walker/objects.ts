@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
 import type { Field, JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
-import { allWalked, failuresOf, type Walked, type Walker, walked } from './walked.ts';
+import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** An object, `open` unless it is strict: a catchall lets in keys no field declares. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
@@ -12,7 +12,7 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   );
   const fields = allWalked(fieldEntries);
   if (mode.kind === 'not-allowed' || fields.kind === 'not-allowed') {
-    return { kind: 'not-allowed', failures: failuresOf([mode, fields]) };
+    return failed(failuresOf([mode, fields]));
   }
   return walked({ type: 'object', mode: mode.value, fields: Object.fromEntries(fields.value) });
 }
@@ -28,7 +28,7 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   const key = walker.schema(def.keyType, [...at, 'key']);
   const value = walker.schema(def.valueType, [...at, 'value']);
   if (key.kind === 'not-allowed' || value.kind === 'not-allowed') {
-    return { kind: 'not-allowed', failures: failuresOf([key, value]) };
+    return failed(failuresOf([key, value]));
   }
   if (key.value.nullable === true) {
     return notAllowed(at, refused.nullableRecordKey);

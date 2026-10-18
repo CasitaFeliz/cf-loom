@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { globalRegistry } from 'zod/v4/core';
 import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refusedExamples, refusedMetaKey } from './not-allowed.ts';
-import { failuresOf, type Walked, walked } from './walked.ts';
+import { failed, failuresOf, type Walked, walked } from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };
@@ -17,7 +17,7 @@ export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
   const meta: Readonly<Record<string, unknown>> = globalRegistry.get(schema) ?? {};
   const failures = metaFailures(meta, at);
   if (failures.length > 0) {
-    return { kind: 'not-allowed', failures };
+    return failed(failures);
   }
   const { description, examples, id } = meta;
   return walked({
@@ -41,7 +41,7 @@ export function annotated(result: Walked, annotations: Annotations): Walked {
 /** A node with what its schema's own metadata says, or the failures of either. */
 export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked {
   if (metadata.kind === 'not-allowed') {
-    return { kind: 'not-allowed', failures: failuresOf([metadata, result]) };
+    return failed(failuresOf([metadata, result]));
   }
   return annotated(result, metadata.value.annotations);
 }

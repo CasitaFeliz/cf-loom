@@ -10,7 +10,7 @@ import type {
 } from './nodes.ts';
 import { notAllowed, refused, refusedName, refusedRepeatedCheck } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
-import { type Walked, walked } from './walked.ts';
+import { failed, type Walked, walked } from './walked.ts';
 
 type Constraint<Node> = Walked<Partial<Node>>;
 
@@ -76,7 +76,7 @@ function withConstraints<Node extends SchemaNode>(
     }
     constrainedNode = { ...constrainedNode, ...constraint.value };
   }
-  return failures.length > 0 ? { kind: 'not-allowed', failures } : walked(constrainedNode);
+  return failures.length > 0 ? failed(failures) : walked(constrainedNode);
 }
 
 function stringConstraint(check: CheckDef, at: Path): Constraint<StringNode> {

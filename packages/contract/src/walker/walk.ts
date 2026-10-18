@@ -3,7 +3,14 @@ import { checksOf } from './check-defs.ts';
 import { annotatedBy, type Metadata, metadataOf } from './metadata.ts';
 import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
-import { allWalked, type LocatedSchema, type Walked, type Walker, walked } from './walked.ts';
+import {
+  allWalked,
+  distinctFailures,
+  type LocatedSchema,
+  type Walked,
+  type Walker,
+  walked,
+} from './walked.ts';
 import { constrained, type Def, walkDefinition } from './zod-types.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
@@ -16,7 +23,7 @@ export type WalkedSchemas =
       readonly nodes: readonly SchemaNode[];
       readonly defs: Readonly<Record<string, SchemaNode>>;
     }
-  | { readonly kind: 'not-allowed'; readonly failures: readonly NotAllowed[] };
+  | { readonly kind: 'not-allowed'; readonly failures: readonly [NotAllowed, ...NotAllowed[]] };
 
 type Context = {
   readonly walker: Walker;
@@ -37,7 +44,7 @@ export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginO
   const context: Context = { walker, recursion, originOf };
   const nodes = allWalked(located.map(({ at, schema }) => walker.schema(schema, at)));
   if (nodes.kind === 'not-allowed') {
-    return nodes;
+    return { kind: 'not-allowed', failures: distinctFailures(nodes.failures) };
   }
   return { kind: 'walked', nodes: nodes.value, defs: recursion.defs() };
 }
