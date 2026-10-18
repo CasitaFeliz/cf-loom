@@ -166,14 +166,16 @@ describe('the README’s declaration examples', () => {
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {
-    const ordersDeps = defineDependencies(orders, { endpoints: [orders.endpoints.getOrder] });
-    const paymentsDeps = defineDependencies(payments, {
+    const adminOrdersDeps = defineDependencies(orders, {
+      endpoints: [orders.endpoints.getOrder],
+    });
+    const adminPaymentsDeps = defineDependencies(payments, {
       endpoints: [payments.endpoints.getPayment],
     });
 
     const application = defineApplication({
       name: 'web-admin',
-      dependencies: [ordersDeps, paymentsDeps],
+      dependencies: [adminOrdersDeps, adminPaymentsDeps],
     });
 
     expect(application.dependencies[1].endpoints.getPayment).toBe(getPayment);
