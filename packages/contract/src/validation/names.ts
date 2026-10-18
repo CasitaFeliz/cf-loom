@@ -1,4 +1,5 @@
 import type { Endpoint } from '../endpoint.ts';
+import { isEndpoint } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations, LocatedEndpoint, LocatedGroup } from './declarations.ts';
 import { endpointAt } from './declarations.ts';
@@ -120,8 +121,8 @@ export function groupFailures(declarations: Declarations): readonly DeclarationF
   const groupByEndpoint = new Map<Endpoint, LocatedGroup>();
   const failures: DeclarationFailure[] = [];
   for (const located of declarations.groups) {
-    const endpoints = listOf(located.group.endpoints);
-    if (Array.isArray(located.group.endpoints) && endpoints.length === 0) {
+    const endpoints = listOf(located.group.endpoints).filter(isEndpoint);
+    if (Array.isArray(located.group.endpoints) && located.group.endpoints.length === 0) {
       const message = 'A Group lists at least one Endpoint';
       failures.push(failure([...located.at, 'endpoints'], 'empty-group', message));
     }

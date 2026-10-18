@@ -281,6 +281,46 @@ describe('validateContract: lists and their items', () => {
     );
   });
 
+  test('two Groups each with a hole fail once per hole', () => {
+    const orders: Endpoint[] = [];
+    orders[1] = defineEndpoint(listing);
+    const sales: Endpoint[] = [];
+    sales[1] = defineEndpoint({ ...listing, name: 'listSales', path: '/sales' });
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'orders',
+          description: 'Orders',
+          endpoints: anything<readonly [Endpoint]>(orders),
+        }),
+        defineGroup({
+          name: 'sales',
+          description: 'Sales',
+          endpoints: anything<readonly [Endpoint]>(sales),
+        }),
+      ],
+    });
+
+    expect(validateContract(contract, noOrigin)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['groups', 'orders', 'endpoints', 0],
+          rule: 'not-a-declaration',
+          message: 'endpoints.0 is not an Endpoint',
+        },
+        {
+          kind: 'declaration',
+          at: ['groups', 'sales', 'endpoints', 0],
+          rule: 'not-a-declaration',
+          message: 'endpoints.0 is not an Endpoint',
+        },
+      ],
+    });
+  });
+
   test('a hole in an Endpoint’s guards fails once, as no Attachment', () => {
     const guards: Guard[] = [];
     guards[1] = defineGuard({ name: 'apiKey', description: 'A key' });
