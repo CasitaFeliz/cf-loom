@@ -2,6 +2,7 @@ import { isApplication, isContract, isDefinitions } from '../declarations/index.
 import type { NotAllowed, SchemaNode } from '../walker/index.ts';
 import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
+import { unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
@@ -97,6 +98,7 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...declarations.endpoints.flatMap(attachmentFailures),
     ...rejectionFailures(declarations),
     ...dependencyFailures(declarations),
+    ...unlistedFailures(declarations),
   ];
 }
 

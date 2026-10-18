@@ -198,7 +198,7 @@ describe('validateContract', () => {
     const definitions = defineDefinitions({
       name: 'definitions',
       guards: [apiKey],
-      rejections: [orderLocked],
+      rejections: [orderLocked, unauthenticated],
     });
 
     const validated = validateContract(definitions, noOrigin);

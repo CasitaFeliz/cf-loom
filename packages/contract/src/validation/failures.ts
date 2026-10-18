@@ -52,7 +52,8 @@ export type Rule =
   | 'standard-codes-distinct'
   | 'standard-rejections-once'
   | 'dependency-selection'
-  | 'application-dependency';
+  | 'application-dependency'
+  | 'definitions-unlisted';
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */
 export type DeclarationFailure = {

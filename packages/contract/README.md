@@ -73,7 +73,7 @@ export const definitions = defineDefinitions({
 });
 ```
 
-Services import its Guards and schemas directly and list its `definitions` on their root (see [The root](#the-root)). It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
+Services import its Guards and schemas directly and list its `definitions` on their root (see [The root](#the-root)). It lists every Guard and Rejection its Guards reach, through their `guards` and `rejections`; one it leaves out fails `generate`. It is published built, as JavaScript with its `.d.ts`, from erasable TypeScript source, since Node strips no types under `node_modules`. It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
 
 ## Groups and Endpoints
 
