@@ -103,7 +103,7 @@ function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
   if (left.mode === 'strict' || right.mode === 'strict') {
     return notAllowed(at, refused.strictIntersection);
   }
-  const shared = Object.keys(left.fields).filter((key) => key in right.fields);
+  const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
   const differs = shared.some(
     (key) => canonicalJson(left.fields[key]) !== canonicalJson(right.fields[key]),
   );

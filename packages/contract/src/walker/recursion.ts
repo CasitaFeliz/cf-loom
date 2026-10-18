@@ -21,7 +21,7 @@ type State = {
   readonly ancestors: Ancestor[];
   readonly nameBySchema: Map<core.$ZodType, string>;
   readonly schemaById: Map<string, core.$ZodType>;
-  readonly defs: Record<string, SchemaNode>;
+  readonly defById: Map<string, SchemaNode>;
   readonly reported: Set<core.$ZodType>;
 };
 
@@ -31,10 +31,13 @@ export function startRecursion(): Recursion {
     ancestors: [],
     nameBySchema: new Map(),
     schemaById: new Map(),
-    defs: {},
+    defById: new Map(),
     reported: new Set(),
   };
-  return { within: (entering, walk) => within(state, entering, walk), defs: () => state.defs };
+  return {
+    within: (entering, walk) => within(state, entering, walk),
+    defs: () => Object.fromEntries(state.defById),
+  };
 }
 
 function within(state: State, entering: Entering, walk: () => Walked): Walked {
@@ -105,7 +108,7 @@ function written(state: State, ancestor: Ancestor, node: Walked): Walked {
   }
   state.schemaById.set(ancestor.id, ancestor.schema);
   state.nameBySchema.set(ancestor.schema, ancestor.id);
-  state.defs[ancestor.id] = node.value;
+  state.defById.set(ancestor.id, node.value);
   return walked({ type: 'ref', name: ancestor.id });
 }
 

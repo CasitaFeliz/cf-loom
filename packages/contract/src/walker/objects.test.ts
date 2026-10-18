@@ -206,6 +206,25 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
+  test.each([
+    ['first', z.object({ toString: z.string() }), z.object({ name: z.string() })],
+    ['second', z.object({ name: z.string() }), z.object({ toString: z.string() })],
+  ])(
+    'a key named like an Object method, in the %s object, merges like any key',
+    (_order, left, right) => {
+      expect(walkBody(z.intersection(left, right))).toEqual(
+        walkedTo({
+          type: 'object',
+          mode: 'open',
+          fields: {
+            name: { required: true, schema: text },
+            toString: { required: true, schema: text },
+          },
+        }),
+      );
+    },
+  );
+
   test('any other intersection is allOf', () => {
     const bounded = z.intersection(z.string().min(1), z.string().max(10));
 

@@ -127,6 +127,33 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('an id named __proto__ is a def like any other', () => {
+    const node = z
+      .object({
+        get children() {
+          return z.array(node);
+        },
+      })
+      .meta({ id: '__proto__' });
+
+    expect(walkBody(node)).toEqual({
+      kind: 'walked',
+      nodes: [{ type: 'ref', name: '__proto__' }],
+      defs: {
+        ['__proto__']: {
+          type: 'object',
+          mode: 'open',
+          fields: {
+            children: {
+              required: true,
+              schema: { type: 'array', items: { type: 'ref', name: '__proto__' } },
+            },
+          },
+        },
+      },
+    });
+  });
+
   test('an id on a schema that closes no cycle is ignored', () => {
     const money = z.object({ amount: z.int() }).meta({ id: 'Money' });
 
