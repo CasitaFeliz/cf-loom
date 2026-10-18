@@ -36,7 +36,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - Tests sit next to the code (`*.test.ts`) and import as [C23](CODING_STANDARDS.md#tests) says.
 - Changesets with one fixed group: every package releases together. No PR carries a changeset before the first release candidate; from it on, every PR that changes a package carries one. cf-loom reaches 1.0.0 before any Contract Package publishes a version that is not a prerelease; before it, a Contract Package is published only as a prerelease.
 - Published to GitHub Packages as `@casitafeliz/loom-<name>` from GitHub Actions.
-- Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome, the TSDoc check and the layout check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
+- Commands: `pnpm build`, `pnpm test` (builds, then runs Vitest), `pnpm check` (Biome failing on warnings as CI does, the TSDoc check and the layout check), `pnpm format`, `pnpm clean`, `pnpm changeset`.
 
 ## Design principles
 
