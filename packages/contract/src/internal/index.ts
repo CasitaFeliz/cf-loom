@@ -12,6 +12,10 @@ export type { Field, NotAllowed, Origin, Path, SchemaNode } from '../walker/node
 export type { OriginOf, WalkedSchemas } from '../walker/walk.ts';
 export { walkSchemas } from '../walker/walk.ts';
 export type { LocatedSchema } from '../walker/walked.ts';
+export type { DeclarationFailure, Failure, Rule } from '../validation/failures.ts';
+export type { LocatedNode } from '../validation/schemas.ts';
+export type { ValidatedContract, ValidatedSchemas } from '../validation/validate.ts';
+export { validateContract } from '../validation/validate.ts';
 
 /** The `kind` every declaration carries, which the walker switches on to tell them apart. */
 export type Kind =
