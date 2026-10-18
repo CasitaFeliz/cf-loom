@@ -50,9 +50,15 @@ describe('walkSchemas', () => {
       noOrigin,
     );
 
-    expect(walked.kind === 'walked' && walked.nodes[0]).toEqual(
-      walked.kind === 'walked' && walked.nodes[1],
-    );
+    const moneyNode = {
+      type: 'object',
+      mode: 'open',
+      fields: {
+        amount: { required: true, schema: { type: 'number', int: true } },
+        currency: { required: true, schema: { type: 'enum', values: ['eur', 'usd'], open: false } },
+      },
+    };
+    expect(walked).toEqual({ kind: 'walked', nodes: [moneyNode, moneyNode], defs: {} });
   });
 
   test('enum values, union options and allOf items are in canonical order', () => {

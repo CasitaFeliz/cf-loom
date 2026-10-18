@@ -240,8 +240,24 @@ describe('walkSchemas: recursion', () => {
     const fromTeam = walkSchemas([{ at: ['body'], schema: team }], () => undefined);
     const fromDepartment = walkSchemas([{ at: ['body'], schema: department }], () => undefined);
 
-    expect(fromTeam.kind === 'walked' && fromTeam.defs).toEqual(
-      fromDepartment.kind === 'walked' && fromDepartment.defs,
-    );
+    const departmentDef = {
+      type: 'object',
+      mode: 'open',
+      fields: {
+        teams: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'team' } } },
+      },
+    };
+    const teamDef = {
+      type: 'object',
+      mode: 'open',
+      fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
+    };
+    const defs = { department: departmentDef, team: teamDef };
+    expect(fromTeam).toEqual({ kind: 'walked', nodes: [{ type: 'ref', name: 'team' }], defs });
+    expect(fromDepartment).toEqual({
+      kind: 'walked',
+      nodes: [{ type: 'ref', name: 'department' }],
+      defs,
+    });
   });
 });
