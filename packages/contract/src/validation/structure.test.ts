@@ -14,7 +14,13 @@ import {
   type Guard,
   type Rejection,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+}
 
 function noOrigin() {
   return undefined;
@@ -36,7 +42,7 @@ function anything<Wanted>(value: unknown): Wanted {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -45,7 +51,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
 
 describe('validateContract: a root that is not one', () => {
   test('a null root is invalid, not an exception', () => {
-    expect(validateContract(anything<Contract>(null), noOrigin)).toEqual(
+    expect(validateInPackage(anything<Contract>(null), noOrigin)).toEqual(
       failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
     );
   });
@@ -53,7 +59,7 @@ describe('validateContract: a root that is not one', () => {
   test('a root with an unknown kind fails', () => {
     const root = anything<Contract>({ kind: 'service', name: 'orders-service' });
 
-    expect(validateContract(root, noOrigin)).toEqual(
+    expect(validateInPackage(root, noOrigin)).toEqual(
       failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
     );
   });
@@ -61,7 +67,7 @@ describe('validateContract: a root that is not one', () => {
   test('an unbranded object with a root kind is not a declaration', () => {
     const root = anything<Contract>({ kind: 'contract', name: 'orders-service' });
 
-    expect(validateContract(root, noOrigin)).toEqual(
+    expect(validateInPackage(root, noOrigin)).toEqual(
       failed([], 'not-a-root', 'A root is a Contract, an Application or a Definitions Package'),
     );
   });
@@ -74,7 +80,7 @@ describe('validateContract: lists and their items', () => {
       groups: anything<readonly Group[]>('orders'),
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(['groups'], 'not-a-list', 'groups is a list'),
     );
   });
@@ -85,7 +91,7 @@ describe('validateContract: lists and their items', () => {
       groups: anything<readonly Group[]>([null]),
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
     );
   });
@@ -97,7 +103,7 @@ describe('validateContract: lists and their items', () => {
       dependencies: anything<readonly never[]>([null]),
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual({
+    expect(validateInPackage(contract, noOrigin)).toEqual({
       kind: 'invalid',
       failures: [
         {
@@ -124,7 +130,7 @@ describe('validateContract: lists and their items', () => {
     });
 
     expect(
-      validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin),
+      validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin),
     ).toEqual(
       failed(
         ['groups', 'orders', 'endpoints', 0],
@@ -176,7 +182,7 @@ describe('validateContract: lists and their items', () => {
       standardRejections: anything<Record<string, never>>({ notFound: null }),
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(['standardRejections', 'notFound'], 'not-an-object', 'notFound is an object'),
     );
   });
@@ -235,7 +241,7 @@ describe('validateContract: lists and their items', () => {
       schemas: anything<Record<string, never>>(null),
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(['schemas'], 'not-an-object', 'schemas is an object'),
     );
   });
@@ -246,7 +252,7 @@ describe('validateContract: lists and their items', () => {
       standardRejections: anything<Record<string, never>>('abc'),
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
     );
   });
@@ -259,7 +265,7 @@ describe('validateContract: lists and their items', () => {
       ]),
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
     );
   });
@@ -272,7 +278,7 @@ describe('validateContract: lists and their items', () => {
       endpoints: [defineEndpoint(listing)],
     });
 
-    expect(validateContract(defineContract({ name: 'orders-service', groups }), noOrigin)).toEqual(
+    expect(validateInPackage(defineContract({ name: 'orders-service', groups }), noOrigin)).toEqual(
       failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
     );
   });
@@ -298,7 +304,7 @@ describe('validateContract: lists and their items', () => {
       ],
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual({
+    expect(validateInPackage(contract, noOrigin)).toEqual({
       kind: 'invalid',
       failures: [
         {
@@ -366,6 +372,6 @@ describe('validateContract: lists and their items', () => {
       dependencies: anything<readonly never[]>([{}]),
     });
 
-    expect(validateContract(contract, noOrigin).kind).toBe('invalid');
+    expect(validateInPackage(contract, noOrigin).kind).toBe('invalid');
   });
 });

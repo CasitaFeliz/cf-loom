@@ -9,7 +9,13 @@ import {
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+}
 
 const listing = {
   name: 'listOrders',
@@ -27,7 +33,7 @@ function headersOf(shape: Record<string, core.$ZodType>) {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(
+  return validateInPackage(
     defineContract({ name: 'orders-service', groups: [orders] }),
     () => undefined,
   );

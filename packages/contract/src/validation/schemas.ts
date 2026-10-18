@@ -40,9 +40,6 @@ export type SchemaSlot = Slot & { readonly value: $ZodType };
 /** A slot whose schema walked to a node. */
 export type WalkedSlot = Slot & { readonly node: SchemaNode };
 
-/** A schema's node and where it sits in the root, as the walk returned it. */
-export type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
-
 /** Every slot of a root that holds a schema, and the slots a cast filled with no schema. */
 export type SchemaSlots = {
   readonly slots: readonly SchemaSlot[];

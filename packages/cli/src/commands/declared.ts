@@ -57,13 +57,10 @@ function builtOf(
   { packageName, root, packages }: Project,
   stamping: { readonly generator: string; readonly committed: unknown; readonly now: number },
 ): { readonly kind: 'built'; readonly bytes: Buffer } | Stopped {
-  const validated = validateContract(root, schemaOriginsOf(packages));
+  const originOf = schemaOriginsOf(packages);
+  const validated = validateContract(root, { originOf, packageName: packageName.name });
   if (validated.kind === 'invalid') {
     return stopped(checkFailed(validated.failures.map(failureLine)));
-  }
-  if (validated.declarations.root.name !== packageName.name) {
-    const message = `The root is named as package.json without its scope: ${packageName.name}`;
-    return stopped(checkFailed([`name package-name: ${message}`]));
   }
   const snapshot = snapshotOf(validated, { ...stamping, packages });
   return { kind: 'built', bytes: Buffer.from(canonicalTextOf(snapshot), 'utf8') };

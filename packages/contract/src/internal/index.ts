@@ -30,7 +30,6 @@ export type {
   LocatedEndpoint,
   LocatedGroup,
   LocatedGuard,
-  LocatedNode,
   LocatedRejection,
   LocatedStandardRejection,
   ResolvedStandard,

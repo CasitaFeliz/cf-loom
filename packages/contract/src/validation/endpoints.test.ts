@@ -10,7 +10,13 @@ import {
   type SuccessStatus,
   type Visibility,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+}
 
 const orderBody = z.object({ id: z.uuid() });
 
@@ -35,7 +41,7 @@ const createOrder = {
 /** The result of validating one Endpoint, written with a cast where the types refuse it. */
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateContract(
+  return validateInPackage(
     defineContract({ name: 'orders-service', groups: [orders] }),
     () => undefined,
   );
@@ -260,7 +266,7 @@ describe('validateContract: where Endpoints sit', () => {
       endpoints: [retired, active],
     });
 
-    const validated = validateContract(
+    const validated = validateInPackage(
       defineContract({ name: 'orders-service', groups: [orders] }),
       () => undefined,
     );

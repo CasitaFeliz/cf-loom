@@ -392,7 +392,7 @@ describe('cf-loom generate', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^name name-grammar: .+\n$/);
+    expect(ran.stderr).toMatch(/^name name-grammar: .+\nname package-name: .+\n$/);
   });
 
   test('a missing config is a tooling error', () => {
@@ -548,8 +548,25 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: The root is named as package.json without its scope: billing-service\n',
+        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
     });
+  });
+
+  test('a wrong root name is reported with every other failure at once', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ body: 'z.object({ at: z.date() })' }),
+      'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr.split('\n')).toEqual([
+      'name package-name: A root is named as its package.json, without the scope: billing-service',
+      'groups.health.endpoints.GET /ping.success.body.fields.at not allowed: z.date() (use z.iso.datetime())',
+      '',
+    ]);
   });
 
   test.each(brokenManifests)('a package.json with %s is a tooling error', (_, manifest) => {

@@ -13,8 +13,13 @@ export type {
   Root,
 } from './located.ts';
 export { attachedGuardsOf } from './references.ts';
-export type { LocatedNode, Part } from './schemas.ts';
+export type { Part } from './schemas.ts';
 export type { ResolvedStandard } from './standard-codes.ts';
-export type { ValidatedContract, ValidatedSchemas, ValidContract } from './validate.ts';
+export type {
+  RootPackage,
+  ValidatedContract,
+  ValidatedSchemas,
+  ValidContract,
+} from './validate.ts';
 export { validateContract } from './validate.ts';
 export type { ValidatedCode, ValidatedDeclarations, ValidatedGuard } from './validated.ts';

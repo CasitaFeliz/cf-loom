@@ -9,30 +9,28 @@ import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import type { Root } from './located.ts';
-import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
+import { groupFailures, nameFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import {
-  type LocatedNode,
-  locatedSchemasOf,
-  type Nodes,
-  nodesOf,
-  type Part,
-  schemaSlotsOf,
-} from './schemas.ts';
+import { locatedSchemasOf, type Nodes, nodesOf, type Part, schemaSlotsOf } from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
 /**
- * The walked schemas of a valid root, each where its declaration sits, and their `defs`; `nodeOf`
- * finds the node of a declaration's part, a shared schema being its own declaration.
+ * The walked schemas of a valid root and their `defs`: `nodeOf` finds the node of a declaration's
+ * part, a shared schema being its own declaration.
  */
 export type ValidatedSchemas = {
-  readonly nodes: readonly LocatedNode[];
   readonly nodeOf: (declaration: unknown, part: Part) => SchemaNode | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
+
+/**
+ * The package a root sits in: the unscoped name of its package.json, which the root is named as,
+ * and where each schema came from, as the Definitions Packages installed beside it tell.
+ */
+export type RootPackage = { readonly packageName: string; readonly originOf: OriginOf };
 
 /**
  * A root validated: its schemas walked and its declarations gathered for the Snapshot, or every
@@ -54,17 +52,18 @@ export type ValidContract = Extract<ValidatedContract, { readonly kind: 'valid' 
  * once, reporting all failures together, since a cast or a widened type skips the rules the
  * types state; what a module exports as its root is judged whatever it is.
  */
-export function validateContract(root: unknown, originOf: OriginOf): ValidatedContract {
+export function validateContract(root: unknown, rootPackage: RootPackage): ValidatedContract {
   if (!isRoot(root)) {
     const message = 'A root is a Contract, an Application or a Definitions Package';
     return invalid([failure([], 'not-a-root', message)]);
   }
   const declarations = declarationsOf(root);
   const slots = schemaSlotsOf(declarations);
-  const walked = walkSchemas(locatedSchemasOf(slots.slots), originOf);
+  const walked = walkSchemas(locatedSchemasOf(slots.slots), rootPackage.originOf);
   const nodes = nodesOf(slots.slots, walked);
   const failures = [
     ...declarationFailures(declarations),
+    ...packageNameFailures(root, rootPackage.packageName),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...new Set(walked.located.flatMap(failuresAt)),
@@ -72,11 +71,9 @@ export function validateContract(root: unknown, originOf: OriginOf): ValidatedCo
   if (failures.length > 0) {
     return invalid(failures);
   }
-  const written = nodes.slots.filter((slot) => slot.role === 'snapshot');
   return {
     kind: 'valid',
     schemas: {
-      nodes: written.map(({ at, node }) => ({ at, node })),
       nodeOf: nodes.nodeOf,
       defs: nodes.defs,
     },

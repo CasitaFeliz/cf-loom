@@ -14,7 +14,13 @@ import {
   type Rejection,
   type RejectionStatus,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type OriginOf, validateContract } from '../internal/index.ts';
+
+/** Validates a root as the package it names: its package.json named as the root is. */
+function validateInPackage(root: unknown, originOf: OriginOf) {
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  return validateContract(root, { originOf, packageName: typeof name === 'string' ? name : '' });
+}
 
 function noOrigin() {
   return undefined;
@@ -47,7 +53,7 @@ const orderLocked = defineRejection({
 
 function validateEndpoints(endpoints: readonly [Endpoint, ...Endpoint[]]) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints });
-  return validateContract(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
+  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }), noOrigin);
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -81,7 +87,7 @@ describe('validateContract: Rejection statuses', () => {
       standardRejections: { notFound: { code: 'NOT_FOUND', status, message: 'Not found' } },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(
         ['standardRejections', 'notFound', 'status'],
         'rejection-status',
@@ -97,7 +103,7 @@ describe('validateContract: Rejection statuses', () => {
       standardRejections: { notImplemented: { code: 'NOT_IMPLEMENTED', status, message: 'Later' } },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(
         ['standardRejections', 'notImplemented', 'status'],
         'rejection-status',
@@ -202,7 +208,7 @@ describe('validateContract: one status and one body per code', () => {
       groups: [orders],
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual({
+    expect(validateInPackage(contract, noOrigin)).toEqual({
       kind: 'invalid',
       failures: [
         {
@@ -293,7 +299,7 @@ describe('validateContract: reserved codes', () => {
       },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(
         ['standardRejections', 'notFound', 'code'],
         'reserved-code',
@@ -381,7 +387,7 @@ describe('validateContract: Standard Rejections', () => {
       groups: [orders],
     });
 
-    expect(validateContract(contract, noOrigin)).toEqual({
+    expect(validateInPackage(contract, noOrigin)).toEqual({
       kind: 'invalid',
       failures: [
         {
@@ -411,7 +417,7 @@ describe('validateContract: Standard Rejections', () => {
       },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(
         ['standardRejections', 'notFound', 'code'],
         'standard-codes-distinct',
@@ -430,7 +436,7 @@ describe('validateContract: Standard Rejections', () => {
     });
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
         ['definitions', 'definitions', 'standardRejections', 'notImplemented', 'code'],
         'standard-codes-distinct',
@@ -445,7 +451,7 @@ describe('validateContract: Standard Rejections', () => {
       standardRejections: { invalidInput: { code: 'NOT_FOUND', status: 404, message: 'Missing' } },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
       failed(
         ['standardRejections', 'notFound', 'code'],
         'standard-codes-distinct',
@@ -473,7 +479,7 @@ describe('validateContract: Standard Rejections', () => {
     });
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
-    expect(validateContract(contract, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
   });
 
   test('two listed Definitions Packages declaring Standard Rejections fail', () => {
@@ -487,7 +493,7 @@ describe('validateContract: Standard Rejections', () => {
     });
     const contract = defineContract({ name: 'orders-service', definitions: [first, second] });
 
-    expect(validateContract(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
         ['definitions', 'second', 'standardRejections'],
         'standard-rejections-once',

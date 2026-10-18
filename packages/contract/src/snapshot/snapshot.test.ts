@@ -192,7 +192,9 @@ function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
 }
 
 function snapshotFor(root: unknown, context: SnapshotContext = aContext()): Snapshot {
-  const validated = validateContract(root, schemaOriginsOf(context.packages));
+  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const originOf = schemaOriginsOf(context.packages);
+  const validated = validateContract(root, { originOf, packageName: String(name) });
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
