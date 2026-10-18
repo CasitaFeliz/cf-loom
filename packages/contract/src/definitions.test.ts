@@ -111,3 +111,37 @@ describe('a declared Definitions Package’s containers', () => {
     expect(Object.isFrozen(definitions.standardRejections.notFound)).toBe(true);
   });
 });
+
+describe('defineDefinitions nested fields', () => {
+  test('an undeclared Standard Rejection is a type error', () => {
+    const declare = () =>
+      defineDefinitions({
+        name: 'definitions',
+        standardRejections: {
+          invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'Bad request' },
+          // @ts-expect-error notFund is not a Standard Rejection
+          notFund: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared field in a Standard Rejection is a type error', () => {
+    const declare = () =>
+      defineDefinitions({
+        name: 'definitions',
+        standardRejections: {
+          notFound: {
+            code: 'NOT_FOUND',
+            status: 404,
+            message: 'Not found',
+            // @ts-expect-error detail is not a field of a Standard Rejection
+            detail: 'More',
+          },
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+});

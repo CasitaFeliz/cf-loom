@@ -121,12 +121,17 @@ type GuardsRule<Declaration extends EndpointDeclaration> = {
   readonly guards?: GuardOrderRule<Declaration['guards']>;
 };
 
+type NestedFieldsRule<Declaration extends EndpointDeclaration> = {
+  readonly input?: DeclaredFieldsRule<InputOfDeclaration<Declaration>, InputDeclaration>;
+  readonly success?: DeclaredFieldsRule<Declaration['success'], SuccessDeclaration>;
+};
+
 type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declaration> &
   InputBodyRule<Declaration> &
   SuccessBodyRule<Declaration> &
   HeadersRule<Declaration> &
   GuardsRule<Declaration> &
-  NoInfer<DeclaredFieldsRule<Declaration, EndpointDeclaration>>;
+  NoInfer<DeclaredFieldsRule<Declaration, EndpointDeclaration> & NestedFieldsRule<Declaration>>;
 
 /** Declares one HTTP method on one literal path, refusing what TypeScript can state exactly. */
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(

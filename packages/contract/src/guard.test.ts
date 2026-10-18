@@ -171,3 +171,20 @@ describe('a declared Guard’s containers', () => {
     expect(Object.isFrozen(tenant.rejections)).toBe(true);
   });
 });
+
+describe('defineGuard nested fields', () => {
+  test('an undeclared field in demands is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'apiKey',
+        description: 'A key per client',
+        demands: {
+          query: z.object({ page: z.int() }),
+          // @ts-expect-error header is not a part of demands
+          header: z.object({ 'x-api-key': z.string() }),
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+});

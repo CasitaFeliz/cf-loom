@@ -32,11 +32,15 @@ type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   };
 };
 
+type DemandsFieldsRule<Declaration extends GuardDeclaration> = {
+  readonly demands?: DeclaredFieldsRule<NonNullable<Declaration['demands']>, Demands>;
+};
+
 /** Declares a reusable requirement that Endpoints attach explicitly. */
 export function defineGuard<const Declaration extends GuardDeclaration>(
   declaration: Declaration &
     DemandedHeadersRule<Declaration> &
-    NoInfer<DeclaredFieldsRule<Declaration, GuardDeclaration>>,
+    NoInfer<DeclaredFieldsRule<Declaration, GuardDeclaration> & DemandsFieldsRule<Declaration>>,
 ): Guard<Declaration> {
   return frozenDeclaration('guard', declaration);
 }

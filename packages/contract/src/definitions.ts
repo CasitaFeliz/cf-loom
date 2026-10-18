@@ -18,9 +18,27 @@ type DefinitionsDeclaration = {
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
   Readonly<Declaration> & { readonly kind: 'definitions' };
 
+type StandardRejectionFields = NonNullable<StandardRejectionDeclarations['notFound']>;
+
+type StandardRejectionsFieldsRule<Declared> = DeclaredFieldsRule<
+  Declared,
+  StandardRejectionDeclarations
+> & {
+  readonly [Name in keyof Declared]?: DeclaredFieldsRule<Declared[Name], StandardRejectionFields>;
+};
+
+type NestedFieldsRule<Declaration extends DefinitionsDeclaration> = {
+  readonly standardRejections?: StandardRejectionsFieldsRule<
+    NonNullable<Declaration['standardRejections']>
+  >;
+};
+
 /** Declares the Guards, schemas, Rejections and Standard Rejections several Contracts share. */
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(
-  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, DefinitionsDeclaration>>,
+  declaration: Declaration &
+    NoInfer<
+      DeclaredFieldsRule<Declaration, DefinitionsDeclaration> & NestedFieldsRule<Declaration>
+    >,
 ): Definitions<Declaration> {
   return frozenDeclaration('definitions', declaration);
 }

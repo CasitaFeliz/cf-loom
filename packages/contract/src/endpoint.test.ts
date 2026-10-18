@@ -325,3 +325,30 @@ describe('a declared Endpoint’s containers', () => {
     expect(Object.isFrozen(orderParams)).toBe(false);
   });
 });
+
+describe('defineEndpoint nested fields', () => {
+  test('an undeclared field in input is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        input: {
+          headers: z.object({ 'x-tenant': z.string() }),
+          // @ts-expect-error querry is not a part of input
+          querry: z.object({ page: z.int() }),
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an undeclared field in success is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error bdy is not a part of a Success
+        success: { status: 200, body: orderBody, bdy: orderBody },
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
