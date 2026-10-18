@@ -524,4 +524,28 @@ describe('walkSchemas: recursion', () => {
     expect(walked.kind).toBe('walked');
     expect(elapsed).toBeLessThan(1000);
   });
+
+  test('a failing def met by many paths is reported once and walked once', () => {
+    const count = 18;
+    const steps: z.ZodType[] = [];
+    const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
+    for (let index = 0; index <= count; index++) {
+      const side = () =>
+        z.object({
+          get next() {
+            return nextOf(index);
+          },
+        });
+      const shape =
+        index === count ? { placedAt: z.date(), a: side(), b: side() } : { a: side(), b: side() };
+      steps.push(z.object(shape).meta({ id: `step${index}` }));
+    }
+
+    const started = performance.now();
+    const walked = walkSchemas([{ at: ['body'], schema: steps[0]! }], () => undefined);
+    const elapsed = performance.now() - started;
+
+    expect(walked).toMatchObject({ kind: 'not-allowed', failures: [{ construct: 'z.date()' }] });
+    expect(elapsed).toBeLessThan(1000);
+  });
 });

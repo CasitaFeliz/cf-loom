@@ -129,8 +129,13 @@ function closeGroup(state: State, ancestor: Ancestor): void {
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
 }
 
+/** A schema with an id on a cycle is walked once: its def, or its failures, kept for every use. */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
-  if (node.kind === 'not-allowed' || ancestor.id === undefined) {
+  if (ancestor.id === undefined) {
+    return node;
+  }
+  if (node.kind === 'not-allowed') {
+    state.reportedBySchema.set(ancestor.schema, node);
     return node;
   }
   const owner = state.schemaById.get(ancestor.id);
