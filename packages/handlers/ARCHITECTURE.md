@@ -8,7 +8,7 @@ How the package's `src/` is split into modules, as [Package layout](../../ARCHIT
 | --- | --- | --- |
 | `outcomes/` | `success`, `reject`, `admit`, `fault`; the built and resolved Outcome and Admission types, `Fault`, `Committed`; the runtime shapes, telling an Outcome or an Admission by its kind and fields; the fixed message `Internal error` | none |
 | `checks/` | what a call is given and what a Handler built, part by part with `schemaOf`, against the schemas of its Endpoint or Guard, as Issues with their part; the resolution of a Rejection against the Standard Rejections | `outcomes` |
-| `calls/` | running one call: check what it is given, run the implementation with a throw or a return that is no Outcome caught into the Fault, check what it built; `InvalidInputError`, `InvalidOutcomeError` and the direct call's answer, which throws on them | `checks`, `outcomes` |
+| `calls/` | running one call: check what it is given, run the implementation, check what it built; a return that is no Outcome, or anything thrown while running or checking, is the Fault with its `cause`, so a run never throws; `InvalidInputError`, `InvalidOutcomeError` and the direct call's answer, which throws on them | `checks`, `outcomes` |
 | `handlers/` | `handle`, `handle.stub` and the Handler types; what a Handler was written with, its stub mark included, hidden from its call signature; `runEndpoint`, `runGuard` and `isStub` for `./internal` | `calls`, `checks`, `outcomes` |
 
 ## The runtime's seam

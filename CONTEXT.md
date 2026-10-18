@@ -95,7 +95,7 @@ One of the three Rejections whose code, status and message come from a Definitio
 _Avoid_: generic error, built-in error
 
 **Fault**:
-A technical failure any Endpoint or Message Handler can produce and none declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it.
+A technical failure any Handler can produce and no Endpoint, Guard or Message declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it.
 _Avoid_: error, server error, operation failure
 
 **Open Enum**, **Open Union**:
@@ -149,7 +149,7 @@ _Avoid_: catalog, index (one kind of directory)
 ### Implementation
 
 **Handler**: **EndpointHandler**, **CommandHandler**, **EventHandler**, **GuardHandler**:
-The code the runtime invokes with something incoming: a call to an Endpoint, a Command, an Event through a Subscription, or a request a Guard must judge (the GuardHandler decides whether it passes). CommandHandlers and EventHandlers together are Message Handlers.
+The code the runtime invokes with something incoming: a call to an Endpoint, a Command, an Event through a Subscription, or a request a Guard must judge (the GuardHandler decides whether to admit it). CommandHandlers and EventHandlers together are Message Handlers.
 _Avoid_: controller, listener, resolver, processor
 
 **Admission**:
@@ -157,11 +157,11 @@ What a GuardHandler answers: the request admitted with the Context its Guard pro
 _Avoid_: verdict, pass, result
 
 **Stub**:
-A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, marked so the runtime does not run it as written: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
+A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, and marks as such: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
 _Avoid_: placeholder, mock
 
 **Issue**:
-One way a value broke a schema: the part and path, cf-loom's code and a message, never the received value.
+One way a value broke its part of the Contract: the part and path, cf-loom's code and a message, never the received value.
 _Avoid_: error, violation
 
 **Plan**:
