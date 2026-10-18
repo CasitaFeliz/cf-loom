@@ -1,7 +1,11 @@
+import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import * as zm from 'zod/mini';
 import { openEnum, openUnion } from './index.ts';
 import { isOpen } from './internal/index.ts';
+
+type Status = ReturnType<typeof openEnum<readonly ['pending', 'paid']>>;
 
 const card = z.object({ type: z.literal('card'), last4: z.string() });
 const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
@@ -16,12 +20,19 @@ describe('openEnum', () => {
     expectTypeOf<z.output<typeof status>>().toEqualTypeOf<'pending' | 'paid'>();
   });
 
-  test('a clone of an openEnum is not open', () => {
+  test.each([
+    ['.describe()', (status: Status) => status.describe('The order status')],
+    ['.meta()', (status: Status) => status.meta({ description: 'The order status' })],
+    ['zod/mini describe', (status: Status) => status.check(zm.describe('The order status'))],
+    ['zod/mini meta', (status: Status) => status.check(zm.meta({ description: 'Status' }))],
+  ])('an openEnum described with %s stays open', (_name, described) => {
     const status = openEnum(['pending', 'paid']);
 
-    const described = status.describe('The order status');
+    expect(isOpen(described(status))).toBe(true);
+  });
 
-    expect(isOpen(described)).toBe(false);
+  test('a described z.enum() stays closed', () => {
+    expect(isOpen(z.enum(['pending', 'paid']).describe('The order status'))).toBe(false);
   });
 
   test('openEnum takes string values only', () => {
@@ -61,5 +72,33 @@ describe('openUnion', () => {
   test('a variant without the discriminator is a type error', () => {
     // @ts-expect-error every variant has the discriminator
     expectTypeOf(openUnion<'kind', readonly [typeof card]>).toBeFunction();
+  });
+});
+
+describe('openUnion metadata', () => {
+  test('an openUnion described with .describe() stays open', () => {
+    const payment = openUnion('type', [card, transfer]);
+
+    expect(isOpen(payment.describe('A payment'))).toBe(true);
+  });
+
+  test('an openUnion described with zod/mini meta stays open', () => {
+    const payment = openUnion('type', [card, transfer]);
+
+    expect(isOpen(payment.check(zm.meta({ description: 'A payment' })))).toBe(true);
+  });
+});
+
+describe('openness from another copy of loom-contract', () => {
+  test('an openEnum from another copy is open', () => {
+    const status = built.openEnum(['pending', 'paid']);
+
+    expect(isOpen(status)).toBe(true);
+  });
+
+  test('an openUnion from another copy is open', () => {
+    const payment = built.openUnion('type', [card, transfer]);
+
+    expect(isOpen(payment)).toBe(true);
   });
 });

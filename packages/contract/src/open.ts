@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 
-const openSchemas = new WeakSet<core.$ZodType>();
+const openKey = Symbol.for('@casitafeliz/loom-contract.open');
+
+/** Kept on `globalThis`, so a schema made open by one copy of this package is open to every copy. */
+const openHolder = globalThis as typeof globalThis & { [openKey]?: WeakSet<core.$ZodType> };
+openHolder[openKey] ??= new WeakSet<core.$ZodType>();
+const openSchemas = openHolder[openKey];
 
 type Variant<Discriminator extends string> = core.$ZodObject<{
   readonly [Key in Discriminator]: core.$ZodLiteral<string>;
@@ -24,7 +29,11 @@ export function openUnion<
   return schema;
 }
 
-/** Whether a schema was declared open, by identity: a clone is a new schema and is closed. */
+/**
+ * Whether a schema was declared open: by `openEnum()` or `openUnion()` itself, or cloned from
+ * one by zod's own `.describe()`, `.meta()` or `.check()`, which keep the shape.
+ */
 export function isOpen(schema: core.$ZodType): boolean {
-  return openSchemas.has(schema);
+  const parent = schema._zod.parent;
+  return openSchemas.has(schema) || (parent !== undefined && isOpen(parent));
 }

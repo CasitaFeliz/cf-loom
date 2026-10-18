@@ -99,7 +99,7 @@ An Open Enum or Open Union gives its readers a type with an Unknown case, so the
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is compared as an enum, and `T | null` as a nullable `T`, before these rules apply. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
+A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md). Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
 
 ### Constraints
 
@@ -140,7 +140,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Neutral
 
-Descriptions, examples, titles, a Rejection's message, key order, an Endpoint's `deprecatedAt` (see [Endpoints](SNAPSHOT.md#endpoints) in SNAPSHOT.md), which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), a Guard's `guards`, a Guard's `qualifier` and the Qualifier an Endpoint attaches a Guard with (who is admitted is the GuardHandler's decision, which the Check never judged; a change shows in the committed Snapshot's diff), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards, within what their `guards` allow. Transport headers on a Message are not part of the Contract (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README). For Dependencies and Subscriptions see [below](#dependencies).
+Descriptions, examples, a Rejection's message, key order, an Endpoint's `deprecatedAt` (see [Endpoints](SNAPSHOT.md#endpoints) in SNAPSHOT.md), which Guard demands a header or query param (only its effect is compared), the Context a Guard provides (only the Service's own Handlers read it), a Guard's `guards`, a Guard's `qualifier` and the Qualifier an Endpoint attaches a Guard with (who is admitted is the GuardHandler's decision, which the Check never judged; a change shows in the committed Snapshot's diff), moving an Element between Groups or renaming a Group, and the order of an Endpoint's Guards, within what their `guards` allow. Transport headers on a Message are not part of the Contract (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README). For Dependencies and Subscriptions see [below](#dependencies).
 
 ### Not allowed in a Contract
 
