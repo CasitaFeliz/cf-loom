@@ -23,7 +23,7 @@ export type {
   SuccessSnapshot,
   ValidContract,
 } from '../snapshot/index.ts';
-export { canonicalBytes, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
+export { canonicalTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
 export type {
   DeclarationFailure,
   Failure,

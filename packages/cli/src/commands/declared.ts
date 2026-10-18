@@ -1,7 +1,8 @@
+import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  canonicalBytes,
+  canonicalTextOf,
   type ResolvedDefinitions,
   schemaOriginsOf,
   snapshotOf,
@@ -49,7 +50,11 @@ export async function declaredSnapshotOf(run: Run): Promise<Declared> {
   }
   const { bytes, parsed } = committed.committed;
   const context = { generator: generatorOf(), packages, committed: parsed, now: run.now };
-  return { kind: 'built', bytes: canonicalBytes(snapshotOf(validated, context)), committed: bytes };
+  return {
+    kind: 'built',
+    bytes: Buffer.from(canonicalTextOf(snapshotOf(validated, context)), 'utf8'),
+    committed: bytes,
+  };
 }
 
 async function projectOf(

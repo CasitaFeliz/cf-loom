@@ -13,7 +13,7 @@ import {
   notFound,
 } from '../index.ts';
 import {
-  canonicalBytes,
+  canonicalTextOf,
   type ResolvedDefinitions,
   type Snapshot,
   type SnapshotContext,
@@ -208,7 +208,7 @@ function serviceSnapshot(root: unknown = contract, context: SnapshotContext = aC
 }
 
 function textOf(snapshot: Snapshot): string {
-  return new TextDecoder().decode(canonicalBytes(snapshot));
+  return canonicalTextOf(snapshot);
 }
 
 describe('snapshotOf: a Service', () => {
@@ -665,7 +665,7 @@ describe('snapshotOf: a Definitions Package', () => {
   });
 });
 
-describe('canonicalBytes', () => {
+describe('canonicalTextOf', () => {
   test('keys are sorted by code point, indented by two spaces, with a final newline', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
