@@ -4,6 +4,7 @@ import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows } from './grammars.ts';
 import { paramNamesOf, segmentsOf } from './identity.ts';
 import { type Nodes, slotAt } from './schemas.ts';
+import { isPlainObject, partOf } from './written.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;
 
@@ -22,16 +23,20 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
 
 /**
  * `params` declares exactly the `:names` of a canonical path, none of them optional, and none
- * without; a `params` whose schema is no object, or no schema, is the `not-an-object-schema`
- * or `not-a-schema` rule's finding.
+ * without; a `params` whose schema is no object, or no schema, and an `input` that is no object,
+ * are the `not-an-object-schema`, `not-a-schema` and `not-an-object` rules' findings.
  */
 export function paramsFailures(
   { at, endpoint }: LocatedEndpoint,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
   const params = nodes.nodeOf(endpoint, 'input.params');
-  const declared = endpoint.input?.params !== undefined;
+  const input: unknown = endpoint.input;
+  const declared = partOf<'params'>(input).params !== undefined;
   if (!isCanonicalPath(endpoint.path) || (declared && params === undefined)) {
+    return [];
+  }
+  if (input !== undefined && !isPlainObject(input)) {
     return [];
   }
   const paramsAt = slotAt(at, 'input.params');

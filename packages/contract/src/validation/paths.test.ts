@@ -302,6 +302,22 @@ describe('validateContract: params against the path', () => {
     );
   });
 
+  test('an input that is a list fails once, as no object', () => {
+    const getOrder = defineEndpoint({
+      ...listOrders,
+      path: '/orders/:orderId',
+      input: [] as unknown as { params: z.ZodObject<{ orderId: z.ZodUUID }> },
+    });
+
+    expect(validateEndpoint(getOrder)).toEqual(
+      failedAt(
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input'],
+        'not-an-object',
+        'input is an object',
+      ),
+    );
+  });
+
   test('params that are no schema fail once, as a slot with no schema', () => {
     const getOrder = defineEndpoint({
       ...listOrders,
