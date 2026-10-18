@@ -1,37 +1,10 @@
-import { $ZodType } from 'zod/v4/core';
+import type { $ZodType } from 'zod/v4/core';
 import type { LocatedSchema, Path, SchemaNode, WalkedSchemas } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';
-import { entriesOf, partOf, textOf } from './written.ts';
-
-/** A slot of a declaration that holds a schema, as the Snapshot names it. */
-export type Part =
-  | 'input.params'
-  | 'input.query'
-  | 'input.headers'
-  | 'input.body'
-  | 'success.headers'
-  | 'success.body'
-  | 'demands.headers'
-  | 'demands.query'
-  | 'context'
-  | 'qualifier'
-  | 'body'
-  | 'schema';
-
-/** The parts that travel as text and are objects of their fields in a valid root. */
-export const objectParts = [
-  'input.params',
-  'input.query',
-  'input.headers',
-  'success.headers',
-  'demands.headers',
-  'demands.query',
-] as const satisfies readonly Part[];
-
-/** A part a valid root declares as an object of its fields. */
-export type ObjectPart = (typeof objectParts)[number];
+import { endpointParts, guardParts, isSchema, type Part, slotAt, writtenAt } from './parts.ts';
+import { entriesOf, textOf } from './written.ts';
 
 /**
  * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared
@@ -65,20 +38,6 @@ export type Nodes = {
   readonly nodeOf: (owner: unknown, part: Part) => SchemaNode | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
-
-/** Where a part of a declaration sits: the one place that spells a schema's location. */
-export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
-  return [...owner, ...part.split('.')];
-}
-
-/**
- * Whether a value is a zod schema, by zod's own `instanceof`: it reads the traits in `_zod`, which
- * zod, `zod/mini` and any copy of either set and a hand-built `_zod` object lacks, so an impostor
- * never reaches the walker, which reads `_zod.def`.
- */
-export function isSchema(value: unknown): value is $ZodType {
-  return value instanceof $ZodType;
-}
 
 /** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
 export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
@@ -125,28 +84,13 @@ export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): No
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {
-  const input = partOf<'params' | 'query' | 'headers' | 'body'>(endpoint.input);
-  const success = partOf<'headers' | 'body'>(endpoint.success);
   const owned = { at, owner: endpoint };
-  return [
-    slot(owned, 'input.params', input.params),
-    slot(owned, 'input.query', input.query),
-    slot(owned, 'input.headers', input.headers),
-    slot(owned, 'input.body', input.body),
-    slot(owned, 'success.headers', success.headers),
-    slot(owned, 'success.body', success.body),
-  ];
+  return endpointParts.map((part) => slot(owned, part, writtenAt(endpoint, part)));
 }
 
 function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
-  const demands = partOf<'headers' | 'query'>(guard.demands);
   const owned = { at, owner: guard };
-  return [
-    slot(owned, 'demands.headers', demands.headers),
-    slot(owned, 'demands.query', demands.query),
-    slot(owned, 'context', guard.context),
-    slot(owned, 'qualifier', guard.qualifier),
-  ];
+  return guardParts.map((part) => slot(owned, part, writtenAt(guard, part)));
 }
 
 /** One body per code is written, the first declaration's; every other is compared with it. */

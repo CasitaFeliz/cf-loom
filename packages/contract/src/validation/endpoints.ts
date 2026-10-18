@@ -2,7 +2,7 @@ import type { Endpoint } from '../declarations/index.ts';
 import { lifecycles, methods, successStatuses, visibilities } from '../declarations/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
-import { slotAt } from './schemas.ts';
+import { slotAt } from './parts.ts';
 import { isMissing, isWithoutValue, textOf } from './written.ts';
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */

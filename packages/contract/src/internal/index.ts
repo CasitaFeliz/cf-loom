@@ -32,6 +32,7 @@ export type {
 } from '../snapshot/index.ts';
 export { canonicalTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
 export type {
+  AnswerableRejection,
   DeclarationFailure,
   ExportsOf,
   Failure,
@@ -54,11 +55,16 @@ export type {
   ValidContract,
 } from '../validation/index.ts';
 export {
+  answerableRejectionsOf,
   attachedGuardsOf,
+  demandParts,
   follows,
+  inputParts,
   kebabCase,
   listedDefinitionsOf,
+  schemaOf,
   standardRejectionsOf,
+  successParts,
   validateContract,
 } from '../validation/index.ts';
 export type {

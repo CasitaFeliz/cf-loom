@@ -10,17 +10,10 @@ import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import type { Root } from './located.ts';
 import { groupFailures, nameFailures, packageNameFailures, uniquenessFailures } from './names.ts';
+import { type ObjectPart, objectParts, type Part } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import {
-  locatedSchemasOf,
-  type Nodes,
-  nodesOf,
-  type ObjectPart,
-  objectParts,
-  type Part,
-  schemaSlotsOf,
-} from './schemas.ts';
+import { locatedSchemasOf, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';

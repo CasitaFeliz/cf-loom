@@ -47,16 +47,23 @@ type ListedRejections<Target> = Target extends {
   ? Listed
   : never;
 
-/**
- * Every Rejection an Endpoint or a Guard may answer: its own, and for an Endpoint its Guards' and
- * the two the runtime adds; a Guard's stub answers the not-implemented one.
- */
+/** Every Rejection an Endpoint may answer: its own, its Guards' and the two the runtime adds. */
+type EndpointRejectionsOf<Target extends Endpoint> =
+  | ListedRejections<Target>
+  | ListedRejections<GuardsOf<Target>>
+  | StandardRejection<AddedStandardRejectionName>;
+
+/** Every Rejection a Guard may answer: its own and the not-implemented one its stub answers. */
+type GuardRejectionsOf<Target extends Guard> =
+  | ListedRejections<Target>
+  | StandardRejection<'notImplemented'>;
+
+/** Every Rejection an Endpoint or a Guard may answer. */
 export type RejectionsOf<Target extends Endpoint | Guard> = Target extends Endpoint
-  ?
-      | ListedRejections<Target>
-      | ListedRejections<GuardsOf<Target>>
-      | StandardRejection<AddedStandardRejectionName>
-  : ListedRejections<Target> | StandardRejection<'notImplemented'>;
+  ? EndpointRejectionsOf<Target>
+  : Target extends Guard
+    ? GuardRejectionsOf<Target>
+    : never;
 
 /** What a GuardHandler receives first: one key per declared demand part, typed by its schema. */
 export type DemandsOf<Target extends Guard> = Target extends { readonly demands: infer Demands }

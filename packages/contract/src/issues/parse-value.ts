@@ -13,12 +13,15 @@ export type SchemaIssue = {
 };
 
 /** A value parsed with its schema: the parsed value, unknown keys stripped, or every issue. */
-export type Parsed =
-  | { readonly kind: 'value'; readonly value: unknown }
+export type Parsed<Value = unknown> =
+  | { readonly kind: 'value'; readonly value: Value }
   | { readonly kind: 'issues'; readonly issues: readonly SchemaIssue[] };
 
 /** Parses a value with its schema and turns zod's failures into cf-loom's issues. */
-export function parseValue(schema: core.$ZodType, value: unknown): Parsed {
+export function parseValue<Schema extends core.$ZodType>(
+  schema: Schema,
+  value: unknown,
+): Parsed<core.output<Schema>> {
   const parsed = z.safeParse(schema, value, { reportInput: true });
   if (parsed.success) {
     return { kind: 'value', value: parsed.data };
@@ -43,10 +46,13 @@ function pathKeyOf(key: PropertyKey): string | number {
   return typeof key === 'symbol' ? String(key) : key;
 }
 
+/** A missing value is required whatever zod calls it; zod reports what it received as `input`. */
 function issueCodeOf(issue: core.$ZodIssue): IssueCode {
+  if (issue.input === undefined) {
+    return 'required';
+  }
   switch (issue.code) {
     case 'invalid_type':
-      return issue.input === undefined ? 'required' : 'invalid_type';
     case 'too_small':
     case 'too_big':
     case 'invalid_format':

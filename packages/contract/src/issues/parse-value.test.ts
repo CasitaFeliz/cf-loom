@@ -51,6 +51,18 @@ describe('parseValue', () => {
     expect(codes).toEqual(['required', 'invalid_type']);
   });
 
+  test('a missing enum, literal or union field is required, whatever zod calls it', () => {
+    const schema = z.object({
+      status: z.enum(['paid']),
+      kind: z.literal('order'),
+      id: z.union([z.string(), z.number()]),
+    });
+
+    const codes = codesOf(schema, {});
+
+    expect(codes).toEqual(['required', 'required', 'required']);
+  });
+
   test('a value outside an enum, a literal or a union is invalid_value', () => {
     const schema = z.object({
       status: z.enum(['paid']),

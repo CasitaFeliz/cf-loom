@@ -1,8 +1,9 @@
 import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
+import { type Part, slotAt } from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
-import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
+import type { Nodes, WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import { textOf } from './written.ts';
 
