@@ -25,6 +25,9 @@ export type ContractPackage = {
   readonly standardRejections: StandardRejections;
 };
 
+/** The Elements a Provider exports, kept by a Dependency so `generate` checks what it selected. */
+export type ExportedElements = Pick<ContractPackage, 'endpoints' | 'events'>;
+
 type ElementOf<Elements> = Elements[keyof Elements];
 
 /** What a Dependency may select: only Elements its Provider's Contract Package exports. */
@@ -53,7 +56,10 @@ type EventsByName<Events> = {
     : never]: Provided;
 };
 
-/** What a Contract uses of one Provider, keyed by name in code, and the version it relied on. */
+/**
+ * What a Contract uses of one Provider, keyed by name in code, the version it relied on, and the
+ * Elements the Provider exports, so `generate` checks each selected Element is one of them.
+ */
 export type Dependencies<
   Endpoints = Readonly<Record<string, Endpoint>>,
   Events = Readonly<Record<string, ProvidedEvent>>,
@@ -64,6 +70,7 @@ export type Dependencies<
   readonly standardRejections: StandardRejections;
   readonly endpoints: Endpoints;
   readonly events: Events;
+  readonly exported: ExportedElements;
 };
 
 /** Declares what a Contract uses of one Provider, so its client and Subscriptions reach no more. */
@@ -85,6 +92,7 @@ export function defineDependencies<
     standardRejections: provider.standardRejections,
     endpoints: Object.fromEntries(endpoints),
     events: Object.fromEntries(events),
+    exported: { endpoints: provider.endpoints, events: provider.events },
   });
 }
 
