@@ -101,7 +101,7 @@ const editOrder = defineEndpoint({
   visibility: 'internal',
   description: 'Edits one line',
   lifecycle: 'deprecated',
-  guards: [userToken, { guard: permission, qualifier: ['orders:edit', 'orders:read'] }],
+  guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
     params: z.strictObject({ orderId: z.uuid(), lineId: z.uuid() }),
     headers: z.object({
@@ -324,7 +324,7 @@ describe('snapshotOf: a Service', () => {
 
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.guards).toEqual([
       { guard: 'userToken', qualifier: null },
-      { guard: 'permission', qualifier: ['orders:edit', 'orders:read'] },
+      { guard: 'permission', qualifier: ['orders:read', 'orders:edit'] },
     ]);
   });
 
