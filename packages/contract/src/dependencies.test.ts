@@ -47,7 +47,7 @@ describe('defineDependencies', () => {
 
     expect(paymentsDeps.provider).toBe('payments-service');
     expect(paymentsDeps.against).toBe('5.1.0');
-    expect(paymentsDeps.standardRejections).toBe(payments.standardRejections);
+    expect(paymentsDeps.standardRejections).toEqual(payments.standardRejections);
   });
 
   test('a Dependency exposes the selected Endpoints and Events by name', () => {
@@ -111,5 +111,19 @@ describe('defineDependencies fields', () => {
       defineDependencies(payments, { endpoints: [getPayment], commands: [] });
 
     expect(declare).not.toThrow();
+  });
+});
+
+describe('a declared Dependency’s containers', () => {
+  test('a Dependency freezes its maps of Endpoints and Events', () => {
+    const paymentsDeps = defineDependencies(payments, {
+      endpoints: [getPayment],
+      events: [paymentSettledV1],
+    });
+
+    expect(Object.isFrozen(paymentsDeps)).toBe(true);
+    expect(Object.isFrozen(paymentsDeps.endpoints)).toBe(true);
+    expect(Object.isFrozen(paymentsDeps.events)).toBe(true);
+    expect(paymentsDeps.endpoints.getPayment).toBe(getPayment);
   });
 });

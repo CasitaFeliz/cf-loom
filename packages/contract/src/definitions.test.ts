@@ -77,3 +77,27 @@ describe('defineDefinitions fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared Definitions Package’s containers', () => {
+  test('a Definitions Package freezes its lists and maps and keeps its schemas', () => {
+    const money = z.object({ amount: z.int() });
+    const schemas = { money };
+    const notFound = { code: 'NOT_FOUND', status: 404, message: 'Not found' } as const;
+
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      guards: [],
+      schemas,
+      rejections: [],
+      standardRejections: { notFound },
+    });
+    Reflect.set(schemas, 'money', z.object({}));
+
+    expect(definitions.schemas.money).toBe(money);
+    expect(Object.isFrozen(definitions.schemas)).toBe(true);
+    expect(Object.isFrozen(definitions.guards)).toBe(true);
+    expect(Object.isFrozen(definitions.rejections)).toBe(true);
+    expect(Object.isFrozen(definitions.standardRejections)).toBe(true);
+    expect(Object.isFrozen(definitions.standardRejections.notFound)).toBe(true);
+  });
+});

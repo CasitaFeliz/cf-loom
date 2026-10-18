@@ -119,3 +119,27 @@ describe('defineGuard fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared Guard’s containers', () => {
+  test('a Guard freezes its containers and keeps its schemas', () => {
+    const headers = z.object({ 'x-tenant': z.string() });
+    const demands = { headers };
+    const guards = [apiKey];
+
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'The tenant the client acts for',
+      demands,
+      guards,
+      rejections: [unauthenticated],
+    });
+    Reflect.set(demands, 'headers', z.object({}));
+    guards.pop();
+
+    expect(tenant.demands.headers).toBe(headers);
+    expect(tenant.guards).toEqual([apiKey]);
+    expect(Object.isFrozen(tenant.demands)).toBe(true);
+    expect(Object.isFrozen(tenant.guards)).toBe(true);
+    expect(Object.isFrozen(tenant.rejections)).toBe(true);
+  });
+});

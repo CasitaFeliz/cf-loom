@@ -107,3 +107,24 @@ describe('the roots’ fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared root’s containers', () => {
+  test('a Contract freezes its lists', () => {
+    const groups = [
+      defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] }),
+    ];
+
+    const contract = defineContract({ name: 'payments-service', groups, definitions: [] });
+    groups.pop();
+
+    expect(contract.groups).toHaveLength(1);
+    expect(Object.isFrozen(contract.groups)).toBe(true);
+    expect(Object.isFrozen(contract.definitions)).toBe(true);
+  });
+
+  test('an Application freezes its list of Dependencies', () => {
+    const application = defineApplication({ name: 'web-admin', dependencies: [] });
+
+    expect(Object.isFrozen(application.dependencies)).toBe(true);
+  });
+});

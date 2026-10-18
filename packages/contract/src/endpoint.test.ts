@@ -264,3 +264,32 @@ describe('defineEndpoint fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared Endpoint’s containers', () => {
+  test('an Endpoint freezes its containers and keeps its schemas', () => {
+    const params = z.object({ orderId: z.uuid() });
+    const input = { params };
+    const success = { status: 200, body: orderBody } as const;
+    const rejections = [notFound];
+
+    const getOrder = defineEndpoint({
+      name: 'getOrder',
+      method: 'GET',
+      path: '/orders/:orderId',
+      visibility: 'public',
+      description: 'One order by id',
+      input,
+      success,
+      rejections,
+    });
+    Reflect.set(input, 'params', z.object({}));
+    rejections.pop();
+
+    expect(getOrder.input.params).toBe(params);
+    expect(getOrder.rejections).toEqual([notFound]);
+    expect(Object.isFrozen(getOrder.input)).toBe(true);
+    expect(Object.isFrozen(getOrder.success)).toBe(true);
+    expect(Object.isFrozen(getOrder.rejections)).toBe(true);
+    expect(Object.isFrozen(params)).toBe(false);
+  });
+});

@@ -50,3 +50,15 @@ describe('defineGroup fields', () => {
     expect(declare).not.toThrow();
   });
 });
+
+describe('a declared Group’s containers', () => {
+  test('a Group freezes its list of Endpoints', () => {
+    const endpoints: [typeof listOrders, ...(typeof listOrders)[]] = [listOrders];
+
+    const ordersGroup = defineGroup({ name: 'orders', description: 'Order lifecycle', endpoints });
+    endpoints.pop();
+
+    expect(ordersGroup.endpoints).toEqual([listOrders]);
+    expect(Object.isFrozen(ordersGroup.endpoints)).toBe(true);
+  });
+});

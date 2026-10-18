@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import { frozenDeclaration } from './frozen-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
@@ -21,5 +22,5 @@ export type Definitions<Declaration extends DefinitionsDeclaration = Definitions
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, DefinitionsDeclaration>>,
 ): Definitions<Declaration> {
-  return Object.freeze({ ...declaration, kind: 'definitions' });
+  return frozenDeclaration('definitions', declaration);
 }

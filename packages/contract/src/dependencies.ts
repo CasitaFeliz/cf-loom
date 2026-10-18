@@ -1,5 +1,6 @@
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
+import { frozenDeclaration } from './frozen-declaration.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
@@ -78,13 +79,12 @@ export function defineDependencies<
 > {
   const endpoints = (selection.endpoints ?? []).map((endpoint) => [endpoint.name, endpoint]);
   const events = (selection.events ?? []).map((event) => [eventName(event), event]);
-  return Object.freeze({
-    kind: 'dependencies',
+  return frozenDeclaration('dependencies', {
     provider: provider.name,
     against: provider.version,
     standardRejections: provider.standardRejections,
-    endpoints: Object.freeze(Object.fromEntries(endpoints)),
-    events: Object.freeze(Object.fromEntries(events)),
+    endpoints: Object.fromEntries(endpoints),
+    events: Object.fromEntries(events),
   });
 }
 

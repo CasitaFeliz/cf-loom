@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { Lifecycle, Visibility } from './element.ts';
+import { frozenDeclaration } from './frozen-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { LowerCaseHeaderNames, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
@@ -112,5 +113,5 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(
   declaration: Declaration & EndpointRules<Declaration>,
 ): Endpoint<Declaration> {
-  return Object.freeze({ ...declaration, kind: 'endpoint' });
+  return frozenDeclaration('endpoint', declaration);
 }

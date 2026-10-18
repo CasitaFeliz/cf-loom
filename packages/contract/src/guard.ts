@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import { frozenDeclaration } from './frozen-declaration.ts';
 import type { LowerCaseHeaderNames } from './http.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
@@ -37,5 +38,5 @@ export function defineGuard<const Declaration extends GuardDeclaration>(
     DemandedHeadersRule<Declaration> &
     NoInfer<DeclaredFieldsRule<Declaration, GuardDeclaration>>,
 ): Guard<Declaration> {
-  return Object.freeze({ ...declaration, kind: 'guard' });
+  return frozenDeclaration('guard', declaration);
 }
