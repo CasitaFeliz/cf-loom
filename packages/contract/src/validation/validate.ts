@@ -3,6 +3,7 @@ import { type OriginOf, walkSchemas } from '../walker/walk.ts';
 import { type Declarations, declarationsOf, type Root } from './declarations.ts';
 import { endpointFailures } from './endpoints.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
+import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { groupFailures, nameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { type LocatedNode, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
@@ -47,12 +48,17 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...groupFailures(declarations),
     ...declarations.endpoints.flatMap(pathFailures),
     ...declarations.endpoints.flatMap(endpointFailures),
+    ...declarations.guards.flatMap(guardFailures),
+    ...declarations.endpoints.flatMap(attachmentFailures),
   ];
 }
 
 /** The rules that read the walked nodes, judged once every schema walked. */
 function schemaFailures(declarations: Declarations, nodes: Nodes): readonly DeclarationFailure[] {
-  return [...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes))];
+  return [
+    ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
+    ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
+  ];
 }
 
 function invalid(failures: readonly Failure[]): ValidatedContract {
