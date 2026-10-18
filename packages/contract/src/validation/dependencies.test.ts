@@ -180,6 +180,38 @@ describe('validateContract: a Service’s Dependencies', () => {
   });
 });
 
+describe('validateContract: a Dependency whose exported Elements are not there', () => {
+  test('exported Endpoints written null fail once, as a required field', () => {
+    const provider = { ...payments, endpoints: null } as unknown as ContractPackage;
+    const selection = { endpoints: [getPayment, refundPayment] } as unknown as AnySelection;
+    const paymentsDeps = defineDependencies(provider, selection);
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'exported', 'endpoints'],
+        'required-field',
+        'endpoints is a required field',
+      ),
+    );
+  });
+
+  test('exported Events left out fail once, as a required field', () => {
+    const provider = { ...payments, events: undefined } as unknown as ContractPackage;
+    const selection = { events: [paymentSettledV1] } as unknown as AnySelection;
+    const paymentsDeps = defineDependencies(provider, selection);
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'exported', 'events'],
+        'required-field',
+        'events is a required field',
+      ),
+    );
+  });
+});
+
 describe('validateContract: an Application’s Dependencies', () => {
   test('an Application depending on Public Endpoints validates', () => {
     const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });

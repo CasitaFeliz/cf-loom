@@ -1,6 +1,6 @@
 import type { QualifiedAttachment } from '../attachment.ts';
 import type { Definitions } from '../definitions.ts';
-import type { Dependencies } from '../dependencies.ts';
+import type { Dependencies, ExportedElements } from '../dependencies.ts';
 import type { Endpoint } from '../endpoint.ts';
 import type { Group } from '../group.ts';
 import type { Guard } from '../guard.ts';
@@ -213,6 +213,14 @@ export const dependenciesFields = {
   strings: { kind: true, provider: true, against: true },
   objects: { standardRejections: true, endpoints: true, events: true, exported: true },
 } satisfies Fields<Dependencies>;
+
+/** The Elements a Dependency keeps as its Provider exported them. */
+export const exportedFields = {
+  declared: { endpoints: true, events: true },
+  required: { endpoints: true, events: true },
+  strings: {},
+  objects: { endpoints: true, events: true },
+} satisfies Fields<ExportedElements>;
 
 /** The three Standard Rejections a Definitions Package may declare. */
 export const standardRejectionsFields = {

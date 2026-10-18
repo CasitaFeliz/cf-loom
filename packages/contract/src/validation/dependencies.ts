@@ -3,7 +3,7 @@ import type { Path } from '../walker/nodes.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedDependencies, Root } from './located.ts';
-import { entriesOf, partOf, textOf } from './written.ts';
+import { entriesOf, isPlainObject, partOf, textOf } from './written.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';
 
@@ -40,14 +40,22 @@ function selectedOf(
   }));
 }
 
-/** The Elements a Dependency's Provider exports, read once per Dependency. */
-type Exported = { readonly endpoints: ReadonlySet<unknown>; readonly events: readonly unknown[] };
+/**
+ * The Elements a Dependency's Provider exports, read once per Dependency; a map that is no object
+ * is the field rules' finding, and nothing is judged against it.
+ */
+type Exported = {
+  readonly endpoints: ReadonlySet<unknown> | undefined;
+  readonly events: readonly unknown[] | undefined;
+};
 
 function exportedOf({ dependencies }: LocatedDependencies): Exported {
   const exported: Partial<Record<'endpoints' | 'events', unknown>> = partOf(dependencies.exported);
   return {
-    endpoints: new Set(Object.values(partOf(exported.endpoints))),
-    events: Object.values(partOf(exported.events)),
+    endpoints: isPlainObject(exported.endpoints)
+      ? new Set(Object.values(exported.endpoints))
+      : undefined,
+    events: isPlainObject(exported.events) ? Object.values(exported.events) : undefined,
   };
 }
 
@@ -62,7 +70,7 @@ function selectedEndpointFailures(
   if (element.visibility === 'private') {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
-  if (!exported.endpoints.has(element)) {
+  if (exported.endpoints !== undefined && !exported.endpoints.has(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
   }
   if (rootKind !== 'application' || element.visibility === 'public') {
@@ -93,7 +101,7 @@ function selectedEventFailures(
   if (element.visibility === 'private') {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
-  const isExported = exported.events.some(
+  const isExported = (exported.events ?? [element]).some(
     (event) => isEvent(event) && event.name === element.name && event.version === element.version,
   );
   return isExported

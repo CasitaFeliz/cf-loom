@@ -8,6 +8,7 @@ import {
   demandsFields,
   dependenciesFields,
   endpointFields,
+  exportedFields,
   groupFields,
   guardFields,
   inputFields,
@@ -73,7 +74,10 @@ function writtenOf(declarations: Declarations): readonly Written[] {
       written([...at, 'demands'], guard.demands, demandsFields),
     ]),
     ...rejections.map(({ at, rejection }) => written(at, rejection, rejectionFields)),
-    ...dependencies.map(({ at, dependencies: listed }) => written(at, listed, dependenciesFields)),
+    ...dependencies.flatMap(({ at, dependencies: listed }) => [
+      written(at, listed, dependenciesFields),
+      written([...at, 'exported'], listed.exported, exportedFields),
+    ]),
     ...allPackages.flatMap(standardRejectionsOf),
   ];
 }
