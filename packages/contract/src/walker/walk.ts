@@ -1,21 +1,10 @@
 import type * as core from 'zod/v4/core';
-import {
-  type CheckDef,
-  checksOf,
-  constrainArray,
-  constrainNumber,
-  constrainString,
-  unconstrained,
-} from './checks.ts';
-import { walkEnum, walkTagged, walkUnion } from './choices.ts';
-import { walkArray, walkTuple } from './collections.ts';
-import { annotated, annotatedBy, type Metadata, metadataOf } from './metadata.ts';
+import { checksOf } from './checks.ts';
+import { annotatedBy, type Metadata, metadataOf } from './metadata.ts';
 import type { Field, NotAllowed, Origin, Path, SchemaNode } from './nodes.ts';
-import { notAllowed, refused, refusedName } from './not-allowed.ts';
-import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
-import { isJsonUnion, walkBoolean, walkLiteral, walkNumber, walkString } from './scalars.ts';
 import { allWalked, type LocatedSchema, type Walked, type Walker, walked } from './walked.ts';
+import { constrained, type Def, walkDefinition } from './zod-types.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
@@ -34,8 +23,6 @@ type Context = {
   readonly recursion: Recursion;
   readonly originOf: OriginOf;
 };
-
-type Def = core.$ZodTypes['_zod']['def'];
 
 /**
  * Walks every schema of one Snapshot at once, since recursion ids are unique and `defs` shared
@@ -63,13 +50,26 @@ function walkSchema(schema: core.$ZodType, at: Path, context: Context): Walked {
   );
 }
 
+/** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
 function walkField(schema: core.$ZodType, at: Path, context: Context): Walked<Field> {
   const def = schema._zod.def as Def;
-  if (def.type !== 'optional') {
-    return requiredField(walkSchema(schema, at, context));
+  if (def.type === 'optional') {
+    const inner = walkSchema(def.innerType, at, context);
+    return optionalField(throughWrapper({ schema, at }, inner, context));
   }
-  const inner = walkSchema(def.innerType, at, context);
-  return optionalField(throughWrapper({ schema, at }, inner, context));
+  if (def.type === 'nonoptional') {
+    const inner = walkUnlessOptional(def.innerType, at, context);
+    return requiredField(throughWrapper({ schema, at }, inner, context));
+  }
+  return requiredField(walkSchema(schema, at, context));
+}
+
+function walkUnlessOptional(schema: core.$ZodType, at: Path, context: Context): Walked {
+  const def = schema._zod.def as Def;
+  if (def.type !== 'optional') {
+    return walkSchema(schema, at, context);
+  }
+  return throughWrapper({ schema, at }, walkSchema(def.innerType, at, context), context);
 }
 
 /** A field's wrapper says what any schema does: its checks and its own metadata apply. */
@@ -97,121 +97,4 @@ function ownMetadata(schema: core.$ZodType, at: Path, originOf: OriginOf): Walke
   }
   const annotations = { ...metadata.value.annotations, origin };
   return walked({ ...metadata.value, annotations });
-}
-
-function walkDefinition(schema: core.$ZodType, at: Path, walker: Walker): Walked {
-  const node = nodeOf(schema, at, walker);
-  if (node.kind === 'not-allowed') {
-    return node;
-  }
-  return constrained(node.value, checksOf(schema._zod.def), at);
-}
-
-function constrained(node: SchemaNode, checks: readonly CheckDef[], at: Path): Walked {
-  switch (node.type) {
-    case 'string':
-      return constrainString(node, checks, at);
-    case 'number':
-      return constrainNumber(node, checks, at);
-    case 'array':
-      return constrainArray(node, checks, at);
-    case 'boolean':
-    case 'literal':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'tuple':
-    case 'union':
-    case 'tagged':
-    case 'allOf':
-    case 'json':
-    case 'ref':
-      return unconstrained(node, checks, at);
-  }
-}
-
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the node or refusal of each zod type
-function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
-  const def = schema._zod.def as Def;
-  const type: string = def.type;
-  switch (def.type) {
-    case 'string':
-      return walkString(def, at);
-    case 'number':
-      return walkNumber(def, at);
-    case 'boolean':
-      return walkBoolean(def, at);
-    case 'literal':
-      return walkLiteral(def, at);
-    case 'enum':
-      return walkEnum(schema as core.$ZodEnum, at);
-    case 'object':
-      return walkObject(def, at, walker);
-    case 'record':
-      return walkRecord(def, at, walker);
-    case 'array':
-      return walkArray(def, at, walker);
-    case 'tuple':
-      return walkTuple(def, at, walker);
-    case 'union':
-      return unionNodeOf(schema as core.$ZodUnion, at, walker);
-    case 'intersection':
-      return walkIntersection(def, at, walker);
-    case 'lazy':
-      return walker.schema((schema as core.$ZodLazy)._zod.innerType, at);
-    case 'nullable':
-      return annotated(walker.schema(def.innerType, at), { nullable: true });
-    case 'pipe':
-      return notAllowed(at, pipeRefusal(def));
-    case 'optional':
-    case 'default':
-    case 'prefault':
-    case 'catch':
-    case 'readonly':
-    case 'nonoptional':
-    case 'transform':
-    case 'custom':
-    case 'date':
-    case 'null':
-    case 'undefined':
-    case 'any':
-    case 'unknown':
-    case 'bigint':
-    case 'symbol':
-    case 'void':
-    case 'never':
-    case 'nan':
-    case 'map':
-    case 'set':
-    case 'file':
-    case 'promise':
-    case 'function':
-    case 'success':
-      return notAllowed(at, refused[def.type]);
-    case 'template_literal':
-      return notAllowed(at, refused.templateLiteral);
-  }
-  return notAllowed(at, refusedName(type));
-}
-
-/** `z.json()`, a discriminated union or any other union, which zod all writes as a union. */
-function unionNodeOf(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
-  if (isJsonUnion(schema)) {
-    return walked({ type: 'json' });
-  }
-  if ('discriminator' in schema._zod.def) {
-    return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
-  }
-  return walkUnion(schema, at, walker);
-}
-
-function pipeRefusal(def: core.$ZodPipeDef) {
-  if ('reverseTransform' in def) {
-    const isStringbool = def.in._zod.def.type === 'string' && def.out._zod.def.type === 'boolean';
-    return isStringbool ? refused.stringbool : refused.codec;
-  }
-  if (def.in._zod.def.type === 'transform') {
-    return refused.preprocess;
-  }
-  return def.out._zod.def.type === 'transform' ? refused.transform : refused.pipe;
 }

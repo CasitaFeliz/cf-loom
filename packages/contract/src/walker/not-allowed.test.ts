@@ -47,6 +47,11 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.readonly()', z.array(z.string()).readonly(), '.readonly()'],
     ['numeric z.enum() values', z.enum({ low: 1, high: 2 }), 'numeric z.enum() values'],
     ['.optional() outside an object field', z.string().optional(), '.optional()'],
+    [
+      '.nonoptional() outside an object field',
+      z.string().optional().nonoptional(),
+      '.nonoptional()',
+    ],
     ['.lowercase()', z.string().lowercase(), '.lowercase()'],
     ['.uppercase()', z.string().uppercase(), '.uppercase()'],
     ['z.stringFormat()', z.stringFormat('sku', () => true), 'z.stringFormat("sku")'],

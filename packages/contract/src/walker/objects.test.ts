@@ -93,6 +93,18 @@ describe('walkSchemas: objects', () => {
     expect(walkBody(order)).toEqual(refusedAt(['body', 'fields', 'note'], '.refine()'));
   });
 
+  test('.required() makes an optional field required', () => {
+    const order = z.object({ note: z.string().optional(), id: z.string() }).required();
+
+    expect(walkBody(order)).toEqual(
+      walkedTo({
+        type: 'object',
+        mode: 'open',
+        fields: { note: { required: true, schema: text }, id: { required: true, schema: text } },
+      }),
+    );
+  });
+
   test('a zod/mini optional field is not required', () => {
     expect(walkBody(zm.object({ note: zm.optional(zm.string()) }))).toEqual(
       walkedTo({
