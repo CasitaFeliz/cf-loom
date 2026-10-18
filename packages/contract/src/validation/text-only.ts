@@ -51,7 +51,7 @@ export function conflictFailures(
   });
 }
 
-function endpointParts({ at, endpoint: _ }: LocatedEndpoint): readonly TextPart[] {
+function endpointParts({ at }: LocatedEndpoint): readonly TextPart[] {
   return [
     { at: [...at, 'input', 'params'], part: 'params' },
     { at: [...at, 'input', 'query'], part: 'query' },
