@@ -49,8 +49,12 @@ export async function installedPackageOf(
  * built with; nothing of it is loaded.
  */
 export function installedVersionOf(packageName: string, rootPath: string): InstalledVersion {
-  const found = foundOf(packageName, rootPath);
-  return found.kind === 'failed' ? found : { kind: 'installed', version: found.version };
+  const manifestPath = manifestPathOf(packageName, rootPath);
+  const version = manifestPath === undefined ? undefined : manifestIn(manifestPath)?.['version'];
+  if (typeof version !== 'string') {
+    return { kind: 'failed', message: `${packageName} is not installed` };
+  }
+  return { kind: 'installed', version };
 }
 
 /** A package's package.json as found from the root file, with its version. */

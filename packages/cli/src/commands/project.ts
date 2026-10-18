@@ -13,6 +13,8 @@ import { type Exit, toolingError } from './exit.ts';
 export type Project = {
   readonly directory: string;
   readonly packageName: PackageName;
+  /** The npm scope of the configuration, which the Contract Package is published under. */
+  readonly scope: string;
   readonly root: unknown;
   /** Everything the root file exports, which a Definitions root lists. */
   readonly rootExports: readonly unknown[];
@@ -52,7 +54,8 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   const { packageName } = projectPackage;
   const { root, file: rootFile, exports: rootExports } = loaded;
   const { packages } = resolved;
-  const project = { directory, packageName, root, rootExports, rootFile, packages };
+  const { scope } = config.config;
+  const project = { directory, packageName, scope, root, rootExports, rootFile, packages };
   return { kind: 'read', project };
 }
 

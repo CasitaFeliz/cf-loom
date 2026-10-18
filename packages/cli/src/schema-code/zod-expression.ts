@@ -1,0 +1,160 @@
+import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
+import { keyOf, stringLiteralOf } from '../source-text/index.ts';
+import { defIdentifierOf } from './def-names.ts';
+import { formatCallOf, regexCallOf } from './formats.ts';
+import type { Needs, SchemaMode } from './needs.ts';
+import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
+
+type NodeOf<Type extends SchemaNode['type']> = Extract<SchemaNode, { readonly type: Type }>;
+
+/** Where a schema is written: its mode, and what the module writing it must import. */
+export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
+
+/**
+ * The zod expression of a Snapshot node in a mode, with its nullability and annotations, so the
+ * generated schema walks back to the same node.
+ */
+export function zodExpressionOf(node: SchemaNode, writing: Writing): string {
+  const shape = shapeOf(node, writing);
+  const nullable = node.nullable === true ? `${shape}.nullable()` : shape;
+  return `${nullable}${metaOf(node)}`;
+}
+
+function shapeOf(node: SchemaNode, writing: Writing): string {
+  switch (node.type) {
+    case 'string':
+      return stringOf(node);
+    case 'number':
+      return numberOf(node);
+    case 'boolean':
+      return 'z.boolean()';
+    case 'literal':
+      return `z.literal(${valueTextOf(node.value)})`;
+    case 'enum':
+      return enumOf(node, writing);
+    case 'object':
+      return objectOf(node, writing);
+    case 'record':
+      return `z.record(${zodExpressionOf(node.key, writing)}, ${zodExpressionOf(node.value, writing)})`;
+    case 'array':
+      return `z.array(${zodExpressionOf(node.items, writing)})${boundsOf(node)}`;
+    case 'tuple':
+      return tupleOf(node, writing);
+    case 'union':
+      return `z.union([${node.options.map((option) => zodExpressionOf(option, writing)).join(', ')}])`;
+    case 'tagged':
+      return taggedOf(node, writing);
+    case 'allOf':
+      return allOfOf(node.items.map((item) => zodExpressionOf(item, writing)));
+    case 'json':
+      return 'z.json()';
+    case 'ref':
+      return refOf(node.name, writing);
+  }
+}
+
+function stringOf(node: NodeOf<'string'>): string {
+  const base =
+    node.format === undefined ? 'z.string()' : formatCallOf(node.format, node.formatOptions);
+  const regex = node.regex === undefined ? '' : regexCallOf(node.regex);
+  return `${base}${regex}${boundsOf(node)}`;
+}
+
+function numberOf(node: NodeOf<'number'>): string {
+  const base = node.int === true ? 'z.int()' : 'z.number()';
+  const checks = [
+    node.min === undefined ? '' : `.min(${node.min})`,
+    node.exclusiveMin === undefined ? '' : `.gt(${node.exclusiveMin})`,
+    node.max === undefined ? '' : `.max(${node.max})`,
+    node.exclusiveMax === undefined ? '' : `.lt(${node.exclusiveMax})`,
+    node.multipleOf === undefined ? '' : `.multipleOf(${node.multipleOf})`,
+  ];
+  return `${base}${checks.join('')}`;
+}
+
+function boundsOf(node: { readonly min?: number; readonly max?: number }): string {
+  const min = node.min === undefined ? '' : `.min(${node.min})`;
+  const max = node.max === undefined ? '' : `.max(${node.max})`;
+  return `${min}${max}`;
+}
+
+/** An enum: an Open Enum's reader has its Unknown case; values that are not all strings are literals. */
+function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
+  const values = node.values.map(valueTextOf).join(', ');
+  const allStrings = node.values.every((value) => typeof value === 'string');
+  if (!node.open) {
+    return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
+  }
+  if (writing.mode === 'reader') {
+    return openEnumReaderOf(`z.enum([${values}])`);
+  }
+  writing.needs.helpers.add('openEnum');
+  return `openEnum([${values}])`;
+}
+
+/** An object: strict only as declared, since readers ignore fields they do not know. */
+function objectOf(node: NodeOf<'object'>, writing: Writing): string {
+  const fields = Object.entries(node.fields).map(([name, field]) => {
+    const schema = zodExpressionOf(field.schema, writing);
+    return `${keyOf(name)}: ${field.required ? schema : `${schema}.optional()`}`;
+  });
+  const call =
+    node.mode === 'strict' && writing.mode === 'declared' ? 'z.strictObject' : 'z.object';
+  return fields.length === 0 ? `${call}({})` : `${call}({ ${fields.join(', ')} })`;
+}
+
+function tupleOf(node: NodeOf<'tuple'>, writing: Writing): string {
+  const items = node.items.map((item) => zodExpressionOf(item, writing)).join(', ');
+  if (node.rest === undefined) {
+    return `z.tuple([${items}])`;
+  }
+  return `z.tuple([${items}], ${zodExpressionOf(node.rest, writing)})`;
+}
+
+/** A discriminated union: an Open Union's reader has its Unknown case. */
+function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
+  const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
+  const discriminator = stringLiteralOf(node.discriminator);
+  const union = `z.discriminatedUnion(${discriminator}, [${variants.join(', ')}])`;
+  if (!node.open) {
+    return union;
+  }
+  if (writing.mode === 'reader') {
+    const known = Object.keys(node.variants).map((key) => JSON.parse(key));
+    return openUnionReaderOf(union, node.discriminator, known);
+  }
+  writing.needs.helpers.add('openUnion');
+  return `openUnion(${discriminator}, [${variants.join(', ')}])`;
+}
+
+/** An intersection of every item, nested from the left, as zod intersects two at a time. */
+function allOfOf(items: readonly string[]): string {
+  const [first, ...rest] = items;
+  if (first === undefined) {
+    throw new Error('An allOf node intersects at least one item');
+  }
+  let intersection = first;
+  for (const item of rest) {
+    intersection = `z.intersection(${intersection}, ${item})`;
+  }
+  return intersection;
+}
+
+function refOf(name: string, writing: Writing): string {
+  const identifier = defIdentifierOf(name, writing.mode);
+  writing.needs.defs.add(identifier);
+  return identifier;
+}
+
+function valueTextOf(value: string | number | boolean): string {
+  return typeof value === 'string' ? stringLiteralOf(value) : String(value);
+}
+
+/** The annotations a schema's `.meta()` carries: its description and examples; `origin` is not code's. */
+function metaOf(node: SchemaNode): string {
+  const meta = {
+    ...(node.description !== undefined && { description: node.description }),
+    ...(node.examples !== undefined && { examples: node.examples }),
+  };
+  return Object.keys(meta).length === 0 ? '' : `.meta(${JSON.stringify(meta)})`;
+}

@@ -2,20 +2,25 @@
 import { parseArgs } from 'node:util';
 import { type Exit, runCommand, usageError } from './commands/index.ts';
 
-/** Runs the command the arguments name; the CLI takes no option, so any option is a usage error. */
+/** Runs the command the arguments name; `--out <dir>` is the one option, any other a usage error. */
 async function exitOf(args: readonly string[]): Promise<Exit> {
-  const { positionals, tokens } = parseArgs({
+  const { positionals, tokens, values } = parseArgs({
     args: [...args],
     allowPositionals: true,
     strict: false,
     tokens: true,
-    options: {},
+    options: { out: { type: 'string' } },
   });
-  const option = tokens.find((token) => token.kind === 'option');
-  if (option !== undefined) {
-    return usageError(`Unknown option: ${option.rawName}`);
+  const unknown = tokens.find((token) => token.kind === 'option' && token.name !== 'out');
+  if (unknown !== undefined && unknown.kind === 'option') {
+    return usageError(`Unknown option: ${unknown.rawName}`);
   }
-  return await runCommand(positionals, { cwd: process.cwd(), now: Date.now() });
+  const { out } = values;
+  if (out !== undefined && typeof out !== 'string') {
+    return usageError('--out takes a folder');
+  }
+  const called = out === undefined ? { positionals } : { positionals, out };
+  return await runCommand(called, { cwd: process.cwd(), now: Date.now() });
 }
 
 const exit = await exitOf(process.argv.slice(2));

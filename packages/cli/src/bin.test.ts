@@ -61,7 +61,8 @@ function cfLoom(project: string, ...args: string[]) {
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
 
-const usage = 'Usage: cf-loom init [service | application | definitions] | generate | verify';
+const usage =
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>]';
 
 const config = [
   "import { defineConfig } from '@casitafeliz/loom-cli';",
