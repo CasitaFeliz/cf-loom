@@ -157,7 +157,7 @@ What a GuardHandler answers: the request admitted with the Context its Guard pro
 _Avoid_: verdict, pass, result
 
 **Stub**:
-A Handler `generate` writes for an Endpoint, a Guard or a Message Version not implemented yet, marked so the runtime does not run it as written: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
+A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, marked so the runtime does not run it as written: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
 _Avoid_: placeholder, mock
 
 **Issue**:
