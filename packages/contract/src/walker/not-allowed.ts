@@ -45,6 +45,7 @@ export const refused = {
   undefined: { construct: 'z.undefined()', instead: nullableInstead },
   literalNull: { construct: 'z.literal(null)', instead: nullableInstead },
   literalUndefined: { construct: 'z.literal(undefined)', instead: nullableInstead },
+  nonFinite: { construct: 'a number that is not finite (NaN or Infinity)' },
   literalBigint: { construct: 'a bigint z.literal()' },
   xor: { construct: 'z.xor()' },
   severalDiscriminatorValues: {

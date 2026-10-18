@@ -68,6 +68,9 @@ function uncoerced(def: Coercible, at: Path, node: SchemaNode): Walked {
 }
 
 function jsonValueOf(value: core.util.Literal, at: Path): Walked<JsonPrimitive> {
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return notAllowed(at, refused.nonFinite);
+  }
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return walked(value);
   }

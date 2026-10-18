@@ -17,6 +17,7 @@ function refused(construct: string, instead?: string) {
 
 const mutating = '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()';
 const dynamicValue = 'z.record() or z.json()';
+const nonFinite = 'a number that is not finite (NaN or Infinity)';
 const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
@@ -52,6 +53,11 @@ describe('walkSchemas: the Not allowed list', () => {
       z.string().optional().nonoptional(),
       '.nonoptional()',
     ],
+    ['z.literal(NaN)', z.literal(Number.NaN), nonFinite],
+    ['z.literal(Infinity)', z.literal(Number.POSITIVE_INFINITY), nonFinite],
+    ['.max(Infinity) on a number', z.number().max(Number.POSITIVE_INFINITY), nonFinite],
+    ['.min(-Infinity) on a number', z.number().min(Number.NEGATIVE_INFINITY), nonFinite],
+    ['.max(Infinity) on a string', z.string().max(Number.POSITIVE_INFINITY), nonFinite],
     ['.lowercase()', z.string().lowercase(), '.lowercase()'],
     ['.uppercase()', z.string().uppercase(), '.uppercase()'],
     ['z.stringFormat()', z.stringFormat('sku', () => true), 'z.stringFormat("sku")'],

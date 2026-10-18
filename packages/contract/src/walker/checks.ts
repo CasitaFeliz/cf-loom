@@ -83,6 +83,9 @@ function constrained<Node extends SchemaNode>(
       failures.push(...constraint.failures);
       continue;
     }
+    if (Object.values(constraint.value).some(isNonFinite)) {
+      failures.push({ at, ...refused.nonFinite });
+    }
     const repeated = Object.keys(constraint.value).find((key) => key in constrainedNode);
     if (repeated !== undefined) {
       failures.push({ at, ...refusedRepeatedCheck(repeated) });
@@ -161,6 +164,10 @@ function numberConstraint(check: CheckDef, at: Path): Constraint<NumberNode> {
     case 'meta':
       return notAllowed(at, refusedCheck(check));
   }
+}
+
+function isNonFinite(value: unknown): boolean {
+  return typeof value === 'number' && !Number.isFinite(value);
 }
 
 function regexOf(pattern: RegExp): Regex {
