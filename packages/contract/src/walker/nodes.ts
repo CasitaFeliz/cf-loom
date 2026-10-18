@@ -90,11 +90,14 @@ export type UnionNode = Annotations & {
   readonly options: readonly SchemaNode[];
 };
 
-/** Objects told apart by one field, keyed by the canonical JSON of its value in each variant. */
+/**
+ * Objects told apart by one field, keyed by the canonical JSON of its value in each variant; a
+ * variant may be a `ref` to an object def.
+ */
 export type TaggedNode = Annotations & {
   readonly type: 'tagged';
   readonly discriminator: string;
-  readonly variants: Readonly<Record<string, ObjectNode>>;
+  readonly variants: Readonly<Record<string, ObjectNode | RefNode>>;
   readonly open: boolean;
 };
 

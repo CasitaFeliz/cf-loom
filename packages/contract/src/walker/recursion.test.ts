@@ -308,4 +308,73 @@ describe('walkSchemas: recursion', () => {
     expect(walked.kind).toBe('not-allowed');
     expect(failures.length).toBeLessThanOrEqual(count);
   });
+
+  describe('a recursive discriminated union with an id on a variant', () => {
+    const leaf = z.object({ type: z.literal('leaf'), value: z.number() });
+    const branch = z
+      .object({
+        type: z.literal('branch'),
+        get children(): z.ZodArray<typeof tree> {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'branch' });
+    const tree: z.ZodDiscriminatedUnion<[typeof leaf, typeof branch], 'type'> =
+      z.discriminatedUnion('type', [leaf, branch]);
+
+    const leafNode = {
+      type: 'object',
+      mode: 'open',
+      fields: {
+        type: { required: true, schema: { type: 'literal', value: 'leaf' } },
+        value: { required: true, schema: { type: 'number' } },
+      },
+    } as const;
+    const treeNode = {
+      type: 'tagged',
+      discriminator: 'type',
+      variants: { '"leaf"': leafNode, '"branch"': { type: 'ref', name: 'branch' } },
+      open: false,
+    } as const;
+    const branchDef = {
+      type: 'object',
+      mode: 'open',
+      fields: {
+        type: { required: true, schema: { type: 'literal', value: 'branch' } },
+        children: { required: true, schema: { type: 'array', items: treeNode } },
+      },
+    } as const;
+
+    test('entering at the union, the variant is a ref to its def', () => {
+      const walked = walkSchemas(
+        [
+          { at: ['tree'], schema: tree },
+          { at: ['branch'], schema: branch },
+        ],
+        () => undefined,
+      );
+
+      expect(walked).toEqual({
+        kind: 'walked',
+        nodes: [treeNode, { type: 'ref', name: 'branch' }],
+        defs: { branch: branchDef },
+      });
+    });
+
+    test('entering at the variant gives the same nodes and defs', () => {
+      const walked = walkSchemas(
+        [
+          { at: ['branch'], schema: branch },
+          { at: ['tree'], schema: tree },
+        ],
+        () => undefined,
+      );
+
+      expect(walked).toEqual({
+        kind: 'walked',
+        nodes: [{ type: 'ref', name: 'branch' }, treeNode],
+        defs: { branch: branchDef },
+      });
+    });
+  });
 });

@@ -8,7 +8,9 @@ import type {
   LiteralNode,
   ObjectNode,
   Path,
+  RefNode,
   SchemaNode,
+  TaggedNode,
 } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, type Walker, walked } from './walked.ts';
@@ -44,7 +46,8 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
-      return taggedVariant(walker.schema(option, variantAt), def.discriminator, variantAt);
+      const values = option._zod.propValues?.[def.discriminator];
+      return taggedVariant(walker.schema(option, variantAt), values, variantAt);
     }),
   );
   if (variants.kind === 'not-allowed') {
@@ -62,11 +65,15 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
   });
 }
 
+/**
+ * A variant keyed by its discriminator value, as zod itself reads it from the variant, so a
+ * `ref` to an object def keys like the object.
+ */
 function taggedVariant(
   variant: Walked,
-  discriminator: string,
+  values: ReadonlySet<unknown> | undefined,
   at: Path,
-): Walked<[string, ObjectNode]> {
+): Walked<[string, TaggedNode['variants'][string]]> {
   if (variant.kind === 'not-allowed') {
     return variant;
   }
@@ -74,14 +81,22 @@ function taggedVariant(
   if (node.type === 'tagged') {
     return notAllowed(at, refused.nestedDiscriminatedUnion);
   }
-  const field = node.type === 'object' ? node.fields[discriminator] : undefined;
-  if (field?.schema.type === 'enum') {
-    return notAllowed(at, refused.severalDiscriminatorValues);
-  }
-  if (node.type !== 'object' || field?.schema.type !== 'literal' || !field.required) {
+  const literals = [...(values ?? [])];
+  if (!isTaggable(node) || literals.length === 0 || !literals.every(isJsonPrimitive)) {
     return notAllowed(at, refused.unliteralDiscriminator);
   }
-  return walked([canonicalJson(field.schema.value), node]);
+  if (literals.length > 1) {
+    return notAllowed(at, refused.severalDiscriminatorValues);
+  }
+  return walked([canonicalJson(literals[0]), node]);
+}
+
+function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
+  return node.type === 'object' || node.type === 'ref';
+}
+
+function isJsonPrimitive(value: unknown): value is JsonPrimitive {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
