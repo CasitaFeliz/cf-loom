@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
 import { formatOptionsOf } from './format-options.ts';
+import { type HashFormat, hashFormats, hashPartsOf, isHashFormat } from './hash-formats.ts';
 import type { Path, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 import { type Walked, walked } from './walked.ts';
@@ -13,16 +14,6 @@ type FormatDef = BuiltDef & {
   readonly fn?: ((value: string) => unknown) | undefined;
   readonly normalize?: boolean | undefined;
 };
-
-const hashAlgorithms = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'] as const;
-const hashEncodings = ['hex', 'base64', 'base64url'] as const;
-
-/** A hash format, its algorithm and encoding in its name, as `z.hash()` builds it. */
-type HashFormat = `${(typeof hashAlgorithms)[number]}_${(typeof hashEncodings)[number]}`;
-
-const hashFormats: readonly HashFormat[] = hashAlgorithms.flatMap((algorithm) =>
-  hashEncodings.map((encoding): HashFormat => `${algorithm}_${encoding}`),
-);
 
 /** The formats zod builds itself, each by its own constructor from its options. */
 const builtFormats = [
@@ -54,20 +45,29 @@ const builtFormats = [
   'jwt',
 ] as const;
 
-/** The formats zod builds from a regex alone. */
-const regexFormatNames = ['hex', 'hostname', 'currency_code'] as const;
+/** The formats zod builds from a regex alone, each with the zod that builds it. */
+const regexFormatBuilders = {
+  hex: () => z.hex(),
+  hostname: () => z.hostname(),
+  // biome-ignore lint/style/useNamingConvention: SNAPSHOT.md's name of the format
+  currency_code: () => z.currencyCode(),
+} as const satisfies Readonly<Record<string, () => core.$ZodType>>;
+
+/** A format zod builds from a regex alone, a hash's aside. */
+type RegexFormat = keyof typeof regexFormatBuilders;
 
 /** A known string format, as SNAPSHOT.md names them: the ones zod builds itself. */
-export type StringFormat =
-  | (typeof builtFormats)[number]
-  | (typeof regexFormatNames)[number]
-  | HashFormat;
+export type StringFormat = (typeof builtFormats)[number] | RegexFormat | HashFormat;
 
 const knownFormats: ReadonlySet<string> = new Set<StringFormat>([
   ...builtFormats,
-  ...regexFormatNames,
+  ...Object.keys(regexFormatBuilders).filter(isRegexFormat),
   ...hashFormats,
 ]);
+
+function isRegexFormat(format: string): format is RegexFormat {
+  return Object.hasOwn(regexFormatBuilders, format);
+}
 
 /** A format check of a format SNAPSHOT.md knows. */
 type KnownFormatDef = FormatDef & { readonly format: StringFormat };
@@ -86,16 +86,6 @@ const refusedByFormat: ReadonlyMap<string, Refused> = new Map<string, Refused>([
   ['uppercase', refused.uppercase],
 ]);
 
-/** The formats zod builds from a regex, which a function of the author's could pose as. */
-const regexFormats: ReadonlyMap<string, () => core.$ZodType> = new Map<string, () => core.$ZodType>(
-  [
-    ['hex', () => z.hex()],
-    ['hostname', () => z.hostname()],
-    ['currency_code', () => z.currencyCode()],
-    ...hashFormats.map((format): [string, () => core.$ZodType] => [format, () => hashOf(format)]),
-  ],
-);
-
 /**
  * The `format` and `formatOptions` a string format check declares: only a format zod builds
  * itself, checked as zod checks it, with the options that differ from zod's default.
@@ -109,7 +99,7 @@ export function formatOf(check: DeclaredCheck, at: Path): Walked<Partial<StringN
   if (!isKnownFormat(def)) {
     return notAllowed(at, refusedStringFormat(def.format));
   }
-  if (regexFormats.has(def.format)) {
+  if (isRegexFormat(def.format) || isHashFormat(def.format)) {
     return regexFormatOf(def, at);
   }
   return builtFormatOf(check, def, at);
@@ -162,15 +152,16 @@ function regexFormatOf(def: KnownFormatDef, at: Path): Walked<Partial<StringNode
   return samePattern ? walked({ format: def.format }) : notAllowed(at, refused.customPattern);
 }
 
-function referenceOf(format: string): FormatDef | undefined {
-  const schema = regexFormats.get(format)?.();
+/** The format zod itself builds by that name, which a function of the author's could pose as. */
+function referenceOf(format: StringFormat): FormatDef | undefined {
+  const schema = referenceSchemaOf(format);
   return schema?._zod.def as FormatDef | undefined;
 }
 
-function hashOf(format: string): core.$ZodType {
-  const [algorithm, encoding] = format.split('_') as [
-    'md5' | 'sha1' | 'sha256' | 'sha384' | 'sha512',
-    'hex' | 'base64' | 'base64url',
-  ];
-  return z.hash(algorithm, { enc: encoding });
+function referenceSchemaOf(format: StringFormat): core.$ZodType | undefined {
+  if (isHashFormat(format)) {
+    const { algorithm, encoding } = hashPartsOf(format);
+    return z.hash(algorithm, { enc: encoding });
+  }
+  return isRegexFormat(format) ? regexFormatBuilders[format]() : undefined;
 }

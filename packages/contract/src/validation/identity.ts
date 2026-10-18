@@ -23,3 +23,15 @@ export function identityOf(method: unknown, path: unknown): string {
   );
   return `${textOf(method)} /${segments.join('/')}`;
 }
+
+/**
+ * The path an Endpoint declares, from the path of its identity and its param names in order: the
+ * reverse of `identityOf`, since the Snapshot stores the names apart from the identity.
+ */
+export function pathOf(identityPath: string, params: readonly string[]): string {
+  const unused = [...params].reverse();
+  const segments = segmentsOf(identityPath).map((segment) =>
+    segment === '{}' ? `:${unused.pop() ?? ''}` : segment,
+  );
+  return `/${segments.join('/')}`;
+}

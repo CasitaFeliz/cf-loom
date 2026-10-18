@@ -1,6 +1,11 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
 import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
-import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
+import {
+  type OriginOf,
+  openIntersectionsOf,
+  type WalkedLocation,
+  walkSchemas,
+} from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
 import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
@@ -82,6 +87,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
+    ...nodes.slots.flatMap(({ at, node }) => openIntersectionsOf(node, at, nodes.defs)),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {

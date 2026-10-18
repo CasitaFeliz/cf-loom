@@ -71,6 +71,11 @@ export const refused = {
     construct: 'an intersection of objects whose shared keys differ',
     instead: '.extend()',
   },
+  openIntersection: {
+    construct:
+      'an intersection that is not of open objects reaching an openEnum() or an openUnion()',
+    instead: '.extend()',
+  },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
   bigint: { construct: 'z.bigint()' },
   symbol: { construct: 'z.symbol()' },

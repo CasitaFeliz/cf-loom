@@ -1,5 +1,6 @@
 export type { Kind, StandardRejections } from '../declarations/index.ts';
 export {
+  addedStandardRejectionNames,
   isEndpoint,
   isGuard,
   isRejection,
@@ -62,14 +63,13 @@ export {
   demandParts,
   fieldsOf,
   follows,
-  identityOf,
   inOf,
   inputParts,
   isSameRejection,
   kebabCase,
   listedDefinitionsOf,
-  paramNamesOf,
   partFieldOf,
+  pathOf,
   schemaOf,
   standardRejectionsOf,
   successParts,
@@ -77,6 +77,7 @@ export {
 } from '../validation/index.ts';
 export type {
   Field,
+  HashFormat,
   LocatedSchema,
   NotAllowed,
   Origin,
@@ -87,4 +88,4 @@ export type {
   WalkedLocation,
   WalkedSchemas,
 } from '../walker/index.ts';
-export { byCodePoint, walkSchemas } from '../walker/index.ts';
+export { byCodePoint, hashPartsOf, isHashFormat, walkSchemas } from '../walker/index.ts';
