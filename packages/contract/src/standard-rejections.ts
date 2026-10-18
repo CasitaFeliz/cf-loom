@@ -55,3 +55,10 @@ export type StandardRejectionDeclarations = {
 
 /** Every Standard Rejection resolved, as a Contract Package carries them for its Callers. */
 export type StandardRejections = Required<StandardRejectionDeclarations>;
+
+/** cf-loom's own code, status and message of each Standard Rejection, where no Definitions Package declares one. */
+export const standardRejectionDefaults: StandardRejections = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+};

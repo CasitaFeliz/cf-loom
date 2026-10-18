@@ -1,6 +1,10 @@
 import { isRejectionStatus } from '../http.ts';
 import { isStandardRejection } from '../predicates.ts';
-import { addedStandardRejectionNames, standardRejectionNames } from '../standard-rejections.ts';
+import {
+  addedStandardRejectionNames,
+  standardRejectionDefaults,
+  standardRejectionNames,
+} from '../standard-rejections.ts';
 import type {
   Declarations,
   LocatedEndpoint,
@@ -11,22 +15,17 @@ import type {
 import { listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
-/** cf-loom's own codes for the Standard Rejections, where no Definitions Package declares one. */
-const defaultStandardCodes: Readonly<Record<string, string>> = {
-  invalidInput: 'INVALID_INPUT',
-  notFound: 'NOT_FOUND',
-  notImplemented: 'NOT_IMPLEMENTED',
+/** A Standard Rejection as the root resolves it: the Definitions Package's declaration, else cf-loom's. */
+export type ResolvedStandard = {
+  readonly name: string;
+  readonly code: string;
+  readonly status: unknown;
+  readonly declared: LocatedStandardRejection | undefined;
 };
 
-/** cf-loom's own statuses for the Standard Rejections, where no Definitions Package declares one. */
-const defaultStandardStatuses: Readonly<Record<string, number>> = {
-  invalidInput: 400,
-  notFound: 404,
-  notImplemented: 501,
-};
-
-/** A Standard Rejection resolved: its code and status, from a Definitions Package or the defaults. */
-export type ResolvedStandard = { readonly code: string; readonly status: unknown };
+/** The sentence a Rejection declared with a Standard Rejection's code fails with. */
+export const redefinedStandard =
+  'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
 
 /** A declared Standard Rejection is 4xx too, except not-implemented, which is always 501. */
 export function standardStatusFailures({
@@ -82,17 +81,38 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
   );
 }
 
-/** Each Standard Rejection as the root resolves it: the Definitions Package's, else cf-loom's. */
+/** Each Standard Rejection as the root resolves it, in the order cf-loom names them. */
 export function resolvedStandards(
   standardRejections: readonly LocatedStandardRejection[],
 ): readonly ResolvedStandard[] {
   return standardRejectionNames.map((name) => {
     const declared = standardRejections.find((located) => located.name === name);
+    const defaults = standardRejectionDefaults[name];
     return {
-      code: String(declared?.declaration.code ?? defaultStandardCodes[name]),
-      status: declared?.declaration.status ?? defaultStandardStatuses[name],
+      name,
+      code: String(declared?.declaration.code ?? defaults.code),
+      status: declared?.declaration.status ?? defaults.status,
+      declared,
     };
   });
+}
+
+/** Each Standard Rejection resolves to a code of its own: their bodies differ, whatever their statuses. */
+export function distinctCodeFailures(
+  resolved: readonly ResolvedStandard[],
+): readonly DeclarationFailure[] {
+  const sharing = (standard: ResolvedStandard) =>
+    resolved.filter((other) => other.code === standard.code);
+  return resolved
+    .filter(isDeclared)
+    .filter((standard) => sharing(standard).length > 1)
+    .map((standard) => {
+      const names = sharing(standard)
+        .map((other) => other.name)
+        .join(' and ');
+      const message = `Each Standard Rejection resolves to a code of its own: ${standard.code} is ${names}`;
+      return failure([...standard.declared.at, 'code'], 'standard-codes-distinct', message);
+    });
 }
 
 /** No declared Rejection takes the code a Standard Rejection resolves to. */
@@ -107,7 +127,7 @@ export function redefinitionFailures(
       failure(
         [...at, 'code'],
         'standard-code-redefined',
-        `No Contract redefines a Standard Rejection: ${String(rejection.code)}`,
+        `${redefinedStandard}: ${String(rejection.code)}`,
       ),
     );
 }
@@ -130,7 +150,11 @@ export function onceFailures({ definitions }: Declarations): readonly Declaratio
   );
 }
 
-/** The name of a Standard Rejection, from any copy of this package; nothing for anything else. */
+function isDeclared(
+  standard: ResolvedStandard,
+): standard is ResolvedStandard & { readonly declared: LocatedStandardRejection } {
+  return standard.declared !== undefined;
+}
 
 /** The name of a Standard Rejection, from any copy of this package; nothing for anything else. */
 function standardNameOf(value: unknown): unknown {

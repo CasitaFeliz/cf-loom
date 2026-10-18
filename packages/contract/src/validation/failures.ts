@@ -8,6 +8,7 @@ export type Rule =
   | 'not-a-schema'
   | 'undeclared-field'
   | 'required-field'
+  | 'not-a-string'
   | 'name-grammar'
   | 'duplicate-group-name'
   | 'duplicate-endpoint-name'
@@ -46,6 +47,7 @@ export type Rule =
   | 'standard-rejection-listed'
   | 'standard-rejection-on-guard'
   | 'standard-code-redefined'
+  | 'standard-codes-distinct'
   | 'standard-rejections-once'
   | 'dependency-selection'
   | 'application-dependency';

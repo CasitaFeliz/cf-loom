@@ -209,7 +209,8 @@ describe('validateContract: one status and one body per code', () => {
           kind: 'declaration',
           at: ['rejections', 'NOT_FOUND', 'code'],
           rule: 'standard-code-redefined',
-          message: 'No Contract redefines a Standard Rejection: NOT_FOUND',
+          message:
+            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
         },
         {
           kind: 'declaration',
@@ -337,7 +338,7 @@ describe('validateContract: Standard Rejections', () => {
       failed(
         ['rejections', 'NOT_FOUND', 'code'],
         'standard-code-redefined',
-        'No Contract redefines a Standard Rejection: NOT_FOUND',
+        'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
       ),
     );
   });
@@ -369,16 +370,106 @@ describe('validateContract: Standard Rejections', () => {
           kind: 'declaration',
           at: ['rejections', 'BAD_REQUEST', 'code'],
           rule: 'standard-code-redefined',
-          message: 'No Contract redefines a Standard Rejection: BAD_REQUEST',
+          message:
+            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: BAD_REQUEST',
         },
         {
           kind: 'declaration',
           at: ['rejections', 'NOT_FOUND', 'code'],
           rule: 'standard-code-redefined',
-          message: 'No Contract redefines a Standard Rejection: NOT_FOUND',
+          message:
+            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
         },
       ],
     });
+  });
+
+  test('two Standard Rejections resolving to one code fail in a Definitions Package', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: {
+        invalidInput: { code: 'NOT_FOUND', status: 400, message: 'Bad' },
+        notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+      },
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['standardRejections', 'invalidInput', 'code'],
+          rule: 'standard-codes-distinct',
+          message:
+            'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+        },
+        {
+          kind: 'declaration',
+          at: ['standardRejections', 'notFound', 'code'],
+          rule: 'standard-codes-distinct',
+          message:
+            'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+        },
+      ],
+    });
+  });
+
+  test('two Standard Rejections resolving to one code fail in a Contract', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: {
+        notFound: { code: 'GONE', status: 404, message: 'Gone' },
+        notImplemented: { code: 'GONE', status: 501, message: 'Later' },
+      },
+    });
+    const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
+
+    expect(validateContract(contract, noOrigin)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['definitions', 'definitions', 'standardRejections', 'notFound', 'code'],
+          rule: 'standard-codes-distinct',
+          message:
+            'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
+        },
+        {
+          kind: 'declaration',
+          at: ['definitions', 'definitions', 'standardRejections', 'notImplemented', 'code'],
+          rule: 'standard-codes-distinct',
+          message:
+            'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
+        },
+      ],
+    });
+  });
+
+  test('a Standard Rejection declared with the default code of another fails', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { invalidInput: { code: 'NOT_FOUND', status: 404, message: 'Missing' } },
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(
+        ['standardRejections', 'invalidInput', 'code'],
+        'standard-codes-distinct',
+        'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+      ),
+    );
+  });
+
+  test('a Rejection declared with a Standard code and the same status fails once, as a redefinition', () => {
+    const missing = defineRejection({ code: 'NOT_FOUND', status: 404, message: 'Missing' });
+
+    expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [missing] })])).toEqual(
+      failed(
+        ['rejections', 'NOT_FOUND', 'code'],
+        'standard-code-redefined',
+        `Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND`,
+      ),
+    );
   });
 
   test('one listed Definitions Package may declare Standard Rejections', () => {
