@@ -1,5 +1,3 @@
-import type { Guard, QualifiedGuard } from './guard.ts';
-
 type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
 /** What a declaration must also satisfy: each field it holds is one its kind declares. */
@@ -34,15 +32,6 @@ export type LiteralNames<Names> = Names extends string
     ? never
     : Names
   : never;
-
-/** Whether a Guard is typed wider than a declaration, so no Guard rule can judge it exactly. */
-export type IsWidenedGuard<Listed extends Guard> = string extends Listed['name']
-  ? true
-  : Listed extends QualifiedGuard
-    ? false
-    : 'qualifier' extends keyof Listed
-      ? true
-      : false;
 
 /** Whether a type is one value, not a union: a rule judges only what the author wrote exactly. */
 export type IsOneLiteral<Value> = [Value] extends [never]

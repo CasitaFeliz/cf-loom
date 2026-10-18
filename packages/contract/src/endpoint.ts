@@ -6,13 +6,7 @@ import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type {
-  DeclaredFieldsRule,
-  IsOneLiteral,
-  IsWidenedGuard,
-  JoinedNames,
-  LiteralNames,
-} from './rules.ts';
+import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
@@ -129,7 +123,7 @@ type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends rea
   : unknown;
 
 type ListedOrderRule<Listed, Rest, Earlier extends string> = Listed extends Guard
-  ? IsWidenedGuard<Listed> extends true
+  ? string extends Listed['name']
     ? GuardOrderRule<Rest, Earlier>
     : Listed['name'] extends Earlier
       ? `${Listed['name']} is listed twice`

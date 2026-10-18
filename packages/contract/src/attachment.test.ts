@@ -297,3 +297,19 @@ describe('Attachments typed wider than declarations', () => {
     expect(listOrders.guards[0].qualifier).toBe(1);
   });
 });
+
+describe('Attachments of a Guard whose qualifier is optional', () => {
+  const qualified: boolean = Math.random() < 1;
+  const optional = defineGuard({
+    name: 'optional',
+    description: 'A Guard that may declare a qualifier',
+    ...(qualified ? { qualifier: z.string() } : {}),
+  });
+
+  test('a Guard with an optional qualifier listed twice is listed twice', () => {
+    // @ts-expect-error optional is listed twice
+    const declare = () => defineEndpoint({ ...endpoint, guards: [optional, optional] });
+
+    expect(declare).not.toThrow();
+  });
+});

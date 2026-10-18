@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
-import type { Guard, QualifiedGuard } from './guard.ts';
-import type { DeclaredFieldsRule, IsWidenedGuard } from './rules.ts';
+import type { Guard, IsWidenedGuard, QualifiedGuard } from './guard.ts';
+import type { DeclaredFieldsRule } from './rules.ts';
 
 /** A Guard as an Endpoint lists it with its Qualifier, for a Guard that declares a `qualifier`. */
 export type QualifiedAttachment = {

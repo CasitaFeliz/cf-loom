@@ -32,6 +32,13 @@ export type Guard<Declaration extends GuardDeclaration = GuardDeclaration> =
 /** A Guard that declares a `qualifier`, so every Endpoint lists it with a Qualifier. */
 export type QualifiedGuard = Guard & { readonly qualifier: core.$ZodType };
 
+/** Whether a Guard's type leaves open if it declares a `qualifier`, so no rule can say how to list it. */
+export type IsWidenedGuard<Listed extends Guard> = Listed extends QualifiedGuard
+  ? false
+  : 'qualifier' extends keyof Listed
+    ? true
+    : false;
+
 type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   readonly demands?: {
     readonly headers?: HeaderNamesRule<NonNullable<Declaration['demands']>['headers']>;
