@@ -1,5 +1,7 @@
 import type * as core from 'zod/v4/core';
+import { isJsonPrimitive } from './canonical-json.ts';
 import { enumOf } from './choices.ts';
+import { innerOfLazy } from './lazy.ts';
 import type { JsonPrimitive, Path } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, walked } from './walked.ts';
@@ -37,17 +39,19 @@ export function isJsonUnion(union: core.$ZodUnion): boolean {
     isPlain(string) &&
     isPlain(number) &&
     isPlain(recordDef?.keyType._zod.def) &&
-    resolvedLazy(element) === union &&
-    resolvedLazy(recordDef?.valueType) === union
+    element !== undefined &&
+    innerOfLazy(element) === union &&
+    recordDef !== undefined &&
+    innerOfLazy(recordDef.valueType) === union
   );
 }
 
 function jsonValueOf(value: core.util.Literal, at: Path): Walked<JsonPrimitive> {
-  if (typeof value === 'number' && !Number.isFinite(value)) {
-    return notAllowed(at, refused.nonFinite);
-  }
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (isJsonPrimitive(value)) {
     return walked(value);
+  }
+  if (typeof value === 'number') {
+    return notAllowed(at, refused.nonFinite);
   }
   if (typeof value === 'bigint') {
     return notAllowed(at, refused.literalBigint);
@@ -61,11 +65,4 @@ function jsonValueOf(value: core.util.Literal, at: Path): Walked<JsonPrimitive> 
 function isPlain(def: core.$ZodTypeDef | undefined): boolean {
   const unchecked = def?.checks === undefined || def.checks.length === 0;
   return unchecked && def !== undefined && !('check' in def) && !('coerce' in def && def.coerce);
-}
-
-function resolvedLazy(schema: core.$ZodType | undefined): core.$ZodType | undefined {
-  if (schema?._zod.def.type !== 'lazy') {
-    return schema;
-  }
-  return resolvedLazy((schema as core.$ZodLazy)._zod.innerType);
 }

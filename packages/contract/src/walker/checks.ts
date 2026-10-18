@@ -1,3 +1,4 @@
+import { isFiniteNumber } from './canonical-json.ts';
 import { type CheckDef, type DeclaredCheck, refusedCheck } from './check-defs.ts';
 import type {
   ArrayNode,
@@ -176,7 +177,7 @@ function slotOf(key: string): string {
 }
 
 function isNonFinite(value: unknown): boolean {
-  return typeof value === 'number' && !Number.isFinite(value);
+  return typeof value === 'number' && !isFiniteNumber(value);
 }
 
 function regexOf(pattern: RegExp): Regex {

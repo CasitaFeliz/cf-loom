@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open.ts';
-import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
+import { byCanonicalJson, canonicalJson, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
 import { hasAnnotations } from './metadata.ts';
 import type {
@@ -110,10 +110,6 @@ function variantRefusalOf(option: core.$ZodType, discriminator: string): Refused
 
 function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
   return node.type === 'object' || node.type === 'ref';
-}
-
-function isJsonPrimitive(value: unknown): value is JsonPrimitive {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }
 
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
