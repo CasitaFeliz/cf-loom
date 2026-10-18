@@ -1,6 +1,7 @@
 import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import * as zm from 'zod/mini';
 import { openEnum, openUnion } from './index.ts';
 import { isOpen } from './internal/index.ts';
 
@@ -17,12 +18,22 @@ describe('openEnum', () => {
     expectTypeOf<z.output<typeof status>>().toEqualTypeOf<'pending' | 'paid'>();
   });
 
-  test('a clone of an openEnum is not open', () => {
+  test('an openEnum described with .describe() or .meta() stays open', () => {
     const status = openEnum(['pending', 'paid']);
 
-    const described = status.describe('The order status');
+    expect(isOpen(status.describe('The order status'))).toBe(true);
+    expect(isOpen(status.meta({ description: 'The order status' }))).toBe(true);
+  });
 
-    expect(isOpen(described)).toBe(false);
+  test('an openEnum described with zod/mini metadata stays open', () => {
+    const status = openEnum(['pending', 'paid']);
+
+    expect(isOpen(status.check(zm.describe('The order status')))).toBe(true);
+    expect(isOpen(status.check(zm.meta({ description: 'The order status' })))).toBe(true);
+  });
+
+  test('a described z.enum() stays closed', () => {
+    expect(isOpen(z.enum(['pending', 'paid']).describe('The order status'))).toBe(false);
   });
 
   test('openEnum takes string values only', () => {
@@ -62,6 +73,15 @@ describe('openUnion', () => {
   test('a variant without the discriminator is a type error', () => {
     // @ts-expect-error every variant has the discriminator
     expectTypeOf(openUnion<'kind', readonly [typeof card]>).toBeFunction();
+  });
+});
+
+describe('openUnion metadata', () => {
+  test('an openUnion described with .describe() or .meta() stays open', () => {
+    const payment = openUnion('type', [card, transfer]);
+
+    expect(isOpen(payment.describe('A payment'))).toBe(true);
+    expect(isOpen(payment.check(zm.meta({ description: 'A payment' })))).toBe(true);
   });
 });
 

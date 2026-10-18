@@ -245,13 +245,13 @@ At runtime:
 ## Open Enums and Open Unions
 
 ```ts
-status: openEnum(['pending', 'paid'])
+status: openEnum(['pending', 'paid']).describe('Where the order stands')
 payment: openUnion('type', [card, transfer])
 ```
 
 Readers get a type with an Unknown case and must handle it: an unknown enum value arrives as `{ unknown: 'refunded' }`, and an unknown union variant as `{ type: { unknown: 'crypto' }, raw }`, so TypeScript can tell them from the declared ones. Writers may only use the declared values. `openEnum()` and `openUnion()` infer the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 
-`openEnum()` takes string values. `openUnion(discriminator, variants)` takes objects whose discriminator is a string literal and returns zod's discriminated union; a literal of several values, or two variants with the same value, fail `generate`. Openness belongs to the schema either one returns: a clone, such as `.describe('…')`, is a new schema and is closed, just as it carries no `origin` (see [Origin](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#origin) in SNAPSHOT.md).
+`openEnum()` takes string values. `openUnion(discriminator, variants)` takes objects whose discriminator is a string literal and returns zod's discriminated union; a literal of several values, or two variants with the same value, fail `generate`. Openness belongs to the schema either one returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` or `z.discriminatedUnion()` described the same way stays closed.
 
 ## Dependencies
 

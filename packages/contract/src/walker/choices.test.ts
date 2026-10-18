@@ -51,14 +51,14 @@ describe('walkSchemas: enums', () => {
     );
   });
 
-  test('a clone of an openEnum is closed', () => {
+  test('a described openEnum stays open', () => {
     const status = openEnum(['pending', 'paid']).describe('The status');
 
     expect(walkBody(status)).toEqual(
       walkedTo({
         type: 'enum',
         values: ['paid', 'pending'],
-        open: false,
+        open: true,
         description: 'The status',
       }),
     );
@@ -116,11 +116,11 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
-  test('a clone of an openUnion is closed', () => {
+  test('a described openUnion stays open', () => {
     const payment = openUnion('type', [card, transfer]).describe('A payment');
 
     expect(walkBody(payment)).toMatchObject(
-      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: false }),
+      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: true }),
     );
   });
 
