@@ -3,7 +3,8 @@ import { type DeclarationFailure, failure } from './failures.ts';
 import { camelCase, follows } from './grammars.ts';
 import { paramNamesOf, segmentsOf } from './identity.ts';
 import type { LocatedEndpoint } from './located.ts';
-import { type Nodes, slotAt } from './schemas.ts';
+import { slotAt } from './parts.ts';
+import type { Nodes } from './schemas.ts';
 import { isPlainObject, partOf } from './written.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;

@@ -66,7 +66,7 @@ export const standardRejectionDefaults: StandardRejections = {
 };
 
 /** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
-const issueCodes = [
+export const issueCodes = [
   'required',
   'invalid_type',
   'invalid_value',
@@ -77,6 +77,9 @@ const issueCodes = [
   'unrecognized_key',
   'malformed',
 ] as const;
+
+/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
+export type IssueCode = (typeof issueCodes)[number];
 
 /**
  * The body of the invalid-input Rejection: always cf-loom's, whatever a Definitions Package

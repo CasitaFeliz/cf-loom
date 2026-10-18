@@ -1,8 +1,9 @@
 import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
+import { isObjectPart, type Part, partFieldOf, slotAt } from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
-import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
+import type { Nodes, WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import { textOf } from './written.ts';
 
@@ -12,14 +13,10 @@ type TextPart = 'params' | 'query' | 'headers';
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
-const textPartOf: Readonly<Partial<Record<Part, TextPart>>> = {
-  'input.params': 'params',
-  'input.query': 'query',
-  'input.headers': 'headers',
-  'success.headers': 'headers',
-  'demands.headers': 'headers',
-  'demands.query': 'query',
-};
+/** The text part a slot's fields travel in, by the field its part names; none for the rest. */
+function textPartOf(part: Part): TextPart | undefined {
+  return isObjectPart(part) ? partFieldOf(part) : undefined;
+}
 
 const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
 
@@ -51,7 +48,7 @@ export function conflictFailures(
 }
 
 function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
-  const part = textPartOf[slot.part];
+  const part = textPartOf(slot.part);
   if (part === undefined) {
     return [];
   }

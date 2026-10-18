@@ -4,9 +4,10 @@ import { isDeclaration, isGuard } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint, LocatedGuard } from './located.ts';
+import { isSchema } from './parts.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
 import { attachedGuardOf } from './references.ts';
-import { isSchema, type Nodes } from './schemas.ts';
+import type { Nodes } from './schemas.ts';
 import { isPlainObject, isWithoutValue, listOf, textOf } from './written.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */

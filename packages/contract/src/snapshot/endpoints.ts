@@ -1,10 +1,6 @@
+import { type Attachment, type Endpoint, isStandardRejection } from '../declarations/index.ts';
 import {
-  type Attachment,
-  addedStandardRejectionNames,
-  type Endpoint,
-  type Guard,
-} from '../declarations/index.ts';
-import {
+  answerableRejectionsOf,
   attachedGuardsOf,
   identityOf,
   type LocatedEndpoint,
@@ -48,7 +44,7 @@ function endpointOf(
     guards: (endpoint.guards ?? []).map(attachmentOf),
     input: inputOf(endpoint, guards, sources),
     success: successOf(endpoint, sources),
-    rejections: rejectionsOf(endpoint, guards, sources),
+    rejections: rejectionsOf(endpoint, sources),
   };
 }
 
@@ -67,18 +63,10 @@ function successOf(endpoint: Endpoint, { nodeOf }: SnapshotSources): SuccessSnap
   };
 }
 
-/** The Endpoint's own codes, its Guards', and the two the runtime adds to every Endpoint. */
-function rejectionsOf(
-  endpoint: Endpoint,
-  guards: readonly Guard[],
-  { standards }: SnapshotSources,
-): readonly string[] {
-  const own = (endpoint.rejections ?? []).map((rejection) =>
-    rejection.kind === 'standard-rejection'
-      ? codeOfStandard(standards, rejection.name)
-      : rejection.code,
+/** The codes of every Rejection the Endpoint may answer, Standard Rejections resolved. */
+function rejectionsOf(endpoint: Endpoint, { standards }: SnapshotSources): readonly string[] {
+  const codes = answerableRejectionsOf(endpoint).map((rejection) =>
+    isStandardRejection(rejection) ? codeOfStandard(standards, rejection.name) : rejection.code,
   );
-  const ofGuards = guards.flatMap((guard) => (guard.rejections ?? []).map(({ code }) => code));
-  const added = addedStandardRejectionNames.map((name) => codeOfStandard(standards, name));
-  return sortedCodes([...own, ...ofGuards, ...added]);
+  return sortedCodes(codes);
 }

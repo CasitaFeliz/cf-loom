@@ -3,7 +3,8 @@ import type { Path, SchemaNode } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedRejection } from './located.ts';
-import { type Nodes, slotAt } from './schemas.ts';
+import { slotAt } from './parts.ts';
+import type { Nodes } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import {
   distinctCodeFailures,

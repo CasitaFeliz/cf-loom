@@ -2,13 +2,17 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type ContextOf,
+  type DemandsOf,
   defineEndpoint,
   defineGuard,
   defineRejection,
+  type Endpoint,
+  type Guard,
   type invalidInput,
   notFound,
   type notImplemented,
   type ProvidedContextOf,
+  type Rejection,
   type RejectionsOf,
 } from '../index.ts';
 
@@ -108,6 +112,10 @@ describe('defineGuard', () => {
     expectTypeOf<ProvidedContextOf<typeof apiKey>>().toEqualTypeOf<{ clientId: string }>();
   });
 
+  test('a Guard whose type leaves its context open provides unknown', () => {
+    expectTypeOf<ProvidedContextOf<Guard>>().toEqualTypeOf<unknown>();
+  });
+
   test('a Guard without a context schema provides undefined', () => {
     expectTypeOf<ProvidedContextOf<typeof internalOnly>>().toEqualTypeOf<undefined>();
   });
@@ -143,6 +151,39 @@ describe('defineGuard', () => {
     expectTypeOf<RejectionsOf<typeof getOrder>>().toEqualTypeOf<
       typeof notFound | typeof unauthenticated | typeof invalidInput | typeof notImplemented
     >();
+  });
+
+  test('an Endpoint or a Guard whose type leaves its lists open answers any Rejection it may list', () => {
+    expectTypeOf<RejectionsOf<Endpoint>>().toEqualTypeOf<
+      Rejection | typeof notFound | typeof invalidInput | typeof notImplemented
+    >();
+    expectTypeOf<RejectionsOf<Guard>>().toEqualTypeOf<Rejection | typeof notImplemented>();
+  });
+
+  test('a Guard answers its own Rejections and the not-implemented one', () => {
+    expectTypeOf<RejectionsOf<typeof apiKey>>().toEqualTypeOf<
+      typeof unauthenticated | typeof notImplemented
+    >();
+  });
+
+  test('what a GuardHandler receives first has one key per declared demand part', () => {
+    const paged = defineGuard({
+      name: 'paged',
+      description: 'A page of results',
+      demands: {
+        headers: z.object({ 'x-api-key': z.string() }),
+        query: z.object({ page: z.int() }),
+      },
+    });
+
+    expectTypeOf<DemandsOf<typeof paged>>().toEqualTypeOf<{
+      readonly headers: { 'x-api-key': string };
+      readonly query: { page: number };
+    }>();
+  });
+
+  test('a Guard that demands nothing gives its GuardHandler no demand parts', () => {
+    expectTypeOf<DemandsOf<typeof internalOnly>>().toEqualTypeOf<Record<never, never>>();
   });
 });
 

@@ -16,6 +16,7 @@ export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
 export { isRejectionStatus, methods, successStatuses } from './http.ts';
 export type {
   ContextOf,
+  DemandsOf,
   InputOf,
   ProvidedContextOf,
   QualifierOf,
@@ -41,6 +42,7 @@ export { defineRejection } from './rejection.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
 export type {
+  IssueCode,
   StandardRejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,
@@ -51,6 +53,7 @@ export {
   addedStandardRejectionNames,
   invalidInput,
   invalidInputBody,
+  issueCodes,
   notFound,
   notImplemented,
   standardRejectionDefaults,

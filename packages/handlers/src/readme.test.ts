@@ -1,0 +1,162 @@
+import {
+  defineEndpoint,
+  defineGuard,
+  defineRejection,
+  notFound,
+  openEnum,
+} from '@casitafeliz/loom-contract';
+import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { admit, handle, isRejectionOf, reject, success } from './index.ts';
+
+const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
+
+const money = z.object({ amount: z.int(), currency: z.string() });
+
+const unauthenticated = defineRejection({
+  code: 'UNAUTHENTICATED',
+  status: 401,
+  message: 'Unauthenticated',
+});
+
+const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+
+const orderLocked = defineRejection({
+  code: 'ORDER_LOCKED',
+  status: 409,
+  message: 'The order can no longer be changed',
+  body: z.object({ lockedAt: z.iso.datetime() }),
+});
+
+const apiKey = defineGuard({
+  name: 'apiKey',
+  description: 'An API key per client',
+  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  context: z.object({ clientId: z.string() }),
+  rejections: [unauthenticated],
+});
+
+const userToken = defineGuard({
+  name: 'userToken',
+  description: 'A signed-in user',
+  demands: { headers: z.object({ authorization: z.string() }) },
+  context: z.object({ userId: z.string() }),
+  rejections: [unauthenticated],
+});
+
+const permissionCode = z.enum(['orders:read', 'orders:edit', 'customers:read']);
+
+const permission = defineGuard({
+  name: 'permission',
+  description: 'The user holds every listed permission',
+  guards: [userToken],
+  qualifier: z.array(permissionCode).min(1),
+  rejections: [forbidden],
+});
+
+const getOrder = defineEndpoint({
+  name: 'getOrder',
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order by id',
+  guards: [apiKey],
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: {
+    status: 200,
+    body: z.object({ id: z.uuid(), status: openEnum(['pending', 'paid']), total: money }),
+  },
+  rejections: [notFound, orderLocked],
+});
+
+type Order = {
+  id: string;
+  clientId: string;
+  status: 'pending' | 'paid';
+  total: { amount: number; currency: string };
+  locked: boolean;
+  lockedAt: string;
+};
+
+const stored: Order = {
+  id: ORDER_ID,
+  clientId: 'c-1',
+  status: 'paid',
+  total: { amount: 1200, currency: 'EUR' },
+  locked: false,
+  lockedAt: '2026-10-18T10:00:00Z',
+};
+
+const orders = {
+  find: async (orderId: string, clientId: string) =>
+    orderId === stored.id && clientId === stored.clientId ? stored : undefined,
+};
+const clients = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
+const permissions = { of: async (_userId: string): Promise<string[]> => ['orders:edit'] };
+
+const getOrderHandler = handle(getOrder, async ({ params }, context) => {
+  const order = await orders.find(params.orderId, context.apiKey.clientId);
+  if (!order) return reject(notFound);
+  if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
+  return success({ id: order.id, status: order.status, total: order.total });
+});
+
+const apiKeyHandler = handle(apiKey, async ({ headers }) => {
+  const client = await clients.byKey(headers['x-api-key']);
+  if (!client) return reject(unauthenticated);
+  return admit({ clientId: client.id });
+});
+
+const permissionHandler = handle(permission, async (_demands, { userToken }, qualifier) => {
+  const held = await permissions.of(userToken.userId);
+  const granted = qualifier.every((code) => held.includes(code));
+  return granted ? admit() : reject(forbidden);
+});
+
+describe('the handlers README', () => {
+  test('the EndpointHandler example answers its Success', async () => {
+    const outcome = await getOrderHandler(
+      { params: { orderId: ORDER_ID } },
+      { apiKey: { clientId: 'c-1' } },
+    );
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      status: 200,
+      body: { id: ORDER_ID, status: 'paid', total: { amount: 1200, currency: 'EUR' } },
+    });
+  });
+
+  test('the EndpointHandler example answers not found, told by its declaration', async () => {
+    const outcome = await getOrderHandler(
+      { params: { orderId: ORDER_ID } },
+      { apiKey: { clientId: 'c-2' } },
+    );
+
+    expect(isRejectionOf(outcome, notFound)).toBe(true);
+  });
+
+  test('the GuardHandler example admits a known key and rejects an unknown one', async () => {
+    const admissions = [
+      await apiKeyHandler({ headers: { 'x-api-key': 'key-1' } }, {}),
+      await apiKeyHandler({ headers: { 'x-api-key': 'key-2' } }, {}),
+    ];
+
+    expect(admissions).toMatchObject([
+      { kind: 'admitted', context: { clientId: 'c-1' } },
+      { kind: 'rejection', rejection: unauthenticated },
+    ]);
+  });
+
+  test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
+    const admissions = [
+      await permissionHandler({}, { userToken: { userId: 'u-1' } }, ['orders:edit']),
+      await permissionHandler({}, { userToken: { userId: 'u-1' } }, ['customers:read']),
+    ];
+
+    expect(admissions).toMatchObject([
+      { kind: 'admitted' },
+      { kind: 'rejection', rejection: forbidden },
+    ]);
+  });
+});
