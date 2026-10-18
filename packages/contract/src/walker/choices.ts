@@ -23,7 +23,7 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   if (strings.length !== values.length) {
     return notAllowed(at, refused.numericEnum);
   }
-  return walked({ type: 'enum', values: strings.sort(byCanonicalJson), open: isOpen(schema) });
+  return walked({ ...enumOf(strings), open: isOpen(schema) });
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in canonical order. */

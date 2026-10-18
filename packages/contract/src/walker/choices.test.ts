@@ -45,6 +45,12 @@ describe('walkSchemas: enums', () => {
     );
   });
 
+  test('an enum holds each value once', () => {
+    expect(walkBody(z.enum({ first: 'x', second: 'x' }))).toEqual(
+      walkedTo({ type: 'enum', values: ['x'], open: false }),
+    );
+  });
+
   test('an openEnum is open', () => {
     expect(walkBody(openEnum(['pending', 'paid']))).toEqual(
       walkedTo({ type: 'enum', values: ['paid', 'pending'], open: true }),
