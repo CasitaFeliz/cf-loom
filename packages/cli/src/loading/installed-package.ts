@@ -2,7 +2,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { findPackageJSON } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { importedModuleOf } from './imported.ts';
+import { type Imported, importedModuleOf, oneLineOf } from './imported.ts';
 
 /** A package as installed where the root imports it: its version and what its module exports. */
 export type InstalledPackage =
@@ -32,12 +32,20 @@ export async function installedPackageOf(
   if (typeof version !== 'string') {
     return { kind: 'failed', message: `${packageName} has no version in its package.json` };
   }
-  const entry = realpathSync(join(dirname(manifestPath), entryOf(manifest)));
-  const imported = await importedModuleOf(entry, directory);
+  const imported = await entryModuleOf(join(dirname(manifestPath), entryOf(manifest)), directory);
   if (imported.kind === 'failed') {
     return { kind: 'failed', message: `${packageName} cannot be loaded: ${imported.message}` };
   }
   return { kind: 'installed', version, exports: Object.values(imported.exports) };
+}
+
+/** The package's entry as Node imports it, at its real path; an entry that is missing is a failure. */
+async function entryModuleOf(entry: string, directory: string): Promise<Imported> {
+  try {
+    return await importedModuleOf(realpathSync(entry), directory);
+  } catch (e) {
+    return { kind: 'failed', message: oneLineOf(e, directory) };
+  }
 }
 
 /** Where Node finds the package's package.json from the root file, as the root imports it. */
