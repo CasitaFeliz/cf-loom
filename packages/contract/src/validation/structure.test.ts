@@ -8,6 +8,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
   type Endpoint,
   type Group,
   type Guard,
@@ -264,6 +265,46 @@ describe('validateContract: lists and their items', () => {
 
     expect(validateContract(definitions, noOrigin)).toEqual(
       failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
+    );
+  });
+
+  test('a hole in groups fails as not a declaration', () => {
+    const groups: Group[] = [];
+    groups[1] = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [defineEndpoint(listing)],
+    });
+
+    expect(validateContract(defineContract({ name: 'orders-service', groups }), noOrigin)).toEqual(
+      failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
+    );
+  });
+
+  test('a hole in an Endpoint’s guards fails once, as no Attachment', () => {
+    const guards: Guard[] = [];
+    guards[1] = defineGuard({ name: 'apiKey', description: 'A key' });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards }))).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards', 0],
+        'not-an-attachment',
+        'An Attachment is a Guard or { guard, qualifier }',
+      ),
+    );
+  });
+
+  test('a declaration that is no Attachment in guards fails once', () => {
+    const locked = anything<Guard>(
+      defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' }),
+    );
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [locked] }))).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards', 0],
+        'not-an-attachment',
+        'An Attachment is a Guard or { guard, qualifier }',
+      ),
     );
   });
 

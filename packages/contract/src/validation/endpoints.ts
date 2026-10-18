@@ -4,6 +4,7 @@ import { methods, successStatuses } from '../http.ts';
 import type { LocatedEndpoint } from './declarations.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 import { slotAt } from './schemas.ts';
+import { isMissing, textOf } from './written.ts';
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */
 type ClosedValue = {
@@ -37,20 +38,23 @@ function closedValueFailures(
   if (typeof value !== 'string' || allowed.includes(value)) {
     return [];
   }
-  return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${String(value)}`)];
+  return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${textOf(value)}`)];
 }
 
-/** A Success declares an allowed status; HEAD and 204 answer no body, every other status one. */
+/** A Success declares an allowed status; HEAD and 204 answer no body, every other status one; a `null` body is the schema rule's. */
 function successFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
   const success: Partial<Endpoint['success']> | undefined = endpoint.success;
-  if (typeof success !== 'object' || success === null || success.status === undefined) {
+  if (typeof success !== 'object' || success === null || isMissing(success.status)) {
     return [];
   }
   if (!successStatuses.includes(success.status)) {
-    const message = `A Success status is ${oneOf(successStatuses)}: ${String(success.status)}`;
+    const message = `A Success status is ${oneOf(successStatuses)}: ${textOf(success.status)}`;
     return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');
+  if (success.body === null) {
+    return [];
+  }
   if (endpoint.method === 'HEAD') {
     return success.body === undefined
       ? []
@@ -68,7 +72,7 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
 
 function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
   const takesNoBody = endpoint.method === 'GET' || endpoint.method === 'HEAD';
-  if (!takesNoBody || endpoint.input?.body === undefined) {
+  if (!takesNoBody || isMissing(endpoint.input?.body)) {
     return [];
   }
   const message = 'A GET or HEAD Endpoint takes no body';

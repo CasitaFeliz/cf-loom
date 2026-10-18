@@ -2,6 +2,7 @@ import { isRejectionStatus } from '../http.ts';
 import { isStandardRejection } from '../predicates.ts';
 import {
   addedStandardRejectionNames,
+  type StandardRejectionName,
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../standard-rejections.ts';
@@ -12,19 +13,22 @@ import type {
   LocatedRejection,
   LocatedStandardRejection,
 } from './declarations.ts';
-import { listOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { isMissing, listOf, textOf } from './written.ts';
 
-/** A Standard Rejection as the root resolves it: the Definitions Package's declaration, else cf-loom's. */
+/**
+ * A Standard Rejection as the root resolves it: the Definitions Package's declaration, else
+ * cf-loom's, with the declaration it came from when it did.
+ */
 export type ResolvedStandard = {
-  readonly name: string;
+  readonly name: StandardRejectionName;
   readonly code: string;
-  readonly status: unknown;
+  readonly status: number;
+  readonly message: string;
   readonly declared: LocatedStandardRejection | undefined;
 };
 
-/** The sentence a Rejection declared with a Standard Rejection's code fails with. */
-export const redefinedStandard =
+const redefinedStandard =
   'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
 
 /** A declared Standard Rejection is 4xx too, except not-implemented, which is always 501. */
@@ -34,14 +38,14 @@ export function standardStatusFailures({
   declaration,
 }: LocatedStandardRejection): readonly DeclarationFailure[] {
   const { status } = declaration;
-  if (status === undefined) {
+  if (isMissing(status)) {
     return [];
   }
   if (name === 'notImplemented') {
-    const message = `The not-implemented Rejection's status is 501: ${String(status)}`;
+    const message = `The not-implemented Rejection's status is 501: ${textOf(status)}`;
     return status === 501 ? [] : [failure([...at, 'status'], 'rejection-status', message)];
   }
-  const message = `A Rejection's status is 4xx: ${String(status)}`;
+  const message = `A Rejection's status is 4xx: ${textOf(status)}`;
   return isRejectionStatus(status) ? [] : [failure([...at, 'status'], 'rejection-status', message)];
 }
 
@@ -60,7 +64,7 @@ export function listedStandardFailures({
     failure(
       [...at, 'rejections', index],
       'standard-rejection-listed',
-      `${String(name)} is added to every Endpoint without listing it`,
+      `${textOf(name)} is added to every Endpoint without listing it`,
     ),
   );
 }
@@ -76,7 +80,7 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
     failure(
       [...at, 'rejections', index],
       'standard-rejection-on-guard',
-      `A Guard lists declared Rejections only: ${String(name)}`,
+      `A Guard lists declared Rejections only: ${textOf(name)}`,
     ),
   );
 }
@@ -90,8 +94,9 @@ export function resolvedStandards(
     const defaults = standardRejectionDefaults[name];
     return {
       name,
-      code: String(declared?.declaration.code ?? defaults.code),
+      code: textOf(declared?.declaration.code ?? defaults.code),
       status: declared?.declaration.status ?? defaults.status,
+      message: textOf(declared?.declaration.message ?? defaults.message),
       declared,
     };
   });
@@ -122,19 +127,19 @@ export function redefinitionFailures(
 ): readonly DeclarationFailure[] {
   const standardCodes = resolved.map(({ code }) => code);
   return rejections
-    .filter(({ rejection }) => standardCodes.includes(String(rejection.code)))
+    .filter(({ rejection }) => standardCodes.includes(textOf(rejection.code)))
     .map(({ at, rejection }) =>
       failure(
         [...at, 'code'],
         'standard-code-redefined',
-        `${redefinedStandard}: ${String(rejection.code)}`,
+        `${redefinedStandard}: ${textOf(rejection.code)}`,
       ),
     );
 }
 
 /** At most one listed Definitions Package declares Standard Rejections. */
-export function onceFailures({ definitions }: Declarations): readonly DeclarationFailure[] {
-  const declaring = definitions.filter(({ definitions: listed }) =>
+export function onceFailures({ listedDefinitions }: Declarations): readonly DeclarationFailure[] {
+  const declaring = listedDefinitions.filter(({ definitions: listed }) =>
     Object.values(listed.standardRejections ?? {}).some((declaration) => declaration !== undefined),
   );
   const [first, ...others] = declaring;
@@ -145,7 +150,7 @@ export function onceFailures({ definitions }: Declarations): readonly Declaratio
     failure(
       [...at, 'standardRejections'],
       'standard-rejections-once',
-      `At most one listed Definitions Package declares Standard Rejections: ${String(first.definitions.name)} already does`,
+      `At most one listed Definitions Package declares Standard Rejections: ${textOf(first.definitions.name)} already does`,
     ),
   );
 }

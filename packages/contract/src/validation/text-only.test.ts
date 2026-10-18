@@ -221,7 +221,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
       failed(
         [...endpointAt, 'input', 'headers'],
-        'not-an-object',
+        'not-an-object-schema',
         'headers is an object of its fields',
       ),
     );

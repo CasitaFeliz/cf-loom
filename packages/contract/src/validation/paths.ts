@@ -22,7 +22,8 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
 
 /**
  * `params` declares exactly the `:names` of a canonical path, none of them optional, and none
- * without; a `params` that is no object or no schema is another rule's finding.
+ * without; a `params` whose schema is no object, or no schema, is the `not-an-object-schema`
+ * or `not-a-schema` rule's finding.
  */
 export function paramsFailures(
   { at, endpoint }: LocatedEndpoint,

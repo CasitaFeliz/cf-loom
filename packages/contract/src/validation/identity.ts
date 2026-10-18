@@ -1,3 +1,5 @@
+import { textOf } from './written.ts';
+
 /** The segments between the slashes of a path, a leading or trailing slash dropped. */
 export function segmentsOf(path: string): readonly string[] {
   const inner = path.replace(/^\//, '').replace(/\/$/, '');
@@ -16,8 +18,8 @@ export function paramNamesOf(path: string): readonly string[] {
  * is not canonical still gets one, so every failure of the Endpoint has a location.
  */
 export function identityOf(method: unknown, path: unknown): string {
-  const segments = segmentsOf(String(path)).map((segment) =>
+  const segments = segmentsOf(textOf(path)).map((segment) =>
     segment.startsWith(':') ? '{}' : segment,
   );
-  return `${String(method)} /${segments.join('/')}`;
+  return `${textOf(method)} /${segments.join('/')}`;
 }

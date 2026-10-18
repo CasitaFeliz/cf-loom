@@ -14,6 +14,7 @@ import {
   resolvedStandards,
   standardStatusFailures,
 } from './standard-codes.ts';
+import { isMissing, textOf } from './written.ts';
 
 /** The declarations of one code, at least one, the first met first. */
 type CodeGroup = readonly [LocatedRejection, ...LocatedRejection[]];
@@ -64,10 +65,10 @@ export function rejectionBodyFailures(
 }
 
 function statusFailures({ at, rejection }: LocatedRejection): readonly DeclarationFailure[] {
-  if (rejection.status === undefined || isRejectionStatus(rejection.status)) {
+  if (isMissing(rejection.status) || isRejectionStatus(rejection.status)) {
     return [];
   }
-  const message = `A Rejection's status is 4xx: ${String(rejection.status)}`;
+  const message = `A Rejection's status is 4xx: ${textOf(rejection.status)}`;
   return [failure([...at, 'status'], 'rejection-status', message)];
 }
 
@@ -75,7 +76,7 @@ function reservedFailures(at: Path, code: unknown): readonly DeclarationFailure[
   if (!reservedCodes.includes(code)) {
     return [];
   }
-  const message = `A code cf-loom answers as a Fault is reserved: ${String(code)}`;
+  const message = `A code cf-loom answers as a Fault is reserved: ${textOf(code)}`;
   return [failure([...at, 'code'], 'reserved-code', message)];
 }
 
@@ -103,7 +104,7 @@ function statusConflictFailures(
 function groupedByCode(rejections: readonly LocatedRejection[]): ReadonlyMap<string, CodeGroup> {
   const byCode = new Map<string, CodeGroup>();
   for (const located of rejections) {
-    const code = String(located.rejection.code);
+    const code = textOf(located.rejection.code);
     const group = byCode.get(code);
     byCode.set(code, group === undefined ? [located] : [...group, located]);
   }
@@ -118,8 +119,8 @@ function distinctStatuses(
 ): readonly string[] {
   const standard = resolved
     .filter((entry) => entry.code === code)
-    .map((entry) => String(entry.status));
-  const statuses = declared.map(({ rejection }) => String(rejection.status));
+    .map((entry) => textOf(entry.status));
+  const statuses = declared.map(({ rejection }) => textOf(rejection.status));
   return [...new Set([...standard, ...statuses])];
 }
 

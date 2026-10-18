@@ -17,6 +17,7 @@ import type { Application, Contract } from '../roots.ts';
 import type { StandardRejectionDeclaration } from '../standard-rejections.ts';
 import type { Path } from '../walker/nodes.ts';
 import { identityOf } from './identity.ts';
+import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
 export type Root = Contract | Application | Definitions;
@@ -25,11 +26,15 @@ export type Root = Contract | Application | Definitions;
 export type LocatedGroup = { readonly at: Path; readonly group: Group };
 
 /**
- * An Endpoint and where it sits in its root, under its Group and by its identity, since a
- * Retired Endpoint may share its name with an Active one: `['groups', <group>, 'endpoints',
- * 'GET /orders/{}']`. A Snapshot's reader finds an Endpoint's schemas under that location.
+ * An Endpoint, its Group, and where it sits in its root, under its Group and by its identity,
+ * since a Retired Endpoint may share its name with an Active one: `['groups', <group>,
+ * 'endpoints', 'GET /orders/{}']`. A Snapshot's reader finds an Endpoint's schemas under that location.
  */
-export type LocatedEndpoint = { readonly at: Path; readonly endpoint: Endpoint };
+export type LocatedEndpoint = {
+  readonly at: Path;
+  readonly endpoint: Endpoint;
+  readonly group: Group;
+};
 
 /** A Guard and where it sits, by name, since Endpoints and other Guards only reference it. */
 export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
@@ -56,33 +61,36 @@ export type LocatedStandardRejection = {
  */
 export type Declarations = {
   readonly root: Root;
-  readonly packages: readonly LocatedDefinitions[];
+  /** Every Definitions Package in play: the ones a Contract lists, or the root itself when it is one. */
+  readonly allPackages: readonly LocatedDefinitions[];
+  /** The Definitions Packages a Contract lists; never the root. */
+  readonly listedDefinitions: readonly LocatedDefinitions[];
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly LocatedGuard[];
   readonly rejections: readonly LocatedRejection[];
-  readonly definitions: readonly LocatedDefinitions[];
   readonly standardRejections: readonly LocatedStandardRejection[];
   readonly dependencies: readonly LocatedDependencies[];
 };
 
 /** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
 export function declarationsOf(root: Root): Declarations {
-  const definitions = definitionsOf(root);
+  const listedDefinitions = definitionsOf(root);
   const groups = groupsOf(root);
   const endpoints = distinctEndpoints(groups.flatMap(endpointsOf));
-  const packages = root.kind === 'definitions' ? [{ at: [], definitions: root }] : definitions;
-  const guards = guardsOf(packages, endpoints);
-  const rejections = rejectionsOf({ packages, guards, endpoints });
+  const allPackages =
+    root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
+  const guards = guardsOf(allPackages, endpoints);
+  const rejections = rejectionsOf({ allPackages, guards, endpoints });
   return {
     root,
-    packages,
+    allPackages,
+    listedDefinitions,
     groups,
     endpoints,
     guards,
     rejections,
-    definitions,
-    standardRejections: packages.flatMap(standardRejectionsOf),
+    standardRejections: allPackages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
   };
 }
@@ -92,35 +100,15 @@ export function endpointAt(groupAt: Path, endpoint: Endpoint): Path {
   return [...groupAt, 'endpoints', identityOf(endpoint.method, endpoint.path)];
 }
 
-/** Whether a value is written as a Standard Rejection declaration is: a plain object. */
-export function isStandardRejectionDeclaration(
-  value: unknown,
-): value is StandardRejectionDeclaration<number> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** The `standardRejections` entries of a Definitions Package, none when the map is no object. */
-export function standardRejectionEntriesOf(
-  definitions: Definitions,
-): readonly (readonly [string, unknown])[] {
-  const map: unknown = definitions.standardRejections;
-  return isStandardRejectionDeclaration(map) ? Object.entries(map) : [];
-}
-
 /** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */
 export function attachedGuardOf(attachment: Attachment): Guard | undefined {
   if (isGuard(attachment)) {
     return attachment;
   }
-  if (typeof attachment === 'object' && attachment !== null && isGuard(attachment.guard)) {
+  if (isPlainObject(attachment) && isGuard(attachment.guard)) {
     return attachment.guard;
   }
   return undefined;
-}
-
-/** A list a declaration may leave out is empty; what a cast put there that is no list is too. */
-export function listOf<Item>(list: readonly Item[] | undefined): readonly Item[] {
-  return Array.isArray(list) ? list : [];
 }
 
 /** An Endpoint listed twice is one Endpoint, where first met; the Groups rule reports the repeat. */
@@ -136,18 +124,26 @@ function distinctEndpoints(endpoints: readonly LocatedEndpoint[]): readonly Loca
   return distinct;
 }
 
+/** A Standard Rejection declaration as written, before the structure rule has judged it. */
+type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & {
+  readonly declaration: unknown;
+};
+
 function standardRejectionsOf({
   at,
   definitions,
 }: LocatedDefinitions): readonly LocatedStandardRejection[] {
-  const entries = standardRejectionEntriesOf(definitions).filter(([, declaration]) =>
-    isStandardRejectionDeclaration(declaration),
-  );
-  return entries.map(([name, declaration]) => ({
-    at: [...at, 'standardRejections', name],
-    name,
-    declaration: declaration as StandardRejectionDeclaration<number>,
-  }));
+  const entries: readonly WrittenStandardRejection[] = entriesOf(
+    definitions.standardRejections,
+  ).map(([name, declaration]) => ({ at: [...at, 'standardRejections', name], name, declaration }));
+  return entries.filter(isLocatedStandardRejection);
+}
+
+/** A declared Standard Rejection is an object; what else sits there is the structure rule's. */
+function isLocatedStandardRejection(
+  entry: WrittenStandardRejection,
+): entry is LocatedStandardRejection {
+  return isPlainObject(entry.declaration);
 }
 
 function definitionsOf(root: Root): readonly LocatedDefinitions[] {
@@ -156,7 +152,7 @@ function definitionsOf(root: Root): readonly LocatedDefinitions[] {
   }
   return listOf(root.definitions)
     .filter(isDefinitions)
-    .map((definitions) => ({ at: ['definitions', String(definitions.name)], definitions }));
+    .map((definitions) => ({ at: ['definitions', textOf(definitions.name)], definitions }));
 }
 
 function groupsOf(root: Root): readonly LocatedGroup[] {
@@ -165,13 +161,13 @@ function groupsOf(root: Root): readonly LocatedGroup[] {
   }
   return listOf(root.groups)
     .filter(isGroup)
-    .map((group) => ({ at: ['groups', String(group.name)], group }));
+    .map((group) => ({ at: ['groups', textOf(group.name)], group }));
 }
 
 function endpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
   return listOf(group.endpoints)
     .filter(isEndpoint)
-    .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint }));
+    .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint, group }));
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependencies[] {
@@ -181,17 +177,17 @@ function dependenciesOf(root: Root): readonly LocatedDependencies[] {
   return listOf(root.dependencies)
     .filter(isDependencies)
     .map((dependencies) => ({
-      at: ['dependencies', String(dependencies.provider)],
+      at: ['dependencies', textOf(dependencies.provider)],
       dependencies,
     }));
 }
 
 /** Every Guard a root reaches, each once, the Guards one lists before it. */
 function guardsOf(
-  packages: readonly LocatedDefinitions[],
+  allPackages: readonly LocatedDefinitions[],
   endpoints: readonly LocatedEndpoint[],
 ): readonly LocatedGuard[] {
-  const listed = packages.flatMap((located) => listOf(located.definitions.guards));
+  const listed = allPackages.flatMap((located) => listOf(located.definitions.guards));
   const attached = endpoints.flatMap((located) => listOf(located.endpoint.guards));
   const named = attached.map(attachedGuardOf).filter(isGuard);
   const gathered: LocatedGuard[] = [];
@@ -210,20 +206,20 @@ function gatherGuard(guard: Guard, seen: Set<Guard>, gathered: LocatedGuard[]): 
   for (const listed of listOf(guard.guards)) {
     gatherGuard(listed, seen, gathered);
   }
-  gathered.push({ at: ['guards', String(guard.name)], guard });
+  gathered.push({ at: ['guards', textOf(guard.name)], guard });
 }
 
 /** Every Rejection a root reaches, each once: a Definitions Package's, a Guard's, an Endpoint's. */
 function rejectionsOf(
-  declared: Pick<Declarations, 'packages' | 'guards' | 'endpoints'>,
+  declared: Pick<Declarations, 'allPackages' | 'guards' | 'endpoints'>,
 ): readonly LocatedRejection[] {
-  const listed = declared.packages.flatMap((located) => listOf(located.definitions.rejections));
+  const listed = declared.allPackages.flatMap((located) => listOf(located.definitions.rejections));
   const ofGuards = declared.guards.flatMap((located) => listOf(located.guard.rejections));
   const ofEndpoints = declared.endpoints.flatMap((located) => listOf(located.endpoint.rejections));
   const rejections = [...listed, ...ofGuards, ...ofEndpoints].filter(isRejection);
   const distinct = [...new Set(rejections)];
   return distinct.map((rejection) => ({
-    at: ['rejections', String(rejection.code)],
+    at: ['rejections', textOf(rejection.code)],
     rejection,
   }));
 }

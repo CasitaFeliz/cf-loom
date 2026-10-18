@@ -1,10 +1,11 @@
 import { isGuard } from '../predicates.ts';
 import type { ObjectNode, Path, SchemaNode } from '../walker/nodes.ts';
 import type { LocatedEndpoint } from './declarations.ts';
-import { attachedGuardOf, listOf } from './declarations.ts';
+import { attachedGuardOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { type Nodes, type Part, slotAt, type WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
+import { listOf, textOf } from './written.ts';
 
 /** The parts of a request that travel as text, and a Success's headers with them. */
 type TextPart = 'params' | 'query' | 'headers';
@@ -41,9 +42,9 @@ export function conflictFailures(
 ): readonly DeclarationFailure[] {
   const guards = [...new Set(listOf(endpoint.guards).map(attachedGuardOf).filter(isGuard))];
   return (['headers', 'query'] as const).flatMap((part) => {
-    const own = { owner: String(endpoint.name), node: nodes.nodeOf(endpoint, `input.${part}`) };
+    const own = { owner: textOf(endpoint.name), node: nodes.nodeOf(endpoint, `input.${part}`) };
     const demanded = guards.map((guard) => ({
-      owner: String(guard.name),
+      owner: textOf(guard.name),
       node: nodes.nodeOf(guard, `demands.${part}`),
     }));
     return partConflicts([own, ...demanded], { at: slotAt(at, `input.${part}`), part });
@@ -56,9 +57,9 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
     return [];
   }
   const { at, node } = slot;
-  const name = String(at.at(-1));
+  const name = textOf(at.at(-1));
   if (node.type !== 'object') {
-    return [failure(at, 'not-an-object', `${name} is an object of its fields`)];
+    return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
   }
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];

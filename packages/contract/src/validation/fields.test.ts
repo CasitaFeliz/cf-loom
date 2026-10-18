@@ -240,6 +240,75 @@ describe('validateContract: required fields', () => {
     );
   });
 
+  test('a null Success status counts as missing, once', () => {
+    const success = {
+      status: null,
+      body: listing.success.body,
+    } as unknown as typeof listing.success;
+    const endpoint = defineEndpoint({ ...listing, success });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      required([...endpointAt, 'success', 'status'], 'status is a required field'),
+    );
+  });
+
+  test('a null Rejection status counts as missing, once', () => {
+    const rejection = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: null as unknown as 409,
+      message: 'Locked',
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      required(['rejections', 'ORDER_LOCKED', 'status'], 'status is a required field'),
+    );
+  });
+
+  test('a null Rejection body fails once, as no schema', () => {
+    const rejection = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body: null as unknown as z.ZodString,
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(['rejections', 'ORDER_LOCKED', 'body'], 'not-a-schema', 'body is not a zod schema'),
+    );
+  });
+
+  test('a null Standard Rejection status counts as missing, once', () => {
+    const notFound = { code: 'NOT_FOUND', status: null, message: 'Not found' } as unknown as {
+      code: 'NOT_FOUND';
+      status: 404;
+      message: 'Not found';
+    };
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { notFound },
+    });
+
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      required(['standardRejections', 'notFound', 'status'], 'status is a required field'),
+    );
+  });
+
+  test('a Rejection status that is an object without a prototype is named without throwing', () => {
+    const rejection = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: Object.create(null) as 409,
+      message: 'Locked',
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        ['rejections', 'ORDER_LOCKED', 'status'],
+        'rejection-status',
+        "A Rejection's status is 4xx: an object",
+      ),
+    );
+  });
+
   test('an Application without dependencies fails', () => {
     const application = defineApplication(
       withoutField({ name: 'web-admin', dependencies: [] }, 'dependencies'),

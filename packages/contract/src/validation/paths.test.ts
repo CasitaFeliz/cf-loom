@@ -298,7 +298,7 @@ describe('validateContract: params against the path', () => {
     });
 
     expect(validateEndpoint(getOrder)).toEqual(
-      failedAt(paramsAt, 'not-an-object', 'params is an object of its fields'),
+      failedAt(paramsAt, 'not-an-object-schema', 'params is an object of its fields'),
     );
   });
 

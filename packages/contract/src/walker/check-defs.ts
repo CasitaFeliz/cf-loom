@@ -33,7 +33,8 @@ type CheckInstance = {
 /** The checks a schema declares, its own first: a format schema such as `z.email()` is a check. */
 export function checksOf(schema: core.$ZodType): readonly DeclaredCheck[] {
   const own: CheckInstance[] = 'check' in schema._zod.def ? [schema] : [];
-  const listed: readonly CheckInstance[] = schema._zod.def.checks ?? [];
+  const checks: unknown = schema._zod.def.checks;
+  const listed: readonly CheckInstance[] = Array.isArray(checks) ? checks : [];
   return [...own, ...listed].map(declaredCheckOf).filter(isConstraintCheck);
 }
 

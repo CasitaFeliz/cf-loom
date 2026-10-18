@@ -4,10 +4,11 @@ import type { Guard } from '../guard.ts';
 import { isGuard } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { LocatedEndpoint, LocatedGuard } from './declarations.ts';
-import { attachedGuardOf, listOf } from './declarations.ts';
+import { attachedGuardOf } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
 import type { Nodes } from './schemas.ts';
+import { listOf, textOf } from './written.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
 type Listed = {
@@ -49,7 +50,7 @@ export function attachmentFailures({
     }
     failures.push(...shapeFailures({ at: attachedAt, attachment, guard }));
     failures.push(...orderFailures({ at: attachedAt, attachment, guard }, earlier));
-    earlier.push(String(guard.name));
+    earlier.push(textOf(guard.name));
   }
   return failures;
 }
@@ -82,7 +83,7 @@ function valueFailures(
   }
   const qualifierAt = [...at, 'qualifier'];
   if (!safeParse(guard.qualifier, attachment.qualifier).success) {
-    const message = `${String(guard.name)} takes a Qualifier its schema accepts`;
+    const message = `${textOf(guard.name)} takes a Qualifier its schema accepts`;
     return [failure(qualifierAt, 'qualifier-value', message)];
   }
   const undeclared = undeclaredKeysOf(attachment.qualifier, node, nodes.defs);
@@ -96,11 +97,11 @@ function valueFailures(
 function shapeFailures({ at, attachment, guard }: Attached): readonly DeclarationFailure[] {
   const declaresQualifier = guard.qualifier !== undefined;
   if (isGuard(attachment) && declaresQualifier) {
-    const message = `${String(guard.name)} needs a qualifier: { guard, qualifier }`;
+    const message = `${textOf(guard.name)} needs a qualifier: { guard, qualifier }`;
     return [failure(at, 'attachment-needs-qualifier', message)];
   }
   if (!isGuard(attachment) && !declaresQualifier) {
-    const message = `${String(guard.name)} takes no qualifier`;
+    const message = `${textOf(guard.name)} takes no qualifier`;
     return [failure(at, 'attachment-takes-no-qualifier', message)];
   }
   return [];
@@ -110,17 +111,17 @@ function orderFailures(
   { at, guard }: Attached,
   earlier: readonly string[],
 ): readonly DeclarationFailure[] {
-  if (earlier.includes(String(guard.name))) {
-    return [failure(at, 'guard-once', `${String(guard.name)} is listed twice`)];
+  if (earlier.includes(textOf(guard.name))) {
+    return [failure(at, 'guard-once', `${textOf(guard.name)} is listed twice`)];
   }
   const required = listOf(guard.guards)
     .filter(isGuard)
-    .map((listed) => String(listed.name));
+    .map((listed) => textOf(listed.name));
   const missing = required.filter((name) => !earlier.includes(name));
   if (missing.length === 0) {
     return [];
   }
-  const message = `${String(guard.name)} requires ${missing.join(', ')} earlier in guards`;
+  const message = `${textOf(guard.name)} requires ${missing.join(', ')} earlier in guards`;
   return [failure(at, 'guard-order', message)];
 }
 

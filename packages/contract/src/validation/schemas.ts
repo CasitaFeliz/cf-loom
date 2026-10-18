@@ -9,6 +9,7 @@ import type {
   LocatedRejection,
 } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { entriesOf, isPlainObject, partOf, textOf } from './written.ts';
 
 /** A slot of a declaration that holds a schema, as the Snapshot names it. */
 export type Part =
@@ -28,7 +29,8 @@ export type Part =
 /**
  * A schema slot: where it sits, the declaration that owns it and which part it is; a Rejection body
  * declared again for a code already written is `compared` with the first and not written itself.
- * The owner is the declaration itself, since two declarations may sit at one location.
+ * The owner is the declaration itself, since two declarations may sit at one location; a shared
+ * schema of a Definitions Package owns its own slot.
  */
 export type Slot = {
   readonly at: Path;
@@ -61,8 +63,8 @@ export type Nodes = {
 };
 
 /** Where a part of a declaration sits: the one place that spells a schema's location. */
-export function slotAt(owner: Path, part: Part): Path {
-  return part === 'schema' ? owner : [...owner, ...part.split('.')];
+export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
+  return [...owner, ...part.split('.')];
 }
 
 /** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
@@ -76,7 +78,7 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
   const failures = slots
     .filter((slot) => !holdsSchema(slot))
     .map((slot) =>
-      failure(slot.at, 'not-a-schema', `${String(slot.at.at(-1))} is not a zod schema`),
+      failure(slot.at, 'not-a-schema', `${textOf(slot.at.at(-1))} is not a zod schema`),
     );
   return { slots: slots.filter(holdsSchema), failures };
 }
@@ -88,6 +90,9 @@ export function locatedSchemasOf(slots: readonly SchemaSlot[]): readonly Located
 
 /** The walked nodes by owner and part, zipped with the slots the walk was given, in order. */
 export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): Nodes {
+  if (walked.located.length !== slots.length) {
+    throw new Error('The walk returned a result for a number of schemas other than given: a bug.');
+  }
   const walkedSlots: WalkedSlot[] = [];
   const nodesByOwner = new Map<object, Map<Part, SchemaNode>>();
   for (const [index, slot] of slots.entries()) {
@@ -136,7 +141,7 @@ function rejectionSlots(rejections: readonly LocatedRejection[]): readonly Slot[
   const written = new Set<string>();
   const slots: Slot[] = [];
   for (const { at, rejection } of rejections) {
-    const code = String(rejection.code);
+    const code = textOf(rejection.code);
     const role = written.has(code) ? 'compared' : 'snapshot';
     written.add(code);
     slots.push({ ...slot({ at, owner: rejection }, 'body', rejection.body), role });
@@ -144,32 +149,38 @@ function rejectionSlots(rejections: readonly LocatedRejection[]): readonly Slot[
   return slots;
 }
 
+/** A shared schema sits under `schemas` by name and owns its slot, being no declaration's part. */
 function sharedSlots({ root }: Declarations): readonly Slot[] {
   if (root.kind !== 'definitions') {
     return [];
   }
-  return Object.entries(partOf<string>(root.schemas)).map(([name, value]) =>
-    slot({ at: ['schemas', name], owner: root }, 'schema', value),
-  );
+  return entriesOf(root.schemas).map(([name, value]) => ({
+    at: ['schemas', name],
+    owner: isPlainObject(value) ? value : { name },
+    part: 'schema' as const,
+    value,
+    role: 'snapshot' as const,
+  }));
 }
 
 function slot(
   { at, owner }: { readonly at: Path; readonly owner: object },
-  part: Part,
+  part: Exclude<Part, 'schema'>,
   value: unknown,
 ): Slot {
   return { at: slotAt(at, part), owner, part, value, role: 'snapshot' };
-}
-
-/** A part a declaration may leave out is empty; what a cast put there that is no object is too. */
-function partOf<Key extends string>(part: unknown): Partial<Readonly<Record<Key, unknown>>> {
-  return typeof part === 'object' && part !== null ? (part as Record<Key, unknown>) : {};
 }
 
 function isFilled(slot: Slot): boolean {
   return slot.value !== undefined;
 }
 
+/** A zod schema names its type in `_zod.def`; anything that only looks like one is none. */
 function holdsSchema(slot: Slot): slot is SchemaSlot {
-  return typeof slot.value === 'object' && slot.value !== null && '_zod' in slot.value;
+  const { value } = slot;
+  if (!isPlainObject(value) || !isPlainObject(value['_zod'])) {
+    return false;
+  }
+  const def = value['_zod']['def'];
+  return isPlainObject(def) && typeof def['type'] === 'string';
 }

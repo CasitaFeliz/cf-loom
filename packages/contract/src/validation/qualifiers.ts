@@ -1,5 +1,6 @@
 import { canonicalJson } from '../walker/canonical-json.ts';
 import type { ObjectNode, SchemaNode, TupleNode } from '../walker/nodes.ts';
+import { isPlainObject } from './written.ts';
 
 /** Where in a value the judgement is, and the `defs` its schema's refs resolve through. */
 type Within = {
@@ -140,8 +141,4 @@ function deeper(within: Within, segment: string | number): Within {
 
 function pathOf(within: Within, key: string): string {
   return [...within.path, key].join('.');
-}
-
-function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

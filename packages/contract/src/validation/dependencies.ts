@@ -2,6 +2,7 @@ import { isEndpoint, isEvent } from '../predicates.ts';
 import type { Path } from '../walker/nodes.ts';
 import type { Declarations, LocatedDependencies, Root } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { entriesOf, partOf, textOf } from './written.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';
 
@@ -14,31 +15,44 @@ type Selected = { readonly at: Path; readonly name: string; readonly element: un
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, dependencies } = declarations;
-  return dependencies.flatMap((located) => [
-    ...selectedOf(located, 'endpoints').flatMap((selected) =>
-      endpointFailures(selected, located, root.kind),
-    ),
-    ...selectedOf(located, 'events').flatMap((selected) =>
-      eventFailures(selected, located, root.kind),
-    ),
-  ]);
+  return dependencies.flatMap((located) => {
+    const exported = exportedOf(located);
+    return [
+      ...selectedOf(located, 'endpoints').flatMap((selected) =>
+        selectedEndpointFailures(selected, exported, root.kind),
+      ),
+      ...selectedOf(located, 'events').flatMap((selected) =>
+        selectedEventFailures(selected, exported, root.kind),
+      ),
+    ];
+  });
 }
 
 function selectedOf(
   { at, dependencies }: LocatedDependencies,
   part: 'endpoints' | 'events',
 ): readonly Selected[] {
-  const elements: object = dependencies[part] ?? {};
-  return Object.entries(elements).map(([name, element]) => ({
+  return entriesOf(dependencies[part]).map(([name, element]) => ({
     at: [...at, part, name],
     name,
     element,
   }));
 }
 
-function endpointFailures(
+/** The Elements a Dependency's Provider exports, read once per Dependency. */
+type Exported = { readonly endpoints: ReadonlySet<unknown>; readonly events: readonly unknown[] };
+
+function exportedOf({ dependencies }: LocatedDependencies): Exported {
+  const exported: Partial<Record<'endpoints' | 'events', unknown>> = partOf(dependencies.exported);
+  return {
+    endpoints: new Set(Object.values(partOf(exported.endpoints))),
+    events: Object.values(partOf(exported.events)),
+  };
+}
+
+function selectedEndpointFailures(
   { at, name, element }: Selected,
-  { dependencies }: LocatedDependencies,
+  exported: Exported,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
   if (!isEndpoint(element)) {
@@ -47,14 +61,13 @@ function endpointFailures(
   if (element.visibility === 'private') {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
-  const exported: object = dependencies.exported?.endpoints ?? {};
-  if (!Object.values(exported).includes(element)) {
+  if (!exported.endpoints.has(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
   }
   if (rootKind !== 'application' || element.visibility === 'public') {
     return [];
   }
-  const message = `An Application depends on Public Endpoints only: ${name} is ${String(element.visibility)}`;
+  const message = `An Application depends on Public Endpoints only: ${name} is ${textOf(element.visibility)}`;
   return [failure(at, 'application-dependency', message)];
 }
 
@@ -63,9 +76,9 @@ function endpointFailures(
  * Package's Events are plain objects until `defineEvent` brands them (milestone 2), and a
  * declaration copies plain objects, so identity cannot tell them apart.
  */
-function eventFailures(
+function selectedEventFailures(
   { at, name, element }: Selected,
-  { dependencies }: LocatedDependencies,
+  exported: Exported,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
   if (rootKind === 'application') {
@@ -79,8 +92,7 @@ function eventFailures(
   if (element.visibility === 'private') {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
-  const exported: object = dependencies.exported?.events ?? {};
-  const isExported = Object.values(exported).some(
+  const isExported = exported.events.some(
     (event) => isEvent(event) && event.name === element.name && event.version === element.version,
   );
   return isExported

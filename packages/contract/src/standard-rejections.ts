@@ -4,7 +4,8 @@ import type { RejectionStatus } from './http.ts';
 /** The three Standard Rejections by name, as values, so the runtime resolves each. */
 export const standardRejectionNames = ['invalidInput', 'notFound', 'notImplemented'] as const;
 
-type StandardRejectionName = (typeof standardRejectionNames)[number];
+/** One of the three Standard Rejections, by name. */
+export type StandardRejectionName = (typeof standardRejectionNames)[number];
 
 /** The Standard Rejections cf-loom's runtime adds to every Endpoint, as values, so none lists them. */
 export const addedStandardRejectionNames = ['invalidInput', 'notImplemented'] as const;
