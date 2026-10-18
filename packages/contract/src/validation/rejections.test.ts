@@ -411,25 +411,13 @@ describe('validateContract: Standard Rejections', () => {
       },
     });
 
-    expect(validateContract(definitions, noOrigin)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: ['standardRejections', 'invalidInput', 'code'],
-          rule: 'standard-codes-distinct',
-          message:
-            'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
-        },
-        {
-          kind: 'declaration',
-          at: ['standardRejections', 'notFound', 'code'],
-          rule: 'standard-codes-distinct',
-          message:
-            'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
-        },
-      ],
-    });
+    expect(validateContract(definitions, noOrigin)).toEqual(
+      failed(
+        ['standardRejections', 'notFound', 'code'],
+        'standard-codes-distinct',
+        'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+      ),
+    );
   });
 
   test('two Standard Rejections resolving to one code fail in a Contract', () => {
@@ -442,25 +430,13 @@ describe('validateContract: Standard Rejections', () => {
     });
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
-    expect(validateContract(contract, noOrigin)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: ['definitions', 'definitions', 'standardRejections', 'notFound', 'code'],
-          rule: 'standard-codes-distinct',
-          message:
-            'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
-        },
-        {
-          kind: 'declaration',
-          at: ['definitions', 'definitions', 'standardRejections', 'notImplemented', 'code'],
-          rule: 'standard-codes-distinct',
-          message:
-            'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
-        },
-      ],
-    });
+    expect(validateContract(contract, noOrigin)).toEqual(
+      failed(
+        ['definitions', 'definitions', 'standardRejections', 'notImplemented', 'code'],
+        'standard-codes-distinct',
+        'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
+      ),
+    );
   });
 
   test('a Standard Rejection declared with the default code of another fails', () => {
@@ -471,7 +447,7 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateContract(definitions, noOrigin)).toEqual(
       failed(
-        ['standardRejections', 'invalidInput', 'code'],
+        ['standardRejections', 'notFound', 'code'],
         'standard-codes-distinct',
         'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
       ),

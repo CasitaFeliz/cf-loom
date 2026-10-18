@@ -6,15 +6,16 @@ import {
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../standard-rejections.ts';
+import type { Path } from '../walker/nodes.ts';
+import type { Declarations } from './declarations.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
 import type {
-  Declarations,
   LocatedEndpoint,
   LocatedGuard,
   LocatedRejection,
   LocatedStandardRejection,
-} from './declarations.ts';
-import { type DeclarationFailure, failure } from './failures.ts';
-import { isMissing, listOf, textOf } from './written.ts';
+} from './located.ts';
+import { isWithoutValue, listOf, textOf } from './written.ts';
 
 /**
  * A Standard Rejection as the root resolves it: the Definitions Package's declaration, else
@@ -22,6 +23,7 @@ import { isMissing, listOf, textOf } from './written.ts';
  */
 export type ResolvedStandard = {
   readonly name: StandardRejectionName;
+  readonly at: Path;
   readonly code: string;
   readonly status: number;
   readonly message: string;
@@ -38,7 +40,7 @@ export function standardStatusFailures({
   declaration,
 }: LocatedStandardRejection): readonly DeclarationFailure[] {
   const { status } = declaration;
-  if (isMissing(status)) {
+  if (isWithoutValue(status)) {
     return [];
   }
   if (name === 'notImplemented') {
@@ -85,15 +87,25 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
   );
 }
 
-/** Each Standard Rejection as the root resolves it, in the order cf-loom names them. */
-export function resolvedStandards(
-  standardRejections: readonly LocatedStandardRejection[],
-): readonly ResolvedStandard[] {
+/**
+ * Each Standard Rejection as the root resolves it, in the order cf-loom names them; one cf-loom
+ * resolves sits where the declaring Definitions Package would have declared it.
+ */
+export function resolvedStandards({
+  allPackages,
+  standardRejections,
+}: Pick<Declarations, 'allPackages' | 'standardRejections'>): readonly ResolvedStandard[] {
+  const declaring = allPackages.find(({ definitions }) =>
+    Object.values(definitions.standardRejections ?? {}).some(
+      (declaration) => declaration !== undefined,
+    ),
+  );
   return standardRejectionNames.map((name) => {
     const declared = standardRejections.find((located) => located.name === name);
     const defaults = standardRejectionDefaults[name];
     return {
       name,
+      at: declared?.at ?? [...(declaring?.at ?? []), 'standardRejections', name],
       code: textOf(declared?.declaration.code ?? defaults.code),
       status: declared?.declaration.status ?? defaults.status,
       message: textOf(declared?.declaration.message ?? defaults.message),
@@ -102,21 +114,21 @@ export function resolvedStandards(
   });
 }
 
-/** Each Standard Rejection resolves to a code of its own: their bodies differ, whatever their statuses. */
+/** Each Standard Rejection resolves to a code of its own; the ones after the first sharing a code fail. */
 export function distinctCodeFailures(
   resolved: readonly ResolvedStandard[],
 ): readonly DeclarationFailure[] {
-  const sharing = (standard: ResolvedStandard) =>
-    resolved.filter((other) => other.code === standard.code);
   return resolved
-    .filter(isDeclared)
-    .filter((standard) => sharing(standard).length > 1)
+    .filter(
+      (standard, index) => resolved.findIndex((other) => other.code === standard.code) < index,
+    )
     .map((standard) => {
-      const names = sharing(standard)
+      const names = resolved
+        .filter((other) => other.code === standard.code)
         .map((other) => other.name)
         .join(' and ');
       const message = `Each Standard Rejection resolves to a code of its own: ${standard.code} is ${names}`;
-      return failure([...standard.declared.at, 'code'], 'standard-codes-distinct', message);
+      return failure([...standard.at, 'code'], 'standard-codes-distinct', message);
     });
 }
 
@@ -156,12 +168,6 @@ export function onceFailures({ listedDefinitions }: Declarations): readonly Decl
       `At most one listed Definitions Package declares Standard Rejections: ${textOf(first.definitions.name)} already does`,
     ),
   );
-}
-
-function isDeclared(
-  standard: ResolvedStandard,
-): standard is ResolvedStandard & { readonly declared: LocatedStandardRejection } {
-  return standard.declared !== undefined;
 }
 
 /** The name of a Standard Rejection, from any copy of this package; nothing for anything else. */
