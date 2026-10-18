@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { importedModuleOf, thrownLineOf } from '../loading/index.ts';
+import { importedModuleOf, oneLineOf } from '../loading/index.ts';
 import type { Config } from './config.ts';
 
 /** The file the tools are configured in, next to the project's package.json. */
@@ -34,7 +34,7 @@ export async function loadConfig(directory: string): Promise<LoadedConfig> {
   try {
     return scopedConfigOf(Reflect.get(config, 'scope'));
   } catch (e) {
-    return failed(`${configFile} threw while it was read: ${thrownLineOf(e, directory)}`);
+    return failed(`${configFile} threw while it was read: ${oneLineOf(e, directory)}`);
   }
 }
 

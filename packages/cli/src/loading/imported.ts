@@ -15,15 +15,15 @@ export async function importedModuleOf(path: string, directory: string): Promise
     const exports: Readonly<Record<string, unknown>> = await import(pathToFileURL(path).href);
     return { kind: 'imported', exports };
   } catch (e) {
-    return { kind: 'failed', message: thrownLineOf(e, directory) };
+    return { kind: 'failed', message: oneLineOf(e, directory) };
   }
 }
 
 /**
- * What a user's code threw, as one line: where in the project it threw when its stack says so,
- * and the project's paths relative to it.
+ * Renders anything thrown as one line: where in the project it was thrown when its stack says
+ * so, with the project's paths relative to it.
  */
-export function thrownLineOf(thrown: unknown, directory: string): string {
+export function oneLineOf(thrown: unknown, directory: string): string {
   if (!(thrown instanceof Error)) {
     return relativeTo(firstLineOf(String(thrown)), directory);
   }

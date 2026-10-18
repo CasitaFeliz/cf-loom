@@ -835,6 +835,62 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
   });
 });
 
+describe('cf-loom generate: what a listed Definitions Package lists', () => {
+  test('a Rejection the package exports and does not list fails with every other failure', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'node_modules/@org/definitions/package.json': JSON.stringify({
+        name: '@org/definitions',
+        version: '4.2.0',
+        type: 'module',
+        exports: './index.js',
+      }),
+      'node_modules/@org/definitions/index.js': [
+        "import { defineDefinitions, defineRejection } from '@casitafeliz/loom-contract';",
+        "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
+        "export const definitions = defineDefinitions({ name: 'definitions' });",
+        '',
+      ].join('\n'),
+    });
+    listDefinitions(project);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'definitions.definitions.rejections definitions-unlisted: A Definitions Package lists every Rejection it exports or its Guards reach: GONE\n',
+    });
+  });
+
+  test('a listed Definitions Package whose name breaks the grammar is reported by the grammar', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'src/contract/definitions.ts': [
+        "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+        "export const definitions = defineDefinitions({ name: 'Org Definitions' });",
+        '',
+      ].join('\n'),
+    });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text
+        .replace(
+          "import { ping } from './ping.endpoint.ts';",
+          "import { ping } from './ping.endpoint.ts';\nimport { definitions } from './definitions.ts';",
+        )
+        .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toMatch(/^definitions\.Org Definitions\.name name-grammar: [^\n]+\n$/);
+  });
+});
+
 describe('cf-loom generate: deprecatedAt', () => {
   test('an Endpoint Deprecated again after being Active is stamped anew', () => {
     const project = aProject({

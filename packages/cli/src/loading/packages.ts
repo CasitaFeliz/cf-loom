@@ -1,64 +1,41 @@
-import { readFileSync } from 'node:fs';
-import { findPackageJSON } from 'node:module';
-import { pathToFileURL } from 'node:url';
-import { listedDefinitionsOf, type ResolvedDefinitions } from '@casitafeliz/loom-contract/internal';
+import {
+  follows,
+  kebabCase,
+  listedDefinitionsOf,
+  type ResolvedDefinitions,
+} from '@casitafeliz/loom-contract/internal';
+import { installedPackageOf, type LookedUp } from './installed-package.ts';
+
+/** A listed Definitions Package as installed, with what its module exports. */
+export type InstalledDefinitions = ResolvedDefinitions & { readonly exports: readonly unknown[] };
 
 /** The Definitions Packages a root lists as installed, or the first that is not. */
 export type ResolvedPackages =
-  | { readonly kind: 'resolved'; readonly packages: readonly ResolvedDefinitions[] }
+  | { readonly kind: 'resolved'; readonly packages: readonly InstalledDefinitions[] }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** What a listed Definitions Package is resolved from: the root file's absolute path and the scope. */
-export type Resolving = { readonly rootPath: string; readonly scope: string };
+/** What a listed Definitions Package is resolved from: where it is looked up and the scope. */
+export type Resolving = LookedUp & { readonly scope: string };
 
 /**
  * Resolves each Definitions Package a root lists to the package `<scope>/<name>` as the root
- * file imports it, at its exact version, which the Snapshot records.
+ * file imports it, at its exact version, with what its module exports; a name that breaks the
+ * grammar names no package and is left to the validation.
  */
-export function resolvePackages(root: unknown, { rootPath, scope }: Resolving): ResolvedPackages {
-  const packages: ResolvedDefinitions[] = [];
-  for (const definitions of listedDefinitionsOf(root)) {
-    const packageName = `${scope}/${definitions.name}`;
-    const version = installedVersionOf(packageName, rootPath);
-    if (version.kind === 'failed') {
-      return version;
+export async function resolvePackages(
+  root: unknown,
+  resolving: Resolving,
+): Promise<ResolvedPackages> {
+  const packages: InstalledDefinitions[] = [];
+  const named = listedDefinitionsOf(root).filter(({ name }) => follows(kebabCase, name));
+  for (const definitions of named) {
+    const packageName = `${resolving.scope}/${definitions.name}`;
+    const installed = await installedPackageOf(packageName, resolving);
+    if (installed.kind === 'failed') {
+      return installed;
     }
-    packages.push({ definitions, packageName, version: version.version });
+    const { version, exports } = installed;
+    packages.push({ definitions, packageName, version, exports });
   }
   return { kind: 'resolved', packages };
-}
-
-function installedVersionOf(
-  packageName: string,
-  rootPath: string,
-):
-  | { readonly kind: 'installed'; readonly version: string }
-  | Extract<ResolvedPackages, { readonly kind: 'failed' }> {
-  const manifest = manifestPathOf(packageName, rootPath);
-  if (manifest === undefined) {
-    return { kind: 'failed', message: `${packageName} is not installed: install it to list it` };
-  }
-  const version = versionIn(manifest);
-  if (version === undefined) {
-    return { kind: 'failed', message: `${packageName} has no version in its package.json` };
-  }
-  return { kind: 'installed', version };
-}
-
-/** Where Node finds the package's package.json from the root file, as the root imports it. */
-function manifestPathOf(packageName: string, rootPath: string): string | undefined {
-  try {
-    return findPackageJSON(packageName, pathToFileURL(rootPath));
-  } catch {
-    return undefined;
-  }
-}
-
-function versionIn(manifest: string): string | undefined {
-  try {
-    const version: unknown = JSON.parse(readFileSync(manifest, 'utf8')).version;
-    return typeof version === 'string' ? version : undefined;
-  } catch {
-    return undefined;
-  }
 }

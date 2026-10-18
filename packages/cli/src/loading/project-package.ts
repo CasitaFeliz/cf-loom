@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { thrownLineOf } from './imported.ts';
+import { oneLineOf } from './imported.ts';
 
 /** A project's package as its package.json names it: the scope, when it has one, and the name. */
 export type PackageName = { readonly scope: string | undefined; readonly name: string };
@@ -60,7 +60,7 @@ function manifestOf(
     };
   } catch (e) {
     const problem = e instanceof SyntaxError ? 'is no JSON' : 'cannot be read';
-    return failed(`package.json ${problem}: ${thrownLineOf(e, directory)}`);
+    return failed(`package.json ${problem}: ${oneLineOf(e, directory)}`);
   }
 }
 

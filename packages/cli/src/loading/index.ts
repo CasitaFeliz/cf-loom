@@ -1,6 +1,6 @@
 export type { Imported } from './imported.ts';
-export { importedModuleOf, thrownLineOf } from './imported.ts';
-export type { ResolvedPackages, Resolving } from './packages.ts';
+export { importedModuleOf, oneLineOf } from './imported.ts';
+export type { InstalledDefinitions, ResolvedPackages, Resolving } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';
 export { projectPackageOf } from './project-package.ts';

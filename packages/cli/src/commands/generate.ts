@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { thrownLineOf } from '../loading/index.ts';
+import { oneLineOf } from '../loading/index.ts';
 import { declaredSnapshotOf, snapshotFile } from './declared.ts';
 import { done, type Exit, type Run, toolingError } from './exit.ts';
 
@@ -27,6 +27,6 @@ function written(cwd: string, bytes: Uint8Array): Exit {
     writeFileSync(join(cwd, snapshotFile), bytes);
     return done(`Wrote ${snapshotFile}`);
   } catch (e) {
-    return toolingError(`${snapshotFile} cannot be written: ${thrownLineOf(e, cwd)}`);
+    return toolingError(`${snapshotFile} cannot be written: ${oneLineOf(e, cwd)}`);
   }
 }

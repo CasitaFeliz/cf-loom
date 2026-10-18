@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path';
 import { configFile } from '../config/index.ts';
 import {
+  oneLineOf,
   type PackageName,
   projectPackageOf,
   type RootKind,
   rootFiles,
   rootPlaces,
-  thrownLineOf,
 } from '../loading/index.ts';
 import { done, type Exit, type Run, toolingError } from './exit.ts';
 import { configTemplateOf, rootTemplateOf } from './templates.ts';
@@ -95,6 +95,6 @@ function writeAll(cwd: string, written: Written): string | undefined {
     for (const path of writtenPaths.reverse()) {
       rmSync(join(cwd, path), { force: true, recursive: true });
     }
-    return thrownLineOf(e, cwd);
+    return oneLineOf(e, cwd);
   }
 }
