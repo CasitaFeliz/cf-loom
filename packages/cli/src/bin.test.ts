@@ -57,6 +57,8 @@ function cfLoom(project: string, ...args: string[]) {
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
+const usage = 'Usage: cf-loom init [service | application | definitions] | generate | verify';
+
 const config = [
   "import { defineConfig } from '@casitafeliz/loom-cli';",
   '',
@@ -95,6 +97,56 @@ function aRoot({
     ].join('\n'),
   };
 }
+
+/** The Definitions Package `@org/definitions`, installed as built JavaScript under `at`. */
+function installedDefinitions(
+  at: string,
+  manifest: Readonly<Record<string, unknown>> = { version: '4.2.0' },
+): Readonly<Record<string, string>> {
+  return {
+    [`${at}/@org/definitions/package.json`]: JSON.stringify({
+      name: '@org/definitions',
+      type: 'module',
+      exports: './index.js',
+      ...manifest,
+    }),
+    [`${at}/@org/definitions/index.js`]: [
+      "import { defineDefinitions, defineRejection } from '@casitafeliz/loom-contract';",
+      "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
+      'export const definitions = defineDefinitions({',
+      "  name: 'definitions',",
+      '  rejections: [gone],',
+      "  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },",
+      '});',
+      '',
+    ].join('\n'),
+  };
+}
+
+/** Lists `@org/definitions` on the project's root. */
+function listDefinitions(project: string): void {
+  write(project, {
+    'src/contract/index.ts': read(project, 'src/contract/index.ts')
+      .replace(
+        "import { ping } from './ping.endpoint.ts';",
+        "import { ping } from './ping.endpoint.ts';\nimport { definitions } from '@org/definitions';",
+      )
+      .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
+  });
+}
+
+/** Rewrites one file of a project from what it holds. */
+function edit(project: string, path: string, change: (text: string) => string): void {
+  write(project, { [path]: change(read(project, path)) });
+}
+
+/** The package.json files the CLI refuses, each with what is wrong with it. */
+const brokenManifests = [
+  ['no JSON', '{ "name": '],
+  ['no name', JSON.stringify({ type: 'module' })],
+  ['an upper-case name', JSON.stringify({ name: '@org/Orders', type: 'module' })],
+  ['a scope alone', JSON.stringify({ name: '@org', type: 'module' })],
+];
 
 /** A value with every object's keys sorted, as the canonical form writes them. */
 function sortedKeys(value: unknown): unknown {
@@ -201,8 +253,67 @@ describe('cf-loom init', () => {
 
     const ran = cfLoom(project, 'init', 'service-worker');
 
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Unknown kind: service-worker. ${usage}\n`,
+    });
+  });
+
+  test('init refuses when the root of another kind exists', () => {
+    const project = aProject({ 'src/definitions/index.ts': 'export {};\n' });
+
+    const ran = cfLoom(project, 'init', 'service');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'src/definitions/index.ts already exists\n',
+    });
+    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
+    expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+  });
+
+  test('init writes nothing when src/contract is a file', () => {
+    const project = aProject({ 'src/contract': 'not a folder\n' });
+
+    const ran = cfLoom(project, 'init');
+
     expect(ran.status).toBe(3);
-    expect(ran.stderr).toContain('service, application or definitions');
+    expect(ran.stderr).toBe('src/contract is no folder: init cannot write src/contract/index.ts\n');
+    expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+  });
+
+  test('init writes nothing when cf-loom.config.ts is no file', () => {
+    const project = aProject({ 'cf-loom.config.ts/kept.txt': '' });
+
+    const ran = cfLoom(project, 'init');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe('cf-loom.config.ts is no file\n');
+    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
+  });
+
+  test('init refuses a package.json whose type is not module', () => {
+    const project = aProject({ 'package.json': JSON.stringify({ name: '@org/orders-service' }) });
+
+    const ran = cfLoom(project, 'init');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(
+      'package.json has no "type": "module": the config and the Contract\'s files are ES modules\n',
+    );
+    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
+  });
+
+  test.each(brokenManifests)('init refuses a package.json with %s', (_, manifest) => {
+    const project = aProject({ 'package.json': manifest });
+
+    const ran = cfLoom(project, 'init');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^package\.json [^\n]+\n$/);
+    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
   });
 
   test.each(['service', 'application', 'definitions'])(
@@ -331,31 +442,9 @@ describe('cf-loom generate', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
-      'node_modules/@org/definitions/package.json': JSON.stringify({
-        name: '@org/definitions',
-        version: '4.2.0',
-        type: 'module',
-        exports: './index.js',
-      }),
-      'node_modules/@org/definitions/index.js': [
-        "import { defineDefinitions, defineRejection } from '@casitafeliz/loom-contract';",
-        "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
-        'export const definitions = defineDefinitions({',
-        "  name: 'definitions',",
-        '  rejections: [gone],',
-        "  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },",
-        '});',
-        '',
-      ].join('\n'),
+      ...installedDefinitions('node_modules'),
     });
-    write(project, {
-      'src/contract/index.ts': read(project, 'src/contract/index.ts')
-        .replace(
-          "import { ping } from './ping.endpoint.ts';",
-          "import { ping } from './ping.endpoint.ts';\nimport { definitions } from '@org/definitions';",
-        )
-        .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
-    });
+    listDefinitions(project);
 
     const ran = cfLoom(project, 'generate');
 
@@ -400,7 +489,8 @@ describe('cf-loom generate', () => {
       'cf-loom.config.ts': config,
       ...aRoot({ lifecycle: 'deprecated' }),
     });
-    cfLoom(project, 'generate');
+    const generated = cfLoom(project, 'generate');
+    expect(generated.status).toBe(0);
     const committed = JSON.parse(read(project, 'contract.snapshot.json'));
     committed.endpoints['GET /ping'].deprecatedAt = '2026-01-02T03:04:05Z';
     write(project, { 'contract.snapshot.json': JSON.stringify(committed) });
@@ -438,7 +528,186 @@ describe('cf-loom generate', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json is no JSON: /);
+    expect(ran.stderr).toMatch(
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+    );
+  });
+});
+
+describe('cf-loom generate: what it refuses', () => {
+  test('a root whose name is not the unscoped name of package.json exits 1', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'name package-name: The root is named as package.json without its scope: billing-service\n',
+    });
+  });
+
+  test.each(brokenManifests)('a package.json with %s is a tooling error', (_, manifest) => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot(), 'package.json': manifest });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^package\.json [^\n]+\n$/);
+  });
+
+  test('a package.json whose type is not module is a tooling error', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'package.json': JSON.stringify({ name: '@org/orders-service' }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toContain('"type": "module"');
+  });
+
+  test('a root file that exports two roots is a tooling error', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.concat('export const application = contract;\n'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'src/contract/index.ts exports one root, not contract and application\n',
+    });
+  });
+
+  test('a schema that throws while it is read is a tooling error naming the root file', () => {
+    const body = [
+      'z.object({ name: z.string(), get children() { return z.array(categry); } })',
+    ].join('');
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(
+      'src/contract/index.ts threw while it was read: categry is not defined\n',
+    );
+  });
+
+  test('a config that throws while it is read is a tooling error naming it', () => {
+    const throwing = "export const config = { get scope() { throw new Error('not yet'); } };\n";
+    const project = aProject({ 'cf-loom.config.ts': throwing, ...aRoot() });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'cf-loom.config.ts threw while it was read: not yet\n',
+    });
+  });
+
+  test('a nested file with TypeScript Node cannot strip names the file and line', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) => `enum Unused { A }\n${text}`);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'src/contract/index.ts cannot be loaded: src/contract/ping.endpoint.ts:1: TypeScript enum is not supported in strip-only mode\n',
+    });
+  });
+
+  test('a nested file that is no TypeScript names the file and line', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) => `${text}export const broken = ;\n`);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(
+      /^src\/contract\/index\.ts cannot be loaded: src\/contract\/ping\.endpoint\.ts:13: [^\n]+\n$/,
+    );
+  });
+
+  test('a relative import without its .ts extension says relative imports name the .ts file', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace("'./ping.endpoint.ts'", "'./ping.endpoint'"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(
+      /^src\/contract\/index\.ts cannot be loaded: [^\n]+: relative imports name the \.ts file\n$/,
+    );
+  });
+
+  test('a listed Definitions Package is resolved from the root file, not the working directory', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      ...installedDefinitions('src/contract/node_modules'),
+    });
+    listDefinitions(project);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.definitions).toEqual({ '@org/definitions': '4.2.0' });
+  });
+
+  test('a listed Definitions Package whose package.json has no version is a tooling error', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      ...installedDefinitions('node_modules', { version: undefined }),
+    });
+    listDefinitions(project);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: '@org/definitions has no version in its package.json\n',
+    });
+  });
+});
+
+describe('cf-loom generate: deprecatedAt', () => {
+  test('an Endpoint Deprecated again after being Active is stamped anew', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ lifecycle: 'deprecated' }),
+    });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(/"deprecatedAt": "[^"]+"/, '"deprecatedAt": "2020-01-02T03:04:05Z"'),
+    );
+    write(project, aRoot({ lifecycle: 'active' }));
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    write(project, aRoot({ lifecycle: 'deprecated' }));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.endpoints['GET /ping'].deprecatedAt).not.toBe('2020-01-02T03:04:05Z');
   });
 });
 
@@ -494,6 +763,63 @@ describe('cf-loom verify', () => {
     });
   });
 
+  test('verify ignores which CLI wrote contract.snapshot.json', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test('generate writes the CLI that runs it', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+    );
+
+    cfLoom(project, 'generate');
+
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.generator).toBe(`@casitafeliz/loom-cli@${cliVersion}`);
+  });
+
+  test('verify exits 1 when a deprecatedAt was edited into no instant', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ lifecycle: 'deprecated' }),
+    });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(/"deprecatedAt": "[^"]+"/, '"deprecatedAt": "yesterday"'),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'contract.snapshot.json was edited or is out of date: run cf-loom generate\n',
+    });
+  });
+
+  test('verify exits 1 when contract.snapshot.json is no JSON', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'contract.snapshot.json': '<<<<<<< HEAD\n',
+    });
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json was edited: it is no JSON \([^\n]+\)\n$/);
+  });
+
   test('verify writes nothing', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
 
@@ -504,12 +830,23 @@ describe('cf-loom verify', () => {
 });
 
 describe('cf-loom', () => {
-  test('an unknown command is a tooling error that lists the commands', () => {
+  test('an unknown command is a usage error', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'publish-everything');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toContain('init, generate, verify');
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Unknown command: publish-everything. ${usage}\n`,
+    });
+  });
+
+  test('an unknown option is a usage error', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'generate', '--force');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `Unknown option: --force. ${usage}\n` });
   });
 });

@@ -4,12 +4,13 @@ How the package's `src/` is split into modules, as [Package layout](../../ARCHIT
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `config/`; `src/bin.ts` parses the arguments, runs a command and prints what it ends with.
+The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/directories/index.ts` (`./directories`) from `contract-directory/`; `src/bin.ts` parses the arguments, runs a command and prints what it ends with.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `loading/` | importing a user's TypeScript file, the root, and the Definitions Packages a root lists as installed | none |
-| `config/` | `defineConfig`, `Config`, and loading `cf-loom.config.ts` | `loading` |
+| `contract-directory/` | the `ContractDirectory` type, which `./directories` exports | none |
+| `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, and the Definitions Packages a root lists as the root file resolves them | none |
+| `config/` | `defineConfig`, `Config`, `ApprovalSource`, and loading `cf-loom.config.ts` | `contract-directory`, `loading` |
 | `commands/` | `init`, `generate` and `verify`, each ending with its exit status and the lines it prints | `config`, `loading` |
 
 A command takes where and when it runs (the working directory and the clock) from `bin.ts`; `generate` and `verify` build the declared Snapshot with `@casitafeliz/loom-contract/internal` and only read and write the files.

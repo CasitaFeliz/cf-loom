@@ -1,6 +1,10 @@
 export type { Imported } from './imported.ts';
-export { importedModuleOf } from './imported.ts';
-export type { ResolvedPackages } from './packages.ts';
+export { importedModuleOf, thrownLineOf } from './imported.ts';
+export type { ResolvedPackages, Resolving } from './packages.ts';
 export { resolvePackages } from './packages.ts';
-export type { LoadedRoot, RootFile } from './root.ts';
-export { loadRoot, rootFiles } from './root.ts';
+export type { PackageName, ProjectPackage } from './project-package.ts';
+export { projectPackageOf } from './project-package.ts';
+export type { LoadedRoot } from './root.ts';
+export { loadRoot } from './root.ts';
+export type { RootKind, RootPlace } from './roots.ts';
+export { isRootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';

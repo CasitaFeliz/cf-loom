@@ -1,76 +1,94 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { configFile } from '../config/index.ts';
-import { done, type Exit, type Run, toolingError } from './exit.ts';
 import {
-  configTemplateOf,
+  type PackageName,
+  projectPackageOf,
   type RootKind,
-  rootFileOf,
-  rootKinds,
-  rootTemplateOf,
-} from './templates.ts';
+  rootFiles,
+  rootPlaces,
+} from '../loading/index.ts';
+import { done, type Exit, type Run, toolingError } from './exit.ts';
+import { configTemplateOf, rootTemplateOf } from './templates.ts';
 
-/** A project's package as its package.json names it: the scope, when it has one, and the name. */
-type Named =
-  | { readonly kind: 'named'; readonly scope: string | undefined; readonly name: string }
-  | { readonly kind: 'failed'; readonly message: string };
+/** The files `init` writes, each path relative to the project with its text. */
+type Written = readonly { readonly path: string; readonly text: string }[];
 
 /**
- * Creates a root that declares nothing yet, and `cf-loom.config.ts` when the project has none; it
- * never overwrites, so a root that exists stops it before anything is written.
+ * Creates a root that declares nothing yet, and `cf-loom.config.ts` when the project has none. It
+ * checks every target before writing and never overwrites, so it writes everything or nothing.
  */
-export function init({ cwd }: Run, kind = 'service'): Exit {
-  if (!isRootKind(kind)) {
-    return toolingError(`init takes service, application or definitions: ${kind}`);
+export function init({ cwd }: Run, kind: RootKind): Exit {
+  const projectPackage = projectPackageOf(cwd);
+  if (projectPackage.kind === 'failed') {
+    return toolingError(projectPackage.message);
   }
-  const named = namedOf(cwd);
-  if (named.kind === 'failed') {
-    return toolingError(named.message);
+  const planned = plannedOf(cwd, kind, projectPackage.packageName);
+  if (planned.kind === 'refused') {
+    return toolingError(planned.message);
   }
-  const rootFile = rootFileOf(kind);
-  if (existsSync(join(cwd, rootFile))) {
-    return toolingError(`${rootFile} already exists`);
+  const failure = writeAll(cwd, planned.written);
+  if (failure !== undefined) {
+    return toolingError(`init cannot write: ${failure}`);
   }
-  const writesConfig = !existsSync(join(cwd, configFile));
-  if (writesConfig && named.scope === undefined) {
-    return toolingError(`package.json names no scope to write ${configFile} with`);
-  }
-  writeFile(join(cwd, rootFile), rootTemplateOf(kind, named.name));
-  if (writesConfig && named.scope !== undefined) {
-    writeFile(join(cwd, configFile), configTemplateOf(named.scope));
-  }
-  return done(`Created ${rootFile}`);
+  return done(`Created ${rootPlaces[kind].file}`);
 }
 
-function isRootKind(kind: string): kind is RootKind {
-  const kinds: readonly string[] = rootKinds;
-  return kinds.includes(kind);
+/** What `init` would write, or the first target that stops it. */
+function plannedOf(
+  cwd: string,
+  kind: RootKind,
+  packageName: PackageName,
+):
+  | { readonly kind: 'planned'; readonly written: Written }
+  | { readonly kind: 'refused'; readonly message: string } {
+  const existing = rootFiles.find((file) => existsSync(join(cwd, file)));
+  if (existing !== undefined) {
+    return { kind: 'refused', message: `${existing} already exists` };
+  }
+  const { file } = rootPlaces[kind];
+  const blocking = foldersOf(file).find((folder) => isNoFolder(join(cwd, folder)));
+  if (blocking !== undefined) {
+    return { kind: 'refused', message: `${blocking} is no folder: init cannot write ${file}` };
+  }
+  const root = { path: file, text: rootTemplateOf(kind, packageName.name) };
+  if (existsSync(join(cwd, configFile))) {
+    const refused = { kind: 'refused', message: `${configFile} is no file` } as const;
+    return statSync(join(cwd, configFile)).isFile()
+      ? { kind: 'planned', written: [root] }
+      : refused;
+  }
+  if (packageName.scope === undefined) {
+    return { kind: 'refused', message: `package.json names no scope to write ${configFile} with` };
+  }
+  const config = { path: configFile, text: configTemplateOf(packageName.scope) };
+  return { kind: 'planned', written: [config, root] };
 }
 
-/** The package's scope and name from package.json, or why they cannot be read. */
-function namedOf(cwd: string): Named {
-  const path = join(cwd, 'package.json');
-  if (!existsSync(path)) {
-    const message = 'package.json not found: init runs next to the package.json of the project';
-    return { kind: 'failed', message };
-  }
-  const name: unknown = parsedOf(readFileSync(path, 'utf8'))?.name;
-  if (typeof name !== 'string' || name === '') {
-    return { kind: 'failed', message: 'package.json names no package' };
-  }
-  const [scope, unscoped] = name.startsWith('@') ? name.split('/') : [undefined, name];
-  return { kind: 'named', scope, name: unscoped ?? name };
+/** The folders a file sits in under the project, outermost first. */
+function foldersOf(file: string): readonly string[] {
+  const parent = dirname(file);
+  return parent === '.' ? [] : [...foldersOf(parent), parent];
 }
 
-function parsedOf(text: string): { readonly name?: unknown } | undefined {
+function isNoFolder(path: string): boolean {
+  return existsSync(path) && !statSync(path).isDirectory();
+}
+
+/** Writes every file in order; on a failure removes the ones it wrote and says why. */
+function writeAll(cwd: string, written: Written): string | undefined {
+  const done: string[] = [];
   try {
-    return JSON.parse(text);
-  } catch {
+    for (const { path, text } of written) {
+      mkdirSync(dirname(join(cwd, path)), { recursive: true });
+      writeFileSync(join(cwd, path), text, { flag: 'wx' });
+      done.push(path);
+    }
     return undefined;
+  } catch (e) {
+    for (const path of done) {
+      rmSync(join(cwd, path), { force: true });
+    }
+    return e instanceof Error ? e.message : String(e);
   }
-}
-
-function writeFile(path: string, text: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, text);
 }

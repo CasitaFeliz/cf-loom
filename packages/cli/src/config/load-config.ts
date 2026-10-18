@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { importedModuleOf } from '../loading/index.ts';
+import { importedModuleOf, thrownLineOf } from '../loading/index.ts';
 import type { Config } from './config.ts';
 
 /** The file the tools are configured in, next to the project's package.json. */
@@ -23,7 +23,7 @@ export async function loadConfig(directory: string): Promise<LoadedConfig> {
   if (!existsSync(path)) {
     return failed(`${configFile} not found: run cf-loom init`);
   }
-  const imported = await importedModuleOf(path);
+  const imported = await importedModuleOf(path, directory);
   if (imported.kind === 'failed') {
     return failed(`${configFile} cannot be loaded: ${imported.message}`);
   }
@@ -31,7 +31,14 @@ export async function loadConfig(directory: string): Promise<LoadedConfig> {
   if (typeof config !== 'object' || config === null) {
     return failed(`${configFile} exports no config: export const config = defineConfig({ … })`);
   }
-  const scope: unknown = Reflect.get(config, 'scope');
+  try {
+    return scopedConfigOf(Reflect.get(config, 'scope'));
+  } catch (e) {
+    return failed(`${configFile} threw while it was read: ${thrownLineOf(e, directory)}`);
+  }
+}
+
+function scopedConfigOf(scope: unknown): LoadedConfig {
   if (typeof scope !== 'string' || !scopePattern.test(scope)) {
     return failed(`${configFile}: scope is required, an npm scope such as '@org'`);
   }

@@ -3,96 +3,94 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   canonicalTextOf,
-  type ResolvedDefinitions,
   schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
-import { loadConfig } from '../config/index.ts';
-import { loadRoot, resolvePackages } from '../loading/index.ts';
+import { thrownLineOf } from '../loading/index.ts';
 import { checkFailed, type Exit, failureLine, type Run, toolingError } from './exit.ts';
+import { type Project, projectOf } from './project.ts';
 
 /** The file `generate` writes the declared Snapshot to, next to `cf-loom.config.ts`. */
 export const snapshotFile = 'contract.snapshot.json';
 
-/** The declared Snapshot's bytes and the committed file's, or the exit that stopped building it. */
+/** The committed `contract.snapshot.json` as read: none, its bytes and their JSON, or no JSON. */
+export type Committed =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'json'; readonly bytes: Buffer; readonly parsed: unknown }
+  | { readonly kind: 'no-json'; readonly reason: string };
+
+/**
+ * Which CLI the declared Snapshot names: the one running, as `generate` writes it, or the
+ * committed file's, as `verify` compares, so upgrading cf-loom alone never fails `verify`.
+ */
+export type Generator = 'running' | 'committed';
+
+/** The declared Snapshot's bytes and the committed file, or the exit that stopped building it. */
 export type Declared =
-  | {
-      readonly kind: 'built';
-      readonly bytes: Uint8Array;
-      readonly committed: Uint8Array | undefined;
-    }
+  | { readonly kind: 'built'; readonly bytes: Buffer; readonly committed: Committed }
   | { readonly kind: 'stopped'; readonly exit: Exit };
-
-/** A project's root and the Definitions Packages it lists, as installed. */
-type Project = { readonly root: unknown; readonly packages: readonly ResolvedDefinitions[] };
-
-/** The committed Snapshot as read: its bytes and their JSON, or nothing when none is committed. */
-type Committed = { readonly bytes: Uint8Array | undefined; readonly parsed: unknown };
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only the `deprecatedAt` stamps it carries forward.
+ * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
  */
-export async function declaredSnapshotOf(run: Run): Promise<Declared> {
-  const project = await projectOf(run.cwd);
-  if (project.kind === 'stopped') {
-    return project;
+export async function declaredSnapshotOf(run: Run, generator: Generator): Promise<Declared> {
+  const read = await projectOf(run.cwd);
+  if (read.kind === 'stopped') {
+    return read;
   }
-  const { root, packages } = project.project;
+  const committed = committedOf(run.cwd);
+  const parsed = committed.kind === 'json' ? committed.parsed : undefined;
+  const context = { generator: generatorOf(generator, parsed), committed: parsed, now: run.now };
+  try {
+    const built = builtOf(read.project, context);
+    return built.kind === 'stopped' ? built : { ...built, committed };
+  } catch (e) {
+    const thrown = thrownLineOf(e, run.cwd);
+    return stopped(toolingError(`${read.project.rootFile} threw while it was read: ${thrown}`));
+  }
+}
+
+/** Validates the root and builds its Snapshot; a user's schema may throw while it is read. */
+function builtOf(
+  { packageName, root, packages }: Project,
+  stamping: { readonly generator: string; readonly committed: unknown; readonly now: number },
+): { readonly kind: 'built'; readonly bytes: Buffer } | Stopped {
   const validated = validateContract(root, schemaOriginsOf(packages));
   if (validated.kind === 'invalid') {
     return stopped(checkFailed(validated.failures.map(failureLine)));
   }
-  const committed = committedOf(run.cwd);
-  if (committed.kind === 'stopped') {
-    return committed;
+  if (validated.declarations.root.name !== packageName.name) {
+    const message = `The root is named as package.json without its scope: ${packageName.name}`;
+    return stopped(checkFailed([`name package-name: ${message}`]));
   }
-  const { bytes, parsed } = committed.committed;
-  const context = { generator: generatorOf(), packages, committed: parsed, now: run.now };
-  return {
-    kind: 'built',
-    bytes: Buffer.from(canonicalTextOf(snapshotOf(validated, context)), 'utf8'),
-    committed: bytes,
-  };
+  const snapshot = snapshotOf(validated, { ...stamping, packages });
+  return { kind: 'built', bytes: Buffer.from(canonicalTextOf(snapshot), 'utf8') };
 }
 
-async function projectOf(
-  cwd: string,
-): Promise<{ readonly kind: 'loaded'; readonly project: Project } | Stopped> {
-  const config = await loadConfig(cwd);
-  if (config.kind === 'failed') {
-    return stopped(toolingError(config.message));
-  }
-  const loaded = await loadRoot(cwd);
-  if (loaded.kind === 'failed') {
-    return stopped(toolingError(loaded.message));
-  }
-  const resolved = resolvePackages(loaded.root, { directory: cwd, scope: config.config.scope });
-  if (resolved.kind === 'failed') {
-    return stopped(toolingError(resolved.message));
-  }
-  return { kind: 'loaded', project: { root: loaded.root, packages: resolved.packages } };
-}
-
-function committedOf(
-  cwd: string,
-): { readonly kind: 'read'; readonly committed: Committed } | Stopped {
+function committedOf(cwd: string): Committed {
   const path = join(cwd, snapshotFile);
   if (!existsSync(path)) {
-    return { kind: 'read', committed: { bytes: undefined, parsed: undefined } };
+    return { kind: 'none' };
   }
   const bytes = readFileSync(path);
   try {
-    return { kind: 'read', committed: { bytes, parsed: JSON.parse(bytes.toString('utf8')) } };
+    return { kind: 'json', bytes, parsed: JSON.parse(bytes.toString('utf8')) };
   } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
-    return stopped(toolingError(`${snapshotFile} is no JSON: ${reason}`));
+    return { kind: 'no-json', reason: thrownLineOf(e, cwd) };
   }
 }
 
-/** The cf-loom CLI writing the Snapshot, by its package's name and version. */
-function generatorOf(): string {
+/** The CLI the Snapshot names, by its package's name and version. */
+function generatorOf(generator: Generator, committed: unknown): string {
+  const written =
+    typeof committed === 'object' && committed !== null
+      ? Reflect.get(committed, 'generator')
+      : undefined;
+  if (generator === 'committed' && typeof written === 'string') {
+    return written;
+  }
   const manifest = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
   return `${manifest.name}@${manifest.version}`;
 }

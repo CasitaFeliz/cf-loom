@@ -2,17 +2,20 @@
 import { parseArgs } from 'node:util';
 import { type Exit, runCommand, usageError } from './commands/index.ts';
 
-/** The CLI's arguments, with an unknown option a usage error rather than a stack trace. */
+/** Runs the command the arguments name; the CLI takes no option, so any option is a usage error. */
 async function exitOf(args: readonly string[]): Promise<Exit> {
-  try {
-    const { positionals } = parseArgs({ args: [...args], allowPositionals: true, options: {} });
-    return await runCommand(positionals, { cwd: process.cwd(), now: Date.now() });
-  } catch (e) {
-    if (e instanceof TypeError && 'code' in e && e.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
-      return usageError(e.message);
-    }
-    throw e;
+  const { positionals, tokens } = parseArgs({
+    args: [...args],
+    allowPositionals: true,
+    strict: false,
+    tokens: true,
+    options: {},
+  });
+  const option = tokens.find((token) => token.kind === 'option');
+  if (option !== undefined) {
+    return usageError(`Unknown option: ${option.rawName}`);
   }
+  return await runCommand(positionals, { cwd: process.cwd(), now: Date.now() });
 }
 
 const exit = await exitOf(process.argv.slice(2));

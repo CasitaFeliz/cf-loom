@@ -32,7 +32,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 
 | Command | Does |
 | --- | --- |
-| `cf-loom init [service \| application \| definitions]` | Creates the root under `src/contract/` (or `src/definitions/`), exporting `contract`, `application` or `definitions`, and `cf-loom.config.ts` with the scope of package.json's name when there is none; it never overwrites a file |
+| `cf-loom init [service \| application \| definitions]` | Creates the root, `src/contract/index.ts` (or `src/definitions/index.ts`) exporting `contract`, `application` or `definitions`, and `cf-loom.config.ts` with the scope of package.json's name when there is none; it writes all of them or nothing, and never overwrites a file. A project has one root, exported under one name |
 | `cf-loom add-endpoint <group> <name> <METHOD> <path> --visibility <v>` | Creates the Endpoint, its Group if new, and registers both |
 | `cf-loom add-guard <name>` | Creates a Guard |
 | `cf-loom add-rejection <CODE> --status <n>` | Creates a Rejection |
