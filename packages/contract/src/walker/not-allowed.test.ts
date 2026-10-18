@@ -40,6 +40,20 @@ describe('walkSchemas: the Not allowed list', () => {
     ['a zod/mini custom check', zm.string().check(zm.refine((value) => value !== '')), '.refine()'],
     ['z.custom()', z.custom<string>(), 'z.custom()'],
     ['z.codec()', z.codec(z.string(), z.number(), { decode: Number, encode: String }), 'z.codec()'],
+    [
+      'a zod/mini z.codec()',
+      zm.codec(zm.string(), zm.number(), { decode: Number, encode: String }),
+      'z.codec()',
+    ],
+    [
+      'a zod/mini transform',
+      zm.pipe(
+        zm.string(),
+        zm.transform((value) => value.length),
+      ),
+      '.transform()',
+    ],
+    ['a zod/mini pipe', zm.pipe(zm.string(), zm.string()), '.pipe()'],
     ['z.coerce.*', z.coerce.number(), 'z.coerce.*'],
     ['z.coerce.date()', z.coerce.date(), 'z.coerce.*'],
     ['z.coerce.bigint()', z.coerce.bigint(), 'z.coerce.*'],
