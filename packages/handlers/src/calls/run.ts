@@ -15,8 +15,9 @@ import {
   isOutcome,
   type ResolvedAdmission,
   type ResolvedOutcome,
+  thrownFault,
 } from '../outcomes/index.ts';
-import { ranOf } from './implementation.ts';
+import { returnedOf } from './implementation.ts';
 
 /** An implementation as the runtime calls it, whatever Endpoint or Guard it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
@@ -51,43 +52,71 @@ export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
  */
 export type GuardRun = Run<ResolvedAdmission<Guard>>;
 
-/** Runs one call of an EndpointHandler: checks what it is given and what it builds, then resolves. */
-export async function endpointRunOf(
+/**
+ * Runs one call of an EndpointHandler: checks what it is given and what it builds, then resolves.
+ * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
+ */
+export function endpointRunOf(
   written: Written<Endpoint>,
   given: EndpointGiven,
   standards: StandardRejections,
 ): Promise<EndpointRun> {
-  const { element: endpoint, implementation } = written;
+  return caught(() => endpointCallOf(written, given, standards));
+}
+
+/**
+ * Runs one call of a GuardHandler: checks what it is given and what it admits, then resolves.
+ * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
+ */
+export function guardRunOf(
+  written: Written<Guard>,
+  given: GuardGiven,
+  standards: StandardRejections,
+): Promise<GuardRun> {
+  return caught(() => guardCallOf(written, given, standards));
+}
+
+async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answer>> {
+  try {
+    return await run();
+  } catch (e) {
+    return { kind: 'thrown', fault: thrownFault(e) };
+  }
+}
+
+async function endpointCallOf(
+  { element: endpoint, implementation }: Written<Endpoint>,
+  given: EndpointGiven,
+  standards: StandardRejections,
+): Promise<EndpointRun> {
   const checked = checkedEndpointCall(endpoint, given);
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }
   const { input, context } = checked.value;
-  const ran = await ranOf(endpoint, () => implementation(input, context), isOutcome);
-  if (ran.kind === 'thrown') {
-    return ran;
+  const returned = await returnedOf(endpoint, () => implementation(input, context), isOutcome);
+  if (returned.kind === 'thrown') {
+    return returned;
   }
-  return answeredRunOf(checkedOutcome(endpoint, ran.built, standards));
+  return answeredRunOf(checkedOutcome(endpoint, returned.built, standards));
 }
 
-/** Runs one call of a GuardHandler: checks what it is given and what it admits, then resolves. */
-export async function guardRunOf(
-  written: Written<Guard>,
+async function guardCallOf(
+  { element: guard, implementation }: Written<Guard>,
   given: GuardGiven,
   standards: StandardRejections,
 ): Promise<GuardRun> {
-  const { element: guard, implementation } = written;
   const checked = checkedGuardCall(guard, given);
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }
   const { demands, context, qualifier } = checked.value;
   const run = () => implementation(demands, context, qualifier);
-  const ran = await ranOf(guard, run, isAdmission);
-  if (ran.kind === 'thrown') {
-    return ran;
+  const returned = await returnedOf(guard, run, isAdmission);
+  if (returned.kind === 'thrown') {
+    return returned;
   }
-  return answeredRunOf(checkedAdmission(guard, ran.built, standards));
+  return answeredRunOf(checkedAdmission(guard, returned.built, standards));
 }
 
 function answeredRunOf<Answer>(checked: Checked<Answer>): Run<Answer> {

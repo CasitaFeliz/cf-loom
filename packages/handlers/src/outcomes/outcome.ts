@@ -2,6 +2,7 @@ import type {
   Endpoint,
   Guard,
   ProvidedContextOf,
+  Rejection,
   RejectionsOf,
   StandardRejection,
   SuccessOf,
@@ -33,13 +34,18 @@ type NoBodyOf<Target extends Endpoint> = Target['success'] extends { readonly bo
   ? unknown
   : { readonly body?: never };
 
+/** A declared Rejection's code, status and message as written; a Standard one's as the root resolves them. */
+type ResolutionOf<Answered extends AnswerableRejection> = Answered extends Rejection
+  ? {
+      readonly code: Answered['code'];
+      readonly status: Answered['status'];
+      readonly message: Answered['message'];
+    }
+  : { readonly code: string; readonly status: number; readonly message: string };
+
 /** A Rejection as a direct call returns it: as built, its code, status and message resolved. */
 export type ResolvedRejection<Answered extends AnswerableRejection> = Answered extends unknown
-  ? BuiltRejection<Answered> & {
-      readonly code: string;
-      readonly status: number;
-      readonly message: string;
-    }
+  ? BuiltRejection<Answered> & ResolutionOf<Answered>
   : never;
 
 /** What an EndpointHandler builds: a Success, one of the Endpoint's Rejections with its body, or a Fault. */

@@ -51,7 +51,7 @@ describe('handle', () => {
     expect(write).toThrow('handle() takes an Endpoint or a Guard');
   });
 
-  test('a stub is the Handler of its Element', () => {
+  test('a stub is the Handler of the Endpoint or Guard it was written for', () => {
     const endpointStub = handle.stub(getOrder);
     const guardStub = handle.stub(apiKey);
 

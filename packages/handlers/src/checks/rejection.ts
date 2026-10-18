@@ -9,6 +9,7 @@ import {
   type AnswerableRejection,
   answerableRejectionsOf,
   isRejection,
+  isSameRejection,
   isStandardRejection,
   schemaOf,
 } from '@casitafeliz/loom-contract/internal';
@@ -64,14 +65,7 @@ function isGuardRejection(
 
 /** Whether an Endpoint or a Guard answers a Rejection; a Standard one is told by its name, from any copy of loom-contract. */
 function isAnsweredBy(answering: Endpoint | Guard, rejection: AnswerableRejection): boolean {
-  return answerableRejectionsOf(answering).some((answerable) => isSame(answerable, rejection));
-}
-
-function isSame(answerable: AnswerableRejection, rejection: AnswerableRejection): boolean {
-  if (isStandardRejection(answerable) && isStandardRejection(rejection)) {
-    return answerable.name === rejection.name;
-  }
-  return answerable === rejection;
+  return answerableRejectionsOf(answering).some((listed) => isSameRejection(listed, rejection));
 }
 
 /** A Rejection its Endpoint or Guard answers, with the body it declares and no other. */

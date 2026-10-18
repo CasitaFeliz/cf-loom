@@ -34,7 +34,7 @@ export type AnyRejection = {
   readonly body?: unknown;
 };
 
-/** What a GuardHandler builds when the request passes: the Context its Guard provides. */
+/** What a GuardHandler builds when it admits the request: the Context its Guard provides. */
 export type BuiltAdmitted<Context> = { readonly kind: 'admitted'; readonly context: Context };
 
 /** The Success a Handler answers: nothing for 204, the body, or `{ headers, body }` with headers. */
@@ -59,7 +59,7 @@ export function reject(rejection: AnswerableRejection, ...body: readonly unknown
   return { kind: 'rejection', rejection, body: body[0] };
 }
 
-/** What a GuardHandler answers when the request passes: the Context its Guard provides. */
+/** What a GuardHandler answers when it admits the request: the Context its Guard provides. */
 export function admit(): BuiltAdmitted<undefined>;
 export function admit<Context>(context: Context): BuiltAdmitted<Context>;
 export function admit(context?: unknown): BuiltAdmitted<unknown> {

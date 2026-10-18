@@ -256,22 +256,22 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('the parsed Context and Qualifier reach the implementation, unknown keys stripped', async () => {
-    const scoped = defineGuard({
-      name: 'scoped',
-      description: 'A scope for the user',
+    const regional = defineGuard({
+      name: 'regional',
+      description: 'The user works in a region',
       guards: [userToken],
-      qualifier: z.object({ scope: z.string() }),
+      qualifier: z.object({ region: z.string() }),
     });
     const received: unknown[] = [];
-    const scopedHandler = handle(scoped, (_demands, context, qualifier) => {
+    const regionalHandler = handle(regional, (_demands, context, qualifier) => {
       received.push(context, qualifier);
       return admit();
     });
     const context = { userToken: { userId: 'u-1', extra: true } } as never;
 
-    await scopedHandler({}, context, { scope: 'orders', extra: true } as never);
+    await regionalHandler({}, context, { region: 'emea', extra: true } as never);
 
-    expect(received).toEqual([userContext, { scope: 'orders' }]);
+    expect(received).toEqual([userContext, { region: 'emea' }]);
   });
 
   test('a Qualifier given to a Guard that declares none throws InvalidInputError', async () => {

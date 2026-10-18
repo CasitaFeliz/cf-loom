@@ -1,4 +1,5 @@
-import type { IssueCode, Part, SchemaIssue } from '@casitafeliz/loom-contract/internal';
+import type { IssueCode } from '@casitafeliz/loom-contract';
+import type { Part, SchemaIssue } from '@casitafeliz/loom-contract/internal';
 import { parseValue } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
 

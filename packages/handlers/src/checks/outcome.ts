@@ -1,5 +1,5 @@
 import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { fieldsOf, schemaOf, successParts } from '@casitafeliz/loom-contract/internal';
+import { partFieldOf, schemaOf, successParts } from '@casitafeliz/loom-contract/internal';
 import type {
   AnyAdmission,
   AnyOutcome,
@@ -11,9 +11,8 @@ import { type Checked, checkedAll, checkedPart, fieldOf, mapValue } from './chec
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
 
 /**
- * What an EndpointHandler built, checked against its Endpoint and resolved, as `serve` sends it.
- * A valid Contract has no strict object outside Input (COMPATIBILITY.md, Fields), so parsing what
- * a Handler built only strips unknown keys.
+ * What an EndpointHandler built, checked against its Endpoint and resolved, as `serve` sends it:
+ * parsed with its schema as written, so an open object's unknown keys are stripped.
  */
 export function checkedOutcome(
   endpoint: Endpoint,
@@ -30,7 +29,10 @@ export function checkedOutcome(
   }
 }
 
-/** What a GuardHandler built, checked against its Guard and resolved, its admitted Context parsed as an Outcome is. */
+/**
+ * What a GuardHandler built, checked against its Guard and resolved: parsed with its schema as
+ * written, so an open object's unknown keys are stripped.
+ */
 export function checkedAdmission(
   guard: Guard,
   built: AnyAdmission,
@@ -59,7 +61,7 @@ function checkedSuccess(
   const given = schemaOf(endpoint, 'success.headers') === undefined ? { body: value } : value;
   const parts = successParts.map((part) => ({
     part,
-    field: fieldsOf(part)[1],
+    field: partFieldOf(part),
     schema: schemaOf(endpoint, part),
   }));
   const checks = parts.map(({ part, field, schema }) => {

@@ -7,7 +7,7 @@ import {
 } from '@casitafeliz/loom-contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { admit, handle, reject, success } from './index.ts';
+import { admit, handle, isRejectionOf, reject, success } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -133,7 +133,7 @@ describe('the handlers README', () => {
       { apiKey: { clientId: 'c-2' } },
     );
 
-    expect(outcome.kind === 'rejection' && outcome.rejection === notFound).toBe(true);
+    expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
   test('the GuardHandler example admits a known key and rejects an unknown one', async () => {

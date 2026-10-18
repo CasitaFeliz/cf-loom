@@ -16,4 +16,4 @@ export type {
   ResolvedAdmission,
   ResolvedOutcome,
 } from './outcomes/index.ts';
-export { admit, fault, reject, success } from './outcomes/index.ts';
+export { admit, fault, isRejectionOf, reject, success } from './outcomes/index.ts';

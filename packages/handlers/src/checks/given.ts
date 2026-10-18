@@ -1,9 +1,9 @@
 import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
 import {
-  attachedGuardsOf,
+  contextProvidersOf,
   demandParts,
-  fieldsOf,
   inputParts,
+  partFieldOf,
   schemaOf,
 } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
@@ -37,7 +37,7 @@ export function checkedEndpointCall(
   const schemaAt = (part: (typeof inputParts)[number]) => schemaOf(endpoint, part);
   return checkedAll({
     input: checkedDeclaredParts(inputParts, schemaAt, given.input),
-    context: checkedContext(attachedGuardsOf(endpoint), given.context),
+    context: checkedContext(endpoint, given.context),
   });
 }
 
@@ -53,7 +53,7 @@ export function checkedGuardCall(
   const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
   return checkedAll({
     demands: checkedDeclaredParts(demandParts, schemaAt, given.demands),
-    context: checkedContext(guard.guards ?? [], given.context),
+    context: checkedContext(guard, given.context),
     qualifier: checkedPart('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
   });
 }
@@ -68,7 +68,7 @@ function checkedDeclaredParts<
 ): Checked<ValuesByField> {
   const declared = parts.filter((part) => schemaAt(part) !== undefined);
   const checks = declared.map((part) => {
-    const field = fieldsOf(part)[1];
+    const field = partFieldOf(part);
     const value = fieldOf(given, field);
     return [field, checkedPart(part, schemaAt(part), { value })] as const;
   });
@@ -79,8 +79,8 @@ function checkedDeclaredParts<
  * A Context, one key per Guard that provides one, each parsed with that Guard's `context` schema;
  * any other key is unrecognized.
  */
-function checkedContext(guards: readonly Guard[], context: unknown): Checked<ValuesByField> {
-  const providers = guards.filter((guard) => schemaOf(guard, 'context') !== undefined);
+function checkedContext(receiving: Endpoint | Guard, context: unknown): Checked<ValuesByField> {
+  const providers = contextProvidersOf(receiving);
   const checks = providers.map((guard) => {
     const given = { value: fieldOf(context, guard.name), at: [guard.name] };
     return [guard.name, checkedPart('context', schemaOf(guard, 'context'), given)] as const;

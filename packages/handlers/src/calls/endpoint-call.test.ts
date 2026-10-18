@@ -17,6 +17,7 @@ import {
   InvalidInputError,
   InvalidOutcomeError,
   type Issue,
+  isRejectionOf,
   type ResolvedOutcome,
   reject,
   success,
@@ -243,7 +244,11 @@ describe('an EndpointHandler’s Success', () => {
 
     const outcome = await getOrderHandler(getInput, getContext);
 
-    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: ORDER_ID, total: 1 } });
+    expect(outcome).toStrictEqual({
+      kind: 'success',
+      status: 200,
+      body: { id: ORDER_ID, total: 1 },
+    });
   });
 
   test('success({ headers, body }) carries both when the Endpoint declares headers', async () => {
@@ -325,14 +330,14 @@ describe('an EndpointHandler’s Rejections', () => {
 
     const outcome = await getOrderHandler(getInput, getContext);
 
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'rejection',
       rejection: notFound,
       code: 'NOT_FOUND',
       status: 404,
       message: 'Not found',
     });
-    expect(outcome.kind === 'rejection' && outcome.rejection === notFound).toBe(true);
+    expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
   test('given the root, a Standard Rejection resolves to the listed Definitions Package’s', async () => {
@@ -429,7 +434,7 @@ describe('an EndpointHandler’s Rejections', () => {
     const outcome = await getOrderHandler(getInput, getContext);
 
     expect(outcome).toMatchObject({ kind: 'rejection', body: { lockedAt } });
-    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toEqual({ lockedAt });
+    expect(isRejectionOf(outcome, orderLocked) && outcome.body).toEqual({ lockedAt });
   });
 
   test('the invalid-input Rejection is the runtime’s, never a Handler’s', async () => {
@@ -568,6 +573,65 @@ describe('what an EndpointHandler returns', () => {
       message: 'Internal error',
       cause: new TypeError(`getOrder's Handler returned no Outcome but ${what}`),
     });
+  });
+});
+
+describe('more of what a direct call answers', () => {
+  test('success({ headers }) resolves a 204 Endpoint with headers', async () => {
+    const touchOrder = defineEndpoint({
+      name: 'touchOrder',
+      method: 'POST',
+      path: '/orders/:orderId/touch',
+      visibility: 'internal',
+      description: 'Marks an order as seen',
+      input: { params: z.object({ orderId: z.uuid() }) },
+      success: { status: 204, headers: z.object({ etag: z.string() }) },
+    });
+    const touchOrderHandler = handle(touchOrder, () => success({ headers: { etag: 'v2' } }));
+
+    const outcome = await touchOrderHandler(getInput, {});
+
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204, headers: { etag: 'v2' } });
+  });
+
+  test('a class instance missing a key of the Success body throws required', async () => {
+    class Row {
+      readonly id = ORDER_ID;
+    }
+    const getOrderHandler = handle(getOrder, () => success(new Row() as never));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues.map(({ path, code }) => ({ path, code }))).toEqual([
+      { path: ['total'], code: 'required' },
+    ]);
+  });
+
+  test('an error carries one Issue per failure and one line per Issue', async () => {
+    const body = { ...validOrder, email: 'nope', quantity: 0 };
+
+    const caught = await created({ ...createInput, body }, {}).then(
+      () => undefined,
+      (thrown: unknown) => thrown,
+    );
+
+    expect(caught).toBeInstanceOf(InvalidInputError);
+    const error = caught as InvalidInputError;
+    expect(error.issues.map(({ path }) => path)).toEqual([['email'], ['quantity']]);
+    expect(error.message.split('\n')).toEqual([
+      expect.stringMatching(/^createOrder: input\.body\.email invalid_format: /),
+      expect.stringMatching(/^createOrder: input\.body\.quantity too_small: /),
+    ]);
+  });
+
+  test('something that is no Rejection, rejected, throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(undefined as never));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues.map(({ message }) => message)).toEqual([
+      'A value that is no Rejection is not a Rejection getOrder answers',
+    ]);
   });
 });
 

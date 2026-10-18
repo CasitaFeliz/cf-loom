@@ -9,5 +9,6 @@ export type {
   ResolvedOutcome,
   ResolvedRejection,
 } from './outcome.ts';
+export { isRejectionOf } from './rejection-of.ts';
 export type { AnyAdmission, AnyOutcome } from './shapes.ts';
 export { isAdmission, isOutcome } from './shapes.ts';

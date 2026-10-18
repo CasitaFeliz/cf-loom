@@ -1,4 +1,4 @@
-export { handle, isStub, runEndpoint, runGuard } from './handle.ts';
+export { handle } from './handle.ts';
 export type {
   DirectCall,
   EndpointHandler,
@@ -6,3 +6,4 @@ export type {
   GuardHandler,
   GuardImplementation,
 } from './handler.ts';
+export { isStub, runEndpoint, runGuard } from './runs.ts';
