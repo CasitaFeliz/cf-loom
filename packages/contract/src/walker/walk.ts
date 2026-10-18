@@ -82,7 +82,7 @@ function walkRequired(schema: core.$ZodType, at: Path, context: Context): Walked
 /** A field's wrapper says what any schema does: its checks and its own metadata apply. */
 function throughWrapper(wrapper: LocatedSchema, inner: Walked, context: Context): Walked {
   const { schema, at } = wrapper;
-  const checks = checksOf(schema._zod.def);
+  const checks = checksOf(schema);
   const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
   return annotatedBy(checked, ownMetadata(schema, at, context.originOf));
 }

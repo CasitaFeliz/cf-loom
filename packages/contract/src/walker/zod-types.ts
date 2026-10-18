@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { type CheckDef, checksOf } from './check-defs.ts';
+import { checksOf, type DeclaredCheck, isConditional } from './check-defs.ts';
 import { constrainArray, constrainNumber, constrainString, unconstrained } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
@@ -19,11 +19,14 @@ export function walkDefinition(schema: core.$ZodType, at: Path, walker: Walker):
   if (node.kind === 'not-allowed') {
     return node;
   }
-  return constrained(node.value, checksOf(schema._zod.def), at);
+  return constrained(node.value, checksOf(schema), at);
 }
 
 /** A node with the constraint of each check, by what its type takes. */
-export function constrained(node: SchemaNode, checks: readonly CheckDef[], at: Path): Walked {
+export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], at: Path): Walked {
+  if (checks.some(isConditional)) {
+    return notAllowed(at, refused.conditionalCheck);
+  }
   switch (node.type) {
     case 'string':
       return constrainString(node, checks, at);

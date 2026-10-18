@@ -27,6 +27,13 @@ const customPattern = 'a format with a custom pattern';
 const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
+  test('a format whose options its own zod refuses fails instead of throwing', () => {
+    const id = z.uuid();
+    Object.assign(id._zod.def, { version: 'v9' });
+
+    expect(walkBody(id)).toEqual(refused('z.stringFormat("uuid")'));
+  });
+
   test.each([
     ['.default()', z.string().default('x'), '.default()'],
     ['.prefault()', z.string().prefault('x'), '.prefault()'],
@@ -81,6 +88,12 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.max(Infinity) on a number', z.number().max(Number.POSITIVE_INFINITY), nonFinite],
     ['.min(-Infinity) on a number', z.number().min(Number.NEGATIVE_INFINITY), nonFinite],
     ['.max(Infinity) on a string', z.string().max(Number.POSITIVE_INFINITY), nonFinite],
+    [
+      'a conditional length check',
+      z.string().min(5, { when: () => true } as object),
+      'a conditional check',
+    ],
+    ['a conditional format', z.url({ when: () => true } as object), 'a conditional check'],
     ['.lowercase()', z.string().lowercase(), '.lowercase()'],
     ['.uppercase()', z.string().uppercase(), '.uppercase()'],
     ['z.stringFormat()', z.stringFormat('sku', () => true), 'z.stringFormat("sku")'],

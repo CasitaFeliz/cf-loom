@@ -7,11 +7,47 @@ export type CheckDef =
   | { readonly check: 'custom'; readonly type?: 'custom' }
   | { readonly check: 'describe' | 'meta' };
 
+/** A def as zod built it, read key by key. */
+export type BuiltDef = Readonly<Record<string, unknown>> & {
+  readonly format?: unknown;
+  readonly pattern?: unknown;
+  readonly when?: unknown;
+};
+
+/**
+ * A check as declared, and the same check built again with other options by the very zod copy
+ * that built it, so it is compared with that copy's own defaults; nothing when zod refuses them.
+ */
+export type DeclaredCheck = {
+  readonly def: CheckDef;
+  readonly rebuilt: (def: object) => BuiltDef | undefined;
+};
+
+type CheckInstance = {
+  readonly _zod: {
+    readonly def: unknown;
+    readonly constr?: new (def: object) => { readonly _zod: { readonly def: unknown } };
+  };
+};
+
 /** The checks a schema declares, its own first: a format schema such as `z.email()` is a check. */
-export function checksOf(def: core.$ZodTypeDef): readonly CheckDef[] {
-  const own = 'check' in def ? [def as CheckDef] : [];
-  const listed = (def.checks ?? []).map((check) => check._zod.def as CheckDef);
-  return [...own, ...listed].filter(isConstraintCheck);
+export function checksOf(schema: core.$ZodType): readonly DeclaredCheck[] {
+  const own: CheckInstance[] = 'check' in schema._zod.def ? [schema] : [];
+  const listed: readonly CheckInstance[] = schema._zod.def.checks ?? [];
+  return [...own, ...listed].map(declaredCheckOf).filter(isConstraintCheck);
+}
+
+/**
+ * Whether a check runs only when a condition of the author's holds: a `when` other than the one
+ * zod gives that check itself.
+ */
+export function isConditional(check: DeclaredCheck): boolean {
+  const when = 'when' in check.def ? check.def.when : undefined;
+  if (when === undefined) {
+    return false;
+  }
+  const { when: _declared, ...unconditional } = check.def as BuiltDef;
+  return check.rebuilt(unconditional)?.when !== when;
 }
 
 /** The name a check is refused by, on a node that does not take it. */
@@ -55,6 +91,22 @@ export function refusedCheck(check: CheckDef): Refused {
   }
 }
 
-function isConstraintCheck(check: CheckDef): boolean {
-  return check.check !== 'describe' && check.check !== 'meta';
+function declaredCheckOf(instance: CheckInstance): DeclaredCheck {
+  const constr = instance._zod.constr;
+  return {
+    def: instance._zod.def as CheckDef,
+    rebuilt: (def) => (constr === undefined ? undefined : rebuiltDef(constr, def)),
+  };
+}
+
+function rebuiltDef(constr: NonNullable<CheckInstance['_zod']['constr']>, def: object) {
+  try {
+    return new constr({ ...def })._zod.def as BuiltDef;
+  } catch {
+    return undefined;
+  }
+}
+
+function isConstraintCheck(check: DeclaredCheck): boolean {
+  return check.def.check !== 'describe' && check.def.check !== 'meta';
 }

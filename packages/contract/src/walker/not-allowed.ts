@@ -36,6 +36,7 @@ export const refused = {
   includes: { construct: '.includes()' },
   lowercase: { construct: '.lowercase()' },
   uppercase: { construct: '.uppercase()' },
+  conditionalCheck: { construct: 'a conditional check' },
   customPattern: { construct: 'a format with a custom pattern' },
   urlNormalize: { construct: 'z.url({ normalize })' },
   readonly: { construct: '.readonly()' },

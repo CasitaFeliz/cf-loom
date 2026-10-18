@@ -1,3 +1,4 @@
+import * as built from '@casitafeliz/loom-contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
@@ -63,6 +64,33 @@ describe('walkSchemas: strings', () => {
     ['a zod/mini z.hex()', zm.hex(), 'hex'],
   ])('%s is its format with no options', (_name, schema, format) => {
     expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
+  });
+
+  test.each([
+    ['z.url({ normalize: false })', z.url({ normalize: false })],
+    ['z.url() with a key zod does not read', z.url({ params: { note: 'x' } } as object)],
+  ])('%s is a url with no options', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format: 'url' }));
+  });
+
+  test('z.jwt() with a key zod does not read is a jwt with no options', () => {
+    expect(walkBody(z.jwt({ foo: 'bar' } as object))).toEqual(
+      walkedTo({ type: 'string', format: 'jwt' }),
+    );
+  });
+
+  test('a zod/mini format keeps the options it declares', () => {
+    expect(walkBody(zm.uuid({ version: 'v4' }))).toEqual(
+      walkedTo({ type: 'string', format: 'uuid', formatOptions: { version: 'v4' } }),
+    );
+  });
+
+  test('the built package walks a format like the source', () => {
+    const placedAt = z.iso.datetime({ offset: true, precision: 3 });
+
+    const walked = built.walkSchemas([{ at: ['body'], schema: placedAt }], () => undefined);
+
+    expect(walked).toEqual(walkBody(placedAt));
   });
 
   test('an option that differs from zod default is a format option', () => {

@@ -1,4 +1,4 @@
-import { type CheckDef, refusedCheck } from './check-defs.ts';
+import { type CheckDef, type DeclaredCheck, refusedCheck } from './check-defs.ts';
 import type {
   ArrayNode,
   NotAllowed,
@@ -17,7 +17,11 @@ type Constraint<Node> = Walked<Partial<Node>>;
 type Bounds = { readonly min?: number; readonly max?: number };
 
 /** A string node with the constraint of each check, or the checks a string does not take. */
-export function constrainString(node: StringNode, checks: readonly CheckDef[], at: Path): Walked {
+export function constrainString(
+  node: StringNode,
+  checks: readonly DeclaredCheck[],
+  at: Path,
+): Walked {
   return withConstraints(
     node,
     checks.map((check) => stringConstraint(check, at)),
@@ -26,28 +30,40 @@ export function constrainString(node: StringNode, checks: readonly CheckDef[], a
 }
 
 /** A number node with the constraint of each check; `z.int()` is `int: true` and nothing more. */
-export function constrainNumber(node: NumberNode, checks: readonly CheckDef[], at: Path): Walked {
+export function constrainNumber(
+  node: NumberNode,
+  checks: readonly DeclaredCheck[],
+  at: Path,
+): Walked {
   return withConstraints(
     node,
-    checks.map((check) => numberConstraint(check, at)),
+    checks.map((check) => numberConstraint(check.def, at)),
     at,
   );
 }
 
 /** An array node with the length bound of each check. */
-export function constrainArray(node: ArrayNode, checks: readonly CheckDef[], at: Path): Walked {
+export function constrainArray(
+  node: ArrayNode,
+  checks: readonly DeclaredCheck[],
+  at: Path,
+): Walked {
   return withConstraints(
     node,
-    checks.map((check) => lengthConstraint(check, at)),
+    checks.map((check) => lengthConstraint(check.def, at)),
     at,
   );
 }
 
 /** A node that takes no check: each declared check fails. */
-export function unconstrained(node: SchemaNode, checks: readonly CheckDef[], at: Path): Walked {
+export function unconstrained(
+  node: SchemaNode,
+  checks: readonly DeclaredCheck[],
+  at: Path,
+): Walked {
   return withConstraints(
     node,
-    checks.map((check) => notAllowed(at, refusedCheck(check))),
+    checks.map((check) => notAllowed(at, refusedCheck(check.def))),
     at,
   );
 }
@@ -79,12 +95,13 @@ function withConstraints<Node extends SchemaNode>(
   return failures.length > 0 ? failed(failures) : walked(constrainedNode);
 }
 
-function stringConstraint(check: CheckDef, at: Path): Constraint<StringNode> {
-  if (check.check !== 'string_format') {
-    return lengthConstraint(check, at);
+function stringConstraint(check: DeclaredCheck, at: Path): Constraint<StringNode> {
+  const { def } = check;
+  if (def.check !== 'string_format') {
+    return lengthConstraint(def, at);
   }
-  if (check.format === 'regex' && check.pattern !== undefined) {
-    return walked({ regex: regexOf(check.pattern) });
+  if (def.format === 'regex' && def.pattern !== undefined) {
+    return walked({ regex: regexOf(def.pattern) });
   }
   return formatOf(check, at);
 }
