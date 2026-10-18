@@ -44,6 +44,18 @@ describe('defineGuard', () => {
     expect(paged.demands.query).toBe(query);
   });
 
+  test('a Guard declares a qualifier schema and keeps it by identity', () => {
+    const qualifier = z.array(z.string()).min(1);
+
+    const permission = defineGuard({
+      name: 'permission',
+      description: 'The user holds every listed permission',
+      qualifier,
+    });
+
+    expect(permission.qualifier).toBe(qualifier);
+  });
+
   test('a Guard demanding the body is a type error', () => {
     const declare = () =>
       defineGuard({
@@ -140,8 +152,8 @@ describe('defineGuard fields', () => {
       defineGuard({
         name: 'permission',
         description: 'The user holds a permission',
-        // @ts-expect-error a Qualifier is not declared yet
-        qualifier: z.array(z.string()),
+        // @ts-expect-error scope is not a declared field
+        scope: z.array(z.string()),
       });
 
     expect(declare).not.toThrow();

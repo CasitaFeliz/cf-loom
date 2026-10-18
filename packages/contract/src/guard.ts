@@ -21,6 +21,7 @@ type GuardDeclaration = {
   readonly demands?: Demands;
   readonly guards?: readonly Guard[];
   readonly context?: core.$ZodType;
+  readonly qualifier?: core.$ZodType;
   readonly rejections?: readonly Rejection[];
 };
 
