@@ -78,6 +78,9 @@ export const issueCodes = [
   'malformed',
 ] as const;
 
+/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
+export type IssueCode = (typeof issueCodes)[number];
+
 /**
  * The body of the invalid-input Rejection: always cf-loom's, whatever a Definitions Package
  * declares, so every Caller reads the issues one way. An issue never carries the received value.

@@ -1,9 +1,6 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import type { issueCodes } from '../declarations/index.ts';
-
-/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
-export type IssueCode = (typeof issueCodes)[number];
+import type { IssueCode } from '../declarations/index.ts';
 
 /** One way a value broke its schema, inside the value: never the received value itself. */
 export type SchemaIssue = {
@@ -70,13 +67,9 @@ function valueAt(value: unknown, path: readonly PropertyKey[]): unknown {
   return current;
 }
 
-/** An object whose fields are keys: a plain object, never a list. */
+/** An object whose fields are keys, a class instance included; never a list. */
 function isKeyed(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function issueCodeOf(issue: core.$ZodIssue): IssueCode {

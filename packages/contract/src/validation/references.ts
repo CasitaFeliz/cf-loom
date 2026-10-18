@@ -1,5 +1,5 @@
 import type { Attachment, Endpoint, Guard } from '../declarations/index.ts';
-import { isGuard, isRejection } from '../declarations/index.ts';
+import { isEndpoint, isGuard, isRejection } from '../declarations/index.ts';
 import type {
   LocatedCode,
   LocatedDefinitions,
@@ -20,6 +20,15 @@ type Sources = {
 /** The Guards an Endpoint attaches, each once, in Attachment order; what names no Guard is left out. */
 export function attachedGuardsOf(endpoint: Endpoint): readonly Guard[] {
   return [...new Set(listOf(endpoint.guards).map(attachedGuardOf).filter(isGuard))];
+}
+
+/**
+ * The Guards whose Context a Handler receives, each once, in order: an Endpoint's attached ones,
+ * or the ones a Guard lists, that provide a Context.
+ */
+export function contextProvidersOf(element: Endpoint | Guard): readonly Guard[] {
+  const guards = isEndpoint(element) ? attachedGuardsOf(element) : listOf(element.guards);
+  return [...new Set(guards.filter(isGuard))].filter((guard) => guard.context !== undefined);
 }
 
 /** The Guard an Attachment names, bare or qualified; nothing when it names no Guard at all. */

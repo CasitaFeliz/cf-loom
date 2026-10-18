@@ -93,6 +93,16 @@ describe('parseValue', () => {
     expect(codes).toEqual(['invalid_type', 'invalid_type', 'invalid_type']);
   });
 
+  test('a key missing on a class instance is required', () => {
+    class Row {
+      readonly id = 'r-1';
+    }
+
+    const codes = codesOf(z.object({ id: z.string(), total: z.number() }), new Row());
+
+    expect(codes).toEqual(['required']);
+  });
+
   test('a missing value is required', () => {
     const codes = codesOf(z.object({ id: z.string() }), undefined);
 

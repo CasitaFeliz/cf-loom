@@ -28,6 +28,14 @@ export function answerableRejectionsOf(element: Endpoint | Guard): readonly Answ
   return distinct([...listOf(element.rejections), ...ofGuards, ...added]);
 }
 
+/** Whether two Rejections are one: a Standard Rejection by its name, from any copy of this package. */
+export function isSameRejection(listed: AnswerableRejection, rejection: unknown): boolean {
+  if (isStandardRejection(listed) && isStandardRejection(rejection)) {
+    return listed.name === rejection.name;
+  }
+  return listed === rejection;
+}
+
 function distinct(rejections: readonly unknown[]): readonly AnswerableRejection[] {
   return [...new Set(rejections.filter(isAnswerable))];
 }

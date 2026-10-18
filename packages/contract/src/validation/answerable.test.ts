@@ -8,7 +8,7 @@ import {
   notFound,
   notImplemented,
 } from '../index.ts';
-import { answerableRejectionsOf, schemaOf } from '../internal/index.ts';
+import { answerableRejectionsOf, contextProvidersOf, inOf, schemaOf } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTH',
@@ -87,5 +87,41 @@ describe('schemaOf', () => {
     ];
 
     expect(schemas).toEqual([getOrder.success.body, undefined, apiKey.demands.headers, undefined]);
+  });
+});
+
+describe('inOf', () => {
+  test('the part of the request an issue sits in', () => {
+    const ins = [inOf('input.params'), inOf('input.body'), inOf('demands.query')];
+
+    expect(ins).toEqual(['params', 'body', 'query']);
+  });
+});
+
+describe('contextProvidersOf', () => {
+  test('the Guards that provide a Context to an Endpoint, or to a Guard that lists them', () => {
+    const userToken = defineGuard({
+      name: 'userToken',
+      description: 'A signed-in user',
+      context: z.object({ userId: z.string() }),
+    });
+    const permission = defineGuard({
+      name: 'permission',
+      description: 'A permission',
+      guards: [apiKey, userToken],
+    });
+    const editOrder = defineEndpoint({
+      name: 'editOrder',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'The latest order',
+      guards: [apiKey, userToken, permission],
+      success: { status: 200, body: z.object({ id: z.string() }) },
+    });
+
+    const providers = [contextProvidersOf(editOrder), contextProvidersOf(permission)];
+
+    expect(providers).toEqual([[userToken], [userToken]]);
   });
 });

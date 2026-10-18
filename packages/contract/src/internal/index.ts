@@ -6,7 +6,7 @@ export {
   isStandardRejection,
   standardRejectionDefaults,
 } from '../declarations/index.ts';
-export type { IssueCode, Parsed, SchemaIssue } from '../issues/index.ts';
+export type { Parsed, SchemaIssue } from '../issues/index.ts';
 export { parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
@@ -36,6 +36,7 @@ export type {
   DeclarationFailure,
   ExportsOf,
   Failure,
+  InputPart,
   LocatedCode,
   LocatedDefinitions,
   LocatedEndpoint,
@@ -57,12 +58,16 @@ export type {
 export {
   answerableRejectionsOf,
   attachedGuardsOf,
+  contextProvidersOf,
   demandParts,
   fieldsOf,
   follows,
+  inOf,
   inputParts,
+  isSameRejection,
   kebabCase,
   listedDefinitionsOf,
+  partFieldOf,
   schemaOf,
   standardRejectionsOf,
   successParts,

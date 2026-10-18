@@ -12,6 +12,7 @@ export type {
   Group,
   Guard,
   InputOf,
+  IssueCode,
   Lifecycle,
   Method,
   ProvidedContextOf,

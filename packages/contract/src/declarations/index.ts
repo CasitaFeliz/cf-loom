@@ -42,6 +42,7 @@ export { defineRejection } from './rejection.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
 export type {
+  IssueCode,
   StandardRejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,

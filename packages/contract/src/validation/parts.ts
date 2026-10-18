@@ -67,6 +67,29 @@ export function fieldsOf<Named extends Exclude<Part, 'schema'>>(part: Named): Fi
   return part.split('.') as readonly string[] as FieldsOf<Named>;
 }
 
+/** The field a part's value sits under: `input.params` is `params`, `context` is `context`. */
+type FieldOf<Named extends string> = Named extends `${string}.${infer Inner}` ? Inner : Named;
+
+/** The field a part's value sits under, where a Handler reads it: its innermost field. */
+export function partFieldOf<Named extends Exclude<Part, 'schema'>>(part: Named): FieldOf<Named> {
+  const fields: readonly string[] = fieldsOf(part);
+  return fields[fields.length - 1] as FieldOf<Named>;
+}
+
+/** A part of what a request carries: the Endpoint's Input, or what a Guard demands. */
+export type InputPart = (typeof inputParts)[number] | (typeof demandParts)[number];
+
+/** Where an invalid-input issue says it sits, `in`: the part of the request it read. */
+export function inOf(part: InputPart): 'params' | 'query' | 'headers' | 'body' {
+  return partFieldOf(part);
+}
+
+/** Whether a part travels as text and is an object of its fields in a valid root. */
+export function isObjectPart(part: Part): part is ObjectPart {
+  const textParts: readonly Part[] = objectParts;
+  return textParts.includes(part);
+}
+
 /** Where a part of a declaration sits: the one place that spells a schema's location. */
 export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
   return [...owner, ...fieldsOf(part)];

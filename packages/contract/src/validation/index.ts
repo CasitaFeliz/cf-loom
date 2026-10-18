@@ -1,5 +1,5 @@
 export type { AnswerableRejection } from './answerable.ts';
-export { answerableRejectionsOf } from './answerable.ts';
+export { answerableRejectionsOf, isSameRejection } from './answerable.ts';
 export { listedDefinitionsOf } from './declarations.ts';
 export type { ExportsOf } from './definitions.ts';
 export type { DeclarationFailure, Failure, Rule } from './failures.ts';
@@ -16,9 +16,17 @@ export type {
   LocatedStandardRejection,
   Root,
 } from './located.ts';
-export type { ObjectPart, Part } from './parts.ts';
-export { demandParts, fieldsOf, inputParts, schemaOf, successParts } from './parts.ts';
-export { attachedGuardsOf } from './references.ts';
+export type { InputPart, ObjectPart, Part } from './parts.ts';
+export {
+  demandParts,
+  fieldsOf,
+  inOf,
+  inputParts,
+  partFieldOf,
+  schemaOf,
+  successParts,
+} from './parts.ts';
+export { attachedGuardsOf, contextProvidersOf } from './references.ts';
 export type { ResolvedStandard } from './standard-codes.ts';
 export { standardRejectionsOf } from './standard-codes.ts';
 export type {
