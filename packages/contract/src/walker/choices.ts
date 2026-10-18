@@ -116,14 +116,18 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
  * intersection, and is nullable when any of its literals is.
  */
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
-  const literals = options.filter(isLiteral);
+  const literals = options.filter(isLiterals);
   if (literals.length !== options.length) {
     return { type: 'union', options: [...options].sort(byCanonicalJson) };
   }
-  const values = enumOf(literals.map((literal) => literal.value));
+  const values = enumOf(literals.flatMap(valuesOf));
   return literals.some((literal) => literal.nullable === true)
     ? { ...values, nullable: true }
     : values;
+}
+
+function valuesOf(literals: LiteralNode | EnumNode): readonly JsonPrimitive[] {
+  return literals.type === 'literal' ? [literals.value] : literals.values;
 }
 
 /** An enum of several literal values, each once, in canonical order. */
@@ -133,8 +137,9 @@ export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
   return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
 }
 
-function isLiteral(node: SchemaNode): node is LiteralNode {
-  return node.type === 'literal';
+/** A literal of one value, or a closed enum, which is how a literal of several values walks. */
+function isLiterals(node: SchemaNode): node is LiteralNode | EnumNode {
+  return node.type === 'literal' || (node.type === 'enum' && !node.open);
 }
 
 function isString(value: unknown): value is string {

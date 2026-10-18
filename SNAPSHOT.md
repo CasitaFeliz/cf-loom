@@ -172,7 +172,7 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 | `number` | `int?`, `min?`, `max?`, `exclusiveMin?`, `exclusiveMax?`, `multipleOf?` | `z.number()`, `z.int()` |
 | `boolean` | | `z.boolean()` |
 | `literal` | `value` | `z.literal()` |
-| `enum` | `values`, `open` | `z.enum()`, `openEnum()`, a union of literals, a literal of several values |
+| `enum` | `values`, `open` | `z.enum()`, `openEnum()`, a literal of several values, a union of literals (each of one or several values) and closed enums, as one enum of all their values |
 | `object` | `mode` (`open` or `strict`), `fields` | `z.object()`, `z.strictObject()`, an intersection of objects; `z.record()` with an enum or literal key is `strict` with every key a required field, and `z.partialRecord()` is `strict` with every key optional |
 | `record` | `key`, `value` | `z.record()` with a string key |
 | `array` | `items`, `min?`, `max?` | `z.array()` |

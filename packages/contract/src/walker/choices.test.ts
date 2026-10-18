@@ -90,6 +90,14 @@ describe('walkSchemas: unions', () => {
     expect(walkBody(flag)).toEqual(walkedTo({ type: 'enum', values: ['off', 'on'], open: false }));
   });
 
+  test('a union of literals of one and of several values is one enum', () => {
+    const grade = z.union([z.literal(['a', 'b']), z.literal('c')]);
+
+    expect(walkBody(grade)).toEqual(
+      walkedTo({ type: 'enum', values: ['a', 'b', 'c'], open: false }),
+    );
+  });
+
   test('a union of literals with a nullable one is a nullable enum', () => {
     const flag = z.union([z.literal('on').nullable(), z.literal('off')]);
 
