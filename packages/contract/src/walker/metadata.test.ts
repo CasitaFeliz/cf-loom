@@ -12,6 +12,12 @@ function walkedTo(node: SchemaNode) {
   return { kind: 'walked', nodes: [node], defs: {} };
 }
 
+function cyclic(): Record<string, unknown> {
+  const loop: Record<string, unknown> = {};
+  loop['self'] = loop;
+  return loop;
+}
+
 describe('walkSchemas: metadata', () => {
   test('.describe() sets the description', () => {
     expect(walkBody(z.string().describe('A name'))).toEqual(
@@ -43,6 +49,17 @@ describe('walkSchemas: metadata', () => {
         fields: { note: { required: false, schema: { type: 'string', description: 'A note' } } },
       }),
     );
+  });
+
+  test.each([
+    ['a bigint', [1n]],
+    ['a cyclic value', [cyclic()]],
+    ['a function', [() => 'Ada']],
+  ])('examples holding %s fail', (_name, examples) => {
+    expect(walkBody(z.string().meta({ examples }))).toEqual({
+      kind: 'not-allowed',
+      failures: [{ at: ['body'], construct: 'examples that are not JSON values' }],
+    });
   });
 
   test('any other .meta() key fails', () => {

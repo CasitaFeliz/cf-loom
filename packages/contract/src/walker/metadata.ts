@@ -1,7 +1,14 @@
 import type * as core from 'zod/v4/core';
 import { globalRegistry } from 'zod/v4/core';
+import { isJsonValue } from './canonical-json.ts';
 import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
-import { notAllowed, refusedExamples, refusedMetaKey } from './not-allowed.ts';
+import {
+  notAllowed,
+  type Refused,
+  refused,
+  refusedExamples,
+  refusedMetaKey,
+} from './not-allowed.ts';
 import { failed, failuresOf, type Walked, walked } from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
@@ -56,9 +63,17 @@ function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readon
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
   const keyFailures = unknownKeys.map((key) => notAllowed(at, refusedMetaKey(key)));
-  const examplesFailure =
-    meta['examples'] === undefined || Array.isArray(meta['examples'])
-      ? []
-      : [notAllowed(at, refusedExamples)];
+  const examplesRefusal = examplesRefusalOf(meta['examples']);
+  const examplesFailure = examplesRefusal === undefined ? [] : [notAllowed(at, examplesRefusal)];
   return failuresOf([...keyFailures, ...examplesFailure]);
+}
+
+function examplesRefusalOf(examples: unknown): Refused | undefined {
+  if (examples === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(examples)) {
+    return refusedExamples;
+  }
+  return isJsonValue(examples) ? undefined : refused.nonJsonExamples;
 }
