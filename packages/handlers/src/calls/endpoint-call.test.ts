@@ -1,0 +1,499 @@
+import {
+  defineContract,
+  defineDefinitions,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  defineRejection,
+  invalidInput,
+  notFound,
+  notImplemented,
+} from '@casitafeliz/loom-contract';
+import { describe, expect, expectTypeOf, test } from 'vitest';
+import { z } from 'zod';
+import {
+  fault,
+  handle,
+  InvalidInputError,
+  InvalidOutcomeError,
+  type Issue,
+  type ResolvedOutcome,
+  reject,
+  success,
+} from '../index.ts';
+
+const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
+
+const unauthenticated = defineRejection({
+  code: 'UNAUTHENTICATED',
+  status: 401,
+  message: 'Unauthenticated',
+});
+
+const orderLocked = defineRejection({
+  code: 'ORDER_LOCKED',
+  status: 409,
+  message: 'The order can no longer be changed',
+  body: z.object({ lockedAt: z.iso.datetime() }),
+});
+
+const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+
+const apiKey = defineGuard({
+  name: 'apiKey',
+  description: 'An API key per client',
+  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  context: z.object({ clientId: z.string() }),
+  rejections: [unauthenticated],
+});
+
+const internalOnly = defineGuard({ name: 'internalOnly', description: 'Only the network' });
+
+const getOrder = defineEndpoint({
+  name: 'getOrder',
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order by id',
+  guards: [apiKey, internalOnly],
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 200, body: z.object({ id: z.uuid(), total: z.int().min(0) }) },
+  rejections: [notFound, orderLocked],
+});
+
+const createOrder = defineEndpoint({
+  name: 'createOrder',
+  method: 'POST',
+  path: '/orders',
+  visibility: 'public',
+  description: 'A new order',
+  input: {
+    headers: z.object({ 'x-request-id': z.string() }),
+    body: z.strictObject({
+      email: z.email(),
+      quantity: z.int().min(1).max(10).multipleOf(2),
+      channel: z.enum(['web', 'phone']),
+      note: z.string(),
+    }),
+  },
+  success: {
+    status: 201,
+    headers: z.object({ location: z.string().min(1) }),
+    body: z.object({ id: z.uuid() }),
+  },
+});
+
+const deleteOrder = defineEndpoint({
+  name: 'deleteOrder',
+  method: 'DELETE',
+  path: '/orders/:orderId',
+  visibility: 'internal',
+  description: 'Deletes an order',
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 204 },
+});
+
+const headOrder = defineEndpoint({
+  name: 'headOrder',
+  method: 'HEAD',
+  path: '/orders/:orderId',
+  visibility: 'internal',
+  description: 'Whether an order exists',
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+});
+
+const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' } as const;
+const createInput = { headers: { 'x-request-id': 'r-1' }, body: validOrder };
+const getInput = { params: { orderId: ORDER_ID } };
+const getContext = { apiKey: { clientId: 'c-1' } };
+
+async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]> {
+  try {
+    await call();
+  } catch (e) {
+    if (e instanceof InvalidInputError || e instanceof InvalidOutcomeError) {
+      return e.issues;
+    }
+    throw e;
+  }
+  throw new Error('the call did not throw');
+}
+
+const created = handle(createOrder, () =>
+  success({ headers: { location: `/orders/${ORDER_ID}` }, body: { id: ORDER_ID } }),
+);
+
+describe('an EndpointHandler’s Input', () => {
+  test('the implementation receives the parsed Input, unknown keys stripped, then the Context', async () => {
+    const received: unknown[] = [];
+    const getOrderHandler = handle(getOrder, (input, context) => {
+      received.push(input, context);
+      return success({ id: ORDER_ID, total: 1 });
+    });
+
+    await getOrderHandler({ params: { orderId: ORDER_ID, extra: 'x' } as never }, getContext);
+
+    expect(received).toEqual([{ params: { orderId: ORDER_ID } }, getContext]);
+  });
+
+  test('Input that breaks a schema throws InvalidInputError with one Issue per failure', async () => {
+    const issues = await issuesOf(() =>
+      created({ headers: { 'x-request-id': 'r-1' }, body: { ...validOrder, email: 'nope' } }, {}),
+    );
+
+    expect(issues).toEqual([
+      {
+        part: 'input.body',
+        path: ['email'],
+        code: 'invalid_format',
+        message: expect.any(String),
+      },
+    ]);
+  });
+
+  test('the error message names the Element, part, path and code, never the received value', async () => {
+    const secret = 'the-secret-email';
+
+    const call = created({ ...createInput, body: { ...validOrder, email: secret } }, {});
+
+    await expect(call).rejects.toThrow(/^createOrder: input\.body\.email invalid_format: /);
+    await expect(call).rejects.not.toThrow(secret);
+  });
+
+  test.each([
+    ['required', { note: undefined }],
+    ['invalid_type', { note: 7 }],
+    ['invalid_value', { channel: 'fax' }],
+    ['invalid_format', { email: 'nope' }],
+    ['too_small', { quantity: 0 }],
+    ['too_big', { quantity: 12 }],
+    ['not_multiple', { quantity: 3 }],
+    ['unrecognized_key', { extra: true }],
+  ])('a body that fails as %s gets that code', async (code, broken) => {
+    const body = { ...validOrder, ...broken } as never;
+
+    const issues = await issuesOf(() => created({ ...createInput, body }, {}));
+
+    expect(issues.map((issue) => issue.code)).toEqual([code]);
+  });
+
+  test('a part the Endpoint does not declare is not read', async () => {
+    const received: unknown[] = [];
+    const deleteOrderHandler = handle(deleteOrder, (input) => {
+      received.push(input);
+      return success();
+    });
+
+    await deleteOrderHandler({ ...getInput, body: 'anything' } as never, {});
+
+    expect(received).toEqual([getInput]);
+  });
+});
+
+describe('an EndpointHandler’s Context', () => {
+  const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID, total: 1 }));
+
+  test('a Context that breaks its Guard’s context schema throws', async () => {
+    const issues = await issuesOf(() =>
+      getOrderHandler(getInput, { apiKey: { clientId: 7 } } as never),
+    );
+
+    expect(issues).toEqual([
+      {
+        part: 'context',
+        path: ['apiKey', 'clientId'],
+        code: 'invalid_type',
+        message: expect.any(String),
+      },
+    ]);
+  });
+
+  test('a missing Context throws', async () => {
+    const issues = await issuesOf(() => getOrderHandler(getInput, {} as never));
+
+    expect(issues).toEqual([
+      { part: 'context', path: ['apiKey'], code: 'required', message: expect.any(String) },
+    ]);
+  });
+
+  test('a Context key no attached Guard provides throws', async () => {
+    const context = { ...getContext, internalOnly: {} } as never;
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, context));
+
+    expect(issues).toEqual([
+      {
+        part: 'context',
+        path: ['internalOnly'],
+        code: 'unrecognized_key',
+        message: expect.any(String),
+      },
+    ]);
+  });
+});
+
+describe('an EndpointHandler’s Success', () => {
+  test('success(body) resolves to the declared status and the parsed body', async () => {
+    const getOrderHandler = handle(getOrder, () =>
+      success({ id: ORDER_ID, total: 1, extra: true }),
+    );
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: ORDER_ID, total: 1 } });
+  });
+
+  test('success({ headers, body }) carries both when the Endpoint declares headers', async () => {
+    const outcome = await created(createInput, {});
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      status: 201,
+      headers: { location: `/orders/${ORDER_ID}` },
+      body: { id: ORDER_ID },
+    });
+  });
+
+  test('success() resolves a 204 Endpoint', async () => {
+    const deleteOrderHandler = handle(deleteOrder, () => success());
+
+    const outcome = await deleteOrderHandler(getInput, {});
+
+    expect(outcome).toEqual({ kind: 'success', status: 204 });
+  });
+
+  test('success({ headers }) resolves a HEAD Endpoint with headers', async () => {
+    const headOrderHandler = handle(headOrder, () => success({ headers: { 'x-total': 3 } }));
+
+    const outcome = await headOrderHandler(getInput, {});
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, headers: { 'x-total': 3 } });
+  });
+
+  test('a Success body that breaks a constraint throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID, total: -1 }));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues).toEqual([
+      { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
+    ]);
+  });
+
+  test('Success headers that break their schema throw InvalidOutcomeError', async () => {
+    const createOrderHandler = handle(createOrder, () =>
+      success({ headers: { location: '' }, body: { id: ORDER_ID } }),
+    );
+
+    const issues = await issuesOf(() => createOrderHandler(createInput, {}));
+
+    expect(issues).toEqual([
+      {
+        part: 'success.headers',
+        path: ['location'],
+        code: 'too_small',
+        message: expect.any(String),
+      },
+    ]);
+  });
+
+  test('a body given to a 204 throws InvalidOutcomeError', async () => {
+    const deleteOrderHandler = handle(deleteOrder, () => success({ id: ORDER_ID }) as never);
+
+    const issues = await issuesOf(() => deleteOrderHandler(getInput, {}));
+
+    expect(issues.map(({ part, path }) => ({ part, path }))).toEqual([
+      { part: 'success.body', path: [] },
+    ]);
+  });
+
+  test('a Success of the wrong shape is a type error', () => {
+    const write = () =>
+      // @ts-expect-error total is a number
+      handle(getOrder, () => success({ id: ORDER_ID, total: 'one' }));
+
+    expect(write).not.toThrow();
+  });
+});
+
+describe('an EndpointHandler’s Rejections', () => {
+  test('reject(notFound) resolves against cf-loom’s defaults and is told by its declaration', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'rejection',
+      rejection: notFound,
+      code: 'NOT_FOUND',
+      status: 404,
+      message: 'Not found',
+    });
+    expect(outcome.kind === 'rejection' && outcome.rejection === notFound).toBe(true);
+  });
+
+  test('given the root, a Standard Rejection resolves to the listed Definitions Package’s', async () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
+    });
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: [definitions],
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
+    });
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+
+    const outcome = await getOrderHandler(getInput, getContext, { contract });
+
+    expect(outcome).toMatchObject({ code: 'MISSING', status: 410, message: 'Gone' });
+  });
+
+  test('reject(orderLocked, body) carries the declaration, the parsed body and the declared code', async () => {
+    const lockedAt = '2026-10-18T10:00:00Z';
+    const getOrderHandler = handle(getOrder, () => reject(orderLocked, { lockedAt }));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'rejection',
+      rejection: orderLocked,
+      body: { lockedAt },
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'The order can no longer be changed',
+    });
+  });
+
+  test('a Guard’s Rejection is one the Endpoint answers', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(unauthenticated));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'UNAUTHENTICATED', status: 401 });
+  });
+
+  test('a Rejection body that breaks its schema throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(orderLocked, { lockedAt: 'soon' }));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues).toEqual([
+      { part: 'body', path: ['lockedAt'], code: 'invalid_format', message: expect.any(String) },
+    ]);
+  });
+
+  test('a missing Rejection body throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(orderLocked as never));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues.map(({ part, code }) => ({ part, code }))).toEqual([
+      { part: 'body', code: 'required' },
+    ]);
+  });
+
+  test('a body for a Rejection without one throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () =>
+      Reflect.apply(reject, undefined, [notFound, { id: ORDER_ID }]),
+    );
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues.map(({ part, path }) => ({ part, path }))).toEqual([{ part: 'body', path: [] }]);
+  });
+
+  test('a Rejection the Endpoint does not answer throws InvalidOutcomeError', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(forbidden) as never);
+
+    const call = getOrderHandler(getInput, getContext);
+
+    await expect(call).rejects.toThrow(InvalidOutcomeError);
+  });
+
+  test('the invalid-input Rejection is the runtime’s, never a Handler’s', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(invalidInput as never));
+
+    const call = getOrderHandler(getInput, getContext);
+
+    await expect(call).rejects.toThrow(InvalidOutcomeError);
+  });
+
+  test('a Rejection the Endpoint does not list, invalidInput and a missing body are type errors', () => {
+    const write = () => [
+      // @ts-expect-error forbidden is not a Rejection getOrder answers
+      handle(getOrder, () => reject(forbidden)),
+      // @ts-expect-error the runtime answers invalid input
+      handle(getOrder, () => reject(invalidInput)),
+      // @ts-expect-error orderLocked declares a body
+      handle(getOrder, () => reject(orderLocked)),
+    ];
+
+    expect(write).not.toThrow();
+  });
+});
+
+describe('an EndpointHandler’s Faults', () => {
+  test('an implementation that throws answers the Fault Internal error, the error as cause', async () => {
+    const error = new Error('database down');
+    const getOrderHandler = handle(getOrder, () => {
+      throw error;
+    });
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'unknown',
+      retryable: false,
+      message: 'Internal error',
+      cause: error,
+    });
+  });
+
+  test('a Fault the implementation returns is answered as built, its message Internal error', async () => {
+    const getOrderHandler = handle(getOrder, async () =>
+      fault({ committed: 'no', retryable: true }),
+    );
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'no',
+      retryable: true,
+      message: 'Internal error',
+    });
+  });
+});
+
+describe('an EndpointHandler stub', () => {
+  const stub = handle.stub(getOrder);
+
+  test('a stub answers the not-implemented Rejection, resolved', async () => {
+    const outcome = await stub(getInput, getContext);
+
+    expect(outcome).toEqual({
+      kind: 'rejection',
+      rejection: notImplemented,
+      code: 'NOT_IMPLEMENTED',
+      status: 501,
+      message: 'Not implemented',
+    });
+  });
+
+  test('a stub still throws on Input that breaks the Contract', async () => {
+    const call = stub({ params: { orderId: 'nope' } }, getContext);
+
+    await expect(call).rejects.toThrow(InvalidInputError);
+  });
+
+  test('a direct call’s Outcome includes the not-implemented Rejection', () => {
+    type Rejected = Extract<ResolvedOutcome<typeof getOrder>, { kind: 'rejection' }>;
+
+    expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
+      typeof notFound | typeof orderLocked | typeof unauthenticated | typeof notImplemented
+    >();
+  });
+});
