@@ -47,6 +47,18 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.readonly()', z.array(z.string()).readonly(), '.readonly()'],
     ['numeric z.enum() values', z.enum({ low: 1, high: 2 }), 'numeric z.enum() values'],
     ['.optional() outside an object field', z.string().optional(), '.optional()'],
+    ['.lowercase()', z.string().lowercase(), '.lowercase()'],
+    ['.uppercase()', z.string().uppercase(), '.uppercase()'],
+    ['z.stringFormat()', z.stringFormat('sku', () => true), 'z.stringFormat("sku")'],
+    ['z.email({ pattern })', z.email({ pattern: z.regexes.html5Email }), 'z.email({ pattern })'],
+    ['z.url({ normalize })', z.url({ normalize: true }), 'z.url({ normalize: true })'],
+    ['z.int32()', z.int32(), 'z.int32()'],
+    ['z.uint32()', z.uint32(), 'z.uint32()'],
+    ['z.float32()', z.float32(), 'z.float32()'],
+    ['z.float64()', z.float64(), 'z.float64()'],
+    ['z.looseRecord()', z.looseRecord(z.string(), z.string()), 'z.looseRecord()'],
+    ['z.xor()', z.xor([z.string(), z.number()]), 'z.xor()'],
+    ['two checks that set one constraint', z.string().min(1).min(2), 'two checks that set min'],
   ])('%s fails', (_name, schema, construct) => {
     expect(walkBody(schema)).toEqual(refused(construct));
   });

@@ -148,4 +148,17 @@ describe('walkSchemas: discriminated unions', () => {
       refusedAt(['body'], 'two discriminated union variants with the same discriminator value'),
     );
   });
+
+  test('a variant whose discriminator is not a literal fails', () => {
+    const nested = z.discriminatedUnion('kind', [
+      z.object({ type: z.literal('wallet'), kind: z.literal('crypto') }),
+    ]);
+
+    expect(walkBody(z.discriminatedUnion('type', [card, nested]))).toEqual(
+      refusedAt(
+        ['body', 'variants', 1],
+        'a discriminated union variant whose discriminator is not a literal',
+      ),
+    );
+  });
 });
