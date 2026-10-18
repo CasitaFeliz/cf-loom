@@ -184,7 +184,7 @@ describe('walkSchemas: intersections', () => {
   });
 
   test('any other intersection is allOf', () => {
-    const bounded = z.intersection(z.string().max(10), z.string().min(1));
+    const bounded = z.intersection(z.string().min(1), z.string().max(10));
 
     expect(walkBody(bounded)).toEqual(
       walkedTo({
