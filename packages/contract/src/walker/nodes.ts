@@ -110,7 +110,7 @@ export type AllOfNode = Annotations & {
 /** Any JSON value. */
 export type JsonNode = Annotations & { readonly type: 'json' };
 
-/** The schema that closes a cycle, written once under the Snapshot's `defs` by its id. */
+/** A schema with an id on a cycle, written once under the Snapshot's `defs` by that id. */
 export type RefNode = Annotations & { readonly type: 'ref'; readonly name: string };
 
 /** A schema as the Snapshot describes it, language-neutral, for the Compatibility Check. */
