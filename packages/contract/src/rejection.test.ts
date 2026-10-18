@@ -16,15 +16,25 @@ describe('defineRejection', () => {
     expect(orderLocked.body).toBe(body);
   });
 
-  test('a Rejection status outside 400–499 is a type error', () => {
-    const declare = () => [
-      // @ts-expect-error a Rejection status is 4xx
-      defineRejection({ code: 'TEAPOT', status: 500, message: 'Server' }),
-      // @ts-expect-error a Rejection status is 4xx
-      defineRejection({ code: 'MOVED', status: 399, message: 'Moved' }),
+  test('a Rejection status of 400 and of 499 type-check', () => {
+    const rejections = [
       defineRejection({ code: 'FIRST', status: 400, message: 'First' }),
       defineRejection({ code: 'LAST', status: 499, message: 'Last' }),
     ];
+
+    expect(rejections.map((rejection) => rejection.status)).toEqual([400, 499]);
+  });
+
+  test('a Rejection status of 399 is a type error', () => {
+    // @ts-expect-error a Rejection status is 4xx
+    const declare = () => defineRejection({ code: 'MOVED', status: 399, message: 'Moved' });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Rejection status of 500 is a type error', () => {
+    // @ts-expect-error a Rejection status is 4xx
+    const declare = () => defineRejection({ code: 'BROKEN', status: 500, message: 'Broken' });
 
     expect(declare).not.toThrow();
   });

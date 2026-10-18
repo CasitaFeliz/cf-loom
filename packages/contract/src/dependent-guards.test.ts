@@ -49,13 +49,17 @@ describe('dependent Guards', () => {
     expectTypeOf<RequiredContextOf<typeof userToken>>().toEqualTypeOf<Record<never, never>>();
   });
 
-  test('a missing or later-listed required Guard is a type error', () => {
-    const declare = () => [
-      // @ts-expect-error permission requires tenant earlier in guards
-      defineEndpoint({ ...endpoint, guards: [userToken, permission] }),
+  test('a missing required Guard is a type error', () => {
+    // @ts-expect-error permission requires tenant earlier in guards
+    const declare = () => defineEndpoint({ ...endpoint, guards: [userToken, permission] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a required Guard listed later is a type error', () => {
+    const declare = () =>
       // @ts-expect-error tenant requires userToken earlier in guards
-      defineEndpoint({ ...endpoint, guards: [internalOnly, tenant, userToken] }),
-    ];
+      defineEndpoint({ ...endpoint, guards: [internalOnly, tenant, userToken] });
 
     expect(declare).not.toThrow();
   });

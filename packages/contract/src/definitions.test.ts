@@ -21,30 +21,40 @@ describe('defineDefinitions', () => {
     expect(definitions.kind).toBe('definitions');
   });
 
+  test('a Definitions Package may declare its Standard Rejections’ codes, statuses and messages', () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: {
+        invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'Bad request' },
+        notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+      },
+    });
+
+    expect(definitions.standardRejections.invalidInput.status).toBe(422);
+  });
+
   test('notImplemented’s status must be 501', () => {
-    const declare = () => [
+    const declare = () =>
       defineDefinitions({
         name: 'definitions',
         standardRejections: {
           // @ts-expect-error not implemented is always 501
           notImplemented: { code: 'NOT_IMPLEMENTED', status: 500, message: 'Not implemented' },
         },
-      }),
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('invalidInput’s status must be a 4xx', () => {
+    const declare = () =>
       defineDefinitions({
         name: 'definitions',
         standardRejections: {
           // @ts-expect-error invalid input is a 4xx
           invalidInput: { code: 'BAD_REQUEST', status: 501, message: 'Bad request' },
         },
-      }),
-      defineDefinitions({
-        name: 'definitions',
-        standardRejections: {
-          invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'Bad request' },
-          notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-        },
-      }),
-    ];
+      });
 
     expect(declare).not.toThrow();
   });

@@ -74,18 +74,35 @@ describe('defineContract', () => {
 });
 
 describe('defineApplication', () => {
-  test('an Application may depend only on Public Endpoints', () => {
+  test('an Application may depend on Public Endpoints', () => {
     const publicDeps = defineDependencies(payments, { endpoints: [getPayment] });
+
+    const application = defineApplication({ name: 'web-admin', dependencies: [publicDeps] });
+
+    expect(application.dependencies[0]).toBe(publicDeps);
+  });
+
+  test('an Application depending on an Internal Endpoint is a type error', () => {
     const internalDeps = defineDependencies(payments, { endpoints: [refundPayment] });
+
+    // @ts-expect-error an Application runs outside the internal network
+    const declare = () => defineApplication({ name: 'web-admin', dependencies: [internalDeps] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Application depending on an Event is a type error', () => {
     const eventDeps = defineDependencies(payments, { events: [paymentSettledV1] });
 
-    const declare = () => [
-      defineApplication({ name: 'web-admin', dependencies: [publicDeps] }),
-      // @ts-expect-error an Application runs outside the internal network
-      defineApplication({ name: 'web-admin', dependencies: [internalDeps] }),
-      // @ts-expect-error an Application subscribes to no Event
-      defineApplication({ name: 'web-admin', dependencies: [eventDeps] }),
-    ];
+    // @ts-expect-error an Application subscribes to no Event
+    const declare = () => defineApplication({ name: 'web-admin', dependencies: [eventDeps] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Application without dependencies is a type error', () => {
+    // @ts-expect-error an Application lists its Dependencies
+    const declare = () => defineApplication({ name: 'web-admin' });
 
     expect(declare).not.toThrow();
   });
