@@ -1,6 +1,18 @@
 # Internals of @casitafeliz/loom-cli
 
-How `cf-loom check` and `cf-loom publish` (see [Commands](README.md#commands)) read and write the registry and the Contract directory (see [Configuration](README.md#configuration)). Which Dependencies form the dependency graph is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in the root ARCHITECTURE.md; the Baseline is read as [The Baseline](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-baseline) in COMPATIBILITY.md says.
+How the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires, and how `cf-loom check` and `cf-loom publish` (see [Commands](README.md#commands)) read and write the registry and the Contract directory (see [Configuration](README.md#configuration)). Which Dependencies form the dependency graph is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in the root ARCHITECTURE.md; the Baseline is read as [The Baseline](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-baseline) in COMPATIBILITY.md says.
+
+## Modules
+
+The entry `src/index.ts` (`.`) re-exports from `config/`; `src/bin.ts` parses the arguments, runs a command and prints what it ends with.
+
+| Module | Holds | Depends on |
+| --- | --- | --- |
+| `loading/` | importing a user's TypeScript file, the root, and the Definitions Packages a root lists as installed | none |
+| `config/` | `defineConfig`, `Config`, and loading `cf-loom.config.ts` | `loading` |
+| `commands/` | `init`, `generate` and `verify`, each ending with its exit status and the lines it prints | `config`, `loading` |
+
+A command takes where and when it runs (the working directory and the clock) from `bin.ts`; `generate` and `verify` build the declared Snapshot with `@casitafeliz/loom-contract/internal` and only read and write the files.
 
 ## Reading the graph
 

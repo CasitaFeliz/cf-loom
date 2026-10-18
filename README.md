@@ -17,7 +17,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@casitafeliz/loom-messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
 | [`@casitafeliz/loom-messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
 | [`@casitafeliz/loom-testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider`, `fakeEvent` |
-| [`@casitafeliz/loom-cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `config`; Contract directories under `@casitafeliz/loom-cli/directories` |
+| [`@casitafeliz/loom-cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig`; Contract directories under `@casitafeliz/loom-cli/directories` |
 
 How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 

@@ -10,3 +10,4 @@ How the package's `src/` is split into modules, as [Package layout](../../ARCHIT
 | `open/` | Open Enums and Open Unions: `openEnum`, `openUnion` and `isOpen` | none |
 | `walker/` | zod schemas to Snapshot nodes | `open` |
 | `validation/` | every rule `generate` enforces, and the valid result | `declarations`, `walker` |
+| `snapshot/` | the declared Snapshot of a valid root, its types and its canonical bytes | `declarations`, `walker`, `validation` |

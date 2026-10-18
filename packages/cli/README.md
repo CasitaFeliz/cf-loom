@@ -1,17 +1,17 @@
 # @casitafeliz/loom-cli
 
-The `cf-loom` command and `config`; the Contract directories are under `@casitafeliz/loom-cli/directories`. How the command reads and writes the registry and the Contract directory is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the Compatibility Check the command runs is in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md), and the Snapshot it writes in [SNAPSHOT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md).
+The `cf-loom` command and `defineConfig`; the Contract directories are under `@casitafeliz/loom-cli/directories`. How the command reads and writes the registry and the Contract directory is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the Compatibility Check the command runs is in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md), and the Snapshot it writes in [SNAPSHOT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md).
 
 ## Configuration
 
-Each Service, Application or Definitions Package configures the tools in `cf-loom.config.ts`, next to its package.json: at the root of its repository, or in its own directory of a monorepo, where the CLI runs. The CLI reads it; it is never part of the Snapshot or the published package.
+Each Service, Application or Definitions Package configures the tools in `cf-loom.config.ts`, next to its package.json: at the root of its repository, or in its own directory of a monorepo, where the CLI runs. The CLI reads its `config` export; it is never part of the Snapshot or the published package. Like the Contract's files, it is erasable TypeScript (see [Where Contracts live](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#where-contracts-live) in the root ARCHITECTURE.md).
 
 ```ts
 // cf-loom.config.ts
-import { config } from '@casitafeliz/loom-cli';
+import { defineConfig } from '@casitafeliz/loom-cli';
 import { github } from '@casitafeliz/loom-cli/directories';
 
-export default config({
+export const config = defineConfig({
   scope: '@org',                     // publishes @org/contract-orders-service
   registry: 'https://npm.internal.example',
   directory: github({ org: 'org' }),   // how to list every Contract Package in the scope
@@ -32,7 +32,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 
 | Command | Does |
 | --- | --- |
-| `cf-loom init [service \| application \| definitions]` | Creates the root under `src/contract/` (or `src/definitions/`) |
+| `cf-loom init [service \| application \| definitions]` | Creates the root under `src/contract/` (or `src/definitions/`), exporting `contract`, `application` or `definitions`, and `cf-loom.config.ts` with the scope of package.json's name when there is none; it never overwrites a file |
 | `cf-loom add-endpoint <group> <name> <METHOD> <path> --visibility <v>` | Creates the Endpoint, its Group if new, and registers both |
 | `cf-loom add-guard <name>` | Creates a Guard |
 | `cf-loom add-rejection <CODE> --status <n>` | Creates a Rejection |
