@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { frozenDeclaration } from './frozen-declaration.ts';
-import type { LowerCaseHeaderNames } from './http.ts';
+import type { HeaderNamesRule } from './http.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
@@ -28,7 +28,7 @@ export type Guard<Declaration extends GuardDeclaration = GuardDeclaration> =
 
 type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   readonly demands?: {
-    readonly headers?: LowerCaseHeaderNames<NonNullable<Declaration['demands']>['headers']>;
+    readonly headers?: HeaderNamesRule<NonNullable<Declaration['demands']>['headers']>;
   };
 };
 

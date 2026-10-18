@@ -7,3 +7,28 @@ export type DeclaredFieldsRule<Declaration, Shape> = {
     keyof Shape
   >]: Refusal<`${Field & string} is not a declared field`>;
 };
+
+type IntersectionOf<Members> = (
+  Members extends unknown
+    ? (member: Members) => void
+    : never
+) extends (member: infer Intersection) => void
+  ? Intersection
+  : never;
+
+type LastOf<Names> =
+  IntersectionOf<Names extends unknown ? () => Names : never> extends () => infer Last
+    ? Last
+    : never;
+
+/** Several names in one message, comma-separated, so a refusal reads as one sentence. */
+export type Listed<Names extends string> = [Exclude<Names, LastOf<Names>>] extends [never]
+  ? Names
+  : `${Listed<Exclude<Names, LastOf<Names>>>}, ${LastOf<Names> & string}`;
+
+/** The names a rule may judge: a name typed as plain `string` says nothing about itself. */
+export type LiteralNames<Names> = Names extends string
+  ? string extends Names
+    ? never
+    : Names
+  : never;

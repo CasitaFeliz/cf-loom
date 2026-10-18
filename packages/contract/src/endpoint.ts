@@ -2,10 +2,10 @@ import type * as core from 'zod/v4/core';
 import type { Lifecycle, Visibility } from './element.ts';
 import { frozenDeclaration } from './frozen-declaration.ts';
 import type { Guard } from './guard.ts';
-import type { LowerCaseHeaderNames, Method, SuccessStatus } from './http.ts';
+import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule } from './rules.ts';
+import type { DeclaredFieldsRule, Listed, LiteralNames } from './rules.ts';
 import type { StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
@@ -16,16 +16,14 @@ type InputDeclaration = {
   readonly body?: core.$ZodType;
 };
 
-/** What an Endpoint promises when it does what was asked: only a 204 has no body. */
-type SuccessDeclaration =
-  | { readonly status: 204; readonly headers?: core.$ZodObject; readonly body?: never }
-  | {
-      readonly status: Exclude<SuccessStatus, 204>;
-      readonly headers?: core.$ZodObject;
-      readonly body: core.$ZodType;
-    };
+/** What an Endpoint promises when it does what was asked; which Successes carry a body is a rule. */
+type SuccessDeclaration = {
+  readonly status: SuccessStatus;
+  readonly headers?: core.$ZodObject;
+  readonly body?: core.$ZodType;
+};
 
-/** What an author writes to declare an Endpoint; `lifecycle` defaults to Active and the lists to empty. */
+/** What an author writes to declare an Endpoint; a `lifecycle` left out is Active, a list empty. */
 type EndpointDeclaration = {
   readonly name: string;
   readonly method: Method;
@@ -39,7 +37,7 @@ type EndpointDeclaration = {
   readonly lifecycle?: Lifecycle;
 };
 
-/** A declared Endpoint, kept as written so its Handlers, its client and the walker read the same schemas. */
+/** A declared Endpoint, kept as written so its Handlers, client and the walker read one schema. */
 export type Endpoint<Declaration extends EndpointDeclaration = EndpointDeclaration> =
   Readonly<Declaration> & { readonly kind: 'endpoint' };
 
@@ -47,64 +45,82 @@ type InputOfDeclaration<Declaration extends EndpointDeclaration> = NonNullable<
   Declaration['input']
 >;
 
-type ParamsRule<Declaration extends EndpointDeclaration> = [
-  PathParams<Declaration['path']>,
-] extends [never]
-  ? { readonly input?: { readonly params?: 'A path without :names takes no params' } }
-  : {
-      readonly input: {
-        readonly params: ExactParams<
-          InputOfDeclaration<Declaration>['params'],
-          PathParams<Declaration['path']>
-        >;
+type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declaration['path']
+  ? unknown
+  : [PathParams<Declaration['path']>] extends [never]
+    ? { readonly input?: { readonly params?: 'A path without :names takes no params' } }
+    : {
+        readonly input: {
+          readonly params: ExactParamsRule<
+            InputOfDeclaration<Declaration>['params'],
+            PathParams<Declaration['path']>
+          >;
+        };
       };
-    };
 
-type ExactParams<Params, Names extends string> =
+type ExactParamsMessage<Names extends string> =
+  `params declares exactly the path's :names: ${Listed<Names>}`;
+
+type ExactParamsRule<Params, Names extends string> =
   Params extends core.$ZodObject<infer Shape>
     ? [Exclude<keyof Shape, Names>, Exclude<Names, keyof Shape>] extends [never, never]
       ? unknown
-      : `params declares exactly the path's :names: ${Names}`
-    : `params declares exactly the path's :names: ${Names}`;
+      : ExactParamsMessage<Names>
+    : ExactParamsMessage<Names>;
 
-type BodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends
+type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends
   | 'GET'
   | 'HEAD'
   ? { readonly input?: { readonly body?: 'A GET or HEAD Endpoint takes no body' } }
   : unknown;
 
+type SuccessBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'HEAD'
+  ? { readonly success?: { readonly body?: 'A HEAD Endpoint answers no body' } }
+  : Declaration['success']['status'] extends 204
+    ? { readonly success?: { readonly body?: 'A 204 Success has no body' } }
+    : Declaration['success'] extends { readonly body: core.$ZodType }
+      ? unknown
+      : {
+          readonly success: {
+            readonly body: `A ${Declaration['success']['status']} Success has a body`;
+          };
+        };
+
 type HeadersRule<Declaration extends EndpointDeclaration> = {
   readonly input?: {
-    readonly headers?: LowerCaseHeaderNames<InputOfDeclaration<Declaration>['headers']>;
+    readonly headers?: HeaderNamesRule<InputOfDeclaration<Declaration>['headers']>;
   };
   readonly success?: {
-    readonly headers?: LowerCaseHeaderNames<Declaration['success']['headers']>;
+    readonly headers?: HeaderNamesRule<Declaration['success']['headers']>;
   };
 };
 
-type RequiredGuardNames<Listed extends Guard> = Listed extends {
+type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed extends {
   readonly guards: readonly (infer Required extends Guard)[];
 }
-  ? Required['name']
+  ? Exclude<LiteralNames<Required['name']>, Earlier>
   : never;
 
-type GuardOrder<Guards, Earlier extends string = never> = Guards extends readonly [
+type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
   infer First extends Guard,
   ...infer Rest,
 ]
-  ? First['name'] extends Earlier
-    ? `${First['name']} is listed twice`
-    : [Exclude<RequiredGuardNames<First>, Earlier>] extends [never]
-      ? GuardOrder<Rest, Earlier | First['name']>
-      : `${First['name']} requires ${Exclude<RequiredGuardNames<First>, Earlier>} earlier in guards`
+  ? string extends First['name']
+    ? GuardOrderRule<Rest, Earlier>
+    : First['name'] extends Earlier
+      ? `${First['name']} is listed twice`
+      : [MissingGuardNames<First, Earlier>] extends [never]
+        ? GuardOrderRule<Rest, Earlier | First['name']>
+        : `${First['name']} requires ${Listed<MissingGuardNames<First, Earlier>>} earlier in guards`
   : unknown;
 
 type GuardsRule<Declaration extends EndpointDeclaration> = {
-  readonly guards?: GuardOrder<Declaration['guards']>;
+  readonly guards?: GuardOrderRule<Declaration['guards']>;
 };
 
 type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declaration> &
-  BodyRule<Declaration> &
+  InputBodyRule<Declaration> &
+  SuccessBodyRule<Declaration> &
   HeadersRule<Declaration> &
   GuardsRule<Declaration> &
   NoInfer<DeclaredFieldsRule<Declaration, EndpointDeclaration>>;

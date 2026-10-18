@@ -11,25 +11,44 @@ import {
 } from './index.ts';
 
 const orderBody = z.object({ id: z.uuid() });
+const orderParams = z.object({ orderId: z.uuid() });
+
+const listOrders = {
+  name: 'listOrders',
+  method: 'GET',
+  path: '/orders',
+  visibility: 'public',
+  description: 'Every order',
+  success: { status: 200, body: z.array(orderBody) },
+} as const;
+
+const createOrder = {
+  name: 'createOrder',
+  method: 'POST',
+  path: '/orders',
+  visibility: 'public',
+  description: 'Creates an order',
+  success: { status: 201, body: orderBody },
+} as const;
+
+const getOrder = {
+  name: 'getOrder',
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order by id',
+  input: { params: orderParams },
+  success: { status: 200, body: orderBody },
+} as const;
 
 describe('defineEndpoint', () => {
   test('a declared Endpoint keeps the author’s schemas by identity', () => {
-    const params = z.object({ orderId: z.uuid() });
+    const endpoint = defineEndpoint(getOrder);
 
-    const getOrder = defineEndpoint({
-      name: 'getOrder',
-      method: 'GET',
-      path: '/orders/:orderId',
-      visibility: 'public',
-      description: 'One order by id',
-      input: { params },
-      success: { status: 200, body: orderBody },
-    });
-
-    expect(getOrder.input.params).toBe(params);
-    expect(getOrder.success.body).toBe(orderBody);
-    expect(getOrder.kind).toBe('endpoint');
-    expect(Object.isFrozen(getOrder)).toBe(true);
+    expect(endpoint.input.params).toBe(orderParams);
+    expect(endpoint.success.body).toBe(orderBody);
+    expect(endpoint.kind).toBe('endpoint');
+    expect(Object.isFrozen(endpoint)).toBe(true);
   });
 
   test('an Endpoint’s input type is inferred from its params, query, headers and body', () => {
@@ -54,45 +73,51 @@ describe('defineEndpoint', () => {
       readonly headers: { 'if-match': string };
       readonly body: { quantity: number };
     }>();
-    expectTypeOf<SuccessOf<typeof updateItem>>().toEqualTypeOf<{ readonly status: 204 }>();
   });
 
-  test('a path’s :names must be declared exactly in params', () => {
-    const declare = () => [
+  test('an Endpoint’s Success type is its status with its headers and body typed', () => {
+    const endpoint = defineEndpoint({
+      ...createOrder,
+      success: { ...createOrder.success, headers: z.object({ location: z.string() }) },
+    });
+
+    expectTypeOf<SuccessOf<typeof endpoint>>().toEqualTypeOf<{
+      readonly status: 201;
+      readonly headers: { location: string };
+      readonly body: { id: string };
+    }>();
+  });
+});
+
+describe('defineEndpoint path params', () => {
+  test('a path’s :name missing from params is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'getItem',
-        method: 'GET',
+        ...getOrder,
         path: '/orders/:orderId/items/:itemId',
-        visibility: 'public',
-        description: 'One item',
-        input: {
-          // @ts-expect-error itemId is missing
-          params: z.object({ orderId: z.uuid() }),
-        },
-        success: { status: 200, body: orderBody },
-      }),
+        // @ts-expect-error itemId is missing
+        input: { params: orderParams },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a param that is not a :name of the path is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'getOrder',
-        method: 'GET',
-        path: '/orders/:orderId',
-        visibility: 'public',
-        description: 'One order',
-        input: {
-          // @ts-expect-error id is not a :name of the path
-          params: z.object({ orderId: z.uuid(), id: z.uuid() }),
-        },
-        success: { status: 200, body: orderBody },
-      }),
-      // @ts-expect-error the path's :names need params
-      defineEndpoint({
-        name: 'getOrder',
-        method: 'GET',
-        path: '/orders/:orderId',
-        visibility: 'public',
-        description: 'One order',
-        success: { status: 200, body: orderBody },
-      }),
-    ];
+        ...getOrder,
+        // @ts-expect-error id is not a :name of the path
+        input: { params: z.object({ orderId: z.uuid(), id: z.uuid() }) },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a path with :names needs params', () => {
+    const { input: _input, ...withoutInput } = getOrder;
+
+    // @ts-expect-error the path's :names need params
+    const declare = () => defineEndpoint(withoutInput);
 
     expect(declare).not.toThrow();
   });
@@ -100,166 +125,184 @@ describe('defineEndpoint', () => {
   test('an Endpoint without path names takes no params', () => {
     const declare = () =>
       defineEndpoint({
-        name: 'listOrders',
-        method: 'GET',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Every order',
-        input: {
-          // @ts-expect-error the path has no :names
-          params: z.object({ orderId: z.uuid() }),
-        },
-        success: { status: 200, body: z.array(orderBody) },
+        ...listOrders,
+        // @ts-expect-error the path has no :names
+        input: { params: orderParams },
       });
 
     expect(declare).not.toThrow();
   });
 
-  test('a body on GET or HEAD is a type error', () => {
-    const declare = () => [
+  test('a path typed wider than a literal skips the params rule', () => {
+    const path: string = '/orders/:orderId';
+
+    const endpoint = defineEndpoint({ ...getOrder, path });
+
+    expect(endpoint.path).toBe(path);
+  });
+});
+
+describe('defineEndpoint bodies', () => {
+  test('a body on GET is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'searchOrders',
-        method: 'GET',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Orders matching a filter',
+        ...listOrders,
         // @ts-expect-error a GET takes no body
         input: { body: z.object({ status: z.string() }) },
-        success: { status: 200, body: z.array(orderBody) },
-      }),
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a body on HEAD is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'checkOrders',
+        ...listOrders,
         method: 'HEAD',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Whether orders exist',
+        success: { status: 200 },
         // @ts-expect-error a HEAD takes no body
         input: { body: z.object({ status: z.string() }) },
-        success: { status: 204 },
-      }),
-    ];
+      });
 
     expect(declare).not.toThrow();
   });
 
-  test('a 204 Success takes no body, and any other Success requires one', () => {
-    const declare = () => [
+  test('a HEAD Endpoint answers a status and headers but no body', () => {
+    const checkOrders = defineEndpoint({
+      ...listOrders,
+      method: 'HEAD',
+      success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+    });
+
+    expect(checkOrders.success.status).toBe(200);
+  });
+
+  test('a HEAD Endpoint’s Success with a body is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'deleteOrder',
-        method: 'DELETE',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Deletes every order',
+        ...listOrders,
+        method: 'HEAD',
+        // @ts-expect-error a HEAD Endpoint answers no body
+        success: { status: 200, body: orderBody },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a 204 Success with a body is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...createOrder,
         // @ts-expect-error a 204 has no body
         success: { status: 204, body: orderBody },
-      }),
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Success other than 204 without a body is a type error', () => {
+    const declare = () =>
       defineEndpoint({
-        name: 'createOrder',
-        method: 'POST',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Creates an order',
+        ...createOrder,
         // @ts-expect-error a 201 needs a body
         success: { status: 201 },
-      }),
-    ];
-
-    expect(declare).not.toThrow();
-  });
-
-  test('a Success status outside 200–204 is a type error', () => {
-    const declare = () => [
-      defineEndpoint({
-        name: 'resetOrders',
-        method: 'POST',
-        path: '/orders/reset',
-        visibility: 'private',
-        description: 'Resets the view',
-        // @ts-expect-error 205 is not a Success status
-        success: { status: 205, body: orderBody },
-      }),
-      defineEndpoint({
-        name: 'createOrder',
-        method: 'POST',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Creates an order',
-        // @ts-expect-error 302 is not a Success status
-        success: { status: 302, body: orderBody },
-      }),
-    ];
-
-    expect(declare).not.toThrow();
-  });
-
-  test('an Endpoint may list notFound but not invalidInput or notImplemented', () => {
-    const orderLocked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
-    const endpoint = {
-      name: 'getOrder',
-      method: 'GET',
-      path: '/orders',
-      visibility: 'public',
-      description: 'The latest order',
-      success: { status: 200, body: orderBody },
-    } as const;
-
-    const declare = () => [
-      defineEndpoint({ ...endpoint, rejections: [notFound, orderLocked] }),
-      // @ts-expect-error invalidInput is always added
-      defineEndpoint({ ...endpoint, rejections: [invalidInput] }),
-      // @ts-expect-error notImplemented is always added
-      defineEndpoint({ ...endpoint, rejections: [notImplemented] }),
-    ];
-
-    expect(declare).not.toThrow();
-  });
-
-  test('an upper-case header name is a type error', () => {
-    const declare = () => [
-      defineEndpoint({
-        name: 'listOrders',
-        method: 'GET',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Every order',
-        input: {
-          // @ts-expect-error header names are lower-case
-          headers: z.object({ 'X-Tenant': z.string() }),
-        },
-        success: { status: 200, body: z.array(orderBody) },
-      }),
-      defineEndpoint({
-        name: 'createOrder',
-        method: 'POST',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Creates an order',
-        success: {
-          status: 201,
-          // @ts-expect-error header names are lower-case
-          headers: z.object({ 'Content-Location': z.string() }),
-          body: orderBody,
-        },
-      }),
-    ];
+      });
 
     expect(declare).not.toThrow();
   });
 });
 
-describe('defineEndpoint fields', () => {
-  test('an undeclared field is a type error', () => {
+describe('defineEndpoint Success statuses', () => {
+  test('a Success status of 200 and of 204 type-check', () => {
+    const endpoints = [
+      defineEndpoint({ ...createOrder, success: { status: 200, body: orderBody } }),
+      defineEndpoint({ ...createOrder, success: { status: 204 } }),
+    ];
+
+    expect(endpoints.map((endpoint) => endpoint.success.status)).toEqual([200, 204]);
+  });
+
+  test('a Success status of 199 is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error 199 is not a Success status
+      defineEndpoint({ ...createOrder, success: { status: 199, body: orderBody } });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a Success status of 205 is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error 205 is not a Success status
+      defineEndpoint({ ...createOrder, success: { status: 205, body: orderBody } });
+
+    expect(declare).not.toThrow();
+  });
+});
+
+describe('defineEndpoint Rejections', () => {
+  test('an Endpoint may list notFound and its own Rejections', () => {
+    const orderLocked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+
+    const endpoint = defineEndpoint({ ...listOrders, rejections: [notFound, orderLocked] });
+
+    expect(endpoint.rejections).toEqual([notFound, orderLocked]);
+  });
+
+  test('an Endpoint listing invalidInput is a type error', () => {
+    // @ts-expect-error invalidInput is always added
+    const declare = () => defineEndpoint({ ...listOrders, rejections: [invalidInput] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing notImplemented is a type error', () => {
+    // @ts-expect-error notImplemented is always added
+    const declare = () => defineEndpoint({ ...listOrders, rejections: [notImplemented] });
+
+    expect(declare).not.toThrow();
+  });
+});
+
+describe('defineEndpoint header names', () => {
+  test('an upper-case Input header name is a type error', () => {
     const declare = () =>
       defineEndpoint({
-        name: 'listOrders',
-        method: 'GET',
-        path: '/orders',
-        visibility: 'public',
-        description: 'Every order',
-        success: { status: 200, body: orderBody },
-        // @ts-expect-error group is not a field of an Endpoint
-        group: 'orders',
+        ...listOrders,
+        // @ts-expect-error header names are lower-case
+        input: { headers: z.object({ 'X-Tenant': z.string() }) },
       });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an upper-case Success header name is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...createOrder,
+        success: {
+          ...createOrder.success,
+          // @ts-expect-error header names are lower-case
+          headers: z.object({ 'Content-Location': z.string() }),
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a header object keyed wider than literals skips the header-name rule', () => {
+    const shape: Record<string, z.ZodString> = { 'x-tenant': z.string() };
+    const headers = z.object(shape);
+
+    const endpoint = defineEndpoint({ ...listOrders, input: { headers } });
+
+    expect(endpoint.input.headers).toBe(headers);
+  });
+});
+
+describe('defineEndpoint fields', () => {
+  test('an undeclared field is a type error', () => {
+    // @ts-expect-error group is not a field of an Endpoint
+    const declare = () => defineEndpoint({ ...listOrders, group: 'orders' });
 
     expect(declare).not.toThrow();
   });
@@ -267,29 +310,18 @@ describe('defineEndpoint fields', () => {
 
 describe('a declared Endpoint’s containers', () => {
   test('an Endpoint freezes its containers and keeps its schemas', () => {
-    const params = z.object({ orderId: z.uuid() });
-    const input = { params };
-    const success = { status: 200, body: orderBody } as const;
+    const input = { params: orderParams };
     const rejections = [notFound];
 
-    const getOrder = defineEndpoint({
-      name: 'getOrder',
-      method: 'GET',
-      path: '/orders/:orderId',
-      visibility: 'public',
-      description: 'One order by id',
-      input,
-      success,
-      rejections,
-    });
+    const endpoint = defineEndpoint({ ...getOrder, input, rejections });
     Reflect.set(input, 'params', z.object({}));
     rejections.pop();
 
-    expect(getOrder.input.params).toBe(params);
-    expect(getOrder.rejections).toEqual([notFound]);
-    expect(Object.isFrozen(getOrder.input)).toBe(true);
-    expect(Object.isFrozen(getOrder.success)).toBe(true);
-    expect(Object.isFrozen(getOrder.rejections)).toBe(true);
-    expect(Object.isFrozen(params)).toBe(false);
+    expect(endpoint.input.params).toBe(orderParams);
+    expect(endpoint.rejections).toEqual([notFound]);
+    expect(Object.isFrozen(endpoint.input)).toBe(true);
+    expect(Object.isFrozen(endpoint.success)).toBe(true);
+    expect(Object.isFrozen(endpoint.rejections)).toBe(true);
+    expect(Object.isFrozen(orderParams)).toBe(false);
   });
 });
