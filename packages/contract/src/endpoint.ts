@@ -16,7 +16,7 @@ type InputDeclaration = {
   readonly body?: core.$ZodType;
 };
 
-/** What an Endpoint promises when it does what was asked; which Successes carry a body is a rule. */
+/** What an Endpoint promises when it does what was asked; a rule says which carry a body. */
 type SuccessDeclaration = {
   readonly status: SuccessStatus;
   readonly headers?: core.$ZodObject;
@@ -128,7 +128,7 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
   GuardsRule<Declaration> &
   NoInfer<DeclaredFieldsRule<Declaration, EndpointDeclaration>>;
 
-/** Declares one HTTP method on one literal path, refusing in its type what TypeScript can state exactly. */
+/** Declares one HTTP method on one literal path, refusing what TypeScript can state exactly. */
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(
   declaration: Declaration & EndpointRules<Declaration>,
 ): Endpoint<Declaration> {

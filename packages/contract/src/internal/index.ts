@@ -9,7 +9,7 @@ import type { StandardRejection } from '../standard-rejections.ts';
 
 export { isOpen } from '../open.ts';
 
-/** The `kind` every declaration carries, which the walker switches on to tell declarations apart. */
+/** The `kind` every declaration carries, which the walker switches on to tell them apart. */
 export type Kind =
   | Contract['kind']
   | Application['kind']

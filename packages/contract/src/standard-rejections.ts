@@ -17,7 +17,7 @@ export const invalidInput: StandardRejection<'invalidInput'> = Object.freeze({
   name: 'invalidInput',
 });
 
-/** The Rejection an Endpoint lists, like any of its own, when it may answer that nothing was found. */
+/** The Rejection an Endpoint lists, like any of its own, when it may answer that nothing exists. */
 export const notFound: StandardRejection<'notFound'> = Object.freeze({
   kind: 'standard-rejection',
   name: 'notFound',
@@ -36,7 +36,7 @@ type StandardRejectionDeclaration<Status extends number> = {
   readonly body?: never;
 };
 
-/** What a Definitions Package may give each Standard Rejection: never a body, which is cf-loom's. */
+/** What a Definitions Package may give each Standard Rejection: never a body, which is cf-loom's */
 export type StandardRejectionDeclarations = {
   readonly invalidInput?: StandardRejectionDeclaration<RejectionStatus>;
   readonly notFound?: StandardRejectionDeclaration<RejectionStatus>;

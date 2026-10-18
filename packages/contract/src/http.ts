@@ -4,7 +4,7 @@ import type { Listed, LiteralNames } from './rules.ts';
 /** The HTTP methods an Endpoint may declare; any other is a type error. */
 export type Method = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
 
-/** The statuses a Success may declare: 205 and 206 carry HTTP semantics cf-loom does not implement. */
+/** The statuses a Success may declare: 205 and 206 carry semantics cf-loom does not implement. */
 export type SuccessStatus = 200 | 201 | 202 | 203 | 204;
 
 type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;

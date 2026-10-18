@@ -14,11 +14,11 @@ type DefinitionsDeclaration = {
   readonly standardRejections?: StandardRejectionDeclarations;
 };
 
-/** A declared Definitions Package, which a Contract lists on its root to resolve what it imports. */
+/** A declared Definitions Package, listed on a root to resolve what the Contract imports. */
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
   Readonly<Declaration> & { readonly kind: 'definitions' };
 
-/** Declares the Guards, schemas and Rejections several Contracts share, and their Standard Rejections. */
+/** Declares the Guards, schemas, Rejections and Standard Rejections several Contracts share. */
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, DefinitionsDeclaration>>,
 ): Definitions<Declaration> {

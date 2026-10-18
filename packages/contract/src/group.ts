@@ -9,7 +9,7 @@ type GroupDeclaration = {
   readonly endpoints: readonly [Endpoint, ...Endpoint[]];
 };
 
-/** A declared Group, which organizes Endpoints for code and documentation and adds nothing to them. */
+/** A declared Group, which organizes Endpoints for code and documentation and adds nothing. */
 export type Group<Declaration extends GroupDeclaration = GroupDeclaration> =
   Readonly<Declaration> & { readonly kind: 'group' };
 

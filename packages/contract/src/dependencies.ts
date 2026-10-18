@@ -6,7 +6,7 @@ import type { StandardRejections } from './standard-rejections.ts';
 
 type ExportedVisibility = Exclude<Visibility, 'private'>;
 
-/** An Event as a Contract Package exports it: enough to key it by name and version and to subscribe to it. */
+/** An Event as a Contract Package exports it: enough to key it and to subscribe to it. */
 type ProvidedEvent = {
   readonly kind: 'event';
   readonly name: string;
@@ -14,7 +14,7 @@ type ProvidedEvent = {
   readonly visibility: ExportedVisibility;
 };
 
-/** The `contract` a Contract Package exports: its Public and Internal Elements, stamped with its version by `publish`. */
+/** The `contract` a Contract Package exports: its Public and Internal Elements and its version. */
 export type ContractPackage = {
   readonly name: string;
   readonly version: string;
@@ -33,7 +33,7 @@ type Selection<Provider extends ContractPackage> = {
   readonly events?: readonly ElementOf<Provider['events']>[];
 };
 
-type Selected<Chosen, Part extends keyof Selection<ContractPackage>> = Chosen extends {
+type SelectedIn<Chosen, Part extends keyof Selection<ContractPackage>> = Chosen extends {
   readonly [Key in Part]: readonly (infer Element)[];
 }
   ? Element
@@ -42,18 +42,18 @@ type Selected<Chosen, Part extends keyof Selection<ContractPackage>> = Chosen ex
 type EventName<Event extends ProvidedEvent> = `${Uncapitalize<Event['name']>}V${Event['version']}`;
 
 type EndpointsByName<Endpoints> = {
-  readonly [Selected in Endpoints as Selected extends Endpoint
-    ? Selected['name']
-    : never]: Selected;
+  readonly [Provided in Endpoints as Provided extends Endpoint
+    ? Provided['name']
+    : never]: Provided;
 };
 
 type EventsByName<Events> = {
-  readonly [Selected in Events as Selected extends ProvidedEvent
-    ? EventName<Selected>
-    : never]: Selected;
+  readonly [Provided in Events as Provided extends ProvidedEvent
+    ? EventName<Provided>
+    : never]: Provided;
 };
 
-/** The Elements of one Provider that a Contract uses, keyed by their names in code, with the version it was declared against. */
+/** What a Contract uses of one Provider, keyed by name in code, and the version it relied on. */
 export type Dependencies<
   Endpoints = Readonly<Record<string, Endpoint>>,
   Events = Readonly<Record<string, ProvidedEvent>>,
@@ -66,7 +66,7 @@ export type Dependencies<
   readonly events: Events;
 };
 
-/** Declares what a Contract uses of one Provider, so its client and Subscriptions reach nothing else. */
+/** Declares what a Contract uses of one Provider, so its client and Subscriptions reach no more. */
 export function defineDependencies<
   const Provider extends ContractPackage,
   const Chosen extends Selection<Provider>,
@@ -74,8 +74,8 @@ export function defineDependencies<
   provider: Provider,
   selection: Chosen & NoInfer<DeclaredFieldsRule<Chosen, Selection<Provider>>>,
 ): Dependencies<
-  EndpointsByName<Selected<Chosen, 'endpoints'>>,
-  EventsByName<Selected<Chosen, 'events'>>
+  EndpointsByName<SelectedIn<Chosen, 'endpoints'>>,
+  EventsByName<SelectedIn<Chosen, 'events'>>
 > {
   const endpoints = (selection.endpoints ?? []).map((endpoint) => [endpoint.name, endpoint]);
   const events = (selection.events ?? []).map((event) => [eventName(event), event]);

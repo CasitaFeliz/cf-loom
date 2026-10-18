@@ -19,7 +19,7 @@ export type Contract<Declaration extends ContractDeclaration = ContractDeclarati
 
 type PublicEndpoint = Endpoint & { readonly visibility: 'public' };
 
-/** A Dependency an Application may declare: Public Endpoints only, since it runs outside the internal network. */
+/** What an Application may depend on: Public Endpoints only, as it runs outside the network. */
 type ApplicationDependencies = Dependencies<
   Readonly<Record<string, PublicEndpoint>>,
   Readonly<Record<string, never>>

@@ -1,4 +1,4 @@
-/** What every declaration returns: what was written, its plain containers copied and frozen, with its kind. */
+/** What every declaration returns: what was written, its containers copied and frozen, a kind. */
 export function frozenDeclaration<const Kind extends string, Fields extends object>(
   kind: Kind,
   fields: Fields,
@@ -22,7 +22,7 @@ function frozenContainer(value: unknown): unknown {
   return Object.freeze(frozenFields(value));
 }
 
-/** A zod schema and a declaration, which carries a `kind`, keep their identity; anything else plain is copied. */
+/** Only plain objects without a `kind` are copied: a zod schema and a declaration keep identity. */
 function isPlainContainer(value: unknown): value is object {
   if (typeof value !== 'object' || value === null || 'kind' in value) {
     return false;

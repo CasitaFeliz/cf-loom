@@ -22,7 +22,7 @@ type GuardDeclaration = {
   readonly rejections?: readonly Rejection[];
 };
 
-/** A declared Guard, which an Endpoint attaches and each Service implements with its GuardHandler. */
+/** A declared Guard, which Endpoints attach and each Service implements with a GuardHandler. */
 export type Guard<Declaration extends GuardDeclaration = GuardDeclaration> =
   Readonly<Declaration> & { readonly kind: 'guard' };
 
