@@ -53,21 +53,27 @@ function eventFailures(
   { at, dependencies }: LocatedDependencies,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
-  return Object.entries(dependencies.events ?? {}).flatMap(([name, event]) => {
-    const eventAt = [...at, 'events', name];
-    if (rootKind === 'application') {
-      const message = `An Application subscribes to no Event: ${name}`;
-      return [failure(eventAt, 'application-dependency', message)];
-    }
-    if (!isEvent(event)) {
-      return [failure(eventAt, 'dependency-selection', `${selection}: ${name} is not an Event`)];
-    }
-    const visibility: unknown = event.visibility;
-    if (visibility === 'private') {
-      return [failure(eventAt, 'dependency-selection', `${selection}: ${name} is private`)];
-    }
-    return [];
-  });
+  return Object.entries(dependencies.events ?? {}).flatMap(([name, event]) =>
+    selectedEventFailures({ at: [...at, 'events', name], name, event }, rootKind),
+  );
+}
+
+function selectedEventFailures(
+  { at, name, event }: { readonly at: Path; readonly name: string; readonly event: unknown },
+  rootKind: Root['kind'],
+): readonly DeclarationFailure[] {
+  if (rootKind === 'application') {
+    const message = `An Application subscribes to no Event: ${name}`;
+    return [failure(at, 'application-dependency', message)];
+  }
+  if (!isEvent(event)) {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
+  }
+  const visibility: unknown = event.visibility;
+  if (visibility === 'private') {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
+  }
+  return [];
 }
 
 function isEvent(
