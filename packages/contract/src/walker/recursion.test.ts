@@ -260,4 +260,25 @@ describe('walkSchemas: recursion', () => {
       defs,
     });
   });
+
+  test('many schemas that all refer to each other without an id fail once each at most', () => {
+    const count = 8;
+    const schemas: z.ZodObject[] = [];
+    for (let index = 0; index < count; index++) {
+      const shape = {};
+      for (let other = 0; other < count; other++) {
+        Object.defineProperty(shape, `to${other}`, {
+          enumerable: true,
+          get: () => schemas[other],
+        });
+      }
+      schemas.push(z.object(shape));
+    }
+
+    const walked = walkSchemas([{ at: ['body'], schema: schemas[0]! }], () => undefined);
+
+    const failures = walked.kind === 'not-allowed' ? walked.failures : [];
+    expect(walked.kind).toBe('not-allowed');
+    expect(failures.length).toBeLessThanOrEqual(count);
+  });
 });

@@ -20,11 +20,13 @@ export function walked<Value>(value: Value): Walked<Value> {
   return { kind: 'walked', value };
 }
 
-/** Every value when each walked, else every failure of all of them, so none hides another. */
+/**
+ * Every value when each walked, else every failure of all of them, so none hides another; a
+ * schema whose failure was already reported fails with none.
+ */
 export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonly Value[]> {
-  const failures = failuresOf(list);
-  if (failures.length > 0) {
-    return { kind: 'not-allowed', failures };
+  if (list.some(isNotAllowed)) {
+    return { kind: 'not-allowed', failures: failuresOf(list) };
   }
   return walked(list.filter(isWalked).map((success) => success.value));
 }
