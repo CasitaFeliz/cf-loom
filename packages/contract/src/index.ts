@@ -38,6 +38,5 @@ export {
   invalidInput,
   notFound,
   notImplemented,
-  openEnum,
-  openUnion,
 } from './declarations/index.ts';
+export { openEnum, openUnion } from './open/index.ts';

@@ -23,7 +23,6 @@ export type {
   RequiredContextOf,
   SuccessOf,
 } from './inference.ts';
-export { isOpen, openEnum, openUnion } from './open.ts';
 export type { Kind } from './predicates.ts';
 export {
   isApplication,

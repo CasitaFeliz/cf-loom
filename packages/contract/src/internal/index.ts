@@ -1,5 +1,5 @@
 export type { Kind } from '../declarations/index.ts';
-export { isOpen } from '../declarations/index.ts';
+export { isOpen } from '../open/index.ts';
 export type {
   DeclarationFailure,
   Failure,
