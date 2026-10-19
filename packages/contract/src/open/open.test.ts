@@ -3,7 +3,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import * as contract from '../index.ts';
-import { isOpen } from '../internal/index.ts';
+import { encodedValueOf, isOpen } from '../internal/index.ts';
 
 type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
 
@@ -37,6 +37,55 @@ describe('openEnum', () => {
     const declare = () => contract.openEnum([1, 2]);
 
     expect(declare).not.toThrow();
+  });
+});
+
+describe('openEnumReader', () => {
+  test('a declared value reads as itself and any other string as its Unknown case', () => {
+    const stage = contract.openEnumReader(['packed', 'shipped']);
+
+    const read = [stage.parse('shipped'), stage.parse('lost')];
+
+    expect(read).toEqual(['shipped', { unknown: 'lost' }]);
+    expect(stage.safeParse(1).success).toBe(false);
+  });
+
+  test('its type is the declared values or the Unknown case', () => {
+    const stage = contract.openEnumReader(['packed', 'shipped']);
+
+    expectTypeOf<z.output<typeof stage>>().toEqualTypeOf<
+      'packed' | 'shipped' | { unknown: string }
+    >();
+  });
+
+  test('a declared value and an Unknown case are written back as their text', () => {
+    const stage = contract.openEnumReader(['packed', 'shipped']);
+
+    const written = [encodedValueOf(stage, 'packed'), encodedValueOf(stage, { unknown: 'lost' })];
+
+    expect(written).toEqual([
+      { kind: 'value', value: 'packed' },
+      { kind: 'value', value: 'lost' },
+    ]);
+  });
+
+  test('an Unknown case holding a declared value is refused, and so is a bare unknown string', () => {
+    const stage = contract.openEnumReader(['packed', 'shipped']);
+
+    const written = [encodedValueOf(stage, { unknown: 'packed' }), encodedValueOf(stage, 'lost')];
+
+    expect(written).toEqual([
+      {
+        kind: 'issues',
+        issues: [
+          { path: [], code: 'invalid_value', message: 'A declared value, not an Unknown case' },
+        ],
+      },
+      {
+        kind: 'issues',
+        issues: [{ path: [], code: 'invalid_value', message: expect.any(String) }],
+      },
+    ]);
   });
 });
 

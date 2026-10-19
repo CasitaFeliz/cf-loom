@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { defineRejection, invalidInput, notFound } from '../index.ts';
 import {
   bodyOf,
   committedValues,
@@ -11,6 +13,7 @@ import {
   headerValuesOf,
   invalidInputBodyOf,
   invalidInputBodyReader,
+  invalidInputResponseOf,
   isHeaderText,
   isJsonContentType,
   isQueryText,
@@ -21,6 +24,7 @@ import {
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionEnvelopeOf,
+  rejectionReaderOf,
   reservedCodes,
   reservedFaults,
   type SchemaNode,
@@ -440,6 +444,49 @@ describe('the invalid-input body', () => {
         { in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
       ],
     });
+  });
+});
+
+describe('the invalid-input Rejection', () => {
+  test('it answers the resolved code, status and message with cf-loom’s body', async () => {
+    const standards = {
+      invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
+      notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+      notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+    } as const;
+    const issues = [
+      { part: 'input.query', path: ['page'], code: 'invalid_type', message: 'A number' },
+    ] as const;
+
+    const response = invalidInputResponseOf(issues, standards);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      rejection: {
+        code: 'BAD_REQUEST',
+        message: 'The request is invalid',
+        body: {
+          issues: [{ in: 'query', path: ['page'], code: 'invalid_type', message: 'A number' }],
+        },
+      },
+    });
+  });
+});
+
+describe('rejectionReaderOf', () => {
+  test('a Rejection’s body is read by its declared schema, invalid input’s by cf-loom’s reader', () => {
+    const locked = z.object({ lockedAt: z.iso.datetime() });
+    const orderLocked = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body: locked,
+    });
+    const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });
+
+    const readers = [orderLocked, gone, invalidInput, notFound].map(rejectionReaderOf);
+
+    expect(readers).toEqual([locked, undefined, invalidInputBodyReader, undefined]);
   });
 });
 

@@ -1,7 +1,6 @@
 import type { Endpoint } from '@casitafeliz/loom-contract';
 import {
-  attachmentsOf,
-  demandParts,
+  demandIssuesOf,
   headerTextsOf,
   type InputIssue,
   inputParts,
@@ -35,11 +34,9 @@ export type ReadyInput =
  */
 export function readyInputOf(endpoint: Endpoint, passed: unknown): ReadyInput {
   const sent = sentInputOf(passed);
-  for (const { guard } of attachmentsOf(endpoint)) {
-    const demands = parsedPartsOf(demandParts, (part) => schemaOf(guard, part), sent);
-    if (demands.kind === 'issues') {
-      return { kind: 'invalid', issues: demands.issues };
-    }
+  const demandIssues = demandIssuesOf(endpoint, sent);
+  if (demandIssues.length > 0) {
+    return { kind: 'invalid', issues: demandIssues };
   }
   if (schemaOf(endpoint, 'input.body') !== undefined && sent['body'] === undefined) {
     return { kind: 'invalid', issues: [notJsonBodyIssue] };

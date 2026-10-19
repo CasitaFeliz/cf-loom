@@ -11,7 +11,7 @@ export {
   standardRejectionNames,
 } from '../declarations/index.ts';
 export type { Parsed, ParsedParts, SchemaIssue } from '../issues/index.ts';
-export { parsedPartsOf, parseValue } from '../issues/index.ts';
+export { demandIssuesOf, encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
   ApplicationSnapshot,
@@ -39,12 +39,14 @@ export type {
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
+  exportedEntryOf,
   hashedTextOf,
   isExportedEndpoint,
   isLive,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,
+  textPartNodesOf,
 } from '../snapshot/index.ts';
 export type {
   AnswerableRejection,
@@ -78,6 +80,7 @@ export type {
   WalkedTextParts,
 } from '../validation/index.ts';
 export {
+  answerableByCodeOf,
   answerableRejectionsOf,
   attachedGuardsOf,
   attachmentsOf,
@@ -87,7 +90,6 @@ export {
   failureLineOf,
   fieldsOf,
   follows,
-  identityOf,
   inOf,
   inputParts,
   isInputPart,
@@ -168,6 +170,7 @@ export {
   internalError,
   invalidInputBodyOf,
   invalidInputBodyReader,
+  invalidInputResponseOf,
   isHeaderText,
   isJsonContentType,
   isQueryText,
@@ -180,6 +183,7 @@ export {
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionEnvelopeOf,
+  rejectionReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,

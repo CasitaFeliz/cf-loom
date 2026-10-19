@@ -10,6 +10,7 @@ import {
   type Endpoint,
   notFound,
   openEnum,
+  openEnumReader,
   type StandardRejections,
 } from '@casitafeliz/loom-contract';
 import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
@@ -58,9 +59,7 @@ function getOrderOf<const Stage extends z.ZodType>(stage: Stage) {
 
 const getOrder = getOrderOf(openEnum(['packed', 'shipped']));
 
-const getOrderReader = getOrderOf(
-  z.union([z.enum(['packed', 'shipped']), z.string().transform((unknown) => ({ unknown }))]),
-);
+const getOrderReader = getOrderOf(openEnumReader(['packed', 'shipped']));
 
 const createOrder = defineEndpoint({
   name: 'createOrder',

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { parseValue } from '../internal/index.ts';
+import { openEnumReader } from '../index.ts';
+import { encodedValueOf, parseValue } from '../internal/index.ts';
 
 const order = z.object({ id: z.uuid(), lines: z.array(z.object({ quantity: z.int().min(1) })) });
 
@@ -154,5 +155,49 @@ describe('parseValue', () => {
     const codes = codesOf(schema, { b: 'x' });
 
     expect(codes).toEqual(['invalid_value']);
+  });
+});
+
+describe('encodedValueOf', () => {
+  const shipment = z.object({
+    stage: openEnumReader(['packed', 'shipped']),
+    parcels: z.array(z.object({ weight: z.number().positive() })),
+  });
+
+  test('a value is written as its readers read it: unknown keys stripped, Unknown cases as text', () => {
+    const value = { stage: { unknown: 'lost' }, parcels: [{ weight: 2, label: 'x' }], extra: 1 };
+
+    const encoded = encodedValueOf(shipment, value);
+
+    expect(encoded).toEqual({ kind: 'value', value: { stage: 'lost', parcels: [{ weight: 2 }] } });
+  });
+
+  test('a value that breaks a constraint is its Issues, with their paths', () => {
+    const value = { stage: 'packed', parcels: [{ weight: 0 }] };
+
+    const encoded = encodedValueOf(shipment, value);
+
+    expect(encoded).toEqual({
+      kind: 'issues',
+      issues: [{ path: ['parcels', 0, 'weight'], code: 'too_small', message: expect.any(String) }],
+    });
+  });
+
+  test('a missing field is required', () => {
+    const encoded = encodedValueOf(shipment, { parcels: [] });
+
+    expect(encoded).toMatchObject({
+      kind: 'issues',
+      issues: [{ path: ['stage'], code: 'required' }],
+    });
+  });
+
+  test('an Unknown case holding a declared value is invalid_value at its path', () => {
+    const encoded = encodedValueOf(shipment, { stage: { unknown: 'shipped' }, parcels: [] });
+
+    expect(encoded).toMatchObject({
+      kind: 'issues',
+      issues: [{ path: ['stage'], code: 'invalid_value' }],
+    });
   });
 });

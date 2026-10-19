@@ -19,11 +19,22 @@ export function parseValue<Schema extends core.$ZodType>(
   schema: Schema,
   value: unknown,
 ): Parsed<core.output<Schema>> {
-  const parsed = z.safeParse(schema, value);
-  if (parsed.success) {
-    return { kind: 'value', value: parsed.data };
+  return parsedOf(z.safeParse(schema, value), value);
+}
+
+/**
+ * A value written as its schema's readers read it, encoded back through the schema: its
+ * constraints checked, unknown keys stripped and an Unknown case turned into its text.
+ */
+export function encodedValueOf(schema: core.$ZodType, value: unknown): Parsed {
+  return parsedOf(z.safeEncode(schema, value), value);
+}
+
+function parsedOf<Value>(result: z.ZodSafeParseResult<Value>, value: unknown): Parsed<Value> {
+  if (result.success) {
+    return { kind: 'value', value: result.data };
   }
-  const issues = parsed.error.issues.flatMap((issue) => schemaIssuesOf(issue, value));
+  const issues = result.error.issues.flatMap((issue) => schemaIssuesOf(issue, value));
   return { kind: 'issues', issues };
 }
 

@@ -4,6 +4,7 @@ export type {
   CallOptions,
   Client,
   ClientOptions,
+  ConfiguredName,
   DeprecationNotice,
   Fetch,
   OnDeprecation,

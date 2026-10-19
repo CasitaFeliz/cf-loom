@@ -23,3 +23,22 @@ export function isOpen(schema: core.$ZodType): boolean {
   const parent = schema._zod.parent;
   return openSchemas.has(schema) || (parent !== undefined && isOpen(parent));
 }
+
+/** What an Unknown case may never hold: a value its Open Enum declares, which reads as itself. */
+const declaredMessage = 'A declared value, not an Unknown case';
+
+/**
+ * An Open Enum's Reader schema, which generated readers call: a declared value reads as itself and
+ * any other string as its Unknown case, `{ unknown }`, which is written back as that string.
+ */
+export function openEnumReader<const Values extends readonly [string, ...string[]]>(
+  values: Values,
+) {
+  const declared: ReadonlySet<string> = new Set(values);
+  const undeclared = z.string().refine((text) => !declared.has(text), declaredMessage);
+  const unknownCase = z.codec(undeclared, z.object({ unknown: z.string() }), {
+    decode: (unknown) => ({ unknown }),
+    encode: ({ unknown }) => unknown,
+  });
+  return z.union([z.enum(values), unknownCase]);
+}

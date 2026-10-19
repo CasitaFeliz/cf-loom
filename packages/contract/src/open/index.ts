@@ -1,1 +1,1 @@
-export { isOpen, openEnum } from './open.ts';
+export { isOpen, openEnum, openEnumReader } from './open.ts';

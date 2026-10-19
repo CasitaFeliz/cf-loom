@@ -9,6 +9,7 @@ import {
   notImplemented,
 } from '../index.ts';
 import {
+  answerableByCodeOf,
   answerableRejectionsOf,
   contextProvidersOf,
   inOf,
@@ -81,6 +82,26 @@ describe('answerableRejectionsOf', () => {
     const answerable = answerableRejectionsOf(apiKey);
 
     expect(answerable).toEqual([unauthenticated, notImplemented]);
+  });
+});
+
+describe('answerableByCodeOf', () => {
+  test('each Rejection an Endpoint answers is found by its resolved code', () => {
+    const standards = {
+      ...standardRejectionDefaults,
+      notFound: { code: 'NO_ORDER', status: 404, message: 'No order' } as const,
+    };
+
+    const byCode = answerableByCodeOf(getOrder, standards);
+
+    expect([...byCode.keys()]).toEqual([
+      'NO_ORDER',
+      'FORBIDDEN',
+      'UNAUTH',
+      'INVALID_INPUT',
+      'NOT_IMPLEMENTED',
+    ]);
+    expect(byCode.get('NO_ORDER')).toBe(notFound);
   });
 });
 

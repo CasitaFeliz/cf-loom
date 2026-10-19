@@ -6,6 +6,7 @@ import {
   defineGroup,
   type Endpoint,
   openEnum,
+  openEnumReader,
   type StandardRejections,
 } from '@casitafeliz/loom-contract';
 import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
@@ -248,10 +249,7 @@ describe('an Open Enum Success header', () => {
     success: {
       status: 204,
       headers: z.object({
-        'x-stage': z.union([
-          z.enum(['packed', 'shipped']),
-          z.string().transform((unknown) => ({ unknown })),
-        ]),
+        'x-stage': openEnumReader(['packed', 'shipped']),
       }),
     },
   });
@@ -297,10 +295,7 @@ describe('an Open Enum Success header', () => {
       success: {
         status: 200,
         body: z.object({
-          stage: z.union([
-            z.enum(['packed', 'shipped']),
-            z.string().transform((unknown) => ({ unknown })),
-          ]),
+          stage: openEnumReader(['packed', 'shipped']),
         }),
       },
     });
