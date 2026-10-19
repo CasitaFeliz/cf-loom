@@ -15,7 +15,6 @@ import {
   type Guard,
   notFound,
   openEnum,
-  openUnion,
 } from '../index.ts';
 import {
   type OriginOf,
@@ -638,8 +637,11 @@ describe('validateContract: the README’s examples', () => {
     },
     rejections: [notFound, orderLocked],
   });
-  const card = z.object({ type: z.literal('card'), last4: z.string() });
-  const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
+  const payment = z.object({
+    type: openEnum(['card', 'transfer']),
+    last4: z.string().optional(),
+    iban: z.string().optional(),
+  });
   const createOrder = defineEndpoint({
     name: 'createOrder',
     method: 'POST',
@@ -647,7 +649,7 @@ describe('validateContract: the README’s examples', () => {
     visibility: 'public',
     description: 'Creates an order',
     guards: [apiKey],
-    input: { body: z.object({ total: money, payment: openUnion('type', [card, transfer]) }) },
+    input: { body: z.object({ total: money, payment }) },
     success: { status: 201, body: z.object({ id: z.uuid() }) },
   });
   const updateOrder = defineEndpoint({

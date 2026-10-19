@@ -435,7 +435,6 @@ describe('walkSchemas: recursion', () => {
       type: 'tagged',
       discriminator: 'type',
       variants: { '"leaf"': leafNode, '"branch"': { type: 'ref', name: 'branch' } },
-      open: false,
     } as const;
     const branchDef = {
       type: 'object',

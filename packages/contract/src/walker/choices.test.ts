@@ -2,7 +2,7 @@ import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { openEnum, openUnion } from '../index.ts';
+import { openEnum } from '../index.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
@@ -120,13 +120,12 @@ describe('walkSchemas: unions', () => {
 });
 
 describe('walkSchemas: discriminated unions', () => {
-  test('a discriminated union is tagged, its variants keyed by canonical JSON', () => {
+  test('a discriminated union is a closed tagged node, its variants keyed by canonical JSON', () => {
     expect(walkBody(z.discriminatedUnion('type', [card, transfer]))).toEqual(
       walkedTo({
         type: 'tagged',
         discriminator: 'type',
         variants: { '"card"': cardNode, '"transfer"': transferNode },
-        open: false,
       }),
     );
   });
@@ -145,26 +144,6 @@ describe('walkSchemas: discriminated unions', () => {
     });
   });
 
-  test('an openUnion is open', () => {
-    expect(walkBody(openUnion('type', [card, transfer]))).toMatchObject(
-      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: true }),
-    );
-  });
-
-  test('a described openUnion stays open', () => {
-    const payment = openUnion('type', [card, transfer]).describe('A payment');
-
-    expect(walkBody(payment)).toMatchObject(
-      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: true }),
-    );
-  });
-
-  test('an openUnion from another copy of loom-contract is open', () => {
-    expect(walkBody(built.openUnion('type', [card]))).toMatchObject(
-      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: true }),
-    );
-  });
-
   test('a variant whose discriminator has several values fails', () => {
     const either = z.object({ type: z.literal(['card', 'debit']) });
 
@@ -176,23 +155,11 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
-  test('an openUnion variant whose discriminator is not a string fails', () => {
-    const numbered = z.object({ type: z.literal(1) });
-    const variants = [card, numbered] as unknown as [typeof card, typeof card];
-
-    expect(walkBody(openUnion('type', variants))).toEqual(
-      refusedAt(
-        ['body', 'variants', 1],
-        'an openUnion() variant whose discriminator is not a string literal',
-      ),
-    );
-  });
-
-  test('a closed discriminated union variant whose discriminator is a number is allowed', () => {
+  test('a discriminated union variant whose discriminator is a number is allowed', () => {
     const numbered = z.object({ type: z.literal(1) });
 
     expect(walkBody(z.discriminatedUnion('type', [card, numbered]))).toMatchObject(
-      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: false }),
+      walkedTo({ type: 'tagged', discriminator: 'type', variants: {} }),
     );
   });
 
