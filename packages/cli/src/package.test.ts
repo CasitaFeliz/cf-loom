@@ -534,6 +534,23 @@ describe('cf-loom package: the built package', () => {
     });
   });
 
+  test('a discriminated union’s variants are in canonical order, whatever order they are declared in', () => {
+    const variants = [
+      "z.object({ kind: z.literal('circle'), r: z.number() })",
+      "z.object({ kind: z.literal('square'), side: z.number() })",
+    ];
+    const unionOf = (listed: readonly string[]) =>
+      `z.object({ shape: z.discriminatedUnion('kind', [${listed.join(', ')}]) })`;
+    const first = aProject(withDeclarations([], '', unionOf(variants)));
+    const second = aProject(withDeclarations([], '', unionOf([...variants].reverse())));
+
+    cfLoom(first, 'package');
+    cfLoom(second, 'package');
+
+    const endpoint = 'contract-package/src/endpoints/ping.ts';
+    expect(read(second, endpoint)).toBe(read(first, endpoint));
+  });
+
   test('cfLoom.dependencies is in canonical order, whatever order the root lists them in', () => {
     const alpha = aProviderPackage('alpha-service');
     const beta = aProviderPackage('beta-service');
