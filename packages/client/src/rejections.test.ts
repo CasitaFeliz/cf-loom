@@ -92,12 +92,6 @@ function contractPackageOf<
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const;
-
 /** A Provider whose Definitions Package resolved its Standard Rejections to codes of its own. */
 const orders = contractPackageOf({ editOrder, getOrder }, {
   invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
