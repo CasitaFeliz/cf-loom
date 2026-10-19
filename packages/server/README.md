@@ -1,6 +1,6 @@
 # @casitafeliz/loom-server
 
-`serve`, which answers a Contract's Endpoints with their Handlers; `@casitafeliz/loom-server/node-http` is its adapter for `node:http`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`serve`, which answers a Contract's Endpoints with their Handlers, and its types (see [Types](#types)); `@casitafeliz/loom-server/node-http` is its adapter for `node:http`, `nodeHttp` and `nodeListener`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 ## Serving
 
@@ -29,10 +29,28 @@ process.on('SIGTERM', () => {
 
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). `serve(contract, handlers, { maxBodyBytes })` refuses a larger body with `BODY_TOO_LARGE` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), and counts the bytes read, not `Content-Length`; without it cf-loom sets no limit, leaving it to the host or the organization's gateway. The limit is operational, not part of the Contract.
 
-How `serve` validates every Outcome before sending it is in [Validation](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md#validation). `serve(contract, handlers, { onFault })` receives every Fault cf-loom answers that the Handler did not return itself: a throw or a return that is no Outcome, with the error (or a `TypeError` naming what came back) as `cause`; `INVALID_OUTCOME`, with the issues; and a Context or Qualifier `serve` built that breaks the Contract, the runtime's own bug, with the issues. A Fault the Handler returns never reaches it. Without an `onFault`, they go to the console (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.
+`serve()` checks the Service before the first request, so a Service assembled otherwise than its Contract says fails at startup, not inside a request. It throws, naming what it found, on a root that is no Contract; on an Endpoint that is not Retired whose Handler the map lacks, or holds a value `handle()` did not return for that very Endpoint; on a Guard such an Endpoint attaches without such a Handler; on a part that travels as text, an Endpoint's path params, query or headers or a Guard's demands, that `generate` would refuse; and on a Deprecated Endpoint whose `deprecatedAt` the map lacks, since the map is then stale. A Retired Endpoint needs no Handler, and keys the Contract does not name are ignored, so a test can spread the map (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README). Every response of a Deprecated Endpoint carries the `Deprecation` header, from the `deprecatedAt` the Handler map carries (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README).
+
+How `serve` validates every Outcome before sending it is in [Validation](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md#validation). `serve(contract, handlers, { onServiceFault })` receives every Fault the Service's side produced, a `ServiceFault` naming its `endpoint` and, when a GuardHandler produced it, its `guard`:
+
+- `returned`, a Fault the Handler returned, as `fault`; its `cause` is the Handler's own and never travels;
+- `thrown`, a throw or a return that is no Outcome, as the Fault answered, with the error (or a `TypeError` naming what came back) as its `cause`;
+- `invalid-outcome`, an Outcome that broke a constraint, answered `INVALID_OUTCOME`, with the issues;
+- `runtime-bug`, a Context or Qualifier `serve` built that breaks the Contract, answered as a Fault with `committed: 'no'`, with the issues.
+
+The Caller's Faults, `RETIRED`, `NO_SUCH_ENDPOINT` and `BODY_TOO_LARGE`, never reach it; `onOutcome` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue, `<endpoint>[ <guard>]: <part>.<path> <code>: <message>`, or the Fault's message and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.
 
 `serve(contract, handlers, { onOutcome })` receives `{ endpoint, status, kind, durationMs }` for every request it answers: the Endpoint's name, absent when none matched, the HTTP status, `'success'`, `'rejection'` or `'fault'`, and the time taken. It is the hook for metrics and tracing; cf-loom ships no exporter, the backend is the organization's. On the Caller's side the `fetch` option of the client does the same (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README).
 
+Both hooks are called before the response is returned; what one throws is the Service's own bug, and the handler `serve` returns rejects with it.
+
 ## node-http
 
-`@casitafeliz/loom-server/node-http` exports `nodeHttp`, the adapter that connects the handler `serve` returns to `node:http`, as `nodeHttp(http).listen(3000)` does above.
+`@casitafeliz/loom-server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. A request whose `Host` header is missing or names no URL is answered 400. A request's body is streamed to `serve` for every method but `GET` and `HEAD`, and a response to `HEAD` carries no body. What the handler rejects with, a hook's throw, reaches the process.
+
+## Types
+
+- `Http`, `(request: Request) => Promise<Response>`: the fetch-style handler `serve` returns.
+- `ServeOptions`, `{ maxBodyBytes?, onServiceFault?, onOutcome? }`: what is operational about serving and no part of the Contract.
+- `ServiceFault`: what `onServiceFault` receives, `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
+- `AnsweredRequest`, `{ endpoint?, status, kind, durationMs }`: what `onOutcome` receives.

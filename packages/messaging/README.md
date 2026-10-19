@@ -18,7 +18,7 @@ export const { publisher, sender, consume, connect, close } = messaging(contract
 
 `messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [In memory](#in-memory)). Creating `messaging` opens no connection. Publishing, sending or consuming before `connect` throws, and so does connecting while connected; `close()` returns to not connected, so a test connects in its setup and closes in its teardown. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [Applying the plan](#applying-the-plan)), fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection. Broker options come from the Service; cf-loom has no defaults for them.
 
-`messaging(contract, { onFault })` receives what Message Handlers end or fail with: a Message ended for failing its schema, a Fault with `retryable: false`, and anything thrown. Without an `onFault`, they go to the console (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+`messaging(contract, { onServiceFault })` receives what Message Handlers end or fail with: a Message ended for failing its schema, a Fault with `retryable: false`, and anything thrown. Without an `onServiceFault`, they go to the console (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
 ## Publishing and sending
 
