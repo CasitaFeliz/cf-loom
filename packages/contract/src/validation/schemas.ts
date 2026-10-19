@@ -1,9 +1,26 @@
 import type { $ZodType } from 'zod/v4/core';
-import type { LocatedSchema, Path, SchemaNode, WalkedSchemas } from '../walker/index.ts';
+import type {
+  LocatedSchema,
+  NotAllowed,
+  ObjectNode,
+  Path,
+  SchemaNode,
+  WalkedLocation,
+  WalkedSchemas,
+} from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';
-import { endpointParts, guardParts, isSchema, type Part, slotAt, writtenAt } from './parts.ts';
+import {
+  endpointParts,
+  guardParts,
+  isObjectPart,
+  isSchema,
+  type ObjectPart,
+  type Part,
+  slotAt,
+  writtenAt,
+} from './parts.ts';
 import { entriesOf, textOf } from './written.ts';
 
 /**
@@ -87,6 +104,31 @@ export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): No
   }
   const nodeOf = (owner: unknown, part: Part) => nodesByOwner.get(owner)?.get(part);
   return { slots: walkedSlots, nodeOf, defs: walked.defs };
+}
+
+/**
+ * The node of a declaration's part, if it declares that part: an object for a part that travels as
+ * text, since the validation refuses any other there.
+ */
+export type NodeLookup = {
+  (declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  (declaration: unknown, part: Part): SchemaNode | undefined;
+};
+
+/** Finds walked nodes by declaration and part, a text part's typed as the object it is. */
+export function nodeLookupOf(nodes: Nodes): NodeLookup {
+  function nodeOf(declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined {
+    const node = nodes.nodeOf(declaration, part);
+    return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
+  }
+  return nodeOf;
+}
+
+/** What the walk refused at a location; a cycle's failure comes back wherever the cycle is met. */
+export function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
+  return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {

@@ -1,5 +1,11 @@
-import { isKeyedRecord, type ObjectNode, type Path, type SchemaNode } from '../walker/index.ts';
-import { type DeclarationFailure, failure } from './failures.ts';
+import {
+  isKeyedRecord,
+  keyedRecordsOf,
+  type ObjectNode,
+  type Path,
+  type SchemaNode,
+} from '../walker/index.ts';
+import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
 import { isObjectPart, isQueryOrHeadersPart, type Part, partFieldOf, slotAt } from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
@@ -26,8 +32,20 @@ const nouns: Readonly<Record<TextPart, string>> = {
   headers: 'A header',
 };
 
+/**
+ * Every rule the parts that travel as text break, judged on their walked nodes, so `generate` and
+ * the runtime's startup check read text parts by the same rules.
+ */
+export function textPartFailures(nodes: Nodes): readonly Failure[] {
+  const queryOrHeaders = nodes.slots.filter((slot) => isQueryOrHeadersPart(slot.part));
+  return [
+    ...textFailures(nodes),
+    ...keyedRecordsOf({ queryOrHeaders, readShapes: [] }, nodes.defs),
+  ];
+}
+
 /** Every text part holds only text, judged on the walked nodes. */
-export function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
+function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
   return nodes.slots.flatMap(partFailures);
 }
 

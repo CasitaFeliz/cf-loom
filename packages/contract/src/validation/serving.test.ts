@@ -6,7 +6,7 @@ import {
   endpointsOf,
   isInputPart,
   pathSegmentsOf,
-  textNodesOf,
+  walkedTextPartsOf,
 } from '../internal/index.ts';
 
 const userToken = defineGuard({
@@ -115,7 +115,7 @@ describe('isInputPart', () => {
   });
 });
 
-describe('textNodesOf', () => {
+describe('walkedTextPartsOf', () => {
   test('walks the parts of an Endpoint that travel as text, each an object of its fields', () => {
     const getOrder = defineEndpoint({
       name: 'getOrder',
@@ -130,7 +130,7 @@ describe('textNodesOf', () => {
       success: { status: 204 },
     });
 
-    const walked = textNodesOf(getOrder);
+    const walked = walkedTextPartsOf(getOrder);
 
     expect(walked.kind === 'valid' && walked.nodeOf('input.query')).toEqual({
       type: 'object',
@@ -141,7 +141,7 @@ describe('textNodesOf', () => {
   });
 
   test('walks what a Guard demands', () => {
-    const walked = textNodesOf(userToken);
+    const walked = walkedTextPartsOf(userToken);
 
     expect(walked.kind === 'valid' && walked.nodeOf('demands.headers')?.fields).toHaveProperty(
       'authorization',
@@ -159,11 +159,30 @@ describe('textNodesOf', () => {
       success: { status: 204 },
     });
 
-    const walked = textNodesOf(search);
+    const walked = walkedTextPartsOf(search);
 
     expect(walked).toMatchObject({
       kind: 'invalid',
       failures: [{ rule: 'not-text', message: expect.stringContaining('filter') }],
+    });
+  });
+
+  test('a query that is a record keyed by an enum is a failure, as generate words it', () => {
+    const filtered = defineEndpoint({
+      name: 'filtered',
+      method: 'GET',
+      path: '/filtered',
+      visibility: 'public',
+      description: 'Filters',
+      input: { query: z.record(z.enum(['a', 'b']), z.string()) as never },
+      success: { status: 204 },
+    });
+
+    const walked = walkedTextPartsOf(filtered);
+
+    expect(walked).toMatchObject({
+      kind: 'invalid',
+      failures: [{ kind: 'not-allowed', at: ['endpoints', 'filtered', 'input', 'query'] }],
     });
   });
 
@@ -178,7 +197,7 @@ describe('textNodesOf', () => {
       success: { status: 204 },
     });
 
-    const walked = textNodesOf(lookup);
+    const walked = walkedTextPartsOf(lookup);
 
     expect(walked).toMatchObject({ kind: 'invalid', failures: [{ rule: 'not-an-object-schema' }] });
   });

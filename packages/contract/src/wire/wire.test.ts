@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  canTravelAsHeader,
   committedValues,
   deprecationHeaderOf,
   faultEnvelopeOf,
@@ -8,8 +9,10 @@ import {
   isJsonContentType,
   jsonContentType,
   rejectionEnvelopeOf,
+  reservedCodes,
   reservedFaults,
   type SchemaNode,
+  textOfValue,
   valueOfText,
 } from '../internal/index.ts';
 
@@ -27,11 +30,11 @@ describe('valueOfText', () => {
   });
 
   test('a boolean is exactly true or false', () => {
-    const texts = ['true', 'false', 'TRUE', '1'];
+    const texts = ['true', 'false', 'TRUE', 'FALSE', '1', '0'];
 
     const values = texts.map((text) => valueOfText(boolean, [text]));
 
-    expect(values).toEqual([true, false, 'TRUE', '1']);
+    expect(values).toEqual([true, false, 'TRUE', 'FALSE', '1', '0']);
   });
 
   test('a literal and an enum take their declared value by its text, a numeric one included', () => {
@@ -69,7 +72,26 @@ describe('valueOfText', () => {
   });
 });
 
-describe('the envelopes', () => {
+describe('textOfValue and canTravelAsHeader', () => {
+  test('a value travels as the text JavaScript writes it', () => {
+    expect([textOfValue(3), textOfValue(-1.5), textOfValue(true), textOfValue('v1')]).toEqual([
+      '3',
+      '-1.5',
+      'true',
+      'v1',
+    ]);
+  });
+
+  test('a header value holds no NUL, LF or CR and nothing above U+00FF', () => {
+    const accepted = ['v1', 'a, b', 'café', '\u00ff', ''];
+    const refused = ['€', 'a\nb', 'a\rb', 'a\u0000b', '😀'];
+
+    expect(accepted.map(canTravelAsHeader)).toEqual(Array(5).fill(true));
+    expect(refused.map(canTravelAsHeader)).toEqual(Array(5).fill(false));
+  });
+});
+
+describe('the Envelopes', () => {
   test('a Rejection without a body travels with no body key', () => {
     const envelope = rejectionEnvelopeOf({ code: 'NOT_FOUND', message: 'Not found' });
 
@@ -112,11 +134,21 @@ describe('the envelopes', () => {
 describe('the reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
     expect(Object.entries(reservedFaults)).toEqual([
-      ['RETIRED', { status: 410, committed: 'no' }],
-      ['NO_SUCH_ENDPOINT', { status: 404, committed: 'no' }],
-      ['BODY_TOO_LARGE', { status: 413, committed: 'no' }],
-      ['INVALID_OUTCOME', { status: 500, committed: 'unknown' }],
+      ['RETIRED', { status: 410, committed: 'no', message: 'The Endpoint is retired' }],
+      [
+        'NO_SUCH_ENDPOINT',
+        { status: 404, committed: 'no', message: 'No Endpoint has this method and path' },
+      ],
+      ['BODY_TOO_LARGE', { status: 413, committed: 'no', message: 'The body is too large' }],
+      [
+        'INVALID_OUTCOME',
+        { status: 500, committed: 'unknown', message: 'The Outcome broke the Contract' },
+      ],
     ]);
+  });
+
+  test('every reserved code a declaration may not take has its row', () => {
+    expect(Object.keys(reservedFaults)).toEqual([...reservedCodes]);
   });
 
   test('a Fault travels with its reserved code’s status, else 503 when retryable and 500 otherwise', () => {

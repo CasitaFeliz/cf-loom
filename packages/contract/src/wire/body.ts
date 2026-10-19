@@ -1,4 +1,4 @@
-import { isJsonContentType } from '@casitafeliz/loom-contract/internal';
+import { isJsonContentType } from './headers.ts';
 
 /** A request's body as read: the parsed JSON, why it cannot be read as JSON, or too large to read. */
 export type Body =

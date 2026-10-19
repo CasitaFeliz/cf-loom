@@ -58,10 +58,25 @@ const misattached = defineEndpoint({
   success: { status: 204 },
 });
 
+const addNote = defineEndpoint({
+  name: 'addNote',
+  method: 'POST',
+  path: '/notes',
+  visibility: 'public',
+  description: 'Adds a note',
+  guards: [userToken],
+  input: { body: z.object({ text: z.string() }) },
+  success: { status: 204 },
+});
+
 const contract = defineContract({
   name: 'orders-service',
   groups: [
-    defineGroup({ name: 'orders', description: 'Orders', endpoints: [updateOrder, misattached] }),
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [updateOrder, misattached, addNote],
+    }),
   ],
 });
 
@@ -86,7 +101,11 @@ const updateOrderHandler = handle(updateOrder, (_input, context) => {
 });
 
 const handlers = {
-  endpoints: { updateOrder: updateOrderHandler, misattached: handle.stub(misattached) },
+  endpoints: {
+    updateOrder: updateOrderHandler,
+    misattached: handle.stub(misattached),
+    addNote: handle(addNote, () => success()),
+  },
   guards: { userToken: userTokenHandler, permission: permissionHandler },
   deprecatedAt: {},
 };
@@ -128,6 +147,28 @@ describe('serve: Guards', () => {
         },
       },
     });
+  });
+
+  test('Guards run before the body is read: a malformed or oversized body gets the Guard’s answer', async () => {
+    const http = serve(contract, handlers, { maxBodyBytes: 8 });
+    const headers = { 'content-type': 'application/json' };
+
+    const answers = await Promise.all(
+      ['nope', JSON.stringify({ text: 'x'.repeat(100) })].map(async (body) => {
+        const response = await http(
+          new Request('http://test/notes', { method: 'POST', headers, body }),
+        );
+        return { status: response.status, body: await response.json() };
+      }),
+    );
+
+    const guardIssue = {
+      rejection: { body: { issues: [{ in: 'headers', path: ['authorization'] }] } },
+    };
+    expect(answers).toMatchObject([
+      { status: 400, body: guardIssue },
+      { status: 400, body: guardIssue },
+    ]);
   });
 
   test('a GuardHandler’s Rejection stops the request with its declared status', async () => {

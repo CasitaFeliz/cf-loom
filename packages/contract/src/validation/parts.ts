@@ -1,5 +1,5 @@
 import { $ZodType } from 'zod/v4/core';
-import type { Endpoint, Guard, Rejection } from '../declarations/index.ts';
+import type { Endpoint, Guard, IssueCode, Rejection } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { partOf } from './written.ts';
 
@@ -93,8 +93,19 @@ export function partFieldOf<Named extends Exclude<Part, 'schema'>>(part: Named):
 /** A part of what a request carries: the Endpoint's Input, or what a Guard demands. */
 export type InputPart = (typeof inputParts)[number] | (typeof demandParts)[number];
 
+/** The slot an Issue sits in: a part of an Endpoint, a Guard or a Rejection, or the Rejections. */
+export type IssuePart = Exclude<Part, 'schema'> | 'rejections';
+
+/** One way a value broke its part of the Contract: the part and path, cf-loom's code and a message; never the value. */
+export type Issue = {
+  readonly part: IssuePart;
+  readonly path: readonly (string | number)[];
+  readonly code: IssueCode;
+  readonly message: string;
+};
+
 /** Whether an Issue's part is one the Caller sent, so the runtime answers it as invalid input. */
-export function isInputPart(part: Part | 'rejections'): part is InputPart {
+export function isInputPart(part: IssuePart): part is InputPart {
   const sent: readonly string[] = [...inputParts, ...demandParts];
   return sent.includes(part);
 }

@@ -1,5 +1,5 @@
-import type { IssueCode } from '../declarations/index.ts';
-import { type InputPart, inOf } from '../validation/index.ts';
+import type { IssueCode, ReservedCode } from '../declarations/index.ts';
+import { type InputPart, type Issue, inOf } from '../validation/index.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
@@ -7,29 +7,43 @@ export const committedValues = ['no', 'yes', 'unknown'] as const;
 /** Whether the change was committed, which alone decides whether retrying is safe. */
 export type Committed = (typeof committedValues)[number];
 
-/** The codes cf-loom answers outside the Contract, as a Fault. */
-export type ReservedCode = 'RETIRED' | 'NO_SUCH_ENDPOINT' | 'BODY_TOO_LARGE' | 'INVALID_OUTCOME';
+/** The one text a Fault says by default, so no internal detail reaches a Caller. */
+export const internalError = 'Internal error';
 
-/** The codes cf-loom answers outside the Contract, each with its status and `committed`, as Over HTTP lists them. */
-export const reservedFaults: Readonly<
-  Record<ReservedCode, { readonly status: number; readonly committed: Committed }>
-> = {
-  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
-  RETIRED: { status: 410, committed: 'no' },
-  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
-  NO_SUCH_ENDPOINT: { status: 404, committed: 'no' },
-  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
-  BODY_TOO_LARGE: { status: 413, committed: 'no' },
-  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
-  INVALID_OUTCOME: { status: 500, committed: 'unknown' },
+/** How a reserved code travels: its status, whether the change was committed, and its fixed text. */
+type ReservedFault = {
+  readonly status: number;
+  readonly committed: Committed;
+  readonly message: string;
 };
 
-/** A Rejection as it travels over HTTP. */
+/** The codes cf-loom answers outside the Contract, as Over HTTP lists them; a text carries nothing received. */
+export const reservedFaults = {
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  RETIRED: { status: 410, committed: 'no', message: 'The Endpoint is retired' },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  NO_SUCH_ENDPOINT: {
+    status: 404,
+    committed: 'no',
+    message: 'No Endpoint has this method and path',
+  },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  BODY_TOO_LARGE: { status: 413, committed: 'no', message: 'The body is too large' },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  INVALID_OUTCOME: {
+    status: 500,
+    /** `serve`'s value: the Outcome may have been committed before it broke the Contract; the client's depends on what failed. */
+    committed: 'unknown',
+    message: 'The Outcome broke the Contract',
+  },
+} as const satisfies Readonly<Record<ReservedCode, ReservedFault>>;
+
+/** A Rejection's Envelope, as it travels over HTTP. */
 export type RejectionEnvelope = {
   readonly rejection: { readonly code: string; readonly message: string; readonly body?: unknown };
 };
 
-/** A Fault as it travels over HTTP, with a code only when it is a reserved one. */
+/** A Fault's Envelope, as it travels over HTTP, with a code only when it is a reserved one. */
 export type FaultEnvelope = {
   readonly fault: {
     readonly code?: ReservedCode;
@@ -74,23 +88,21 @@ export function faultStatusOf(fault: {
   return fault.retryable ? 503 : 500;
 }
 
-/** One way the request broke the part of the Contract the Caller sent; never the received value. */
-export type InputIssue = {
-  readonly part: InputPart;
-  readonly path: readonly (string | number)[];
-  readonly code: IssueCode;
-  readonly message: string;
-};
+/** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
+export type InputIssue = Issue & { readonly part: InputPart };
 
-/** The body of the invalid-input Rejection, cf-loom's own: each Issue with the part of the request it read. */
-export function invalidInputBodyOf(issues: readonly InputIssue[]): {
+/** The body of the invalid-input Rejection, cf-loom's own, as it travels and as the client decodes it. */
+export type InvalidInputBody = {
   readonly issues: readonly {
     readonly in: ReturnType<typeof inOf>;
     readonly path: readonly (string | number)[];
     readonly code: IssueCode;
     readonly message: string;
   }[];
-} {
+};
+
+/** The body of the invalid-input Rejection: each Issue with the part of the request it read. */
+export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputBody {
   return {
     issues: issues.map(({ part, path, code, message }) => ({
       in: inOf(part),

@@ -33,7 +33,7 @@ const getOrder = defineEndpoint({
   input: { params: z.object({ orderId: z.string().min(3) }) },
   success: {
     status: 200,
-    headers: z.object({ 'x-total': z.int(), etag: z.string() }),
+    headers: z.object({ 'x-total': z.int(), etag: z.string().optional() }),
     body: z.object({ id: z.string(), total: z.int().min(0) }),
   },
   rejections: [notFound, orderLocked],
@@ -113,6 +113,45 @@ describe('serve: a Success', () => {
     expect(response.status).toBe(200);
     expect([response.headers.get('x-total'), response.headers.get('etag')]).toEqual(['3', 'v1']);
     expect(await response.json()).toEqual(order);
+  });
+
+  test('an optional header the Handler leaves out is not sent', async () => {
+    const { http } = serveWith(() => success({ headers: { 'x-total': 3 }, body: order }));
+
+    const response = await http(getRequest.clone());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has('etag')).toBe(false);
+  });
+
+  test.each([
+    ['above U+00FF', 'v€'],
+    ['with a line feed', 'v\n1'],
+    ['with a carriage return', 'v\r1'],
+    ['with a NUL', 'v\u00001'],
+  ])('a header value %s cannot travel, so it is INVALID_OUTCOME', async (_case, etag) => {
+    const { http, faults } = serveWith(() =>
+      success({ headers: { 'x-total': 3, etag }, body: order }),
+    );
+
+    const response = await http(getRequest.clone());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+    expect(faults).toEqual([
+      {
+        kind: 'invalid-outcome',
+        endpoint: 'getOrder',
+        issues: [
+          {
+            part: 'success.headers',
+            path: ['etag'],
+            code: 'invalid_format',
+            message: expect.any(String),
+          },
+        ],
+      },
+    ]);
   });
 
   test('a 204 sends no body and no content type', async () => {

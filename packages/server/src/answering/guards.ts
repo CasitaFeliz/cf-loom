@@ -1,7 +1,6 @@
 import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { contextProvidersOf } from '@casitafeliz/loom-contract/internal';
+import { contextProvidersOf, textPartsOf } from '@casitafeliz/loom-contract/internal';
 import { runGuard } from '@casitafeliz/loom-handlers/internal';
-import { textPartsOf } from '../request/index.ts';
 import type { ServedAttachment } from '../served/index.ts';
 import type { Call } from './call.ts';
 import { type Answered, answeredOfFailedRun, answeredOfNotSuccess } from './runs.ts';
@@ -17,18 +16,19 @@ export type Admitted =
  */
 export async function admittedOf(call: Call, standards: StandardRejections): Promise<Admitted> {
   const contexts = new Map<Guard, unknown>();
+  const endpoint = call.endpoint.declared;
   for (const attachment of call.endpoint.attachments) {
     const run = await runGuard(attachment.handler, givenOf(call, attachment, contexts), standards);
-    const party = { endpoint: call.endpoint.endpoint.name, guard: attachment.guard.name };
+    const faultedBy = { endpoint: endpoint.name, guard: attachment.guard.name };
     if (run.kind !== 'answered') {
-      return { kind: 'answered', answered: answeredOfFailedRun(run, party, standards) };
+      return { kind: 'answered', answered: answeredOfFailedRun(run, faultedBy, standards) };
     }
     if (run.answer.kind !== 'admitted') {
-      return { kind: 'answered', answered: answeredOfNotSuccess(run.answer, party) };
+      return { kind: 'answered', answered: answeredOfNotSuccess(run.answer, faultedBy) };
     }
     contexts.set(attachment.guard, run.answer.context);
   }
-  return { kind: 'admitted', context: contextOf(call.endpoint.endpoint, contexts) };
+  return { kind: 'admitted', context: contextOf(endpoint, contexts) };
 }
 
 function givenOf(call: Call, attachment: ServedAttachment, contexts: ReadonlyMap<Guard, unknown>) {

@@ -130,6 +130,35 @@ describe('serve: the body', () => {
     expect(answers).toEqual(Array(3).fill(malformed('The body is not JSON')));
   });
 
+  test('a byte that is no UTF-8 inside a JSON string is malformed, never replaced', async () => {
+    const encoded = new TextEncoder().encode('{"email":"a@example.com","quantity":2,"note":"x"}');
+    const noteAt = encoded.lastIndexOf(0x78);
+    encoded[noteAt] = 0xff;
+
+    const response = await http(post(encoded));
+
+    expect(await issuesOf(response)).toEqual(malformed('The body is not JSON'));
+  });
+
+  test('a stream that fails after a complete JSON value is malformed', async () => {
+    const failing = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(JSON.stringify(order)));
+        controller.error(new Error('the Caller went away'));
+      },
+    });
+    const request = new Request('http://test/orders', {
+      method: 'POST',
+      headers: json,
+      body: failing,
+      duplex: 'half',
+    } as RequestInit);
+
+    const response = await http(request);
+
+    expect(await issuesOf(response)).toEqual(malformed('The body is not JSON'));
+  });
+
   test('a body whose stream fails while read is malformed', async () => {
     const failing = new ReadableStream({
       start(controller) {
@@ -187,6 +216,18 @@ describe('serve: maxBodyBytes', () => {
         message: 'The body is too large',
       },
     });
+  });
+
+  test('a body of exactly maxBodyBytes is read, and one byte more is BODY_TOO_LARGE', async () => {
+    const exact = JSON.stringify({ ...order, note: '' });
+    const atLimit = serve(contract, handlers, { maxBodyBytes: exact.length });
+
+    const statuses = [
+      (await atLimit(post(exact))).status,
+      (await atLimit(post(JSON.stringify({ ...order, note: 'x' })))).status,
+    ];
+
+    expect(statuses).toEqual([201, 413]);
   });
 
   test('a body within maxBodyBytes is read', async () => {

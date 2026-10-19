@@ -1,14 +1,15 @@
-import type { Endpoint } from '@casitafeliz/loom-contract';
-import type { ResolvedOutcome } from '@casitafeliz/loom-handlers';
+import type { StandardRejections } from '@casitafeliz/loom-contract';
+import { deprecationHeaderOf, matchOf } from '@casitafeliz/loom-contract/internal';
+import type { Issue } from '@casitafeliz/loom-handlers';
 import { runEndpoint } from '@casitafeliz/loom-handlers/internal';
-import { matchOf } from '../matching/index.ts';
-import { type ResolvedSuccess, reservedResponseOf, withDeprecation } from '../response/index.ts';
-import type { ServedContract, ServedEndpoint } from '../served/index.ts';
-import { type Call, callOf, inputOf, type Reading } from './call.ts';
+import { reservedResponseOf } from '../response/index.ts';
+import type { LiveEndpoint, ServedContract, ServedEndpoint } from '../served/index.ts';
+import { type Call, callOf, inputOf, type UnreadBody } from './call.ts';
 import { admittedOf } from './guards.ts';
 import {
   type Answered,
   answeredOfFailedRun,
+  answeredOfInvalidInput,
   answeredOfNotSuccess,
   answeredOfSuccess,
 } from './runs.ts';
@@ -17,52 +18,68 @@ import {
 export type AnsweredFor = { readonly endpoint?: ServedEndpoint; readonly answered: Answered };
 
 /** One request answered: matched to its Endpoint, then its Guards, its Input and its Handler. */
-export async function answerOf(
-  served: ServedContract,
-  request: Request,
-  maxBodyBytes: number | undefined,
-): Promise<AnsweredFor> {
-  const match = matchOf(served.endpoints, request.method, new URL(request.url).pathname);
+export async function answerOf(served: ServedContract, request: Request): Promise<AnsweredFor> {
+  const url = new URL(request.url);
+  const match = matchOf(served.endpoints, request.method, url.pathname);
   if (match.kind === 'none') {
     return { answered: { kind: 'fault', response: reservedResponseOf('NO_SUCH_ENDPOINT') } };
   }
-  const endpoint = match.route;
+  const endpoint = match.matched;
   switch (endpoint.kind) {
     case 'retired':
       return { endpoint, answered: { kind: 'fault', response: reservedResponseOf('RETIRED') } };
     case 'live': {
-      const call = callOf(endpoint, request, match.params);
-      const answered = await answeredCallOf(call, { standards: served.standards, maxBodyBytes });
-      const response = withDeprecation(answered.response, endpoint.deprecatedAt);
-      return { endpoint, answered: { ...answered, response } };
+      const call = callOf(endpoint, request, { url, params: match.params });
+      const answered = await answeredCallOf(call, served);
+      return { endpoint, answered: withDeprecation(answered, endpoint) };
     }
   }
 }
 
-async function answeredCallOf(call: Call, reading: Reading): Promise<Answered> {
-  const admitted = await admittedOf(call, reading.standards);
+async function answeredCallOf(call: Call, served: ServedContract): Promise<Answered> {
+  const admitted = await admittedOf(call, served.standards);
   if (admitted.kind === 'answered') {
     return admitted.answered;
   }
-  const input = await inputOf(call, reading);
-  if (input.kind === 'answered') {
-    return input.answered;
+  const read = await inputOf(call, served.maxBodyBytes);
+  if (read.kind !== 'input') {
+    return answeredOfUnread(read, call, served.standards);
   }
-  const given = { input: input.input, context: admitted.context };
-  const run = await runEndpoint(call.endpoint.handler, given, reading.standards);
-  const party = { endpoint: call.endpoint.endpoint.name };
+  const given = { input: read.input, context: admitted.context };
+  const run = await runEndpoint(call.endpoint.handler, given, served.standards);
+  const faultedBy = { endpoint: call.endpoint.declared.name };
   if (run.kind !== 'answered') {
-    return answeredOfFailedRun(run, party, reading.standards);
+    return answeredOfFailedRun(run, faultedBy, served.standards);
   }
-  return answeredOfOutcome(run.answer, party);
+  const outcome = run.answer;
+  if (outcome.kind === 'success') {
+    return answeredOfSuccess(outcome, faultedBy);
+  }
+  return answeredOfNotSuccess(outcome, faultedBy);
 }
 
-function answeredOfOutcome(
-  outcome: ResolvedOutcome<Endpoint>,
-  party: { readonly endpoint: string },
-): Answered {
-  if (outcome.kind === 'success') {
-    return answeredOfSuccess(outcome as ResolvedSuccess);
+/** A body that could not be read, answered alone: too large unread, or not JSON. */
+function answeredOfUnread(read: UnreadBody, call: Call, standards: StandardRejections): Answered {
+  switch (read.kind) {
+    case 'too-large':
+      return { kind: 'fault', response: reservedResponseOf('BODY_TOO_LARGE') };
+    case 'malformed': {
+      const issue: Issue = {
+        part: 'input.body',
+        path: [],
+        code: 'malformed',
+        message: read.message,
+      };
+      const faultedBy = { endpoint: call.endpoint.declared.name };
+      return answeredOfInvalidInput([issue], faultedBy, standards);
+    }
   }
-  return answeredOfNotSuccess(outcome, party);
+}
+
+/** Every response of a Deprecated Endpoint, whatever it answers, carries its `Deprecation` header. */
+function withDeprecation(answered: Answered, endpoint: LiveEndpoint): Answered {
+  if (endpoint.deprecatedAt !== undefined) {
+    answered.response.headers.set('deprecation', deprecationHeaderOf(endpoint.deprecatedAt));
+  }
+  return answered;
 }

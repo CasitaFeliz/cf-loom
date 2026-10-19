@@ -42,14 +42,14 @@ export type Run<Answer> =
 
 /**
  * How one call of an EndpointHandler went, as `serve` answers it. Inside `serve`, an Issue at
- * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onFault`.
+ * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onServiceFault`.
  */
 export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
 
 /**
  * How one call of a GuardHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
- * to `onFault`.
+ * to `onServiceFault`.
  */
 export type GuardRun = Run<ResolvedAdmission<Guard>>;
 

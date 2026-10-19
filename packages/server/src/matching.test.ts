@@ -58,12 +58,22 @@ const getItem = defineEndpoint({
   success: { status: 204 },
 });
 
+const getRoot = defineEndpoint({
+  name: 'getRoot',
+  method: 'GET',
+  path: '/',
+  visibility: 'public',
+  description: 'The root',
+  success: { status: 200, body: z.object({ root: z.boolean() }) },
+});
+
 const handlers = {
   endpoints: {
     getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId, extra: true })),
     getSummary: handle(getSummary, () => success({ count: 3 })),
     getInvoice: handle(getInvoice, () => success()),
     getItem: handle(getItem, () => success()),
+    getRoot: handle(getRoot, () => success({ root: true })),
   },
   guards: {},
   deprecatedAt: {},
@@ -77,7 +87,7 @@ function contractOf(endpoints: readonly [Endpoint, ...Endpoint[]]) {
 }
 
 const http = serve(
-  contractOf([getOrder, getSummary, getInvoice, getLatestItem, getItem]),
+  contractOf([getOrder, getSummary, getInvoice, getLatestItem, getItem, getRoot]),
   handlers,
 );
 
@@ -121,6 +131,32 @@ describe('serve: matching a request to an Endpoint', () => {
     expect(answers[1]?.body).toEqual(noSuchEndpoint);
   });
 
+  test('OPTIONS and a CORS preflight are NO_SUCH_ENDPOINT unless declared', async () => {
+    const preflight = {
+      method: 'OPTIONS',
+      headers: { origin: 'http://app', 'access-control-request-method': 'GET' },
+    };
+
+    const answers = [
+      await answerOf('/orders/o-1', { method: 'OPTIONS' }),
+      await answerOf('/orders/o-1', preflight),
+    ];
+
+    expect(answers).toEqual([
+      { status: 404, body: noSuchEndpoint },
+      { status: 404, body: noSuchEndpoint },
+    ]);
+  });
+
+  test('an Endpoint at the root path answers there, and only there', async () => {
+    const answers = [await answerOf('/'), await answerOf('/?x=1')];
+
+    expect(answers).toEqual([
+      { status: 200, body: { root: true } },
+      { status: 200, body: { root: true } },
+    ]);
+  });
+
   test('a Retired Endpoint still declared is RETIRED, and shadows the param Endpoint that would match', async () => {
     const answer = await answerOf('/items/latest');
 
@@ -162,6 +198,16 @@ describe('serve: matching a request to an Endpoint', () => {
     const statuses = await Promise.all(paths.map(async (path) => (await answerOf(path)).status));
 
     expect(statuses).toEqual([404, 404, 404, 404, 404, 404]);
+  });
+
+  test('the path is the URL’s path: dot segments, %2e included, are removed before matching', async () => {
+    const answers = [
+      await answerOf('/orders/o-1/../summary'),
+      await answerOf('/orders/o-1/%2e%2e/summary'),
+      await answerOf('/orders/./summary'),
+    ];
+
+    expect(answers).toEqual(Array(3).fill({ status: 200, body: { count: 3 } }));
   });
 
   test('the query string takes no part in matching', async () => {

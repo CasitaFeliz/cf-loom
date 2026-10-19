@@ -18,7 +18,7 @@ export type {
   LocatedStandardRejection,
   Root,
 } from './located.ts';
-export type { InputPart, ObjectPart, Part } from './parts.ts';
+export type { InputPart, Issue, IssuePart, ObjectPart, Part } from './parts.ts';
 export {
   demandParts,
   fieldsOf,
@@ -30,12 +30,10 @@ export {
   successParts,
 } from './parts.ts';
 export { attachedGuardsOf, attachmentsOf, contextProvidersOf } from './references.ts';
+export type { NodeLookup } from './schemas.ts';
 export type { ResolvedStandard } from './standard-codes.ts';
 export { standardRejectionsOf } from './standard-codes.ts';
-export type { TextNodes, TextPart } from './text-nodes.ts';
-export { textNodesOf } from './text-nodes.ts';
 export type {
-  NodeLookup,
   RootPackage,
   ValidatedContract,
   ValidatedSchemas,
@@ -43,3 +41,5 @@ export type {
 } from './validate.ts';
 export { validateContract } from './validate.ts';
 export type { ValidatedCode, ValidatedDeclarations, ValidatedGuard } from './validated.ts';
+export type { TextPart, WalkedTextParts } from './walked-text-parts.ts';
+export { walkedTextPartsOf } from './walked-text-parts.ts';

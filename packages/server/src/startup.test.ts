@@ -133,8 +133,82 @@ describe('serve: what it checks before the first request', () => {
     const serving = () => serve(contract, stale);
 
     expect(serving).toThrow(
-      'deprecatedAt.findOrder is missing from the Handler map: run cf-loom generate',
+      'deprecatedAt.findOrder is missing or not an instant in the Handler map: run cf-loom generate',
     );
+  });
+
+  test.each([
+    'Oct 17 2026',
+    '2026-10-17',
+    '2026-10-17T09:30:00.000Z',
+    '2026-10-17T09:30:00+02:00',
+    'yesterday',
+  ])('a deprecatedAt that is not a stamp generate writes, %s, throws', (stamp) => {
+    const loose = { ...handlers, deprecatedAt: { findOrder: stamp } };
+
+    const serving = () => serve(contract, loose);
+
+    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
+  });
+
+  test('a map with no deprecatedAt at all throws the same, never a TypeError', () => {
+    const { deprecatedAt: _stamps, ...withoutStamps } = handlers;
+
+    const serving = () => serve(contract, withoutStamps as never);
+
+    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
+  });
+
+  test('a stamp for an Active Endpoint or a name the Contract lacks is ignored', () => {
+    const extra = {
+      ...handlers,
+      deprecatedAt: { ...handlers.deprecatedAt, getOrder: 'junk', other: 'junk' },
+    };
+
+    const http = serve(contract, extra);
+
+    expect(typeof http).toBe('function');
+  });
+
+  test('a Handler the map only inherits is no Handler', () => {
+    const inherited = { ...handlers, endpoints: Object.create(handlers.endpoints) };
+
+    const serving = () => serve(contract, inherited);
+
+    expect(serving).toThrow('endpoints.getOrder has no Handler in the Handler map');
+  });
+
+  test('a GuardHandler written for another Guard throws, naming the Guard', () => {
+    const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit()) } };
+
+    const serving = () => serve(contract, swapped as never);
+
+    expect(serving).toThrow('guards.apiKey holds no Handler handle() returned for it');
+  });
+
+  test('a text part the walker refuses throws, as generate words it', () => {
+    const since = defineEndpoint({
+      name: 'since',
+      method: 'GET',
+      path: '/since',
+      visibility: 'public',
+      description: 'Since a day',
+      input: { query: z.object({ at: z.date() as never }) },
+      success: { status: 204 },
+    });
+    const withSince = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [since] })],
+    });
+
+    const serving = () =>
+      serve(withSince, {
+        endpoints: { since: handle(since, () => success()) },
+        guards: {},
+        deprecatedAt: {},
+      });
+
+    expect(serving).toThrow('endpoints.since.input.query.fields.at not allowed: z.date()');
   });
 
   test('a text part that is no object throws, as generate words it', () => {

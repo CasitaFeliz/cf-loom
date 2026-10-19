@@ -51,6 +51,28 @@ function booleanOf(text: string): unknown {
   return text === 'false' ? false : text;
 }
 
+/** A value a text part or a Success header holds: a string, a number or a boolean. */
+export type TextValue = string | number | boolean;
+
+/** A value as the text it travels in, as a Success header: a number or boolean as JavaScript writes it. */
+export function textOfValue(value: TextValue): string {
+  return String(value);
+}
+
+/** The code points a header value never holds, by the rule `Headers` applies: NUL, LF and CR. */
+const forbiddenInHeaders: readonly number[] = [0x00, 0x0a, 0x0d];
+
+/** Whether a text can travel as an HTTP header value: no NUL, LF or CR, and nothing above U+00FF. */
+export function canTravelAsHeader(text: string): boolean {
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code > 0xff || forbiddenInHeaders.includes(code)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** The declared value whose text is the one received, keeping its JSON type. */
 function declaredValueOf(values: readonly JsonPrimitive[], text: string): unknown {
   return values.find((value) => String(value) === text) ?? text;

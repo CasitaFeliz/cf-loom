@@ -48,13 +48,23 @@ const archive = defineEndpoint({
   success: { status: 204 },
 });
 
+const importOrders = defineEndpoint({
+  name: 'importOrders',
+  method: 'POST',
+  path: '/imports',
+  visibility: 'public',
+  description: 'Imports orders',
+  input: { body: z.object({ orders: z.array(z.string()) }) },
+  success: { status: 204 },
+});
+
 const contract = defineContract({
   name: 'orders-service',
   groups: [
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [getOrder, listOrders, archive],
+      endpoints: [getOrder, listOrders, archive, importOrders],
     }),
   ],
 });
@@ -64,8 +74,11 @@ const deprecatedAt = { getOrder: '2026-10-17T09:30:00Z', listOrders: '2020-01-01
 /** The Handlers, `getOrder` answering by its param: a Success, a Rejection, a Fault or a broken body. */
 const handlers = {
   endpoints: {
-    getOrder: handle(getOrder, ({ params }) => {
+    getOrder: handle(getOrder, async ({ params }) => {
       switch (params.orderId) {
+        case 'slow':
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return success({ secret: 'a long enough secret' });
         case 'missing':
           return reject(notFound);
         case 'down':
@@ -79,6 +92,7 @@ const handlers = {
       }
     }),
     listOrders: handle(listOrders, () => success({ count: 1 })),
+    importOrders: handle(importOrders, () => success()),
   },
   guards: { apiKey: handle(apiKey, () => admit({ clientId: 'c-1' })) },
   deprecatedAt,
@@ -87,6 +101,12 @@ const handlers = {
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+function tooLarge(): Request {
+  const body = JSON.stringify({ orders: ['o-1', 'o-2', 'o-3'] });
+  const headers = { 'content-type': 'application/json' };
+  return new Request('http://test/imports', { method: 'POST', headers, body });
+}
 
 function get(path: string): Request {
   return new Request(`http://test${path}`);
@@ -112,12 +132,47 @@ describe('serve: onServiceFault', () => {
     expect(logged).toHaveBeenCalledWith('getOrder: Internal error', new Error('a bug'));
   });
 
+  test('without it, the console names the Guard whose Handler failed', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = handle(apiKey, () => admit({ clientId: 7 } as never));
+
+    await serve(contract, { ...handlers, guards: { apiKey: broken } })(get('/orders/o-1'));
+
+    expect(String(logged.mock.calls[0]?.[0])).toMatch(
+      /^getOrder apiKey: context\.clientId invalid_type: /,
+    );
+  });
+
+  test('without it, the console receives a returned Fault with its message', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await serve(contract, handlers)(get('/orders/down'));
+
+    expect(logged).toHaveBeenCalledWith('getOrder: Internal error');
+  });
+
+  test('with it, the console receives nothing', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const faults: ServiceFault[] = [];
+
+    await serve(contract, handlers, { onServiceFault: (served) => faults.push(served) })(
+      get('/orders/thrown'),
+    );
+
+    expect(faults).toHaveLength(1);
+    expect(logged).not.toHaveBeenCalled();
+  });
+
   test('the Caller’s Faults never reach it', async () => {
     const faults: ServiceFault[] = [];
-    const http = serve(contract, handlers, { onServiceFault: (served) => faults.push(served) });
+    const http = serve(contract, handlers, {
+      maxBodyBytes: 8,
+      onServiceFault: (served) => faults.push(served),
+    });
 
     await http(get('/customers'));
     await http(new Request('http://test/archive', { method: 'POST' }));
+    await http(tooLarge());
 
     expect(faults).toEqual([]);
   });
@@ -155,6 +210,46 @@ describe('serve: onOutcome', () => {
       { status: 404, kind: 'fault', durationMs: expect.any(Number) },
     ]);
     expect(answered.every(({ durationMs }) => durationMs >= 0)).toBe(true);
+  });
+});
+
+describe('serve: onOutcome for the Caller’s Faults', () => {
+  test('RETIRED and BODY_TOO_LARGE are recorded with their Endpoint', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, {
+      maxBodyBytes: 8,
+      onOutcome: (request) => answered.push(request),
+    });
+
+    await http(new Request('http://test/archive', { method: 'POST' }));
+    await http(tooLarge());
+
+    expect(answered).toEqual([
+      { endpoint: 'archive', status: 410, kind: 'fault', durationMs: expect.any(Number) },
+      { endpoint: 'importOrders', status: 413, kind: 'fault', durationMs: expect.any(Number) },
+    ]);
+  });
+
+  test('durationMs is the time the request took', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, { onOutcome: (request) => answered.push(request) });
+
+    await http(get('/orders/slow'));
+
+    expect(answered[0]?.durationMs).toBeGreaterThanOrEqual(35);
+  });
+
+  test('what it throws propagates, as the Service’s own bug', async () => {
+    const broken = new Error('the hook broke');
+    const http = serve(contract, handlers, {
+      onOutcome: () => {
+        throw broken;
+      },
+    });
+
+    const answered = http(get('/orders'));
+
+    await expect(answered).rejects.toBe(broken);
   });
 });
 

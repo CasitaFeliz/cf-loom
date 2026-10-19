@@ -1,19 +1,23 @@
-import type { PathSegment } from '@casitafeliz/loom-contract/internal';
+import type { PathSegment } from '../validation/index.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
-export type Route = { readonly method: string; readonly segments: readonly PathSegment[] };
+export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
 
-/** The route a request matched, with the texts of its params in path order, or none. */
-export type Match<Matched extends Route> =
+/** The declared Endpoint a request matched, with the texts of its params by name, or none. */
+export type Match<Matched extends Matchable> =
   | { readonly kind: 'none' }
-  | { readonly kind: 'matched'; readonly route: Matched; readonly params: readonly string[] };
+  | {
+      readonly kind: 'matched';
+      readonly matched: Matched;
+      readonly params: Readonly<Record<string, string>>;
+    };
 
 /**
- * The route a request's method and path match exactly, segment by segment, each percent-decoded on
- * its own; among several, the one with a literal at the first segment where they differ.
+ * What a request's method and path match exactly, segment by segment, each percent-decoded on its
+ * own; among several, the one with a literal at the first segment where they differ.
  */
-export function matchOf<Matched extends Route>(
-  routes: readonly Matched[],
+export function matchOf<Matched extends Matchable>(
+  declared: readonly Matched[],
   method: string,
   pathname: string,
 ): Match<Matched> {
@@ -22,15 +26,15 @@ export function matchOf<Matched extends Route>(
     return { kind: 'none' };
   }
   let best: Matched | undefined;
-  for (const route of routes) {
-    if (route.method === method && isMatchedBy(route.segments, texts)) {
-      best = best === undefined || beats(route.segments, best.segments) ? route : best;
+  for (const candidate of declared) {
+    if (candidate.method === method && isMatchedBy(candidate.segments, texts)) {
+      best = best === undefined || beats(candidate.segments, best.segments) ? candidate : best;
     }
   }
   if (best === undefined) {
     return { kind: 'none' };
   }
-  return { kind: 'matched', route: best, params: paramTextsOf(best.segments, texts) };
+  return { kind: 'matched', matched: best, params: paramsOf(best.segments, texts) };
 }
 
 /** The decoded segments of a request path; the root has none, and an empty one matches nothing. */
@@ -59,21 +63,22 @@ function isMatchedBy(segments: readonly PathSegment[], texts: readonly string[])
   });
 }
 
-/** Whether a route has a literal at the first segment where it and another differ. */
+/** Whether a path has a literal at the first segment where it and another differ. */
 function beats(segments: readonly PathSegment[], other: readonly PathSegment[]): boolean {
   const index = segments.findIndex((segment, at) => segment.kind !== other[at]?.kind);
   return segments[index]?.kind === 'literal';
 }
 
-function paramTextsOf(
+/** The text of each param, by its name. */
+function paramsOf(
   segments: readonly PathSegment[],
   texts: readonly string[],
-): readonly string[] {
-  const params: string[] = [];
+): Readonly<Record<string, string>> {
+  const params: (readonly [string, string])[] = [];
   for (const [index, segment] of segments.entries()) {
     if (segment.kind === 'param') {
-      params.push(texts[index] ?? '');
+      params.push([segment.name, texts[index] ?? '']);
     }
   }
-  return params;
+  return Object.fromEntries(params);
 }

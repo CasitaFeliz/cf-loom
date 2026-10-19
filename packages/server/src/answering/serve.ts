@@ -1,6 +1,5 @@
 import type { Contract } from '@casitafeliz/loom-contract';
-import type { HandlerMap } from '@casitafeliz/loom-handlers';
-import { servedContractOf } from '../served/index.ts';
+import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
 import { type AnsweredRequest, reportServiceFault, type ServiceFault } from './hooks.ts';
 
@@ -26,21 +25,21 @@ export type ServeOptions = {
  */
 export function serve(
   contract: Contract,
-  handlers: Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>,
+  handlers: ServedHandlers,
   options: ServeOptions = {},
 ): Http {
-  const served = servedContractOf(contract, handlers);
+  const served = servedContractOf(contract, handlers, options.maxBodyBytes);
   return async (request) => {
     const started = performance.now();
-    const { endpoint, answered } = await answerOf(served, request, options.maxBodyBytes);
-    if (answered.serviceFault !== undefined) {
+    const { endpoint, answered } = await answerOf(served, request);
+    if (answered.kind === 'fault' && answered.serviceFault !== undefined) {
       reportServiceFault(answered.serviceFault, options.onServiceFault);
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;
     const record = { status, kind: answered.kind, durationMs };
     options.onOutcome?.(
-      endpoint === undefined ? record : { endpoint: endpoint.endpoint.name, ...record },
+      endpoint === undefined ? record : { endpoint: endpoint.declared.name, ...record },
     );
     return answered.response;
   };

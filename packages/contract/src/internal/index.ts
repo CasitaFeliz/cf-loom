@@ -1,10 +1,11 @@
-export type { Kind, StandardRejections } from '../declarations/index.ts';
+export type { Kind, ReservedCode, StandardRejections } from '../declarations/index.ts';
 export {
   isContract,
   isEndpoint,
   isGuard,
   isRejection,
   isStandardRejection,
+  reservedCodes,
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
@@ -39,6 +40,7 @@ export {
   hashedTextOf,
   isExportedEndpoint,
   isLive,
+  isStamp,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,
@@ -49,6 +51,8 @@ export type {
   ExportsOf,
   Failure,
   InputPart,
+  Issue,
+  IssuePart,
   LocatedCode,
   LocatedDefinitions,
   LocatedEndpoint,
@@ -61,7 +65,6 @@ export type {
   ResolvedStandard,
   RootPackage,
   Rule,
-  TextNodes,
   TextPart,
   ValidatedCode,
   ValidatedContract,
@@ -69,6 +72,7 @@ export type {
   ValidatedGuard,
   ValidatedSchemas,
   ValidContract,
+  WalkedTextParts,
 } from '../validation/index.ts';
 export {
   answerableRejectionsOf,
@@ -92,8 +96,8 @@ export {
   schemaOf,
   standardRejectionsOf,
   successParts,
-  textNodesOf,
   validateContract,
+  walkedTextPartsOf,
 } from '../validation/index.ts';
 export type {
   Defs,
@@ -124,22 +128,35 @@ export {
   walkSchemas,
 } from '../walker/index.ts';
 export type {
+  Body,
   Committed,
   FaultEnvelope,
   InputIssue,
+  InvalidInputBody,
+  Match,
+  Matchable,
   RejectionEnvelope,
-  ReservedCode,
+  TextPartNodes,
+  TextSource,
+  TextValue,
   TravellingFault,
 } from '../wire/index.ts';
 export {
+  bodyOf,
+  canTravelAsHeader,
   committedValues,
   deprecationHeaderOf,
   faultEnvelopeOf,
   faultStatusOf,
+  internalError,
   invalidInputBodyOf,
   isJsonContentType,
   jsonContentType,
+  matchOf,
   rejectionEnvelopeOf,
   reservedFaults,
+  textOfValue,
+  textPartsOf,
+  textSourceOf,
   valueOfText,
 } from '../wire/index.ts';

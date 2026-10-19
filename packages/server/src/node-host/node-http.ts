@@ -1,20 +1,31 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type RequestListener,
+  type Server,
+  type ServerResponse,
+} from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { Http } from '../answering/index.ts';
+import { reservedResponseOf } from '../response/index.ts';
 
 /** The methods whose request never carries a body, which a web-standard `Request` refuses one for. */
 const bodiless: readonly string[] = ['GET', 'HEAD'];
 
+/** How an incoming message reads as a web-standard request: a `Request`, or what answers it instead. */
+type Incoming =
+  | { readonly kind: 'request'; readonly request: Request }
+  | { readonly kind: 'answered'; readonly response: Response };
+
 /**
  * Connects the handler `serve` returns to `node:http` as a request listener, for a server the
- * Service creates itself; what `http` rejects with, a hook's throw, reaches the process.
+ * Service creates itself; what `http` rejects with, a hook's throw, reaches the process. The URL
+ * it builds is always `http://`, which is harmless: `serve` reads only its path and query.
  */
-export function nodeListener(
-  http: Http,
-): (request: IncomingMessage, response: ServerResponse) => void {
-  return (request, response) => {
-    void respond(http, request, response);
+export function nodeListener(http: Http): RequestListener {
+  return (incoming, outgoing) => {
+    void respond(http, incoming, outgoing);
   };
 }
 
@@ -24,12 +35,8 @@ export function nodeHttp(http: Http): Server {
 }
 
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const request = requestOf(incoming);
-  if (request === undefined) {
-    outgoing.writeHead(400).end();
-    return;
-  }
-  const response = await http(request);
+  const read = incomingOf(incoming);
+  const response = read.kind === 'request' ? await http(read.request) : read.response;
   try {
     await written(response, incoming, outgoing);
   } catch {
@@ -37,13 +44,33 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
   }
 }
 
-/** The web-standard `Request` of an incoming message; none when its `Host` names no URL. */
-function requestOf(incoming: IncomingMessage): Request | undefined {
+/**
+ * The web-standard `Request` of an incoming message: 400 when its target is no path or its `Host`
+ * names no URL, and `NO_SUCH_ENDPOINT` for a method a `Request` refuses, which no Endpoint has.
+ */
+function incomingOf(incoming: IncomingMessage): Incoming {
+  const url = urlOf(incoming);
+  if (url === undefined) {
+    return { kind: 'answered', response: new Response(null, { status: 400 }) };
+  }
+  try {
+    return { kind: 'request', request: requestOf(incoming, url) };
+  } catch {
+    return { kind: 'answered', response: reservedResponseOf('NO_SUCH_ENDPOINT') };
+  }
+}
+
+/** The URL of a request target that is a path, on the origin its `Host` names; none otherwise. */
+function urlOf(incoming: IncomingMessage): URL | undefined {
+  const target = incoming.url ?? '';
   const host = incoming.headers.host;
-  const url = host === undefined ? null : URL.parse(incoming.url ?? '/', `http://${host}`);
-  if (url === null) {
+  if (!target.startsWith('/') || host === undefined) {
     return undefined;
   }
+  return URL.parse(`http://${host}${target}`) ?? undefined;
+}
+
+function requestOf(incoming: IncomingMessage, url: URL): Request {
   const headers = new Headers();
   for (let index = 0; index + 1 < incoming.rawHeaders.length; index += 2) {
     headers.append(incoming.rawHeaders[index] ?? '', incoming.rawHeaders[index + 1] ?? '');

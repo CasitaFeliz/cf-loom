@@ -1,4 +1,4 @@
-import type { Committed } from '@casitafeliz/loom-contract/internal';
+import { type Committed, internalError } from '@casitafeliz/loom-contract/internal';
 
 /** A technical failure no Endpoint, Guard or Message declares, as a Handler builds it and a direct call returns it. */
 export type Fault = {
@@ -8,9 +8,6 @@ export type Fault = {
   readonly message: string;
   readonly cause?: unknown;
 };
-
-/** The one text a Fault says by default, so no internal detail reaches a Caller. */
-const internalError = 'Internal error';
 
 /**
  * A Fault the Handler knows better than `Internal error`: whether the change was committed and

@@ -28,7 +28,10 @@ export function writtenOf<Kind extends AnyWritten>(
 }
 
 /** Whether a value is a Handler `handle()` returned for this very Endpoint or Guard. */
-export function isWrittenFor(handler: unknown, element: Endpoint | Guard): boolean {
+export function isWrittenFor<Element extends Endpoint | Guard>(
+  handler: unknown,
+  element: Element,
+): handler is { readonly element: Element } {
   if (typeof handler !== 'function') {
     return false;
   }

@@ -32,7 +32,7 @@ function stampOf(instant: number): string {
 }
 
 /** Whether a value is a stamp `generate` could have written: one that reads back as itself. */
-function isStamp(value: unknown): value is string {
+export function isStamp(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value)) {
     return false;
   }

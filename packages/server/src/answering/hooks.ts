@@ -1,18 +1,20 @@
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
 
 /** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-type FaultedBy = { readonly endpoint: string; readonly guard?: string };
+export type FaultedBy = { readonly endpoint: string; readonly guard?: string };
 
 /**
  * A Fault the Service's side produced, which `onServiceFault` receives: one its Handler returned,
  * threw or answered with no Outcome, an Outcome that broke the Contract, or a Context or Qualifier
  * `serve` built that broke it, the runtime's own bug.
  */
-export type ServiceFault =
-  | (FaultedBy & { readonly kind: 'returned'; readonly fault: Fault })
-  | (FaultedBy & { readonly kind: 'thrown'; readonly fault: Fault })
-  | (FaultedBy & { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] })
-  | (FaultedBy & { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] });
+export type ServiceFault = FaultedBy &
+  (
+    | { readonly kind: 'returned'; readonly fault: Fault }
+    | { readonly kind: 'thrown'; readonly fault: Fault }
+    | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
+    | { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] }
+  );
 
 /** One request answered: which Endpoint, with what status and kind, and how long it took. */
 export type AnsweredRequest = {
