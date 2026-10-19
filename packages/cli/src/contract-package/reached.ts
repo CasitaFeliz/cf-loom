@@ -32,7 +32,7 @@ export function reachedOf(snapshot: ServiceSnapshot): Reached {
   );
   const guardCodes = [...guards].flatMap((guard) => snapshot.guards[guard]?.rejections ?? []);
   const listed = endpoints.flatMap(({ endpoint }) => ownRejectionsOf(endpoint, snapshot));
-  const endpointCodes = listed.filter(isDeclared).map(({ code }) => code);
+  const endpointCodes = listed.filter(isDeclaredRejection).map(({ code }) => code);
   const codes = new Set([...guardCodes, ...endpointCodes]);
   return {
     endpoints,
@@ -42,7 +42,7 @@ export function reachedOf(snapshot: ServiceSnapshot): Reached {
 }
 
 /** Whether a listed Rejection is a declared one, which the package writes a file for. */
-export function isDeclared(
+export function isDeclaredRejection(
   rejection: ListedRejection,
 ): rejection is Extract<ListedRejection, { readonly kind: 'declared' }> {
   return rejection.kind === 'declared';

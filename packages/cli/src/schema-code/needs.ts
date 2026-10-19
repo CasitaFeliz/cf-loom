@@ -1,3 +1,5 @@
+import { namedImportOf, namespaceImportOf } from '../source-text/index.ts';
+
 /** The modes a generated schema is written in, each def in each it is referenced in. */
 export const schemaModes = ['declared', 'reader'] as const;
 
@@ -26,6 +28,9 @@ export type Needs = {
   readonly defs: DefUses;
   readonly defTypes: DefUses;
 };
+
+/** Where generated code is written: its mode, and what the module writing it must import. */
+export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
 
 /** Nothing needed yet. */
 export function noNeeds(): Needs {
@@ -59,8 +64,8 @@ export type ImportLine = { readonly specifier: string; readonly line: string };
  */
 export function schemaImportsOf(needs: Needs): readonly ImportLine[] {
   const loom = '@casitafeliz/loom-contract';
-  const loomImport = { specifier: loom, line: `import * as loom from '${loom}';` };
-  const zodImport = { specifier: 'zod', line: "import { z } from 'zod';" };
+  const loomImport = { specifier: loom, line: namespaceImportOf('loom', loom) };
+  const zodImport = { specifier: 'zod', line: namedImportOf(['z'], 'zod') };
   return [
     ...(needs.modules.has('loom') ? [loomImport] : []),
     ...(needs.modules.has('zod') ? [zodImport] : []),

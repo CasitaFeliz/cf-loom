@@ -1,14 +1,14 @@
-import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import {
+  byCodePoint,
+  childrenOf,
+  type Defs,
+  type SchemaNode,
+} from '@casitafeliz/loom-contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
-import { type DefUse, defUseKeyOf, type Needs, noNeeds } from './needs.ts';
-import { refsOf } from './refs.ts';
+import { type DefUse, defUseKeyOf, type Needs, noNeeds, type SchemaMode } from './needs.ts';
 import { typeTextOf } from './type-text.ts';
 import { zodExpressionOf } from './zod-expression.ts';
-
-/** The recursive defs of a Snapshot, by id. */
-export type Defs = Readonly<Record<string, SchemaNode>>;
 
 /** The declarations of the recursive defs generated schemas reach, and what they import. */
 export type DefsCode = { readonly body: readonly string[]; readonly needs: Needs };
@@ -66,7 +66,7 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
 }
 
 /** A def's type name, and the mode it is written in. */
-type DefNames = { readonly typeName: string; readonly mode: DefUse['mode'] };
+type DefNames = { readonly typeName: string; readonly mode: SchemaMode };
 
 /**
  * A def's annotation, so a written type that disagrees with the schema fails to compile: its
@@ -78,4 +78,12 @@ function annotationOf(node: SchemaNode, { typeName, mode }: DefNames): string {
     mode === 'declared' ? `z.ZodType<${typeName}, ${typeName}>` : `z.ZodType<${typeName}>`;
   const isObject = node.type === 'object' && node.nullable !== true;
   return isObject ? `${output} & z.core.$ZodTypeDiscriminable` : output;
+}
+
+/** The ids of the recursive defs a node references directly, at any depth but through a `ref`. */
+export function refsOf(node: SchemaNode): readonly string[] {
+  if (node.type === 'ref') {
+    return [node.name];
+  }
+  return childrenOf(node).flatMap((child) => refsOf(child.node));
 }

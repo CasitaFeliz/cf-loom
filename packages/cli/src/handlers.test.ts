@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,9 @@ const packagesDir = join(cliDir, '..');
 const bin = join(cliDir, 'src', 'bin.ts');
 const tsc = join(packagesDir, '..', 'node_modules', '.bin', 'tsc');
 const projects: string[] = [];
+
+/** Root may read any folder, so a permission test means nothing when run as root. */
+const isRoot = process.getuid?.() === 0;
 
 afterEach(() => {
   for (const project of projects.splice(0)) {
@@ -538,7 +542,8 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'src/guards/old-key.handler.ts names no declared Endpoint or Guard: delete it\n',
+      stderr:
+        "src/guards/old-key.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
   });
 
@@ -705,7 +710,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr:
-        'src/endpoints/orders/old-order.handler.ts names no declared Endpoint or Guard: delete it\n',
+        "src/endpoints/orders/old-order.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
   });
 
@@ -793,7 +798,8 @@ describe('cf-loom generate: linked folders and other runs', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'src/endpoints/other/old.handler.ts names no declared Endpoint or Guard: delete it\n',
+      stderr:
+        "src/endpoints/other/old.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
   });
 
@@ -835,5 +841,86 @@ describe('cf-loom generate: linked folders and other runs', () => {
 
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(new RegExp(`^${command} takes no argument\\. Usage: `));
+  });
+});
+
+describe('cf-loom generate and verify: what the file system holds', () => {
+  test('a dangling link at a Handler path is no file', () => {
+    const project = aProject(aService());
+    mkdirSync(join(project, 'src/guards'), { recursive: true });
+    symlinkSync(join(project, 'nowhere'), join(project, 'src/guards/api-key.handler.ts'));
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(generated).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/guards/api-key.handler.ts is no file: a Handler is a file\n',
+    });
+    expect(verified.stderr).toContain(
+      'src/guards/api-key.handler.ts is no file: a Handler is a file\n',
+    );
+  });
+
+  test('a folder where the Handler map goes is a tooling error in one line', () => {
+    const project = aProject({ ...aService(), 'src/handlers.generated.ts/kept.txt': '' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^src\/handlers\.generated\.ts cannot be written: [^\n]+\n$/);
+  });
+
+  test.each(['src/endpoints', 'src/guards'])(
+    '%s that is a file is a tooling error in one line',
+    (path) => {
+      const project = aProject({ ...aService(), [path]: 'mine' });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^[^\n]+ cannot be written: [^\n]+\n$/);
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'an unreadable folder under the Handlers is a tooling error in one line (skipped as root)',
+    () => {
+      const project = aProject({ ...aService(), 'src/endpoints/private/kept.txt': '' });
+      chmodSync(join(project, 'src/endpoints/private'), 0o000);
+
+      const generated = cfLoom(project, 'generate');
+      const verified = cfLoom(project, 'verify');
+
+      chmodSync(join(project, 'src/endpoints/private'), 0o755);
+      expect(generated.status).toBe(3);
+      expect(generated.stderr).toMatch(/^src\/endpoints\/private cannot be read: EACCES[^\n]*\n$/);
+      expect(verified.status).toBe(3);
+      expect(verified.stderr).toMatch(/^src\/endpoints\/private cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'an unreadable folder under src/contract is a tooling error in one line (skipped as root)',
+    () => {
+      const project = aProject({ ...aService(), 'src/contract/locked/kept.txt': '' });
+      chmodSync(join(project, 'src/contract/locked'), 0o000);
+
+      const ran = cfLoom(project, 'generate');
+
+      chmodSync(join(project, 'src/contract/locked'), 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^src\/contract\/locked cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test('init takes one kind', () => {
+    const project = aProject({ 'package.json': manifest });
+
+    const ran = cfLoom(project, 'init', 'service', 'application');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^init takes one kind\. Usage: /);
   });
 });

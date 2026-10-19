@@ -14,9 +14,9 @@ export function namedImportOf(names: readonly string[], specifier: string): stri
   return `import { ${names.join(', ')} } from ${stringLiteralOf(specifier)};`;
 }
 
-/** An import of type-only named exports. */
-export function typeImportOf(names: readonly string[], specifier: string): string {
-  return `import type { ${names.join(', ')} } from ${stringLiteralOf(specifier)};`;
+/** An import of a whole module under one name. */
+export function namespaceImportOf(local: string, specifier: string): string {
+  return `import * as ${local} from ${stringLiteralOf(specifier)};`;
 }
 
 /** An import of a module's default export under a local name. */

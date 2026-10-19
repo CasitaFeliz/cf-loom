@@ -33,8 +33,12 @@ export type ContractExports =
  * imports its declaration from where it is exported: Node gives each the instance the root holds.
  */
 export async function contractExportsOf(directory: string): Promise<ContractExports> {
+  const files = filesUnder(directory, contractFolder, isContractSource);
+  if (files.kind === 'failed') {
+    return files;
+  }
   const exportsByDeclaration = new Map<unknown, FileExport[]>();
-  for (const path of contractFilesOf(directory)) {
+  for (const path of [...files.files].sort(byCodePoint)) {
     const imported = await importedModuleOf(join(directory, path), directory);
     if (imported.kind === 'failed') {
       return { kind: 'failed', message: `${path} cannot be loaded: ${imported.message}` };
@@ -50,10 +54,6 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
     kind: 'exported',
     exportsOf: (declaration) => exportsByDeclaration.get(declaration) ?? [],
   };
-}
-
-function contractFilesOf(directory: string): readonly string[] {
-  return [...filesUnder(directory, contractFolder, isContractSource)].sort(byCodePoint);
 }
 
 function isContractSource(file: string): boolean {

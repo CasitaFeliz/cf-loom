@@ -10,7 +10,7 @@ import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, siblingOf } from './names.ts';
-import { type ExportedEndpoint, isDeclared } from './reached.ts';
+import { type ExportedEndpoint, isDeclaredRejection } from './reached.ts';
 import { partsLinesOf } from './schema-lines.ts';
 
 /**
@@ -26,8 +26,8 @@ export function endpointModuleOf(
   const rejections = ownRejectionsOf(endpoint, snapshot);
   const guards = endpoint.guards.map(({ guard }) => siblingOf({ kind: 'guard', name: guard }));
   const declared = rejections
-    .filter(isDeclared)
-    .map(({ code }) => siblingOf({ kind: 'rejection', name: code }));
+    .filter(isDeclaredRejection)
+    .map(({ code }) => siblingOf({ kind: 'rejection', code }));
   const file = packageModuleOf({
     path: fileOf({ kind: 'endpoint', name: endpoint.name }),
     body: endpointBodyOf(exported, rejections, needs),
@@ -98,6 +98,6 @@ function rejectionNameOf(rejection: ListedRejection): string {
     case 'not-found':
       return 'loom.notFound';
     case 'declared':
-      return bindingOf({ kind: 'rejection', name: rejection.code });
+      return bindingOf({ kind: 'rejection', code: rejection.code });
   }
 }

@@ -70,7 +70,7 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
     guardModuleOf({ kind: 'guard', name }, declaredIn(snapshot.guards, name)),
   );
   const rejections = reached.codes.map((code) =>
-    rejectionModuleOf({ kind: 'rejection', name: code }, declaredIn(snapshot.codes, code)),
+    rejectionModuleOf({ kind: 'rejection', code }, declaredIn(snapshot.codes, code)),
   );
   const schemaFiles = [...endpoints, ...guards, ...rejections];
   const defUses = reachedDefUsesOf(

@@ -1,10 +1,10 @@
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint, isLive } from '@casitafeliz/loom-contract/internal';
 import { contractExportsOf, type ExportedAt, type FileExport } from '../loading/index.ts';
 import type { BuiltService, Tooling } from '../project/index.ts';
 import { type Handled, handledOf, handlerPathOf, stubTextOf } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
+import { isNothingAt } from './handler-files.ts';
 
 /**
  * The stubs `generate` writes, and a line for every handled Element a stub could not import as
@@ -33,7 +33,7 @@ export async function stubsOf(service: BuiltService): Promise<Stubs | Tooling> {
   );
   const missing = located
     .filter(hasExport)
-    .filter(({ handled }) => !existsSync(join(directory, handlerPathOf(handled))));
+    .filter(({ handled }) => isNothingAt(join(directory, handlerPathOf(handled))));
   const stubs = missing.map(({ handled, at }) => stubOf(handled, at));
   const failureLines = located.filter(isRefused).map(({ line }) => line);
   const sorted = stubs.sort((left, right) => byCodePoint(left.path, right.path));
@@ -102,7 +102,7 @@ function declarationOf(service: BuiltService, handled: Handled): unknown {
   switch (handled.kind) {
     case 'endpoint':
       return declarations.endpoints.find(
-        ({ endpoint }) => endpoint.name === handled.name && endpoint.lifecycle !== 'retired',
+        ({ endpoint }) => endpoint.name === handled.name && isLive(endpoint),
       )?.endpoint;
     case 'guard':
       return declarations.guards.find(({ guard }) => guard.name === handled.name)?.guard;

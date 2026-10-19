@@ -11,23 +11,30 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import { isPackagePath, type PackageFile } from '../contract-package/index.ts';
+import {
+  builtFolder,
+  isPackageManifest,
+  isPackagePath,
+  type PackageFile,
+  packagePaths,
+} from '../contract-package/index.ts';
 import { oneLineOf } from '../loading/index.ts';
 
 /** What sits where the package is to be written. */
 type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
 
-/** The package written, or why not, in one line. */
+/** The package written; the target refused as it is; or a read or write that failed, in one line. */
 export type PackageWrite =
   | { readonly kind: 'written' }
-  | { readonly kind: 'refused'; readonly message: string };
+  | { readonly kind: 'refused'; readonly message: string }
+  | { readonly kind: 'failed'; readonly message: string };
 
-/** The folders a previous output keeps as they are: a build's `dist/` and an install's `node_modules/`. */
-const keptFolders: readonly string[] = ['dist', 'node_modules'];
+/** The folders a previous output keeps as they are: a build's and an install's. */
+const keptFolders: readonly string[] = [builtFolder, 'node_modules'];
 
 /**
  * Writes the Contract Package to `out`, relative to the project: a missing or empty folder, or a
- * previous output, whose files are replaced, its build and install kept; anything else is
+ * previous output, whose files are replaced, its install and build kept; anything else is
  * refused and left as it was.
  */
 export function writeContractPackageTo(
@@ -36,7 +43,13 @@ export function writeContractPackageTo(
   files: readonly PackageFile[],
 ): PackageWrite {
   const target = resolve(directory, out);
-  switch (targetOf(target)) {
+  let found: Target;
+  try {
+    found = targetOf(target);
+  } catch (e) {
+    return { kind: 'failed', message: `${out} cannot be read: ${oneLineOf(e, directory)}` };
+  }
+  switch (found) {
     case 'other-files':
       return refused(
         `${out} holds files package did not write: package writes to a missing or empty folder, or over its own output`,
@@ -48,7 +61,7 @@ export function writeContractPackageTo(
     case 'missing':
     case 'empty':
     case 'previous-output':
-      return replaced(directory, { out, target }, files);
+      return replaced(directory, { out, target, found }, files);
   }
 }
 
@@ -82,15 +95,18 @@ function isLink(target: string): boolean {
 
 /**
  * A folder `package` wrote: outside the folders it keeps, every file is one `package` writes,
- * and its package.json carries the `cfLoom` metadata.
+ * and its package.json is one `package` wrote.
  */
 function isPreviousOutput(target: string): boolean {
   if (!filesOutsideKeptOf(target).every(isPackagePath)) {
     return false;
   }
+  const manifestPath = join(target, packagePaths.manifest);
+  if (!existsSync(manifestPath)) {
+    return false;
+  }
   try {
-    const manifest: unknown = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8'));
-    return typeof manifest === 'object' && manifest !== null && 'cfLoom' in manifest;
+    return isPackageManifest(JSON.parse(readFileSync(manifestPath, 'utf8')));
   } catch {
     return false;
   }
@@ -111,14 +127,18 @@ function filesOutsideKeptOf(target: string): readonly string[] {
   });
 }
 
+/** Where the package goes, as given and resolved, and what was found there. */
+type Destination = { readonly out: string; readonly target: string; readonly found: Target };
+
 /**
- * Writes the files beside the target, then clears the target's own files, `package.json` last
- * so an interrupted run is still a previous output, and moves the new ones in: the kept folders
- * are never moved, so no failure can lose them.
+ * Writes the files beside the target, then puts them in place so an interrupted run leaves a
+ * target a rerun accepts: a missing or empty target is the written folder renamed into place; a
+ * previous output keeps its package.json until the new one is renamed over it, last, and its
+ * kept folders are never moved.
  */
 function replaced(
   directory: string,
-  { out, target }: { readonly out: string; readonly target: string },
+  { out, target, found }: Destination,
   files: readonly PackageFile[],
 ): PackageWrite {
   let staging: string | undefined;
@@ -126,12 +146,16 @@ function replaced(
     mkdirSync(dirname(target), { recursive: true });
     staging = mkdtempSync(join(dirname(target), `.${basename(target)}-`));
     writeAll(staging, files);
-    mkdirSync(target, { recursive: true });
-    clearOwnFiles(target);
-    moveEntries(staging, target);
+    if (found === 'previous-output') {
+      clearOwnFiles(target);
+      moveEntries(staging, target);
+    } else {
+      rmSync(target, { recursive: true, force: true });
+      renameSync(staging, target);
+    }
     return { kind: 'written' };
   } catch (e) {
-    return refused(`${out} cannot be written: ${oneLineOf(e, directory)}`);
+    return { kind: 'failed', message: `${out} cannot be written: ${oneLineOf(e, directory)}` };
   } finally {
     if (staging !== undefined) {
       rmSync(staging, { recursive: true, force: true });
@@ -146,19 +170,20 @@ function writeAll(folder: string, files: readonly PackageFile[]): void {
   }
 }
 
+/** Removes the target's own files, its package.json aside, which the new one replaces in place. */
 function clearOwnFiles(target: string): void {
-  const own = readdirSync(target).filter((entry) => !keptFolders.includes(entry));
-  const ordered = [
-    ...own.filter((entry) => entry !== 'package.json'),
-    ...own.filter((entry) => entry === 'package.json'),
-  ];
-  for (const entry of ordered) {
+  const own = readdirSync(target).filter(
+    (entry) => !keptFolders.includes(entry) && entry !== packagePaths.manifest,
+  );
+  for (const entry of own) {
     rmSync(join(target, entry), { recursive: true, force: true });
   }
 }
 
+/** Moves every new entry in, the package.json last, renamed over the old one at once. */
 function moveEntries(from: string, to: string): void {
-  for (const entry of readdirSync(from)) {
+  const entries = readdirSync(from).filter((entry) => entry !== packagePaths.manifest);
+  for (const entry of [...entries, packagePaths.manifest]) {
     renameSync(join(from, entry), join(to, entry));
   }
 }

@@ -1,16 +1,15 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type BuiltProject,
   type BuiltService,
   builtOf,
   isBuiltService,
+  isCommittedCurrent,
   type Run,
   snapshotFile,
 } from '../project/index.ts';
 import { type GeneratedFile, isUpToDate } from '../writing/index.ts';
-import { checkFailed, done, type Exit, failureExitOf } from './exit.ts';
-import { handlerPathsOf, noFileLinesOf, orphanLinesOf } from './handler-files.ts';
+import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
+import { missingHandlerPathsOf, noFileLinesOf, orphanLinesOf } from './handler-files.ts';
 import { serviceFilesOf } from './regenerated.ts';
 
 /**
@@ -28,7 +27,15 @@ export async function verify(run: Run): Promise<Exit> {
     return verifiedExit(snapshotLines, [snapshotFile]);
   }
   const regenerated = serviceFilesOf(built);
-  const failures = [...snapshotLines, ...serviceFailuresOf(run, built, regenerated)];
+  const orphans = orphanLinesOf(built);
+  if (orphans.kind === 'tooling') {
+    return toolingError(orphans.message);
+  }
+  const failures = [
+    ...snapshotLines,
+    ...serviceFailuresOf(run, built, regenerated),
+    ...orphans.lines,
+  ];
   return verifiedExit(failures, [snapshotFile, ...regenerated.map(({ path }) => path)]);
 }
 
@@ -42,7 +49,7 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
 
 /**
  * What a Service fails `verify` on beside its Snapshot: its Handler map or readers out of date,
- * and its Handler files as `generate` would refuse or complete them. Exports are not loaded.
+ * and its Handler files as `generate` would complete or refuse them. Exports are not loaded.
  */
 function serviceFailuresOf(
   run: Run,
@@ -50,12 +57,10 @@ function serviceFailuresOf(
   regenerated: readonly GeneratedFile[],
 ): readonly string[] {
   const outdated = regenerated.filter((file) => !isUpToDate(run.cwd, file));
-  const missing = handlerPathsOf(service).filter((path) => !existsSync(join(run.cwd, path)));
   return [
     ...outdated.map(({ path }) => `${path} was edited or is out of date: run cf-loom generate`),
-    ...missing.map((path) => `${path} is missing: run cf-loom generate`),
+    ...missingHandlerPathsOf(service).map((path) => `${path} is missing: run cf-loom generate`),
     ...noFileLinesOf(service),
-    ...orphanLinesOf(service),
   ];
 }
 
@@ -67,7 +72,7 @@ function snapshotFailureOf(built: BuiltProject): string | undefined {
     case 'no-json':
       return `${snapshotFile} was edited: it is no JSON (${committed.reason})`;
     case 'json':
-      return built.bytes.equals(committed.bytes)
+      return isCommittedCurrent(built)
         ? undefined
         : `${snapshotFile} was edited or is out of date: run cf-loom generate`;
   }

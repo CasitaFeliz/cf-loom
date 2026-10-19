@@ -16,7 +16,7 @@ async function exitOf(args: readonly string[]): Promise<Exit> {
     return usageError(`Unknown option: ${unknown.rawName}`);
   }
   const { out } = values;
-  if (out !== undefined && typeof out !== 'string') {
+  if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return usageError('--out takes a folder');
   }
   const called = out === undefined ? { positionals } : { positionals, out };

@@ -69,13 +69,7 @@ export function literalOf(value: LiteralValue): string {
   return typeof value === 'string' ? stringLiteralOf(value) : String(value);
 }
 
-/**
- * A key of an object literal or type: bare when it is an identifier, else quoted, and
- * `__proto__` computed, since a literal `__proto__` key sets the prototype instead.
- */
+/** A key of an object literal or type: bare when it is an identifier, else quoted. */
 export function keyOf(name: string): string {
-  if (name === '__proto__') {
-    return `[${stringLiteralOf(name)}]`;
-  }
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : stringLiteralOf(name);
 }

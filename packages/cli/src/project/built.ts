@@ -15,12 +15,14 @@ import {
 } from '@casitafeliz/loom-contract/internal';
 import { oneLineOf } from '../loading/index.ts';
 import { type Committed, committedOf } from './committed.ts';
-import { type ProjectFailure, type Run, type Tooling, tooling } from './failures.ts';
+import { type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type Project, projectOf } from './project.ts';
+import type { Run } from './run.ts';
 
 /**
- * Which CLI the declared Snapshot names: the one running, as `generate` and `package` write it,
- * or the committed file's, as `verify` compares, so upgrading cf-loom alone never fails `verify`.
+ * Which CLI the declared Snapshot names: the one running, as `generate` writes it, or the
+ * committed file's, as `verify` and `package` compare it, so upgrading cf-loom alone fails
+ * neither.
  */
 export type Generator = 'running' | 'committed';
 
@@ -45,6 +47,11 @@ export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 
 /** A Service's project as built, the one kind of root that offers Elements. */
 export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
+
+/** Whether the committed `contract.snapshot.json` is what `generate` would write, its generator aside. */
+export function isCommittedCurrent(built: BuiltProject): boolean {
+  return built.committed.kind === 'json' && built.committed.bytes.equals(built.bytes);
+}
 
 /** Whether a built project is a Service's. */
 export function isBuiltService(built: BuiltProject): built is BuiltService {
@@ -105,7 +112,7 @@ function validatedOf(project: Project): ValidatedContract | Tooling {
   }
 }
 
-/** The CLI the Snapshot names: the committed file's for `verify`, else the one running. */
+/** The CLI the Snapshot names: the committed file's for `verify` and `package`, else the one running. */
 function generatorOf(generator: Generator, committed: unknown): string {
   const written =
     typeof committed === 'object' && committed !== null

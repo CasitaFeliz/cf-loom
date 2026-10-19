@@ -1,5 +1,5 @@
 import type { ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint, isLive } from '@casitafeliz/loom-contract/internal';
 import { kebabCaseOf } from '../source-text/index.ts';
 
 /** An Endpoint or a Guard a Service writes a Handler for, by what names its Handler file. */
@@ -40,11 +40,11 @@ function declaredHandledOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[
     .map(
       (endpoint): DeclaredHandled => ({
         handled: { kind: 'endpoint', name: endpoint.name, group: endpoint.group },
-        isMapped: endpoint.lifecycle !== 'retired',
+        isMapped: isLive(endpoint),
       }),
     )
     .sort((left, right) => byCodePoint(left.handled.name, right.handled.name));
-  const live = Object.values(snapshot.endpoints).filter(({ lifecycle }) => lifecycle !== 'retired');
+  const live = Object.values(snapshot.endpoints).filter(isLive);
   const attached = new Set(live.flatMap(({ guards }) => guards.map(({ guard }) => guard)));
   const guards = Object.keys(snapshot.guards).map(
     (name): DeclaredHandled => ({ handled: { kind: 'guard', name }, isMapped: attached.has(name) }),

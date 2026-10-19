@@ -12,11 +12,8 @@ import type {
 import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
-import { addDefUse, type Needs, type SchemaMode } from './needs.ts';
+import { addDefUse, type Writing } from './needs.ts';
 import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
-
-/** Where a schema is written: its mode, and what the module writing it must import. */
-export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
 
 /**
  * The zod expression of a Snapshot node in a mode, with its nullability and annotations, so the
@@ -130,7 +127,7 @@ function tupleOf(node: TupleNode, writing: Writing): string {
   if (node.rest === undefined) {
     return `z.tuple([${items}])`;
   }
-  return `z.tuple([${items}], ${zodExpressionOf(node.rest, writing)})`;
+  return `z.tuple([${items}]).rest(${zodExpressionOf(node.rest, writing)})`;
 }
 
 /** A discriminated union: an Open Union's reader has its Unknown case. */

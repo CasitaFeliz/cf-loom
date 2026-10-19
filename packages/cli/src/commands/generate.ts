@@ -14,7 +14,7 @@ export async function generate(run: Run): Promise<Exit> {
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }
-  const noJson = noJsonExitOf(built.committed, 'generate');
+  const noJson = noJsonExitOf(built.committed);
   if (noJson !== undefined) {
     return noJson;
   }
@@ -33,7 +33,11 @@ async function generateService(run: Run, service: BuiltService): Promise<Exit> {
   if (stubs.kind === 'tooling') {
     return toolingError(stubs.message);
   }
-  const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphanLinesOf(service)];
+  const orphans = orphanLinesOf(service);
+  if (orphans.kind === 'tooling') {
+    return toolingError(orphans.message);
+  }
+  const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphans.lines];
   if (failures.length > 0) {
     return checkFailed(failures);
   }

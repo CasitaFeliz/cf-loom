@@ -1,20 +1,23 @@
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
 import { camelCaseOf, kebabCaseOf, kebabCaseOfCode } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
-import { type DeclaredKind, declaredFolders } from './paths.ts';
+import { declaredFolders } from './paths.ts';
 
-/** A declaration the package writes a file of its own for: an Endpoint, a Guard, or a code. */
-export type Declared = { readonly kind: DeclaredKind; readonly name: string };
+/** A declaration the package writes a file of its own for: an Endpoint or a Guard by name, a Rejection by code. */
+export type PackagedDeclaration =
+  | { readonly kind: 'endpoint'; readonly name: string }
+  | { readonly kind: 'guard'; readonly name: string }
+  | { readonly kind: 'rejection'; readonly code: string };
 
 /** The file of a declaration in the package, its name in kebab-case. */
-export function fileOf(declared: Declared): string {
+export function fileOf(declared: PackagedDeclaration): string {
   const folder = declaredFolders[declared.kind];
   switch (declared.kind) {
     case 'endpoint':
     case 'guard':
       return `${folder}/${kebabCaseOf(declared.name)}.ts`;
     case 'rejection':
-      return `${folder}/${kebabCaseOfCode(declared.name)}.ts`;
+      return `${folder}/${kebabCaseOfCode(declared.code)}.ts`;
   }
 }
 
@@ -22,19 +25,19 @@ export function fileOf(declared: Declared): string {
  * The name a declaration is exported under, suffixed by its kind as every generated name is,
  * so names of different kinds never meet: `ORDER_LOCKED` is `orderLockedRejection`.
  */
-export function bindingOf(declared: Declared): string {
+export function bindingOf(declared: PackagedDeclaration): string {
   switch (declared.kind) {
     case 'endpoint':
       return `${declared.name}Endpoint`;
     case 'guard':
       return `${declared.name}Guard`;
     case 'rejection':
-      return `${camelCaseOf(kebabCaseOfCode(declared.name))}Rejection`;
+      return `${camelCaseOf(kebabCaseOfCode(declared.code))}Rejection`;
   }
 }
 
 /** A declaration as another file of the package imports it. */
-export function siblingOf(declared: Declared): Sibling {
+export function siblingOf(declared: PackagedDeclaration): Sibling {
   return { name: bindingOf(declared), path: fileOf(declared), kind: 'value' };
 }
 
@@ -42,7 +45,7 @@ export function siblingOf(declared: Declared): Sibling {
 export function collidingCodesOf(codes: readonly string[]): readonly [string, string] | undefined {
   const codeByBinding = new Map<string, string>();
   for (const code of [...codes].sort(byCodePoint)) {
-    const binding = bindingOf({ kind: 'rejection', name: code });
+    const binding = bindingOf({ kind: 'rejection', code });
     const earlier = codeByBinding.get(binding);
     if (earlier !== undefined) {
       return [earlier, code];

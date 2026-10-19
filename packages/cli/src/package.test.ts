@@ -805,6 +805,29 @@ describe('cf-loom package: the built package', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
+  test('defs reached through an array and through a tuple’s rest are both written', () => {
+    const files = withDeclarations(
+      [
+        "export const leaf = z.object({ get up() { return z.array(leaf); } }).meta({ id: 'leaf' });",
+        "export const knot = z.object({ get next() { return z.tuple([]).rest(knot); } }).meta({ id: 'knot' });",
+        "export const root = z.object({ get leaves() { return z.array(leaf); }, get knots() { return z.tuple([]).rest(knot); }, get self() { return root.optional(); } }).meta({ id: 'root' });",
+      ],
+      '',
+      'root',
+    );
+    const project = aProject(files);
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+
+    const defs = read(out, 'src/defs.ts');
+
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+    expect(defs).toContain('export const leafReaderDef');
+    expect(defs).toContain('export const knotReaderDef');
+    expect(defs).toContain('.rest(');
+  });
+
   test('an Application’s package exports its Snapshot only, and builds', async () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
@@ -894,13 +917,75 @@ describe('cf-loom package: where it writes', () => {
     expect(read(project, 'contract-package/src/NOTES.md')).toBe('mine');
   });
 
-  test('a committed contract.snapshot.json that is no JSON stops package, which names itself', () => {
+  test('a committed contract.snapshot.json that is no JSON stops package, which advises generate', () => {
     const project = aProject({ ...service, 'contract.snapshot.json': '<<<<<<< HEAD\n' });
 
-    const ran = packageIn(project);
+    const ran = cfLoom(project, 'package');
 
     expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/: restore it or delete it, then run cf-loom package\n$/);
+    expect(ran.stderr).toMatch(/: restore it or delete it, then run cf-loom generate\n$/);
+  });
+
+  test('a committed contract.snapshot.json that is out of date stops package', () => {
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace("message: 'Locked'", "message: 'Held'"),
+    );
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'contract.snapshot.json is missing or out of date: run cf-loom generate\n',
+    });
+  });
+
+  test('a committed contract.snapshot.json another CLI wrote is current for package', () => {
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    edit(project, 'contract.snapshot.json', (text) =>
+      text.replace(/"generator": "[^"]+"/, '"generator": "@casitafeliz/loom-cli@0.0.1"'),
+    );
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'contract-package/snapshot.json')).toContain(
+      '@casitafeliz/loom-cli@0.0.1',
+    );
+  });
+
+  test('a committed contract.snapshot.json that cannot be read stops package in one line', () => {
+    const project = aProject({ ...service, 'contract.snapshot.json/kept.txt': '' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be read: EISDIR[^\n]*\n$/);
+  });
+
+  test('a listed Definitions Package that cannot be loaded stops package in one line', () => {
+    const project = aProject({
+      ...service,
+      'node_modules/@org/definitions/package.json': JSON.stringify({
+        name: '@org/definitions',
+        version: '4.2.0',
+        type: 'module',
+        exports: { '.': './broken.js', './all': './index.js' },
+      }),
+      'node_modules/@org/definitions/broken.js': 'export const = ;\n',
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        "from '@org/definitions';",
+        "from '@org/definitions/all';",
+      ),
+    });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^@org\/definitions cannot be loaded: [^\n]+\n$/);
   });
 
   test('a previous output holding a file package does not write is refused and kept', () => {
@@ -980,9 +1065,94 @@ describe('cf-loom package: where it writes', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(/^--out takes a folder\. Usage: /);
   });
+  test.each([
+    ['not in kebab-case', 'src/endpoints/My Notes.ts'],
+    ['a test', 'src/endpoints/get-order.test.ts'],
+    ['a declaration', 'src/endpoints/get-order.d.ts'],
+    ['no name', 'src/endpoints/.ts'],
+    ['in a nested folder', 'src/endpoints/old/get-order.ts'],
+  ])('a previous output holding a file %s is refused and kept', (_name, path) => {
+    const project = aProject(service);
+    packageIn(project);
+    write(project, { [`contract-package/${path}`]: 'mine' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(read(project, `contract-package/${path}`)).toBe('mine');
+  });
+
+  test('a folder of package files whose package.json has no cfLoom is refused', () => {
+    const project = aProject({
+      ...service,
+      'contract-package/package.json': JSON.stringify({ name: 'mine' }),
+      'contract-package/src/index.ts': 'export {};\n',
+    });
+    cfLoom(project, 'generate');
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(read(project, 'contract-package/package.json')).toBe(JSON.stringify({ name: 'mine' }));
+  });
+
+  test('package leaves no folder of its own beside the target', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+    packageIn(project);
+
+    expect(readdirSync(project).filter((entry) => entry.startsWith('.contract-package'))).toEqual(
+      [],
+    );
+  });
+
+  test.skipIf(isRoot)(
+    'a previous output that cannot be read is a tooling error in one line (skipped as root)',
+    () => {
+      const project = aProject(service);
+      packageIn(project);
+      chmodSync(join(project, 'contract-package/src'), 0o000);
+
+      const ran = cfLoom(project, 'package');
+
+      chmodSync(join(project, 'contract-package/src'), 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^contract-package cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test('an empty --out is a usage error', () => {
+    const project = aProject(service);
+
+    const ran = cfLoom(project, 'package', '--out=');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^--out takes a folder\. Usage: /);
+  });
 });
 
 describe('cf-loom package: what it refuses', () => {
+  test('a Definitions Package root is refused before any Snapshot is looked at', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'cf-loom.config.ts': config,
+      'src/definitions/index.ts': lines([
+        "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+        "export const definitions = defineDefinitions({ name: 'definitions' });",
+      ]),
+    });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'A Definitions Package has no Contract Package: it is published from its own source\n',
+    });
+  });
+
   test('a Definitions Package root is a tooling error', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),

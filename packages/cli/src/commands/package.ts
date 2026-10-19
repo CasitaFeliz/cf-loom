@@ -1,7 +1,13 @@
 import { join } from 'node:path';
 import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
-import { type BuiltProject, builtOf, type Run, snapshotFile } from '../project/index.ts';
+import {
+  type BuiltProject,
+  builtOf,
+  isCommittedCurrent,
+  type Run,
+  snapshotFile,
+} from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
 
@@ -16,20 +22,20 @@ const localVersion = '0.0.0';
  * committed Snapshot, which must be what `generate` would write, so the package is a function of
  * the reviewed file; a Definitions Package is its own source and has none.
  */
-export async function writeContractPackage(run: Run, out: string): Promise<Exit> {
+export async function packageCommand(run: Run, out: string): Promise<Exit> {
   const built = await builtOf(run, 'committed');
   if (built.kind !== 'built') {
     return failureExitOf(built);
-  }
-  const stop = stopOf(built);
-  if (stop !== undefined) {
-    return stop;
   }
   const { snapshot, text, project } = built;
   if (snapshot.kind === 'definitions') {
     return toolingError(
       'A Definitions Package has no Contract Package: it is published from its own source',
     );
+  }
+  const stop = stopOf(built);
+  if (stop !== undefined) {
+    return stop;
   }
   const peers = peersOf(built);
   if (peers.kind === 'failed') {
@@ -41,17 +47,22 @@ export async function writeContractPackage(run: Run, out: string): Promise<Exit>
     return toolingError(files.line);
   }
   const written = writeContractPackageTo(run.cwd, out, files.files);
-  return written.kind === 'written' ? done([`Wrote ${out}`]) : toolingError(written.message);
+  switch (written.kind) {
+    case 'written':
+      return done([`Wrote ${out}`]);
+    case 'refused':
+    case 'failed':
+      return toolingError(written.message);
+  }
 }
 
 /** A committed Snapshot that is no JSON, or is not what `generate` would write. */
 function stopOf(built: BuiltProject): Exit | undefined {
-  const noJson = noJsonExitOf(built.committed, 'package');
+  const noJson = noJsonExitOf(built.committed);
   if (noJson !== undefined) {
     return noJson;
   }
-  const { committed } = built;
-  if (committed.kind === 'json' && committed.bytes.equals(built.bytes)) {
+  if (isCommittedCurrent(built)) {
     return undefined;
   }
   return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);

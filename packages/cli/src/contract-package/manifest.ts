@@ -1,7 +1,12 @@
-import type { ApplicationSnapshot, ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
-import { snapshotHashOf } from './hash.ts';
+import { createHash } from 'node:crypto';
+import {
+  type ApplicationSnapshot,
+  hashedTextOf,
+  type ServiceSnapshot,
+  type Snapshot,
+} from '@casitafeliz/loom-contract/internal';
 import type { PackageFile } from './modules.ts';
-import { packagePaths } from './paths.ts';
+import { builtFolder, packagePaths } from './paths.ts';
 
 /** The versions of the two peers the package is built with, as installed beside the root. */
 export type Peers = { readonly contract: string; readonly zod: string };
@@ -22,8 +27,10 @@ export function manifestOf(
     name: `${scope}/contract-${snapshot.name}`,
     version,
     type: 'module',
-    exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
-    files: ['dist', packagePaths.snapshot],
+    exports: {
+      '.': { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` },
+    },
+    files: [builtFolder, packagePaths.snapshot],
     sideEffects: false,
     peerDependencies: {
       '@casitafeliz/loom-contract': `^${peers.contract}`,
@@ -51,7 +58,7 @@ export function tsconfigOf(): PackageFile {
       lib: ['ES2024'],
       module: 'nodenext',
       moduleResolution: 'nodenext',
-      outDir: 'dist',
+      outDir: builtFolder,
       rewriteRelativeImportExtensions: true,
       rootDir: 'src',
       skipLibCheck: true,
@@ -63,4 +70,12 @@ export function tsconfigOf(): PackageFile {
     include: ['src'],
   };
   return { path: packagePaths.tsconfig, text: `${JSON.stringify(tsconfig, null, 2)}\n` };
+}
+
+/**
+ * The Snapshot's hash, as `cfLoom.snapshotHash` carries it: the SHA-256 of its canonical text
+ * without `version` and `generator`, in lowercase hex.
+ */
+export function snapshotHashOf(snapshot: Snapshot): string {
+  return createHash('sha256').update(hashedTextOf(snapshot), 'utf8').digest('hex');
 }

@@ -3,7 +3,7 @@ import type { Run } from '../project/index.ts';
 import { type Exit, toolingError } from './exit.ts';
 import { generate } from './generate.ts';
 import { init } from './init.ts';
-import { defaultPackageFolder, writeContractPackage } from './package.ts';
+import { defaultPackageFolder, packageCommand } from './package.ts';
 import { verify } from './verify.ts';
 
 const usage =
@@ -33,7 +33,7 @@ export async function runCommand({ positionals, out }: Called, run: Run): Promis
     case 'package':
       return rest.length > 0
         ? usageError('package takes no argument')
-        : await writeContractPackage(run, out ?? defaultPackageFolder);
+        : await packageCommand(run, out ?? defaultPackageFolder);
     default:
       return usageError(`Unknown command: ${command ?? '(none)'}`);
   }

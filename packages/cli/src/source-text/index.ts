@@ -7,6 +7,6 @@ export {
   headerOf,
   moduleTextOf,
   namedImportOf,
+  namespaceImportOf,
   relativeSpecifierOf,
-  typeImportOf,
 } from './modules.ts';
