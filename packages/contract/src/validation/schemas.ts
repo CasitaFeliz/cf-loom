@@ -1,9 +1,26 @@
 import type { $ZodType } from 'zod/v4/core';
-import type { LocatedSchema, Path, SchemaNode, WalkedSchemas } from '../walker/index.ts';
+import type {
+  LocatedSchema,
+  NotAllowed,
+  ObjectNode,
+  Path,
+  SchemaNode,
+  WalkedLocation,
+  WalkedSchemas,
+} from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';
-import { endpointParts, guardParts, isSchema, type Part, slotAt, writtenAt } from './parts.ts';
+import {
+  endpointParts,
+  guardParts,
+  isObjectPart,
+  isSchema,
+  type ObjectPart,
+  type Part,
+  slotAt,
+  writtenAt,
+} from './parts.ts';
 import { entriesOf, textOf } from './written.ts';
 
 /**
@@ -39,6 +56,15 @@ export type Nodes = {
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
+/** The slots of a root's Endpoints and Guards that travel as text, in declaration order. */
+export function textSlotsOf(declarations: Declarations): readonly Slot[] {
+  const slots = [
+    ...declarations.endpoints.flatMap(endpointSlots),
+    ...declarations.guards.flatMap(guardSlots),
+  ];
+  return slots.filter((slot) => isObjectPart(slot.part));
+}
+
 /** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
 export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
   const slots = [
@@ -46,13 +72,19 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
     ...declarations.guards.flatMap(guardSlots),
     ...declarations.codes.flatMap(codeSlots),
     ...sharedSlots(declarations),
-  ].filter(isFilled);
-  const failures = slots
+  ];
+  return schemaSlotsAmong(slots);
+}
+
+/** The slots among the given that hold a schema, and a failure for each filled with something else. */
+export function schemaSlotsAmong(slots: readonly Slot[]): SchemaSlots {
+  const filled = slots.filter(isFilled);
+  const failures = filled
     .filter((slot) => !holdsSchema(slot))
     .map((slot) =>
       failure(slot.at, 'not-a-schema', `${textOf(slot.at.at(-1))} is not a zod schema`),
     );
-  return { slots: slots.filter(holdsSchema), failures };
+  return { slots: filled.filter(holdsSchema), failures };
 }
 
 /** The schemas to walk, one per slot, in slot order. */
@@ -81,6 +113,31 @@ export function nodesOf(slots: readonly SchemaSlot[], walked: WalkedSchemas): No
   }
   const nodeOf = (owner: unknown, part: Part) => nodesByOwner.get(owner)?.get(part);
   return { slots: walkedSlots, nodeOf, defs: walked.defs };
+}
+
+/**
+ * The node of a declaration's part, if it declares that part: an object for a part that travels as
+ * text, since the validation refuses any other there.
+ */
+export type NodeLookup = {
+  (declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  (declaration: unknown, part: Part): SchemaNode | undefined;
+};
+
+/** Finds walked nodes by declaration and part, a text part's typed as the object it is. */
+export function nodeLookupOf(nodes: Nodes): NodeLookup {
+  function nodeOf(declaration: unknown, part: ObjectPart): ObjectNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined;
+  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined {
+    const node = nodes.nodeOf(declaration, part);
+    return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
+  }
+  return nodeOf;
+}
+
+/** What the walk refused at a location; a cycle's failure comes back wherever the cycle is met. */
+export function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
+  return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {

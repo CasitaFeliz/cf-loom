@@ -1,5 +1,6 @@
+import { committedValues } from '@casitafeliz/loom-contract/internal';
 import type { AnyRejection, BuiltAdmitted, BuiltSuccess } from './built.ts';
-import { committedValues, type Fault } from './fault.ts';
+import type { Fault } from './fault.ts';
 
 /** What any EndpointHandler builds, before its Endpoint checks it. */
 export type AnyOutcome = BuiltSuccess<unknown> | AnyRejection | Fault;

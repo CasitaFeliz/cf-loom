@@ -71,3 +71,16 @@ export type Failure = DeclarationFailure | NotAllowed;
 export function failure(at: Path, rule: Rule, message: string): DeclarationFailure {
   return { kind: 'declaration', at, rule, message };
 }
+
+/** One failure on one line, where it sits first, as every tool that reports a root's rules words it. */
+export function failureLineOf(broken: Failure): string {
+  const location = broken.at.length === 0 ? '(root)' : broken.at.join('.');
+  switch (broken.kind) {
+    case 'declaration':
+      return `${location} ${broken.rule}: ${broken.message}`;
+    case 'not-allowed':
+      return broken.instead === undefined
+        ? `${location} not allowed: ${broken.construct}`
+        : `${location} not allowed: ${broken.construct} (use ${broken.instead})`;
+  }
+}

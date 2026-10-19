@@ -1,21 +1,12 @@
-import type { IssueCode } from '@casitafeliz/loom-contract';
-import type { Part, SchemaIssue } from '@casitafeliz/loom-contract/internal';
+import type { Issue, IssuePart, Part, SchemaIssue } from '@casitafeliz/loom-contract/internal';
 import { parseValue } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
 
 /** Where in a value an Issue sits, inside its part. */
 type Path = readonly (string | number)[];
 
-/** The slot an Issue sits in: a part of an Endpoint, a Guard or a Rejection, or the Rejections. */
-type IssuePart = Exclude<Part, 'schema'> | 'rejections';
-
-/** One way a value broke its schema: the part and path, cf-loom's code and a message; never the value. */
-export type Issue = {
-  readonly part: IssuePart;
-  readonly path: Path;
-  readonly code: IssueCode;
-  readonly message: string;
-};
+/** One way a value broke its part of the Contract, as contract defines it for every package. */
+export type { Issue } from '@casitafeliz/loom-contract/internal';
 
 /** A value checked against the Contract: parsed, or every Issue it broke. */
 export type Checked<Value> =

@@ -5,6 +5,7 @@ import {
   admit,
   type EndpointHandler,
   type GuardHandler,
+  type HandlerMap,
   handle,
   reject,
   success,
@@ -107,5 +108,35 @@ describe('handle', () => {
       kind: 'fault',
       cause: new TypeError("apiKey's Handler returned no Outcome but undefined"),
     });
+  });
+});
+
+describe('HandlerMap', () => {
+  test('takes the map handlers.generated.ts exports, Handlers by name and the stamps', () => {
+    const generated = {
+      endpoints: { getOrder: handle.stub(getOrder), findOrder: handle.stub(findOrder) },
+      guards: { apiKey: handle.stub(apiKey) },
+      commands: {},
+      subscriptions: {},
+      deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
+    };
+
+    const map: HandlerMap = generated;
+
+    expectTypeOf(generated).toExtend<HandlerMap>();
+    expect(map.guards['apiKey']?.element).toBe(apiKey);
+  });
+
+  test('refuses a map whose Handler is no Handler', () => {
+    const generated = {
+      endpoints: { getOrder: () => undefined },
+      guards: {},
+      commands: {},
+      subscriptions: {},
+      deprecatedAt: {},
+    };
+
+    expectTypeOf(generated).not.toExtend<HandlerMap>();
+    expect(generated.endpoints.getOrder()).toBeUndefined();
   });
 });

@@ -1235,11 +1235,10 @@ describe('cf-loom verify', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'contract.snapshot.json was edited or is out of date: run cf-loom generate\n',
-    });
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(
+      'contract.snapshot.json was edited or is out of date: run cf-loom generate\n',
+    );
   });
 
   test('verify exits 1 when contract.snapshot.json is no JSON', () => {

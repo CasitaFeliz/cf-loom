@@ -9,7 +9,7 @@ import {
   writtenOf,
 } from './written.ts';
 
-/** Whether a Handler is a stub, which `consume` does not pull from and `serve` logs. */
+/** Whether a Handler is a stub, which `consume` does not pull from. */
 export function isStub(handler: AnyHandler): boolean {
   return writtenOf(handler, isAnyWritten).stub;
 }

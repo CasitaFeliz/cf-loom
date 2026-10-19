@@ -23,6 +23,27 @@ export function attachedGuardsOf(endpoint: Endpoint): readonly Guard[] {
 }
 
 /**
+ * An Endpoint's Attachments as the runtime runs them: each Guard once, in order, with its
+ * Qualifier, `undefined` when bare.
+ */
+export function attachmentsOf(
+  endpoint: Endpoint,
+): readonly { readonly guard: Guard; readonly qualifier: unknown }[] {
+  return attachedGuardsOf(endpoint).map((guard) => ({
+    guard,
+    qualifier: qualifierOf(endpoint, guard),
+  }));
+}
+
+function qualifierOf(endpoint: Endpoint, guard: Guard): unknown {
+  const attachments: readonly unknown[] = listOf(endpoint.guards);
+  const qualified = attachments.find(
+    (attachment) => isPlainObject(attachment) && attachment['guard'] === guard,
+  );
+  return isPlainObject(qualified) ? qualified['qualifier'] : undefined;
+}
+
+/**
  * The Guards whose Context a Handler receives, each once, in order: an Endpoint's attached ones,
  * or the ones a Guard lists, that provide a Context.
  */

@@ -6,6 +6,7 @@ export type {
   EndpointImplementation,
   GuardHandler,
   GuardImplementation,
+  HandlerMap,
 } from './handlers/index.ts';
 export { handle } from './handlers/index.ts';
 export type {

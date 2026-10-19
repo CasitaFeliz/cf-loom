@@ -1,4 +1,4 @@
-import { isRejectionStatus } from '../declarations/index.ts';
+import { isRejectionStatus, reservedCodes } from '../declarations/index.ts';
 import type { Path, SchemaNode } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -17,14 +17,6 @@ import {
   standardStatusFailures,
 } from './standard-codes.ts';
 import { isMissing, isWithoutValue, textOf } from './written.ts';
-
-/** The codes cf-loom answers outside the Contract, as Faults; no declaration may take one. */
-const reservedCodes: readonly unknown[] = [
-  'RETIRED',
-  'NO_SUCH_ENDPOINT',
-  'BODY_TOO_LARGE',
-  'INVALID_OUTCOME',
-];
 
 /** The rules on Rejections and codes that read declarations alone. */
 export function rejectionFailures(declarations: Declarations): readonly DeclarationFailure[] {
@@ -71,7 +63,8 @@ function statusFailures({ at, rejection }: LocatedRejection): readonly Declarati
 }
 
 function reservedFailures(at: Path, code: unknown): readonly DeclarationFailure[] {
-  if (!reservedCodes.includes(code)) {
+  const reserved: readonly unknown[] = reservedCodes;
+  if (!reserved.includes(code)) {
     return [];
   }
   const message = `A code cf-loom answers as a Fault is reserved: ${textOf(code)}`;

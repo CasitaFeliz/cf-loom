@@ -73,15 +73,15 @@ describe('a direct call never throws what a check throws', () => {
     expect(admission).toEqual(fromTheThrow);
   });
 
-  test('Input whose getter throws answers the Fault', async () => {
+  test('Input whose getter throws answers the Fault, not committed since nothing ran', async () => {
     const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID }));
 
     const outcome = await getOrderHandler({ body: entityThatThrows() }, {});
 
-    expect(outcome).toEqual(fromTheThrow);
+    expect(outcome).toEqual({ ...fromTheThrow, committed: 'no' });
   });
 
-  test('a body nested past the stack answers the Fault', async () => {
+  test('a body nested past the stack answers the Fault, not committed since nothing ran', async () => {
     const node: z.ZodType = z.object({
       get next() {
         return node.optional();
@@ -104,6 +104,10 @@ describe('a direct call never throws what a check throws', () => {
 
     const outcome = await nestedHandler({ body }, {});
 
-    expect(outcome).toMatchObject({ kind: 'fault', cause: expect.any(RangeError) });
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      committed: 'no',
+      cause: expect.any(RangeError),
+    });
   });
 });

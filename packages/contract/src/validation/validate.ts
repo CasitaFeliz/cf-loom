@@ -1,11 +1,9 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
-import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import {
-  type KeyedRecordSlots,
   keyedRecordsOf,
   type OriginOf,
   openIntersectionsOf,
-  type WalkedLocation,
   walkSchemas,
 } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
@@ -18,18 +16,20 @@ import { attachmentFailures, guardFailures, qualifierFailures } from './guards.t
 import type { Root } from './located.ts';
 import { nameFailures } from './name-grammars.ts';
 import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
-import {
-  isQueryOrHeadersPart,
-  isReadShapePart,
-  type ObjectPart,
-  objectParts,
-  type Part,
-} from './parts.ts';
+import { isReadShapePart } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import { locatedSchemasOf, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
+import {
+  failuresAt,
+  locatedSchemasOf,
+  type NodeLookup,
+  type Nodes,
+  nodeLookupOf,
+  nodesOf,
+  schemaSlotsOf,
+} from './schemas.ts';
 import { structureFailures } from './structure.ts';
-import { conflictFailures, textFailures } from './text-only.ts';
+import { conflictFailures, textPartFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
 /**
@@ -39,15 +39,6 @@ import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated
 export type ValidatedSchemas = {
   readonly nodeOf: NodeLookup;
   readonly defs: Readonly<Record<string, SchemaNode>>;
-};
-
-/**
- * The node of a declaration's part, if it declares that part: an object for a part that travels as
- * text, since the validation refuses any other there.
- */
-export type NodeLookup = {
-  (declaration: unknown, part: ObjectPart): ObjectNode | undefined;
-  (declaration: unknown, part: Part): SchemaNode | undefined;
 };
 
 /**
@@ -96,8 +87,9 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
+    ...textPartFailures(nodes),
     ...openIntersectionsOf(nodes.slots, nodes.defs),
-    ...keyedRecordsOf(keyedRecordSlotsOf(nodes), nodes.defs),
+    ...keyedRecordsOf({ queryOrHeaders: [], readShapes: readShapeSlotsOf(nodes) }, nodes.defs),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {
@@ -136,7 +128,6 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
     ...rejectionBodyFailures(declarations, nodes),
-    ...textFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];
 }
@@ -153,31 +144,7 @@ function invalid(failures: readonly Failure[]): ValidatedContract {
   return { kind: 'invalid', failures: [first, ...others] };
 }
 
-/** A cycle's failure comes back wherever the cycle is met, so the same failure may repeat. */
-function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
-  return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
-}
-
-/** Finds a valid root's nodes by declaration and part, a text part's typed as the object it is. */
-function nodeLookupOf(nodes: Nodes): NodeLookup {
-  function nodeOf(declaration: unknown, part: ObjectPart): ObjectNode | undefined;
-  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined;
-  function nodeOf(declaration: unknown, part: Part): SchemaNode | undefined {
-    const node = nodes.nodeOf(declaration, part);
-    return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
-  }
-  return nodeOf;
-}
-
-/** The slots a record keyed by an enum or literal is judged in, by the parts they hold. */
-function keyedRecordSlotsOf(nodes: Nodes): KeyedRecordSlots {
-  return {
-    queryOrHeaders: nodes.slots.filter((slot) => isQueryOrHeadersPart(slot.part)),
-    readShapes: nodes.slots.filter((slot) => isReadShapePart(slot.part)),
-  };
-}
-
-function isObjectPart(part: Part): part is ObjectPart {
-  const parts: readonly Part[] = objectParts;
-  return parts.includes(part);
+/** The slots of Read shapes' bodies, where a record keyed by an enum or literal is refused at any depth. */
+function readShapeSlotsOf(nodes: Nodes): Nodes['slots'] {
+  return nodes.slots.filter((slot) => isReadShapePart(slot.part));
 }

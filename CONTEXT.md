@@ -98,6 +98,10 @@ _Avoid_: generic error, built-in error
 A technical failure any Handler can produce and no Endpoint, Guard or Message declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it.
 _Avoid_: error, server error, operation failure
 
+**Envelope**:
+The body cf-loom defines, in which a Rejection or a Fault travels over HTTP.
+_Avoid_: error body, error payload, problem details (RFC 9457 is another format)
+
 **Open Enum**, **Open Union**:
 An enum, or a discriminated union, declared open: its readers receive values or variants they do not know as a tagged **Unknown** case and must handle it.
 _Avoid_: extensible enum, loose enum
@@ -106,7 +110,7 @@ _Avoid_: extensible enum, loose enum
 
 **Message**:
 A Command or an Event: what travels through the broker rather than over HTTP.
-_Avoid_: payload (for the Message itself), envelope
+_Avoid_: payload (for the Message itself), envelope (for the Message itself)
 
 **Command**:
 An instruction a Service sends to itself, handled by one CommandHandler.
@@ -161,7 +165,7 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name.
+The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `deprecatedAt` of each Deprecated Endpoint.
 _Avoid_: registry, router
 
 **Issue**:

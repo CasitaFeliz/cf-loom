@@ -6,6 +6,20 @@ export function segmentsOf(path: string): readonly string[] {
   return inner === '' ? [] : inner.split('/');
 }
 
+/** A segment of a canonical path: a literal, or a `:name` param. */
+export type PathSegment =
+  | { readonly kind: 'literal'; readonly text: string }
+  | { readonly kind: 'param'; readonly name: string };
+
+/** The segments of a canonical path, a literal or a param, so a request is matched by them alone. */
+export function pathSegmentsOf(path: string): readonly PathSegment[] {
+  return segmentsOf(path).map((segment) =>
+    segment.startsWith(':')
+      ? { kind: 'param', name: segment.slice(1) }
+      : { kind: 'literal', text: segment },
+  );
+}
+
 /** The `:names` of a path, in order, as its params must declare them. */
 export function paramNamesOf(path: string): readonly string[] {
   return segmentsOf(path)

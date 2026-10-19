@@ -11,6 +11,7 @@ import {
 } from '../checks/index.ts';
 import {
   type Fault,
+  fault,
   isAdmission,
   isOutcome,
   type ResolvedAdmission,
@@ -41,14 +42,14 @@ export type Run<Answer> =
 
 /**
  * How one call of an EndpointHandler went, as `serve` answers it. Inside `serve`, an Issue at
- * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onFault`.
+ * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onServiceFault`.
  */
 export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
 
 /**
  * How one call of a GuardHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
- * to `onFault`.
+ * to `onServiceFault`.
  */
 export type GuardRun = Run<ResolvedAdmission<Guard>>;
 
@@ -89,9 +90,9 @@ async function endpointCallOf(
   given: EndpointGiven,
   standards: StandardRejections,
 ): Promise<EndpointRun> {
-  const checked = checkedEndpointCall(endpoint, given);
-  if (checked.kind === 'issues') {
-    return { kind: 'invalid-input', issues: checked.issues };
+  const checked = checkedGiven(() => checkedEndpointCall(endpoint, given));
+  if (checked.kind !== 'value') {
+    return checked;
   }
   const { input, context } = checked.value;
   const returned = await returnedOf(endpoint, () => implementation(input, context), isOutcome);
@@ -106,9 +107,9 @@ async function guardCallOf(
   given: GuardGiven,
   standards: StandardRejections,
 ): Promise<GuardRun> {
-  const checked = checkedGuardCall(guard, given);
-  if (checked.kind === 'issues') {
-    return { kind: 'invalid-input', issues: checked.issues };
+  const checked = checkedGiven(() => checkedGuardCall(guard, given));
+  if (checked.kind !== 'value') {
+    return checked;
   }
   const { demands, context, qualifier } = checked.value;
   const run = () => implementation(demands, context, qualifier);
@@ -117,6 +118,24 @@ async function guardCallOf(
     return returned;
   }
   return answeredRunOf(checkedAdmission(guard, returned.built, standards));
+}
+
+/**
+ * What a call is given, checked; a throw while checking, such as a stack overflow on deep input, is
+ * the Fault not committed, since the implementation never ran.
+ */
+function checkedGiven<Value>(
+  check: () => Checked<Value>,
+): { readonly kind: 'value'; readonly value: Value } | Exclude<Run<never>, { kind: 'answered' }> {
+  try {
+    const checked = check();
+    if (checked.kind === 'issues') {
+      return { kind: 'invalid-input', issues: checked.issues };
+    }
+    return checked;
+  } catch (e) {
+    return { kind: 'thrown', fault: fault({ committed: 'no', retryable: false, cause: e }) };
+  }
 }
 
 function answeredRunOf<Answer>(checked: Checked<Answer>): Run<Answer> {

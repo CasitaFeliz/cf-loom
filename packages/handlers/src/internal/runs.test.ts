@@ -7,7 +7,7 @@ import {
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, fault, handle, reject, success } from '../index.ts';
-import { isStub, runEndpoint, runGuard } from './index.ts';
+import { isStub, isWrittenFor, runEndpoint, runGuard } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -238,5 +238,24 @@ describe('isStub', () => {
     const stubs = [isStub(written), isStub(stub)];
 
     expect(stubs).toEqual([false, true]);
+  });
+});
+
+describe('isWrittenFor', () => {
+  test('a Handler is told written for its own Element, not another, and a plain function never', () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const lookalike = Object.assign(() => undefined, { element: getOrder });
+
+    const written = [
+      isWrittenFor(getOrderHandler, getOrder),
+      isWrittenFor(apiKeyHandler, apiKey),
+      isWrittenFor(getOrderHandler, apiKey),
+      isWrittenFor(handle.stub(permission), apiKey),
+      isWrittenFor(lookalike, getOrder),
+      isWrittenFor(undefined, getOrder),
+    ];
+
+    expect(written).toEqual([true, true, false, false, false, false]);
   });
 });

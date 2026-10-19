@@ -9,9 +9,9 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | Package | Used by | Provides |
 | --- | --- | --- |
 | [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| [`@casitafeliz/loom-handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`); `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws |
-| [`@casitafeliz/loom-server`](packages/server/README.md) | Services with Endpoints | `serve` |
-| [`@casitafeliz/loom-server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter |
+| [`@casitafeliz/loom-handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`); `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
+| [`@casitafeliz/loom-server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
+| [`@casitafeliz/loom-server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
 | [`@casitafeliz/loom-client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type |
 | [`@casitafeliz/loom-messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
 | [`@casitafeliz/loom-messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
