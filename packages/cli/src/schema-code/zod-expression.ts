@@ -98,14 +98,29 @@ function enumOf(node: EnumNode, writing: Writing): string {
   return `loom.openEnum([${values}])`;
 }
 
-/** An object: strict only as declared, since readers ignore fields they do not know. */
+/**
+ * An object, open; a strict one as declared is the record keyed by an enum it was walked from,
+ * since a Contract declares no strict object, and readers ignore fields they do not know.
+ */
 function objectOf(node: ObjectNode, writing: Writing): string {
+  if (node.mode === 'strict' && writing.mode === 'declared') {
+    return keyedRecordOf(node, writing);
+  }
   const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
-  const call =
-    node.mode === 'strict' && writing.mode === 'declared' ? 'z.strictObject' : 'z.object';
-  return fields.length === 0 ? `${call}({})` : `${call}({ ${fields.join(', ')} })`;
+  return fields.length === 0 ? 'z.object({})' : `z.object({ ${fields.join(', ')} })`;
+}
+
+/** A record keyed by an enum of the object's keys: every key shares one schema and requiredness. */
+function keyedRecordOf(node: ObjectNode, writing: Writing): string {
+  const [first] = Object.values(node.fields);
+  if (first === undefined) {
+    throw new Error('A strict object has a field per key of its record, at least one: a bug.');
+  }
+  const keys = Object.keys(node.fields).map(stringLiteralOf).join(', ');
+  const call = first.required ? 'z.record' : 'z.partialRecord';
+  return `${call}(z.enum([${keys}]), ${zodExpressionOf(first.schema, writing)})`;
 }
 
 /**
