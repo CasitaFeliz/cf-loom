@@ -53,10 +53,13 @@ export function readyInputOf(endpoint: Endpoint, passed: unknown): ReadyInput {
 }
 
 /**
- * A part's value as the Provider will read it: a query list with no items sends no key, which the
- * Provider reads as absent, so it is parsed as absent.
+ * A part's value as the Provider will read it: a text part left out sends no field, and a query
+ * list with no items sends no key, which the Provider reads as absent, so it is parsed as absent.
  */
 function sentValueOf(part: InputPart, value: unknown): unknown {
+  if (part !== 'input.body' && value === undefined) {
+    return {};
+  }
   if (part !== 'input.query' || !isFields(value)) {
     return value;
   }
