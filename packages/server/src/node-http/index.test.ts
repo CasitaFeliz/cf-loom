@@ -90,17 +90,18 @@ describe('nodeHttp', () => {
     expect(await response.json()).toMatchObject({ fault: { code: 'NO_SUCH_ENDPOINT' } });
   });
 
-  test('a request without a Host header is answered 400', async () => {
+  test.each([
+    ['missing', {}],
+    ['naming no URL', { host: 'not a host' }],
+  ])('a request whose Host header is %s is answered 400', async (_case, headers) => {
     const url = new URL(await listening());
 
     const status = await new Promise<number | undefined>((resolve, reject) => {
-      const sent = nodeRequest(
-        { host: url.hostname, port: url.port, path: '/orders', setHost: false },
-        (response) => {
-          response.resume();
-          resolve(response.statusCode);
-        },
-      );
+      const options = { host: url.hostname, port: url.port, path: '/orders', setHost: false };
+      const sent = nodeRequest({ ...options, headers }, (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      });
       sent.on('error', reject);
       sent.end();
     });
