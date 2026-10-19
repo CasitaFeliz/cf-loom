@@ -4,7 +4,7 @@
 
 ## Faking Providers
 
-Each fake is checked against the Provider's Snapshot, so a fake can never answer what the Provider could not:
+Each fake is checked against the Provider's Snapshot, as its Contract Package exports it in `contract.exportedSnapshot` (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md), so a fake can never answer what the Provider could not:
 
 ```ts
 import { fakeProvider, fakeEvent } from '@casitafeliz/loom-testing';
