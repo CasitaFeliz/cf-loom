@@ -4,7 +4,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 ## Where it lives
 
-- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot there, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
+- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot into the package it writes, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
 - `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
@@ -13,7 +13,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id` and `events` by identity, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a Qualifier's list) keep it.
-- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
+- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
 
 ## Top level
 
