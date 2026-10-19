@@ -589,6 +589,46 @@ describe('cf-loom package: the built package', () => {
     );
   });
 
+  test.each([
+    [
+      'a discriminated union',
+      "z.discriminatedUnion('kind', [z.object({ kind: z.literal('stem') }), twig])",
+    ],
+    ['an Open Union', "openUnion('kind', [z.object({ kind: z.literal('stem') }), twig])"],
+  ])(
+    '%s with a recursive variant is typed soundly: a wrong written type fails tsc',
+    (_name, union) => {
+      const files = withDeclarations(
+        [
+          'export const twig = z',
+          `  .object({ kind: z.literal('twig'), get up() { return ${union}.optional(); } })`,
+          "  .meta({ id: 'twig' });",
+        ],
+        '',
+        `z.object({ stem: ${union} })`,
+      );
+      const project = aProject({
+        ...files,
+        'src/contract/index.ts': (files['src/contract/index.ts'] ?? '').replace(
+          'defineRejection }',
+          'defineRejection, openUnion }',
+        ),
+      });
+      const out = join(aFolder(), 'contract-orders-service');
+      expect(cfLoom(project, 'package', '--out', out)).toMatchObject({ status: 0, stderr: '' });
+      linkPeers(out);
+      expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+      const written = read(out, 'src/defs.ts');
+      const wrong = written.replaceAll("{ kind: 'stem' }", "{ kind: 'stem'; extra: number }");
+      expect(wrong).not.toBe(written);
+      write(out, { 'src/defs.ts': wrong });
+
+      const checked = typeCheck(out);
+
+      expect(checked.status).not.toBe(0);
+    },
+  );
+
   test('an Application’s package exports its Snapshot only, and builds', async () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),

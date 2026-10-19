@@ -5,9 +5,8 @@ import { addDefUse, type Needs, noNeeds, type SchemaMode } from './needs.ts';
 import type { NodeOf } from './nodes.ts';
 
 /**
- * The TypeScript type of what a generated schema returns, written out only where zod cannot
- * infer it, a recursive def or a union with a recursive variant; it agrees with zod's output type
- * of the same node in the same mode.
+ * The TypeScript type of what a generated schema returns, written out only for a recursive def,
+ * whose `z.lazy` needs it; it agrees with zod's output type of the same node in the same mode.
  */
 export function typeTextOf(node: SchemaNode, mode: SchemaMode, needs: Needs = noNeeds()): string {
   const typing = { mode, needs };
@@ -91,7 +90,7 @@ function taggedTypeOf(node: NodeOf<'tagged'>, typing: Typing): string {
 }
 
 /** The type of a discriminated union's declared variants. */
-export function variantsTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode, needs: Needs): string {
+function variantsTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode, needs: Needs): string {
   const variants = Object.entries(node.variants).map(([, variant]) =>
     typeTextOf(variant, mode, needs),
   );

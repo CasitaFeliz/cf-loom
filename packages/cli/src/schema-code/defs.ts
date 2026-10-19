@@ -58,10 +58,21 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   const schema = mode === 'declared' ? `${lazy}.meta({ id: ${stringLiteralOf(id)} })` : lazy;
   const lines = [
     `export type ${typeName} = ${typeTextOf(node, mode, own)};`,
-    `export const ${defIdentifierOf(id, mode)}: z.ZodType<${typeName}> = ${schema};`,
+    `export const ${defIdentifierOf(id, mode)}: ${annotationOf(node, typeName)} = ${schema};`,
   ];
   for (const module of own.modules) {
     needs.modules.add(module);
   }
   return lines;
+}
+
+/**
+ * A def's annotation: its output type, and for an object, that zod's discriminated union may
+ * take it as a variant, so a union with a recursive variant needs no cast and a written type
+ * that disagrees with the schema fails to compile.
+ */
+function annotationOf(node: SchemaNode, typeName: string): string {
+  const output = `z.ZodType<${typeName}>`;
+  const isObject = node.type === 'object' && node.nullable !== true;
+  return isObject ? `${output} & z.core.$ZodTypeDiscriminable` : output;
 }

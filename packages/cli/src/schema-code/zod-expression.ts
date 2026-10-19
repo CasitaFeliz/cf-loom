@@ -5,7 +5,6 @@ import { formatCallOf, regexCallOf } from './formats.ts';
 import { addDefUse, type Needs, type SchemaMode } from './needs.ts';
 import type { NodeOf } from './nodes.ts';
 import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
-import { variantsTypeOf } from './type-text.ts';
 
 /** Where a schema is written: its mode, and what the module writing it must import. */
 export type Writing = { readonly mode: SchemaMode; readonly needs: Needs };
@@ -138,35 +137,16 @@ function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
 
 /**
  * The declared variants as zod's discriminated union, or `loom.openUnion` for an Open Union as
- * declared. A recursive variant's def is typed by its discriminator alone, which is what the
- * union reads of it, and the union by its variants' types, which zod cannot infer through it.
+ * declared; a recursive variant is its def, which its type says is discriminable.
  */
 function declaredUnionOf(node: NodeOf<'tagged'>, writing: Writing): string {
-  const variants = Object.entries(node.variants).map(([value, variant]) =>
-    variant.type === 'ref'
-      ? recursiveVariantOf(node.discriminator, { value, variant }, writing)
-      : zodExpressionOf(variant, writing),
-  );
+  const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
   const isOpenAsDeclared = node.open && writing.mode === 'declared';
   if (isOpenAsDeclared) {
     writing.needs.modules.add('loom');
   }
   const call = isOpenAsDeclared ? 'loom.openUnion' : 'z.discriminatedUnion';
-  const union = `${call}(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
-  const isRecursive = Object.values(node.variants).some((variant) => variant.type === 'ref');
-  return isRecursive
-    ? `(${union} as z.ZodType<${variantsTypeOf(node, writing.mode, writing.needs)}>)`
-    : union;
-}
-
-/** A variant that is a recursive def, typed as the object of its discriminator, `value` its canonical JSON. */
-function recursiveVariantOf(
-  discriminator: string,
-  { value, variant }: { readonly value: string; readonly variant: NodeOf<'ref'> },
-  writing: Writing,
-): string {
-  const shape = `{ ${keyOf(discriminator)}: z.ZodLiteral<${value}> }`;
-  return `(${zodExpressionOf(variant, writing)} as unknown as z.ZodObject<${shape}>)`;
+  return `${call}(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
 }
 
 /** An intersection of every item, nested from the left, as zod intersects two at a time. */
