@@ -18,7 +18,7 @@ export type KeyedRecordSlots = {
  * reaches, judged once.
  */
 export function keyedRecordsOf(slots: KeyedRecordSlots, defs: Defs): readonly NotAllowed[] {
-  const asQueryOrHeaders = nodesReachedFrom(slots.queryOrHeaders, defs).filter(isLocatedKeyedRecord);
+  const asQueryOrHeaders = slots.queryOrHeaders.filter(isLocatedKeyedRecord);
   const inReadShapes = nodesReachedFrom(slots.readShapes, defs).filter(isLocatedKeyedRecord);
   return [
     ...asQueryOrHeaders.map(({ at }) => refusal(at, refused.keyedRecordAsQueryOrHeaders)),
