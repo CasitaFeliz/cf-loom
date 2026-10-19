@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import type {
   EnumNode,
   Field,
@@ -23,7 +24,17 @@ export function zodExpressionOf(node: SchemaNode, writing: Writing): string {
   writing.needs.modules.add('zod');
   const shape = shapeOf(node, writing);
   const nullable = node.nullable === true ? `${shape}.nullable()` : shape;
-  return `${nullable}${metaOf(node)}`;
+  const meta = metaOf(node);
+  const annotated = isBareRef(node) && meta !== '' ? `z.lazy(() => ${nullable})` : nullable;
+  return `${annotated}${meta}`;
+}
+
+/**
+ * Whether a node is a recursive def as it is: `.meta()` on it would clone the def without its id,
+ * so annotations go on a `z.lazy()` around it, which the walk sees through.
+ */
+function isBareRef(node: SchemaNode): boolean {
+  return node.type === 'ref' && node.nullable !== true;
 }
 
 function shapeOf(node: SchemaNode, writing: Writing): string {
@@ -98,12 +109,9 @@ function enumOf(node: EnumNode, writing: Writing): string {
   return `loom.openEnum([${values}])`;
 }
 
-/**
- * An object, open; a strict one as declared is the record keyed by an enum it was walked from,
- * since a Contract declares no strict object, and readers ignore fields they do not know.
- */
+/** An object as zod declares it; a strict one is the record it was walked from. */
 function objectOf(node: ObjectNode, writing: Writing): string {
-  if (node.mode === 'strict' && writing.mode === 'declared') {
+  if (node.mode === 'strict') {
     return keyedRecordOf(node, writing);
   }
   const fields = Object.entries(node.fields).map(
@@ -112,29 +120,25 @@ function objectOf(node: ObjectNode, writing: Writing): string {
   return fields.length === 0 ? 'z.object({})' : `z.object({ ${fields.join(', ')} })`;
 }
 
-/** A record keyed by an enum of the object's keys: every key shares one schema and requiredness. */
+/**
+ * A record keyed by an enum or literal, since a Contract declares no strict object: one enum of
+ * the object's keys, whose fields share one schema and requiredness.
+ */
 function keyedRecordOf(node: ObjectNode, writing: Writing): string {
-  const [first] = Object.values(node.fields);
-  if (first === undefined) {
-    throw new Error('A strict object has a field per key of its record, at least one: a bug.');
+  const fields = Object.values(node.fields);
+  const [first] = fields;
+  if (first === undefined || !fields.every((field) => isDeepStrictEqual(field, first))) {
+    throw new Error('A strict object is a keyed record, one field per key, all alike: a bug.');
   }
   const keys = Object.keys(node.fields).map(stringLiteralOf).join(', ');
   const call = first.required ? 'z.record' : 'z.partialRecord';
   return `${call}(z.enum([${keys}]), ${zodExpressionOf(first.schema, writing)})`;
 }
 
-/**
- * A field's schema; an annotated reference to a recursive def carries its annotations on the
- * field's wrapper, since `.meta()` on the def itself would clone it without its id.
- */
-function fieldOf(field: Field, writing: Writing): string {
-  const { schema, required } = field;
-  if (schema.type !== 'ref' || schema.nullable === true || metaOf(schema) === '') {
-    const expression = zodExpressionOf(schema, writing);
-    return required ? expression : `${expression}.optional()`;
-  }
-  const reference = refOf(schema, writing);
-  return `${reference}${required ? '.nonoptional()' : '.optional()'}${metaOf(schema)}`;
+/** A field's schema, optional unless it is required. */
+function fieldOf({ schema, required }: Field, writing: Writing): string {
+  const expression = zodExpressionOf(schema, writing);
+  return required ? expression : `${expression}.optional()`;
 }
 
 function tupleOf(node: TupleNode, writing: Writing): string {

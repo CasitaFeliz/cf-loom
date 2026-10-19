@@ -406,7 +406,7 @@ describe('cf-loom generate', () => {
     [
       'a record keyed by an enum in a Success',
       "z.object({ totals: z.record(z.enum(['eur']), z.number()) })",
-      'fields.totals not allowed: a record keyed by an enum or literal in an output (use z.object() or a string-keyed z.record())',
+      'fields.totals not allowed: a record keyed by an enum or literal in a Read shape (use z.object() or a string-keyed z.record())',
     ],
   ])('%s exits 1 in one line naming what to use', (_construct, body, line) => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
@@ -417,6 +417,25 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr: `groups.health.endpoints.GET /ping.success.body.${line}\n`,
+    });
+  });
+
+  test('a record keyed by an enum as Success headers exits 1 in one line naming z.object()', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text.replace(
+        'success: { status: 200,',
+        "success: { status: 200, headers: z.record(z.enum(['etag']), z.string()),",
+      ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.headers not allowed: a record keyed by an enum or literal as query or headers (use z.object())\n',
     });
   });
 
