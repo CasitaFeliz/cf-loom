@@ -296,6 +296,42 @@ function aProviderPackage(name: string): string {
   return out;
 }
 
+/**
+ * A preload hook that kills the process at the chosen file-system call touching the package
+ * folder, so a test sees what an interrupted run leaves.
+ */
+const killHook = lines([
+  "import fs from 'node:fs';",
+  "import { syncBuiltinESMExports } from 'node:module';",
+  'const which = process.env.killOn;',
+  'const at = Number(process.env.killAt);',
+  'let count = 0;',
+  "for (const name of ['renameSync', 'rmSync', 'writeFileSync', 'mkdirSync']) {",
+  '  const original = fs[name];',
+  '  fs[name] = function (...args) {',
+  "    if (name === which && String(args[0]).includes('contract-package') && ++count === at) {",
+  "      process.kill(process.pid, 'SIGKILL');",
+  '    }',
+  '    return original.apply(this, args);',
+  '  };',
+  '}',
+  'syncBuiltinESMExports();',
+]);
+
+/** Runs `package`, killed at the `at`th call of a file-system function on the package folder. */
+function killedPackage(
+  project: string,
+  hook: string,
+  kill: { readonly on: string; readonly at: number },
+) {
+  const ran = spawnSync(process.execPath, ['--import', pathToFileURL(hook).href, bin, 'package'], {
+    cwd: project,
+    encoding: 'utf8',
+    env: { ...process.env, killOn: kill.on, killAt: String(kill.at) },
+  });
+  return { status: ran.status, signal: ran.signal };
+}
+
 /** The Contract Package built in a folder of its own, where only its two peers are installed. */
 function builtPackage(): string {
   const project = aProject(service);
@@ -1130,6 +1166,35 @@ describe('cf-loom package: where it writes', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(/^--out takes a folder\. Usage: /);
   });
+  test.each(['rmSync', 'renameSync', 'writeFileSync', 'mkdirSync'])(
+    'a replace killed at any %s leaves a previous output a rerun replaces, its install and build kept',
+    (on) => {
+      const project = aProject(service);
+      packageIn(project);
+      write(project, {
+        'contract-package/node_modules/kept.txt': 'install',
+        'contract-package/dist/index.js': 'export {};\n',
+      });
+      const hook = join(aFolder(), 'kill.mjs');
+      writeFileSync(hook, killHook);
+      const outcomes: (string | null)[] = [];
+
+      for (let at = 1; at < 50; at++) {
+        const killed = killedPackage(project, hook, { on, at });
+        outcomes.push(killed.signal);
+        const rerun = cfLoom(project, 'package');
+        expect(rerun).toMatchObject({ status: 0, stderr: '' });
+        expect(read(project, 'contract-package/node_modules/kept.txt')).toBe('install');
+        expect(read(project, 'contract-package/dist/index.js')).toBe('export {};\n');
+        if (killed.signal === null) {
+          break;
+        }
+      }
+
+      expect(outcomes.at(-1)).toBeNull();
+      expect(outcomes.filter((signal) => signal === 'SIGKILL').length).toBeGreaterThan(0);
+    },
+  );
 });
 
 describe('cf-loom package: what it refuses', () => {

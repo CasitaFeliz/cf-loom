@@ -845,6 +845,52 @@ describe('cf-loom generate: linked folders and other runs', () => {
 });
 
 describe('cf-loom generate and verify: what the file system holds', () => {
+  test.skipIf(isRoot)(
+    'a regenerated file that cannot be read fails verify in one line (skipped as root)',
+    () => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      chmodSync(join(project, 'src/handlers.generated.ts'), 0o000);
+
+      const ran = cfLoom(project, 'verify');
+
+      chmodSync(join(project, 'src/handlers.generated.ts'), 0o644);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^src\/handlers\.generated\.ts cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test('a folder where the Handler map goes fails verify in one line', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    rmSync(join(project, 'src/handlers.generated.ts'));
+    mkdirSync(join(project, 'src/handlers.generated.ts'));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/handlers.generated.ts was edited or is out of date: run cf-loom generate\n',
+    });
+  });
+
+  test('src/guards that is a file fails generate, which writes the rest, and verify, in one line each', () => {
+    const project = aProject({ ...aService(), 'src/guards': 'mine' });
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(generated.status).toBe(3);
+    expect(generated.stderr).toBe(
+      "src/guards/api-key.handler.ts cannot be written: EEXIST: file already exists, mkdir 'src/guards'\n",
+    );
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toBe(
+      'src/guards/api-key.handler.ts is missing: run cf-loom generate\n',
+    );
+  });
+
   test('a dangling link at a Handler path is no file', () => {
     const project = aProject(aService());
     mkdirSync(join(project, 'src/guards'), { recursive: true });

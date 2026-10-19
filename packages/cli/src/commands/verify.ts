@@ -7,7 +7,7 @@ import {
   type Run,
   snapshotFile,
 } from '../project/index.ts';
-import { type GeneratedFile, isUpToDate } from '../writing/index.ts';
+import { comparedOf } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 import { missingHandlerPathsOf, noFileLinesOf, orphanLinesOf } from './handler-files.ts';
 import { serviceFilesOf } from './regenerated.ts';
@@ -27,13 +27,22 @@ export async function verify(run: Run): Promise<Exit> {
     return verifiedExit(snapshotLines, [snapshotFile]);
   }
   const regenerated = serviceFilesOf(built);
+  const compared = regenerated.map((file) => ({ file, compared: comparedOf(run.cwd, file) }));
+  const unreadable = compared.find(({ compared: { kind } }) => kind === 'failed')?.compared;
+  if (unreadable?.kind === 'failed') {
+    return toolingError(unreadable.message);
+  }
   const orphans = orphanLinesOf(built);
   if (orphans.kind === 'tooling') {
     return toolingError(orphans.message);
   }
+  const outdated = compared.filter(({ compared: { kind } }) => kind === 'different');
   const failures = [
     ...snapshotLines,
-    ...serviceFailuresOf(run, built, regenerated),
+    ...outdated.map(
+      ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
+    ),
+    ...serviceFailuresOf(built),
     ...orphans.lines,
   ];
   return verifiedExit(failures, [snapshotFile, ...regenerated.map(({ path }) => path)]);
@@ -48,17 +57,11 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
 }
 
 /**
- * What a Service fails `verify` on beside its Snapshot: its Handler map or readers out of date,
- * and its Handler files as `generate` would complete or refuse them. Exports are not loaded.
+ * What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them.
+ * Exports are not loaded.
  */
-function serviceFailuresOf(
-  run: Run,
-  service: BuiltService,
-  regenerated: readonly GeneratedFile[],
-): readonly string[] {
-  const outdated = regenerated.filter((file) => !isUpToDate(run.cwd, file));
+function serviceFailuresOf(service: BuiltService): readonly string[] {
   return [
-    ...outdated.map(({ path }) => `${path} was edited or is out of date: run cf-loom generate`),
     ...missingHandlerPathsOf(service).map((path) => `${path} is missing: run cf-loom generate`),
     ...noFileLinesOf(service),
   ];

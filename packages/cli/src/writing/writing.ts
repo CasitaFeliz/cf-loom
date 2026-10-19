@@ -82,13 +82,25 @@ function writeOnce(path: string, file: GeneratedFile): FileWrite {
   }
 }
 
-/** Whether a generated file on disk holds exactly what would be generated. */
-export function isUpToDate(directory: string, file: GeneratedFile): boolean {
+/** A generated file on disk compared with what would be generated, or why it cannot be read. */
+export type Compared =
+  | { readonly kind: 'same' }
+  | { readonly kind: 'different' }
+  | { readonly kind: 'failed'; readonly message: string };
+
+/** Whether a generated file on disk holds exactly what would be generated, in one line if unreadable. */
+export function comparedOf(directory: string, file: GeneratedFile): Compared {
   const path = join(directory, file.path);
-  if (!existsSync(path) || !statSync(path).isFile()) {
-    return false;
+  try {
+    if (!existsSync(path) || !statSync(path).isFile()) {
+      return { kind: 'different' };
+    }
+    return Buffer.from(file.text).equals(readFileSync(path))
+      ? { kind: 'same' }
+      : { kind: 'different' };
+  } catch (e) {
+    return { kind: 'failed', message: `${file.path} cannot be read: ${oneLineOf(e, directory)}` };
   }
-  return Buffer.from(file.text).equals(readFileSync(path));
 }
 
 /** Removes a file the write left; what is no file there is not the write's and stays. */
