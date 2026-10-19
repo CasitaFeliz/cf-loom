@@ -2,8 +2,8 @@ import type { Field, SchemaNode } from '@casitafeliz/loom-contract/internal';
 import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
-import type { Needs, SchemaMode } from './needs.ts';
-import { entriesOf, type NodeOf } from './nodes.ts';
+import { addDefUse, type Needs, type SchemaMode } from './needs.ts';
+import type { NodeOf } from './nodes.ts';
 import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
 import { variantsTypeOf } from './type-text.ts';
 
@@ -95,7 +95,7 @@ function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
 
 /** An object: strict only as declared, since readers ignore fields they do not know. */
 function objectOf(node: NodeOf<'object'>, writing: Writing): string {
-  const fields = entriesOf(node.fields).map(
+  const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
   const call =
@@ -142,7 +142,7 @@ function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
  * union reads of it, and the union by its variants' types, which zod cannot infer through it.
  */
 function declaredUnionOf(node: NodeOf<'tagged'>, writing: Writing): string {
-  const variants = entriesOf(node.variants).map(([value, variant]) =>
+  const variants = Object.entries(node.variants).map(([value, variant]) =>
     variant.type === 'ref'
       ? recursiveVariantOf(node.discriminator, { value, variant }, writing)
       : zodExpressionOf(variant, writing),
@@ -184,9 +184,8 @@ function allOfOf(items: readonly string[]): string {
 
 /** A recursive def by its identifier. */
 function refOf(node: NodeOf<'ref'>, writing: Writing): string {
-  const identifier = defIdentifierOf(node.name, writing.mode);
-  writing.needs.defs.add(identifier);
-  return identifier;
+  addDefUse(writing.needs.defs, { id: node.name, mode: writing.mode });
+  return defIdentifierOf(node.name, writing.mode);
 }
 
 /** The annotations a schema's `.meta()` carries: its description and examples; `origin` is not code's. */

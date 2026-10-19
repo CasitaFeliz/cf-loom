@@ -1,4 +1,4 @@
-import type { ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
+import { type ServiceSnapshot, standardRejectionNames } from '@casitafeliz/loom-contract/internal';
 import { keyOf, stringLiteralOf } from '../source-text/index.ts';
 import { localVersion } from './manifest.ts';
 import { loomNeeds, type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
@@ -31,15 +31,16 @@ export function serviceEntryOf(name: string, endpoints: readonly ExportedEndpoin
     '',
     'export { snapshot };',
   ];
-  const siblings = [
+  const siblings: readonly Sibling[] = [
     ...names.map(
       (endpoint): Sibling => ({
         name: endpointBindingOf(endpoint),
         path: endpointFileOf(endpoint),
+        kind: 'value',
       }),
     ),
-    { name: 'snapshot', path: snapshotModule },
-    { name: 'standardRejections', path: standardRejectionsModule },
+    { name: 'snapshot', path: snapshotModule, kind: 'value' },
+    { name: 'standardRejections', path: standardRejectionsModule, kind: 'value' },
   ];
   return packageModuleOf({ path: entryFile, body, siblings, needs: loomNeeds() });
 }
@@ -49,7 +50,7 @@ export function applicationEntryOf(): PackageFile {
   return packageModuleOf({
     path: entryFile,
     body: ['export { snapshot };'],
-    siblings: [{ name: 'snapshot', path: snapshotModule }],
+    siblings: [{ name: 'snapshot', path: snapshotModule, kind: 'value' }],
   });
 }
 
@@ -63,8 +64,7 @@ export function snapshotModuleOf(text: string): PackageFile {
 
 /** The Standard Rejections resolved, as the Snapshot records them, for every Caller. */
 export function standardRejectionsModuleOf(snapshot: ServiceSnapshot): PackageFile {
-  const names = ['invalidInput', 'notFound', 'notImplemented'] as const;
-  const lines = names.map((name) => {
+  const lines = standardRejectionNames.map((name) => {
     const { code, status, message } = snapshot.standardRejections[name];
     const fields = `code: ${stringLiteralOf(code)}, status: ${status}, message: ${stringLiteralOf(message)}`;
     return `  ${name}: { ${fields} },`;

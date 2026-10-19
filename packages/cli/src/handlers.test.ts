@@ -50,6 +50,11 @@ function write(project: string, files: Readonly<Record<string, string>>): void {
   }
 }
 
+/** Rewrites one file of a project from what it holds. */
+function edit(project: string, path: string, change: (text: string) => string): void {
+  write(project, { [path]: change(read(project, path)) });
+}
+
 function read(project: string, path: string): string {
   return readFileSync(join(project, path), 'utf8');
 }
@@ -709,6 +714,21 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       stdout: '',
       stderr: 'src/guards/api-key.handler.ts is no file: a Handler is a file\n',
     });
+  });
+
+  test('verify compares files and loads no export, so a renamed export is not its to find', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/endpoints/orders/create-order.endpoint.ts', (text) =>
+      text.replace('export const createOrder =', 'export const createOrderEndpoint ='),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }'),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(0);
   });
 
   test('verify writes nothing', () => {

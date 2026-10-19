@@ -34,10 +34,9 @@ export async function installedPackageOf(
 ): Promise<InstalledPackage> {
   const found = foundOf(packageName, rootPath);
   if (found.kind !== 'found') {
-    return {
-      kind: 'failed',
-      message: missingMessageOf(packageName, found, 'install it to list it'),
-    };
+    const message = missingMessageOf(packageName, found);
+    const listed = found.kind === 'not-installed' ? `${message}: install it to list it` : message;
+    return { kind: 'failed', message: listed };
   }
   const { manifestPath, manifest, version } = found;
   const imported = await entryModuleOf(join(dirname(manifestPath), entryOf(manifest)), directory);
@@ -54,8 +53,7 @@ export async function installedPackageOf(
 export function installedVersionOf(packageName: string, rootPath: string): InstalledVersion {
   const found = foundOf(packageName, rootPath);
   if (found.kind !== 'found') {
-    const why = 'a Contract Package is built with it';
-    return { kind: 'failed', message: missingMessageOf(packageName, found, why) };
+    return { kind: 'failed', message: missingMessageOf(packageName, found) };
   }
   return { kind: 'installed', version: found.version };
 }
@@ -71,14 +69,13 @@ type Found =
   | { readonly kind: 'not-installed' }
   | { readonly kind: 'no-version' };
 
-/** Why a package cannot be used, in one line, with what to do when it is not installed. */
+/** Why a package cannot be used, in one line. */
 function missingMessageOf(
   packageName: string,
   missing: Exclude<Found, { readonly kind: 'found' }>,
-  todo: string,
 ): string {
   return missing.kind === 'not-installed'
-    ? `${packageName} is not installed: ${todo}`
+    ? `${packageName} is not installed`
     : `${packageName} has no version in its package.json`;
 }
 

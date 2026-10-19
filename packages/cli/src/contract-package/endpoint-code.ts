@@ -6,14 +6,14 @@ import {
 } from '@casitafeliz/loom-contract/internal';
 import { type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
-import { loomNeeds, packageModuleOf, type SchemaFile, type Sibling } from './modules.ts';
+import { loomNeeds, packageModuleOf, type SchemaFile } from './modules.ts';
 import {
   endpointBindingOf,
   endpointFileOf,
   guardBindingOf,
-  guardFileOf,
+  guardSiblingOf,
   rejectionBindingOf,
-  rejectionFileOf,
+  rejectionSiblingOf,
 } from './names.ts';
 import {
   type ExportedEndpoint,
@@ -34,19 +34,15 @@ export function endpointModuleOf(
   const { endpoint } = exported;
   const needs = loomNeeds();
   const rejections = ownRejectionsOf(endpoint, snapshot);
-  const guards = endpoint.guards.map(
-    ({ guard }): Sibling => ({ name: guardBindingOf(guard), path: guardFileOf(guard) }),
-  );
-  const declared = rejections
-    .filter(isDeclared)
-    .map(({ code }): Sibling => ({ name: rejectionBindingOf(code), path: rejectionFileOf(code) }));
+  const guards = endpoint.guards.map(({ guard }) => guardSiblingOf(guard));
+  const declared = rejections.filter(isDeclared).map(({ code }) => rejectionSiblingOf(code));
   const file = packageModuleOf({
     path: endpointFileOf(endpoint.name),
     body: endpointBodyOf(exported, rejections, needs),
     siblings: [...guards, ...declared],
     needs,
   });
-  return { file, defs: needs.defs };
+  return { file, defUses: [...needs.defs.values()] };
 }
 
 /** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */

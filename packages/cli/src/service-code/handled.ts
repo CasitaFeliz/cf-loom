@@ -29,8 +29,8 @@ export function handlerPathOf(handled: Handled): string {
 }
 
 /**
- * What the Handler map holds: every Endpoint that is not Retired, then every Guard those attach,
- * each in code point order of its name.
+ * What the Handler map holds: every Endpoint that is not Retired, by name, then every Guard those
+ * attach, in the canonical Snapshot's order.
  */
 export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
   const endpoints = Object.values(snapshot.endpoints).filter(
@@ -42,8 +42,8 @@ export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
   const handledEndpoints = endpoints
     .map(({ name, group }): Handled => ({ kind: 'endpoint', name, group }))
     .sort((left, right) => byCodePoint(left.name, right.name));
-  const handledGuards = [...attached]
-    .sort(byCodePoint)
+  const handledGuards = Object.keys(snapshot.guards)
+    .filter((name) => attached.has(name))
     .map((name): Handled => ({ kind: 'guard', name }));
   return [...handledEndpoints, ...handledGuards];
 }

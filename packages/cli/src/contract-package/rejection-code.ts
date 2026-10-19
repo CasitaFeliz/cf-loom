@@ -18,5 +18,5 @@ export function rejectionModuleOf(code: string, declared: CodeSnapshot): SchemaF
   ];
   const { needs } = reader;
   const file = packageModuleOf({ path: rejectionFileOf(code), body, needs });
-  return { file, defs: needs.defs };
+  return { file, defUses: [...needs.defs.values()] };
 }

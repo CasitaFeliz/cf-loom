@@ -1,8 +1,8 @@
 import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
 import { keyOf, literalOf } from '../source-text/index.ts';
 import { defTypeNameOf } from './def-names.ts';
-import { type Needs, noNeeds, type SchemaMode } from './needs.ts';
-import { entriesOf, type NodeOf } from './nodes.ts';
+import { addDefUse, type Needs, noNeeds, type SchemaMode } from './needs.ts';
+import type { NodeOf } from './nodes.ts';
 
 /**
  * The TypeScript type of what a generated schema returns, written out only where zod cannot
@@ -53,9 +53,8 @@ function shapeTypeOf(node: SchemaNode, typing: Typing): string {
     case 'json':
       return 'z.core.util.JSONType';
     case 'ref': {
-      const typeName = defTypeNameOf(node.name, mode);
-      typing.needs.defTypes.add(typeName);
-      return typeName;
+      addDefUse(typing.needs.defTypes, { id: node.name, mode });
+      return defTypeNameOf(node.name, mode);
     }
   }
 }
@@ -67,7 +66,7 @@ function enumTypeOf(node: NodeOf<'enum'>, mode: SchemaMode): string {
 }
 
 function objectTypeOf(node: NodeOf<'object'>, typing: Typing): string {
-  const fields = entriesOf(node.fields).map(([name, field]) => {
+  const fields = Object.entries(node.fields).map(([name, field]) => {
     const optional = field.required ? '' : '?';
     return `${keyOf(name)}${optional}: ${typeOf(field.schema, typing)}`;
   });
@@ -93,6 +92,8 @@ function taggedTypeOf(node: NodeOf<'tagged'>, typing: Typing): string {
 
 /** The type of a discriminated union's declared variants. */
 export function variantsTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode, needs: Needs): string {
-  const variants = entriesOf(node.variants).map(([, variant]) => typeTextOf(variant, mode, needs));
+  const variants = Object.entries(node.variants).map(([, variant]) =>
+    typeTextOf(variant, mode, needs),
+  );
   return `(${variants.join(' | ')})`;
 }

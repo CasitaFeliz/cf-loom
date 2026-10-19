@@ -72,6 +72,8 @@ const everything = [
   "  digest: z.hash('sha256'),",
   "  digest2: z.hash('md5', { enc: 'base64' }),",
   "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
+  '  scores: z.record(z.string().min(2), z.number()),',
+  "  rooted: z.object({ tree: tree.optional().describe('The root') }).required(),",
   '  forest,',
   '  node,',
   '  stem,',
@@ -192,6 +194,8 @@ const sample = {
   digest: 'a'.repeat(64),
   digest2: `${'a'.repeat(22)}==`,
   keyed: { a: 1, b: 2 },
+  scores: { ab: 1 },
+  rooted: { tree: { label: 'root', children: [] } },
   forest: {
     strict: { a: 'x' },
     status: 'a',
@@ -372,6 +376,8 @@ describe('cf-loom package: the schemas it writes', () => {
     ['a value outside a closed enum', { level: 'mid' }],
     ['an intersection whose right item is broken', { both: { a: 'x', n: 1 } }],
     ['a hash of the wrong encoding', { digest2: 'a'.repeat(32) }],
+    ['a record key that breaks its constraint', { scores: { a: 1 } }],
+    ['a required recursive field left out', { rooted: {} }],
   ])('the Success reader refuses %s', (_name, change) => {
     const parsed = read({ ...sample, ...change });
 

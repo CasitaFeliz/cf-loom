@@ -442,13 +442,17 @@ describe('cf-loom package: the files', () => {
   });
 
   test('the files are a function of the canonical Snapshot, whatever order the Contract declares', () => {
-    const swapped = (service['src/contract/index.ts'] ?? '')
+    const active = (service['src/contract/index.ts'] ?? '').replace(
+      "  lifecycle: 'deprecated',\n",
+      '',
+    );
+    const swapped = active
       .replace(
         "body: z.object({ id: z.uuid(), status: openEnum(['pending', 'paid']), total: money }),",
         "body: z.object({ total: money, status: openEnum(['paid', 'pending']), id: z.uuid() }),",
       )
       .replace('guards: [userToken, permission],', 'guards: [permission, userToken],');
-    const first = aProject(service);
+    const first = aProject({ ...service, 'src/contract/index.ts': active });
     const second = aProject({ ...service, 'src/contract/index.ts': swapped });
 
     cfLoom(first, 'package');
@@ -649,15 +653,38 @@ describe('cf-loom package: where it writes', () => {
     expect(ran).toEqual({ status: 0, stdout: 'Wrote out\n', stderr: '' });
     expect(existsSync(join(project, 'out/package.json'))).toBe(true);
   });
-  test('a previous output holding a build is replaced', () => {
+  test('a previous output installed and built in place is replaced, its install and build kept', () => {
     const project = aProject(service);
     cfLoom(project, 'package');
-    write(project, { 'contract-package/dist/index.js': 'export {};\n' });
+    const out = join(project, 'contract-package');
+    linkPeers(out);
+    expect(typeCheck(out).status).toBe(0);
 
     const ran = cfLoom(project, 'package');
 
-    expect(ran.status).toBe(0);
-    expect(existsSync(join(project, 'contract-package/dist'))).toBe(false);
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(out, 'dist/index.js'))).toBe(true);
+    expect(lstatSync(join(out, 'node_modules/zod')).isSymbolicLink()).toBe(true);
+  });
+
+  test('a previous output holding a stray file under src is refused and kept', () => {
+    const project = aProject(service);
+    cfLoom(project, 'package');
+    write(project, { 'contract-package/src/NOTES.md': 'mine' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(read(project, 'contract-package/src/NOTES.md')).toBe('mine');
+  });
+
+  test('a committed contract.snapshot.json that is no JSON stops package, which names itself', () => {
+    const project = aProject({ ...service, 'contract.snapshot.json': '<<<<<<< HEAD\n' });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/: restore it or delete it, then run cf-loom package\n$/);
   });
 
   test('a previous output holding a file package does not write is refused and kept', () => {
@@ -772,6 +799,27 @@ describe('cf-loom package: what it refuses', () => {
     const ran = cfLoom(project, 'package');
 
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
+  });
+
+  test('a recursion id only a Private Endpoint reaches does not stop package', () => {
+    const files = withDeclarations(
+      [
+        "export const tree = z.object({ get children() { return z.array(tree); } }).meta({ id: '1tree' });",
+      ],
+      '',
+      'tree',
+    );
+    const project = aProject({
+      ...files,
+      'src/contract/index.ts': (files['src/contract/index.ts'] ?? '').replace(
+        "visibility: 'public'",
+        "visibility: 'private'",
+      ),
+    });
+
+    const ran = cfLoom(project, 'package');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('two recursion ids whose names in code meet in any mode are a tooling error naming both', () => {

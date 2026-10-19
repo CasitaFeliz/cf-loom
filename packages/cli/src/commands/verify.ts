@@ -8,7 +8,8 @@ import {
   snapshotFile,
 } from './built.ts';
 import { checkFailed, done, type Exit, type Run } from './exit.ts';
-import { handlerPathsOf, noFileLinesOf, orphanLinesOf, serviceFilesOf } from './handler-files.ts';
+import { handlerPathsOf, noFileLinesOf, orphanLinesOf } from './handler-files.ts';
+import { serviceFilesOf } from './regenerated.ts';
 import { isUpToDate } from './writing.ts';
 
 /**
@@ -20,15 +21,22 @@ export async function verify(run: Run): Promise<Exit> {
   if (built.kind === 'stopped') {
     return built.exit;
   }
-  const service = isBuiltService(built) ? built : undefined;
   const snapshotLine = snapshotFailureOf(built);
-  const serviceLines = service === undefined ? [] : serviceFailuresOf(run, service);
-  const failures = [...(snapshotLine === undefined ? [] : [snapshotLine]), ...serviceLines];
+  const snapshotLines = snapshotLine === undefined ? [] : [snapshotLine];
+  if (!isBuiltService(built)) {
+    return verifiedExit(snapshotLines, [snapshotFile]);
+  }
+  const compared = serviceFilesOf(built).map(({ path }) => path);
+  const failures = [...snapshotLines, ...serviceFailuresOf(run, built)];
+  return verifiedExit(failures, [snapshotFile, ...compared]);
+}
+
+/** Every failure found, or each file compared up to date. */
+function verifiedExit(failures: readonly string[], compared: readonly string[]): Exit {
   if (failures.length > 0) {
     return checkFailed(failures);
   }
-  const compared = service === undefined ? [] : serviceFilesOf(service).map(({ path }) => path);
-  return done([snapshotFile, ...compared].map((path) => `${path} is up to date`));
+  return done(compared.map((path) => `${path} is up to date`));
 }
 
 /**

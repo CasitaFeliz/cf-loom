@@ -1,5 +1,5 @@
 import { camelCaseOf, pascalCaseOf } from '../source-text/index.ts';
-import type { SchemaMode } from './needs.ts';
+import { type SchemaMode, schemaModes } from './needs.ts';
 
 /**
  * The identifier of a recursive def's schema in a mode: the camelCase of its id's words, then
@@ -34,10 +34,9 @@ export function defNamesProblemOf(ids: readonly string[]): DefNamesProblem | und
   if (unnamed !== undefined) {
     return { kind: 'no-name', id: unnamed };
   }
-  const modes: readonly SchemaMode[] = ['declared', 'reader'];
   const idByIdentifier = new Map<string, string>();
   for (const id of ids) {
-    for (const identifier of modes.map((mode) => defIdentifierOf(id, mode))) {
+    for (const identifier of schemaModes.map((mode) => defIdentifierOf(id, mode))) {
       const earlier = idByIdentifier.get(identifier);
       if (earlier !== undefined && earlier !== id) {
         return { kind: 'colliding', ids: [earlier, id] };

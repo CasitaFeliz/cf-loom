@@ -1,6 +1,7 @@
-import { type BuiltService, builtOf, isBuiltService } from './built.ts';
+import { type BuiltService, builtOf, isBuiltService, noJsonExitOf } from './built.ts';
 import { checkFailed, done, type Exit, type Run } from './exit.ts';
-import { noFileLinesOf, orphanLinesOf, serviceFilesOf, snapshotFileOf } from './handler-files.ts';
+import { noFileLinesOf, orphanLinesOf } from './handler-files.ts';
+import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
 import { type GeneratedFile, writeFiles } from './writing.ts';
 
@@ -12,6 +13,10 @@ export async function generate(run: Run): Promise<Exit> {
   const built = await builtOf(run, 'running');
   if (built.kind === 'stopped') {
     return built.exit;
+  }
+  const noJson = noJsonExitOf(built, 'generate');
+  if (noJson !== undefined) {
+    return noJson;
   }
   if (!isBuiltService(built)) {
     return writtenExit(run, [snapshotFileOf(built)]);

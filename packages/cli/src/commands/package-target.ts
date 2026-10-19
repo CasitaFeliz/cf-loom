@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import type { PackageFile } from '../contract-package/index.ts';
 import { oneLineOf } from '../loading/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
@@ -18,19 +18,17 @@ import { done, type Exit, toolingError } from './exit.ts';
 /** What sits where the package is to be written. */
 type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
 
-/** What a folder `package` wrote may hold: what it writes, and the `dist/` a build adds. */
-const outputEntries: ReadonlySet<string> = new Set([
-  'package.json',
-  'snapshot.json',
-  'tsconfig.json',
-  'src',
-  'dist',
-]);
+/** The folders a previous output keeps as they are: a build's `dist/` and an install's `node_modules/`. */
+const keptFolders: readonly string[] = ['dist', 'node_modules'];
+
+/** The paths of the files `package` writes, in any Contract Package. */
+const writtenPath =
+  /^(package|snapshot|tsconfig)\.json$|^src\/(index|snapshot|standard-rejections|defs)\.ts$|^src\/(endpoints|guards|rejections)\/[^/]+\.ts$/;
 
 /**
  * Writes the Contract Package to `out`, relative to the project: a missing or empty folder, or a
- * previous output, which is replaced whole; anything else is refused and left as it was. The
- * files are written beside it first, so a failed write leaves the target untouched.
+ * previous output, whose files are replaced, its build and install kept; anything else is
+ * refused and left as it was. The files are written beside it first.
  */
 export function writeContractPackageTo(
   directory: string,
@@ -79,11 +77,11 @@ function isLink(target: string): boolean {
 }
 
 /**
- * A folder `package` wrote: it holds only what `package` writes and a build adds, and its
- * package.json carries the `cfLoom` metadata.
+ * A folder `package` wrote: outside the folders it keeps, every file is one `package` writes,
+ * and its package.json carries the `cfLoom` metadata.
  */
 function isPreviousOutput(target: string): boolean {
-  if (readdirSync(target).some((entry) => !outputEntries.has(entry))) {
+  if (!filesOutsideKeptOf(target).every((path) => writtenPath.test(path))) {
     return false;
   }
   try {
@@ -91,6 +89,30 @@ function isPreviousOutput(target: string): boolean {
     return typeof manifest === 'object' && manifest !== null && 'cfLoom' in manifest;
   } catch {
     return false;
+  }
+}
+
+/** Every file of a folder outside the folders a previous output keeps, by its path in it. */
+function filesOutsideKeptOf(target: string): readonly string[] {
+  const top = readdirSync(target, { withFileTypes: true });
+  const searched = top.filter(({ name }) => !keptFolders.includes(name));
+  return searched.flatMap((entry) => {
+    if (!entry.isDirectory()) {
+      return [entry.name];
+    }
+    const inside = readdirSync(join(target, entry.name), { recursive: true, withFileTypes: true });
+    return inside
+      .filter((found) => !found.isDirectory())
+      .map((found) => relative(target, join(found.parentPath, found.name)).split(sep).join('/'));
+  });
+}
+
+/** Moves the folders a previous output keeps into the package written beside it. */
+function keepFolders(target: string, staging: string): void {
+  for (const folder of keptFolders) {
+    if (existsSync(join(target, folder))) {
+      renameSync(join(target, folder), join(staging, folder));
+    }
   }
 }
 
@@ -106,6 +128,9 @@ function replaced(
     for (const { path, text } of files) {
       mkdirSync(dirname(join(staging, path)), { recursive: true });
       writeFileSync(join(staging, path), text);
+    }
+    if (existsSync(target)) {
+      keepFolders(target, staging);
     }
     rmSync(target, { recursive: true, force: true });
     renameSync(staging, target);

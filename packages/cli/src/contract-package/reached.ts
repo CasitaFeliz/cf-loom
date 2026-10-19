@@ -16,7 +16,7 @@ export type ListedRejection =
 /**
  * What a Contract Package carries of a Service, and nothing else, so nothing Private leaks: its
  * Public and Internal Endpoints that are not Retired, the Guards they attach and the codes those
- * answer, each in code point order.
+ * answer, Endpoints by name, the others in the canonical Snapshot's order.
  */
 export type Reached = {
   readonly endpoints: readonly ExportedEndpoint[];
@@ -35,7 +35,11 @@ export function reachedOf(snapshot: ServiceSnapshot): Reached {
   const listed = endpoints.flatMap(({ endpoint }) => ownRejectionsOf(endpoint, snapshot));
   const endpointCodes = listed.filter(isDeclared).map(({ code }) => code);
   const codes = new Set([...guardCodes, ...endpointCodes]);
-  return { endpoints, guards: [...guards].sort(byCodePoint), codes: [...codes].sort(byCodePoint) };
+  return {
+    endpoints,
+    guards: Object.keys(snapshot.guards).filter((guard) => guards.has(guard)),
+    codes: Object.keys(snapshot.codes).filter((code) => codes.has(code)),
+  };
 }
 
 /**

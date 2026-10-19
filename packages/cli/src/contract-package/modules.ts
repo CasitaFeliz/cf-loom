@@ -1,5 +1,11 @@
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
-import { type Needs, noNeeds } from '../schema-code/index.ts';
+import {
+  type DefUse,
+  defIdentifierOf,
+  defTypeNameOf,
+  type Needs,
+  noNeeds,
+} from '../schema-code/index.ts';
 import {
   headerOf,
   moduleTextOf,
@@ -15,10 +21,14 @@ export const defsFile = 'src/defs.ts';
 export type PackageFile = { readonly path: string; readonly text: string };
 
 /** A file of the package that writes schemas, with the recursive defs they reference. */
-export type SchemaFile = { readonly file: PackageFile; readonly defs: ReadonlySet<string> };
+export type SchemaFile = { readonly file: PackageFile; readonly defUses: readonly DefUse[] };
 
-/** A declaration another file of the package exports, by its name, `type` before a type's, and that file. */
-export type Sibling = { readonly name: string; readonly path: string };
+/** A value or a type another file of the package exports, by its name and that file. */
+export type Sibling = {
+  readonly name: string;
+  readonly path: string;
+  readonly kind: 'value' | 'type';
+};
 
 /** What a generated module of the package declares, the siblings it imports and its needs. */
 export type PackageModule = {
@@ -37,8 +47,16 @@ export function packageModuleOf(module: PackageModule): PackageFile {
   const needs = module.needs ?? noNeeds();
   const siblings = [
     ...(module.siblings ?? []),
-    ...[...needs.defs].map((name): Sibling => ({ name, path: defsFile })),
-    ...[...needs.defTypes].map((name): Sibling => ({ name: `type ${name}`, path: defsFile })),
+    ...[...needs.defs.values()].map(
+      ({ id, mode }): Sibling => ({
+        name: defIdentifierOf(id, mode),
+        path: defsFile,
+        kind: 'value',
+      }),
+    ),
+    ...[...needs.defTypes.values()].map(
+      ({ id, mode }): Sibling => ({ name: defTypeNameOf(id, mode), path: defsFile, kind: 'type' }),
+    ),
   ];
   const imports = [...siblingImportsOf(path, siblings), ...moduleImportsOf(needs)];
   const sorted = imports.sort((left, right) => byCodePoint(left.specifier, right.specifier));
@@ -49,22 +67,27 @@ export function packageModuleOf(module: PackageModule): PackageFile {
 type ImportLine = { readonly specifier: string; readonly line: string };
 
 function siblingImportsOf(path: string, siblings: readonly Sibling[]): readonly ImportLine[] {
-  const namesByPath = new Map<string, Set<string>>();
+  const byPath = new Map<string, Map<string, Sibling>>();
   for (const sibling of siblings) {
-    const names = namesByPath.get(sibling.path) ?? new Set<string>();
-    names.add(sibling.name);
-    namesByPath.set(sibling.path, names);
+    const named = byPath.get(sibling.path) ?? new Map<string, Sibling>();
+    named.set(sibling.name, sibling);
+    byPath.set(sibling.path, named);
   }
-  return [...namesByPath].map(([siblingPath, names]) => {
+  return [...byPath].map(([siblingPath, named]) => {
     const specifier = relativeSpecifierOf(path, siblingPath);
-    const sorted = [...names].sort((left, right) => byCodePoint(bareOf(left), bareOf(right)));
-    return { specifier, line: namedImportOf(sorted, specifier) };
+    const sorted = [...named.values()].sort((left, right) => byCodePoint(left.name, right.name));
+    return { specifier, line: namedImportOf(sorted.map(importedNameOf), specifier) };
   });
 }
 
-/** An imported name without the `type` it may be imported as. */
-function bareOf(name: string): string {
-  return name.replace(/^type /, '');
+/** A name as an import list writes it: a type's after `type`. */
+function importedNameOf({ name, kind }: Sibling): string {
+  switch (kind) {
+    case 'value':
+      return name;
+    case 'type':
+      return `type ${name}`;
+  }
 }
 
 /**

@@ -1,8 +1,14 @@
 import type { GuardSnapshot } from '@casitafeliz/loom-contract/internal';
 import type { Writing } from '../schema-code/index.ts';
 import { stringLiteralOf } from '../source-text/index.ts';
-import { loomNeeds, packageModuleOf, type SchemaFile, type Sibling } from './modules.ts';
-import { guardBindingOf, guardFileOf, rejectionBindingOf, rejectionFileOf } from './names.ts';
+import { loomNeeds, packageModuleOf, type SchemaFile } from './modules.ts';
+import {
+  guardBindingOf,
+  guardFileOf,
+  guardSiblingOf,
+  rejectionBindingOf,
+  rejectionSiblingOf,
+} from './names.ts';
 import { partsLinesOf, schemaLineOf } from './schema-lines.ts';
 
 /**
@@ -24,18 +30,12 @@ export function guardModuleOf(name: string, guard: GuardSnapshot): SchemaFile {
     ...(rejections.length === 0 ? [] : [`  rejections: [${rejections.join(', ')}],`]),
     '});',
   ];
-  const guards = guard.guards.map(
-    (listedName): Sibling => ({ name: guardBindingOf(listedName), path: guardFileOf(listedName) }),
-  );
-  const answered = guard.rejections.map(
-    (code): Sibling => ({ name: rejectionBindingOf(code), path: rejectionFileOf(code) }),
-  );
   const { needs } = declared;
   const file = packageModuleOf({
     path: guardFileOf(name),
     body,
-    siblings: [...guards, ...answered],
+    siblings: [...guard.guards.map(guardSiblingOf), ...guard.rejections.map(rejectionSiblingOf)],
     needs,
   });
-  return { file, defs: needs.defs };
+  return { file, defUses: [...needs.defs.values()] };
 }

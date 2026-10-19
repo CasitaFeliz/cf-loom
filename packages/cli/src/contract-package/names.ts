@@ -1,5 +1,6 @@
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
 import { camelCaseOf, kebabCaseOf, kebabCaseOfCode } from '../source-text/index.ts';
+import type { Sibling } from './modules.ts';
 
 /** The file of an exported Endpoint in the package. */
 export function endpointFileOf(name: string): string {
@@ -46,4 +47,14 @@ export function collidingCodesOf(codes: readonly string[]): readonly [string, st
     codeByBinding.set(binding, code);
   }
   return undefined;
+}
+
+/** A Guard as another file of the package imports it. */
+export function guardSiblingOf(name: string): Sibling {
+  return { name: guardBindingOf(name), path: guardFileOf(name), kind: 'value' };
+}
+
+/** A Rejection as another file of the package imports it. */
+export function rejectionSiblingOf(code: string): Sibling {
+  return { name: rejectionBindingOf(code), path: rejectionFileOf(code), kind: 'value' };
 }

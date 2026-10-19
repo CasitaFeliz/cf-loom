@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
-import { type BuiltProject, builtOf } from './built.ts';
+import { type BuiltProject, builtOf, noJsonExitOf } from './built.ts';
 import { type Exit, type Run, toolingError } from './exit.ts';
 import { writeContractPackageTo } from './package-target.ts';
 
@@ -17,6 +17,10 @@ export async function writeContractPackage(run: Run, out: string): Promise<Exit>
   const built = await builtOf(run, 'running');
   if (built.kind === 'stopped') {
     return built.exit;
+  }
+  const noJson = noJsonExitOf(built, 'package');
+  if (noJson !== undefined) {
+    return noJson;
   }
   const { snapshot } = built;
   if (snapshot.kind === 'definitions') {
@@ -47,11 +51,12 @@ function peersOf(
   const rootPath = join(built.project.directory, built.project.rootFile);
   const contract = installedVersionOf('@casitafeliz/loom-contract', rootPath);
   const zod = installedVersionOf('zod', rootPath);
+  const builtWith = 'a Contract Package is built with it';
   if (contract.kind === 'failed') {
-    return contract;
+    return { kind: 'failed', message: `${contract.message}: ${builtWith}` };
   }
   if (zod.kind === 'failed') {
-    return zod;
+    return { kind: 'failed', message: `${zod.message}: ${builtWith}` };
   }
   return { kind: 'found', peers: { contract: contract.version, zod: zod.version } };
 }

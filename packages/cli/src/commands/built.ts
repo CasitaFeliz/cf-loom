@@ -29,8 +29,7 @@ export type Committed =
 
 /**
  * Which CLI the declared Snapshot names: the one running, as `generate` and `package` write it,
- * which stop on a committed file that is no JSON; or the committed file's, as `verify` compares,
- * so upgrading cf-loom alone never fails `verify`.
+ * or the committed file's, as `verify` compares, so upgrading cf-loom alone never fails `verify`.
  */
 export type Generator = 'running' | 'committed';
 
@@ -48,6 +47,23 @@ export type Built =
       readonly committed: Committed;
     }
   | Stopped;
+
+/**
+ * The stop of a command that writes from the Snapshot when the committed file is no JSON: its
+ * author restores or deletes it, since its `deprecatedAt` stamps would be lost.
+ */
+export function noJsonExitOf(
+  built: BuiltProject,
+  command: 'generate' | 'package',
+): Exit | undefined {
+  if (built.committed.kind !== 'no-json') {
+    return undefined;
+  }
+  const { reason } = built.committed;
+  return toolingError(
+    `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom ${command}`,
+  );
+}
 
 /** A project as built, valid. */
 export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
@@ -73,10 +89,6 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const committed = committedOf(project.directory);
   if (committed.kind === 'stopped') {
     return committed;
-  }
-  if (committed.kind === 'no-json' && generator === 'running') {
-    const message = `${snapshotFile} is no JSON (${committed.reason}): restore it or delete it, then run cf-loom generate`;
-    return stopped(toolingError(message));
   }
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
   const context: SnapshotContext = {
