@@ -25,7 +25,7 @@ export function zodExpressionOf(node: SchemaNode, writing: Writing): string {
   const shape = shapeOf(node, writing);
   const nullable = node.nullable === true ? `${shape}.nullable()` : shape;
   const meta = metaOf(node);
-  const annotated = isBareRef(node) && meta !== '' ? `z.lazy(() => ${nullable})` : nullable;
+  const annotated = isNonNullableRef(node) && meta !== '' ? `z.lazy(() => ${nullable})` : nullable;
   return `${annotated}${meta}`;
 }
 
@@ -33,7 +33,7 @@ export function zodExpressionOf(node: SchemaNode, writing: Writing): string {
  * Whether a node is a recursive def as it is: `.meta()` on it would clone the def without its id,
  * so annotations go on a `z.lazy()` around it, which the walk sees through.
  */
-function isBareRef(node: SchemaNode): boolean {
+function isNonNullableRef(node: SchemaNode): boolean {
   return node.type === 'ref' && node.nullable !== true;
 }
 

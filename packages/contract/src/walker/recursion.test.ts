@@ -88,6 +88,28 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('two ids on one chain of lazies give a def and an alias def that refs it', () => {
+    type Node = { c: Node[] };
+    const inner: z.ZodType<Node> = z
+      .lazy(() => z.object({ c: z.array(outer) }))
+      .meta({ id: 'inner' });
+    const outer: z.ZodType<Node> = z.lazy(() => inner).meta({ id: 'outer' });
+
+    expect(walkBody(outer)).toEqual({
+      located: [walkedAt(['body'], { type: 'ref', name: 'outer' })],
+      defs: {
+        inner: {
+          type: 'object',
+          mode: 'open',
+          fields: {
+            c: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'outer' } } },
+          },
+        },
+        outer: { type: 'ref', name: 'inner' },
+      },
+    });
+  });
+
   test('a cyclic schema used at two locations is one def', () => {
     const category = z
       .object({

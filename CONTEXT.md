@@ -195,7 +195,7 @@ A schema generated from a Snapshot for whoever reads a Success, a Rejection body
 _Avoid_: loose schema, consumer schema
 
 **Read shape**:
-A shape a Service writes for others to read with a Reader schema: a Success, a Rejection body or a Message body. Every object in it is open to its readers.
+A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection body or a Message body. Every object in it is open to its readers.
 _Avoid_: output, response, payload
 
 **Compatibility Check**:

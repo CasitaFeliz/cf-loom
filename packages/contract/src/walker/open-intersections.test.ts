@@ -113,6 +113,47 @@ describe('validateContract: an intersection reaching an Open Enum or an Open Uni
     },
   );
 
+  test('two separate intersections reaching an Open Enum are each reported', () => {
+    const open = () =>
+      z.intersection(
+        z.union([z.object({ s: openEnum(['a']) }), z.object({ q: z.string() })]),
+        z.object({ b: z.string() }),
+      );
+
+    const validated = validatedWithBody(z.object({ a: open(), b: open() }));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...refusal, at: [...bodyAt, 'fields', 'a'] },
+        { ...refusal, at: [...bodyAt, 'fields', 'b'] },
+      ],
+    });
+  });
+
+  test('an intersection in a def is judged even when the schema using it fails the walk', () => {
+    const tree = z
+      .object({
+        x: z.intersection(
+          z.union([z.object({ s: openEnum(['a']) }), z.object({ q: z.string() })]),
+          z.object({ b: z.string() }),
+        ),
+        get c() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const validated = validatedWithBody(z.object({ bad: z.any(), t: tree }));
+
+    expect(validated.kind === 'invalid' ? validated.failures : []).toEqual(
+      expect.arrayContaining([
+        { ...refusal, at: ['defs', 'tree', 'fields', 'x'] },
+        expect.objectContaining({ at: [...bodyAt, 'fields', 'bad'] }),
+      ]),
+    );
+  });
+
   test('an intersection with no Open Enum or Open Union is allowed', () => {
     const body = z.intersection(
       z.object({ status: z.enum(['a']) }),

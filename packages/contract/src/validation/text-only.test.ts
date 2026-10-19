@@ -438,6 +438,39 @@ describe('validateContract: a record keyed by an enum or literal as query or hea
     });
   });
 
+  test('a keyed record as params has its values judged as text', () => {
+    const params = z.record(z.enum(['orderId']), z.object({})) as unknown as z.ZodObject;
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:orderId',
+      input: { params },
+    } as never);
+
+    const validated = validateEndpoint(endpoint);
+
+    expect(validated).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'not-text',
+        `A path param ${text}: orderId`,
+      ),
+    );
+  });
+
+  test('a keyed record in a query field is reported once, as a field that is not text', () => {
+    const query = z.object({ tenant: z.record(z.enum(['a']), z.string()) }) as z.ZodObject;
+
+    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
+
+    expect(validated).toEqual(
+      failed(
+        [...endpointAt, 'input', 'query', 'fields', 'tenant'],
+        'not-text',
+        `A query param ${text}, or a list of those: tenant`,
+      ),
+    );
+  });
+
   test('a keyed record as params is allowed, since the path decides their keys', () => {
     const params = z.record(z.enum(['orderId']), z.uuid()) as unknown as z.ZodObject;
     const endpoint = defineEndpoint({

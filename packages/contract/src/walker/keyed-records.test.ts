@@ -116,6 +116,23 @@ describe('validateContract: a record keyed by an enum or literal in a Read shape
     expect(failures).toEqual([{ ...refusal, at: ['defs', 'tree', 'fields', 'totals'] }]);
   });
 
+  test('a record in a recursive def two Read shapes reach fails once, where the def is', () => {
+    const tree = z
+      .object({
+        totals: z.record(z.enum(['eur']), z.number()),
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const failures = failuresIn(
+      contractWith({ successBody: z.object({ tree }), rejectionBody: z.object({ tree }) }),
+    );
+
+    expect(failures).toEqual([{ ...refusal, at: ['defs', 'tree', 'fields', 'totals'] }]);
+  });
+
   test('a record in a recursive def reached only through another def fails', () => {
     const leaf = z
       .object({

@@ -42,7 +42,7 @@ export const inputParts = [
 /** The parts of an Endpoint's Success. */
 export const successParts = ['success.headers', 'success.body'] as const satisfies readonly Part[];
 
-/** The bodies that are Read shapes; a Success's headers are judged as headers. */
+/** The bodies of Read shapes; a Success's headers are judged as headers. */
 export const readShapeParts = ['success.body', 'body'] as const satisfies readonly Part[];
 
 /** Whether a part is the body of a Read shape. */
