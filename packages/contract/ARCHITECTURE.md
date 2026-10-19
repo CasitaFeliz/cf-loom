@@ -9,7 +9,7 @@ The package builds with `lib: ["ES2024", "WebWorker"]` and no Node types: `wire/
 | Module | Holds | Depends on |
 | --- | --- | --- |
 | `declarations/` | every `define*`, its types and type rules, the runtime consts beside the types (`http`, `element`, Standard Rejections, the reserved codes), Attachments, inference types, predicates, the freeze | none (reads the Snapshot's types for `ContractPackage`; type only) |
-| `open/` | Open Enums and Open Unions: `openEnum`, `openUnion` and `isOpen` | none |
+| `open/` | Open Enums: `openEnum` and `isOpen` | none |
 | `issues/` | a value parsed with its schema, zod's failures as cf-loom's issue codes | `declarations` |
 | `walker/` | zod schemas to Snapshot nodes; the Not allowed rules judged on walked nodes and slots (open intersections, records keyed by an enum or literal) | `open` |
 | `validation/` | every rule `generate` enforces, the valid result, and a failure as one line; the parts a declaration holds schemas in, the Rejections an Endpoint or Guard answers, the code, status and message each resolves to, and the Standard Rejections a root resolves; `Issue`, one way a value broke its part; what the runtime reads of a valid root: its Endpoints in Group order, their Attachments with their Qualifiers, a path's segments, and the text parts of a Contract's Endpoints and Guards walked once and judged by every text-part rule `generate` applies, header names included | `declarations`, `walker` |

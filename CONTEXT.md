@@ -102,8 +102,8 @@ _Avoid_: error, server error, operation failure
 The body cf-loom defines, in which a Rejection or a Fault travels over HTTP.
 _Avoid_: error body, error payload, problem details (RFC 9457 is another format)
 
-**Open Enum**, **Open Union**:
-An enum, or a discriminated union, declared open: its readers receive values or variants they do not know as a tagged **Unknown** case and must handle it.
+**Open Enum**:
+An enum declared open: its readers receive values they do not know as a tagged **Unknown** case and must handle it.
 _Avoid_: extensible enum, loose enum
 
 ### Messaging
@@ -195,7 +195,7 @@ The Snapshot of the highest published version of a Contract Package or Definitio
 _Avoid_: previous snapshot, reference
 
 **Reader schema**:
-A schema generated from a Snapshot for whoever reads a Success, a Rejection body or a Message: every object in it open and every Open Enum and Open Union with its Unknown case, so it admits what any later compatible version may send.
+A schema generated from a Snapshot for whoever reads a Success, a Rejection body or a Message: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
 
 **Read shape**:

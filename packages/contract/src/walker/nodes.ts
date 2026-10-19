@@ -103,7 +103,6 @@ export type TaggedNode = Annotations & {
   readonly type: 'tagged';
   readonly discriminator: string;
   readonly variants: Readonly<Record<string, ObjectNode | RefNode>>;
-  readonly open: boolean;
 };
 
 /** A value that matches every item, for an intersection that is not of open objects. */

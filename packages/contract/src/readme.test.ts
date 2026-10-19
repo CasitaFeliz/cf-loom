@@ -12,7 +12,6 @@ import {
   defineRejection,
   notFound,
   openEnum,
-  openUnion,
 } from './index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
@@ -91,8 +90,11 @@ const getOrder = defineEndpoint({
   rejections: [notFound, orderLocked],
 });
 
-const card = z.object({ type: z.literal('card'), last4: z.string() });
-const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
+const payment = z.object({
+  type: openEnum(['card', 'transfer']),
+  last4: z.string().optional(),
+  iban: z.string().optional(),
+});
 
 const createOrder = defineEndpoint({
   name: 'createOrder',
@@ -102,7 +104,7 @@ const createOrder = defineEndpoint({
   description: 'Creates an order',
   guards: [apiKey],
   input: {
-    body: z.object({ total: money, payment: openUnion('type', [card, transfer]) }),
+    body: z.object({ total: money, payment }),
   },
   success: { status: 201, body: z.object({ id: z.uuid() }) },
 });

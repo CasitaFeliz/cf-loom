@@ -729,16 +729,10 @@ describe('cf-loom package: the built package', () => {
     );
   });
 
-  test.each([
-    [
-      'a discriminated union',
-      "z.discriminatedUnion('kind', [z.object({ kind: z.literal('stem') }), twig])",
-    ],
-    ['an Open Union', "openUnion('kind', [z.object({ kind: z.literal('stem') }), twig])"],
-  ])(
-    '%s with a recursive variant is typed soundly: a wrong written type fails tsc',
-    (_name, union) => {
-      const files = withDeclarations(
+  test('a discriminated union with a recursive variant is typed soundly: a wrong written type fails tsc', () => {
+    const union = "z.discriminatedUnion('kind', [z.object({ kind: z.literal('stem') }), twig])";
+    const project = aProject(
+      withDeclarations(
         [
           'export const twig = z',
           `  .object({ kind: z.literal('twig'), get up() { return ${union}.optional(); } })`,
@@ -746,28 +740,21 @@ describe('cf-loom package: the built package', () => {
         ],
         '',
         `z.object({ stem: ${union} })`,
-      );
-      const project = aProject({
-        ...files,
-        'src/contract/index.ts': (files['src/contract/index.ts'] ?? '').replace(
-          'defineRejection }',
-          'defineRejection, openUnion }',
-        ),
-      });
-      const out = join(aFolder(), 'contract-orders-service');
-      expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
-      linkPeers(out);
-      expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
-      const written = read(out, 'src/defs.ts');
-      const wrong = written.replaceAll("{ kind: 'stem' }", "{ kind: 'stem'; extra: number }");
-      expect(wrong).not.toBe(written);
-      write(out, { 'src/defs.ts': wrong });
+      ),
+    );
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+    const written = read(out, 'src/defs.ts');
+    const wrong = written.replaceAll("{ kind: 'stem' }", "{ kind: 'stem'; extra: number }");
+    expect(wrong).not.toBe(written);
+    write(out, { 'src/defs.ts': wrong });
 
-      const checked = typeCheck(out);
+    const checked = typeCheck(out);
 
-      expect(checked.status).not.toBe(0);
-    },
-  );
+    expect(checked.status).not.toBe(0);
+  });
 
   test('a def chain a to b, where only a is referenced, writes both, each typed exactly as declared', () => {
     const files = withDeclarations(

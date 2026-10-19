@@ -76,7 +76,7 @@ Readers of a Read shape (a Success, a Rejection body or a Message body) ignore f
 
 ### Enums, literals and unions
 
-An Open Enum or Open Union gives its readers a type with an Unknown case, so they must handle values they do not know. Its writers' type only admits the declared values. Openness only matters to readers that do not control the schema, Callers and Subscribers: in Input the Service is the reader and validates the declared values only, so openness has no effect there. Closed → open is Breaking for readers even though it changes no value: it is what lets values be added later as Additive Changes, which readers deployed with the closed enum would fail on.
+An Open Enum gives its readers a type with an Unknown case, so they must handle values they do not know. Its writers' type only admits the declared values. Openness only matters to readers that do not control the schema, Callers and Subscribers: in Input the Service is the reader and validates the declared values only, so openness has no effect there. Closed enum → Open Enum is Breaking for readers even though it changes no value: it is what lets values be added later as Additive Changes, which readers deployed with the closed enum would fail on.
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -84,14 +84,12 @@ An Open Enum or Open Union gives its readers a type with an Unknown case, so the
 | Closed enum: remove a value | Breaking | Additive | Breaking |
 | Open Enum: add a value | Additive | Additive | Additive |
 | Open Enum: remove a value | Breaking | Additive | Breaking |
-| Closed → open | Neutral | Breaking | Breaking |
-| Open → closed | Neutral | Additive | Additive |
+| Closed enum → Open Enum | Neutral | Breaking | Breaking |
+| Open Enum → closed enum | Neutral | Additive | Additive |
 | Change a literal | Breaking | Breaking | Breaking |
 | Widen (literal → enum containing it, enum → its base type) | Additive | Breaking | Breaking |
 | Narrow (base type → enum, enum → literal) | Breaking | Additive | Breaking |
 | Discriminated union: add a variant | Additive | Breaking | Breaking |
-| Open Union: add a variant | Additive | Additive | Additive |
-| Open Union: remove a variant | Breaking | Additive | Breaking |
 | Discriminated union: remove a variant | Breaking | Additive | Breaking |
 | Discriminated union: change inside a variant | Field rules, matching variants by discriminator value | | |
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |

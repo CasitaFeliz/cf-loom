@@ -2,7 +2,6 @@ import type {
   EnumNode,
   ObjectNode,
   SchemaNode,
-  TaggedNode,
   TupleNode,
 } from '@casitafeliz/loom-contract/internal';
 import { keyOf, literalOf } from '../source-text/index.ts';
@@ -48,7 +47,9 @@ function shapeTypeOf(node: SchemaNode, writing: Writing): string {
     case 'union':
       return `(${node.options.map((option) => typeOf(option, writing)).join(' | ')})`;
     case 'tagged':
-      return taggedTypeOf(node, writing);
+      return `(${Object.values(node.variants)
+        .map((variant) => typeOf(variant, writing))
+        .join(' | ')})`;
     case 'allOf':
       return `(${node.items.map((item) => typeOf(item, writing)).join(' & ')})`;
     case 'json':
@@ -78,23 +79,4 @@ function tupleTypeOf(node: TupleNode, writing: Writing): string {
   const items = node.items.map((item) => typeOf(item, writing));
   const rest = node.rest === undefined ? [] : [`...Array<${typeOf(node.rest, writing)}>`];
   return `[${[...items, ...rest].join(', ')}]`;
-}
-
-/** A discriminated union's variants; an Open Union's reader adds its Unknown case. */
-function taggedTypeOf(node: TaggedNode, writing: Writing): string {
-  const variants = variantsTypeOf(node, writing.mode, writing.needs);
-  if (!node.open || writing.mode === 'declared') {
-    return variants;
-  }
-  const key = keyOf(node.discriminator);
-  const raw = `{ ${key}: string; [key: string]: unknown }`;
-  return `(${variants} | { ${key}: { unknown: string }; raw: ${raw} })`;
-}
-
-/** The type of a discriminated union's declared variants. */
-function variantsTypeOf(node: TaggedNode, mode: SchemaMode, needs: Needs): string {
-  const variants = Object.entries(node.variants).map(([, variant]) =>
-    typeTextOf(variant, mode, needs),
-  );
-  return `(${variants.join(' | ')})`;
 }

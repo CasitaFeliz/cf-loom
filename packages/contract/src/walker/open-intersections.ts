@@ -5,9 +5,9 @@ import type { Defs } from './walk.ts';
 
 /**
  * Every outermost `allOf` in the schemas, or in a def at `['defs', <id>]`, that reaches an Open
- * Enum or an Open Union: a reader of an intersection merges what each item read, and an Unknown
- * case and the value it came from never merge. Each def is judged once, where it is, whether or
- * not the schemas using it walked.
+ * Enum: a reader of an intersection merges what each item read, and an Unknown case and the value
+ * it came from never merge. Each def is judged once, where it is, whether or not the schemas using
+ * it walked.
  */
 export function openIntersectionsOf(
   schemas: readonly LocatedNode[],
@@ -33,11 +33,11 @@ function isInside(at: Path, outer: Path): boolean {
   return outer.length < at.length && outer.every((step, index) => at[index] === step);
 }
 
-/** Whether a node reaches an Open Enum or an Open Union, through `ref`s. */
+/** Whether a node reaches an Open Enum, through `ref`s. */
 function reachesOpen(located: LocatedNode, defs: Defs): boolean {
-  return nodesReachedFrom([located], defs).some(isOpenChoice);
+  return nodesReachedFrom([located], defs).some(isOpenEnum);
 }
 
-function isOpenChoice({ node }: LocatedNode): boolean {
-  return (node.type === 'enum' || node.type === 'tagged') && node.open;
+function isOpenEnum({ node }: LocatedNode): boolean {
+  return node.type === 'enum' && node.open;
 }

@@ -439,12 +439,12 @@ describe('cf-loom generate', () => {
     });
   });
 
-  test('an intersection reaching an Open Union exits 1 in one line, since no reader can merge it', () => {
+  test('an intersection reaching an Open Enum exits 1 in one line, since no reader can merge it', () => {
     const body =
-      "z.intersection(z.object({ type: z.string() }), openUnion('type', [z.object({ type: z.literal('card') })]))";
+      "z.intersection(z.object({ status: openEnum(['a']) }), z.record(z.string(), z.string()))";
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
     edit(project, 'src/contract/ping.endpoint.ts', (text) =>
-      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openUnion }'),
+      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openEnum }'),
     );
 
     const ran = cfLoom(project, 'generate');
@@ -453,7 +453,7 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() or an openUnion() (use .extend())\n',
+        'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() (use .extend())\n',
     });
   });
 

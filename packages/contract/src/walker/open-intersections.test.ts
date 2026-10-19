@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { defineContract, defineEndpoint, defineGroup, openEnum, openUnion } from '../index.ts';
+import { defineContract, defineEndpoint, defineGroup, openEnum } from '../index.ts';
 import { validateContract } from '../internal/index.ts';
 
 /** Validates a Contract whose one Endpoint answers the body given. */
@@ -25,20 +25,20 @@ function validatedWithBody(body: core.$ZodType) {
 
 const refusal = {
   kind: 'not-allowed',
-  construct: 'an intersection that is not of open objects reaching an openEnum() or an openUnion()',
+  construct: 'an intersection that is not of open objects reaching an openEnum()',
   instead: '.extend()',
 };
 
 const bodyAt = ['groups', 'shapes', 'endpoints', 'GET /echo', 'success', 'body'];
 
-describe('validateContract: an intersection reaching an Open Enum or an Open Union', () => {
-  test('an intersection of an object and an Open Union is not allowed', () => {
-    const payment = openUnion('type', [z.object({ type: z.literal('card') })]);
+describe('validateContract: an intersection reaching an Open Enum', () => {
+  test('an intersection of an object and a discriminated union is allowed', () => {
+    const payment = z.discriminatedUnion('type', [z.object({ type: z.literal('card') })]);
     const body = z.intersection(z.object({ type: z.string() }), payment);
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
+    expect(validated.kind).toBe('valid');
   });
 
   test('an intersection with an Open Enum deep inside is not allowed where it is written', () => {
@@ -172,7 +172,7 @@ describe('validateContract: an intersection reaching an Open Enum or an Open Uni
     );
   });
 
-  test('an intersection with no Open Enum or Open Union is allowed', () => {
+  test('an intersection with no Open Enum is allowed', () => {
     const body = z.intersection(
       z.object({ status: z.enum(['a']) }),
       z.record(z.string(), z.string()),
