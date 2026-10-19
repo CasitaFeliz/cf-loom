@@ -93,6 +93,12 @@ export function partFieldOf<Named extends Exclude<Part, 'schema'>>(part: Named):
 /** A part of what a request carries: the Endpoint's Input, or what a Guard demands. */
 export type InputPart = (typeof inputParts)[number] | (typeof demandParts)[number];
 
+/** Whether an Issue's part is one the Caller sent, so the runtime answers it as invalid input. */
+export function isInputPart(part: Part | 'rejections'): part is InputPart {
+  const sent: readonly string[] = [...inputParts, ...demandParts];
+  return sent.includes(part);
+}
+
 /** Where an invalid-input issue says it sits, `in`: the part of the request it read. */
 export function inOf(part: InputPart): 'params' | 'query' | 'headers' | 'body' {
   return partFieldOf(part);

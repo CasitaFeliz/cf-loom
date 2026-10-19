@@ -1,4 +1,4 @@
-import type { Failure, Path } from '@casitafeliz/loom-contract/internal';
+import { failureLineOf } from '@casitafeliz/loom-contract/internal';
 import { type Committed, type ProjectFailure, snapshotFile } from '../project/index.ts';
 
 /** The exit statuses of the CLI's README: done, the check failed, a tooling error. */
@@ -26,28 +26,11 @@ export function toolingError(message: string): Exit {
   return { status: 3, stdout: [], stderr: [message] };
 }
 
-/** One failure on one line, where it sits first, in the order the validation found them. */
-export function failureLine(failure: Failure): string {
-  const location = locationOf(failure.at);
-  switch (failure.kind) {
-    case 'declaration':
-      return `${location} ${failure.rule}: ${failure.message}`;
-    case 'not-allowed':
-      return failure.instead === undefined
-        ? `${location} not allowed: ${failure.construct}`
-        : `${location} not allowed: ${failure.construct} (use ${failure.instead})`;
-  }
-}
-
-function locationOf(at: Path): string {
-  return at.length === 0 ? '(root)' : at.join('.');
-}
-
 /** A project that could not be built, as the command ends: its rules broken, or a tooling error. */
 export function failureExitOf(failure: ProjectFailure): Exit {
   switch (failure.kind) {
     case 'invalid':
-      return checkFailed(failure.failures.map(failureLine));
+      return checkFailed(failure.failures.map(failureLineOf));
     case 'tooling':
       return toolingError(failure.message);
   }

@@ -46,13 +46,19 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
     ...declarations.guards.flatMap(guardSlots),
     ...declarations.codes.flatMap(codeSlots),
     ...sharedSlots(declarations),
-  ].filter(isFilled);
-  const failures = slots
+  ];
+  return schemaSlotsAmong(slots);
+}
+
+/** The slots among the given that hold a schema, and a failure for each filled with something else. */
+export function schemaSlotsAmong(slots: readonly Slot[]): SchemaSlots {
+  const filled = slots.filter(isFilled);
+  const failures = filled
     .filter((slot) => !holdsSchema(slot))
     .map((slot) =>
       failure(slot.at, 'not-a-schema', `${textOf(slot.at.at(-1))} is not a zod schema`),
     );
-  return { slots: slots.filter(holdsSchema), failures };
+  return { slots: filled.filter(holdsSchema), failures };
 }
 
 /** The schemas to walk, one per slot, in slot order. */

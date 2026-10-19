@@ -1,4 +1,4 @@
-import type { Definitions, Endpoint } from '../declarations/index.ts';
+import type { Contract, Definitions, Endpoint } from '../declarations/index.ts';
 import {
   isContract,
   isDefinitions,
@@ -47,7 +47,7 @@ export type Declarations = {
 export function declarationsOf(root: Root): Declarations {
   const listedDefinitions = definitionsOf(root);
   const groups = groupsOf(root);
-  const endpoints = distinctEndpoints(groups.flatMap(endpointsOf));
+  const endpoints = distinctEndpoints(groups.flatMap(locatedEndpointsOf));
   const allPackages =
     root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
   const sources = { root, allPackages, endpoints };
@@ -65,6 +65,12 @@ export function declarationsOf(root: Root): Declarations {
     standardRejections: allPackages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
   };
+}
+
+/** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
+export function endpointsOf(contract: Contract): readonly Endpoint[] {
+  const located = distinctEndpoints(groupsOf(contract).flatMap(locatedEndpointsOf));
+  return located.map(({ endpoint }) => endpoint);
 }
 
 /** Where an Endpoint sits under its Group: the one place that spells an Endpoint's location. */
@@ -134,7 +140,7 @@ function groupsOf(root: Root): readonly LocatedGroup[] {
     .map((group) => ({ at: ['groups', textOf(group.name)], group }));
 }
 
-function endpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
+function locatedEndpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
   return listOf(group.endpoints)
     .filter(isEndpoint)
     .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint, group }));
