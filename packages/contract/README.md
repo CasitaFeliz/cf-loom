@@ -1,6 +1,6 @@
 # @casitafeliz/loom-contract
 
-The declarations of a Contract: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`, `openUnion`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented`; and their types (see [Types](#types)). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
+The declarations of a Contract: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented`; and their types (see [Types](#types)). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files. Every declaration is a named export, and an Endpoint or a Guard is exported under its `name` (`export const getOrder = defineEndpoint({ name: 'getOrder', … })`), which its stub imports (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README).
 
@@ -242,16 +242,22 @@ At runtime:
 - A Retired Endpoint that is still declared answers the `RETIRED` Fault; once deleted, its URLs route like any other request, and `NO_SUCH_ENDPOINT` answers when nothing matches, never the not-found Rejection (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in ARCHITECTURE.md).
 - A Retired Message cannot be published or sent (a type error), and its Handler is not consumed.
 
-## Open Enums and Open Unions
+## Open Enums
 
 ```ts
 status: openEnum(['pending', 'paid']).describe('Where the order stands')
-payment: openUnion('type', [card, transfer])
+payment: z.object({
+  type: openEnum(['card', 'transfer']),
+  last4: z.string().optional(),
+  iban: z.string().optional(),
+})
 ```
 
-Readers get a type with an Unknown case and must handle it: an unknown enum value arrives as `{ unknown: 'refunded' }`, and an unknown union variant as `{ type: { unknown: 'crypto' }, raw }`, so TypeScript can tell them from the declared ones. Writers may only use the declared values. `openEnum()` and `openUnion()` infer the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
+Readers get a type with an Unknown case and must handle it: an unknown value arrives as `{ unknown: 'refunded' }`, so TypeScript can tell it from the declared ones. Writers may only use the declared values. `openEnum()` infers the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 
-`openEnum()` takes string values. `openUnion(discriminator, variants)` takes schemas whose discriminator is a string literal (a `z.lazy` of an object included) and returns zod's discriminated union; a literal of several values, a value that is no string, or two variants with the same value, fail `generate`. Its types refuse a variant whose discriminator is no string literal, but take what zod's own discriminated union takes, such as an enum discriminator, a nested union or intersection variant, or a `.default()`, which only `generate` refuses. Inside an intersection, use `.extend()` (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema either one returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` or `z.discriminatedUnion()` described the same way stays closed.
+A set of variants that grows is an object whose `type` is an Open Enum and whose variants' fields are optional, as `payment` above: a reader handles a `type` it does not know, and a new variant adds a value and its optional fields. A `z.discriminatedUnion()` is closed: adding a variant is Breaking for its readers (see [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) in COMPATIBILITY.md).
+
+`openEnum()` takes string values. Inside an intersection, use `.extend()` (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema `openEnum()` returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` described the same way stays closed.
 
 ## Dependencies
 

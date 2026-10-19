@@ -41,4 +41,4 @@ export {
   notFound,
   notImplemented,
 } from './declarations/index.ts';
-export { openEnum, openUnion } from './open/index.ts';
+export { openEnum } from './open/index.ts';

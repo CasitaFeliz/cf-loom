@@ -57,7 +57,7 @@ const everything = [
   '  .object({',
   '    inner: z.object({ a: z.string() }),',
   "    status: openEnum(['a', \"it's\"]),",
-  "    pick: openUnion('the-type', [z.object({ 'the-type': z.literal('x') })]),",
+  "    pick: z.discriminatedUnion('the-type', [z.object({ 'the-type': z.literal('x') })]),",
   '    note: z.string().nullable(),',
   '    maybe: z.string().optional(),',
   '    tuple: z.tuple([z.string()], z.number()),',
@@ -70,7 +70,7 @@ const everything = [
   'const leaf = z',
   "  .object({ type: z.literal('leaf'), get parent() { return node.optional(); } })",
   "  .meta({ id: 'leaf' });",
-  "const node = openUnion('type', [leaf, z.object({ type: z.literal('branch') })]);",
+  "const node = z.discriminatedUnion('type', [leaf, z.object({ type: z.literal('branch') })]);",
   'const twig = z',
   "  .object({ kind: z.literal('twig'), get up() { return stem.optional(); } })",
   "  .meta({ id: 'twig' });",
@@ -112,10 +112,11 @@ const everything = [
   '  list: z.array(z.string()).min(1).max(3),',
   '  tuple: z.tuple([z.string(), z.number()], z.boolean()),',
   '  union: z.union([z.string(), z.number()]),',
-  "  payment: openUnion('type', [",
-  "    z.object({ type: z.literal('card'), last4: z.string() }),",
-  "    z.object({ type: z.literal('transfer'), iban: z.iban() }),",
-  '  ]),',
+  '  payment: z.object({',
+  "    type: openEnum(['card', 'transfer']),",
+  '    last4: z.string().optional(),',
+  '    iban: z.iban().optional(),',
+  '  }),',
   "  shape: z.discriminatedUnion('kind', [",
   "    z.object({ kind: z.literal('circle'), r: z.number() }),",
   "    z.object({ kind: z.literal('square'), side: z.number() }),",
@@ -190,7 +191,6 @@ const service: Readonly<Record<string, string>> = {
     '  defineGuard,',
     '  defineRejection,',
     '  openEnum,',
-    '  openUnion,',
     "} from '@casitafeliz/loom-contract';",
     "import { z } from 'zod';",
     '',
@@ -376,16 +376,20 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
   });
 
-  test('the Success reader reads an unknown Open Union variant as its Unknown case, with raw', () => {
-    const payment = { type: 'crypto', coin: 'btc' };
+  test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {
+    const parsed = read({ ...sample, payment: { type: 'crypto', coin: 'btc' } });
 
-    const parsed = read({ ...sample, payment });
+    expect(parsed.data?.['payment']).toEqual({ type: { unknown: 'crypto' } });
+  });
 
-    expect(parsed.data?.['payment']).toEqual({ type: { unknown: 'crypto' }, raw: payment });
+  test('the Success reader refuses a discriminated union variant it does not know', () => {
+    const parsed = read({ ...sample, shape: { kind: 'triangle', side: 1 } });
+
+    expect(parsed.success).toBe(false);
   });
 
   test('the Success reader refuses a declared variant that breaks its schema', () => {
-    const parsed = read({ ...sample, payment: { type: 'card' } });
+    const parsed = read({ ...sample, shape: { kind: 'circle' } });
 
     expect(parsed.success).toBe(false);
   });
@@ -446,12 +450,18 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(written.filter((text) => text.includes('strictObject'))).toEqual([]);
   });
 
+  test('no file of the package reads an unknown variant', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src'));
+
+    expect(written.filter((text) => /openUnion|\braw\b/.test(text))).toEqual([]);
+  });
+
   test('a recursive def reads its Unknown cases, optional, nullable and tuple fields, and another def', () => {
     const forest = {
       ...sample.forest,
       inner: { a: 'x', b: 2 },
       status: 'new',
-      pick: { 'the-type': 'y', more: 1 },
+      pick: { 'the-type': 'x', more: 1 },
     };
 
     const parsed = read({ ...sample, forest });
@@ -460,17 +470,14 @@ describe('cf-loom package: the schemas it writes', () => {
       ...sample.forest,
       inner: { a: 'x' },
       status: { unknown: 'new' },
-      pick: { 'the-type': { unknown: 'y' }, raw: { 'the-type': 'y', more: 1 } },
+      pick: { 'the-type': 'x' },
     });
   });
 
-  test('an Open Union with a recursive variant reads an unknown variant as its Unknown case', () => {
+  test('a discriminated union with a recursive variant refuses a variant it does not know', () => {
     const parsed = read({ ...sample, node: { type: 'leaf', parent: { type: 'vine' } } });
 
-    expect(parsed.data?.['node']).toEqual({
-      type: 'leaf',
-      parent: { type: { unknown: 'vine' }, raw: { type: 'vine' } },
-    });
+    expect(parsed.success).toBe(false);
   });
 
   test('a discriminated union with a recursive variant reads a nested value', () => {

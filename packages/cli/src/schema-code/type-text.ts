@@ -80,21 +80,8 @@ function tupleTypeOf(node: TupleNode, writing: Writing): string {
   return `[${[...items, ...rest].join(', ')}]`;
 }
 
-/** A discriminated union's variants; an Open Union's reader adds its Unknown case. */
+/** A discriminated union's variants. */
 function taggedTypeOf(node: TaggedNode, writing: Writing): string {
-  const variants = variantsTypeOf(node, writing.mode, writing.needs);
-  if (!node.open || writing.mode === 'declared') {
-    return variants;
-  }
-  const key = keyOf(node.discriminator);
-  const raw = `{ ${key}: string; [key: string]: unknown }`;
-  return `(${variants} | { ${key}: { unknown: string }; raw: ${raw} })`;
-}
-
-/** The type of a discriminated union's declared variants. */
-function variantsTypeOf(node: TaggedNode, mode: SchemaMode, needs: Needs): string {
-  const variants = Object.entries(node.variants).map(([, variant]) =>
-    typeTextOf(variant, mode, needs),
-  );
+  const variants = Object.values(node.variants).map((variant) => typeOf(variant, writing));
   return `(${variants.join(' | ')})`;
 }

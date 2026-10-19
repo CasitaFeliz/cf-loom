@@ -14,7 +14,7 @@ import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
 import { addDefUse, type Writing } from './needs.ts';
-import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
+import { openEnumReaderOf } from './open.ts';
 
 /**
  * The zod expression of a Snapshot node in a mode, with its nullability and annotations, so the
@@ -149,28 +149,13 @@ function tupleOf(node: TupleNode, writing: Writing): string {
   return `z.tuple([${items}]).rest(${zodExpressionOf(node.rest, writing)})`;
 }
 
-/** A discriminated union: an Open Union's reader has its Unknown case. */
-function taggedOf(node: TaggedNode, writing: Writing): string {
-  const declared = declaredUnionOf(node, writing);
-  if (!node.open || writing.mode === 'declared') {
-    return declared;
-  }
-  const knownValues = Object.keys(node.variants);
-  return openUnionReaderOf(declared, node.discriminator, knownValues);
-}
-
 /**
- * The declared variants as zod's discriminated union, or `loom.openUnion` for an Open Union as
- * declared; a recursive variant is its def, which its type says is discriminable.
+ * The variants as zod's discriminated union; a recursive variant is its def, which its type says
+ * is discriminable.
  */
-function declaredUnionOf(node: TaggedNode, writing: Writing): string {
+function taggedOf(node: TaggedNode, writing: Writing): string {
   const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
-  const isOpenAsDeclared = node.open && writing.mode === 'declared';
-  if (isOpenAsDeclared) {
-    writing.needs.modules.add('loom');
-  }
-  const call = isOpenAsDeclared ? 'loom.openUnion' : 'z.discriminatedUnion';
-  return `${call}(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
+  return `z.discriminatedUnion(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
 }
 
 /** An intersection of every item, nested from the left, as zod intersects two at a time. */
