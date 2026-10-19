@@ -6,7 +6,7 @@ The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) the types `@casitafeliz/loom-testing` builds its fake's client with: `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `infe
 | `decoding/` | the Outcome types, decoded and as each Endpoint types them; a response decoded in order: the Success with its headers and body read by their Reader schemas, else an Envelope, else the inferred Fault; a Rejection known by code, its body read or dropped; the client's own `INVALID_OUTCOME` | `endpoints`, `inference` |
 | `calling/` | `client()` and its types; one call top to bottom; the headers given to `client()`; the Deprecation told once per method | `endpoints`, `request`, `inference`, `decoding` |
 
-The wire rules the client shares with `serve` and `@casitafeliz/loom-testing` live in `@casitafeliz/loom-contract`'s `wire/`: a value as text and text as a value, which text can travel as a header, a path segment or a query value, reading a received body whole and recognizing an Envelope in it, the reserved codes with their texts, the invalid-input body and its reader, and the `Deprecation` header both ways. Which Rejections an Endpoint answers and how each resolves its code are in the contract's `./internal` too.
+The wire rules the client shares with `serve` and `@casitafeliz/loom-testing` live in `@casitafeliz/loom-contract`'s `wire/`: a value as text and text as a value, which text can travel as a header, a path segment or a query value, reading a received body whole and recognizing an Envelope in it, the reserved codes with their texts, the invalid-input body and its reader, and the `Deprecation` header both ways. Which Rejections an Endpoint answers, by the code each resolves to, its entry in the exported Snapshot, and its Guards' demands read in Attachment order are in the contract's `./internal` too.
 
 ## A call
 

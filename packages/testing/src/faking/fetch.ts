@@ -35,7 +35,10 @@ export function fakingOf(provided: Provided): Faking {
 
 /** The fake's `fetch`: each request answered as its Provider would, or aborted by its signal. */
 export function fakeFetchOf(faking: Faking): Fetch {
-  return (url, init) => abortableOf(fakeResponseOf(faking, new Request(url, init)), init.signal);
+  return async (url, init) => {
+    const request = new Request(url, init);
+    return await abortableOf(fakeResponseOf(faking, request), init.signal);
+  };
 }
 
 /**

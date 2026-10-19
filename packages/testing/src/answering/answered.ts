@@ -9,7 +9,7 @@ import type { ListedEndpoint } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
 import { knownRejectionResponseOf, scriptedSuccessResponseOf } from './outcomes.ts';
 
-/** The status a code the Provider does not declare travels with, as `serve` never sends it. */
+/** The status a scripted code the Provider does not declare travels with. */
 const unknownRejectionStatus = 422;
 
 /**

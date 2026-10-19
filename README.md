@@ -8,7 +8,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 | Package | Used by | Provides |
 | --- | --- | --- |
-| [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
+| [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
 | [`@casitafeliz/loom-handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`); `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
 | [`@casitafeliz/loom-server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
 | [`@casitafeliz/loom-server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
@@ -16,7 +16,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@casitafeliz/loom-messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
 | [`@casitafeliz/loom-messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
 | [`@casitafeliz/loom-messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
-| [`@casitafeliz/loom-testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider`, `fakeEvent` |
+| [`@casitafeliz/loom-testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
 | [`@casitafeliz/loom-cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig`; Contract directories under `@casitafeliz/loom-cli/directories` |
 
 How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
