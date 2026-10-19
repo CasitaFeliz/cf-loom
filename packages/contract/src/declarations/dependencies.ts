@@ -1,3 +1,4 @@
+import type { ExportedSnapshot } from '../snapshot/index.ts';
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
@@ -14,7 +15,10 @@ type ProvidedEvent = {
   readonly visibility: ExportedVisibility;
 };
 
-/** The `contract` a Contract Package exports: its Public and Internal Elements and its version. */
+/**
+ * The `contract` a Contract Package exports: its Public and Internal Elements, its version, and the
+ * Snapshot cut to what it exports.
+ */
 export type ContractPackage = {
   readonly name: string;
   readonly version: string;
@@ -23,6 +27,7 @@ export type ContractPackage = {
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: StandardRejections;
+  readonly exportedSnapshot: ExportedSnapshot;
 };
 
 /** The Elements a Provider exports, kept by a Dependency so `generate` checks what it selected. */
@@ -57,20 +62,24 @@ type EventsByName<Events> = {
 };
 
 /**
- * What a Contract uses of one Provider, keyed by name in code, the version it relied on, and the
- * Elements the Provider exports, so `generate` checks each selected Element is one of them.
+ * What a Contract uses of one Provider, keyed by name in code, the version it relied on, its
+ * Standard Rejections with their codes as written, so a Caller narrows by them, the Elements the
+ * Provider exports, so `generate` checks each selected Element is one of them, and its exported
+ * Snapshot, which the client reads nodes from.
  */
 export type Dependencies<
   Endpoints = Readonly<Record<string, Endpoint>>,
   Events = Readonly<Record<string, ProvidedEvent>>,
+  Standards extends StandardRejections = StandardRejections,
 > = {
   readonly kind: 'dependencies';
   readonly provider: string;
   readonly against: string;
-  readonly standardRejections: StandardRejections;
+  readonly standardRejections: Standards;
   readonly endpoints: Endpoints;
   readonly events: Events;
   readonly exported: ExportedElements;
+  readonly exportedSnapshot: ExportedSnapshot;
 };
 
 /** Declares what a Contract uses of one Provider, so its client and Subscriptions reach no more. */
@@ -82,7 +91,8 @@ export function defineDependencies<
   selection: Chosen & NoInfer<DeclaredFieldsRule<Chosen, Selection<Provider>>>,
 ): Dependencies<
   EndpointsByName<SelectedIn<Chosen, 'endpoints'>>,
-  EventsByName<SelectedIn<Chosen, 'events'>>
+  EventsByName<SelectedIn<Chosen, 'events'>>,
+  Provider['standardRejections']
 > {
   const endpoints = (selection.endpoints ?? []).map((endpoint) => [endpoint.name, endpoint]);
   const events = (selection.events ?? []).map((event) => [eventName(event), event]);
@@ -93,6 +103,7 @@ export function defineDependencies<
     endpoints: Object.fromEntries(endpoints),
     events: Object.fromEntries(events),
     exported: { endpoints: provider.endpoints, events: provider.events },
+    exportedSnapshot: provider.exportedSnapshot,
   });
 }
 

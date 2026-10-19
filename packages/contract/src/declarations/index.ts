@@ -43,6 +43,7 @@ export type { ReservedCode } from './reserved-codes.ts';
 export { reservedCodes } from './reserved-codes.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
+export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,
   StandardRejection,
@@ -53,6 +54,7 @@ export type {
 } from './standard-rejections.ts';
 export {
   addedStandardRejectionNames,
+  inputIns,
   invalidInput,
   invalidInputBody,
   issueCodes,

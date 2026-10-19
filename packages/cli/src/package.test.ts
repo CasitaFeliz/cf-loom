@@ -361,6 +361,7 @@ describe('cf-loom package: the files', () => {
       'src/endpoints',
       'src/endpoints/get-order.ts',
       'src/endpoints/list-orders.ts',
+      'src/exported-snapshot.ts',
       'src/guards',
       'src/guards/permission.ts',
       'src/guards/user-token.ts',
@@ -446,9 +447,11 @@ describe('cf-loom package: the files', () => {
       .filter((file) => file.endsWith('.ts') && file !== 'src/snapshot.ts')
       .map((file) => read(out, file))
       .join('\n');
-    for (const absent of ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category', '@org/definitions']) {
+    for (const absent of ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category']) {
       expect(code).not.toContain(absent);
     }
+    const imports = code.replace(read(out, 'src/exported-snapshot.ts'), '');
+    expect(imports).not.toContain('@org/definitions');
     expect(read(out, 'package.json')).not.toContain('@org/definitions');
   });
 
@@ -600,6 +603,35 @@ describe('cf-loom package: the built package', () => {
     expect(built.contract.endpoints.listOrders.lifecycle).toBe('deprecated');
     expect(built.contract.endpoints.getOrder.lifecycle).toBeUndefined();
     expect(built.snapshot).toEqual(JSON.parse(read(out, 'snapshot.json')));
+  });
+
+  test('its contract carries the Snapshot cut to the Endpoints it exports and what they reach', async () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    const { snapshot } = built;
+    const exported = built.contract.exportedSnapshot;
+    expect(exported).toEqual({
+      format: 1,
+      defs: {},
+      endpoints: {
+        'GET /orders': snapshot.endpoints['GET /orders'],
+        'GET /orders/{}': snapshot.endpoints['GET /orders/{}'],
+      },
+      guards: { permission: snapshot.guards.permission, userToken: snapshot.guards.userToken },
+      codes: {
+        // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
+        FORBIDDEN: snapshot.codes.FORBIDDEN,
+        // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
+        ORDER_LOCKED: snapshot.codes.ORDER_LOCKED,
+      },
+    });
+    const names = Object.values(exported.endpoints).map((endpoint) =>
+      Reflect.get(Object(endpoint), 'name'),
+    );
+    expect(names.sort()).toEqual(Object.keys(built.contract.endpoints).sort());
   });
 
   test('a Consumer declares a Dependency on it, type-checks and generates', () => {

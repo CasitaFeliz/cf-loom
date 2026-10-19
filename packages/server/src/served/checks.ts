@@ -55,7 +55,7 @@ export function checkedTextPartsOf(
  * The stamp a Deprecated Endpoint's responses carry, which the map must hold as `generate` writes
  * it; none for any other Endpoint, whatever the map holds.
  */
-export function stampOf(handlers: ServedHandlers, endpoint: Endpoint): string | undefined {
+export function deprecatedAtOf(handlers: ServedHandlers, endpoint: Endpoint): string | undefined {
   if (endpoint.lifecycle !== 'deprecated') {
     return undefined;
   }

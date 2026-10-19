@@ -143,6 +143,7 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
 const paymentsDeps = defineDependencies(payments, {
@@ -156,6 +157,7 @@ const orders = {
   endpoints: { getOrder, createOrder },
   events: {},
   standardRejections: payments.standardRejections,
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
 describe('the README’s declaration examples', () => {

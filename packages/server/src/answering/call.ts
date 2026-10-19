@@ -13,7 +13,7 @@ export type Call = {
   readonly source: TextSource;
 };
 
-/** Why a body could not be read: too large to read, or no JSON. */
+/** Why a body could not be read: too large to read, no JSON, or a stream that failed. */
 export type UnreadBody = Exclude<Body, { readonly kind: 'value' }>;
 
 /** The Endpoint's Input as the request carries it, or why its body could not be read. */
@@ -36,6 +36,7 @@ export async function inputOf(call: Call, maxBodyBytes: number | undefined): Pro
       return { kind: 'input', input: { ...text, body: body.value } };
     case 'too-large':
     case 'malformed':
+    case 'unreadable':
       return body;
   }
 }

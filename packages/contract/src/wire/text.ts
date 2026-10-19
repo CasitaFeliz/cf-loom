@@ -6,9 +6,42 @@ const numberText = /^-?(0|[1-9]\d*)(\.\d+)?$/;
 /** A value a text part or a Success header holds: a string, a number or a boolean. */
 export type TextValue = string | number | boolean;
 
-/** A value as the text it travels in: a number or boolean as JavaScript writes it. */
+/**
+ * A value as the text it travels in: a boolean as JavaScript writes it, a number as plain decimal,
+ * so the number pattern reads it back as itself.
+ */
 export function textOfValue(value: TextValue): string {
-  return String(value);
+  return typeof value === 'number' ? decimalOf(value) : String(value);
+}
+
+/**
+ * A finite number in plain decimal: JavaScript's shortest round-trip digits, with an exponent
+ * form's decimal point moved by hand, never `toFixed`, which rounds.
+ */
+function decimalOf(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${value} is no finite number, and no Contract value can be one`);
+  }
+  const [mantissa = '', exponent] = String(Math.abs(value)).split('e');
+  if (exponent === undefined) {
+    return String(value);
+  }
+  const point = mantissa.indexOf('.');
+  const digits = mantissa.replace('.', '');
+  const shifted = (point === -1 ? mantissa.length : point) + Number(exponent);
+  const sign = value < 0 ? '-' : '';
+  return `${sign}${digitsWithPoint(digits, shifted)}`;
+}
+
+/** Digits with the decimal point after `point` of them, padded with zeros on either side. */
+function digitsWithPoint(digits: string, point: number): string {
+  if (point <= 0) {
+    return `0.${'0'.repeat(-point)}${digits}`;
+  }
+  if (point >= digits.length) {
+    return `${digits}${'0'.repeat(point - digits.length)}`;
+  }
+  return `${digits.slice(0, point)}.${digits.slice(point)}`;
 }
 
 /** Whether a value is one a text part or a Success header holds. */
@@ -64,7 +97,7 @@ function booleanOf(text: string): unknown {
   return text === 'false' ? false : text;
 }
 
-/** The declared value whose text is the one received, keeping its JSON type. */
+/** The declared value whose text, as it travels, is the one received, keeping its JSON type. */
 function declaredValueOf(values: readonly JsonPrimitive[], text: string): unknown {
-  return values.find((value) => String(value) === text) ?? text;
+  return values.find((value) => isTextValue(value) && textOfValue(value) === text) ?? text;
 }

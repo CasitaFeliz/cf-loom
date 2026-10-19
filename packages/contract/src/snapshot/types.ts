@@ -133,3 +133,13 @@ export type DefinitionsSnapshot = Heading<'definitions'> & {
 
 /** A declared Snapshot, as `generate` writes it to `contract.snapshot.json`. */
 export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapshot;
+
+/**
+ * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints that are not
+ * Retired, with the Guards, codes and defs they reach, keyed as in the Snapshot, so a Caller reads
+ * their nodes and no Private Element reaches a browser.
+ */
+export type ExportedSnapshot = Pick<
+  ServiceSnapshot,
+  'format' | 'defs' | 'endpoints' | 'guards' | 'codes'
+>;

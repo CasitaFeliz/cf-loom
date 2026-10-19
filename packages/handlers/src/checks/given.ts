@@ -3,10 +3,9 @@ import {
   contextProvidersOf,
   demandParts,
   inputParts,
-  partFieldOf,
+  parsedPartsOf,
   schemaOf,
 } from '@casitafeliz/loom-contract/internal';
-import type * as core from 'zod/v4/core';
 import {
   type Checked,
   checkedAll,
@@ -36,7 +35,7 @@ export function checkedEndpointCall(
 ): Checked<{ readonly input: ValuesByField; readonly context: ValuesByField }> {
   const schemaAt = (part: (typeof inputParts)[number]) => schemaOf(endpoint, part);
   return checkedAll({
-    input: checkedDeclaredParts(inputParts, schemaAt, given.input),
+    input: parsedPartsOf(inputParts, schemaAt, given.input),
     context: checkedContext(endpoint, given.context),
   });
 }
@@ -52,27 +51,10 @@ export function checkedGuardCall(
 }> {
   const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
   return checkedAll({
-    demands: checkedDeclaredParts(demandParts, schemaAt, given.demands),
+    demands: parsedPartsOf(demandParts, schemaAt, given.demands),
     context: checkedContext(guard, given.context),
     qualifier: checkedPart('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
   });
-}
-
-/** Each part that declares a schema, parsed under its field; a part declaring none is not read. */
-function checkedDeclaredParts<
-  CallPart extends (typeof inputParts)[number] | (typeof demandParts)[number],
->(
-  parts: readonly CallPart[],
-  schemaAt: (part: CallPart) => core.$ZodType | undefined,
-  given: unknown,
-): Checked<ValuesByField> {
-  const declared = parts.filter((part) => schemaAt(part) !== undefined);
-  const checks = declared.map((part) => {
-    const field = partFieldOf(part);
-    const value = fieldOf(given, field);
-    return [field, checkedPart(part, schemaAt(part), { value })] as const;
-  });
-  return checkedAll(Object.fromEntries(checks));
 }
 
 /**

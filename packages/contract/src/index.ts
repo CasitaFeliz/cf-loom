@@ -42,3 +42,4 @@ export {
   notImplemented,
 } from './declarations/index.ts';
 export { openEnum } from './open/index.ts';
+export type { ExportedSnapshot } from './snapshot/index.ts';

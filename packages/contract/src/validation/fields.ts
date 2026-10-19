@@ -1,6 +1,7 @@
 import { isDeclaration } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
+import type { KnownFields } from './declared-fields.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import {
   attachmentFields,
@@ -12,7 +13,6 @@ import {
   groupFields,
   guardFields,
   inputFields,
-  type KnownFields,
   rejectionFields,
   rootFields,
   standardRejectionFields,

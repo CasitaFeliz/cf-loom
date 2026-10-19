@@ -1,5 +1,10 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
-import { matchOf, reservedResponseOf, withDeprecation } from '@casitafeliz/loom-contract/internal';
+import {
+  malformedBodyIssueOf,
+  matchOf,
+  reservedResponseOf,
+  withDeprecation,
+} from '@casitafeliz/loom-contract/internal';
 import { runEndpoint } from '@casitafeliz/loom-handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, inputOf, type UnreadBody } from './call.ts';
@@ -61,5 +66,5 @@ function answeredOfUnread(read: UnreadBody, call: Call, standards: StandardRejec
     return { kind: 'fault', response: reservedResponseOf('BODY_TOO_LARGE') };
   }
   const faultedBy = { endpoint: call.endpoint.declared.name };
-  return answeredOfInvalidInput([read.issue], faultedBy, standards);
+  return answeredOfInvalidInput([malformedBodyIssueOf(read.message)], faultedBy, standards);
 }

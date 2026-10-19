@@ -12,10 +12,10 @@ import {
 import {
   checkedTextPartsOf,
   contractOf,
+  deprecatedAtOf,
   endpointHandlerOf,
   guardHandlerOf,
   type ServedHandlers,
-  stampOf,
 } from './checks.ts';
 
 /** A Guard as a live Endpoint attaches it: its Qualifier, its Handler and the text it demands. */
@@ -94,6 +94,6 @@ function servedEndpointOf(endpoint: Endpoint, { handlers, nodes }: Preparing): S
     })),
     nodes: nodes.get(endpoint) ?? {},
     readsBody: schemaOf(endpoint, 'input.body') !== undefined,
-    deprecatedAt: stampOf(handlers, endpoint),
+    deprecatedAt: deprecatedAtOf(handlers, endpoint),
   };
 }

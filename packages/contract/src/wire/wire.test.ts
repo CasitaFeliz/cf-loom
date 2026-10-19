@@ -2,18 +2,29 @@ import { describe, expect, test } from 'vitest';
 import {
   bodyOf,
   committedValues,
+  deprecatedAtOfHeader,
   deprecationHeaderOf,
+  envelopeOf,
   faultEnvelopeOf,
   faultStatusOf,
+  headerTextsOf,
+  headerValuesOf,
   invalidInputBodyOf,
+  invalidInputBodyReader,
   isHeaderText,
   isJsonContentType,
+  isQueryText,
+  isSegmentText,
   jsonContentType,
+  malformedBodyIssueOf,
+  notJsonBodyIssue,
+  receivedBodyOf,
+  receivedEnvelopeOf,
   rejectionEnvelopeOf,
   reservedCodes,
   reservedFaults,
   type SchemaNode,
-  successHeaderTextsOf,
+  segmentOf,
   textOfValue,
   valueOfText,
 } from '../internal/index.ts';
@@ -74,7 +85,7 @@ describe('valueOfText', () => {
   });
 });
 
-describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
+describe('textOfValue, isHeaderText and headerTextsOf', () => {
   test('a value travels as the text JavaScript writes it', () => {
     expect([textOfValue(3), textOfValue(-1.5), textOfValue(true), textOfValue('v1')]).toEqual([
       '3',
@@ -82,6 +93,29 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
       'true',
       'v1',
     ]);
+  });
+
+  test('a number travels as plain decimal, never in exponent form, and reads back as itself', () => {
+    const numbers = [1e21, 1.5e-7, -2.5e-10, 1.23e25, 0.1, -0, 123456.789, 5e-324];
+
+    const texts = numbers.map(textOfValue);
+
+    expect(texts.slice(0, 4)).toEqual([
+      '1000000000000000000000',
+      '0.00000015',
+      '-0.00000000025',
+      '12300000000000000000000000',
+    ]);
+    expect(texts.every((text) => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(text))).toBe(true);
+    expect(texts.map((text) => valueOfText(number, [text]))).toEqual(numbers.map((n) => n + 0));
+  });
+
+  test('a number that is not finite cannot travel, a bug', () => {
+    const notFinite = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+    for (const value of notFinite) {
+      expect(() => textOfValue(value)).toThrow(/finite/);
+    }
   });
 
   test('a header value is RFC 9110 field text: tab, visible ASCII, space and U+0080 to U+00FF', () => {
@@ -109,7 +143,7 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   });
 
   test('a Success’s headers travel as text, an undefined one left out', () => {
-    const sent = successHeaderTextsOf({
+    const sent = headerTextsOf('success.headers', {
       'x-total': 3,
       'x-ok': true,
       etag: 'v1',
@@ -127,7 +161,7 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   });
 
   test('a Success header that cannot travel is an Issue at success.headers, by its name', () => {
-    const sent = successHeaderTextsOf({ etag: ' v1', 'x-total': 3, 'x-list': ['a'] });
+    const sent = headerTextsOf('success.headers', { etag: ' v1', 'x-total': 3, 'x-list': ['a'] });
 
     expect(sent).toEqual({
       kind: 'issues',
@@ -143,6 +177,22 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
           path: ['x-list'],
           code: 'invalid_format',
           message: expect.any(String),
+        },
+      ],
+    });
+  });
+
+  test('an Input header that cannot travel is an Issue at input.headers, by its name', () => {
+    const sent = headerTextsOf('input.headers', { 'x-api-key': 'a\nb', 'x-id': 'ok' });
+
+    expect(sent).toEqual({
+      kind: 'issues',
+      issues: [
+        {
+          part: 'input.headers',
+          path: ['x-api-key'],
+          code: 'invalid_format',
+          message: 'The header value cannot travel as HTTP field text',
         },
       ],
     });
@@ -186,6 +236,55 @@ describe('the Envelopes', () => {
       },
       { fault: { committed: 'yes', retryable: true, message: 'Lost' } },
     ]);
+  });
+});
+
+describe('envelopeOf', () => {
+  test('a Rejection Envelope is read with its code, message and body, extra keys ignored', () => {
+    const received = { rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 }, x: 1 } };
+
+    const envelope = envelopeOf(received);
+
+    expect(envelope).toStrictEqual({
+      rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 } },
+    });
+  });
+
+  test('a Rejection Envelope without a body is read with no body key', () => {
+    const envelope = envelopeOf({ rejection: { code: 'GONE', message: 'Gone' } });
+
+    expect(envelope).toStrictEqual({ rejection: { code: 'GONE', message: 'Gone' } });
+  });
+
+  test('a Fault Envelope is read with its reserved code, and a code that is not reserved is dropped', () => {
+    const reserved = envelopeOf({
+      fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' },
+    });
+    const unreserved = envelopeOf({
+      fault: { code: 'DB_DOWN', committed: 'unknown', retryable: true, message: 'Down', at: 1 },
+    });
+
+    expect([reserved, unreserved]).toStrictEqual([
+      { fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' } },
+      { fault: { committed: 'unknown', retryable: true, message: 'Down' } },
+    ]);
+  });
+
+  test('anything else is no Envelope', () => {
+    const received = [
+      null,
+      'text',
+      [],
+      {},
+      { rejection: { code: 1, message: 'm' } },
+      { rejection: { code: 'C' } },
+      { fault: { committed: 'maybe', retryable: true, message: 'm' } },
+      { fault: { committed: 'no', retryable: 'yes', message: 'm' } },
+      { fault: { committed: 'no', retryable: true } },
+      { error: 'boom' },
+    ];
+
+    expect(received.map(envelopeOf)).toEqual(received.map(() => undefined));
   });
 });
 
@@ -243,7 +342,17 @@ describe('the content type', () => {
 });
 
 describe('bodyOf', () => {
-  test('a body sent with another content type is malformed, its Issue at input.body', async () => {
+  test('the Issue serve answers for a body it cannot read sits at the whole of input.body', () => {
+    expect(malformedBodyIssueOf('The body is not JSON')).toEqual(notJsonBodyIssue);
+    expect(notJsonBodyIssue).toEqual({
+      part: 'input.body',
+      path: [],
+      code: 'malformed',
+      message: 'The body is not JSON',
+    });
+  });
+
+  test('a body sent with another content type is malformed', async () => {
     const request = new Request('http://test/', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
@@ -254,16 +363,11 @@ describe('bodyOf', () => {
 
     expect(body).toEqual({
       kind: 'malformed',
-      issue: {
-        part: 'input.body',
-        path: [],
-        code: 'malformed',
-        message: 'The content type is not application/json',
-      },
+      message: 'The content type is not application/json',
     });
   });
 
-  test('a body that is no JSON is malformed, its Issue at input.body', async () => {
+  test('a body that is no JSON is malformed', async () => {
     const request = new Request('http://test/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -272,9 +376,35 @@ describe('bodyOf', () => {
 
     const body = await bodyOf(request, undefined);
 
-    expect(body).toEqual({
-      kind: 'malformed',
-      issue: { part: 'input.body', path: [], code: 'malformed', message: 'The body is not JSON' },
+    expect(body).toEqual({ kind: 'malformed', message: 'The body is not JSON' });
+  });
+});
+
+describe('bodyOf, reading a Response', () => {
+  test('a JSON Response body is read as its value', async () => {
+    const response = Response.json({ id: 'o-1' });
+
+    const body = await bodyOf(response, undefined);
+
+    expect(body).toEqual({ kind: 'value', value: { id: 'o-1' } });
+  });
+
+  test('a body whose stream fails while it is read is unreadable, with the error, told from no JSON', async () => {
+    const failure = new Error('socket hang up');
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"id":'));
+        controller.error(failure);
+      },
+    });
+    const response = new Response(stream, { headers: { 'content-type': 'application/json' } });
+
+    const body = await bodyOf(response, undefined);
+
+    expect(body).toMatchObject({
+      kind: 'unreadable',
+      error: failure,
+      message: 'The body is not JSON',
     });
   });
 });
@@ -282,6 +412,14 @@ describe('bodyOf', () => {
 describe('the Deprecation header', () => {
   test('a deprecatedAt stamp is sent as @ and its unix seconds', () => {
     expect(deprecationHeaderOf('2026-10-17T09:30:00Z')).toBe('@1792229400');
+  });
+
+  test('a received Deprecation header is read back as the stamp, and anything else as none', () => {
+    const headers = ['@1792229400', '1792229400', '@soon', '@1.5', ''];
+
+    const stamps = headers.map(deprecatedAtOfHeader);
+
+    expect(stamps).toEqual(['2026-10-17T09:30:00Z', undefined, undefined, undefined, undefined]);
   });
 });
 
@@ -302,5 +440,170 @@ describe('the invalid-input body', () => {
         { in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
       ],
     });
+  });
+});
+
+describe('the invalid-input body as a Caller reads it', () => {
+  test('an issue code or part a later cf-loom adds is read as its Unknown case', () => {
+    const received = {
+      issues: [
+        { in: 'params', path: ['id'], code: 'too_small', message: 'Too small', extra: 1 },
+        { in: 'cookies', path: [], code: 'too_late', message: 'Too late' },
+      ],
+    };
+
+    const read = invalidInputBodyReader.safeParse(received);
+
+    expect(read.data).toEqual({
+      issues: [
+        { in: 'params', path: ['id'], code: 'too_small', message: 'Too small' },
+        {
+          in: { unknown: 'cookies' },
+          path: [],
+          code: { unknown: 'too_late' },
+          message: 'Too late',
+        },
+      ],
+    });
+  });
+});
+
+describe('a number literal in exponent form', () => {
+  test('is read back from the plain decimal text it travels in', () => {
+    const large: SchemaNode = { type: 'literal', value: 1e21 };
+    const small: SchemaNode = { type: 'literal', value: 1.5e-7 };
+
+    const values = [
+      valueOfText(large, [textOfValue(1e21)]),
+      valueOfText(small, [textOfValue(1.5e-7)]),
+    ];
+
+    expect(values).toEqual([1e21, 1.5e-7]);
+  });
+});
+
+describe('the received Deprecation header out of range', () => {
+  test('an instant before 1970 is read, one past the Date range is none', () => {
+    const headers = [
+      '@-1',
+      '@99999999999999999',
+      '@-99999999999999',
+      '@253402300800',
+      '@-8639977881600',
+    ];
+
+    const stamps = headers.map(deprecatedAtOfHeader);
+
+    expect(stamps).toEqual(['1969-12-31T23:59:59Z', undefined, undefined, undefined, undefined]);
+  });
+});
+
+describe('text that travels in a URL', () => {
+  test('a path segment is neither empty, a dot segment nor a lone surrogate', () => {
+    const accepted = ['a', '...', 'a b', '%', 'é', '😀'];
+    const refused = ['', '.', '..', 'a\uD800', '\uDC00b'];
+
+    expect(accepted.map(isSegmentText)).toEqual(accepted.map(() => true));
+    expect(refused.map(isSegmentText)).toEqual(refused.map(() => false));
+  });
+
+  test('a segment is percent-encoded whole, a slash included', () => {
+    expect(segmentOf('a/b c?')).toBe('a%2Fb%20c%3F');
+  });
+
+  test('a query value holds no lone surrogate, which URLSearchParams would replace', () => {
+    const texts = ['', 'a b', '😀', 'a\uD800'];
+
+    expect(texts.map(isQueryText)).toEqual([true, true, true, false]);
+  });
+});
+
+describe('headerValuesOf', () => {
+  test('each declared header present is converted by its node, others left out', () => {
+    const node: SchemaNode = {
+      type: 'object',
+      mode: 'open',
+      fields: {
+        'x-count': { required: true, schema: number },
+        'x-ok': { required: false, schema: boolean },
+      },
+    };
+    const headers = new Headers({ 'x-count': '3', 'x-other': 'y' });
+
+    const values = node.type === 'object' ? headerValuesOf(node, headers) : undefined;
+
+    expect(values).toEqual({ 'x-count': 3 });
+  });
+});
+
+describe('receivedBodyOf', () => {
+  test('reads a JSON body whatever its size, or says why it is no JSON', async () => {
+    const large = { padding: 'x'.repeat(100_000) };
+    const html = new Response('<p>', { headers: { 'content-type': 'text/html' } });
+
+    const bodies = [await receivedBodyOf(Response.json(large)), await receivedBodyOf(html)];
+
+    expect(bodies).toMatchObject([
+      { kind: 'value', value: large },
+      { kind: 'malformed', message: 'The content type is not application/json' },
+    ]);
+  });
+});
+
+describe('receivedBodyOf, discarding', () => {
+  test('a body that is no JSON by its content type is cancelled unread', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        cancel: () => {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const html = new Response(stream, { headers: { 'content-type': 'text/html' } });
+
+    const body = await receivedBodyOf(html);
+
+    expect(body.kind).toBe('malformed');
+    expect(cancelled).toBe(true);
+  });
+});
+
+describe('receivedEnvelopeOf', () => {
+  /** A stream that has already failed, as a reset leaves a body. */
+  function failed(): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('reset')),
+    });
+  }
+
+  test('a JSON body that is an Envelope is read as one, anything else as none', async () => {
+    const rejection = { code: 'GONE', message: 'Gone' };
+    const sent = [
+      Response.json({ rejection }),
+      Response.json({ error: 'x' }),
+      new Response(JSON.stringify({ rejection }), { headers: { 'content-type': 'text/plain' } }),
+    ];
+
+    const read = [];
+    for (const response of sent) {
+      read.push(await receivedEnvelopeOf(response));
+    }
+
+    expect(read).toEqual([
+      { kind: 'envelope', envelope: { rejection } },
+      { kind: 'none' },
+      { kind: 'none' },
+    ]);
+  });
+
+  test('a body that already failed is unreadable when JSON, none otherwise, never a throw', async () => {
+    const json = new Response(failed(), { headers: { 'content-type': 'application/json' } });
+    const html = new Response(failed(), { headers: { 'content-type': 'text/html' } });
+
+    const read = [await receivedEnvelopeOf(json), await receivedEnvelopeOf(html)];
+
+    expect(read).toMatchObject([{ kind: 'unreadable' }, { kind: 'none' }]);
   });
 });

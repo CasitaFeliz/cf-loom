@@ -34,10 +34,30 @@ export function textPartsOf(
   for (const [part, textIn] of requestTextParts) {
     const node = nodes[part];
     if (node !== undefined) {
-      parts[textIn] = fieldValuesOf(node, (field) => textsOf(textIn, field, source));
+      parts[textIn] = partValuesOf(textIn, node, source);
     }
   }
   return parts;
+}
+
+/** The values a part carries: its headers by their names, its params and query by their texts. */
+function partValuesOf(textIn: TextIn, node: ObjectNode, source: TextSource): FieldValues {
+  switch (textIn) {
+    case 'params':
+      return fieldValuesOf(node, (field) => listOf(source.params[field] ?? null));
+    case 'query':
+      return fieldValuesOf(node, (field) => source.query.getAll(field));
+    case 'headers':
+      return headerValuesOf(node, source.headers);
+  }
+}
+
+/**
+ * The values a party's headers carry, a request's or a Success's, each declared one present
+ * converted by its node; one a message lacks is left out, so whether it is required is the schema's.
+ */
+export function headerValuesOf(node: ObjectNode, headers: Headers): FieldValues {
+  return fieldValuesOf(node, (field) => listOf(headers.get(field)));
 }
 
 function fieldValuesOf(
@@ -52,18 +72,6 @@ function fieldValuesOf(
     }
   }
   return Object.fromEntries(values);
-}
-
-/** The texts a field arrives as: a param or header once, a query key as often as it is repeated. */
-function textsOf(textIn: TextIn, field: string, source: TextSource): readonly string[] {
-  switch (textIn) {
-    case 'params':
-      return listOf(source.params[field] ?? null);
-    case 'query':
-      return source.query.getAll(field);
-    case 'headers':
-      return listOf(source.headers.get(field));
-  }
 }
 
 function listOf(text: string | null): readonly string[] {
