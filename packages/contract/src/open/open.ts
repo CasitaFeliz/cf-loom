@@ -8,9 +8,23 @@ const openHolder = globalThis as typeof globalThis & { [openKey]?: WeakSet<core.
 openHolder[openKey] ??= new WeakSet<core.$ZodType>();
 const openSchemas = openHolder[openKey];
 
-type Variant<Discriminator extends string> = core.$ZodObject<{
-  readonly [Key in Discriminator]: core.$ZodLiteral<string>;
-}>;
+/**
+ * A variant as zod's discriminated union takes it, an object or a `z.lazy` of one, whose output
+ * holds the discriminator as a string.
+ */
+type Variant<Discriminator extends string> = core.$ZodTypeDiscriminable & {
+  readonly _zod: { readonly output: { readonly [Key in Discriminator]: string } };
+};
+
+/** Each variant as given when its discriminator is a string literal, `never` when it is `string`. */
+type LiteralDiscriminators<
+  Variants extends readonly Variant<Discriminator>[],
+  Discriminator extends string,
+> = {
+  readonly [Index in keyof Variants]: string extends Variants[Index]['_zod']['output'][Discriminator]
+    ? never
+    : Variants[Index];
+};
 
 /** Declares an enum whose readers handle values they do not know, so values can be added later. */
 export function openEnum<const Values extends readonly [string, ...string[]]>(values: Values) {
@@ -23,7 +37,10 @@ export function openEnum<const Values extends readonly [string, ...string[]]>(va
 export function openUnion<
   const Discriminator extends string,
   const Variants extends readonly [Variant<Discriminator>, ...Variant<Discriminator>[]],
->(discriminator: Discriminator, variants: Variants) {
+>(
+  discriminator: Discriminator,
+  variants: Variants & LiteralDiscriminators<Variants, Discriminator>,
+) {
   const schema = z.discriminatedUnion(discriminator, variants);
   openSchemas.add(schema);
   return schema;
