@@ -9,7 +9,7 @@ import {
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { type OriginOf, validateContract } from '../internal/index.ts';
+import { type OriginOf, snapshotOf, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: OriginOf) {
@@ -471,7 +471,7 @@ describe('validateContract: a record keyed by an enum or literal as query or hea
     );
   });
 
-  test('a keyed record as params is allowed, since the path decides their keys', () => {
+  test('a keyed record as params is allowed and stored strict, since the path decides their keys', () => {
     const params = z.record(z.enum(['orderId']), z.uuid()) as unknown as z.ZodObject;
     const endpoint = defineEndpoint({
       ...listing,
@@ -482,5 +482,13 @@ describe('validateContract: a record keyed by an enum or literal as query or hea
     const validated = validateEndpoint(endpoint);
 
     expect(validated.kind).toBe('valid');
+    const context = { generator: 'cf-loom@1.0.0', packages: [], committed: undefined, now: 0 };
+    const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
+    const stored = snapshot?.kind === 'service' ? snapshot.endpoints['GET /orders/{}'] : undefined;
+    expect(stored?.input.params).toEqual({
+      type: 'object',
+      mode: 'strict',
+      fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
+    });
   });
 });

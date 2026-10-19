@@ -131,6 +131,24 @@ describe('validateContract: an intersection reaching an Open Enum or an Open Uni
     });
   });
 
+  test('two intersections reaching an Open Enum at different depths are each reported', () => {
+    const open = () =>
+      z.intersection(
+        z.union([z.object({ s: openEnum(['a']) }), z.object({ q: z.string() })]),
+        z.object({ b: z.string() }),
+      );
+
+    const validated = validatedWithBody(z.object({ a: open(), b: z.object({ c: open() }) }));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...refusal, at: [...bodyAt, 'fields', 'a'] },
+        { ...refusal, at: [...bodyAt, 'fields', 'b', 'fields', 'c'] },
+      ],
+    });
+  });
+
   test('an intersection in a def is judged even when the schema using it fails the walk', () => {
     const tree = z
       .object({
