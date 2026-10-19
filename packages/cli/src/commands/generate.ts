@@ -1,47 +1,54 @@
-import { existsSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { oneLineOf } from '../loading/index.ts';
-import { declaredSnapshotOf, snapshotFile } from './declared.ts';
-import { done, type Exit, type Run, toolingError } from './exit.ts';
+import { type BuiltService, builtOf, isBuiltService, type Run } from '../project/index.ts';
+import { type GeneratedFile, writeFiles } from '../writing/index.ts';
+import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
+import { noFileLinesOf, orphanLinesOf } from './handler-files.ts';
+import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
+import { stubsOf } from './stubs.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
- * review; a committed file that is no JSON is left for its author to restore or delete.
+ * review; a Service also gets its Handler map, its readers and its missing Handlers' stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
-  const declared = await declaredSnapshotOf(run, 'running');
-  if (declared.kind === 'stopped') {
-    return declared.exit;
+  const built = await builtOf(run, 'running');
+  if (built.kind !== 'built') {
+    return failureExitOf(built);
   }
-  if (declared.committed.kind === 'no-json') {
-    const reason = declared.committed.reason;
-    return toolingError(
-      `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
-    );
+  const noJson = noJsonExitOf(built.committed);
+  if (noJson !== undefined) {
+    return noJson;
   }
-  return written(run.cwd, declared.bytes);
+  if (!isBuiltService(built)) {
+    return writtenExit(run, [snapshotFileOf(built)]);
+  }
+  return await generateService(run, built);
 }
 
 /**
- * Writes the Snapshot beside the committed file and renames it over it, so a failed write leaves
- * the committed file as it was; the temporary file a failure leaves is removed.
+ * A Service's files, or every line that stops them: an Element no stub could import, a Handler
+ * file nothing names, a Handler path that is no file.
  */
-function written(cwd: string, bytes: Uint8Array): Exit {
-  const path = join(cwd, snapshotFile);
-  const temporary = `${path}.tmp`;
-  try {
-    writeFileSync(temporary, bytes);
-    renameSync(temporary, path);
-    return done(`Wrote ${snapshotFile}`);
-  } catch (e) {
-    removeFile(temporary);
-    return toolingError(`${snapshotFile} cannot be written: ${oneLineOf(e, cwd)}`);
+async function generateService(run: Run, service: BuiltService): Promise<Exit> {
+  const stubs = await stubsOf(service);
+  if (stubs.kind === 'tooling') {
+    return toolingError(stubs.message);
   }
+  const orphans = orphanLinesOf(service);
+  if (orphans.kind === 'tooling') {
+    return toolingError(orphans.message);
+  }
+  const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphans.lines];
+  if (failures.length > 0) {
+    return checkFailed(failures);
+  }
+  const files = [snapshotFileOf(service), ...serviceFilesOf(service), ...stubs.stubs];
+  return writtenExit(run, files);
 }
 
-/** Removes a file the write left; what is no file there is not the write's and stays. */
-function removeFile(path: string): void {
-  if (existsSync(path) && statSync(path).isFile()) {
-    rmSync(path);
+function writtenExit(run: Run, files: readonly GeneratedFile[]): Exit {
+  const written = writeFiles(run.cwd, files);
+  if (written.kind === 'failed') {
+    return toolingError(written.message);
   }
+  return done(written.paths.map((path) => `Wrote ${path}`));
 }

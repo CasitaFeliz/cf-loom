@@ -4,11 +4,16 @@ import type { Field, JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes
 import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
+/** The key zod drops when it parses, since assigning it sets the prototype instead. */
+const protoKey = '__proto__';
+
 /** An object, `open` unless it is strict: a catchall lets in keys no field declares. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
   const mode = modeOf(def, at);
   const fieldEntries = Object.entries(def.shape).map(([key, schema]) =>
-    walkedEntry(key, walker.field(schema, [...at, 'fields', key])),
+    key === protoKey
+      ? notAllowed([...at, 'fields', key], refused.protoField)
+      : walkedEntry(key, walker.field(schema, [...at, 'fields', key])),
   );
   const fields = allWalked(fieldEntries);
   if (mode.kind === 'not-allowed' || fields.kind === 'not-allowed') {
@@ -42,6 +47,9 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   const keys = keysOf(key.value);
   if (keys === undefined) {
     return notAllowed(at, refused.recordKey);
+  }
+  if (keys.includes(protoKey)) {
+    return notAllowed(at, refused.protoField);
   }
   const field: Field = { required: def.partial !== true, schema: value.value };
   const fields = Object.fromEntries(keys.map((name) => [name, field]));

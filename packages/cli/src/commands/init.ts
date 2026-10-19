@@ -9,7 +9,8 @@ import {
   rootFiles,
   rootPlaces,
 } from '../loading/index.ts';
-import { done, type Exit, type Run, toolingError } from './exit.ts';
+import type { Run } from '../project/index.ts';
+import { done, type Exit, toolingError } from './exit.ts';
 import { configTemplateOf, rootTemplateOf } from './templates.ts';
 
 /** The files `init` writes, each path relative to the project with its text. */
@@ -32,7 +33,7 @@ export function init({ cwd }: Run, kind: RootKind): Exit {
   if (failure !== undefined) {
     return toolingError(`init cannot write: ${failure}`);
   }
-  return done(`Created ${rootPlaces[kind].file}`);
+  return done([`Created ${rootPlaces[kind].file}`]);
 }
 
 /** What `init` would write, or the first target that stops it. */

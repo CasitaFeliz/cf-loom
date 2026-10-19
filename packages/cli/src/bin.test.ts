@@ -61,7 +61,8 @@ function cfLoom(project: string, ...args: string[]) {
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
 
-const usage = 'Usage: cf-loom init [service | application | definitions] | generate | verify';
+const usage =
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>]';
 
 const config = [
   "import { defineConfig } from '@casitafeliz/loom-cli';",
@@ -352,7 +353,8 @@ describe('cf-loom generate', () => {
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({ status: 0, stdout: 'Wrote contract.snapshot.json\n', stderr: '' });
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(ran.stdout).toMatch(/^Wrote contract\.snapshot\.json\n/);
     const text = read(project, 'contract.snapshot.json');
     const snapshot = JSON.parse(text);
     expect(text).toBe(`${JSON.stringify(sortedKeys(snapshot), null, 2)}\n`);
@@ -393,6 +395,38 @@ describe('cf-loom generate', () => {
       ].join('\n'),
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
+  test('an intersection reaching an Open Union exits 1 in one line, since no reader can merge it', () => {
+    const body =
+      "z.intersection(z.object({ type: z.string() }), openUnion('type', [z.object({ type: z.literal('card') })]))";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openUnion }'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() or an openUnion() (use .extend())\n',
+    });
+  });
+
+  test('a field named __proto__ exits 1 in one line, since zod drops it when parsing', () => {
+    const body = "z.object({ ['__proto__']: z.string() })";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body.fields.__proto__ not allowed: a field named __proto__ (zod drops it when parsing)\n',
+    });
   });
 
   test('a broken rule exits 1 with its location, rule and message', () => {
@@ -833,21 +867,23 @@ describe('cf-loom generate and verify: contract.snapshot.json on disk', () => {
     },
   );
 
-  test('a write that fails leaves the committed contract.snapshot.json as it was', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    const committed = read(project, 'contract.snapshot.json');
-    write(project, {
-      ...aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }),
-      'contract.snapshot.json.tmp/kept.txt': '',
-    });
+  test.skipIf(isRoot)(
+    'a write that fails leaves the committed contract.snapshot.json as it was (skipped as root)',
+    () => {
+      const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+      expect(cfLoom(project, 'generate').status).toBe(0);
+      const committed = read(project, 'contract.snapshot.json');
+      write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
+      chmodSync(project, 0o555);
 
-    const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: [^\n]+\n$/);
-    expect(read(project, 'contract.snapshot.json')).toBe(committed);
-  });
+      chmodSync(project, 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: [^\n]+\n$/);
+      expect(read(project, 'contract.snapshot.json')).toBe(committed);
+    },
+  );
 });
 
 describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {
@@ -878,7 +914,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         "import { defineContract, defineEndpoint, defineGroup } from '@casitafeliz/loom-contract';",
         "import { apiKey, definitions, money } from '@org/definitions';",
         '',
-        'const price = defineEndpoint({',
+        'export const price = defineEndpoint({',
         "  name: 'price',",
         "  method: 'GET',",
         "  path: '/price',",
@@ -1068,11 +1104,8 @@ describe('cf-loom verify', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 0,
-      stdout: 'contract.snapshot.json is up to date\n',
-      stderr: '',
-    });
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(ran.stdout).toMatch(/^contract\.snapshot\.json is up to date\n/);
   });
 
   test('verify exits 1 when contract.snapshot.json was edited', () => {
@@ -1106,11 +1139,8 @@ describe('cf-loom verify', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'contract.snapshot.json is missing: run cf-loom generate\n',
-    });
+    expect(ran).toMatchObject({ status: 1, stdout: '' });
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json is missing: run cf-loom generate\n/);
   });
 
   test('verify ignores which CLI wrote contract.snapshot.json', () => {
@@ -1180,7 +1210,7 @@ describe('cf-loom verify', () => {
     const ran = cfLoom(project, 'verify');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json was edited: it is no JSON \([^\n]+\)\n$/);
+    expect(ran.stderr).toMatch(/^contract\.snapshot\.json was edited: it is no JSON \([^\n]+\)\n/);
   });
 
   test('verify writes nothing', () => {

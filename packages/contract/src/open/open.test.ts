@@ -69,6 +69,21 @@ describe('openUnion', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a variant that is a z.lazy of an object, a recursive def, type-checks', () => {
+    type Twig = { kind: 'twig'; up?: { kind: 'stem' } | Twig | undefined };
+    const twig: z.ZodType<Twig> & z.core.$ZodTypeDiscriminable = z.lazy(() =>
+      z.object({
+        kind: z.literal('twig'),
+        up: openUnion('kind', [z.object({ kind: z.literal('stem') }), twig]).optional(),
+      }),
+    );
+
+    const stem = openUnion('kind', [z.object({ kind: z.literal('stem') }), twig]);
+
+    expect(stem.safeParse({ kind: 'twig', up: { kind: 'stem' } }).success).toBe(true);
+    expectTypeOf<z.output<typeof stem>>().toEqualTypeOf<{ kind: 'stem' } | Twig>();
+  });
+
   test('a variant without the discriminator is a type error', () => {
     // @ts-expect-error every variant has the discriminator
     expectTypeOf(openUnion<'kind', readonly [typeof card]>).toBeFunction();

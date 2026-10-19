@@ -1,41 +1,12 @@
 import type { Endpoint } from '../declarations/index.ts';
 import { isEndpoint } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { endpointAt } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { camelCase, follows, type Grammar, kebabCase, upperSnakeCase } from './grammars.ts';
 import { identityOf } from './identity.ts';
 import type { LocatedEndpoint, LocatedGroup, Root } from './located.ts';
 import { isCanonicalPath } from './paths.ts';
 import { listOf, textOf } from './written.ts';
-
-/** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
-type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
-
-/** Every name of a root follows the grammar of its kind; a name that is no string is another rule's. */
-export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, groups, listedDefinitions, endpoints, guards, rejections, standardRejections } =
-    declarations;
-  const kebab = [
-    { at: ['name'], value: root.name, noun: rootNoun(root.kind) },
-    ...named(listedDefinitions, (listed) => listed.definitions.name, 'A Definitions Package name'),
-    ...named(groups, (listed) => listed.group.name, 'A Group name'),
-  ];
-  const camel = [
-    ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
-    ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
-  ];
-  const upperSnake = [
-    ...codes(rejections, (listed) => listed.rejection.code),
-    ...codes(standardRejections, (listed) => listed.declaration.code),
-  ];
-  return [
-    ...grammarFailures(kebab, kebabCase),
-    ...grammarFailures(camel, camelCase),
-    ...grammarFailures(upperSnake, upperSnakeCase),
-  ];
-}
 
 /**
  * A root is named as its package.json without the scope, so its Contract Package's name follows
@@ -162,45 +133,6 @@ function membershipFailures(
   const at = endpointAt(located.at, endpoint);
   const message = `An Endpoint belongs to exactly one Group: ${textOf(endpoint.name)} is also in ${textOf(first.group.name)}`;
   return [failure(at, 'group-membership', message)];
-}
-
-function named<Located extends { readonly at: Path }>(
-  list: readonly Located[],
-  nameOf: (located: Located) => unknown,
-  noun: string,
-): readonly Named[] {
-  return list.map((located) => ({ at: [...located.at, 'name'], value: nameOf(located), noun }));
-}
-
-function codes<Located extends { readonly at: Path }>(
-  list: readonly Located[],
-  codeOf: (located: Located) => unknown,
-): readonly Named[] {
-  return list.map((located) => ({
-    at: [...located.at, 'code'],
-    value: codeOf(located),
-    noun: 'A Rejection code',
-  }));
-}
-
-function grammarFailures(named: readonly Named[], grammar: Grammar): readonly DeclarationFailure[] {
-  const breaking = named.filter(
-    ({ value }) => typeof value === 'string' && !follows(grammar, value),
-  );
-  return breaking.map(({ at, value, noun }) =>
-    failure(at, 'name-grammar', `${noun} is ${grammar.name}: ${textOf(value)}`),
-  );
-}
-
-function rootNoun(kind: Declarations['root']['kind']): string {
-  switch (kind) {
-    case 'contract':
-      return 'A Service name';
-    case 'application':
-      return 'An Application name';
-    case 'definitions':
-      return 'A Definitions Package name';
-  }
 }
 
 function identityOfEndpoint({ endpoint }: LocatedEndpoint): string {

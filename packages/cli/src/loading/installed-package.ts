@@ -4,9 +4,18 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { type Imported, importedModuleOf, oneLineOf } from './imported.ts';
 
-/** A package as installed where the root imports it: its version and what its module exports. */
+/** A package as installed where the root imports it: its version and what its module exports, by name. */
 export type InstalledPackage =
-  | { readonly kind: 'installed'; readonly version: string; readonly exports: readonly unknown[] }
+  | {
+      readonly kind: 'installed';
+      readonly version: string;
+      readonly exports: Readonly<Record<string, unknown>>;
+    }
+  | { readonly kind: 'failed'; readonly message: string };
+
+/** A package's version as installed where the root imports it, or why it has none. */
+export type InstalledVersion =
+  | { readonly kind: 'installed'; readonly version: string }
   | { readonly kind: 'failed'; readonly message: string };
 
 /** Where a package is looked up: from the root file, as the root imports it, in its project. */
@@ -23,20 +32,64 @@ export async function installedPackageOf(
   packageName: string,
   { rootPath, directory }: LookedUp,
 ): Promise<InstalledPackage> {
-  const manifestPath = manifestPathOf(packageName, rootPath);
-  const manifest = manifestPath === undefined ? undefined : manifestIn(manifestPath);
-  if (manifestPath === undefined || manifest === undefined) {
-    return { kind: 'failed', message: `${packageName} is not installed: install it to list it` };
+  const found = foundOf(packageName, rootPath);
+  if (found.kind !== 'found') {
+    const message = missingMessageOf(packageName, found);
+    const listed = found.kind === 'not-installed' ? `${message}: install it to list it` : message;
+    return { kind: 'failed', message: listed };
   }
-  const version = manifest['version'];
-  if (typeof version !== 'string') {
-    return { kind: 'failed', message: `${packageName} has no version in its package.json` };
-  }
+  const { manifestPath, manifest, version } = found;
   const imported = await entryModuleOf(join(dirname(manifestPath), entryOf(manifest)), directory);
   if (imported.kind === 'failed') {
     return { kind: 'failed', message: `${packageName} cannot be loaded: ${imported.message}` };
   }
-  return { kind: 'installed', version, exports: Object.values(imported.exports) };
+  return { kind: 'installed', version, exports: imported.exports };
+}
+
+/**
+ * The version of a package as the root file imports it, such as a peer the Contract Package is
+ * built with; nothing of it is loaded.
+ */
+export function installedVersionOf(packageName: string, rootPath: string): InstalledVersion {
+  const found = foundOf(packageName, rootPath);
+  if (found.kind !== 'found') {
+    return { kind: 'failed', message: missingMessageOf(packageName, found) };
+  }
+  return { kind: 'installed', version: found.version };
+}
+
+/** A package's package.json as found from the root file, with its version. */
+type Found =
+  | {
+      readonly kind: 'found';
+      readonly manifestPath: string;
+      readonly manifest: Readonly<Record<string, unknown>>;
+      readonly version: string;
+    }
+  | { readonly kind: 'not-installed' }
+  | { readonly kind: 'no-version' };
+
+/** Why a package cannot be used, in one line. */
+function missingMessageOf(
+  packageName: string,
+  missing: Exclude<Found, { readonly kind: 'found' }>,
+): string {
+  return missing.kind === 'not-installed'
+    ? `${packageName} is not installed`
+    : `${packageName} has no version in its package.json`;
+}
+
+function foundOf(packageName: string, rootPath: string): Found {
+  const manifestPath = manifestPathOf(packageName, rootPath);
+  const manifest = manifestPath === undefined ? undefined : manifestIn(manifestPath);
+  if (manifestPath === undefined || manifest === undefined) {
+    return { kind: 'not-installed' };
+  }
+  const version = manifest['version'];
+  if (typeof version !== 'string') {
+    return { kind: 'no-version' };
+  }
+  return { kind: 'found', manifestPath, manifest, version };
 }
 
 /** The package's entry as Node imports it, at its real path; an entry that is missing is a failure. */

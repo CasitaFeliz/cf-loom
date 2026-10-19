@@ -1,6 +1,11 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
 import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
-import { type OriginOf, type WalkedLocation, walkSchemas } from '../walker/index.ts';
+import {
+  type OriginOf,
+  openIntersectionsOf,
+  type WalkedLocation,
+  walkSchemas,
+} from '../walker/index.ts';
 import { type Declarations, declarationsOf } from './declarations.ts';
 import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
@@ -9,7 +14,8 @@ import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import type { Root } from './located.ts';
-import { groupFailures, nameFailures, packageNameFailures, uniquenessFailures } from './names.ts';
+import { nameFailures } from './name-grammars.ts';
+import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { type ObjectPart, objectParts, type Part } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
@@ -82,6 +88,10 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
+    ...nodes.slots.flatMap(({ at, node }) => openIntersectionsOf(node, at, nodes.defs)),
+    ...Object.entries(nodes.defs).flatMap(([id, def]) =>
+      openIntersectionsOf(def, ['defs', id], nodes.defs),
+    ),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {

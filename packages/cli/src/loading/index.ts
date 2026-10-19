@@ -1,5 +1,11 @@
+export type { ContractExports, ExportedAt, FileExport } from './exported.ts';
+export { contractExportsOf } from './exported.ts';
+export type { FilesUnder } from './files-under.ts';
+export { filesUnder } from './files-under.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
+export type { InstalledVersion } from './installed-package.ts';
+export { installedVersionOf } from './installed-package.ts';
 export type { InstalledDefinitions, ResolvedPackages, Resolving } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';

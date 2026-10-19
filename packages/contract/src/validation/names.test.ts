@@ -105,6 +105,47 @@ describe('validateContract: name grammars', () => {
     );
   });
 
+  test.each(['delete', 'yield', 'await', 'eval', 'default', 'handle'])(
+    'an Endpoint named %s, a word code cannot name it by, fails',
+    (name) => {
+      const endpoint = defineEndpoint({ ...listing, name });
+
+      expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
+        failed(
+          ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+          'name-grammar',
+          `An Endpoint name is camelCase and no reserved word: ${name}`,
+        ),
+      );
+    },
+  );
+
+  test.each(['class', 'arguments', 'handle'])(
+    'a Guard named %s, in a Definitions Package too, fails',
+    (name) => {
+      const guard = defineGuard({ name, description: 'A guard' });
+      const definitions = defineDefinitions({ name: 'definitions', guards: [guard] });
+
+      expect(validateInPackage(definitions, noOrigin)).toEqual(
+        failed(
+          ['guards', name, 'name'],
+          'name-grammar',
+          `A Guard name is camelCase and no reserved word: ${name}`,
+        ),
+      );
+    },
+  );
+
+  test('a path param named as a reserved word is still allowed', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:class',
+      input: { params: z.object({ class: z.string() }) },
+    });
+
+    expect(validateGroups([aGroup('orders', [endpoint])]).kind).toBe('valid');
+  });
+
   test('a Rejection code that is not UPPER_SNAKE_CASE fails', () => {
     const locked = defineRejection({ code: 'orderLocked', status: 409, message: 'Locked' });
     const endpoint = defineEndpoint({ ...listing, rejections: [locked] });

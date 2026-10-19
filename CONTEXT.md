@@ -160,6 +160,10 @@ _Avoid_: verdict, pass, result
 A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, and marks as such: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
 _Avoid_: placeholder, mock
 
+**Handler map**:
+The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name.
+_Avoid_: registry, router
+
 **Issue**:
 One way a value broke its part of the Contract: the part and path, cf-loom's code and a message, never the received value.
 _Avoid_: error, violation
@@ -185,6 +189,10 @@ _Avoid_: schema dump, manifest
 **Baseline**:
 The Snapshot of the highest published version of a Contract Package or Definitions Package, against which every proposed change is judged.
 _Avoid_: previous snapshot, reference
+
+**Reader schema**:
+A schema generated from a Snapshot for whoever reads a Success, a Rejection body or a Message: every object in it open and every Open Enum and Open Union with its Unknown case, so it admits what any later compatible version may send.
+_Avoid_: loose schema, consumer schema
 
 **Compatibility Check**:
 The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.

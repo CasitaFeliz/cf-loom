@@ -64,6 +64,9 @@ export const refused = {
   unliteralDiscriminator: {
     construct: 'a discriminated union variant whose discriminator is not a literal',
   },
+  unstringOpenDiscriminator: {
+    construct: 'an openUnion() variant whose discriminator is not a string literal',
+  },
   objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
   strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
@@ -71,6 +74,12 @@ export const refused = {
     construct: 'an intersection of objects whose shared keys differ',
     instead: '.extend()',
   },
+  openIntersection: {
+    construct:
+      'an intersection that is not of open objects reaching an openEnum() or an openUnion()',
+    instead: '.extend()',
+  },
+  protoField: { construct: 'a field named __proto__ (zod drops it when parsing)' },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
   bigint: { construct: 'z.bigint()' },
   symbol: { construct: 'z.symbol()' },

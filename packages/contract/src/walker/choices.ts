@@ -43,6 +43,7 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
 export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
+  const open = isOpen(schema);
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
@@ -51,6 +52,9 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
         return notAllowed(variantAt, refusal);
       }
       const values = option._zod.propValues?.[def.discriminator];
+      if (open && [...(values ?? [])].some((value) => typeof value !== 'string')) {
+        return notAllowed(variantAt, refused.unstringOpenDiscriminator);
+      }
       return taggedVariant(walker.schema(option, variantAt), values, variantAt);
     }),
   );
@@ -65,7 +69,7 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
     type: 'tagged',
     discriminator: def.discriminator,
     variants: Object.fromEntries(variants.value),
-    open: isOpen(schema),
+    open,
   });
 }
 

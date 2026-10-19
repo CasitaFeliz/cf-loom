@@ -7,12 +7,14 @@ import {
   projectPackageOf,
   resolvePackages,
 } from '../loading/index.ts';
-import { type Exit, toolingError } from './exit.ts';
+import { type Tooling, tooling } from './failures.ts';
 
-/** A project as `generate` and `verify` read it: where it is, its package, its root and what the root lists. */
+/** A project as `generate`, `verify` and `package` read it: where it is, its package, its root and what the root lists. */
 export type Project = {
   readonly directory: string;
   readonly packageName: PackageName;
+  /** The npm scope of the configuration, which the Contract Package is published under. */
+  readonly scope: string;
   readonly root: unknown;
   /** Everything the root file exports, which a Definitions root lists. */
   readonly rootExports: readonly unknown[];
@@ -22,9 +24,7 @@ export type Project = {
 };
 
 /** A project read, or the tooling error that stopped reading it. */
-export type ReadProject =
-  | { readonly kind: 'read'; readonly project: Project }
-  | { readonly kind: 'stopped'; readonly exit: Exit };
+export type ReadProject = { readonly kind: 'read'; readonly project: Project } | Tooling;
 
 /**
  * Reads the project in `directory`: its package.json, its configuration, its root and the
@@ -33,29 +33,26 @@ export type ReadProject =
 export async function projectOf(directory: string): Promise<ReadProject> {
   const projectPackage = projectPackageOf(directory);
   if (projectPackage.kind === 'failed') {
-    return stopped(projectPackage.message);
+    return tooling(projectPackage.message);
   }
   const config = await loadConfig(directory);
   if (config.kind === 'failed') {
-    return stopped(config.message);
+    return tooling(config.message);
   }
   const loaded = await loadRoot(directory);
   if (loaded.kind === 'failed') {
-    return stopped(loaded.message);
+    return tooling(loaded.message);
   }
   const rootPath = join(directory, loaded.file);
   const resolving = { rootPath, directory, scope: config.config.scope };
   const resolved = await resolvePackages(loaded.root, resolving);
   if (resolved.kind === 'failed') {
-    return stopped(resolved.message);
+    return tooling(resolved.message);
   }
   const { packageName } = projectPackage;
   const { root, file: rootFile, exports: rootExports } = loaded;
   const { packages } = resolved;
-  const project = { directory, packageName, root, rootExports, rootFile, packages };
+  const { scope } = config.config;
+  const project = { directory, packageName, scope, root, rootExports, rootFile, packages };
   return { kind: 'read', project };
-}
-
-function stopped(message: string): ReadProject {
-  return { kind: 'stopped', exit: toolingError(message) };
 }

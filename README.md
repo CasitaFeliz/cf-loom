@@ -47,14 +47,15 @@ src/
 │   │   └── notify-on-settled.subscription.ts
 │   └── dependencies/
 │       └── payments-service.dependencies.ts
-├── endpoints/orders/get-order.handler.ts  Handlers mirror contract/
+├── endpoints/orders/get-order.handler.ts  Handlers by Group and name (see Stubs and the Handler map)
 ├── guards/api-key.handler.ts
 ├── commands/charge-card.v1.handler.ts
 ├── subscriptions/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  regenerated, never edited
-├── readers.generated.ts                   reader schemas and types of the Service's own Events; regenerated, never edited
+├── readers.generated.ts                   Reader schemas and types of the Service's own Events; regenerated, never edited
 ├── messaging.ts                           EventPublisher, CommandSender
 └── main.ts                                starts HTTP and messaging
+contract-package/                          the Contract Package cf-loom package writes; built, not edited
 ```
 
 File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
@@ -67,7 +68,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Generate
 
-`cf-loom generate` writes the stub of every missing Handler, regenerates `handlers.generated.ts` and `readers.generated.ts`, and writes `contract.snapshot.json` (see [Stubs and the handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
+`cf-loom generate` writes the stub of every missing Handler, regenerates `handlers.generated.ts` and `readers.generated.ts`, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
 
 ### Implement
 
@@ -83,4 +84,4 @@ A Handler is called directly (see [Testing a Service's own code](packages/handle
 
 ### Publish
 
-`cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package when the Release implementing it is deployed, a Release whose Handlers are stubs included (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
+`cf-loom package` writes the Contract Package to `contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package when the Release implementing it is deployed, a Release whose Handlers are stubs included (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).

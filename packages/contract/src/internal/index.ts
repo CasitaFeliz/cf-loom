@@ -5,6 +5,7 @@ export {
   isRejection,
   isStandardRejection,
   standardRejectionDefaults,
+  standardRejectionNames,
 } from '../declarations/index.ts';
 export type { Parsed, SchemaIssue } from '../issues/index.ts';
 export { parseValue } from '../issues/index.ts';
@@ -20,6 +21,7 @@ export type {
   EventSnapshot,
   GuardSnapshot,
   InputSnapshot,
+  ListedRejection,
   ResolvedDefinitions,
   ServiceSnapshot,
   Snapshot,
@@ -30,7 +32,16 @@ export type {
   SubscriptionSnapshot,
   SuccessSnapshot,
 } from '../snapshot/index.ts';
-export { canonicalTextOf, schemaOriginsOf, snapshotOf } from '../snapshot/index.ts';
+export {
+  canonicalSnapshotOf,
+  canonicalTextOf,
+  hashedTextOf,
+  isExportedEndpoint,
+  isLive,
+  ownRejectionsOf,
+  schemaOriginsOf,
+  snapshotOf,
+} from '../snapshot/index.ts';
 export type {
   AnswerableRejection,
   DeclarationFailure,
@@ -67,6 +78,7 @@ export {
   isSameRejection,
   kebabCase,
   listedDefinitionsOf,
+  methodAndPathOf,
   partFieldOf,
   schemaOf,
   standardRejectionsOf,
@@ -74,14 +86,30 @@ export {
   validateContract,
 } from '../validation/index.ts';
 export type {
+  Defs,
+  EnumNode,
   Field,
+  HashFormat,
   LocatedSchema,
   NotAllowed,
+  NumberNode,
+  ObjectNode,
   Origin,
   OriginOf,
   Path,
+  RefNode,
   SchemaNode,
+  StringFormat,
+  StringNode,
+  TaggedNode,
+  TupleNode,
   WalkedLocation,
   WalkedSchemas,
 } from '../walker/index.ts';
-export { walkSchemas } from '../walker/index.ts';
+export {
+  byCodePoint,
+  childrenOf,
+  hashPartsOf,
+  isHashFormat,
+  walkSchemas,
+} from '../walker/index.ts';
