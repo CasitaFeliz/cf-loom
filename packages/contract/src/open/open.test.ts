@@ -41,7 +41,7 @@ describe('openEnum', () => {
   });
 });
 
-describe('openUnion', () => {
+describe('the entry', () => {
   test('openUnion is not exported', () => {
     expectTypeOf(contract).not.toHaveProperty('openUnion');
     expect(contract).not.toHaveProperty('openUnion');
