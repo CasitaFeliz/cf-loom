@@ -8,14 +8,12 @@ The entry `src/index.ts` (`.`) re-exports from `answering/`, and `src/node-http/
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `matching/` | one request's method and decoded segments against the declared Endpoints: precedence, and the param texts by position | none |
-| `request/` | the text parts of one party, an Endpoint's Input or a Guard's demands, read field by field and converted by their walked nodes; the body read within `maxBodyBytes` and parsed as JSON, or why it cannot be | none |
-| `response/` | a `Response` from a resolved Success, Rejection or Fault; the invalid-input Rejection from Issues, the one place it is built; the reserved Faults with their texts and the runtime's own bug; the `Deprecation` header | none |
-| `served/` | what `serve()` prepares once: each declared Endpoint with its segments, lifecycle, Handler, Attachments with their Handlers and Qualifiers, walked text nodes and stamp, and the resolved Standard Rejections; the startup failures it throws, naming the Element | `request` |
-| `answering/` | `serve` and its types; one request top to bottom; the Attachments in order with their Context and Qualifier; the Endpoint's Input; a run's kinds as a `Response` and a `ServiceFault`; the hooks and their console fallback | `matching`, `request`, `response`, `served` |
-| `node-host/` | `nodeHttp` and `nodeListener`: a `Request` from an `IncomingMessage`, a `Response` written to a `ServerResponse` | `answering` |
+| `response/` | a `Response` from a Success, Rejection or Fault as it is sent; the reserved Faults and the runtime's own bug | none |
+| `served/` | what `serve()` prepares once: each declared Endpoint with its segments, lifecycle, Handler, Attachments with their Handlers and Qualifiers, walked text nodes and stamp, the resolved Standard Rejections and the body limit; the startup failures it throws, naming the Element | none |
+| `answering/` | `serve` and its types; one request top to bottom; the Attachments in order with their Context and Qualifier; the Endpoint's Input; a run's kinds as a `Response` and a `ServiceFault`, the invalid-input Rejection built in one place and a Success's headers checked as text; the `Deprecation` header; the hooks and their console fallback | `response`, `served` |
+| `node-host/` | `nodeHttp` and `nodeListener`: a `Request` from an `IncomingMessage`, or the answer when it cannot be one; a `Response` written to a `ServerResponse` | `answering`, `response` |
 
-The wire rules the client and `@casitafeliz/loom-testing` share, text conversion, the Envelopes, the reserved codes and the invalid-input body, live in `@casitafeliz/loom-contract`'s `./internal`; the runs of the Handlers in `@casitafeliz/loom-handlers`'s.
+The request side, matching a request to an Endpoint and reading its text parts and body, is pure and lives in `@casitafeliz/loom-contract`'s `wire/`, with the other wire rules the client and `@casitafeliz/loom-testing` share: text conversion, the Envelopes, the reserved codes with their texts and the invalid-input body. The runs of the Handlers live in `@casitafeliz/loom-handlers`'s `./internal`. `serve` keeps answering, the hooks, the startup check and the adapter.
 
 ## A request
 
@@ -29,4 +27,4 @@ An Issue at `context` or `qualifier` means `serve` built something the Contract 
 
 ## Validation
 
-`serve` validates every Success, its declared headers included, and every Rejection body before sending it, and serializes the headers as it does the body. A Handler's Outcome that type-checks but breaks a constraint is never sent: the Caller receives a Fault with `INVALID_OUTCOME`, `committed: 'unknown'` and `retryable: false`, and the validation issues go to the Service, never to the Caller (see `onServiceFault` in [Serving](README.md#serving)).
+`serve` validates every Success, its declared headers included, and every Rejection body before sending it, and serializes the headers as it does the body. A header value is sent only when it can travel as text, by the rule `Headers` applies: no CR, LF or NUL, and nothing above U+00FF; one that cannot is an Issue at `success.headers`, its name as path, with the code `invalid_format`. A Handler's Outcome that type-checks but breaks a constraint is never sent: the Caller receives a Fault with `INVALID_OUTCOME`, `committed: 'unknown'` and `retryable: false`, and the validation issues go to the Service, never to the Caller (see `onServiceFault` in [Serving](README.md#serving)).

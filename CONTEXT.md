@@ -100,7 +100,7 @@ _Avoid_: error, server error, operation failure
 
 **Envelope**:
 The body cf-loom defines, in which a Rejection or a Fault travels over HTTP.
-_Avoid_: wrapper, error body
+_Avoid_: error body, error payload, problem details (RFC 9457 is another format)
 
 **Open Enum**, **Open Union**:
 An enum, or a discriminated union, declared open: its readers receive values or variants they do not know as a tagged **Unknown** case and must handle it.
