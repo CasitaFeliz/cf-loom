@@ -1,25 +1,26 @@
 import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
 import type { Field, JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
-import { notAllowed, refused } from './not-allowed.ts';
+import { notAllowed, type Refused, refused } from './not-allowed.ts';
 import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** The key zod drops when it parses, since assigning it sets the prototype instead. */
 const protoKey = '__proto__';
 
-/** An object, `open` unless it is strict: a catchall lets in keys no field declares. */
+/** An object, always `open`: a Contract declares no strictness, and a catchall is refused. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
-  const mode = modeOf(def, at);
+  const catchall = catchallRefusalOf(def);
+  const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
   const fieldEntries = Object.entries(def.shape).map(([key, schema]) =>
     key === protoKey
       ? notAllowed([...at, 'fields', key], refused.protoField)
       : walkedEntry(key, walker.field(schema, [...at, 'fields', key])),
   );
   const fields = allWalked(fieldEntries);
-  if (mode.kind === 'not-allowed' || fields.kind === 'not-allowed') {
-    return failed(failuresOf([mode, fields]));
+  if (refusals.length > 0 || fields.kind === 'not-allowed') {
+    return failed(failuresOf([...refusals, fields]));
   }
-  return walked({ type: 'object', mode: mode.value, fields: Object.fromEntries(fields.value) });
+  return walked({ type: 'object', mode: 'open', fields: Object.fromEntries(fields.value) });
 }
 
 /**
@@ -75,15 +76,19 @@ export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker
   return walked({ type: 'allOf', items: [...items.value].sort(byCanonicalJson) });
 }
 
-function modeOf(def: core.$ZodObjectDef, at: Path): Walked<ObjectNode['mode']> {
+/** What a catchall declares, which a Contract never does: a strict, loose or other catchall. */
+function catchallRefusalOf(def: core.$ZodObjectDef): Refused | undefined {
   const catchall = def.catchall?._zod.def.type;
-  if (catchall === undefined) {
-    return walked('open');
+  switch (catchall) {
+    case undefined:
+      return undefined;
+    case 'never':
+      return refused.strictObject;
+    case 'unknown':
+      return refused.looseObject;
+    default:
+      return refused.catchall;
   }
-  if (catchall === 'never') {
-    return walked('strict');
-  }
-  return notAllowed(at, catchall === 'unknown' ? refused.looseObject : refused.catchall);
 }
 
 function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]> {
@@ -115,7 +120,7 @@ function isString(value: JsonPrimitive): value is string {
 
 function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
   if (left.mode === 'strict' || right.mode === 'strict') {
-    return notAllowed(at, refused.strictIntersection);
+    return notAllowed(at, refused.keyedRecordIntersection);
   }
   const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
   const differs = shared.some(

@@ -1,6 +1,8 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
 import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
 import {
+  type KeyedRecordSlots,
+  keyedRecordsOf,
   type OriginOf,
   openIntersectionsOf,
   type WalkedLocation,
@@ -16,7 +18,13 @@ import { attachmentFailures, guardFailures, qualifierFailures } from './guards.t
 import type { Root } from './located.ts';
 import { nameFailures } from './name-grammars.ts';
 import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
-import { type ObjectPart, objectParts, type Part } from './parts.ts';
+import {
+  isQueryOrHeadersPart,
+  isReadShapePart,
+  type ObjectPart,
+  objectParts,
+  type Part,
+} from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import { locatedSchemasOf, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
@@ -88,10 +96,8 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
-    ...nodes.slots.flatMap(({ at, node }) => openIntersectionsOf(node, at, nodes.defs)),
-    ...Object.entries(nodes.defs).flatMap(([id, def]) =>
-      openIntersectionsOf(def, ['defs', id], nodes.defs),
-    ),
+    ...openIntersectionsOf(nodes.slots, nodes.defs),
+    ...keyedRecordsOf(keyedRecordSlotsOf(nodes), nodes.defs),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {
@@ -161,6 +167,14 @@ function nodeLookupOf(nodes: Nodes): NodeLookup {
     return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
   }
   return nodeOf;
+}
+
+/** The slots a record keyed by an enum or literal is judged in, by the parts they hold. */
+function keyedRecordSlotsOf(nodes: Nodes): KeyedRecordSlots {
+  return {
+    queryOrHeaders: nodes.slots.filter((slot) => isQueryOrHeadersPart(slot.part)),
+    readShapes: nodes.slots.filter((slot) => isReadShapePart(slot.part)),
+  };
 }
 
 function isObjectPart(part: Part): part is ObjectPart {

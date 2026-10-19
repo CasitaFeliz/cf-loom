@@ -2,6 +2,8 @@ export { byCodePoint, canonicalJson, indentedCanonicalJson } from './canonical-j
 export { childrenOf } from './children.ts';
 export type { HashAlgorithm, HashEncoding, HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
+export type { KeyedRecordSlots } from './keyed-records.ts';
+export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';
 export type {
   AllOfNode,
   ArrayNode,

@@ -134,8 +134,8 @@ describe('parseValue', () => {
     expect(codes).toEqual(['invalid_format', 'too_small', 'too_big', 'not_multiple']);
   });
 
-  test('a strict object answers one unrecognized_key per key, the key on the path', () => {
-    const schema = z.strictObject({ inner: z.strictObject({ id: z.string() }) });
+  test('an enum-keyed record answers one unrecognized_key per key, the key on the path', () => {
+    const schema = z.object({ inner: z.record(z.enum(['id']), z.string()) });
 
     const parsed = parseValue(schema, { inner: { id: 'a', first: 1, second: 2 } });
 

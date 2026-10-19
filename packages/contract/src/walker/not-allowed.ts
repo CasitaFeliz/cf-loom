@@ -27,12 +27,21 @@ export const refused = {
   any: { construct: 'z.any()', instead: 'z.record() or z.json()' },
   looseObject: { construct: 'z.looseObject() or .passthrough()', instead: dynamicKeysInstead },
   catchall: { construct: '.catchall()', instead: dynamicKeysInstead },
+  strictObject: { construct: 'z.strictObject()', instead: 'z.object(): objects are open' },
   nullableRecordKey: { construct: 'a nullable z.record() key' },
   openRecordKey: {
     construct: 'a z.record() keyed by an openEnum()',
     instead: 'z.record(z.string(), …)',
   },
   looseRecord: { construct: 'z.looseRecord()' },
+  keyedRecordAsQueryOrHeaders: {
+    construct: 'a record keyed by an enum or literal as query or headers',
+    instead: 'z.object()',
+  },
+  keyedRecordInReadShape: {
+    construct: 'a record keyed by an enum or literal in a Read shape',
+    instead: 'z.object() or a string-keyed z.record()',
+  },
   recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
   mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
   startsWith: { construct: '.startsWith()' },
@@ -69,7 +78,10 @@ export const refused = {
   },
   objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
-  strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
+  keyedRecordIntersection: {
+    construct: 'an intersection with a record keyed by an enum or literal',
+    instead: 'z.object() with the keys as fields, then .extend()',
+  },
   differingIntersection: {
     construct: 'an intersection of objects whose shared keys differ',
     instead: '.extend()',

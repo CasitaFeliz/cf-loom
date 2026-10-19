@@ -85,7 +85,7 @@ function aGetOrder(
     guards: [apiKey],
     input: {
       params: z.object({ orderId: z.uuid() }),
-      headers: z.strictObject({ 'x-trace': z.string().optional() }),
+      headers: z.object({ 'x-trace': z.string().optional() }),
     },
     success: { status: 200, body: z.object({ id: z.uuid(), total: money }) },
     rejections,
@@ -103,13 +103,13 @@ const editOrder = defineEndpoint({
   lifecycle: 'deprecated',
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
-    params: z.strictObject({ orderId: z.uuid(), lineId: z.uuid() }),
+    params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
     headers: z.object({
       authorization: z.string().optional().describe('From the Endpoint'),
     }),
     body: z.object({ quantity: z.int() }),
   },
-  success: { status: 204, headers: z.strictObject({ etag: z.string() }) },
+  success: { status: 204, headers: z.object({ etag: z.string() }) },
 });
 
 const ordersGroup = defineGroup({
@@ -277,7 +277,7 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.params).toEqual(['orderId', 'lineId']);
   });
 
-  test('params are stored strict and every headers object open, whatever mode was written', () => {
+  test('params are stored strict and every headers object open', () => {
     const snapshot = serviceSnapshot();
     const getOrderSnapshot = snapshot.endpoints['GET /orders/{}'];
     const editOrderSnapshot = snapshot.endpoints['PATCH /orders/{}/lines/{}'];
@@ -286,6 +286,28 @@ describe('snapshotOf: a Service', () => {
     expect(getOrderSnapshot?.input.headers?.mode).toBe('open');
     expect(editOrderSnapshot?.success.headers?.mode).toBe('open');
     expect(snapshot.guards['apiKey']?.demands.headers?.mode).toBe('open');
+  });
+
+  test('params written as a record keyed by an enum are stored strict, a field per key', () => {
+    const lookup = defineEndpoint({
+      name: 'lookup',
+      method: 'GET',
+      path: '/lookup/:id',
+      visibility: 'public',
+      description: 'Lookup',
+      input: { params: z.record(z.enum(['id']), z.string()) },
+      success: { status: 204 },
+    } as never);
+    const group = defineGroup({ name: 'lookup', description: 'Lookup', endpoints: [lookup] });
+    const root = defineContract({ name: 'lookup-service', groups: [group] });
+
+    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+
+    expect(snapshot.endpoints['GET /lookup/{}']?.input.params).toEqual({
+      type: 'object',
+      mode: 'strict',
+      fields: { id: { required: true, schema: { type: 'string' } } },
+    });
   });
 
   test('the parts an Endpoint does not declare are null', () => {
@@ -319,44 +341,20 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('query params merge the Endpoint’s own with its Guards’ demands', () => {
+  test('query params merge the Endpoint’s own with its Guards’ demands, open', () => {
     const query = searchQueryOf({
-      own: z.strictObject({ text: z.string() }),
+      own: z.object({ text: z.string() }),
       demanded: z.object({ tenant: z.string() }),
     });
 
     expect(query).toEqual({
       type: 'object',
-      mode: 'strict',
+      mode: 'open',
       fields: {
         text: { required: true, schema: { type: 'string' } },
         tenant: { required: true, schema: { type: 'string' } },
       },
     });
-  });
-
-  test('the merged query is strict when a Guard demands it strict', () => {
-    const query = searchQueryOf({
-      own: z.object({ text: z.string() }),
-      demanded: z.strictObject({ tenant: z.string() }),
-    });
-
-    expect(query?.mode).toBe('strict');
-  });
-
-  test('the merged query is strict when only a Guard declares it, strict', () => {
-    const query = searchQueryOf({ demanded: z.strictObject({ tenant: z.string() }) });
-
-    expect(query?.mode).toBe('strict');
-  });
-
-  test('the merged query is open when every declaration of it is open', () => {
-    const query = searchQueryOf({
-      own: z.object({ text: z.string() }),
-      demanded: z.object({ tenant: z.string() }),
-    });
-
-    expect(query?.mode).toBe('open');
   });
 
   test('Attachments keep their order, each with its Qualifier as written or null', () => {

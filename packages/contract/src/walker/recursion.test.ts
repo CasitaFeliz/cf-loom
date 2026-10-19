@@ -62,6 +62,54 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('an annotated z.lazy() around a lazy def with an id is a ref carrying the annotation', () => {
+    type Category = { name: string; children: Category[] };
+    const category: z.ZodType<Category> = z
+      .lazy(() =>
+        z.object({
+          name: z.string(),
+          children: z.array(z.lazy(() => category).describe('A child')),
+        }),
+      )
+      .meta({ id: 'category' });
+    const child = { type: 'ref', name: 'category', description: 'A child' };
+
+    expect(walkBody(category)).toEqual({
+      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
+      defs: {
+        category: {
+          ...categoryDef,
+          fields: {
+            ...categoryDef.fields,
+            children: { required: true, schema: { type: 'array', items: child } },
+          },
+        },
+      },
+    });
+  });
+
+  test('two ids on one chain of lazies give a def and an alias def that refs it', () => {
+    type Node = { c: Node[] };
+    const inner: z.ZodType<Node> = z
+      .lazy(() => z.object({ c: z.array(outer) }))
+      .meta({ id: 'inner' });
+    const outer: z.ZodType<Node> = z.lazy(() => inner).meta({ id: 'outer' });
+
+    expect(walkBody(outer)).toEqual({
+      located: [walkedAt(['body'], { type: 'ref', name: 'outer' })],
+      defs: {
+        inner: {
+          type: 'object',
+          mode: 'open',
+          fields: {
+            c: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'outer' } } },
+          },
+        },
+        outer: { type: 'ref', name: 'inner' },
+      },
+    });
+  });
+
   test('a cyclic schema used at two locations is one def', () => {
     const category = z
       .object({

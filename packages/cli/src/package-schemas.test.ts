@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -35,16 +36,26 @@ function write(folder: string, files: Readonly<Record<string, string>>): void {
   }
 }
 
+/** The text of every file under a folder. */
+function filesUnder(folder: string): readonly string[] {
+  return readdirSync(folder, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => readFileSync(join(entry.parentPath, entry.name), 'utf8'));
+}
+
 function lines(written: readonly string[]): string {
   return `${written.join('\n')}\n`;
 }
 
-/** A schema of every node a Snapshot has, used as an Input body and as a Success body. */
+/**
+ * A schema of every node a Snapshot has, used as a Success body, and with records keyed by an enum
+ * or literal, which only Input holds, as an Input body.
+ */
 const everything = [
   "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
   'const forest = z',
   '  .object({',
-  '    strict: z.strictObject({ a: z.string() }),',
+  '    inner: z.object({ a: z.string() }),',
   "    status: openEnum(['a', \"it's\"]),",
   "    pick: openUnion('the-type', [z.object({ 'the-type': z.literal('x') })]),",
   '    note: z.string().nullable(),',
@@ -64,6 +75,16 @@ const everything = [
   "  .object({ kind: z.literal('twig'), get up() { return stem.optional(); } })",
   "  .meta({ id: 'twig' });",
   "const stem = z.discriminatedUnion('kind', [twig, z.object({ kind: z.literal('stem') })]);",
+  'const bough = z',
+  '  .object({',
+  '    get list() {',
+  "      return z.array(z.lazy(() => bough).describe('In a list'));",
+  '    },',
+  '    get named() {',
+  "      return z.record(z.string(), z.lazy(() => bough).describe('By name'));",
+  '    },',
+  '  })',
+  "  .meta({ id: 'bough' });",
   'const everything = z.object({',
   '  plain: z.string().min(1).max(10).describe("It\'s a text"),',
   '  email: z.email(),',
@@ -72,7 +93,6 @@ const everything = [
   "  id: z.uuid({ version: 'v4' }),",
   "  digest: z.hash('sha256'),",
   "  digest2: z.hash('md5', { enc: 'base64' }),",
-  "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
   '  scores: z.record(z.string().min(2), z.number()),',
   "  rooted: z.object({ tree: tree.optional().describe('The root') }).required(),",
   '  forest,',
@@ -87,7 +107,7 @@ const everything = [
   "  level: z.enum(['low', 'high']),",
   "  status: openEnum(['pending', 'paid']),",
   '  mixed: z.literal([1, 2, true]),',
-  '  strict: z.strictObject({ a: z.string() }),',
+  '  inner: z.object({ a: z.string() }),',
   '  record: z.record(z.string(), z.number()),',
   '  list: z.array(z.string()).min(1).max(3),',
   '  tuple: z.tuple([z.string(), z.number()], z.boolean()),',
@@ -105,6 +125,20 @@ const everything = [
   '  note: z.string().nullable(),',
   "  optional: z.string().optional().meta({ examples: ['x'] }),",
   '  tree,',
+  '  bough,',
+  '});',
+  'const twin = z',
+  '  .object({',
+  '    get kids() {',
+  "      return z.partialRecord(z.enum(['l', 'r']), z.lazy(() => twin).describe('A child'));",
+  '    },',
+  '  })',
+  "  .meta({ id: 'twin' });",
+  'const everythingIn = everything.extend({',
+  '  twin: twin.optional(),',
+  "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
+  "  partial: z.partialRecord(z.enum(['a', 'b']), z.number()),",
+  "  single: z.record(z.literal('a'), z.number()),",
   '});',
 ];
 
@@ -167,7 +201,7 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/echo',",
     "  visibility: 'public',",
     "  description: 'Answers what it is sent',",
-    '  input: { body: everything },',
+    '  input: { body: everythingIn },',
     '  success: { status: 200, body: everything },',
     '});',
     ...richEndpoint,
@@ -194,18 +228,17 @@ const sample = {
   id: '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00',
   digest: 'a'.repeat(64),
   digest2: `${'a'.repeat(22)}==`,
-  keyed: { a: 1, b: 2 },
   scores: { ab: 1 },
   rooted: { tree: { label: 'root', children: [] } },
   forest: {
-    strict: { a: 'x' },
+    inner: { a: 'x' },
     status: 'a',
     pick: { 'the-type': 'x' },
     note: null,
     tuple: ['a', 1, 2],
     tree: { label: 'root', children: [] },
     parent: {
-      strict: { a: 'y' },
+      inner: { a: 'y' },
       status: "it's",
       pick: { 'the-type': 'x' },
       note: 'n',
@@ -225,7 +258,7 @@ const sample = {
   level: 'low',
   status: 'paid',
   mixed: 2,
-  strict: { a: 'x' },
+  inner: { a: 'x' },
   record: { one: 1 },
   list: ['a'],
   tuple: ['a', 1, true, false],
@@ -236,6 +269,7 @@ const sample = {
   data: { any: [1, null] },
   note: null,
   tree: { label: 'root', children: [{ label: 'leaf', children: [] }] },
+  bough: { list: [], named: {} },
   extra: 'dropped',
 };
 
@@ -329,11 +363,11 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['tree']).toEqual(sample.tree);
   });
 
-  test('the Success reader strips keys it does not know, a strict object’s included', () => {
-    const parsed = read({ ...sample, strict: { a: 'x', b: 1 } });
+  test('the Success reader strips keys it does not know, a nested object’s included', () => {
+    const parsed = read({ ...sample, inner: { a: 'x', b: 1 } });
 
     expect(parsed.data).not.toHaveProperty('extra');
-    expect(parsed.data?.['strict']).toEqual({ a: 'x' });
+    expect(parsed.data?.['inner']).toEqual({ a: 'x' });
   });
 
   test('the Success reader reads an unknown Open Enum value as its Unknown case', () => {
@@ -396,16 +430,26 @@ describe('cf-loom package: the schemas it writes', () => {
     });
   });
 
-  test('the Success reader reads an enum-keyed record as the object it is, unknown keys stripped', () => {
-    const parsed = read({ ...sample, keyed: { a: 1, b: 2, c: 3 } });
+  test('the Input schema refuses a key outside an enum-keyed record’s keys, as the Service does', () => {
+    const records = { keyed: { a: 1, b: 2, c: 3 }, partial: { a: 1 }, single: { a: 1 } };
 
-    expect(parsed.data?.['keyed']).toEqual({ a: 1, b: 2 });
+    const parsed = echo.input.body['~standard'].validate({ ...sample, ...records });
+
+    expect(parsed).toMatchObject({
+      issues: [{ code: 'unrecognized_keys', keys: ['c'], path: ['keyed'] }],
+    });
+  });
+
+  test('no file of the package declares a strict object', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src'));
+
+    expect(written.filter((text) => text.includes('strictObject'))).toEqual([]);
   });
 
   test('a recursive def reads its Unknown cases, optional, nullable and tuple fields, and another def', () => {
     const forest = {
       ...sample.forest,
-      strict: { a: 'x', b: 2 },
+      inner: { a: 'x', b: 2 },
       status: 'new',
       pick: { 'the-type': 'y', more: 1 },
     };
@@ -414,7 +458,7 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(parsed.data?.['forest']).toEqual({
       ...sample.forest,
-      strict: { a: 'x' },
+      inner: { a: 'x' },
       status: { unknown: 'new' },
       pick: { 'the-type': { unknown: 'y' }, raw: { 'the-type': 'y', more: 1 } },
     });

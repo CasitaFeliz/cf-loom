@@ -1,7 +1,7 @@
-import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
+import { isKeyedRecord, type ObjectNode, type Path, type SchemaNode } from '../walker/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
-import { isObjectPart, type Part, partFieldOf, slotAt } from './parts.ts';
+import { isObjectPart, isQueryOrHeadersPart, type Part, partFieldOf, slotAt } from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
@@ -59,6 +59,9 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   }
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
+  }
+  if (isQueryOrHeadersPart(slot.part) && isKeyedRecord(node)) {
+    return [];
   }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
     ...headerNameFailures(at, part, field),

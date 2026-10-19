@@ -194,6 +194,10 @@ _Avoid_: previous snapshot, reference
 A schema generated from a Snapshot for whoever reads a Success, a Rejection body or a Message: every object in it open and every Open Enum and Open Union with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
 
+**Read shape**:
+A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection body or a Message body. Every object in it is open to its readers.
+_Avoid_: output, response, payload
+
 **Compatibility Check**:
 The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.
 _Avoid_: diff, lint, compatibility review
