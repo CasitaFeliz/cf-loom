@@ -1,5 +1,6 @@
 export type { Kind, StandardRejections } from '../declarations/index.ts';
 export {
+  isContract,
   isEndpoint,
   isGuard,
   isRejection,

@@ -14,9 +14,13 @@ export type ReservedCode = 'RETIRED' | 'NO_SUCH_ENDPOINT' | 'BODY_TOO_LARGE' | '
 export const reservedFaults: Readonly<
   Record<ReservedCode, { readonly status: number; readonly committed: Committed }>
 > = {
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   RETIRED: { status: 410, committed: 'no' },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   NO_SUCH_ENDPOINT: { status: 404, committed: 'no' },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   BODY_TOO_LARGE: { status: 413, committed: 'no' },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   INVALID_OUTCOME: { status: 500, committed: 'unknown' },
 };
 

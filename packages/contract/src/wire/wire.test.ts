@@ -111,12 +111,12 @@ describe('the envelopes', () => {
 
 describe('the reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
-    expect(reservedFaults).toEqual({
-      RETIRED: { status: 410, committed: 'no' },
-      NO_SUCH_ENDPOINT: { status: 404, committed: 'no' },
-      BODY_TOO_LARGE: { status: 413, committed: 'no' },
-      INVALID_OUTCOME: { status: 500, committed: 'unknown' },
-    });
+    expect(Object.entries(reservedFaults)).toEqual([
+      ['RETIRED', { status: 410, committed: 'no' }],
+      ['NO_SUCH_ENDPOINT', { status: 404, committed: 'no' }],
+      ['BODY_TOO_LARGE', { status: 413, committed: 'no' }],
+      ['INVALID_OUTCOME', { status: 500, committed: 'unknown' }],
+    ]);
   });
 
   test('a Fault travels with its reserved code’s status, else 503 when retryable and 500 otherwise', () => {
