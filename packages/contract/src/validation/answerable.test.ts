@@ -8,7 +8,14 @@ import {
   notFound,
   notImplemented,
 } from '../index.ts';
-import { answerableRejectionsOf, contextProvidersOf, inOf, schemaOf } from '../internal/index.ts';
+import {
+  answerableRejectionsOf,
+  contextProvidersOf,
+  inOf,
+  resolutionOf,
+  schemaOf,
+  standardRejectionDefaults,
+} from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTH',
@@ -74,6 +81,28 @@ describe('answerableRejectionsOf', () => {
     const answerable = answerableRejectionsOf(apiKey);
 
     expect(answerable).toEqual([unauthenticated, notImplemented]);
+  });
+});
+
+describe('resolutionOf', () => {
+  test('a declared Rejection resolves to its own code, status and message', () => {
+    const resolution = resolutionOf(forbidden, standardRejectionDefaults);
+
+    expect(resolution).toEqual({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+  });
+
+  test('a Standard Rejection resolves to the code, status and message the root resolved', () => {
+    const standards = {
+      ...standardRejectionDefaults,
+      notFound: { code: 'MISSING', status: 404, message: 'Missing' },
+    } as const;
+
+    const resolutions = [resolutionOf(notFound, standards), resolutionOf(invalidInput, standards)];
+
+    expect(resolutions).toEqual([
+      { code: 'MISSING', status: 404, message: 'Missing' },
+      { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    ]);
   });
 });
 

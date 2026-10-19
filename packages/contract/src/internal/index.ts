@@ -95,6 +95,7 @@ export {
   methodAndPathOf,
   partFieldOf,
   pathSegmentsOf,
+  resolutionOf,
   schemaOf,
   standardRejectionsOf,
   successParts,

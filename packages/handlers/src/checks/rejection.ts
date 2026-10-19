@@ -11,6 +11,7 @@ import {
   isRejection,
   isSameRejection,
   isStandardRejection,
+  resolutionOf,
   schemaOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { AnyRejection, ResolvedRejection } from '../outcomes/index.ts';
@@ -89,9 +90,7 @@ function resolvedRejectionOf<Answered extends EndpointRejection>(
   body: unknown,
   standards: StandardRejections,
 ): ResolvedRejection<Answered> {
-  const resolution = isStandardRejection(rejection)
-    ? standards[rejection.name]
-    : { code: rejection.code, status: rejection.status, message: rejection.message };
+  const resolution = resolutionOf(rejection, standards);
   const resolved =
     body === undefined
       ? { kind: 'rejection' as const, rejection, ...resolution }

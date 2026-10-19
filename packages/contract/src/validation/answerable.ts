@@ -9,6 +9,7 @@ import {
   notImplemented,
   type Rejection,
   type StandardRejection,
+  type StandardRejections,
 } from '../declarations/index.ts';
 import { attachedGuardsOf } from './references.ts';
 import { listOf } from './written.ts';
@@ -34,6 +35,18 @@ export function isSameRejection(listed: AnswerableRejection, rejection: unknown)
     return listed.name === rejection.name;
   }
   return listed === rejection;
+}
+
+/** A Rejection's code, status and message: its own, or, for a Standard one, the root's resolved. */
+export function resolutionOf(
+  rejection: AnswerableRejection,
+  standards: StandardRejections,
+): { readonly code: string; readonly status: number; readonly message: string } {
+  if (isStandardRejection(rejection)) {
+    return standards[rejection.name];
+  }
+  const { code, status, message } = rejection;
+  return { code, status, message };
 }
 
 function distinct(rejections: readonly unknown[]): readonly AnswerableRejection[] {

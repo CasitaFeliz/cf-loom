@@ -57,17 +57,19 @@ type EventsByName<Events> = {
 };
 
 /**
- * What a Contract uses of one Provider, keyed by name in code, the version it relied on, and the
- * Elements the Provider exports, so `generate` checks each selected Element is one of them.
+ * What a Contract uses of one Provider, keyed by name in code, the version it relied on, its
+ * Standard Rejections with their codes as written, so a Caller narrows by them, and the Elements
+ * the Provider exports, so `generate` checks each selected Element is one of them.
  */
 export type Dependencies<
   Endpoints = Readonly<Record<string, Endpoint>>,
   Events = Readonly<Record<string, ProvidedEvent>>,
+  Standards extends StandardRejections = StandardRejections,
 > = {
   readonly kind: 'dependencies';
   readonly provider: string;
   readonly against: string;
-  readonly standardRejections: StandardRejections;
+  readonly standardRejections: Standards;
   readonly endpoints: Endpoints;
   readonly events: Events;
   readonly exported: ExportedElements;
@@ -82,7 +84,8 @@ export function defineDependencies<
   selection: Chosen & NoInfer<DeclaredFieldsRule<Chosen, Selection<Provider>>>,
 ): Dependencies<
   EndpointsByName<SelectedIn<Chosen, 'endpoints'>>,
-  EventsByName<SelectedIn<Chosen, 'events'>>
+  EventsByName<SelectedIn<Chosen, 'events'>>,
+  Provider['standardRejections']
 > {
   const endpoints = (selection.endpoints ?? []).map((endpoint) => [endpoint.name, endpoint]);
   const events = (selection.events ?? []).map((event) => [eventName(event), event]);

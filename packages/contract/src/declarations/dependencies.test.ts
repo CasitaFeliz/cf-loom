@@ -50,6 +50,16 @@ describe('defineDependencies', () => {
     expect(paymentsDeps.standardRejections).toEqual(payments.standardRejections);
   });
 
+  test('a Dependency keeps its Provider’s Standard codes as literals, so a Caller narrows by them', () => {
+    const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
+
+    expectTypeOf(paymentsDeps.standardRejections.notFound.code).toEqualTypeOf<'NOT_FOUND'>();
+    expectTypeOf(
+      paymentsDeps.standardRejections.invalidInput.code,
+    ).toEqualTypeOf<'INVALID_INPUT'>();
+    expect(paymentsDeps.standardRejections.notFound.code).toBe('NOT_FOUND');
+  });
+
   test('a Dependency keeps the Elements its Provider exports, by identity', () => {
     const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
 
