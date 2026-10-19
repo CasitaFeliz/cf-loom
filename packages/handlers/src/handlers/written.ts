@@ -27,6 +27,14 @@ export function writtenOf<Kind extends AnyWritten>(
   return written;
 }
 
+/** Whether a value is a Handler `handle()` returned for this very Endpoint or Guard. */
+export function isWrittenFor(handler: unknown, element: Endpoint | Guard): boolean {
+  if (typeof handler !== 'function') {
+    return false;
+  }
+  return writtenByHandler.get(handler)?.element === element;
+}
+
 /** Whether a Handler was written for an Endpoint. */
 export function isEndpointWritten(written: AnyWritten): written is Written<Endpoint> {
   return isEndpoint(written.element);

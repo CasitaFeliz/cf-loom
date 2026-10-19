@@ -37,6 +37,19 @@ export type EndpointHandler<Target extends Endpoint> = {
   readonly element: Target;
 };
 
+/**
+ * The Handler map `handlers.generated.ts` exports, as `serve` and `consume` take it: each Handler
+ * by its name, known by the Endpoint or Guard it was written for, since its call signature is the
+ * Service's own; and each Deprecated Endpoint's `deprecatedAt`, from the Snapshot.
+ */
+export type HandlerMap = {
+  readonly endpoints: Readonly<Record<string, { readonly element: Endpoint }>>;
+  readonly guards: Readonly<Record<string, { readonly element: Guard }>>;
+  readonly commands: Readonly<Record<string, never>>;
+  readonly subscriptions: Readonly<Record<string, never>>;
+  readonly deprecatedAt: Readonly<Record<string, string>>;
+};
+
 /** The Qualifier a GuardHandler's direct call takes third, only when its Guard declares one. */
 type QualifierArgument<Target extends Guard> = Target extends {
   readonly qualifier: core.$ZodType;
