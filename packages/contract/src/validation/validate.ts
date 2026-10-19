@@ -3,6 +3,7 @@ import type { NotAllowed, ObjectNode, SchemaNode } from '../walker/index.ts';
 import {
   type OriginOf,
   openIntersectionsOf,
+  outputRecordsOf,
   type WalkedLocation,
   walkSchemas,
 } from '../walker/index.ts';
@@ -16,10 +17,16 @@ import { attachmentFailures, guardFailures, qualifierFailures } from './guards.t
 import type { Root } from './located.ts';
 import { nameFailures } from './name-grammars.ts';
 import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
-import { type ObjectPart, objectParts, type Part } from './parts.ts';
+import { type ObjectPart, objectParts, outputParts, type Part } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
-import { locatedSchemasOf, type Nodes, nodesOf, schemaSlotsOf } from './schemas.ts';
+import {
+  locatedSchemasOf,
+  type Nodes,
+  nodesOf,
+  schemaSlotsOf,
+  type WalkedSlot,
+} from './schemas.ts';
 import { structureFailures } from './structure.ts';
 import { conflictFailures, textFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
@@ -92,6 +99,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...Object.entries(nodes.defs).flatMap(([id, def]) =>
       openIntersectionsOf(def, ['defs', id], nodes.defs),
     ),
+    ...outputRecordsOf(nodes.slots.filter(isOutput), nodes.defs),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {
@@ -161,6 +169,11 @@ function nodeLookupOf(nodes: Nodes): NodeLookup {
     return isObjectPart(part) && node?.type !== 'object' ? undefined : node;
   }
   return nodeOf;
+}
+
+function isOutput(slot: WalkedSlot): boolean {
+  const parts: readonly Part[] = outputParts;
+  return parts.includes(slot.part);
 }
 
 function isObjectPart(part: Part): part is ObjectPart {

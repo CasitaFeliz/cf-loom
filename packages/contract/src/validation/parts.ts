@@ -42,6 +42,9 @@ export const inputParts = [
 /** The parts of an Endpoint's Success. */
 export const successParts = ['success.headers', 'success.body'] as const satisfies readonly Part[];
 
+/** The parts a Service writes and a Caller reads: its Success and a Rejection's body. */
+export const outputParts = [...successParts, 'body'] as const satisfies readonly Part[];
+
 /** The parts of the request a Guard may demand. */
 export const demandParts = ['demands.headers', 'demands.query'] as const satisfies readonly Part[];
 

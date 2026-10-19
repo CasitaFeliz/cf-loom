@@ -7,7 +7,7 @@ import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from 
 /** The key zod drops when it parses, since assigning it sets the prototype instead. */
 const protoKey = '__proto__';
 
-/** An object, `open` unless it is strict: a catchall lets in keys no field declares. */
+/** An object, always `open`: a Contract declares no strictness, and a catchall is refused. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
   const mode = modeOf(def, at);
   const fieldEntries = Object.entries(def.shape).map(([key, schema]) =>
@@ -81,7 +81,7 @@ function modeOf(def: core.$ZodObjectDef, at: Path): Walked<ObjectNode['mode']> {
     return walked('open');
   }
   if (catchall === 'never') {
-    return walked('strict');
+    return notAllowed(at, refused.strictObject);
   }
   return notAllowed(at, catchall === 'unknown' ? refused.looseObject : refused.catchall);
 }

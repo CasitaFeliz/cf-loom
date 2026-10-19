@@ -85,7 +85,7 @@ function aGetOrder(
     guards: [apiKey],
     input: {
       params: z.object({ orderId: z.uuid() }),
-      headers: z.strictObject({ 'x-trace': z.string().optional() }),
+      headers: z.object({ 'x-trace': z.string().optional() }),
     },
     success: { status: 200, body: z.object({ id: z.uuid(), total: money }) },
     rejections,
@@ -103,13 +103,13 @@ const editOrder = defineEndpoint({
   lifecycle: 'deprecated',
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
-    params: z.strictObject({ orderId: z.uuid(), lineId: z.uuid() }),
+    params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
     headers: z.object({
       authorization: z.string().optional().describe('From the Endpoint'),
     }),
     body: z.object({ quantity: z.int() }),
   },
-  success: { status: 204, headers: z.strictObject({ etag: z.string() }) },
+  success: { status: 204, headers: z.object({ etag: z.string() }) },
 });
 
 const ordersGroup = defineGroup({

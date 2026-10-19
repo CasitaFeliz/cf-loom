@@ -27,12 +27,17 @@ export const refused = {
   any: { construct: 'z.any()', instead: 'z.record() or z.json()' },
   looseObject: { construct: 'z.looseObject() or .passthrough()', instead: dynamicKeysInstead },
   catchall: { construct: '.catchall()', instead: dynamicKeysInstead },
+  strictObject: { construct: 'z.strictObject()', instead: 'z.object(): objects are open' },
   nullableRecordKey: { construct: 'a nullable z.record() key' },
   openRecordKey: {
     construct: 'a z.record() keyed by an openEnum()',
     instead: 'z.record(z.string(), …)',
   },
   looseRecord: { construct: 'z.looseRecord()' },
+  outputRecord: {
+    construct: 'a record keyed by an enum or literal in an output',
+    instead: 'z.object() or a string-keyed z.record()',
+  },
   recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
   mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
   startsWith: { construct: '.startsWith()' },

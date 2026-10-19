@@ -2,8 +2,16 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
-import { openEnum } from '../index.ts';
-import { type SchemaNode, walkSchemas } from '../internal/index.ts';
+import {
+  defineContract,
+  defineDefinitions,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  defineRejection,
+  openEnum,
+} from '../index.ts';
+import { type SchemaNode, validateContract, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
   return walkSchemas([{ at: ['body'], schema }], () => undefined);
@@ -37,13 +45,13 @@ describe('walkSchemas: objects', () => {
     );
   });
 
-  test('a strict object is strict', () => {
-    expect(walkBody(z.strictObject({ id: z.string() }))).toEqual(
-      walkedTo({
-        type: 'object',
-        mode: 'strict',
-        fields: { id: { required: true, schema: text } },
-      }),
+  test.each([
+    ['z.strictObject()', z.strictObject({ id: z.string() })],
+    ['.strict()', z.object({ id: z.string() }).strict()],
+    ['a zod/mini strictObject()', zm.strictObject({ id: zm.string() })],
+  ])('%s fails, naming z.object(), since objects are open', (_written, schema) => {
+    expect(walkBody(schema)).toEqual(
+      refusedAt(['body'], 'z.strictObject()', 'z.object(): objects are open'),
     );
   });
 
@@ -210,8 +218,8 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
-  test('an intersection with a strict object fails', () => {
-    const named = z.strictObject({ name: z.string() });
+  test('an intersection with the strict object of an enum-keyed record fails', () => {
+    const named = z.record(z.enum(['name']), z.string());
     const priced = z.object({ total: z.number() });
 
     expect(walkBody(named.and(priced))).toEqual(
@@ -289,5 +297,100 @@ describe('walkSchemas: a field named __proto__', () => {
     const schema = z.record(z.string(), z.number());
 
     expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
+  });
+});
+
+/** A Contract whose one Endpoint attaches one Guard and answers one Rejection. */
+function contractWith(parts: {
+  readonly guard?: Parameters<typeof defineGuard>[0];
+  readonly input?: Parameters<typeof defineEndpoint>[0]['input'];
+  readonly success?: Parameters<typeof defineEndpoint>[0]['success'];
+  readonly rejectionBody?: core.$ZodType;
+}) {
+  const guard = defineGuard(parts.guard ?? { name: 'gate', description: 'Gate' });
+  const denied = defineRejection({
+    code: 'DENIED',
+    status: 403,
+    message: 'Denied',
+    ...(parts.rejectionBody && { body: parts.rejectionBody }),
+  });
+  const echo = defineEndpoint({
+    name: 'echo',
+    method: 'POST',
+    path: '/echo',
+    visibility: 'public',
+    description: 'Echo',
+    guards: [guard.qualifier === undefined ? guard : { guard, qualifier: { scope: 'x' } }],
+    ...(parts.input && { input: parts.input }),
+    success: parts.success ?? { status: 204 },
+    rejections: [denied],
+  } as never);
+  const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
+  return defineContract({ name: 'shapes-service', groups: [group] });
+}
+
+function failuresIn(root: unknown) {
+  const name = Reflect.get(root as object, 'name');
+  const validated = validateContract(root, {
+    originOf: () => undefined,
+    packageName: String(name),
+    exportsOf: () => [],
+  });
+  return validated.kind === 'invalid' ? validated.failures : [];
+}
+
+const strictObject = () => z.strictObject({ scope: z.string() });
+const endpointAt = ['groups', 'shapes', 'endpoints', 'POST /echo'];
+const refusedStrict = {
+  kind: 'not-allowed',
+  construct: 'z.strictObject()',
+  instead: 'z.object(): objects are open',
+};
+
+describe('validateContract: a strict object fails wherever it sits', () => {
+  test.each([
+    [
+      'in Input',
+      () => contractWith({ input: { body: strictObject() } }),
+      [...endpointAt, 'input', 'body'],
+    ],
+    [
+      'in a demand',
+      () =>
+        contractWith({
+          guard: { name: 'gate', description: 'Gate', demands: { query: strictObject() } },
+        }),
+      ['guards', 'gate', 'demands', 'query'],
+    ],
+    [
+      'in a Context',
+      () => contractWith({ guard: { name: 'gate', description: 'Gate', context: strictObject() } }),
+      ['guards', 'gate', 'context'],
+    ],
+    [
+      'in a Qualifier',
+      () =>
+        contractWith({ guard: { name: 'gate', description: 'Gate', qualifier: strictObject() } }),
+      ['guards', 'gate', 'qualifier'],
+    ],
+    [
+      'in a Success',
+      () => contractWith({ success: { status: 200, body: strictObject() } }),
+      [...endpointAt, 'success', 'body'],
+    ],
+    [
+      'in a Rejection body',
+      () => contractWith({ rejectionBody: strictObject() }),
+      ['rejections', 'DENIED', 'body'],
+    ],
+    [
+      'in a shared schema of a Definitions root',
+      () => defineDefinitions({ name: 'definitions', schemas: { scope: strictObject() } }),
+      ['schemas', 'scope'],
+    ],
+  ])('a strict object %s fails with one line naming z.object()', (_position, rootOf, at) => {
+    const failures = failuresIn(rootOf());
+
+    expect(failures).toEqual([{ ...refusedStrict, at }]);
   });
 });

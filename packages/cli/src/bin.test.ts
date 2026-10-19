@@ -397,6 +397,29 @@ describe('cf-loom generate', () => {
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
+  test.each([
+    [
+      'a strict object',
+      'z.object({ exact: z.strictObject({ a: z.string() }) })',
+      'fields.exact not allowed: z.strictObject() (use z.object(): objects are open)',
+    ],
+    [
+      'a record keyed by an enum in a Success',
+      "z.object({ totals: z.record(z.enum(['eur']), z.number()) })",
+      'fields.totals not allowed: a record keyed by an enum or literal in an output (use z.object() or a string-keyed z.record())',
+    ],
+  ])('%s exits 1 in one line naming what to use', (_construct, body, line) => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `groups.health.endpoints.GET /ping.success.body.${line}\n`,
+    });
+  });
+
   test('an intersection reaching an Open Union exits 1 in one line, since no reader can merge it', () => {
     const body =
       "z.intersection(z.object({ type: z.string() }), openUnion('type', [z.object({ type: z.literal('card') })]))";

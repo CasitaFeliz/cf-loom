@@ -1,4 +1,4 @@
-import { childrenOf } from './children.ts';
+import { childrenOf, type LocatedNode, nodesWithin } from './children.ts';
 import type { NotAllowed, Path, SchemaNode } from './nodes.ts';
 import { refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
@@ -9,12 +9,11 @@ import type { Defs } from './walk.ts';
  * value it came from never merge. A `ref` is not entered, since each def is judged once itself.
  */
 export function openIntersectionsOf(node: SchemaNode, at: Path, defs: Defs): readonly NotAllowed[] {
-  if (node.type === 'allOf' && reachesOpen(node, defs, new Set())) {
-    return [{ kind: 'not-allowed', at, ...refused.openIntersection }];
-  }
-  return childrenOf(node).flatMap(({ steps, node: child }) =>
-    openIntersectionsOf(child, [...at, ...steps], defs),
-  );
+  const isOpenIntersection = (located: LocatedNode) =>
+    located.node.type === 'allOf' && reachesOpen(located.node, defs, new Set());
+  return nodesWithin(node, at)
+    .filter(isOpenIntersection)
+    .map((located) => ({ kind: 'not-allowed', at: located.at, ...refused.openIntersection }));
 }
 
 /** Whether a node reaches an Open Enum or an Open Union, through `ref`s, each def once. */

@@ -70,11 +70,12 @@ const createOrder = defineEndpoint({
   description: 'A new order',
   input: {
     headers: z.object({ 'x-request-id': z.string() }),
-    body: z.strictObject({
+    body: z.object({
       email: z.email(),
       quantity: z.int().min(1).max(10).multipleOf(2),
       channel: z.enum(['web', 'phone']),
       note: z.string(),
+      options: z.partialRecord(z.enum(['gift']), z.boolean()).optional(),
     }),
   },
   success: {
@@ -172,7 +173,7 @@ describe('an EndpointHandler’s Input', () => {
     ['too_small', { ...validOrder, quantity: 0 }],
     ['too_big', { ...validOrder, quantity: 12 }],
     ['not_multiple', { ...validOrder, quantity: 3 }],
-    ['unrecognized_key', { ...validOrder, extra: true }],
+    ['unrecognized_key', { ...validOrder, options: { wrap: true } }],
   ])('a body that fails as %s gets that code', async (code, broken) => {
     const body = broken as never;
 
