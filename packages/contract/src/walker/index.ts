@@ -1,8 +1,9 @@
 export { byCodePoint, canonicalJson, indentedCanonicalJson } from './canonical-json.ts';
-export type { LocatedNode } from './children.ts';
 export { childrenOf } from './children.ts';
 export type { HashAlgorithm, HashEncoding, HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
+export type { KeyedRecordSlots } from './keyed-records.ts';
+export { keyedRecordsOf } from './keyed-records.ts';
 export type {
   AllOfNode,
   ArrayNode,
@@ -26,9 +27,7 @@ export type {
   UnionNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
-export { refused } from './not-allowed.ts';
 export { openIntersectionsOf } from './open-intersections.ts';
-export { outputRecordsOf } from './output-records.ts';
 export type { StringFormat } from './string-formats.ts';
 export type { Defs, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkSchemas } from './walk.ts';

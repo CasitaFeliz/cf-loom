@@ -1,19 +1,30 @@
-import { childrenOf, type LocatedNode, nodesWithin } from './children.ts';
+import { childrenOf, type LocatedNode, nodesReachedFrom } from './children.ts';
 import type { NotAllowed, Path, SchemaNode } from './nodes.ts';
 import { refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
 
 /**
- * Every `allOf` in a schema, or in a def at `['defs', <id>]`, that reaches an Open Enum or an
- * Open Union: a reader of an intersection merges what each item read, and an Unknown case and the
- * value it came from never merge. A `ref` is not entered, since each def is judged once itself.
+ * Every outermost `allOf` in the schemas, or in a def they reach, at `['defs', <id>]`, that
+ * reaches an Open Enum or an Open Union: a reader of an intersection merges what each item read,
+ * and an Unknown case and the value it came from never merge.
  */
-export function openIntersectionsOf(node: SchemaNode, at: Path, defs: Defs): readonly NotAllowed[] {
-  const isOpenIntersection = (located: LocatedNode) =>
-    located.node.type === 'allOf' && reachesOpen(located.node, defs, new Set());
-  return nodesWithin(node, at)
-    .filter(isOpenIntersection)
-    .map((located) => ({ kind: 'not-allowed', at: located.at, ...refused.openIntersection }));
+export function openIntersectionsOf(
+  schemas: readonly LocatedNode[],
+  defs: Defs,
+): readonly NotAllowed[] {
+  const reported: Path[] = [];
+  for (const { at, node } of nodesReachedFrom(schemas, defs)) {
+    const isInsideReported = reported.some((outer) => isInside(at, outer));
+    if (node.type === 'allOf' && !isInsideReported && reachesOpen(node, defs, new Set())) {
+      reported.push(at);
+    }
+  }
+  return reported.map((at) => ({ kind: 'not-allowed', at, ...refused.openIntersection }));
+}
+
+/** Whether a path lies under another, which the walk of nodes lists first. */
+function isInside(at: Path, outer: Path): boolean {
+  return outer.length < at.length && outer.every((step, index) => at[index] === step);
 }
 
 /** Whether a node reaches an Open Enum or an Open Union, through `ref`s, each def once. */

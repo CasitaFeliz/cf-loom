@@ -3,7 +3,6 @@ import { checksOf, type DeclaredCheck, isConditional } from './check-defs.ts';
 import { constrainArray, constrainNumber, constrainString, unconstrained } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
-import { innerOfLazy } from './lazy.ts';
 import { annotated } from './metadata.ts';
 import type { Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedName } from './not-allowed.ts';
@@ -85,7 +84,7 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'intersection':
       return walkIntersection(def, at, walker);
     case 'lazy':
-      return walker.schema(innerOfLazy(schema), at);
+      return walker.schema((schema as core.$ZodLazy)._zod.innerType, at);
     case 'nullable':
       return annotated(walker.schema(def.innerType, at), { nullable: true });
     case 'pipe':

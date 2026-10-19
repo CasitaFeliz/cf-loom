@@ -12,8 +12,8 @@ import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts'
 
 /**
  * What an EndpointHandler built, checked against its Endpoint and resolved, as `serve` sends it:
- * parsed with its schema as written, and a valid Contract declares no strict object, so unknown
- * keys are stripped.
+ * parsed with its schema as written, so unknown keys are stripped: every object in a Read shape is
+ * open.
  */
 export function checkedOutcome(
   endpoint: Endpoint,
@@ -32,7 +32,8 @@ export function checkedOutcome(
 
 /**
  * What a GuardHandler built, checked against its Guard and resolved: parsed with its schema as
- * written, and a valid Contract declares no strict object, so unknown keys are stripped.
+ * written: unknown keys are stripped, except inside a record keyed by an enum or literal, which a
+ * Context may hold and which refuses them.
  */
 export function checkedAdmission(
   guard: Guard,

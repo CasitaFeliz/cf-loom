@@ -277,7 +277,7 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.params).toEqual(['orderId', 'lineId']);
   });
 
-  test('params are stored strict and every headers object open, whatever mode was written', () => {
+  test('params are stored strict and every headers object open', () => {
     const snapshot = serviceSnapshot();
     const getOrderSnapshot = snapshot.endpoints['GET /orders/{}'];
     const editOrderSnapshot = snapshot.endpoints['PATCH /orders/{}/lines/{}'];

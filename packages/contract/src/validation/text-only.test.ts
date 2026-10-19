@@ -426,4 +426,28 @@ describe('validateContract: a record keyed by an enum or literal as query or hea
       ],
     });
   });
+
+  test('a keyed record as query fails once, its values not judged as text', () => {
+    const query = z.record(z.enum(['tenant']), z.object({})) as unknown as z.ZodObject;
+
+    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...refusal, at: [...endpointAt, 'input', 'query'] }],
+    });
+  });
+
+  test('a keyed record as params is allowed, since the path decides their keys', () => {
+    const params = z.record(z.enum(['orderId']), z.uuid()) as unknown as z.ZodObject;
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:orderId',
+      input: { params },
+    } as never);
+
+    const validated = validateEndpoint(endpoint);
+
+    expect(validated.kind).toBe('valid');
+  });
 });

@@ -64,7 +64,7 @@ function failuresIn(root: unknown) {
 const endpointAt = ['groups', 'shapes', 'endpoints', 'POST /echo'];
 const refusal = {
   kind: 'not-allowed',
-  construct: 'a record keyed by an enum or literal in an output',
+  construct: 'a record keyed by an enum or literal in a Read shape',
   instead: 'z.object() or a string-keyed z.record()',
 };
 
@@ -74,7 +74,7 @@ const records = [
   ['an enum-keyed record of one key', () => z.record(z.enum(['eur']), z.number())],
 ] as const;
 
-describe('validateContract: a record keyed by an enum or literal in an output', () => {
+describe('validateContract: a record keyed by an enum or literal in a Read shape', () => {
   test.each(records)('%s fails in a Success body', (_kind, record) => {
     const failures = failuresIn(contractWith({ successBody: record() }));
 
@@ -139,7 +139,7 @@ describe('validateContract: a record keyed by an enum or literal in an output', 
     expect(failures).toEqual([{ ...refusal, at: ['defs', 'leaf', 'fields', 'totals'] }]);
   });
 
-  test('a shared schema of a Definitions Package fails where a Service uses it in an output', () => {
+  test('a shared schema of a Definitions Package fails where a Service uses it in a Read shape', () => {
     const totals = z.record(z.enum(['eur']), z.number());
     const definitions = defineDefinitions({ name: 'definitions', schemas: { totals } });
 

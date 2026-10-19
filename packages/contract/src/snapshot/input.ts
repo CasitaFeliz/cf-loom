@@ -1,7 +1,6 @@
 import type { Endpoint, Guard } from '../declarations/index.ts';
 import type { Field, ObjectNode } from '../walker/index.ts';
 import type { SnapshotSources } from './context.ts';
-import { inMode } from './text-parts.ts';
 import type { InputSnapshot } from './types.ts';
 
 /**
@@ -18,17 +17,22 @@ export function inputOf(
     guards.map((guard) => nodeOf(guard, part));
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
-    params: inMode(nodeOf(endpoint, 'input.params'), 'strict'),
+    params: strictParamsOf(nodeOf(endpoint, 'input.params')),
     query: mergedOf([own('input.query'), ...demanded('demands.query')]) ?? null,
-    headers: inMode(headers, 'open'),
+    headers: headers ?? null,
     body: nodeOf(endpoint, 'input.body') ?? null,
   };
+}
+
+/** The params as the Snapshot stores them: `strict`, exactly the path's params. */
+function strictParamsOf(params: ObjectNode | undefined): ObjectNode | null {
+  return params === undefined ? null : { ...params, mode: 'strict' };
 }
 
 /**
  * One object of every field the declarations name, in declaration order: a field declared twice
  * keeps the first declaration's schema, since the validation proved their shapes equal, and is
- * required when either requires it; the merged object is open, as every query and headers object is.
+ * required when either requires it.
  */
 function mergedOf(objects: readonly (ObjectNode | undefined)[]): ObjectNode | undefined {
   const declared = objects.filter(isDeclared);
@@ -44,7 +48,7 @@ function mergedOf(objects: readonly (ObjectNode | undefined)[]): ObjectNode | un
       fieldByName.set(name, { ...(known ?? field), required });
     }
   }
-  return { ...first, mode: 'open', fields: Object.fromEntries(fieldByName) };
+  return { ...first, fields: Object.fromEntries(fieldByName) };
 }
 
 function isDeclared(object: ObjectNode | undefined): object is ObjectNode {

@@ -59,7 +59,7 @@ Every shape is read in one of three positions:
 - **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes.
 
-Readers of a Success, a Rejection body or a Message ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
+Readers of a Read shape (a Success, a Rejection body or a Message) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -111,7 +111,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Records, arrays, tuples, intersections, recursion, opaque data
 
-- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)).
+- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)); removing a key is Breaking in every position (see [Fields](#fields)).
 - A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
 - An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
 - A recursive schema is compared by following its `ref`s (see [Recursion](SNAPSHOT.md#recursion)).
@@ -124,7 +124,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Headers, path and query
 
-- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, is always open. A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
+- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, and the merged query are always open (a record keyed by an enum or literal is Not allowed as either). A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
 - Adding an Input header, optional on the Endpoint or demanded by a newly attached Guard, is Additive only when its schema accepts every text value: a string with no format, regex, min, max or enum. With any other schema it is Breaking, because header names are shared with proxies, gateways and browsers, which may already send one with a value the schema refuses. A required header follows the field rules.
 - A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Additive on every Visibility: the URL is the same, params are matched by position, and Dependencies do not record param names. Its type and constraints follow the rules above.
 - Path params, query params and headers, a Success's included, travel as text (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.

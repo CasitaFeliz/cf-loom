@@ -1,5 +1,5 @@
-import { type ObjectNode, type Path, refused, type SchemaNode } from '../walker/index.ts';
-import { type DeclarationFailure, type Failure, failure } from './failures.ts';
+import type { ObjectNode, Path, SchemaNode } from '../walker/index.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
 import { isObjectPart, type Part, partFieldOf, slotAt } from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
@@ -27,7 +27,7 @@ const nouns: Readonly<Record<TextPart, string>> = {
 };
 
 /** Every text part holds only text, judged on the walked nodes. */
-export function textFailures(nodes: Nodes): readonly Failure[] {
+export function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
   return nodes.slots.flatMap(partFailures);
 }
 
@@ -47,11 +47,7 @@ export function conflictFailures(
   });
 }
 
-/**
- * A text part is an open object of text fields; a record keyed by an enum or literal, the only
- * strict object a walk gives, refuses the query params and headers a request also carries.
- */
-function partFailures(slot: WalkedSlot): readonly Failure[] {
+function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   const part = textPartOf(slot.part);
   if (part === undefined) {
     return [];
@@ -64,13 +60,18 @@ function partFailures(slot: WalkedSlot): readonly Failure[] {
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
   }
-  if (node.mode === 'strict' && part !== 'params') {
-    return [{ kind: 'not-allowed', at, ...refused.keyedTextRecord }];
+  if (isRefusedWhole(node, part)) {
+    return [];
   }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
     ...headerNameFailures(at, part, field),
     ...fieldFailures({ at, part }, field, schema),
   ]);
+}
+
+/** A strict query or headers object: a record keyed by an enum or literal, refused as a whole. */
+function isRefusedWhole(node: ObjectNode, part: TextPart): boolean {
+  return node.mode === 'strict' && part !== 'params';
 }
 
 function headerNameFailures(at: Path, part: TextPart, name: string): readonly DeclarationFailure[] {

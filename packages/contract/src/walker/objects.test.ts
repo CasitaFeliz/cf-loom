@@ -218,12 +218,16 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
-  test('an intersection with the strict object of an enum-keyed record fails', () => {
+  test('an intersection with a record keyed by an enum fails', () => {
     const named = z.record(z.enum(['name']), z.string());
     const priced = z.object({ total: z.number() });
 
     expect(walkBody(named.and(priced))).toEqual(
-      refusedAt(['body'], 'an intersection with a record keyed by an enum or literal', '.extend()'),
+      refusedAt(
+        ['body'],
+        'an intersection with a record keyed by an enum or literal',
+        'z.object() with the keys as fields, then .extend()',
+      ),
     );
   });
 
@@ -352,6 +356,11 @@ describe('validateContract: a strict object fails wherever it sits', () => {
     [
       'in Input',
       () => contractWith({ input: { body: strictObject() } }),
+      [...endpointAt, 'input', 'body'],
+    ],
+    [
+      'in Input, written with .strict()',
+      () => contractWith({ input: { body: z.object({ scope: z.string() }).strict() } }),
       [...endpointAt, 'input', 'body'],
     ],
     [

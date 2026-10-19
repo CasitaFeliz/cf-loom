@@ -10,7 +10,6 @@ import { codeOfStandard, sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
 import { deprecationOf, type Stamping } from './deprecation.ts';
 import { inputOf } from './input.ts';
-import { inMode } from './text-parts.ts';
 import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './types.ts';
 
 /** Every Endpoint by its identity, its Input merged and its codes resolved. */
@@ -58,7 +57,7 @@ function attachmentOf(attachment: Attachment): AttachmentSnapshot {
 function successOf(endpoint: Endpoint, { nodeOf }: SnapshotSources): SuccessSnapshot {
   return {
     status: endpoint.success.status,
-    headers: inMode(nodeOf(endpoint, 'success.headers'), 'open'),
+    headers: nodeOf(endpoint, 'success.headers') ?? null,
     body: nodeOf(endpoint, 'success.body') ?? null,
   };
 }

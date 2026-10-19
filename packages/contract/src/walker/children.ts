@@ -1,4 +1,5 @@
-import type { Path, SchemaNode } from './nodes.ts';
+import type { Path, RefNode, SchemaNode } from './nodes.ts';
+import type { Defs } from './walk.ts';
 
 /** A node inside another, with the steps of the path that lead to it. */
 export type Child = { readonly steps: Path; readonly node: SchemaNode };
@@ -12,6 +13,35 @@ export function nodesWithin(node: SchemaNode, at: Path): readonly LocatedNode[] 
     nodesWithin(child, [...at, ...steps]),
   );
   return [{ at, node }, ...inside];
+}
+
+/**
+ * Every node within the located nodes and within each def they reach through `ref`s, directly or
+ * through other defs; a def is added once, at `['defs', <id>]`.
+ */
+export function nodesReachedFrom(
+  located: readonly LocatedNode[],
+  defs: Defs,
+): readonly LocatedNode[] {
+  const entered = new Set<string>();
+  function enter(name: string): readonly LocatedNode[] {
+    const def = defs[name];
+    if (def === undefined || entered.has(name)) {
+      return [];
+    }
+    entered.add(name);
+    return reachedFrom({ at: ['defs', name], node: def });
+  }
+  function reachedFrom({ at, node }: LocatedNode): readonly LocatedNode[] {
+    const within = nodesWithin(node, at);
+    const names = within.map((inner) => inner.node).filter(isRef);
+    return [...within, ...names.flatMap((ref) => enter(ref.name))];
+  }
+  return located.flatMap(reachedFrom);
+}
+
+function isRef(node: SchemaNode): node is RefNode {
+  return node.type === 'ref';
 }
 
 /** The nodes directly inside a node, each with the steps the walker's paths take to it. */

@@ -62,6 +62,32 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('an annotated z.lazy() around a lazy def with an id is a ref carrying the annotation', () => {
+    type Category = { name: string; children: Category[] };
+    const category: z.ZodType<Category> = z
+      .lazy(() =>
+        z.object({
+          name: z.string(),
+          children: z.array(z.lazy(() => category).describe('A child')),
+        }),
+      )
+      .meta({ id: 'category' });
+    const child = { type: 'ref', name: 'category', description: 'A child' };
+
+    expect(walkBody(category)).toEqual({
+      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
+      defs: {
+        category: {
+          ...categoryDef,
+          fields: {
+            ...categoryDef.fields,
+            children: { required: true, schema: { type: 'array', items: child } },
+          },
+        },
+      },
+    });
+  });
+
   test('a cyclic schema used at two locations is one def', () => {
     const category = z
       .object({

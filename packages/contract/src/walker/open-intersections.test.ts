@@ -90,6 +90,29 @@ describe('validateContract: an intersection reaching an Open Enum or an Open Uni
     });
   });
 
+  test.each([
+    [
+      'an intersection',
+      (inner: core.$ZodType) =>
+        z.intersection(inner, z.union([z.object({ c: z.string() }), z.object({ d: z.string() })])),
+    ],
+    [
+      'a union in an intersection',
+      (inner: core.$ZodType) =>
+        z.intersection(z.union([inner, z.object({ e: z.string() })]), z.object({ f: z.string() })),
+    ],
+  ])(
+    'an intersection reaching an Open Enum inside %s is reported once, at the outer one',
+    (_outer, outerOf) => {
+      const options = z.union([z.object({ s: openEnum(['a']) }), z.object({ t: z.string() })]);
+      const inner = z.intersection(options, z.object({ b: z.string() }));
+
+      const validated = validatedWithBody(outerOf(inner));
+
+      expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
+    },
+  );
+
   test('an intersection with no Open Enum or Open Union is allowed', () => {
     const body = z.intersection(
       z.object({ status: z.enum(['a']) }),
