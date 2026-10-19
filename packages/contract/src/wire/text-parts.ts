@@ -65,7 +65,7 @@ function fieldValuesOf(
 function textsOf(part: TextPartName, field: string, source: TextSource): readonly string[] {
   switch (part) {
     case 'params':
-      return listOf(Object.hasOwn(source.params, field) ? (source.params[field] ?? null) : null);
+      return listOf(source.params[field] ?? null);
     case 'query':
       return source.query.getAll(field);
     case 'headers':

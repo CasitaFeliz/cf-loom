@@ -141,10 +141,15 @@ describe('serve: the body', () => {
   });
 
   test('a stream that fails after a complete JSON value is malformed', async () => {
-    const failing = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(JSON.stringify(order)));
-        controller.error(new Error('the Caller went away'));
+    const chunks = [new TextEncoder().encode(JSON.stringify(order))];
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk === undefined) {
+          controller.error(new Error('the Caller went away'));
+          return;
+        }
+        controller.enqueue(chunk);
       },
     });
     const request = new Request('http://test/orders', {
