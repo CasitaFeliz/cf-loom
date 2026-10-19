@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '../index.ts';
+import {
+  defineContract,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  type Endpoint,
+} from '../index.ts';
 import {
   attachmentsOf,
   endpointsOf,
@@ -115,6 +121,14 @@ describe('isInputPart', () => {
   });
 });
 
+/** A Contract of the given Endpoints, in one Group. */
+function contractOf(...endpoints: readonly [Endpoint, ...Endpoint[]]) {
+  return defineContract({
+    name: 'orders-service',
+    groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints })],
+  });
+}
+
 describe('walkedTextPartsOf', () => {
   test('walks the parts of an Endpoint that travel as text, each an object of its fields', () => {
     const getOrder = defineEndpoint({
@@ -130,22 +144,33 @@ describe('walkedTextPartsOf', () => {
       success: { status: 204 },
     });
 
-    const walked = walkedTextPartsOf(getOrder);
+    const walked = walkedTextPartsOf(contractOf(getOrder));
 
-    expect(walked.kind === 'valid' && walked.nodeOf('input.query')).toEqual({
+    const nodes = walked.kind === 'valid' ? walked.nodes.get(getOrder) : undefined;
+    expect(nodes?.['input.query']).toEqual({
       type: 'object',
       mode: 'open',
       fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
     });
-    expect(walked.kind === 'valid' && walked.nodeOf('input.headers')).toBeUndefined();
+    expect(nodes?.['input.headers']).toBeUndefined();
   });
 
-  test('walks what a Guard demands', () => {
-    const walked = walkedTextPartsOf(userToken);
+  test('walks what a Guard demands, once for every Endpoint that attaches it', () => {
+    const anEndpoint = (name: string, path: string) =>
+      defineEndpoint({
+        name,
+        method: 'GET',
+        path,
+        visibility: 'public',
+        description: 'An Endpoint',
+        guards: [userToken],
+        success: { status: 204 },
+      });
 
-    expect(walked.kind === 'valid' && walked.nodeOf('demands.headers')?.fields).toHaveProperty(
-      'authorization',
-    );
+    const walked = walkedTextPartsOf(contractOf(anEndpoint('a', '/a'), anEndpoint('b', '/b')));
+
+    const nodes = walked.kind === 'valid' ? walked.nodes.get(userToken) : undefined;
+    expect(nodes?.['demands.headers']?.fields).toHaveProperty('authorization');
   });
 
   test('a text part generate refuses is a failure, as generate words it', () => {
@@ -159,7 +184,7 @@ describe('walkedTextPartsOf', () => {
       success: { status: 204 },
     });
 
-    const walked = walkedTextPartsOf(search);
+    const walked = walkedTextPartsOf(contractOf(search));
 
     expect(walked).toMatchObject({
       kind: 'invalid',
@@ -178,11 +203,16 @@ describe('walkedTextPartsOf', () => {
       success: { status: 204 },
     });
 
-    const walked = walkedTextPartsOf(filtered);
+    const walked = walkedTextPartsOf(contractOf(filtered));
 
     expect(walked).toMatchObject({
       kind: 'invalid',
-      failures: [{ kind: 'not-allowed', at: ['endpoints', 'filtered', 'input', 'query'] }],
+      failures: [
+        {
+          kind: 'not-allowed',
+          at: ['groups', 'orders', 'endpoints', 'GET /filtered', 'input', 'query'],
+        },
+      ],
     });
   });
 
@@ -197,7 +227,7 @@ describe('walkedTextPartsOf', () => {
       success: { status: 204 },
     });
 
-    const walked = walkedTextPartsOf(lookup);
+    const walked = walkedTextPartsOf(contractOf(lookup));
 
     expect(walked).toMatchObject({ kind: 'invalid', failures: [{ rule: 'not-an-object-schema' }] });
   });

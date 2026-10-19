@@ -4,6 +4,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  type Endpoint,
 } from '@casitafeliz/loom-contract';
 import { admit, handle, success } from '@casitafeliz/loom-handlers';
 import { describe, expect, test } from 'vitest';
@@ -170,6 +171,87 @@ describe('serve: what it checks before the first request', () => {
     expect(typeof http).toBe('function');
   });
 
+  test('a stamp the map only inherits is no stamp', () => {
+    const inherited = { ...handlers, deprecatedAt: Object.create(handlers.deprecatedAt) };
+
+    const serving = () => serve(contract, inherited);
+
+    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
+  });
+
+  test.each([
+    [
+      'params that are not exactly the path’s names',
+      { path: '/orders/:orderId', input: { params: z.object({ id: z.string() }) as never } },
+      'exact-params',
+    ],
+    [
+      'a Success header name the host owns',
+      {
+        success: {
+          status: 200,
+          headers: z.object({ 'content-type': z.string() }),
+          body: z.object({}),
+        },
+      },
+      'header-names',
+    ],
+  ])('an Endpoint with %s throws, as generate words it', (_case, written, rule) => {
+    const odd: Endpoint = defineEndpoint({
+      name: 'odd',
+      method: 'GET',
+      path: '/odd',
+      visibility: 'public',
+      description: 'An odd one',
+      success: { status: 204 },
+      ...(written as object),
+    } as never);
+    const withOdd = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
+    });
+
+    const serving = () =>
+      serve(withOdd, {
+        endpoints: { odd: handle(odd, () => success()) },
+        guards: {},
+        deprecatedAt: {},
+      });
+
+    expect(serving).toThrow(` ${rule}: `);
+  });
+
+  test('a header an Endpoint and its Guard declare with two shapes throws, as generate words it', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      demands: { headers: z.object({ 'x-tenant': z.number() }) },
+    });
+    const listed = defineEndpoint({
+      name: 'listed',
+      method: 'GET',
+      path: '/listed',
+      visibility: 'public',
+      description: 'Lists',
+      guards: [tenant],
+      input: { headers: z.object({ 'x-tenant': z.string() }) },
+      success: { status: 204 },
+    });
+    const withListed = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [listed] })],
+    });
+
+    const serving = () =>
+      serve(withListed, {
+        endpoints: { listed: handle(listed, () => success()) },
+        guards: { tenant: handle(tenant, () => admit()) },
+        deprecatedAt: {},
+      });
+
+    expect(serving).toThrow(' input-conflict: ');
+  });
+
   test('a Handler the map only inherits is no Handler', () => {
     const inherited = { ...handlers, endpoints: Object.create(handlers.endpoints) };
 
@@ -208,7 +290,7 @@ describe('serve: what it checks before the first request', () => {
         deprecatedAt: {},
       });
 
-    expect(serving).toThrow('endpoints.lookup.input.query not-a-schema');
+    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-a-schema');
   });
 
   test('a text part the walker refuses throws, as generate words it', () => {
@@ -233,7 +315,9 @@ describe('serve: what it checks before the first request', () => {
         deprecatedAt: {},
       });
 
-    expect(serving).toThrow('endpoints.since.input.query.fields.at not allowed: z.date()');
+    expect(serving).toThrow(
+      'groups.orders.endpoints.GET /since.input.query.fields.at not allowed: z.date()',
+    );
   });
 
   test('a text part that is no object throws, as generate words it', () => {
@@ -258,6 +342,6 @@ describe('serve: what it checks before the first request', () => {
         deprecatedAt: {},
       });
 
-    expect(serving).toThrow('endpoints.lookup.input.query not-an-object-schema');
+    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-an-object-schema');
   });
 });

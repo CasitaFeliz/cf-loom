@@ -60,14 +60,21 @@ export function servedContractOf(
   maxBodyBytes: number | undefined,
 ): ServedContract {
   const contract = contractOf(root);
+  const preparing = { handlers, nodes: checkedTextPartsOf(contract) };
   return {
-    endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
+    endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, preparing)),
     standards: standardRejectionsOf(contract),
     maxBodyBytes,
   };
 }
 
-function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedEndpoint {
+/** What each Endpoint is prepared from: the Handler map and the walked text parts by declaration. */
+type Preparing = {
+  readonly handlers: ServedHandlers;
+  readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
+};
+
+function servedEndpointOf(endpoint: Endpoint, { handlers, nodes }: Preparing): ServedEndpoint {
   const declared = {
     declared: endpoint,
     method: endpoint.method,
@@ -76,7 +83,6 @@ function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedE
   if (!isLive(endpoint)) {
     return { ...declared, kind: 'retired' };
   }
-  const walked = checkedTextPartsOf(endpoint);
   return {
     ...declared,
     kind: 'live',
@@ -84,19 +90,10 @@ function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedE
     attachments: attachmentsOf(endpoint).map((attached) => ({
       ...attached,
       handler: guardHandlerOf(handlers, attached.guard),
-      nodes: demandNodesOf(attached.guard),
+      nodes: nodes.get(attached.guard) ?? {},
     })),
-    nodes: {
-      params: walked.nodeOf('input.params'),
-      query: walked.nodeOf('input.query'),
-      headers: walked.nodeOf('input.headers'),
-    },
+    nodes: nodes.get(endpoint) ?? {},
     readsBody: schemaOf(endpoint, 'input.body') !== undefined,
     deprecatedAt: stampOf(handlers, endpoint),
   };
-}
-
-function demandNodesOf(guard: Guard): TextPartNodes {
-  const walked = checkedTextPartsOf(guard);
-  return { query: walked.nodeOf('demands.query'), headers: walked.nodeOf('demands.headers') };
 }

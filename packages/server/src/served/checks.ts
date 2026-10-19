@@ -3,14 +3,17 @@ import {
   failureLineOf,
   isContract,
   isStamp,
-  type WalkedTextParts,
+  type TextPartNodes,
   walkedTextPartsOf,
 } from '@casitafeliz/loom-contract/internal';
-import type { HandlerMap } from '@casitafeliz/loom-handlers';
 import { isWrittenFor } from '@casitafeliz/loom-handlers/internal';
+import type { serve } from '../answering/index.ts';
 
-/** What of the Handler map `serve` reads: the Handlers of Endpoints and Guards, and the stamps. */
-export type ServedHandlers = Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>;
+/**
+ * What of the Handler map `serve` reads, as its signature takes it: the Handlers of Endpoints and
+ * Guards, and the stamps. A type-only import, so `served/` still runs before `answering/`.
+ */
+export type ServedHandlers = Parameters<typeof serve>[1];
 
 /** The root `serve` answers for, which must be a Contract; anything else is a bug of the Service. */
 export function contractOf(root: unknown): Contract {
@@ -36,16 +39,16 @@ export function guardHandlerOf(
   return writtenHandlerOf(handlers.guards, `guards.${guard.name}`, guard);
 }
 
-/** The walked text parts of an Endpoint or a Guard, which must be what `generate` accepts. */
+/** The walked text parts of every Endpoint and Guard, which must be what `generate` accepts. */
 export function checkedTextPartsOf(
-  declaration: Endpoint | Guard,
-): Extract<WalkedTextParts, { kind: 'valid' }> {
-  const walked = walkedTextPartsOf(declaration);
+  contract: Contract,
+): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
+  const walked = walkedTextPartsOf(contract);
   if (walked.kind === 'invalid') {
     const lines = walked.failures.map(failureLineOf);
-    throw new Error(`serve() cannot read the text of ${declaration.name}:\n${lines.join('\n')}`);
+    throw new Error(`serve() takes a Contract generate accepts:\n${lines.join('\n')}`);
   }
-  return walked;
+  return walked.nodes;
 }
 
 /**

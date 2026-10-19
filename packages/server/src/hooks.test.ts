@@ -8,7 +8,7 @@ import {
 import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { type AnsweredRequest, type ServiceFault, serve } from './index.ts';
+import { type AnsweredRequest, type ServedFault, serve } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -153,7 +153,7 @@ describe('serve: onServiceFault', () => {
 
   test('with it, the console receives nothing', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const faults: ServiceFault[] = [];
+    const faults: ServedFault[] = [];
 
     await serve(contract, handlers, { onServiceFault: (served) => faults.push(served) })(
       get('/orders/thrown'),
@@ -164,7 +164,7 @@ describe('serve: onServiceFault', () => {
   });
 
   test('the Caller’s Faults never reach it', async () => {
-    const faults: ServiceFault[] = [];
+    const faults: ServedFault[] = [];
     const http = serve(contract, handlers, {
       maxBodyBytes: 8,
       onServiceFault: (served) => faults.push(served),

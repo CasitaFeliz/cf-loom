@@ -1,19 +1,22 @@
-import { isJsonContentType } from './headers.ts';
+import { isJsonContentType } from './content-type.ts';
+import type { InputIssue } from './invalid-input.ts';
 
 /** A request's body as read: the parsed JSON, why it cannot be read as JSON, or too large to read. */
 export type Body =
   | { readonly kind: 'value'; readonly value: unknown }
-  | { readonly kind: 'malformed'; readonly message: string }
+  | { readonly kind: 'malformed'; readonly issue: InputIssue }
   | { readonly kind: 'too-large' };
 
 /** What a body that was not JSON says, never what was received. */
-const notJson: Body = { kind: 'malformed', message: 'The body is not JSON' };
+const notJson = malformedOf('The body is not JSON');
 
 /** What a body sent with another content type, or none, says. */
-const notJsonContentType: Body = {
-  kind: 'malformed',
-  message: 'The content type is not application/json',
-};
+const notJsonContentType = malformedOf('The content type is not application/json');
+
+/** A body that cannot be read as JSON: an Issue at the whole of `input.body`. */
+function malformedOf(message: string): Body {
+  return { kind: 'malformed', issue: { part: 'input.body', path: [], code: 'malformed', message } };
+}
 
 /** The bytes of a body as read, counting them against the limit, or why they were not. */
 type Bytes =

@@ -1,20 +1,20 @@
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
 
-/** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-export type FaultedBy = { readonly endpoint: string; readonly guard?: string };
-
 /**
- * A Fault the Service's side produced, which `onServiceFault` receives: one its Handler returned,
- * threw or answered with no Outcome, an Outcome that broke the Contract, or a Context or Qualifier
- * `serve` built that broke it, the runtime's own bug.
+ * A Fault the Service's side produced, which `onServiceFault` receives, naming the Endpoint and,
+ * when a GuardHandler produced it, the Guard: one its Handler returned, threw or answered with no
+ * Outcome, an Outcome that broke the Contract, or a Context or Qualifier `serve` built that broke
+ * it, the runtime's own bug.
  */
-export type ServiceFault = FaultedBy &
-  (
-    | { readonly kind: 'returned'; readonly fault: Fault }
-    | { readonly kind: 'thrown'; readonly fault: Fault }
-    | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
-    | { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] }
-  );
+export type ServedFault = { readonly endpoint: string; readonly guard?: string } & (
+  | { readonly kind: 'returned'; readonly fault: Fault }
+  | { readonly kind: 'thrown'; readonly fault: Fault }
+  | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
+  | { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] }
+);
+
+/** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
+export type FaultedBy = Pick<ServedFault, 'endpoint' | 'guard'>;
 
 /** One request answered: which Endpoint, with what status and kind, and how long it took. */
 export type AnsweredRequest = {
@@ -25,31 +25,31 @@ export type AnsweredRequest = {
 };
 
 /** Hands a Service's Fault to its hook, or to the console without one. */
-export function reportServiceFault(
-  serviceFault: ServiceFault,
-  onServiceFault: ((fault: ServiceFault) => void) | undefined,
+export function reportServedFault(
+  servedFault: ServedFault,
+  onServiceFault: ((fault: ServedFault) => void) | undefined,
 ): void {
   if (onServiceFault !== undefined) {
-    onServiceFault(serviceFault);
+    onServiceFault(servedFault);
     return;
   }
-  logServiceFault(serviceFault);
+  logServedFault(servedFault);
 }
 
-/** A Service's Fault on the console: each Issue's part, path and code, or the Fault and its cause. */
-function logServiceFault(serviceFault: ServiceFault): void {
+/** A Service's Fault on the console: each Issue's part, path, code and message, or the Fault and its cause. */
+function logServedFault(servedFault: ServedFault): void {
   const where =
-    serviceFault.guard === undefined
-      ? serviceFault.endpoint
-      : `${serviceFault.endpoint} ${serviceFault.guard}`;
-  switch (serviceFault.kind) {
+    servedFault.guard === undefined
+      ? servedFault.endpoint
+      : `${servedFault.endpoint} ${servedFault.guard}`;
+  switch (servedFault.kind) {
     case 'returned':
     case 'thrown':
-      logFault(where, serviceFault.fault);
+      logFault(where, servedFault.fault);
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
-      for (const { part, path, code, message } of serviceFault.issues) {
+      for (const { part, path, code, message } of servedFault.issues) {
         console.error(`${where}: ${[part, ...path].join('.')} ${code}: ${message}`);
       }
   }

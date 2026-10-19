@@ -3,6 +3,19 @@ import type { JsonPrimitive, SchemaNode } from '../walker/index.ts';
 /** A number as text: no sign but `-`, no leading zero, no exponent, no trailing dot. */
 const numberText = /^-?(0|[1-9]\d*)(\.\d+)?$/;
 
+/** A value a text part or a Success header holds: a string, a number or a boolean. */
+export type TextValue = string | number | boolean;
+
+/** A value as the text it travels in: a number or boolean as JavaScript writes it. */
+export function textOfValue(value: TextValue): string {
+  return String(value);
+}
+
+/** Whether a value is one a text part or a Success header holds. */
+export function isTextValue(value: unknown): value is TextValue {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
 /**
  * The value a text part's field carries, by its node: `[text]` for a header or param, every
  * occurrence for a query key; a list node converts each, and a single node given several texts

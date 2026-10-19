@@ -1,5 +1,4 @@
 import type { ReservedCode } from '../declarations/index.ts';
-import { type InputIn, type InputPart, type Issue, inOf } from '../validation/index.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
@@ -17,7 +16,11 @@ type ReservedFault = {
   readonly message: string;
 };
 
-/** The codes cf-loom answers outside the Contract, as Over HTTP lists them; a text carries nothing received. */
+/**
+ * The codes cf-loom answers outside the Contract, as Over HTTP lists them; a text carries nothing
+ * received. `INVALID_OUTCOME`'s `committed` is `serve`'s: the Outcome may have been committed
+ * before it broke the Contract, while the client's depends on what failed.
+ */
 export const reservedFaults = {
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   RETIRED: { status: 410, committed: 'no', message: 'The Endpoint is retired' },
@@ -32,7 +35,6 @@ export const reservedFaults = {
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   INVALID_OUTCOME: {
     status: 500,
-    /** `serve`'s value: the Outcome may have been committed before it broke the Contract; the client's depends on what failed. */
     committed: 'unknown',
     message: 'The Outcome broke the Contract',
   },
@@ -54,7 +56,7 @@ export type FaultEnvelope = {
 };
 
 /** A Fault as the wire carries it: what travels of it, never its `cause`. */
-export type TravellingFault = FaultEnvelope['fault'];
+export type TravelingFault = FaultEnvelope['fault'];
 
 /** A Rejection as it travels: `{ rejection: { code, message, body } }`, no `body` key without one. */
 export function rejectionEnvelopeOf(rejection: {
@@ -67,7 +69,7 @@ export function rejectionEnvelopeOf(rejection: {
 }
 
 /** A Fault as it travels: `{ fault: { code?, committed, retryable, message } }`. */
-export function faultEnvelopeOf(fault: TravellingFault): FaultEnvelope {
+export function faultEnvelopeOf(fault: TravelingFault): FaultEnvelope {
   const { code, committed, retryable, message } = fault;
   return {
     fault:
@@ -86,24 +88,4 @@ export function faultStatusOf(fault: {
     return reservedFaults[fault.code].status;
   }
   return fault.retryable ? 503 : 500;
-}
-
-/** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
-export type InputIssue = Issue & { readonly part: InputPart };
-
-/** The body of the invalid-input Rejection, cf-loom's own, as it travels and as the client decodes it. */
-export type InvalidInputBody = {
-  readonly issues: readonly (Omit<Issue, 'part'> & { readonly in: InputIn })[];
-};
-
-/** The body of the invalid-input Rejection: each Issue with the part of the request it read. */
-export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputBody {
-  return {
-    issues: issues.map(({ part, path, code, message }) => ({
-      in: inOf(part),
-      path,
-      code,
-      message,
-    })),
-  };
 }

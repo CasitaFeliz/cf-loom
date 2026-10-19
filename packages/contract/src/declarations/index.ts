@@ -13,7 +13,7 @@ export { defineGroup } from './group.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
-export { isRejectionStatus, methods, successStatuses } from './http.ts';
+export { isRejectionStatus, methods, reservedHeaderNames, successStatuses } from './http.ts';
 export type {
   ContextOf,
   DemandsOf,

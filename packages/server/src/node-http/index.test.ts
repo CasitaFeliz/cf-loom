@@ -412,6 +412,66 @@ describe('nodeHttp', () => {
     expect(ran.stderr).toContain('the hook broke');
   });
 
+  test('an absolute target with credentials is answered 400, and the process lives on', async () => {
+    const url = await listening();
+
+    const listened = await listenedTo({ method: 'GET', url: 'http://u:p@test/orders/o-1' });
+    const answer = await raw(
+      url,
+      'GET http://u@test/orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+    const after = await fetch(`${url}/orders/o-1`);
+
+    expect([listened.status, statusLineOf(answer), after.status]).toEqual([
+      400,
+      'HTTP/1.1 400 Bad Request',
+      200,
+    ]);
+  });
+
+  test('every request header reaches serve, the last one included', async () => {
+    const seen: string[][] = [];
+    const recording: Http = async (request) => {
+      seen.push([...request.headers.keys()]);
+      return new Response(null, { status: 204 });
+    };
+    const url = await listening(nodeHttp(recording));
+
+    await raw(
+      url,
+      'GET /x HTTP/1.1\r\nHost: test\r\nX-First: 1\r\nX-Last: 2\r\nConnection: close\r\n\r\n',
+    );
+
+    expect(seen[0]).toEqual(['connection', 'host', 'x-first', 'x-last']);
+  });
+
+  test('a chunked upload over maxBodyBytes is BODY_TOO_LARGE', async () => {
+    const url = await listening(nodeHttp(serve(contract, handlers, { maxBodyBytes: 16 })));
+    const chunk = '{"quantity":2,"padding":"' + 'x'.repeat(40) + '"}';
+    const chunked = `${chunk.length.toString(16)}\r\n${chunk}\r\n0\r\n\r\n`;
+
+    const answer = await raw(
+      url,
+      `POST /orders HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nX-Api-Key: c-1\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n${chunked}`,
+    );
+
+    expect(statusLineOf(answer)).toBe('HTTP/1.1 413 Payload Too Large');
+  });
+
+  test('the connection serves the next request after a BODY_TOO_LARGE', async () => {
+    const url = await listening(nodeHttp(serve(contract, handlers, { maxBodyBytes: 16 })));
+    const body = JSON.stringify({ quantity: 2, padding: 'x'.repeat(40) });
+    const first = `POST /orders HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nX-Api-Key: c-1\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
+
+    const answer = await raw(url, first + second);
+
+    expect(answer.match(/^HTTP\/1\.1 \d+ .+$/gm)).toEqual([
+      'HTTP/1.1 413 Payload Too Large',
+      'HTTP/1.1 200 OK',
+    ]);
+  });
+
   test('nodeListener serves a node:http server the Service creates itself', async () => {
     const url = await listening(createServer(nodeListener(serve(contract, handlers))));
 

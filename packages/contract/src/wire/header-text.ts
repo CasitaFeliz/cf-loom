@@ -1,22 +1,10 @@
 import type { Issue } from '../validation/index.ts';
-
-/** A value a text part or a Success header holds: a string, a number or a boolean. */
-export type TextValue = string | number | boolean;
+import { isTextValue, textOfValue } from './text.ts';
 
 /** A Success's headers as they travel: each as text, or every one that cannot travel, as Issues. */
 export type SuccessHeaderTexts =
   | { readonly kind: 'texts'; readonly texts: readonly (readonly [string, string])[] }
   | { readonly kind: 'issues'; readonly issues: readonly Issue[] };
-
-/** A value as the text it travels in, as a Success header: a number or boolean as JavaScript writes it. */
-export function textOfValue(value: TextValue): string {
-  return String(value);
-}
-
-/** Whether a value is one a text part or a Success header holds. */
-export function isTextValue(value: unknown): value is TextValue {
-  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-}
 
 /**
  * Whether a text can travel as an HTTP header value: RFC 9110 field text, a tab, visible ASCII, a

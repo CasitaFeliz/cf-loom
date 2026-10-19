@@ -301,6 +301,81 @@ describe('validateContract: header names', () => {
   });
 });
 
+/** An Endpoint declaring one header name where a header can be declared: Input, Success or a Guard's demands. */
+const headerPositions = {
+  input: (name: string) =>
+    defineEndpoint({ ...listing, input: { headers: headersOf({ [name]: z.string() }) } }),
+  success: (name: string) =>
+    defineEndpoint({
+      ...listing,
+      success: { ...listing.success, headers: headersOf({ [name]: z.string() }) },
+    }),
+  demands: (name: string) =>
+    defineEndpoint({
+      ...listing,
+      guards: [
+        defineGuard({
+          name: 'apiKey',
+          description: 'A key',
+          demands: { headers: headersOf({ [name]: z.string() }) },
+        }),
+      ],
+    }),
+} as const;
+
+const positions = Object.keys(headerPositions) as (keyof typeof headerPositions)[];
+
+const reservedHeaderNames = [
+  'content-length',
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+  'proxy-connection',
+  'upgrade',
+  'te',
+  'trailer',
+  'host',
+  'content-type',
+  'deprecation',
+];
+
+const notTokens = ['x y', 'héader', 'a:b', '', 'x"y', 'x/y'];
+
+describe('validateContract: header names are lower-case RFC 9110 tokens no host owns', () => {
+  test.each(
+    positions.flatMap((position) => reservedHeaderNames.map((name) => [position, name] as const)),
+  )('a %s header named %s, which the host or cf-loom owns, fails', (position, name) => {
+    const validated = validateEndpoint(headerPositions[position](name));
+
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [
+        { rule: 'header-names', message: `A header the host or cf-loom owns is reserved: ${name}` },
+      ],
+    });
+  });
+
+  test.each(positions.flatMap((position) => notTokens.map((name) => [position, name] as const)))(
+    'a %s header named %j, which is no token, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({
+        kind: 'invalid',
+        failures: [
+          { rule: 'header-names', message: `A header name is an RFC 9110 token: ${name}` },
+        ],
+      });
+    },
+  );
+
+  test.each(positions)('a %s header named cookie validates', (position) => {
+    const validated = validateEndpoint(headerPositions[position]('cookie'));
+
+    expect(validated.kind).toBe('valid');
+  });
+});
+
 describe('validateContract: one schema per header or query name on an Endpoint', () => {
   const userToken = defineGuard({
     name: 'userToken',

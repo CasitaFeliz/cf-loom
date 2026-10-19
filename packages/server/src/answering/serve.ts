@@ -2,7 +2,7 @@ import type { Contract } from '@casitafeliz/loom-contract';
 import type { HandlerMap } from '@casitafeliz/loom-handlers';
 import { servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
-import { type AnsweredRequest, reportServiceFault, type ServiceFault } from './hooks.ts';
+import { type AnsweredRequest, reportServedFault, type ServedFault } from './hooks.ts';
 
 /** The fetch-style handler `serve` returns: what an adapter connects to its host. */
 export type Http = (request: Request) => Promise<Response>;
@@ -15,7 +15,7 @@ export type ServeOptions = {
    * Receives every Fault the Service's side produced: one a Handler returned or threw, an Outcome
    * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.
    */
-  readonly onServiceFault?: (fault: ServiceFault) => void;
+  readonly onServiceFault?: (fault: ServedFault) => void;
   /** Receives one record per request answered, for metrics and tracing. */
   readonly onOutcome?: (request: AnsweredRequest) => void;
 };
@@ -33,8 +33,8 @@ export function serve(
   return async (request) => {
     const started = performance.now();
     const { endpoint, answered } = await answerOf(served, request);
-    if (answered.kind === 'fault' && answered.serviceFault !== undefined) {
-      reportServiceFault(answered.serviceFault, options.onServiceFault);
+    if (answered.kind === 'fault' && answered.servedFault !== undefined) {
+      reportServedFault(answered.servedFault, options.onServiceFault);
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;

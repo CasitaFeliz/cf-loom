@@ -1,10 +1,12 @@
+import type { ReservedCode } from '../declarations/index.ts';
+import { jsonContentType } from './content-type.ts';
 import {
   faultEnvelopeOf,
   faultStatusOf,
-  jsonContentType,
   rejectionEnvelopeOf,
-  type TravellingFault,
-} from '@casitafeliz/loom-contract/internal';
+  reservedFaults,
+  type TravelingFault,
+} from './envelopes.ts';
 
 /** A Success as it is sent: its declared status, its headers as text that can travel, and its body. */
 export type SentSuccess = {
@@ -40,8 +42,14 @@ export function rejectionResponseOf(rejection: SentRejection): Response {
 }
 
 /** The response of a Fault: the status it travels with and its Envelope, never its `cause`. */
-export function faultResponseOf(fault: TravellingFault): Response {
+export function faultResponseOf(fault: TravelingFault): Response {
   return jsonResponseOf(faultStatusOf(fault), faultEnvelopeOf(fault));
+}
+
+/** The response of a reserved code: its status, its `committed`, never retryable, its fixed text. */
+export function reservedResponseOf(code: ReservedCode): Response {
+  const { committed, message } = reservedFaults[code];
+  return faultResponseOf({ code, committed, retryable: false, message });
 }
 
 function jsonResponseOf(status: number, envelope: unknown): Response {

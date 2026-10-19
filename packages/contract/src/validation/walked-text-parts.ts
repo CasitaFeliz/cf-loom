@@ -1,56 +1,65 @@
-import type { Endpoint, Guard } from '../declarations/index.ts';
-import { isEndpoint } from '../declarations/index.ts';
+import type { Contract, Endpoint, Guard } from '../declarations/index.ts';
+import { isEndpoint, isGuard } from '../declarations/index.ts';
 import { type ObjectNode, walkSchemas } from '../walker/index.ts';
+import { declarationsOf } from './declarations.ts';
 import type { Failure } from './failures.ts';
-import { type ObjectPart, slotAt, writtenAt } from './parts.ts';
+import type { ObjectPart } from './parts.ts';
+import { paramsFailures } from './paths.ts';
 import {
   failuresAt,
   locatedSchemasOf,
-  nodeLookupOf,
+  type Nodes,
   nodesOf,
   schemaSlotsAmong,
+  textSlotsOf,
 } from './schemas.ts';
-import { textPartFailures } from './text-only.ts';
+import { conflictFailures, textPartFailures } from './text-only.ts';
 
-/** The parts of an Endpoint or a Guard that a request carries as text. */
-export type TextPart = Extract<
-  ObjectPart,
-  'input.params' | 'input.query' | 'input.headers' | 'demands.headers' | 'demands.query'
->;
+/** The walked parts of one Endpoint or Guard that travel as text, each an object of its fields. */
+export type TextPartNodes = Readonly<Partial<Record<ObjectPart, ObjectNode>>>;
 
 /**
- * The text parts of one Endpoint or Guard walked, each an object of its fields, or every rule of
+ * The text parts of a Contract's Endpoints and Guards walked, by declaration, or every rule of
  * `generate` they break, so the runtime reads text by the nodes `generate` accepted.
  */
 export type WalkedTextParts =
-  | { readonly kind: 'valid'; readonly nodeOf: (part: TextPart) => ObjectNode | undefined }
+  | { readonly kind: 'valid'; readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes> }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
 
-const endpointTextParts = ['input.params', 'input.query', 'input.headers'] as const;
-const guardTextParts = ['demands.headers', 'demands.query'] as const;
-
-/** Walks the text parts of an Endpoint or a Guard and judges them by `generate`'s text rules. */
-export function walkedTextPartsOf(declaration: Endpoint | Guard): WalkedTextParts {
-  const parts = isEndpoint(declaration) ? endpointTextParts : guardTextParts;
-  const owner = [isEndpoint(declaration) ? 'endpoints' : 'guards', declaration.name];
-  const written = parts.map((part) => ({
-    at: slotAt(owner, part),
-    owner: declaration,
-    part,
-    value: writtenAt(declaration, part),
-    role: 'snapshot' as const,
-  }));
-  const { slots, failures: notSchemas } = schemaSlotsAmong(written);
+/**
+ * Walks the text parts of every Endpoint and Guard of a Contract once, and judges them by every
+ * rule `generate` applies to text parts: what they hold, their names, the path's params and one
+ * shape per header or query name.
+ */
+export function walkedTextPartsOf(contract: Contract): WalkedTextParts {
+  const declarations = declarationsOf(contract);
+  const { slots, failures: notSchemas } = schemaSlotsAmong(textSlotsOf(declarations));
   const walked = walkSchemas(locatedSchemasOf(slots), () => undefined);
   const nodes = nodesOf(slots, walked);
   const [first, ...others] = [
     ...notSchemas,
     ...walked.located.flatMap(failuresAt),
     ...textPartFailures(nodes),
+    ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
+    ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];
   if (first !== undefined) {
     return { kind: 'invalid', failures: [first, ...others] };
   }
-  const nodeOf = nodeLookupOf(nodes);
-  return { kind: 'valid', nodeOf: (part) => nodeOf(declaration, part) };
+  return { kind: 'valid', nodes: nodesByDeclarationOf(nodes) };
+}
+
+function nodesByDeclarationOf(nodes: Nodes): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
+  const byDeclaration = new Map<Endpoint | Guard, Partial<Record<ObjectPart, ObjectNode>>>();
+  for (const { owner, part, node } of nodes.slots) {
+    if (!isDeclared(owner) || node.type !== 'object') {
+      continue;
+    }
+    byDeclaration.set(owner, { ...byDeclaration.get(owner), [part]: node });
+  }
+  return byDeclaration;
+}
+
+function isDeclared(owner: unknown): owner is Endpoint | Guard {
+  return isEndpoint(owner) || isGuard(owner);
 }

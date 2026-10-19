@@ -2,7 +2,7 @@ import { defineContract, defineEndpoint, defineGroup } from '@casitafeliz/loom-c
 import { handle, success } from '@casitafeliz/loom-handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type ServiceFault, serve } from './index.ts';
+import { type ServedFault, serve } from './index.ts';
 
 const node: z.ZodType = z.object({
   get next() {
@@ -248,7 +248,7 @@ describe('serve: maxBodyBytes', () => {
   });
 
   test('a body nested past the stack answers the Fault 500, which onServiceFault receives as thrown', async () => {
-    const faults: ServiceFault[] = [];
+    const faults: ServedFault[] = [];
     const watched = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 

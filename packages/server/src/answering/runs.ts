@@ -1,26 +1,24 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
 import {
+  faultResponseOf,
   type InputIssue,
+  internalError,
   invalidInputBodyOf,
   isInputPart,
+  rejectionResponseOf,
+  reservedResponseOf,
+  type SentRejection,
   successHeaderTextsOf,
+  successResponseOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
 import type { EndpointRun } from '@casitafeliz/loom-handlers/internal';
-import {
-  faultResponseOf,
-  rejectionResponseOf,
-  reservedResponseOf,
-  runtimeBugResponse,
-  type SentRejection,
-  successResponseOf,
-} from '../response/index.ts';
-import type { AnsweredRequest, FaultedBy, ServiceFault } from './hooks.ts';
+import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
 /** How one request was answered; only a Fault may be the Service's, for `onServiceFault`. */
 export type Answered =
   | { readonly kind: Exclude<AnsweredRequest['kind'], 'fault'>; readonly response: Response }
-  | { readonly kind: 'fault'; readonly response: Response; readonly serviceFault?: ServiceFault };
+  | { readonly kind: 'fault'; readonly response: Response; readonly servedFault?: ServedFault };
 
 /** A run that did not answer: given what broke the Contract, built what broke it, or threw. */
 export type FailedRun = Exclude<EndpointRun, { readonly kind: 'answered' }>;
@@ -47,8 +45,8 @@ export function answeredOfFailedRun(
     case 'invalid-outcome':
       return invalidOutcomeOf(run.issues, faultedBy);
     case 'thrown': {
-      const serviceFault = { ...faultedBy, kind: 'thrown' as const, fault: run.fault };
-      return { kind: 'fault', response: faultResponseOf(run.fault), serviceFault };
+      const servedFault = { ...faultedBy, kind: 'thrown' as const, fault: run.fault };
+      return { kind: 'fault', response: handlerFaultResponseOf(run.fault), servedFault };
     }
   }
 }
@@ -69,8 +67,8 @@ export function answeredOfNotSuccess(answer: NotSuccess, faultedBy: FaultedBy): 
     case 'rejection':
       return { kind: 'rejection', response: rejectionResponseOf(answer) };
     case 'fault': {
-      const serviceFault = { ...faultedBy, kind: 'returned' as const, fault: answer };
-      return { kind: 'fault', response: faultResponseOf(answer), serviceFault };
+      const servedFault = { ...faultedBy, kind: 'returned' as const, fault: answer };
+      return { kind: 'fault', response: handlerFaultResponseOf(answer), servedFault };
     }
   }
 }
@@ -86,17 +84,33 @@ export function answeredOfInvalidInput(
 ): Answered {
   const runtimeIssues = issues.filter((issue) => !isInputPart(issue.part));
   if (runtimeIssues.length > 0) {
-    const serviceFault = { ...faultedBy, kind: 'runtime-bug' as const, issues: runtimeIssues };
-    return { kind: 'fault', response: runtimeBugResponse(), serviceFault };
+    const servedFault = { ...faultedBy, kind: 'runtime-bug' as const, issues: runtimeIssues };
+    return { kind: 'fault', response: runtimeBugResponse(), servedFault };
   }
   const body = invalidInputBodyOf(issues.filter(isInputIssue));
   const response = rejectionResponseOf({ ...standards.invalidInput, body });
   return { kind: 'rejection', response };
 }
 
+/**
+ * The response of a Fault a Handler built or the run made of a throw: only what a Handler's
+ * Fault says travels, so no field it adds can make it a reserved Fault.
+ */
+function handlerFaultResponseOf({ committed, retryable, message }: Fault): Response {
+  return faultResponseOf({ committed, retryable, message });
+}
+
+/**
+ * The response of the runtime's own bug, a Context or Qualifier `serve` built that broke the
+ * Contract: not committed, since the run refused it before the implementation ran.
+ */
+function runtimeBugResponse(): Response {
+  return faultResponseOf({ committed: 'no', retryable: false, message: internalError });
+}
+
 function invalidOutcomeOf(issues: readonly Issue[], faultedBy: FaultedBy): Answered {
-  const serviceFault = { ...faultedBy, kind: 'invalid-outcome' as const, issues };
-  return { kind: 'fault', response: reservedResponseOf('INVALID_OUTCOME'), serviceFault };
+  const servedFault = { ...faultedBy, kind: 'invalid-outcome' as const, issues };
+  return { kind: 'fault', response: reservedResponseOf('INVALID_OUTCOME'), servedFault };
 }
 
 function isInputIssue(issue: Issue): issue is InputIssue {

@@ -1,12 +1,6 @@
+import type { TextIn, TextPartNodes } from '../validation/index.ts';
 import type { ObjectNode } from '../walker/index.ts';
 import { valueOfText } from './text.ts';
-
-/** The nodes of the text parts one party reads, an Endpoint's Input or a Guard's demands. */
-export type TextPartNodes = {
-  readonly params?: ObjectNode | undefined;
-  readonly query?: ObjectNode | undefined;
-  readonly headers?: ObjectNode | undefined;
-};
 
 /** Where a request's text comes from: its matched params by name, its query and its headers. */
 export type TextSource = {
@@ -15,33 +9,32 @@ export type TextSource = {
   readonly headers: Headers;
 };
 
-type TextPartName = keyof TextPartNodes;
-
 /** Values by field, as one text part of a request carries them. */
 type FieldValues = Readonly<Record<string, unknown>>;
 
-/** Where a request's text comes from, given its URL, parsed once, and the params its path matched. */
-export function textSourceOf(
-  request: Request,
-  url: URL,
-  params: Readonly<Record<string, string>>,
-): TextSource {
-  return { params, query: url.searchParams, headers: request.headers };
-}
+/** The parts a request carries as text, each with the field a Handler reads it under. */
+const requestTextParts = [
+  ['input.params', 'params'],
+  ['input.query', 'query'],
+  ['input.headers', 'headers'],
+  ['demands.query', 'query'],
+  ['demands.headers', 'headers'],
+] as const;
 
 /**
- * Each text part a party declares, read from the request field by field and converted by its node;
- * a field the request lacks is left out, so whether it is required is the schema's to say.
+ * Each text part a party declares, an Endpoint's Input or a Guard's demands, read from the request
+ * field by field and converted by its node; a field the request lacks is left out, so whether it is
+ * required is the schema's to say.
  */
 export function textPartsOf(
   nodes: TextPartNodes,
   source: TextSource,
-): Readonly<Partial<Record<TextPartName, FieldValues>>> {
-  const parts: Partial<Record<TextPartName, FieldValues>> = {};
-  for (const part of ['params', 'query', 'headers'] as const) {
+): Readonly<Partial<Record<TextIn, FieldValues>>> {
+  const parts: Partial<Record<TextIn, FieldValues>> = {};
+  for (const [part, textIn] of requestTextParts) {
     const node = nodes[part];
     if (node !== undefined) {
-      parts[part] = fieldValuesOf(node, (field) => textsOf(part, field, source));
+      parts[textIn] = fieldValuesOf(node, (field) => textsOf(textIn, field, source));
     }
   }
   return parts;
@@ -62,8 +55,8 @@ function fieldValuesOf(
 }
 
 /** The texts a field arrives as: a param or header once, a query key as often as it is repeated. */
-function textsOf(part: TextPartName, field: string, source: TextSource): readonly string[] {
-  switch (part) {
+function textsOf(textIn: TextIn, field: string, source: TextSource): readonly string[] {
+  switch (textIn) {
     case 'params':
       return listOf(source.params[field] ?? null);
     case 'query':

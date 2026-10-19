@@ -8,7 +8,7 @@ import {
 import { admit, handle, reject, success } from '@casitafeliz/loom-handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type ServiceFault, serve } from './index.ts';
+import { type ServedFault, serve } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -215,7 +215,7 @@ describe('serve: Guards', () => {
   });
 
   test('an admit() that breaks the Guard’s context is INVALID_OUTCOME, the Guard named to onServiceFault', async () => {
-    const faults: ServiceFault[] = [];
+    const faults: ServedFault[] = [];
     const broken = handle(userToken, () => admit({ userId: 7 } as never));
     const http = serve(
       contract,
@@ -247,7 +247,7 @@ describe('serve: Guards', () => {
   });
 
   test('a Qualifier serve hands a Guard that breaks its schema is the runtime’s own bug', async () => {
-    const faults: ServiceFault[] = [];
+    const faults: ServedFault[] = [];
     const http = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
 
     const response = await http(

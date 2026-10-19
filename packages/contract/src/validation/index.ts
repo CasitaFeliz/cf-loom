@@ -18,7 +18,7 @@ export type {
   LocatedStandardRejection,
   Root,
 } from './located.ts';
-export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part } from './parts.ts';
+export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,
   fieldsOf,
@@ -41,5 +41,5 @@ export type {
 } from './validate.ts';
 export { validateContract } from './validate.ts';
 export type { ValidatedCode, ValidatedDeclarations, ValidatedGuard } from './validated.ts';
-export type { TextPart, WalkedTextParts } from './walked-text-parts.ts';
+export type { TextPartNodes, WalkedTextParts } from './walked-text-parts.ts';
 export { walkedTextPartsOf } from './walked-text-parts.ts';

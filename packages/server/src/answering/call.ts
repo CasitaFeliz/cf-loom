@@ -1,8 +1,8 @@
 import {
+  type Body,
   bodyOf,
   type TextSource,
   textPartsOf,
-  textSourceOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { LiveEndpoint } from '../served/index.ts';
 
@@ -14,23 +14,12 @@ export type Call = {
 };
 
 /** Why a body could not be read: too large to read, or no JSON. */
-export type UnreadBody =
-  | { readonly kind: 'too-large' }
-  | { readonly kind: 'malformed'; readonly message: string };
+export type UnreadBody = Exclude<Body, { readonly kind: 'value' }>;
 
 /** The Endpoint's Input as the request carries it, or why its body could not be read. */
 export type ReadInput =
   | { readonly kind: 'input'; readonly input: Readonly<Record<string, unknown>> }
   | UnreadBody;
-
-/** A request to a live Endpoint, given its URL, parsed once, and the params its path matched. */
-export function callOf(
-  endpoint: LiveEndpoint,
-  request: Request,
-  matched: { readonly url: URL; readonly params: Readonly<Record<string, string>> },
-): Call {
-  return { endpoint, request, source: textSourceOf(request, matched.url, matched.params) };
-}
 
 /**
  * The Endpoint's Input: its text parts, and its body only when it declares one, read within the

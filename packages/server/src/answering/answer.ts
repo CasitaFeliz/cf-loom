@@ -1,10 +1,8 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
-import { deprecationHeaderOf, matchOf } from '@casitafeliz/loom-contract/internal';
-import type { Issue } from '@casitafeliz/loom-handlers';
+import { matchOf, reservedResponseOf, withDeprecation } from '@casitafeliz/loom-contract/internal';
 import { runEndpoint } from '@casitafeliz/loom-handlers/internal';
-import { reservedResponseOf } from '../response/index.ts';
-import type { LiveEndpoint, ServedContract, ServedEndpoint } from '../served/index.ts';
-import { type Call, callOf, inputOf, type UnreadBody } from './call.ts';
+import type { ServedContract, ServedEndpoint } from '../served/index.ts';
+import { type Call, inputOf, type UnreadBody } from './call.ts';
 import { admittedOf } from './guards.ts';
 import {
   type Answered,
@@ -19,8 +17,7 @@ export type AnsweredFor = { readonly endpoint?: ServedEndpoint; readonly answere
 
 /** One request answered: matched to its Endpoint, then its Guards, its Input and its Handler. */
 export async function answerOf(served: ServedContract, request: Request): Promise<AnsweredFor> {
-  const url = new URL(request.url);
-  const match = matchOf(served.endpoints, request.method, url.pathname);
+  const match = matchOf(served.endpoints, request);
   if (match.kind === 'none') {
     return { answered: { kind: 'fault', response: reservedResponseOf('NO_SUCH_ENDPOINT') } };
   }
@@ -29,9 +26,9 @@ export async function answerOf(served: ServedContract, request: Request): Promis
     case 'retired':
       return { endpoint, answered: { kind: 'fault', response: reservedResponseOf('RETIRED') } };
     case 'live': {
-      const call = callOf(endpoint, request, { url, params: match.params });
-      const answered = await answeredCallOf(call, served);
-      return { endpoint, answered: withDeprecation(answered, endpoint) };
+      const answered = await answeredCallOf({ endpoint, request, source: match.source }, served);
+      withDeprecation(answered.response, endpoint.deprecatedAt);
+      return { endpoint, answered };
     }
   }
 }
@@ -60,26 +57,9 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
 
 /** A body that could not be read, answered alone: too large unread, or not JSON. */
 function answeredOfUnread(read: UnreadBody, call: Call, standards: StandardRejections): Answered {
-  switch (read.kind) {
-    case 'too-large':
-      return { kind: 'fault', response: reservedResponseOf('BODY_TOO_LARGE') };
-    case 'malformed': {
-      const issue: Issue = {
-        part: 'input.body',
-        path: [],
-        code: 'malformed',
-        message: read.message,
-      };
-      const faultedBy = { endpoint: call.endpoint.declared.name };
-      return answeredOfInvalidInput([issue], faultedBy, standards);
-    }
+  if (read.kind === 'too-large') {
+    return { kind: 'fault', response: reservedResponseOf('BODY_TOO_LARGE') };
   }
-}
-
-/** Every response of a Deprecated Endpoint, whatever it answers, carries its `Deprecation` header. */
-function withDeprecation(answered: Answered, endpoint: LiveEndpoint): Answered {
-  if (endpoint.deprecatedAt !== undefined) {
-    answered.response.headers.set('deprecation', deprecationHeaderOf(endpoint.deprecatedAt));
-  }
-  return answered;
+  const faultedBy = { endpoint: call.endpoint.declared.name };
+  return answeredOfInvalidInput([read.issue], faultedBy, standards);
 }

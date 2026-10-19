@@ -1,16 +1,13 @@
 import type { PathSegment } from '../validation/index.ts';
+import type { TextSource } from './text-parts.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
 
-/** The declared Endpoint a request matched, with the texts of its params by name, or none. */
+/** The declared Endpoint a request matched, with where its text comes from, or none. */
 export type Match<Matched extends Matchable> =
   | { readonly kind: 'none' }
-  | {
-      readonly kind: 'matched';
-      readonly matched: Matched;
-      readonly params: Readonly<Record<string, string>>;
-    };
+  | { readonly kind: 'matched'; readonly matched: Matched; readonly source: TextSource };
 
 /**
  * What a request's method and path match exactly, segment by segment, each percent-decoded on its
@@ -18,23 +15,25 @@ export type Match<Matched extends Matchable> =
  */
 export function matchOf<Matched extends Matchable>(
   declared: readonly Matched[],
-  method: string,
-  pathname: string,
+  request: Request,
 ): Match<Matched> {
-  const texts = segmentTextsOf(pathname);
+  const url = new URL(request.url);
+  const texts = segmentTextsOf(url.pathname);
   if (texts.includes('')) {
     return { kind: 'none' };
   }
   let best: Matched | undefined;
   for (const candidate of declared) {
-    if (candidate.method === method && isMatchedBy(candidate.segments, texts)) {
+    if (candidate.method === request.method && isMatchedBy(candidate.segments, texts)) {
       best = best === undefined || beats(candidate.segments, best.segments) ? candidate : best;
     }
   }
   if (best === undefined) {
     return { kind: 'none' };
   }
-  return { kind: 'matched', matched: best, params: paramsOf(best.segments, texts) };
+  const params = paramsOf(best.segments, texts);
+  const source = { params, query: url.searchParams, headers: request.headers };
+  return { kind: 'matched', matched: best, source };
 }
 
 /** The decoded segments of a request path; the root has none, and an empty one matches nothing. */

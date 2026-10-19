@@ -7,8 +7,8 @@ import {
 } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { reservedResponseOf } from '@casitafeliz/loom-contract/internal';
 import type { Http } from '../answering/index.ts';
-import { reservedResponseOf } from '../response/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
 const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
@@ -23,8 +23,8 @@ type Incoming =
 
 /**
  * Connects the handler `serve` returns to `node:http` as a request listener, for a server the
- * Service creates itself; what `http` rejects with, a hook's throw, reaches the process. The URL
- * it builds is always `http://`, which is harmless: `serve` reads only its path and query.
+ * Service creates itself; what `http` rejects with, a hook's throw, reaches the process, and
+ * nothing else does.
  */
 export function nodeListener(http: Http): RequestListener {
   return (incoming, outgoing) => {
@@ -56,10 +56,11 @@ function incomingOf(incoming: IncomingMessage): Incoming {
     return { kind: 'answered', response: reservedResponseOf('NO_SUCH_ENDPOINT') };
   }
   const url = urlOf(incoming);
-  if (url === undefined) {
+  const request = url === undefined ? undefined : requestOf(incoming, url);
+  if (request === undefined) {
     return { kind: 'answered', response: new Response(null, { status: 400 }) };
   }
-  return { kind: 'request', request: requestOf(incoming, url) };
+  return { kind: 'request', request };
 }
 
 /**
@@ -77,7 +78,8 @@ function urlOf(incoming: IncomingMessage): URL | undefined {
   }
   const absolute = URL.parse(target);
   const isHttp = absolute?.protocol === 'http:' || absolute?.protocol === 'https:';
-  return isHttp ? absolute : undefined;
+  const hasCredentials = absolute?.username !== '' || absolute?.password !== '';
+  return isHttp && !hasCredentials ? absolute : undefined;
 }
 
 /** Whether a `Host` header is a host and an optional port, and nothing a URL would read as more. */
@@ -85,7 +87,19 @@ function isBareHost(host: string): boolean {
   return !/[\s/\\?#@]/.test(host) && URL.canParse(`http://${host}`);
 }
 
-function requestOf(incoming: IncomingMessage, url: URL): Request {
+/**
+ * The `Request` of an incoming message on its URL, or none when a `Request` refuses what Node
+ * accepted, so nothing it is given throws past the listener.
+ */
+function requestOf(incoming: IncomingMessage, url: URL): Request | undefined {
+  try {
+    return newRequestOf(incoming, url);
+  } catch {
+    return undefined;
+  }
+}
+
+function newRequestOf(incoming: IncomingMessage, url: URL): Request {
   const headers = new Headers();
   for (let index = 0; index + 1 < incoming.rawHeaders.length; index += 2) {
     headers.append(incoming.rawHeaders[index] ?? '', incoming.rawHeaders[index + 1] ?? '');

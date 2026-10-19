@@ -1,3 +1,4 @@
+import { reservedHeaderNames } from '../declarations/index.ts';
 import {
   isKeyedRecord,
   keyedRecordsOf,
@@ -7,26 +8,30 @@ import {
 } from '../walker/index.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import type { LocatedEndpoint } from './located.ts';
-import { isObjectPart, isQueryOrHeadersPart, type Part, partFieldOf, slotAt } from './parts.ts';
+import {
+  isObjectPart,
+  isQueryOrHeadersPart,
+  type Part,
+  partFieldOf,
+  slotAt,
+  type TextIn,
+} from './parts.ts';
 import { attachedGuardsOf } from './references.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import { textOf } from './written.ts';
 
-/** The parts of a request that travel as text, and a Success's headers with them. */
-type TextPart = 'params' | 'query' | 'headers';
-
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
 /** The text part a slot's fields travel in, by the field its part names; none for the rest. */
-function textPartOf(part: Part): TextPart | undefined {
+function textPartOf(part: Part): TextIn | undefined {
   return isObjectPart(part) ? partFieldOf(part) : undefined;
 }
 
 const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
 
-const nouns: Readonly<Record<TextPart, string>> = {
+const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',
   query: 'A query param',
   headers: 'A header',
@@ -87,16 +92,33 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   ]);
 }
 
-function headerNameFailures(at: Path, part: TextPart, name: string): readonly DeclarationFailure[] {
-  if (part !== 'headers' || name === name.toLowerCase()) {
+/** A lower-case RFC 9110 token: the only header names a Contract declares. */
+const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
+
+function headerNameFailures(at: Path, part: TextIn, name: string): readonly DeclarationFailure[] {
+  if (part !== 'headers') {
     return [];
   }
-  const message = `Header names are lower-case: ${name}`;
-  return [failure([...at, 'fields', name], 'header-names', message)];
+  const message = headerNameMessageOf(name);
+  return message === undefined ? [] : [failure([...at, 'fields', name], 'header-names', message)];
+}
+
+/** What is wrong with a header name: its case, its characters, or a name the host owns. */
+function headerNameMessageOf(name: string): string | undefined {
+  if (name !== name.toLowerCase()) {
+    return `Header names are lower-case: ${name}`;
+  }
+  if (!lowerCaseToken.test(name)) {
+    return `A header name is an RFC 9110 token: ${name}`;
+  }
+  if (reservedHeaderNames.includes(name)) {
+    return `A header the host or cf-loom owns is reserved: ${name}`;
+  }
+  return undefined;
 }
 
 function fieldFailures(
-  { at, part }: { readonly at: Path; readonly part: TextPart },
+  { at, part }: { readonly at: Path; readonly part: TextIn },
   name: string,
   schema: SchemaNode,
 ): readonly DeclarationFailure[] {

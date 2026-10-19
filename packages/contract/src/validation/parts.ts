@@ -113,6 +113,9 @@ export function isInputPart(part: IssuePart): part is InputPart {
 /** The part of the request an invalid-input issue says it read: its `in`. */
 export type InputIn = 'params' | 'query' | 'headers' | 'body';
 
+/** The parts of a request that travel as text, by the field a Handler reads them under. */
+export type TextIn = Exclude<InputIn, 'body'>;
+
 /** Where an invalid-input issue says it sits, `in`: the part of the request it read. */
 export function inOf(part: InputPart): InputIn {
   return partFieldOf(part);

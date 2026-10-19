@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  bodyOf,
   committedValues,
   deprecationHeaderOf,
   faultEnvelopeOf,
@@ -84,8 +85,18 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   });
 
   test('a header value is RFC 9110 field text: tab, visible ASCII, space and U+0080 to U+00FF', () => {
-    const accepted = ['v1', 'a, b', 'café', '\u00ff', '', 'a\tb', '\u0080'];
-    const refused = ['€', '\u0100', 'a\nb', 'a\rb', 'a\u0000b', 'a\u0001b', 'a\u007fb', '😀'];
+    const accepted = ['v1', 'a, b', 'café', '\u00ff', '', 'a\tb', '\u0080', 'a b'];
+    const refused = [
+      '€',
+      '\u0100',
+      'a\nb',
+      'a\rb',
+      'a\u0000b',
+      'a\u0001b',
+      'a\u001fb',
+      'a\u007fb',
+      '😀',
+    ];
 
     expect(accepted.map(isHeaderText)).toEqual(Array(accepted.length).fill(true));
     expect(refused.map(isHeaderText)).toEqual(Array(refused.length).fill(false));
@@ -228,6 +239,43 @@ describe('the content type', () => {
 
     expect(accepted.map(isJsonContentType)).toEqual([true, true, true]);
     expect(refused.map(isJsonContentType)).toEqual([false, false, false, false, false]);
+  });
+});
+
+describe('bodyOf', () => {
+  test('a body sent with another content type is malformed, its Issue at input.body', async () => {
+    const request = new Request('http://test/', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: '{}',
+    });
+
+    const body = await bodyOf(request, undefined);
+
+    expect(body).toEqual({
+      kind: 'malformed',
+      issue: {
+        part: 'input.body',
+        path: [],
+        code: 'malformed',
+        message: 'The content type is not application/json',
+      },
+    });
+  });
+
+  test('a body that is no JSON is malformed, its Issue at input.body', async () => {
+    const request = new Request('http://test/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{',
+    });
+
+    const body = await bodyOf(request, undefined);
+
+    expect(body).toEqual({
+      kind: 'malformed',
+      issue: { part: 'input.body', path: [], code: 'malformed', message: 'The body is not JSON' },
+    });
   });
 });
 

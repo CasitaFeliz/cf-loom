@@ -15,7 +15,7 @@ import {
 } from '@casitafeliz/loom-handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type ServiceFault, serve } from './index.ts';
+import { type ServedFault, serve } from './index.ts';
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -83,7 +83,7 @@ const order = { id: 'o-1', total: 3 };
 const lockedAt = '2026-10-18T10:00:00Z';
 
 function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
-  const faults: ServiceFault[] = [];
+  const faults: ServedFault[] = [];
   const http = serve(
     contract,
     {
@@ -202,6 +202,33 @@ describe('serve: a Success', () => {
   });
 });
 
+describe('serve: a Success body that is JSON null', () => {
+  test('is sent as null, with the JSON content type', async () => {
+    const findNote = defineEndpoint({
+      name: 'findNote',
+      method: 'GET',
+      path: '/note',
+      visibility: 'public',
+      description: 'The note, if any',
+      success: { status: 200, body: z.object({ text: z.string() }).nullable() },
+    });
+    const withNote = defineContract({
+      name: 'notes-service',
+      groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [findNote] })],
+    });
+    const http = serve(withNote, {
+      endpoints: { findNote: handle(findNote, () => success(null)) },
+      guards: {},
+      deprecatedAt: {},
+    });
+
+    const response = await http(new Request('http://test/note'));
+
+    expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(await response.text()).toBe('null');
+  });
+});
+
 describe('serve: a Rejection', () => {
   test('travels with its declared status, code, message and body', async () => {
     const { http } = serveWith(() => reject(orderLocked, { lockedAt }));
@@ -272,6 +299,24 @@ describe('serve: a Fault', () => {
         fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Try again', cause },
       },
     ]);
+  });
+
+  test('a Fault the Handler builds with a reserved code still travels as its own, never as that code', async () => {
+    const forged = {
+      kind: 'fault',
+      code: 'NO_SUCH_ENDPOINT',
+      committed: 'yes',
+      retryable: true,
+      message: 'forged',
+    };
+    const { http } = serveWith(() => forged as never);
+
+    const response = await http(getRequest.clone());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toStrictEqual({
+      fault: { committed: 'yes', retryable: true, message: 'forged' },
+    });
   });
 
   test('a Fault that is not retryable travels with 500', async () => {

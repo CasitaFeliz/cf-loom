@@ -56,6 +56,15 @@ export type Nodes = {
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
+/** The slots of a root's Endpoints and Guards that travel as text, in declaration order. */
+export function textSlotsOf(declarations: Declarations): readonly Slot[] {
+  const slots = [
+    ...declarations.endpoints.flatMap(endpointSlots),
+    ...declarations.guards.flatMap(guardSlots),
+  ];
+  return slots.filter((slot) => isObjectPart(slot.part));
+}
+
 /** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
 export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
   const slots = [
