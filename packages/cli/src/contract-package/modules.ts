@@ -3,19 +3,18 @@ import {
   type DefUse,
   defIdentifierOf,
   defTypeNameOf,
+  type ImportLine,
   type Needs,
   noNeeds,
+  schemaImportsOf,
 } from '../schema-code/index.ts';
 import {
   headerOf,
   moduleTextOf,
   namedImportOf,
   relativeSpecifierOf,
-  stringLiteralOf,
 } from '../source-text/index.ts';
-
-/** Where the Contract Package's recursive defs live, when a schema reaches one. */
-export const defsFile = 'src/defs.ts';
+import { packagePaths } from './paths.ts';
 
 /** A file of the Contract Package, by its path in the package. */
 export type PackageFile = { readonly path: string; readonly text: string };
@@ -50,21 +49,23 @@ export function packageModuleOf(module: PackageModule): PackageFile {
     ...[...needs.defs.values()].map(
       ({ id, mode }): Sibling => ({
         name: defIdentifierOf(id, mode),
-        path: defsFile,
+        path: packagePaths.defs,
         kind: 'value',
       }),
     ),
     ...[...needs.defTypes.values()].map(
-      ({ id, mode }): Sibling => ({ name: defTypeNameOf(id, mode), path: defsFile, kind: 'type' }),
+      ({ id, mode }): Sibling => ({
+        name: defTypeNameOf(id, mode),
+        path: packagePaths.defs,
+        kind: 'type',
+      }),
     ),
   ];
-  const imports = [...siblingImportsOf(path, siblings), ...moduleImportsOf(needs)];
+  const imports = [...siblingImportsOf(path, siblings), ...schemaImportsOf(needs)];
   const sorted = imports.sort((left, right) => byCodePoint(left.specifier, right.specifier));
   const lines = sorted.map(({ line }) => line);
   return { path, text: moduleTextOf({ first: [headerOf('package')], imports: lines, body }) };
 }
-
-type ImportLine = { readonly specifier: string; readonly line: string };
 
 function siblingImportsOf(path: string, siblings: readonly Sibling[]): readonly ImportLine[] {
   const byPath = new Map<string, Map<string, Sibling>>();
@@ -88,25 +89,4 @@ function importedNameOf({ name, kind }: Sibling): string {
     case 'type':
       return `type ${name}`;
   }
-}
-
-/**
- * `@casitafeliz/loom-contract` imported whole as `loom`, so nothing it exports can meet a
- * generated name, and `z` by name, which no generated name can be.
- */
-function moduleImportsOf(needs: Needs): readonly ImportLine[] {
-  const loom = '@casitafeliz/loom-contract';
-  const loomImport = { specifier: loom, line: `import * as loom from ${stringLiteralOf(loom)};` };
-  const zodImport = { specifier: 'zod', line: namedImportOf(['z'], 'zod') };
-  return [
-    ...(needs.modules.has('loom') ? [loomImport] : []),
-    ...(needs.modules.has('zod') ? [zodImport] : []),
-  ];
-}
-
-/** What a module needs that writes `loom.` itself, beside the schemas it writes. */
-export function loomNeeds(): Needs {
-  const needs = noNeeds();
-  needs.modules.add('loom');
-  return needs;
 }

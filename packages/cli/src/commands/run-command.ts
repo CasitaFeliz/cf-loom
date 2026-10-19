@@ -1,5 +1,6 @@
 import { isRootKind } from '../loading/index.ts';
-import { type Exit, type Run, toolingError } from './exit.ts';
+import type { Run } from '../project/index.ts';
+import { type Exit, toolingError } from './exit.ts';
 import { generate } from './generate.ts';
 import { init } from './init.ts';
 import { defaultPackageFolder, writeContractPackage } from './package.ts';

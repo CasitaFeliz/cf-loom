@@ -1,21 +1,24 @@
-import { existsSync, globSync, statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { filesUnder } from '../loading/index.ts';
+import type { BuiltService } from '../project/index.ts';
 import {
   handledOf,
   handlerFolders,
   handlerPathOf,
   namedHandlerPathsOf,
 } from '../service-code/index.ts';
-import type { BuiltService } from './built.ts';
 
 /** The Handler files the Handler map imports. */
-export function handlerPathsOf(service: BuiltService): readonly string[] {
-  return handledOf(service.snapshot).map(handlerPathOf);
+export function handlerPathsOf({ snapshot }: Pick<BuiltService, 'snapshot'>): readonly string[] {
+  return handledOf(snapshot).map(handlerPathOf);
 }
 
 /** A line for every Handler path that something other than a file holds. */
-export function noFileLinesOf(service: BuiltService): readonly string[] {
+export function noFileLinesOf(
+  service: Pick<BuiltService, 'snapshot' | 'project'>,
+): readonly string[] {
   const { directory } = service.project;
   const blocked = handlerPathsOf(service).filter((path) => isNoFile(join(directory, path)));
   return blocked.map((path) => `${path} is no file: a Handler is a file`);
@@ -26,17 +29,19 @@ function isNoFile(path: string): boolean {
 }
 
 /**
- * Every Handler file under the Handlers' folders that no declared Endpoint or Guard names, a
- * Retired one still declared included: after a rename, the map would import a fresh stub.
+ * Every Handler file under the Handlers' folders, through linked folders too, that no declared
+ * Endpoint or Guard names, a Retired one still declared included: after a rename, the map would
+ * import a fresh stub.
  */
-export function orphanLinesOf(service: BuiltService): readonly string[] {
-  const named = namedHandlerPathsOf(service.snapshot);
+export function orphanLinesOf({
+  snapshot,
+  project,
+}: Pick<BuiltService, 'snapshot' | 'project'>): readonly string[] {
+  const named = namedHandlerPathsOf(snapshot);
   const present = handlerFolders.flatMap((folder) =>
-    globSync(`${folder}**/*.handler.ts`, { cwd: service.project.directory }),
+    filesUnder(project.directory, folder, (path) => path.endsWith('.handler.ts')),
   );
-  const orphans = present
-    .map((path) => path.split('\\').join('/'))
-    .filter((path) => !named.has(path));
+  const orphans = present.filter((path) => !named.has(path));
   return orphans
     .sort(byCodePoint)
     .map((path) => `${path} names no declared Endpoint or Guard: delete it`);

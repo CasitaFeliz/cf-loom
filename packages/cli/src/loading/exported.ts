@@ -1,6 +1,6 @@
-import { globSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 
 /** Where the Contract's own files sit in a project. */
@@ -29,8 +29,8 @@ export type ContractExports =
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * Imports every `.ts` under `src/contract/`, tests aside, so a stub imports its declaration from
- * where it is exported: Node gives each the instance the root already holds.
+ * Imports every `.ts` under `src/contract/`, through linked folders too, tests aside, so a stub
+ * imports its declaration from where it is exported: Node gives each the instance the root holds.
  */
 export async function contractExportsOf(directory: string): Promise<ContractExports> {
   const exportsByDeclaration = new Map<unknown, FileExport[]>();
@@ -53,13 +53,11 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
 }
 
 function contractFilesOf(directory: string): readonly string[] {
-  const files = globSync(`${contractFolder}/**/*.ts`, { cwd: directory });
-  const posixFiles = files.map((file) => file.split('\\').join('/'));
-  return posixFiles.filter(isContractSource).sort(byCodePoint);
+  return [...filesUnder(directory, contractFolder, isContractSource)].sort(byCodePoint);
 }
 
 function isContractSource(file: string): boolean {
-  return !file.endsWith('.test.ts') && !file.endsWith('.d.ts');
+  return file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.d.ts');
 }
 
 /** A module's named exports, in code point order. */

@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { walkSchemas } from '@casitafeliz/loom-contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -109,9 +110,9 @@ const everything = [
 
 /** An Endpoint with two params, a query, Success headers, a Guard listing another, and a Rejection body. */
 const richEndpoint = [
-  "const base = defineGuard({ name: 'base', description: 'Base', context: z.object({ userId: z.string() }) });",
+  "export const base = defineGuard({ name: 'base', description: 'Base', context: z.object({ userId: z.string() }) });",
   "const denied = defineRejection({ code: 'DENIED', status: 403, message: 'Denied' });",
-  'const session = defineGuard({',
+  'export const session = defineGuard({',
   "  name: 'session',",
   "  description: 'Session',",
   '  guards: [base],',
@@ -176,7 +177,7 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/proto',",
     "  visibility: 'public',",
     "  description: 'Proto',",
-    "  input: { body: z.object({ ['__proto__']: z.string(), b: z.string() }) },",
+    '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
     '  success: { status: 204 },',
     '});',
     "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto] });",
@@ -260,6 +261,7 @@ type Parsed = { readonly success: boolean; readonly data?: Record<string, unknow
 
 let folder = '';
 let echo: Endpoint;
+let entrySnapshot: unknown;
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
 let snapshot: {
@@ -278,6 +280,7 @@ beforeAll(async () => {
   link(cliDir, join(project, 'node_modules/@casitafeliz/loom-cli'));
   link(zodDir, join(project, 'node_modules/zod'));
   write(project, service);
+  spawnSync(process.execPath, [bin, 'generate'], { cwd: project, encoding: 'utf8' });
   const packaged = spawnSync(process.execPath, [bin, 'package', '--out', out], {
     cwd: project,
     encoding: 'utf8',
@@ -289,6 +292,7 @@ beforeAll(async () => {
   expect(built.stdout).toBe('');
   const entry = await import(pathToFileURL(join(out, 'dist/index.js')).href);
   echo = entry.contract.endpoints.echo;
+  entrySnapshot = entry.snapshot;
   rich = entry.contract.endpoints.rich;
   proto = entry.contract.endpoints.proto;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
@@ -431,7 +435,12 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['stem']).toEqual(sample.stem);
   });
 
-  test('a field named __proto__ walks back to the Snapshot’s node', () => {
+  test('the entry’s snapshot is snapshot.json, a __proto__ key in an example included', () => {
+    expect(isDeepStrictEqual(entrySnapshot, snapshot)).toBe(true);
+    expect(JSON.stringify(entrySnapshot)).toContain('"__proto__"');
+  });
+
+  test('an example holding a __proto__ key walks back to the Snapshot’s node', () => {
     expect(walkedOf(proto.input.body)).toEqual({
       kind: 'walked',
       value: snapshot.endpoints['POST /proto']?.input.body,

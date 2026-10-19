@@ -22,7 +22,7 @@ export const config = defineConfig({
 });
 ```
 
-`scope` is always required; `registry` and `directory` are required by `check`, `publish`, `broker-plan` and `route-plan`; `generate` and `verify` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
+`scope` is always required; `registry` and `directory` are required by `check`, `publish`, `broker-plan` and `route-plan`; `generate`, `verify` and `package` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
 
 npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. `@casitafeliz/loom-cli/directories` ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry (see [Publishing to the directory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md#publishing-to-the-directory)), and a fixed list for tests. Versions and metadata always come from the standard package metadata. The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. The directory is read with the same credentials the check uses, which must be able to read the whole scope.
 
@@ -46,7 +46,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom openapi` | Writes an OpenAPI 3.1 document of the Endpoints from the Snapshot (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
 | `cf-loom asyncapi` | Writes an AsyncAPI document of the Events from the Snapshot (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
 | `cf-loom verify` | Fails if `contract.snapshot.json`, `src/handlers.generated.ts` or `src/readers.generated.ts` was edited or is out of date, if a Handler file the Handler map imports is missing or is no file, or if a Handler file names no declared Endpoint or Guard. It compares files only and loads no export, so it does not repeat `generate`'s export checks; it writes nothing |
-| `cf-loom package [--out <dir>]` | Validates the Contract as `generate` does and writes its Contract Package to `<dir>`, `contract-package/` next to `cf-loom.config.ts` by default, a Service's or an Application's (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md), ready for `tsc -p <dir>`; `publish` publishes the same package. It runs offline. The folder must be missing, empty, or a previous output, which holds only what `package` writes (`package.json` with `cfLoom`, `snapshot.json`, `tsconfig.json`, `src/`) and a build's `dist/`, and is replaced whole; anything else, a symbolic link included, is refused and left as it was. A Definitions Package has no Contract Package: it is published from its own source |
+| `cf-loom package [--out <dir>]` | Writes the Contract Package of a Service or an Application to `<dir>`, `contract-package/` next to `cf-loom.config.ts` by default, generated from the committed `contract.snapshot.json`, which must be what `generate` would write (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md), ready for `tsc -p <dir>`; `publish` generates the package the same way, from the Snapshot with its `version` and history filled in (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). The folder must be missing, empty, or a previous output, which holds only what `package` writes (`package.json` with `cfLoom`, `snapshot.json`, `tsconfig.json`, `src/`), beside a build's `dist/` or an install's `node_modules/`, which are kept while the rest is replaced; anything else, a symbolic link included, is refused and left as it was. A Definitions Package has no Contract Package: it is published from its own source |
 | `cf-loom check [--json]` | Runs the Compatibility Check against the Baseline (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md) |
 | `cf-loom publish [--force]` | Builds the Contract, writes the Snapshot, derives the version and publishes the Contract Package (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md); `--force` publishes even when nothing changed (see [Versioning](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#versioning) in COMPATIBILITY.md) |
 
@@ -73,6 +73,7 @@ Exit 1, the check failed:
 | `guards.<name> is not exported as <name> by <package>`, for a Guard of a Definitions Package | `generate` |
 | `<path> names no declared Endpoint or Guard: delete it` | `generate`, `verify` |
 | `<path> is no file: a Handler is a file` | `generate`, `verify` |
+| `contract.snapshot.json is missing or out of date: run cf-loom generate` | `package` |
 | `<path> was edited or is out of date: run cf-loom generate` | `verify` |
 | `<path> is missing: run cf-loom generate` | `verify` |
 | `contract.snapshot.json was edited: it is no JSON (<reason>)` | `verify` |
@@ -85,12 +86,13 @@ Exit 3, a tooling error:
 | `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom <command>` | `generate`, `package` |
 | `<file> cannot be loaded: …`, for a file under `src/contract/` the root does not import | `generate` |
 | `<package> is not installed: install it to list it`, for a listed Definitions Package | `generate`, `verify`, `package` |
-| `<package> has no version in its package.json` | `generate`, `verify`, `package` |
+| `<package> has no version in its package.json`, for a listed Definitions Package | `generate`, `verify`, `package` |
 | `<path> cannot be written: …` | `generate`, `package` |
 | `<dir> holds files package did not write: package writes to a missing or empty folder, or over its own output` | `package` |
 | `<dir> is no folder: package writes a folder` | `package` |
 | `<dir> is a symbolic link: package writes a folder of its own` | `package` |
-| `@casitafeliz/loom-contract is not installed: a Contract Package is built with it` (or `zod`) | `package` |
+| `<peer> is not installed: a Contract Package is built with it`, for `zod` or `@casitafeliz/loom-contract` | `package` |
+| `<peer> has no version in its package.json: a Contract Package is built with it` | `package` |
 | `A Definitions Package has no Contract Package: it is published from its own source` | `package` |
 | `The codes <code> and <code> are one name in code: rename one of them` | `package` |
 | `The recursion id <id> is no name in code: rename it` | `package` |
@@ -101,6 +103,7 @@ Exit 3, a usage error, each followed by the usage line:
 | Line | Command |
 | --- | --- |
 | `Unknown command: <command>` | any |
+| `Unknown kind: <kind>`, `init takes one kind` | `init` |
 | `Unknown option: <option>` | any |
 | `--out takes a folder` | `package` |
 | `Only package takes --out` | `init`, `generate`, `verify` |

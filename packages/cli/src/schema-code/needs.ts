@@ -41,3 +41,28 @@ export function addDefUse(uses: DefUses, use: DefUse): void {
 export function defUseKeyOf(use: DefUse): string {
   return JSON.stringify([use.mode, use.id]);
 }
+
+/** What a module needs that writes `loom.` itself, beside the schemas it writes. */
+export function loomNeeds(): Needs {
+  const needs = noNeeds();
+  needs.modules.add('loom');
+  return needs;
+}
+
+/** An import line of generated code, by the specifier it is ordered by. */
+export type ImportLine = { readonly specifier: string; readonly line: string };
+
+/**
+ * The imports the modules a generated module needs: `@casitafeliz/loom-contract` whole as
+ * `loom`, so nothing it exports can meet a generated name, and `z` by name, which no generated
+ * name can be.
+ */
+export function schemaImportsOf(needs: Needs): readonly ImportLine[] {
+  const loom = '@casitafeliz/loom-contract';
+  const loomImport = { specifier: loom, line: `import * as loom from '${loom}';` };
+  const zodImport = { specifier: 'zod', line: "import { z } from 'zod';" };
+  return [
+    ...(needs.modules.has('loom') ? [loomImport] : []),
+    ...(needs.modules.has('zod') ? [zodImport] : []),
+  ];
+}

@@ -1,8 +1,13 @@
-import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
+import type {
+  EnumNode,
+  ObjectNode,
+  SchemaNode,
+  TaggedNode,
+  TupleNode,
+} from '@casitafeliz/loom-contract/internal';
 import { keyOf, literalOf } from '../source-text/index.ts';
 import { defTypeNameOf } from './def-names.ts';
 import { addDefUse, type Needs, noNeeds, type SchemaMode } from './needs.ts';
-import type { NodeOf } from './nodes.ts';
 
 /**
  * The TypeScript type of what a generated schema returns, written out only for a recursive def,
@@ -58,13 +63,13 @@ function shapeTypeOf(node: SchemaNode, typing: Typing): string {
   }
 }
 
-function enumTypeOf(node: NodeOf<'enum'>, mode: SchemaMode): string {
+function enumTypeOf(node: EnumNode, mode: SchemaMode): string {
   const values = node.values.map(literalOf);
   const unknownCase = node.open && mode === 'reader' ? ['{ unknown: string }'] : [];
   return `(${[...values, ...unknownCase].join(' | ')})`;
 }
 
-function objectTypeOf(node: NodeOf<'object'>, typing: Typing): string {
+function objectTypeOf(node: ObjectNode, typing: Typing): string {
   const fields = Object.entries(node.fields).map(([name, field]) => {
     const optional = field.required ? '' : '?';
     return `${keyOf(name)}${optional}: ${typeOf(field.schema, typing)}`;
@@ -72,14 +77,14 @@ function objectTypeOf(node: NodeOf<'object'>, typing: Typing): string {
   return fields.length === 0 ? '{}' : `{ ${fields.join('; ')} }`;
 }
 
-function tupleTypeOf(node: NodeOf<'tuple'>, typing: Typing): string {
+function tupleTypeOf(node: TupleNode, typing: Typing): string {
   const items = node.items.map((item) => typeOf(item, typing));
   const rest = node.rest === undefined ? [] : [`...Array<${typeOf(node.rest, typing)}>`];
   return `[${[...items, ...rest].join(', ')}]`;
 }
 
 /** A discriminated union's variants; an Open Union's reader adds its Unknown case. */
-function taggedTypeOf(node: NodeOf<'tagged'>, typing: Typing): string {
+function taggedTypeOf(node: TaggedNode, typing: Typing): string {
   const variants = variantsTypeOf(node, typing.mode, typing.needs);
   if (!node.open || typing.mode === 'declared') {
     return variants;
@@ -90,7 +95,7 @@ function taggedTypeOf(node: NodeOf<'tagged'>, typing: Typing): string {
 }
 
 /** The type of a discriminated union's declared variants. */
-function variantsTypeOf(node: NodeOf<'tagged'>, mode: SchemaMode, needs: Needs): string {
+function variantsTypeOf(node: TaggedNode, mode: SchemaMode, needs: Needs): string {
   const variants = Object.entries(node.variants).map(([, variant]) =>
     typeTextOf(variant, mode, needs),
   );

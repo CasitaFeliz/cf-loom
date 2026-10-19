@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -57,6 +57,14 @@ function edit(project: string, path: string, change: (text: string) => string): 
 
 function read(project: string, path: string): string {
   return readFileSync(join(project, path), 'utf8');
+}
+
+/** Runs `cf-loom` in the background, so two runs can overlap. */
+function cfLoomAsync(project: string, ...args: string[]) {
+  return new Promise<{ status: number | null }>((resolve) => {
+    const child = spawn(process.execPath, [bin, ...args], { cwd: project, stdio: 'ignore' });
+    child.on('close', (status) => resolve({ status }));
+  });
 }
 
 function cfLoom(project: string, ...args: string[]) {
@@ -750,5 +758,82 @@ describe('cf-loom: options', () => {
 
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(/^Only package takes --out\. Usage: /);
+  });
+});
+
+describe('cf-loom generate: linked folders and other runs', () => {
+  test('a Guard exported behind a linked src/contract/guards gets its stub', () => {
+    const service = aService();
+    const project = aProject({
+      ...service,
+      'shared/guards/api-key.guard.ts': apiKeyGuard,
+      'shared/guards/legacy-key.guard.ts': legacyKeyGuard,
+    });
+    rmSync(join(project, 'src/contract/guards'), { recursive: true });
+    symlinkSync(join(project, 'shared/guards'), join(project, 'src/contract/guards'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/guards/api-key.handler.ts')).toContain(
+      "import { apiKey } from '../contract/guards/api-key.guard.ts';",
+    );
+  });
+
+  test('an orphan Handler behind a linked folder exits 1 naming it', () => {
+    const project = aProject({
+      ...aService(),
+      'elsewhere/old.handler.ts': "export default 'old';\n",
+    });
+    mkdirSync(join(project, 'src/endpoints'), { recursive: true });
+    symlinkSync(join(project, 'elsewhere'), join(project, 'src/endpoints/other'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/endpoints/other/old.handler.ts names no declared Endpoint or Guard: delete it\n',
+    });
+  });
+
+  test('a link back up does not loop', () => {
+    const project = aProject(aService());
+    mkdirSync(join(project, 'src/endpoints'), { recursive: true });
+    symlinkSync(join(project, 'src'), join(project, 'src/endpoints/up'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test('two generate runs at once both complete, each keeping the other’s stubs', async () => {
+    const project = aProject(aService());
+
+    const ran = await Promise.all([
+      cfLoomAsync(project, 'generate'),
+      cfLoomAsync(project, 'generate'),
+    ]);
+
+    expect(ran.map(({ status }) => status)).toEqual([0, 0]);
+    expect(cfLoom(project, 'verify').status).toBe(0);
+  });
+
+  test('a file under src/contract the root does not import that cannot be loaded is a tooling error', () => {
+    const project = aProject({ ...aService(), 'src/contract/broken.ts': 'export const = ;\n' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^src\/contract\/broken\.ts cannot be loaded: [^\n]+\n$/);
+  });
+
+  test.each(['generate', 'verify'])('%s takes no argument', (command) => {
+    const project = aProject(aService());
+
+    const ran = cfLoom(project, command, 'now');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(new RegExp(`^${command} takes no argument\\. Usage: `));
   });
 });

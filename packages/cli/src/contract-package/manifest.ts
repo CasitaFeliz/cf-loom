@@ -1,31 +1,29 @@
 import type { ApplicationSnapshot, ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
 import { snapshotHashOf } from './hash.ts';
 import type { PackageFile } from './modules.ts';
-
-/** The version a Contract Package carries until `publish` derives one. */
-export const localVersion = '0.0.0';
+import { packagePaths } from './paths.ts';
 
 /** The versions of the two peers the package is built with, as installed beside the root. */
 export type Peers = { readonly contract: string; readonly zod: string };
 
-/** Who the package is published as and what it is built with. */
-export type Packaging = { readonly scope: string; readonly peers: Peers };
+/** Who the package is published as, at which version, and what it is built with. */
+export type Packaging = { readonly scope: string; readonly version: string; readonly peers: Peers };
 
 /**
- * The package.json: named `<scope>/contract-<name>`, at the local version, peers on `zod` and
+ * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and
  * `@casitafeliz/loom-contract` only with a caret on the versions built with, and the `cfLoom`
  * metadata the dependency graph is read from.
  */
 export function manifestOf(
   snapshot: ServiceSnapshot | ApplicationSnapshot,
-  { scope, peers }: Packaging,
+  { scope, version, peers }: Packaging,
 ): PackageFile {
   const manifest = {
     name: `${scope}/contract-${snapshot.name}`,
-    version: localVersion,
+    version,
     type: 'module',
     exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
-    files: ['dist', 'snapshot.json'],
+    files: ['dist', packagePaths.snapshot],
     sideEffects: false,
     peerDependencies: {
       '@casitafeliz/loom-contract': `^${peers.contract}`,
@@ -38,7 +36,7 @@ export function manifestOf(
       dependencies: snapshot.dependencies,
     },
   };
-  return { path: 'package.json', text: `${JSON.stringify(manifest, null, 2)}\n` };
+  return { path: packagePaths.manifest, text: `${JSON.stringify(manifest, null, 2)}\n` };
 }
 
 /**
@@ -64,5 +62,5 @@ export function tsconfigOf(): PackageFile {
     },
     include: ['src'],
   };
-  return { path: 'tsconfig.json', text: `${JSON.stringify(tsconfig, null, 2)}\n` };
+  return { path: packagePaths.tsconfig, text: `${JSON.stringify(tsconfig, null, 2)}\n` };
 }

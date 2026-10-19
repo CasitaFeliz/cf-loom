@@ -415,6 +415,20 @@ describe('cf-loom generate', () => {
     });
   });
 
+  test('a field named __proto__ exits 1 in one line, since zod drops it when parsing', () => {
+    const body = "z.object({ ['__proto__']: z.string() })";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body.fields.__proto__ not allowed: a field named __proto__ (zod drops it when parsing)\n',
+    });
+  });
+
   test('a broken rule exits 1 with its location, rule and message', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     write(project, {
@@ -853,21 +867,23 @@ describe('cf-loom generate and verify: contract.snapshot.json on disk', () => {
     },
   );
 
-  test('a write that fails leaves the committed contract.snapshot.json as it was', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    const committed = read(project, 'contract.snapshot.json');
-    write(project, {
-      ...aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }),
-      'contract.snapshot.json.tmp/kept.txt': '',
-    });
+  test.skipIf(isRoot)(
+    'a write that fails leaves the committed contract.snapshot.json as it was (skipped as root)',
+    () => {
+      const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+      expect(cfLoom(project, 'generate').status).toBe(0);
+      const committed = read(project, 'contract.snapshot.json');
+      write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
+      chmodSync(project, 0o555);
 
-    const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: [^\n]+\n$/);
-    expect(read(project, 'contract.snapshot.json')).toBe(committed);
-  });
+      chmodSync(project, 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be written: [^\n]+\n$/);
+      expect(read(project, 'contract.snapshot.json')).toBe(committed);
+    },
+  );
 });
 
 describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {

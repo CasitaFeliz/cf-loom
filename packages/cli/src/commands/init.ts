@@ -9,7 +9,8 @@ import {
   rootFiles,
   rootPlaces,
 } from '../loading/index.ts';
-import { done, type Exit, type Run, toolingError } from './exit.ts';
+import type { Run } from '../project/index.ts';
+import { done, type Exit, toolingError } from './exit.ts';
 import { configTemplateOf, rootTemplateOf } from './templates.ts';
 
 /** The files `init` writes, each path relative to the project with its text. */

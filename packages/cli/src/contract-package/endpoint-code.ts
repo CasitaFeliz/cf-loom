@@ -1,26 +1,16 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
+  type ListedRejection,
   methodAndPathOf,
+  ownRejectionsOf,
   type ServiceSnapshot,
 } from '@casitafeliz/loom-contract/internal';
-import { type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
+import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
-import { loomNeeds, packageModuleOf, type SchemaFile } from './modules.ts';
-import {
-  endpointBindingOf,
-  endpointFileOf,
-  guardBindingOf,
-  guardSiblingOf,
-  rejectionBindingOf,
-  rejectionSiblingOf,
-} from './names.ts';
-import {
-  type ExportedEndpoint,
-  isDeclared,
-  type ListedRejection,
-  ownRejectionsOf,
-} from './reached.ts';
+import { packageModuleOf, type SchemaFile } from './modules.ts';
+import { bindingOf, fileOf, siblingOf } from './names.ts';
+import { type ExportedEndpoint, isDeclared } from './reached.ts';
 import { partsLinesOf } from './schema-lines.ts';
 
 /**
@@ -34,10 +24,12 @@ export function endpointModuleOf(
   const { endpoint } = exported;
   const needs = loomNeeds();
   const rejections = ownRejectionsOf(endpoint, snapshot);
-  const guards = endpoint.guards.map(({ guard }) => guardSiblingOf(guard));
-  const declared = rejections.filter(isDeclared).map(({ code }) => rejectionSiblingOf(code));
+  const guards = endpoint.guards.map(({ guard }) => siblingOf({ kind: 'guard', name: guard }));
+  const declared = rejections
+    .filter(isDeclared)
+    .map(({ code }) => siblingOf({ kind: 'rejection', name: code }));
   const file = packageModuleOf({
-    path: endpointFileOf(endpoint.name),
+    path: fileOf({ kind: 'endpoint', name: endpoint.name }),
     body: endpointBodyOf(exported, rejections, needs),
     siblings: [...guards, ...declared],
     needs,
@@ -55,7 +47,7 @@ function endpointBodyOf(
   const reader: Writing = { mode: 'reader', needs };
   const listed = rejections.map(rejectionNameOf);
   return [
-    `export const ${endpointBindingOf(endpoint.name)} = loom.defineEndpoint({`,
+    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.defineEndpoint({`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     `  visibility: ${stringLiteralOf(endpoint.visibility)},`,
@@ -84,8 +76,8 @@ function guardsLinesOf(guards: readonly AttachmentSnapshot[]): readonly string[]
   }
   const attachments = guards.map(({ guard, qualifier }) =>
     qualifier === null
-      ? guardBindingOf(guard)
-      : `{ guard: ${guardBindingOf(guard)}, qualifier: ${jsonLiteralOf(qualifier)} }`,
+      ? bindingOf({ kind: 'guard', name: guard })
+      : `{ guard: ${bindingOf({ kind: 'guard', name: guard })}, qualifier: ${jsonLiteralOf(qualifier)} }`,
   );
   return [`  guards: [${attachments.join(', ')}],`];
 }
@@ -106,6 +98,6 @@ function rejectionNameOf(rejection: ListedRejection): string {
     case 'not-found':
       return 'loom.notFound';
     case 'declared':
-      return rejectionBindingOf(rejection.code);
+      return bindingOf({ kind: 'rejection', name: rejection.code });
   }
 }

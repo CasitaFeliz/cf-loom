@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { randomUUID } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +11,6 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { oneLineOf } from '../loading/index.ts';
-import { type Exit, toolingError } from './exit.ts';
 
 /**
  * A file a command generates, relative to the project: one regenerated `always`, or a stub
@@ -22,10 +22,10 @@ export type GeneratedFile = {
   readonly written: 'always' | 'once';
 };
 
-/** The files written, by path, or the tooling error that stopped at one of them. */
+/** The files written, by path, or the file a write stopped at, in one line. */
 export type Written =
   | { readonly kind: 'written'; readonly paths: readonly string[] }
-  | { readonly kind: 'stopped'; readonly exit: Exit };
+  | { readonly kind: 'failed'; readonly message: string };
 
 /** What became of one file: written, kept since its Handler exists, or why it failed. */
 type FileWrite =
@@ -34,17 +34,16 @@ type FileWrite =
   | { readonly kind: 'failed'; readonly reason: string };
 
 /**
- * Writes each file in order: a regenerated one beside its target, renamed over it, so a failed
- * write leaves the file as it was; a stub only where no Handler exists. A rerun completes what a
- * failure left undone.
+ * Writes each file in order: a regenerated one beside its target under a name of this run's,
+ * renamed over it, so a failed or concurrent write leaves a whole file; a stub only where no
+ * Handler exists. A rerun completes what a failure left undone.
  */
 export function writeFiles(directory: string, files: readonly GeneratedFile[]): Written {
   const paths: string[] = [];
   for (const file of files) {
     const written = writeFile(directory, file);
     if (written.kind === 'failed') {
-      const exit = toolingError(`${file.path} cannot be written: ${written.reason}`);
-      return { kind: 'stopped', exit };
+      return { kind: 'failed', message: `${file.path} cannot be written: ${written.reason}` };
     }
     if (written.kind === 'written') {
       paths.push(file.path);
@@ -55,7 +54,7 @@ export function writeFiles(directory: string, files: readonly GeneratedFile[]): 
 
 function writeFile(directory: string, file: GeneratedFile): FileWrite {
   const path = join(directory, file.path);
-  const temporary = `${path}.tmp`;
+  const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     mkdirSync(dirname(path), { recursive: true });
     if (file.written === 'once') {
@@ -70,12 +69,17 @@ function writeFile(directory: string, file: GeneratedFile): FileWrite {
   }
 }
 
+/** A stub, written only where nothing is, so a Handler another run just wrote is kept too. */
 function writeOnce(path: string, file: GeneratedFile): FileWrite {
-  if (existsSync(path)) {
-    return { kind: 'kept' };
+  try {
+    writeFileSync(path, file.text, { flag: 'wx' });
+    return { kind: 'written' };
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && e.code === 'EEXIST') {
+      return { kind: 'kept' };
+    }
+    throw e;
   }
-  writeFileSync(path, file.text, { flag: 'wx' });
-  return { kind: 'written' };
 }
 
 /** Whether a generated file on disk holds exactly what would be generated. */

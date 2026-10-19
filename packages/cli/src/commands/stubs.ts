@@ -2,10 +2,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@casitafeliz/loom-contract/internal';
 import { contractExportsOf, type ExportedAt, type FileExport } from '../loading/index.ts';
+import type { BuiltService, Tooling } from '../project/index.ts';
 import { type Handled, handledOf, handlerPathOf, stubTextOf } from '../service-code/index.ts';
-import { type BuiltService, type Stopped, stopped } from './built.ts';
-import { toolingError } from './exit.ts';
-import type { GeneratedFile } from './writing.ts';
+import type { GeneratedFile } from '../writing/index.ts';
 
 /**
  * The stubs `generate` writes, and a line for every handled Element a stub could not import as
@@ -23,11 +22,11 @@ type Located =
   | { readonly kind: 'refused'; readonly line: string };
 
 /** The stub of every Handler that does not exist yet, importing its Element as it is named. */
-export async function stubsOf(service: BuiltService): Promise<Stubs | Stopped> {
+export async function stubsOf(service: BuiltService): Promise<Stubs | Tooling> {
   const { directory } = service.project;
   const exports = await contractExportsOf(directory);
   if (exports.kind === 'failed') {
-    return stopped(toolingError(exports.message));
+    return { kind: 'tooling', message: exports.message };
   }
   const located = handledOf(service.snapshot).map((handled) =>
     locatedOf(service, handled, exports.exportsOf),

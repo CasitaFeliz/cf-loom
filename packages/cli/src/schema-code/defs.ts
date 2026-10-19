@@ -3,6 +3,7 @@ import { byCodePoint } from '@casitafeliz/loom-contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
 import { type DefUse, defUseKeyOf, type Needs, noNeeds } from './needs.ts';
+import { refsOf } from './refs.ts';
 import { typeTextOf } from './type-text.ts';
 import { zodExpressionOf } from './zod-expression.ts';
 
@@ -26,9 +27,7 @@ export function reachedDefUsesOf(defs: Defs, referenced: readonly DefUse[]): rea
       continue;
     }
     reached.set(key, use);
-    const needs = noNeeds();
-    zodExpressionOf(node, { mode: use.mode, needs });
-    pending.push(...needs.defs.values());
+    pending.push(...refsOf(node).map((id): DefUse => ({ id, mode: use.mode })));
   }
   return [...reached.values()].sort((left, right) =>
     byCodePoint(defIdentifierOf(left.id, left.mode), defIdentifierOf(right.id, right.mode)),
@@ -58,7 +57,7 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   const schema = mode === 'declared' ? `${lazy}.meta({ id: ${stringLiteralOf(id)} })` : lazy;
   const lines = [
     `export type ${typeName} = ${typeTextOf(node, mode, own)};`,
-    `export const ${defIdentifierOf(id, mode)}: ${annotationOf(node, typeName)} = ${schema};`,
+    `export const ${defIdentifierOf(id, mode)}: ${annotationOf(node, { typeName, mode })} = ${schema};`,
   ];
   for (const module of own.modules) {
     needs.modules.add(module);
@@ -66,13 +65,17 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   return lines;
 }
 
+/** A def's type name, and the mode it is written in. */
+type DefNames = { readonly typeName: string; readonly mode: DefUse['mode'] };
+
 /**
- * A def's annotation: its output type, and for an object, that zod's discriminated union may
- * take it as a variant, so a union with a recursive variant needs no cast and a written type
- * that disagrees with the schema fails to compile.
+ * A def's annotation, so a written type that disagrees with the schema fails to compile: its
+ * output type, its input type too as declared, and for an object, that it is a variant zod's
+ * discriminated union takes.
  */
-function annotationOf(node: SchemaNode, typeName: string): string {
-  const output = `z.ZodType<${typeName}>`;
+function annotationOf(node: SchemaNode, { typeName, mode }: DefNames): string {
+  const output =
+    mode === 'declared' ? `z.ZodType<${typeName}, ${typeName}>` : `z.ZodType<${typeName}>`;
   const isObject = node.type === 'object' && node.nullable !== true;
   return isObject ? `${output} & z.core.$ZodTypeDiscriminable` : output;
 }

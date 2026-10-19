@@ -1,28 +1,31 @@
 import { join } from 'node:path';
 import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
-import { type BuiltProject, builtOf, noJsonExitOf } from './built.ts';
-import { type Exit, type Run, toolingError } from './exit.ts';
-import { writeContractPackageTo } from './package-target.ts';
+import { type BuiltProject, builtOf, type Run, snapshotFile } from '../project/index.ts';
+import { writeContractPackageTo } from '../writing/index.ts';
+import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
 
 /** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`. */
 export const defaultPackageFolder = 'contract-package';
 
+/** The version a Contract Package `package` writes carries, until `publish` derives one. */
+const localVersion = '0.0.0';
+
 /**
  * Writes the Contract Package of a Service or an Application to `out`, generated from the
- * declared Snapshot, so it can be built and tried before `publish`; a Definitions Package is its
- * own source and has none.
+ * committed Snapshot, which must be what `generate` would write, so the package is a function of
+ * the reviewed file; a Definitions Package is its own source and has none.
  */
 export async function writeContractPackage(run: Run, out: string): Promise<Exit> {
-  const built = await builtOf(run, 'running');
-  if (built.kind === 'stopped') {
-    return built.exit;
+  const built = await builtOf(run, 'committed');
+  if (built.kind !== 'built') {
+    return failureExitOf(built);
   }
-  const noJson = noJsonExitOf(built, 'package');
-  if (noJson !== undefined) {
-    return noJson;
+  const stop = stopOf(built);
+  if (stop !== undefined) {
+    return stop;
   }
-  const { snapshot } = built;
+  const { snapshot, text, project } = built;
   if (snapshot.kind === 'definitions') {
     return toolingError(
       'A Definitions Package has no Contract Package: it is published from its own source',
@@ -32,14 +35,26 @@ export async function writeContractPackage(run: Run, out: string): Promise<Exit>
   if (peers.kind === 'failed') {
     return toolingError(peers.message);
   }
-  const files = contractPackageFilesOf(snapshot, {
-    scope: built.project.scope,
-    peers: peers.peers,
-  });
+  const packaging = { scope: project.scope, version: localVersion, peers: peers.peers };
+  const files = contractPackageFilesOf({ snapshot, text }, packaging);
   if (files.kind === 'unnamed') {
     return toolingError(files.line);
   }
-  return writeContractPackageTo(run.cwd, out, files.files);
+  const written = writeContractPackageTo(run.cwd, out, files.files);
+  return written.kind === 'written' ? done([`Wrote ${out}`]) : toolingError(written.message);
+}
+
+/** A committed Snapshot that is no JSON, or is not what `generate` would write. */
+function stopOf(built: BuiltProject): Exit | undefined {
+  const noJson = noJsonExitOf(built.committed, 'package');
+  if (noJson !== undefined) {
+    return noJson;
+  }
+  const { committed } = built;
+  if (committed.kind === 'json' && committed.bytes.equals(built.bytes)) {
+    return undefined;
+  }
+  return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
 }
 
 /** The versions of the two peers as the root file imports them, which the package is built with. */

@@ -1,3 +1,4 @@
+import { type BuiltProject, type BuiltService, snapshotFile } from '../project/index.ts';
 import {
   handledOf,
   handlerMapFile,
@@ -5,8 +6,7 @@ import {
   readersFile,
   readersTextOf,
 } from '../service-code/index.ts';
-import { type BuiltProject, type BuiltService, snapshotFile } from './built.ts';
-import type { GeneratedFile } from './writing.ts';
+import type { GeneratedFile } from '../writing/index.ts';
 
 /** `contract.snapshot.json`, which every root regenerates. */
 export function snapshotFileOf(built: BuiltProject): GeneratedFile {

@@ -1,5 +1,6 @@
 export type { ContractExports, ExportedAt, FileExport } from './exported.ts';
 export { contractExportsOf } from './exported.ts';
+export { filesUnder } from './files-under.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
 export type { InstalledVersion } from './installed-package.ts';

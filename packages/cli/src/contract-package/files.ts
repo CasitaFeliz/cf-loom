@@ -1,8 +1,6 @@
 import {
   type ApplicationSnapshot,
   byCodePoint,
-  canonicalSnapshotOf,
-  canonicalTextOf,
   type ServiceSnapshot,
 } from '@casitafeliz/loom-contract/internal';
 import {
@@ -20,8 +18,9 @@ import {
 } from './entry-code.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
-import { defsFile, type PackageFile, packageModuleOf } from './modules.ts';
+import { type PackageFile, packageModuleOf } from './modules.ts';
 import { collidingCodesOf } from './names.ts';
+import { packagePaths } from './paths.ts';
 import { type Reached, reachedOf } from './reached.ts';
 import { rejectionModuleOf } from './rejection-code.ts';
 
@@ -30,26 +29,30 @@ export type ContractPackageFiles =
   | { readonly kind: 'files'; readonly files: readonly PackageFile[] }
   | { readonly kind: 'unnamed'; readonly line: string };
 
+/** A Snapshot in canonical order, every map in code point order, with its canonical text. */
+export type CanonicalSnapshot = {
+  readonly snapshot: ServiceSnapshot | ApplicationSnapshot;
+  readonly text: string;
+};
+
 /**
  * The Contract Package of a Service or an Application, generated from its canonical Snapshot
- * alone, so what is published is exactly what the Snapshot describes.
+ * alone, so what is published is exactly what the Snapshot describes, in the Snapshot's order.
  */
 export function contractPackageFilesOf(
-  declared: ServiceSnapshot | ApplicationSnapshot,
+  { snapshot, text }: CanonicalSnapshot,
   packaging: Packaging,
 ): ContractPackageFiles {
-  const snapshot = canonicalSnapshotOf(declared);
-  const text = canonicalTextOf(snapshot);
   const packageFiles = [
     manifestOf(snapshot, packaging),
-    { path: 'snapshot.json', text },
+    { path: packagePaths.snapshot, text },
     tsconfigOf(),
-    snapshotModuleOf(text),
+    snapshotModuleOf(snapshot),
   ];
   if (snapshot.kind === 'application') {
     return { kind: 'files', files: [...packageFiles, applicationEntryOf()] };
   }
-  const sources = serviceSourcesOf(snapshot);
+  const sources = serviceSourcesOf(snapshot, packaging.version);
   if (sources.kind === 'unnamed') {
     return sources;
   }
@@ -60,14 +63,14 @@ export function contractPackageFilesOf(
  * A Service's sources: the entry, each exported Endpoint, the Guards and codes they reach, and
  * the recursive defs those reach; or why their names cannot be written.
  */
-function serviceSourcesOf(snapshot: ServiceSnapshot): ContractPackageFiles {
+function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractPackageFiles {
   const reached = reachedOf(snapshot);
   const endpoints = reached.endpoints.map((exported) => endpointModuleOf(exported, snapshot));
   const guards = reached.guards.map((name) =>
-    guardModuleOf(name, declaredIn(snapshot.guards, name)),
+    guardModuleOf({ kind: 'guard', name }, declaredIn(snapshot.guards, name)),
   );
   const rejections = reached.codes.map((code) =>
-    rejectionModuleOf(code, declaredIn(snapshot.codes, code)),
+    rejectionModuleOf({ kind: 'rejection', name: code }, declaredIn(snapshot.codes, code)),
   );
   const schemaFiles = [...endpoints, ...guards, ...rejections];
   const defUses = reachedDefUsesOf(
@@ -79,7 +82,7 @@ function serviceSourcesOf(snapshot: ServiceSnapshot): ContractPackageFiles {
     return { kind: 'unnamed', line: unnamed };
   }
   const files = [
-    serviceEntryOf(snapshot.name, reached.endpoints),
+    serviceEntryOf({ name: snapshot.name, version, endpoints: reached.endpoints, defUses }),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(snapshot, defUses),
@@ -113,7 +116,7 @@ function defsFilesOf(
     return [];
   }
   const { body, needs } = defsCodeOf(snapshot.defs, defUses);
-  return [packageModuleOf({ path: defsFile, body, needs })];
+  return [packageModuleOf({ path: packagePaths.defs, body, needs })];
 }
 
 /** A Guard or code the Snapshot holds, since every one an Endpoint reaches is written in it. */

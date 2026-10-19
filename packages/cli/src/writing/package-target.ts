@@ -11,45 +11,49 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
-import type { PackageFile } from '../contract-package/index.ts';
+import { isPackagePath, type PackageFile } from '../contract-package/index.ts';
 import { oneLineOf } from '../loading/index.ts';
-import { done, type Exit, toolingError } from './exit.ts';
 
 /** What sits where the package is to be written. */
 type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
 
+/** The package written, or why not, in one line. */
+export type PackageWrite =
+  | { readonly kind: 'written' }
+  | { readonly kind: 'refused'; readonly message: string };
+
 /** The folders a previous output keeps as they are: a build's `dist/` and an install's `node_modules/`. */
 const keptFolders: readonly string[] = ['dist', 'node_modules'];
-
-/** The paths of the files `package` writes, in any Contract Package. */
-const writtenPath =
-  /^(package|snapshot|tsconfig)\.json$|^src\/(index|snapshot|standard-rejections|defs)\.ts$|^src\/(endpoints|guards|rejections)\/[^/]+\.ts$/;
 
 /**
  * Writes the Contract Package to `out`, relative to the project: a missing or empty folder, or a
  * previous output, whose files are replaced, its build and install kept; anything else is
- * refused and left as it was. The files are written beside it first.
+ * refused and left as it was.
  */
 export function writeContractPackageTo(
   directory: string,
   out: string,
   files: readonly PackageFile[],
-): Exit {
+): PackageWrite {
   const target = resolve(directory, out);
   switch (targetOf(target)) {
     case 'other-files':
-      return toolingError(
+      return refused(
         `${out} holds files package did not write: package writes to a missing or empty folder, or over its own output`,
       );
     case 'no-folder':
-      return toolingError(`${out} is no folder: package writes a folder`);
+      return refused(`${out} is no folder: package writes a folder`);
     case 'link':
-      return toolingError(`${out} is a symbolic link: package writes a folder of its own`);
+      return refused(`${out} is a symbolic link: package writes a folder of its own`);
     case 'missing':
     case 'empty':
     case 'previous-output':
       return replaced(directory, { out, target }, files);
   }
+}
+
+function refused(message: string): PackageWrite {
+  return { kind: 'refused', message };
 }
 
 function targetOf(target: string): Target {
@@ -81,7 +85,7 @@ function isLink(target: string): boolean {
  * and its package.json carries the `cfLoom` metadata.
  */
 function isPreviousOutput(target: string): boolean {
-  if (!filesOutsideKeptOf(target).every((path) => writtenPath.test(path))) {
+  if (!filesOutsideKeptOf(target).every(isPackagePath)) {
     return false;
   }
   try {
@@ -107,38 +111,54 @@ function filesOutsideKeptOf(target: string): readonly string[] {
   });
 }
 
-/** Moves the folders a previous output keeps into the package written beside it. */
-function keepFolders(target: string, staging: string): void {
-  for (const folder of keptFolders) {
-    if (existsSync(join(target, folder))) {
-      renameSync(join(target, folder), join(staging, folder));
-    }
-  }
-}
-
+/**
+ * Writes the files beside the target, then clears the target's own files, `package.json` last
+ * so an interrupted run is still a previous output, and moves the new ones in: the kept folders
+ * are never moved, so no failure can lose them.
+ */
 function replaced(
   directory: string,
   { out, target }: { readonly out: string; readonly target: string },
   files: readonly PackageFile[],
-): Exit {
+): PackageWrite {
   let staging: string | undefined;
   try {
     mkdirSync(dirname(target), { recursive: true });
     staging = mkdtempSync(join(dirname(target), `.${basename(target)}-`));
-    for (const { path, text } of files) {
-      mkdirSync(dirname(join(staging, path)), { recursive: true });
-      writeFileSync(join(staging, path), text);
-    }
-    if (existsSync(target)) {
-      keepFolders(target, staging);
-    }
-    rmSync(target, { recursive: true, force: true });
-    renameSync(staging, target);
-    return done([`Wrote ${out}`]);
+    writeAll(staging, files);
+    mkdirSync(target, { recursive: true });
+    clearOwnFiles(target);
+    moveEntries(staging, target);
+    return { kind: 'written' };
   } catch (e) {
+    return refused(`${out} cannot be written: ${oneLineOf(e, directory)}`);
+  } finally {
     if (staging !== undefined) {
       rmSync(staging, { recursive: true, force: true });
     }
-    return toolingError(`${out} cannot be written: ${oneLineOf(e, directory)}`);
+  }
+}
+
+function writeAll(folder: string, files: readonly PackageFile[]): void {
+  for (const { path, text } of files) {
+    mkdirSync(dirname(join(folder, path)), { recursive: true });
+    writeFileSync(join(folder, path), text);
+  }
+}
+
+function clearOwnFiles(target: string): void {
+  const own = readdirSync(target).filter((entry) => !keptFolders.includes(entry));
+  const ordered = [
+    ...own.filter((entry) => entry !== 'package.json'),
+    ...own.filter((entry) => entry === 'package.json'),
+  ];
+  for (const entry of ordered) {
+    rmSync(join(target, entry), { recursive: true, force: true });
+  }
+}
+
+function moveEntries(from: string, to: string): void {
+  for (const entry of readdirSync(from)) {
+    renameSync(join(from, entry), join(to, entry));
   }
 }

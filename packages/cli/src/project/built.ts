@@ -1,6 +1,5 @@
 import { Buffer } from 'node:buffer';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import {
   canonicalSnapshotOf,
   canonicalTextOf,
@@ -15,17 +14,9 @@ import {
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
 import { oneLineOf } from '../loading/index.ts';
-import { checkFailed, type Exit, failureLine, type Run, toolingError } from './exit.ts';
+import { type Committed, committedOf } from './committed.ts';
+import { type ProjectFailure, type Run, type Tooling, tooling } from './failures.ts';
 import { type Project, projectOf } from './project.ts';
-
-/** The file `generate` writes the declared Snapshot to, next to `cf-loom.config.ts`. */
-export const snapshotFile = 'contract.snapshot.json';
-
-/** The committed `contract.snapshot.json` as read: none, its bytes and their JSON, or no JSON. */
-export type Committed =
-  | { readonly kind: 'none' }
-  | { readonly kind: 'json'; readonly bytes: Buffer; readonly parsed: unknown }
-  | { readonly kind: 'no-json'; readonly reason: string };
 
 /**
  * Which CLI the declared Snapshot names: the one running, as `generate` and `package` write it,
@@ -35,7 +26,7 @@ export type Generator = 'running' | 'committed';
 
 /**
  * What every command builds before it writes: the project, its valid root, the declared Snapshot
- * in canonical order and its bytes, and the committed file; or the exit that stopped building it.
+ * in canonical order with its text and bytes, and the committed file; or why it could not be built.
  */
 export type Built =
   | {
@@ -43,27 +34,11 @@ export type Built =
       readonly project: Project;
       readonly validated: ValidContract;
       readonly snapshot: Snapshot;
+      readonly text: string;
       readonly bytes: Buffer;
       readonly committed: Committed;
     }
-  | Stopped;
-
-/**
- * The stop of a command that writes from the Snapshot when the committed file is no JSON: its
- * author restores or deletes it, since its `deprecatedAt` stamps would be lost.
- */
-export function noJsonExitOf(
-  built: BuiltProject,
-  command: 'generate' | 'package',
-): Exit | undefined {
-  if (built.committed.kind !== 'no-json') {
-    return undefined;
-  }
-  const { reason } = built.committed;
-  return toolingError(
-    `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom ${command}`,
-  );
-}
+  | ProjectFailure;
 
 /** A project as built, valid. */
 export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
@@ -82,12 +57,12 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
  */
 export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
-  if (read.kind === 'stopped') {
+  if (read.kind === 'tooling') {
     return read;
   }
   const { project } = read;
   const committed = committedOf(project.directory);
-  if (committed.kind === 'stopped') {
+  if (committed.kind === 'tooling') {
     return committed;
   }
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
@@ -99,20 +74,20 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   };
   const validated = validatedOf(project);
   switch (validated.kind) {
-    case 'stopped':
-      return validated;
+    case 'tooling':
     case 'invalid':
-      return stopped(checkFailed(validated.failures.map(failureLine)));
+      return validated;
     case 'valid': {
       const snapshot = canonicalSnapshotOf(snapshotOf(validated, context));
-      const bytes = Buffer.from(canonicalTextOf(snapshot), 'utf8');
-      return { kind: 'built', project, validated, snapshot, bytes, committed };
+      const text = canonicalTextOf(snapshot);
+      const bytes = Buffer.from(text, 'utf8');
+      return { kind: 'built', project, validated, snapshot, text, bytes, committed };
     }
   }
 }
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
-function validatedOf(project: Project): ValidatedContract | Stopped {
+function validatedOf(project: Project): ValidatedContract | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
   const exportsByDefinitions = new Map(
     packages.map((installed) => [installed.definitions, Object.values(installed.exports)]),
@@ -126,31 +101,7 @@ function validatedOf(project: Project): ValidatedContract | Stopped {
   try {
     return validateContract(root, rootPackage);
   } catch (e) {
-    return stopped(toolingError(`${rootFile} threw while it was read: ${oneLineOf(e, directory)}`));
-  }
-}
-
-function committedOf(directory: string): Committed | Stopped {
-  const path = join(directory, snapshotFile);
-  if (!existsSync(path)) {
-    return { kind: 'none' };
-  }
-  const bytes = bytesOf(path, directory);
-  if (!Buffer.isBuffer(bytes)) {
-    return bytes;
-  }
-  try {
-    return { kind: 'json', bytes, parsed: JSON.parse(bytes.toString('utf8')) };
-  } catch (e) {
-    return { kind: 'no-json', reason: oneLineOf(e, directory) };
-  }
-}
-
-function bytesOf(path: string, directory: string): Buffer | Stopped {
-  try {
-    return readFileSync(path);
-  } catch (e) {
-    return stopped(toolingError(`${snapshotFile} cannot be read: ${oneLineOf(e, directory)}`));
+    return tooling(`${rootFile} threw while it was read: ${oneLineOf(e, directory)}`);
   }
 }
 
@@ -178,12 +129,4 @@ function runningGeneratorOf(): string {
       ? Reflect.get(manifest, 'version')
       : undefined;
   return `${String(name)}@${String(version)}`;
-}
-
-/** A build stopped by the exit it ends with. */
-export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
-
-/** A build stopped by the exit it ends with. */
-export function stopped(exit: Exit): Stopped {
-  return { kind: 'stopped', exit };
 }

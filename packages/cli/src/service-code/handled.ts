@@ -28,24 +28,35 @@ export function handlerPathOf(handled: Handled): string {
   }
 }
 
+/** A declared Endpoint or Guard, and whether the Handler map holds its Handler. */
+type DeclaredHandled = { readonly handled: Handled; readonly isMapped: boolean };
+
 /**
- * What the Handler map holds: every Endpoint that is not Retired, by name, then every Guard those
- * attach, in the canonical Snapshot's order.
+ * Every Endpoint and Guard a Service declares: each Endpoint, by name, mapped unless Retired,
+ * then each Guard, in the canonical Snapshot's order, mapped when a mapped Endpoint attaches it.
  */
+function declaredHandledOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+  const endpoints = Object.values(snapshot.endpoints)
+    .map(
+      (endpoint): DeclaredHandled => ({
+        handled: { kind: 'endpoint', name: endpoint.name, group: endpoint.group },
+        isMapped: endpoint.lifecycle !== 'retired',
+      }),
+    )
+    .sort((left, right) => byCodePoint(left.handled.name, right.handled.name));
+  const live = Object.values(snapshot.endpoints).filter(({ lifecycle }) => lifecycle !== 'retired');
+  const attached = new Set(live.flatMap(({ guards }) => guards.map(({ guard }) => guard)));
+  const guards = Object.keys(snapshot.guards).map(
+    (name): DeclaredHandled => ({ handled: { kind: 'guard', name }, isMapped: attached.has(name) }),
+  );
+  return [...endpoints, ...guards];
+}
+
+/** What the Handler map holds: every Endpoint that is not Retired, then every Guard those attach. */
 export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
-  const endpoints = Object.values(snapshot.endpoints).filter(
-    (endpoint) => endpoint.lifecycle !== 'retired',
-  );
-  const attached = new Set(
-    endpoints.flatMap((endpoint) => endpoint.guards.map(({ guard }) => guard)),
-  );
-  const handledEndpoints = endpoints
-    .map(({ name, group }): Handled => ({ kind: 'endpoint', name, group }))
-    .sort((left, right) => byCodePoint(left.name, right.name));
-  const handledGuards = Object.keys(snapshot.guards)
-    .filter((name) => attached.has(name))
-    .map((name): Handled => ({ kind: 'guard', name }));
-  return [...handledEndpoints, ...handledGuards];
+  return declaredHandledOf(snapshot)
+    .filter(({ isMapped }) => isMapped)
+    .map(({ handled }) => handled);
 }
 
 /**
@@ -53,9 +64,5 @@ export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
  * attaches included, so any other Handler file is an orphan.
  */
 export function namedHandlerPathsOf(snapshot: ServiceSnapshot): ReadonlySet<string> {
-  const endpoints = Object.values(snapshot.endpoints).map(
-    ({ name, group }): Handled => ({ kind: 'endpoint', name, group }),
-  );
-  const guards = Object.keys(snapshot.guards).map((name): Handled => ({ kind: 'guard', name }));
-  return new Set([...endpoints, ...guards].map(handlerPathOf));
+  return new Set(declaredHandledOf(snapshot).map(({ handled }) => handlerPathOf(handled)));
 }

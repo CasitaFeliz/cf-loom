@@ -1,9 +1,9 @@
-import { type BuiltService, builtOf, isBuiltService, noJsonExitOf } from './built.ts';
-import { checkFailed, done, type Exit, type Run } from './exit.ts';
+import { type BuiltService, builtOf, isBuiltService, type Run } from '../project/index.ts';
+import { type GeneratedFile, writeFiles } from '../writing/index.ts';
+import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
 import { noFileLinesOf, orphanLinesOf } from './handler-files.ts';
 import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
-import { type GeneratedFile, writeFiles } from './writing.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
@@ -11,10 +11,10 @@ import { type GeneratedFile, writeFiles } from './writing.ts';
  */
 export async function generate(run: Run): Promise<Exit> {
   const built = await builtOf(run, 'running');
-  if (built.kind === 'stopped') {
-    return built.exit;
+  if (built.kind !== 'built') {
+    return failureExitOf(built);
   }
-  const noJson = noJsonExitOf(built, 'generate');
+  const noJson = noJsonExitOf(built.committed, 'generate');
   if (noJson !== undefined) {
     return noJson;
   }
@@ -30,8 +30,8 @@ export async function generate(run: Run): Promise<Exit> {
  */
 async function generateService(run: Run, service: BuiltService): Promise<Exit> {
   const stubs = await stubsOf(service);
-  if (stubs.kind === 'stopped') {
-    return stubs.exit;
+  if (stubs.kind === 'tooling') {
+    return toolingError(stubs.message);
   }
   const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphanLinesOf(service)];
   if (failures.length > 0) {
@@ -43,8 +43,8 @@ async function generateService(run: Run, service: BuiltService): Promise<Exit> {
 
 function writtenExit(run: Run, files: readonly GeneratedFile[]): Exit {
   const written = writeFiles(run.cwd, files);
-  if (written.kind === 'stopped') {
-    return written.exit;
+  if (written.kind === 'failed') {
+    return toolingError(written.message);
   }
   return done(written.paths.map((path) => `Wrote ${path}`));
 }

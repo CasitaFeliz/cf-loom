@@ -1,9 +1,18 @@
-import type { Field, SchemaNode } from '@casitafeliz/loom-contract/internal';
+import type {
+  EnumNode,
+  Field,
+  NumberNode,
+  ObjectNode,
+  RefNode,
+  SchemaNode,
+  StringNode,
+  TaggedNode,
+  TupleNode,
+} from '@casitafeliz/loom-contract/internal';
 import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
 import { addDefUse, type Needs, type SchemaMode } from './needs.ts';
-import type { NodeOf } from './nodes.ts';
 import { openEnumReaderOf, openUnionReaderOf } from './open.ts';
 
 /** Where a schema is written: its mode, and what the module writing it must import. */
@@ -53,14 +62,14 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
   }
 }
 
-function stringOf(node: NodeOf<'string'>): string {
+function stringOf(node: StringNode): string {
   const base =
     node.format === undefined ? 'z.string()' : formatCallOf(node.format, node.formatOptions);
   const regex = node.regex === undefined ? '' : regexCallOf(node.regex);
   return `${base}${regex}${boundsOf(node)}`;
 }
 
-function numberOf(node: NodeOf<'number'>): string {
+function numberOf(node: NumberNode): string {
   const base = node.int === true ? 'z.int()' : 'z.number()';
   const checks = [
     node.min === undefined ? '' : `.min(${node.min})`,
@@ -79,7 +88,7 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
 }
 
 /** An enum: an Open Enum's reader has its Unknown case; values that are not all strings are literals. */
-function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
+function enumOf(node: EnumNode, writing: Writing): string {
   const values = node.values.map(literalOf).join(', ');
   const allStrings = node.values.every((value) => typeof value === 'string');
   if (!node.open) {
@@ -93,7 +102,7 @@ function enumOf(node: NodeOf<'enum'>, writing: Writing): string {
 }
 
 /** An object: strict only as declared, since readers ignore fields they do not know. */
-function objectOf(node: NodeOf<'object'>, writing: Writing): string {
+function objectOf(node: ObjectNode, writing: Writing): string {
   const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
@@ -108,16 +117,15 @@ function objectOf(node: NodeOf<'object'>, writing: Writing): string {
  */
 function fieldOf(field: Field, writing: Writing): string {
   const { schema, required } = field;
-  const isAnnotatedRef = schema.type === 'ref' && schema.nullable !== true && metaOf(schema) !== '';
-  if (!isAnnotatedRef) {
+  if (schema.type !== 'ref' || schema.nullable === true || metaOf(schema) === '') {
     const expression = zodExpressionOf(schema, writing);
     return required ? expression : `${expression}.optional()`;
   }
-  const reference = zodExpressionOf({ type: 'ref', name: schema.name }, writing);
+  const reference = refOf(schema, writing);
   return `${reference}${required ? '.nonoptional()' : '.optional()'}${metaOf(schema)}`;
 }
 
-function tupleOf(node: NodeOf<'tuple'>, writing: Writing): string {
+function tupleOf(node: TupleNode, writing: Writing): string {
   const items = node.items.map((item) => zodExpressionOf(item, writing)).join(', ');
   if (node.rest === undefined) {
     return `z.tuple([${items}])`;
@@ -126,7 +134,7 @@ function tupleOf(node: NodeOf<'tuple'>, writing: Writing): string {
 }
 
 /** A discriminated union: an Open Union's reader has its Unknown case. */
-function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
+function taggedOf(node: TaggedNode, writing: Writing): string {
   const declared = declaredUnionOf(node, writing);
   if (!node.open || writing.mode === 'declared') {
     return declared;
@@ -139,7 +147,7 @@ function taggedOf(node: NodeOf<'tagged'>, writing: Writing): string {
  * The declared variants as zod's discriminated union, or `loom.openUnion` for an Open Union as
  * declared; a recursive variant is its def, which its type says is discriminable.
  */
-function declaredUnionOf(node: NodeOf<'tagged'>, writing: Writing): string {
+function declaredUnionOf(node: TaggedNode, writing: Writing): string {
   const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
   const isOpenAsDeclared = node.open && writing.mode === 'declared';
   if (isOpenAsDeclared) {
@@ -163,7 +171,8 @@ function allOfOf(items: readonly string[]): string {
 }
 
 /** A recursive def by its identifier. */
-function refOf(node: NodeOf<'ref'>, writing: Writing): string {
+function refOf(node: RefNode, writing: Writing): string {
+  writing.needs.modules.add('zod');
   addDefUse(writing.needs.defs, { id: node.name, mode: writing.mode });
   return defIdentifierOf(node.name, writing.mode);
 }

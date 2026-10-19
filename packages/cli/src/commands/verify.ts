@@ -5,12 +5,13 @@ import {
   type BuiltService,
   builtOf,
   isBuiltService,
+  type Run,
   snapshotFile,
-} from './built.ts';
-import { checkFailed, done, type Exit, type Run } from './exit.ts';
+} from '../project/index.ts';
+import { type GeneratedFile, isUpToDate } from '../writing/index.ts';
+import { checkFailed, done, type Exit, failureExitOf } from './exit.ts';
 import { handlerPathsOf, noFileLinesOf, orphanLinesOf } from './handler-files.ts';
 import { serviceFilesOf } from './regenerated.ts';
-import { isUpToDate } from './writing.ts';
 
 /**
  * Fails when a file `generate` regenerates is not what it would write, edited by hand or left
@@ -18,17 +19,17 @@ import { isUpToDate } from './writing.ts';
  */
 export async function verify(run: Run): Promise<Exit> {
   const built = await builtOf(run, 'committed');
-  if (built.kind === 'stopped') {
-    return built.exit;
+  if (built.kind !== 'built') {
+    return failureExitOf(built);
   }
   const snapshotLine = snapshotFailureOf(built);
   const snapshotLines = snapshotLine === undefined ? [] : [snapshotLine];
   if (!isBuiltService(built)) {
     return verifiedExit(snapshotLines, [snapshotFile]);
   }
-  const compared = serviceFilesOf(built).map(({ path }) => path);
-  const failures = [...snapshotLines, ...serviceFailuresOf(run, built)];
-  return verifiedExit(failures, [snapshotFile, ...compared]);
+  const regenerated = serviceFilesOf(built);
+  const failures = [...snapshotLines, ...serviceFailuresOf(run, built, regenerated)];
+  return verifiedExit(failures, [snapshotFile, ...regenerated.map(({ path }) => path)]);
 }
 
 /** Every failure found, or each file compared up to date. */
@@ -43,8 +44,12 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
  * What a Service fails `verify` on beside its Snapshot: its Handler map or readers out of date,
  * and its Handler files as `generate` would refuse or complete them. Exports are not loaded.
  */
-function serviceFailuresOf(run: Run, service: BuiltService): readonly string[] {
-  const outdated = serviceFilesOf(service).filter((file) => !isUpToDate(run.cwd, file));
+function serviceFailuresOf(
+  run: Run,
+  service: BuiltService,
+  regenerated: readonly GeneratedFile[],
+): readonly string[] {
+  const outdated = regenerated.filter((file) => !isUpToDate(run.cwd, file));
   const missing = handlerPathsOf(service).filter((path) => !existsSync(join(run.cwd, path)));
   return [
     ...outdated.map(({ path }) => `${path} was edited or is out of date: run cf-loom generate`),
