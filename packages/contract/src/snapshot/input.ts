@@ -28,7 +28,7 @@ export function inputOf(
 /**
  * One object of every field the declarations name, in declaration order: a field declared twice
  * keeps the first declaration's schema, since the validation proved their shapes equal, and is
- * required when either requires it; a strict declaration applies to the merged set.
+ * required when either requires it; the merged object is open, as every query and headers object is.
  */
 function mergedOf(objects: readonly (ObjectNode | undefined)[]): ObjectNode | undefined {
   const declared = objects.filter(isDeclared);
@@ -44,8 +44,7 @@ function mergedOf(objects: readonly (ObjectNode | undefined)[]): ObjectNode | un
       fieldByName.set(name, { ...(known ?? field), required });
     }
   }
-  const mode = declared.some((object) => object.mode === 'strict') ? 'strict' : 'open';
-  return { ...first, mode, fields: Object.fromEntries(fieldByName) };
+  return { ...first, mode: 'open', fields: Object.fromEntries(fieldByName) };
 }
 
 function isDeclared(object: ObjectNode | undefined): object is ObjectNode {

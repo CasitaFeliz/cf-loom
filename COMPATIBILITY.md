@@ -67,14 +67,12 @@ Readers of a Success, a Rejection body or a Message ignore fields they do not kn
 | Add an optional field | Additive | Additive | Additive |
 | Optional → required | Breaking | Additive | Breaking |
 | Required → optional | Additive | Breaking | Breaking |
-| Remove a field, open object | Additive | Breaking | Breaking |
-| Remove a field, strict object | Breaking | Breaking | Breaking |
+| Remove a field | Additive | Breaking | Breaking |
+| Remove a key from a record keyed by an enum or literal | Breaking | Breaking | Breaking |
 | Rename a field | A removal plus an addition | | |
 | Change a type (object ↔ record and array ↔ tuple included) | Breaking | Breaking | Breaking |
 | Add nullability | Additive | Breaking | Breaking |
 | Remove nullability | Breaking | Additive | Breaking |
-| Open → strict object | Breaking | Neutral | Neutral |
-| Strict → open object | Additive | Neutral | Neutral |
 
 ### Enums, literals and unions
 

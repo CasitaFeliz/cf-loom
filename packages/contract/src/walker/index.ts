@@ -26,6 +26,7 @@ export type {
   UnionNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
+export { refused } from './not-allowed.ts';
 export { openIntersectionsOf } from './open-intersections.ts';
 export { outputRecordsOf } from './output-records.ts';
 export type { StringFormat } from './string-formats.ts';

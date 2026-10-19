@@ -14,7 +14,6 @@ import { validateContract } from '../internal/index.ts';
 /** The schemas a Contract's one Endpoint, its Guard and its Rejection declare, each optional. */
 type Declared = {
   readonly inputBody?: core.$ZodType;
-  readonly successHeaders?: core.$ZodType;
   readonly successBody?: core.$ZodType;
   readonly rejectionBody?: core.$ZodType;
   readonly context?: core.$ZodType;
@@ -45,7 +44,6 @@ function contractWith(declared: Declared) {
     ...(declared.inputBody && { input: { body: declared.inputBody } }),
     success: {
       status: declared.successBody === undefined ? 204 : 200,
-      ...(declared.successHeaders && { headers: declared.successHeaders }),
       ...(declared.successBody && { body: declared.successBody }),
     },
     rejections: [denied],
@@ -81,12 +79,6 @@ describe('validateContract: a record keyed by an enum or literal in an output', 
     const failures = failuresIn(contractWith({ successBody: record() }));
 
     expect(failures).toEqual([{ ...refusal, at: [...endpointAt, 'success', 'body'] }]);
-  });
-
-  test.each(records)('%s fails as Success headers', (_kind, record) => {
-    const failures = failuresIn(contractWith({ successHeaders: record() }));
-
-    expect(failures).toContainEqual({ ...refusal, at: [...endpointAt, 'success', 'headers'] });
   });
 
   test.each(records)('%s fails in a Rejection body', (_kind, record) => {

@@ -223,7 +223,7 @@ describe('walkSchemas: intersections', () => {
     const priced = z.object({ total: z.number() });
 
     expect(walkBody(named.and(priced))).toEqual(
-      refusedAt(['body'], 'an intersection with a strict object', '.extend()'),
+      refusedAt(['body'], 'an intersection with a record keyed by an enum or literal', '.extend()'),
     );
   });
 

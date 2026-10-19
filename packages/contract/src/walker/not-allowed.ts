@@ -34,6 +34,10 @@ export const refused = {
     instead: 'z.record(z.string(), …)',
   },
   looseRecord: { construct: 'z.looseRecord()' },
+  keyedTextRecord: {
+    construct: 'a record keyed by an enum or literal as query or headers',
+    instead: 'z.object()',
+  },
   outputRecord: {
     construct: 'a record keyed by an enum or literal in an output',
     instead: 'z.object() or a string-keyed z.record()',
@@ -74,7 +78,10 @@ export const refused = {
   },
   objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
-  strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },
+  strictIntersection: {
+    construct: 'an intersection with a record keyed by an enum or literal',
+    instead: '.extend()',
+  },
   differingIntersection: {
     construct: 'an intersection of objects whose shared keys differ',
     instead: '.extend()',

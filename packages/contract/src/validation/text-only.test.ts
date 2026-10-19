@@ -367,3 +367,63 @@ describe('validateContract: one schema per header or query name on an Endpoint',
     );
   });
 });
+
+describe('validateContract: a record keyed by an enum or literal as query or headers', () => {
+  const keyed = () => z.record(z.enum(['tenant']), z.string()) as unknown as z.ZodObject;
+  const refusal = {
+    kind: 'not-allowed',
+    construct: 'a record keyed by an enum or literal as query or headers',
+    instead: 'z.object()',
+  };
+
+  test.each([
+    ['an Endpoint’s query', { input: { query: keyed() } }, [...endpointAt, 'input', 'query']],
+    ['an Endpoint’s headers', { input: { headers: keyed() } }, [...endpointAt, 'input', 'headers']],
+    [
+      'Success headers',
+      { success: { ...listing.success, headers: keyed() } },
+      [...endpointAt, 'success', 'headers'],
+    ],
+  ])('a keyed record as %s fails', (_part, declared, at) => {
+    const validated = validateEndpoint(defineEndpoint({ ...listing, ...declared } as never));
+
+    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at }] });
+  });
+
+  test.each([
+    ['query', { query: keyed() }],
+    ['headers', { headers: keyed() }],
+  ])('a keyed record a Guard demands as %s fails', (part, demands) => {
+    const tenant = defineGuard({ name: 'tenant', description: 'A tenant', demands });
+
+    const validated = validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...refusal, at: ['guards', 'tenant', 'demands', part] }],
+    });
+  });
+
+  test('a keyed record as query fails whether the Endpoint or only its Guard declares it', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      demands: { query: keyed() },
+    });
+    const endpoint = defineEndpoint({
+      ...listing,
+      guards: [tenant],
+      input: { query: keyed() },
+    } as never);
+
+    const validated = validateEndpoint(endpoint);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...refusal, at: [...endpointAt, 'input', 'query'] },
+        { ...refusal, at: ['guards', 'tenant', 'demands', 'query'] },
+      ],
+    });
+  });
+});

@@ -319,44 +319,20 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('query params merge the Endpoint’s own with its Guards’ demands', () => {
+  test('query params merge the Endpoint’s own with its Guards’ demands, open', () => {
     const query = searchQueryOf({
-      own: z.strictObject({ text: z.string() }),
+      own: z.object({ text: z.string() }),
       demanded: z.object({ tenant: z.string() }),
     });
 
     expect(query).toEqual({
       type: 'object',
-      mode: 'strict',
+      mode: 'open',
       fields: {
         text: { required: true, schema: { type: 'string' } },
         tenant: { required: true, schema: { type: 'string' } },
       },
     });
-  });
-
-  test('the merged query is strict when a Guard demands it strict', () => {
-    const query = searchQueryOf({
-      own: z.object({ text: z.string() }),
-      demanded: z.strictObject({ tenant: z.string() }),
-    });
-
-    expect(query?.mode).toBe('strict');
-  });
-
-  test('the merged query is strict when only a Guard declares it, strict', () => {
-    const query = searchQueryOf({ demanded: z.strictObject({ tenant: z.string() }) });
-
-    expect(query?.mode).toBe('strict');
-  });
-
-  test('the merged query is open when every declaration of it is open', () => {
-    const query = searchQueryOf({
-      own: z.object({ text: z.string() }),
-      demanded: z.object({ tenant: z.string() }),
-    });
-
-    expect(query?.mode).toBe('open');
   });
 
   test('Attachments keep their order, each with its Qualifier as written or null', () => {
