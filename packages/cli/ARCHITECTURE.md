@@ -17,6 +17,8 @@ The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/directories/i
 | `contract-package/` | the Contract Package's files from a canonical Snapshot: package.json with `cfLoom` and the hash, `snapshot.json`, tsconfig, the entry, the Standard Rejections, one file per exported Endpoint, per Guard they attach and per code they answer, the recursive defs they reach, each declaration named for its kind; an Application's Snapshot alone; and the codes or recursion ids that cannot be named in code | `source-text`, `schema-code` |
 | `commands/` | `init`, `generate`, `verify` and `package`, each ending with its exit status and the lines it prints | `config`, `loading`, `service-code`, `contract-package` |
 
+Every binding a Contract Package's code declares is named for its kind, so names of different kinds never meet: `<name>Endpoint`, `<name>Guard`, `<code in camelCase>Rejection`, `<id in camelCase>Def` and `<id in camelCase>ReaderDef` with their types in PascalCase, and, from milestone 2, `<name>Event<V n>` for an Event's Message Version (`paymentSettledEventV1`); `@casitafeliz/loom-contract` is imported whole as `loom` and `zod` as `z`.
+
 A command takes where and when it runs (the working directory and the clock) from `bin.ts`. Every command but `init` first builds the project: its valid root and the declared Snapshot, with `@casitafeliz/loom-contract/internal`; then `generate` and `verify` write or compare the generated files and `package` writes the Contract Package, each from that Snapshot.
 
 ## Reading the graph

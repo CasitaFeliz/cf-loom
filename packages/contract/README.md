@@ -29,7 +29,7 @@ export const contract = defineContract({
 
 The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. A root's `name`, a Service's, an Application's or a Definitions Package's, must equal the unscoped part of the `name` in its package.json, or `generate` fails. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections.
 
-Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`); a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
+Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package, Group or Subscription name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`) and no word code cannot bind it by: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports; a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
 ## Applications
 
@@ -251,7 +251,7 @@ payment: openUnion('type', [card, transfer])
 
 Readers get a type with an Unknown case and must handle it: an unknown enum value arrives as `{ unknown: 'refunded' }`, and an unknown union variant as `{ type: { unknown: 'crypto' }, raw }`, so TypeScript can tell them from the declared ones. Writers may only use the declared values. `openEnum()` and `openUnion()` infer the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 
-`openEnum()` takes string values. `openUnion(discriminator, variants)` takes objects whose discriminator is a string literal and returns zod's discriminated union; a literal of several values, or two variants with the same value, fail `generate`. Openness belongs to the schema either one returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` or `z.discriminatedUnion()` described the same way stays closed.
+`openEnum()` takes string values. `openUnion(discriminator, variants)` takes objects whose discriminator is a string literal and returns zod's discriminated union; a literal of several values, a value that is no string, or two variants with the same value, fail `generate`. Inside an intersection, use `.extend()` (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema either one returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` or `z.discriminatedUnion()` described the same way stays closed.
 
 ## Dependencies
 

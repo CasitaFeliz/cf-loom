@@ -40,7 +40,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom add-command <Name> [--version n]` | Creates a Command, or its next Message Version |
 | `cf-loom add-subscription <name> [<service>] <Name>@<n>` | Creates a Subscription to an Event, the Service's own unless `<service>` is given, in which case the Event is also added to the Dependencies |
 | `cf-loom add-dependency <service> <element>` | Adds an Element of an installed Contract Package to the Dependencies: an Endpoint by name, an Event as `<Name>@<n>` |
-| `cf-loom generate` | Writes `contract.snapshot.json`, stamping `deprecatedAt` on an Endpoint it first sees Deprecated (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md); for a Service it also regenerates `src/handlers.generated.ts` and `src/readers.generated.ts` and writes the stub of every missing Handler (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README), while an Application or a Definitions Package gets `contract.snapshot.json` only. It fails on an Endpoint or attached Guard that nothing exports under its name (no file under `src/contract/`, or its Definitions Package), on one named `handle`, on a Handler file that no declared Endpoint or Guard names and on a Handler path that is no file, and then writes nothing |
+| `cf-loom generate` | Writes `contract.snapshot.json`, stamping `deprecatedAt` on an Endpoint it first sees Deprecated (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md); for a Service it also regenerates `src/handlers.generated.ts` and `src/readers.generated.ts` and writes the stub of every missing Handler (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README), while an Application or a Definitions Package gets `contract.snapshot.json` only. It fails on an Endpoint or attached Guard that nothing exports under its name (no file under `src/contract/`, or its Definitions Package), on a Handler file that no declared Endpoint or Guard names and on a Handler path that is no file, and then writes nothing |
 | `cf-loom broker-plan [--prefix <p>] [--json] [--limits-skeleton] [--orphans]` | Prints the streams, durable consumers, orphaned durable consumers and permissions the broker must hold; `--limits-skeleton` prints the `limits` for `apply` with every key empty, `--orphans` reads the broker and lists the orphaned durable consumers with their pending counts (see [The broker plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#the-broker-plan) in the messaging README) |
 | `cf-loom route-plan [--json]` | Prints every route with its Visibility, and the Retired ones, for the organization's gateway or ingress |
 | `cf-loom openapi` | Writes an OpenAPI 3.1 document of the Endpoints from the Snapshot (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
@@ -62,30 +62,48 @@ Each command prints one line per thing it did or found, never a stack trace:
 | `verify` | `<path> is up to date` for each file it compared |
 | `package` | `Wrote <dir>` |
 
-A failure is one line on stderr. Beside the configuration's and the root's (`<file> cannot be loaded: …`, `<file> threw while it was read: …`) and the validation's (`<location> <rule>: <message>`, `<location> not allowed: <construct> (use <instead>)`), exit 1, `generate`, `verify` and `package` print:
+A failure is one line on stderr, never a stack trace. Beside the configuration's and the root's (`<file> cannot be loaded: …`, `<file> threw while it was read: …`, exit 3) and the validation's (`<location> <rule>: <message>`, `<location> not allowed: <construct> (use <instead>)`, exit 1), `generate`, `verify` and `package` print these.
 
-| Line | Command | Exit |
-| --- | --- | --- |
-| `endpoints.<name> is exported by no file under src/contract/` (`guards.<name>` for a Guard) | `generate` | 1 |
-| `endpoints.<name> is not exported as <name>` (`guards.<name>` for a Guard) | `generate` | 1 |
-| `guards.<name> is not exported as <name> by <package>`, for a Guard of a Definitions Package | `generate` | 1 |
-| `endpoints.handle cannot be named handle: its stub imports handle from @casitafeliz/loom-handlers` (`guards.handle` for a Guard) | `generate` | 1 |
-| `<path> names no declared Endpoint or Guard: delete it` | `generate`, `verify` | 1 |
-| `<path> is no file: a Handler is a file` | `generate`, `verify` | 1 |
-| `<path> was edited or is out of date: run cf-loom generate` | `verify` | 1 |
-| `<path> is missing: run cf-loom generate` | `verify` | 1 |
-| `contract.snapshot.json was edited: it is no JSON (<reason>)` | `verify` | 1 |
-| `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package` | 3 |
-| `<file> cannot be loaded: …`, for a file under `src/contract/` the root does not import | `generate` | 3 |
-| `<path> cannot be written: …` | `generate`, `package` | 3 |
-| `<dir> holds files package did not write: package writes to a missing or empty folder, or over its own output` | `package` | 3 |
-| `<dir> is no folder: package writes a folder` | `package` | 3 |
-| `<dir> is a symbolic link: package writes a folder of its own` | `package` | 3 |
-| `@casitafeliz/loom-contract is not installed: a Contract Package is built with it` (or `zod`) | `package` | 3 |
-| `A Definitions Package has no Contract Package: it is published from its own source` | `package` | 3 |
-| `The codes <code> and <code> are one name in code: rename one of them` | `package` | 3 |
-| `The recursion id <id> is no name in code: rename it` | `package` | 3 |
-| `The recursion ids <id> and <id> are one name in code: rename one of them` | `package` | 3 |
-| `Only package takes --out. Usage: …` | every command | 3 |
+Exit 1, the check failed:
+
+| Line | Command |
+| --- | --- |
+| `endpoints.<name> is exported by no file under src/contract/` (`guards.<name>` for a Guard) | `generate` |
+| `endpoints.<name> is not exported as <name>` (`guards.<name>` for a Guard) | `generate` |
+| `guards.<name> is not exported as <name> by <package>`, for a Guard of a Definitions Package | `generate` |
+| `<path> names no declared Endpoint or Guard: delete it` | `generate`, `verify` |
+| `<path> is no file: a Handler is a file` | `generate`, `verify` |
+| `<path> was edited or is out of date: run cf-loom generate` | `verify` |
+| `<path> is missing: run cf-loom generate` | `verify` |
+| `contract.snapshot.json was edited: it is no JSON (<reason>)` | `verify` |
+
+Exit 3, a tooling error:
+
+| Line | Command |
+| --- | --- |
+| `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package` |
+| `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom <command>` | `generate`, `package` |
+| `<file> cannot be loaded: …`, for a file under `src/contract/` the root does not import | `generate` |
+| `<package> is not installed: install it to list it`, for a listed Definitions Package | `generate`, `verify`, `package` |
+| `<package> has no version in its package.json` | `generate`, `verify`, `package` |
+| `<path> cannot be written: …` | `generate`, `package` |
+| `<dir> holds files package did not write: package writes to a missing or empty folder, or over its own output` | `package` |
+| `<dir> is no folder: package writes a folder` | `package` |
+| `<dir> is a symbolic link: package writes a folder of its own` | `package` |
+| `@casitafeliz/loom-contract is not installed: a Contract Package is built with it` (or `zod`) | `package` |
+| `A Definitions Package has no Contract Package: it is published from its own source` | `package` |
+| `The codes <code> and <code> are one name in code: rename one of them` | `package` |
+| `The recursion id <id> is no name in code: rename it` | `package` |
+| `The recursion ids <id> and <id> are one name in code: rename one of them` | `package` |
+
+Exit 3, a usage error, each followed by the usage line:
+
+| Line | Command |
+| --- | --- |
+| `Unknown command: <command>` | any |
+| `Unknown option: <option>` | any |
+| `--out takes a folder` | `package` |
+| `Only package takes --out` | `init`, `generate`, `verify` |
+| `generate takes no argument`, `verify takes no argument`, `package takes no argument` | `generate`, `verify`, `package` |
 
 Every file `generate` regenerates starts with `// Generated by cf-loom generate. Do not edit.`, and every TypeScript file of a Contract Package with `// Generated by cf-loom package. Do not edit.`; stubs carry no such line, since they are the Service's to replace. The Contract Package's package.json carries `cfLoom: { format, snapshotHash, kind, dependencies }` (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), `snapshotHash` being the SHA-256 of the Snapshot's canonical text without `version` and `generator`, in lowercase hex (see [Canonical form](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#canonical-form) in SNAPSHOT.md).
