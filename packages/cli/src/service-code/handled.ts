@@ -59,6 +59,20 @@ export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
     .map(({ handled }) => handled);
 }
 
+/** A live Deprecated Endpoint's `deprecatedAt`, by its name, as the Handler map carries it. */
+export type DeprecationStamp = { readonly name: string; readonly deprecatedAt: string };
+
+/** The `deprecatedAt` of every Deprecated Endpoint that is not Retired, by name, from the Snapshot. */
+export function deprecationStampsOf(snapshot: ServiceSnapshot): readonly DeprecationStamp[] {
+  const stamps: DeprecationStamp[] = [];
+  for (const { name, deprecatedAt } of Object.values(snapshot.endpoints)) {
+    if (deprecatedAt !== undefined) {
+      stamps.push({ name, deprecatedAt });
+    }
+  }
+  return stamps.sort((left, right) => byCodePoint(left.name, right.name));
+}
+
 /**
  * The Handler paths a Service's declarations name, a Retired Endpoint's and the Guards only it
  * attaches included, so any other Handler file is an orphan.

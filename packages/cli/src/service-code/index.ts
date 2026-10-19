@@ -1,5 +1,11 @@
-export type { Handled } from './handled.ts';
-export { handledOf, handlerFolders, handlerPathOf, namedHandlerPathsOf } from './handled.ts';
+export type { DeprecationStamp, Handled } from './handled.ts';
+export {
+  deprecationStampsOf,
+  handledOf,
+  handlerFolders,
+  handlerPathOf,
+  namedHandlerPathsOf,
+} from './handled.ts';
 export {
   handlerMapFile,
   handlerMapTextOf,
