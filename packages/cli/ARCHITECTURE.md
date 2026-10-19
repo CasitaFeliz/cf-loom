@@ -13,8 +13,8 @@ The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/directories/i
 | `config/` | `defineConfig`, `Config`, `ApprovalSource`, and loading `cf-loom.config.ts` | `contract-directory`, `loading` |
 | `source-text/` | spelling generated TypeScript: the header line, string and JSON literals, identifiers, import lines and relative `.ts` specifiers, a module from its imports and body | none |
 | `schema-code/` | a Snapshot node as a zod expression, `declared` or `reader`, the Unknown cases of readers, and the recursive defs with their types | `source-text` |
-| `service-code/` | what `generate` writes into a Service: the Handler map, the readers, each stub, and the Handler paths its declarations name | `source-text` |
-| `contract-package/` | the Contract Package's files from a Snapshot: package.json with `cfLoom` and the hash, `snapshot.json`, tsconfig, the entry and one file per exported Endpoint, reached Guard and code | `source-text`, `schema-code` |
+| `service-code/` | what `generate` writes into a Service: the Handler map, the readers, each stub, and the Handler paths its declarations name | `source-text`, `loading` |
+| `contract-package/` | the Contract Package's files from a canonical Snapshot: package.json with `cfLoom` and the hash, `snapshot.json`, tsconfig, the entry, the Standard Rejections, one file per exported Endpoint, per Guard they attach and per code they answer, the recursive defs they reach, each declaration named for its kind; an Application's Snapshot alone; and the codes or recursion ids that cannot be named in code | `source-text`, `schema-code` |
 | `commands/` | `init`, `generate`, `verify` and `package`, each ending with its exit status and the lines it prints | `config`, `loading`, `service-code`, `contract-package` |
 
 A command takes where and when it runs (the working directory and the clock) from `bin.ts`. Every command but `init` first builds the project: its valid root and the declared Snapshot, with `@casitafeliz/loom-contract/internal`; then `generate` and `verify` write or compare the generated files and `package` writes the Contract Package, each from that Snapshot.

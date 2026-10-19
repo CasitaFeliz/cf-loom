@@ -42,16 +42,19 @@ Every package lays out its `src/` the same way:
 export const contract = {
   name: 'payments-service',
   version: '5.1.0',                                  // stamped by publish
-  endpoints: { getPayment, createPayment },          // keyed by Endpoint name
+  endpoints: {                                       // keyed by Endpoint name
+    createPayment: createPaymentEndpoint,
+    getPayment: getPaymentEndpoint,
+  },
   events: { paymentSettledV1, paymentSettledV2 },    // name with its first letter lower-cased + 'V' + version
   standardRejections,                                // resolved codes, statuses and messages
-};
+} satisfies loom.ContractPackage;
 export { snapshot };
 ```
 
 A Consumer imports `contract` under the Provider's name (`import { contract as payments } from '@org/contract-payments-service'`), and a Dependency declared on it records its `version` (see [Dependencies](packages/contract/README.md#dependencies) in the contract README). Private Elements, Commands, Subscriptions and Dependencies are never exported. Schemas from Definitions Packages are written into the generated code and Dependencies are data in the Snapshot, so the package.json declares only `@casitafeliz/loom-contract` and `zod`, as peers with a caret range on the versions it was built with, and carries the `cfLoom` metadata (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). How a peer's range moves the Contract Package's version is in [Versioning](COMPATIBILITY.md#versioning). The Service itself installs the Contract Packages it depends on as ordinary dependencies, since its client and Subscriptions use them.
 
-The package is TypeScript built with `tsc` alone, since Node strips no types under `node_modules`: `package.json`, `snapshot.json`, a `tsconfig.json` with no Node or DOM types, since Applications import it in browsers, and under `src/` the entry `index.ts`, `snapshot.ts`, `standard-rejections.ts`, one file per exported Endpoint under `endpoints/`, per Guard they attach under `guards/` and per code they answer under `rejections/`, the Standard ones excepted, and `defs.ts` when a schema reaches a recursive def. An Application's package holds its Snapshot only, exported as `snapshot`.
+The package is TypeScript built with `tsc` alone, since Node strips no types under `node_modules`: `package.json`, `snapshot.json`, a `tsconfig.json` with no Node or DOM types, since Applications import it in browsers, and under `src/` the entry `index.ts`, `snapshot.ts`, `standard-rejections.ts`, one file per exported Endpoint under `endpoints/`, per Guard they attach under `guards/` and per code they answer under `rejections/`, the Standard ones excepted, and `defs.ts` when a schema reaches a recursive def. An Application's package exports its Snapshot only, as `snapshot`. Its files are a function of the canonical Snapshot alone: every map is written in code point order. Each generated declaration is named for its kind (`getOrderEndpoint`, `apiKeyGuard`, `orderLockedRejection`, `treeDef` and `treeReaderDef` for a recursive def's two schemas), and `@casitafeliz/loom-contract` is imported whole as `loom`, so no two generated names and no imported name meet.
 
 Each exported Endpoint is rebuilt from its Snapshot entry with `defineEndpoint`, so `InputOf`, `SuccessOf` and `RejectionsOf` give a Consumer the Provider's types: its `input` as declared, the Guards' demands merged as the Snapshot records them, which is what the Service reads; its `success` headers and body and its Rejections' bodies as Reader schemas, since the Consumer reads them; its Guards attached with their Qualifiers; and its own Rejections, the resolved codes but its Guards' and the two cf-loom's runtime adds, `notFound` as the Standard Rejection. Its Guards are rebuilt as declared, with their demands, Context, Qualifier schema and Rejections.
 

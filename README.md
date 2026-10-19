@@ -47,7 +47,7 @@ src/
 │   │   └── notify-on-settled.subscription.ts
 │   └── dependencies/
 │       └── payments-service.dependencies.ts
-├── endpoints/orders/get-order.handler.ts  Handlers mirror contract/
+├── endpoints/orders/get-order.handler.ts  Handlers by Group and name (see Stubs and the Handler map)
 ├── guards/api-key.handler.ts
 ├── commands/charge-card.v1.handler.ts
 ├── subscriptions/notify-on-settled.handler.ts

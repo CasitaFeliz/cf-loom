@@ -161,7 +161,7 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints, Guards, Commands' Message Versions and Subscriptions that are not Retired, keyed by name.
+The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, and of its Commands' Message Versions and Subscriptions that are not Retired, keyed by name.
 _Avoid_: registry, router
 
 **Issue**:
