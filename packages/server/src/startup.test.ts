@@ -186,6 +186,31 @@ describe('serve: what it checks before the first request', () => {
     expect(serving).toThrow('guards.apiKey holds no Handler handle() returned for it');
   });
 
+  test('a text part that holds no zod schema throws, as generate words it', () => {
+    const lookup = defineEndpoint({
+      name: 'lookup',
+      method: 'GET',
+      path: '/lookup',
+      visibility: 'public',
+      description: 'Looks one up',
+      input: { query: { term: z.string() } as never },
+      success: { status: 204 },
+    });
+    const withLookup = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [lookup] })],
+    });
+
+    const serving = () =>
+      serve(withLookup, {
+        endpoints: { lookup: handle(lookup, () => success()) },
+        guards: {},
+        deprecatedAt: {},
+      });
+
+    expect(serving).toThrow('endpoints.lookup.input.query not-a-schema');
+  });
+
   test('a text part the walker refuses throws, as generate words it', () => {
     const since = defineEndpoint({
       name: 'since',

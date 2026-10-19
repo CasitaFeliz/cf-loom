@@ -17,10 +17,16 @@ export {
   rejectionEnvelopeOf,
   reservedFaults,
 } from './envelopes.ts';
+export type { SuccessHeaderTexts, TextValue } from './header-text.ts';
+export {
+  isHeaderText,
+  isTextValue,
+  successHeaderTextsOf,
+  textOfValue,
+} from './header-text.ts';
 export { deprecationHeaderOf, isJsonContentType, jsonContentType } from './headers.ts';
 export type { Match, Matchable } from './match.ts';
 export { matchOf } from './match.ts';
-export type { TextValue } from './text.ts';
-export { canTravelAsHeader, textOfValue, valueOfText } from './text.ts';
+export { valueOfText } from './text.ts';
 export type { TextPartNodes, TextSource } from './text-parts.ts';
 export { textPartsOf, textSourceOf } from './text-parts.ts';

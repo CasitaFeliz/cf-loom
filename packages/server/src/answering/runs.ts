@@ -1,10 +1,9 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
 import {
-  canTravelAsHeader,
   type InputIssue,
   invalidInputBodyOf,
   isInputPart,
-  textOfValue,
+  successHeaderTextsOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
 import type { EndpointRun } from '@casitafeliz/loom-handlers/internal';
@@ -56,17 +55,12 @@ export function answeredOfFailedRun(
 
 /** A Success a Handler answered, sent only when each of its headers can travel as text. */
 export function answeredOfSuccess(success: ResolvedSuccess, faultedBy: FaultedBy): Answered {
-  const declared = Object.entries(success.headers ?? {}).filter(([, value]) => value !== undefined);
-  const texts = declared.map(([name, value]) => [name, headerTextOf(value)] as const);
-  const issues = texts
-    .filter(([, text]) => text === undefined)
-    .map(([name]) => headerIssueOf(name));
-  if (issues.length > 0) {
-    return invalidOutcomeOf(issues, faultedBy);
+  const headers = successHeaderTextsOf(success.headers);
+  if (headers.kind === 'issues') {
+    return invalidOutcomeOf(headers.issues, faultedBy);
   }
-  const headers = texts.filter(isTravelling);
-  const response = successResponseOf({ status: success.status, headers, body: success.body });
-  return { kind: 'success', response };
+  const sent = { status: success.status, headers: headers.texts, body: success.body };
+  return { kind: 'success', response: successResponseOf(sent) };
 }
 
 /** A Rejection or a Fault a Handler answered, as sent; a returned Fault is the Service's too. */
@@ -103,25 +97,6 @@ export function answeredOfInvalidInput(
 function invalidOutcomeOf(issues: readonly Issue[], faultedBy: FaultedBy): Answered {
   const serviceFault = { ...faultedBy, kind: 'invalid-outcome' as const, issues };
   return { kind: 'fault', response: reservedResponseOf('INVALID_OUTCOME'), serviceFault };
-}
-
-function headerIssueOf(name: string): Issue {
-  const message = 'The header value cannot travel as HTTP text';
-  return { part: 'success.headers', path: [name], code: 'invalid_format', message };
-}
-
-/** A Success header's value as the text it travels in, or none when it cannot travel. */
-function headerTextOf(value: unknown): string | undefined {
-  const isText =
-    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-  const text = isText ? textOfValue(value) : undefined;
-  return text !== undefined && canTravelAsHeader(text) ? text : undefined;
-}
-
-function isTravelling(
-  header: readonly [string, string | undefined],
-): header is readonly [string, string] {
-  return header[1] !== undefined;
 }
 
 function isInputIssue(issue: Issue): issue is InputIssue {

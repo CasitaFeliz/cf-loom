@@ -1,5 +1,5 @@
-import type { IssueCode, ReservedCode } from '../declarations/index.ts';
-import { type InputPart, type Issue, inOf } from '../validation/index.ts';
+import type { ReservedCode } from '../declarations/index.ts';
+import { type InputIn, type InputPart, type Issue, inOf } from '../validation/index.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
@@ -93,12 +93,7 @@ export type InputIssue = Issue & { readonly part: InputPart };
 
 /** The body of the invalid-input Rejection, cf-loom's own, as it travels and as the client decodes it. */
 export type InvalidInputBody = {
-  readonly issues: readonly {
-    readonly in: ReturnType<typeof inOf>;
-    readonly path: readonly (string | number)[];
-    readonly code: IssueCode;
-    readonly message: string;
-  }[];
+  readonly issues: readonly (Omit<Issue, 'part'> & { readonly in: InputIn })[];
 };
 
 /** The body of the invalid-input Rejection: each Issue with the part of the request it read. */

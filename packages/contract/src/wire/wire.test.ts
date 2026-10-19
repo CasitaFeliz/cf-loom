@@ -1,17 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import {
-  canTravelAsHeader,
   committedValues,
   deprecationHeaderOf,
   faultEnvelopeOf,
   faultStatusOf,
   invalidInputBodyOf,
+  isHeaderText,
   isJsonContentType,
   jsonContentType,
   rejectionEnvelopeOf,
   reservedCodes,
   reservedFaults,
   type SchemaNode,
+  successHeaderTextsOf,
   textOfValue,
   valueOfText,
 } from '../internal/index.ts';
@@ -72,7 +73,7 @@ describe('valueOfText', () => {
   });
 });
 
-describe('textOfValue and canTravelAsHeader', () => {
+describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   test('a value travels as the text JavaScript writes it', () => {
     expect([textOfValue(3), textOfValue(-1.5), textOfValue(true), textOfValue('v1')]).toEqual([
       '3',
@@ -82,12 +83,58 @@ describe('textOfValue and canTravelAsHeader', () => {
     ]);
   });
 
-  test('a header value holds no NUL, LF or CR and nothing above U+00FF', () => {
-    const accepted = ['v1', 'a, b', 'café', '\u00ff', ''];
-    const refused = ['€', 'a\nb', 'a\rb', 'a\u0000b', '😀'];
+  test('a header value is RFC 9110 field text: tab, visible ASCII, space and U+0080 to U+00FF', () => {
+    const accepted = ['v1', 'a, b', 'café', '\u00ff', '', 'a\tb', '\u0080'];
+    const refused = ['€', '\u0100', 'a\nb', 'a\rb', 'a\u0000b', 'a\u0001b', 'a\u007fb', '😀'];
 
-    expect(accepted.map(canTravelAsHeader)).toEqual(Array(5).fill(true));
-    expect(refused.map(canTravelAsHeader)).toEqual(Array(5).fill(false));
+    expect(accepted.map(isHeaderText)).toEqual(Array(accepted.length).fill(true));
+    expect(refused.map(isHeaderText)).toEqual(Array(refused.length).fill(false));
+  });
+
+  test('a header value has no leading or trailing whitespace', () => {
+    const refused = [' a', 'a ', '\ta', 'a\t', '   '];
+
+    expect(refused.map(isHeaderText)).toEqual(Array(refused.length).fill(false));
+  });
+
+  test('a Success’s headers travel as text, an undefined one left out', () => {
+    const sent = successHeaderTextsOf({
+      'x-total': 3,
+      'x-ok': true,
+      etag: 'v1',
+      'x-none': undefined,
+    });
+
+    expect(sent).toEqual({
+      kind: 'texts',
+      texts: [
+        ['x-total', '3'],
+        ['x-ok', 'true'],
+        ['etag', 'v1'],
+      ],
+    });
+  });
+
+  test('a Success header that cannot travel is an Issue at success.headers, by its name', () => {
+    const sent = successHeaderTextsOf({ etag: ' v1', 'x-total': 3, 'x-list': ['a'] });
+
+    expect(sent).toEqual({
+      kind: 'issues',
+      issues: [
+        {
+          part: 'success.headers',
+          path: ['etag'],
+          code: 'invalid_format',
+          message: expect.any(String),
+        },
+        {
+          part: 'success.headers',
+          path: ['x-list'],
+          code: 'invalid_format',
+          message: expect.any(String),
+        },
+      ],
+    });
   });
 });
 

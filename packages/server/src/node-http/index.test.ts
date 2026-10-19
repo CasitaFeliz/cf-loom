@@ -142,6 +142,31 @@ function bodyOf(received: string): string {
   return chunks.join('');
 }
 
+/**
+ * What `nodeListener` answers for an incoming message `node:http` would never parse itself, given
+ * to it directly with a recording response.
+ */
+async function listenedTo(sent: { readonly method: string; readonly url: string }) {
+  const incoming = Object.assign(Readable.from([]), {
+    ...sent,
+    headers: { host: 'test' },
+    rawHeaders: ['Host', 'test'],
+  });
+  const written = new PassThrough();
+  const outgoing = Object.assign(written, {
+    statusCode: 0,
+    appendHeader: () => outgoing,
+    writeHead: () => outgoing,
+  });
+  const finished = new Promise((resolve) => written.on('finish', resolve));
+  nodeListener(serve(contract, handlers))(
+    incoming as unknown as IncomingMessage,
+    outgoing as unknown as ServerResponse,
+  );
+  await finished;
+  return { status: outgoing.statusCode, body: String(written.read() ?? '') };
+}
+
 describe('nodeHttp', () => {
   test('a POST with a JSON body and a demanded header answers the Success through node:http', async () => {
     const url = await listening();
@@ -195,15 +220,24 @@ describe('nodeHttp', () => {
     ]);
   });
 
-  test('a request target that is not a path is answered 400', async () => {
+  test('an absolute-form target routes on its path and query', async () => {
+    const url = await listening();
+
+    const answer = await raw(
+      url,
+      'GET http://other/orders/o-1?x=1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+
+    expect(statusLineOf(answer)).toBe('HTTP/1.1 200 OK');
+    expect(JSON.parse(bodyOf(answer))).toEqual({ id: 'o-1' });
+  });
+
+  test('an asterisk or authority-form target is answered 400', async () => {
     const url = await listening();
 
     const answers = [
-      await raw(
-        url,
-        'GET http://test/orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
-      ),
       await raw(url, 'OPTIONS * HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n'),
+      await raw(url, 'GET test:80 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n'),
     ];
 
     expect(answers.map(statusLineOf)).toEqual([
@@ -226,31 +260,20 @@ describe('nodeHttp', () => {
     expect(after.status).toBe(200);
   });
 
-  test('any other method a Request refuses answers NO_SUCH_ENDPOINT too', async () => {
-    const incoming = Object.assign(Readable.from([]), {
-      method: 'TRACK',
-      url: '/orders',
-      headers: { host: 'test' },
-      rawHeaders: ['Host', 'test'],
-    });
-    const written = new PassThrough();
-    const outgoing = Object.assign(written, {
-      statusCode: 0,
-      appendHeader: () => outgoing,
-      writeHead: () => outgoing,
-    });
-    const finished = new Promise((resolve) => written.on('finish', resolve));
+  test.each(['CONNECT', 'TRACE', 'TRACK', 'track'])(
+    'nodeListener answers %s, a method a Request refuses, with NO_SUCH_ENDPOINT',
+    async (method) => {
+      const answer = await listenedTo({ method, url: '/orders' });
 
-    nodeListener(serve(contract, handlers))(
-      incoming as unknown as IncomingMessage,
-      outgoing as unknown as ServerResponse,
-    );
-    await finished;
+      expect(answer.status).toBe(404);
+      expect(JSON.parse(answer.body)).toMatchObject({ fault: { code: 'NO_SUCH_ENDPOINT' } });
+    },
+  );
 
-    expect(outgoing.statusCode).toBe(404);
-    expect(JSON.parse(String(written.read()))).toMatchObject({
-      fault: { code: 'NO_SUCH_ENDPOINT' },
-    });
+  test('nodeListener answers an absolute target of another scheme with 400', async () => {
+    const answer = await listenedTo({ method: 'GET', url: 'ftp://test/orders/o-1' });
+
+    expect(answer.status).toBe(400);
   });
 
   test('a request without a Host header is answered 400', async () => {
@@ -262,15 +285,29 @@ describe('nodeHttp', () => {
     expect(statusLineOf(answer)).toBe('HTTP/1.1 400 Bad Request');
   });
 
-  test('a request whose Host header names no URL is answered 400', async () => {
+  test.each(['not a host', 'x/orders', 'x?', 'x#', '', 'x\\orders', 'x:80/orders', 'user@x'])(
+    'a Host header that is no bare host and port, %j, is answered 400 and never routes',
+    async (host) => {
+      const url = await listening();
+
+      const answer = await raw(
+        url,
+        `GET /mine HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`,
+      );
+
+      expect(statusLineOf(answer)).toBe('HTTP/1.1 400 Bad Request');
+    },
+  );
+
+  test('a Host header with a port routes on the path', async () => {
     const url = await listening();
 
     const answer = await raw(
       url,
-      'GET /orders/o-1 HTTP/1.1\r\nHost: not a host\r\nConnection: close\r\n\r\n',
+      'GET /orders/o-1 HTTP/1.1\r\nHost: test:8080\r\nConnection: close\r\n\r\n',
     );
 
-    expect(statusLineOf(answer)).toBe('HTTP/1.1 400 Bad Request');
+    expect(statusLineOf(answer)).toBe('HTTP/1.1 200 OK');
   });
 
   test('a response to HEAD carries no body', async () => {

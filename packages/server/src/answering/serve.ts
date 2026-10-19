@@ -1,5 +1,6 @@
 import type { Contract } from '@casitafeliz/loom-contract';
-import { type ServedHandlers, servedContractOf } from '../served/index.ts';
+import type { HandlerMap } from '@casitafeliz/loom-handlers';
+import { servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
 import { type AnsweredRequest, reportServiceFault, type ServiceFault } from './hooks.ts';
 
@@ -25,7 +26,7 @@ export type ServeOptions = {
  */
 export function serve(
   contract: Contract,
-  handlers: ServedHandlers,
+  handlers: Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>,
   options: ServeOptions = {},
 ): Http {
   const served = servedContractOf(contract, handlers, options.maxBodyBytes);

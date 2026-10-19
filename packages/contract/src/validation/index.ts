@@ -18,7 +18,7 @@ export type {
   LocatedStandardRejection,
   Root,
 } from './located.ts';
-export type { InputPart, Issue, IssuePart, ObjectPart, Part } from './parts.ts';
+export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part } from './parts.ts';
 export {
   demandParts,
   fieldsOf,

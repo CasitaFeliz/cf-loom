@@ -10,6 +10,9 @@ import { pipeline } from 'node:stream/promises';
 import type { Http } from '../answering/index.ts';
 import { reservedResponseOf } from '../response/index.ts';
 
+/** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
+const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
+
 /** The methods whose request never carries a body, which a web-standard `Request` refuses one for. */
 const bodiless: readonly string[] = ['GET', 'HEAD'];
 
@@ -45,29 +48,41 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
 }
 
 /**
- * The web-standard `Request` of an incoming message: 400 when its target is no path or its `Host`
- * names no URL, and `NO_SUCH_ENDPOINT` for a method a `Request` refuses, which no Endpoint has.
+ * The web-standard `Request` of an incoming message: `NO_SUCH_ENDPOINT` for a method a `Request`
+ * refuses, which no Endpoint can have, and 400 when its target or its `Host` names no URL.
  */
 function incomingOf(incoming: IncomingMessage): Incoming {
+  if (refusedMethods.includes((incoming.method ?? '').toUpperCase())) {
+    return { kind: 'answered', response: reservedResponseOf('NO_SUCH_ENDPOINT') };
+  }
   const url = urlOf(incoming);
   if (url === undefined) {
     return { kind: 'answered', response: new Response(null, { status: 400 }) };
   }
-  try {
-    return { kind: 'request', request: requestOf(incoming, url) };
-  } catch {
-    return { kind: 'answered', response: reservedResponseOf('NO_SUCH_ENDPOINT') };
-  }
+  return { kind: 'request', request: requestOf(incoming, url) };
 }
 
-/** The URL of a request target that is a path, on the origin its `Host` names; none otherwise. */
+/**
+ * The URL of a request target in origin form, on the origin its `Host` names, or in absolute form;
+ * none for any other target, or a `Host` that is no bare host and port, so it never moves the path.
+ */
 function urlOf(incoming: IncomingMessage): URL | undefined {
   const target = incoming.url ?? '';
   const host = incoming.headers.host;
-  if (!target.startsWith('/') || host === undefined) {
+  if (host === undefined || !isBareHost(host)) {
     return undefined;
   }
-  return URL.parse(`http://${host}${target}`) ?? undefined;
+  if (target.startsWith('/')) {
+    return URL.parse(`http://${host}${target}`) ?? undefined;
+  }
+  const absolute = URL.parse(target);
+  const isHttp = absolute?.protocol === 'http:' || absolute?.protocol === 'https:';
+  return isHttp ? absolute : undefined;
+}
+
+/** Whether a `Host` header is a host and an optional port, and nothing a URL would read as more. */
+function isBareHost(host: string): boolean {
+  return !/[\s/\\?#@]/.test(host) && URL.canParse(`http://${host}`);
 }
 
 function requestOf(incoming: IncomingMessage, url: URL): Request {

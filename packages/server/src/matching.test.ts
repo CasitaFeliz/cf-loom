@@ -200,14 +200,15 @@ describe('serve: matching a request to an Endpoint', () => {
     expect(statuses).toEqual([404, 404, 404, 404, 404, 404]);
   });
 
-  test('the path is the URL’s path: dot segments, %2e included, are removed before matching', async () => {
+  test('the path is the URL’s path: dot segments, %2e included, are removed and \\ reads as / before matching', async () => {
     const answers = [
       await answerOf('/orders/o-1/../summary'),
       await answerOf('/orders/o-1/%2e%2e/summary'),
       await answerOf('/orders/./summary'),
+      await answerOf('/orders\\summary'),
     ];
 
-    expect(answers).toEqual(Array(3).fill({ status: 200, body: { count: 3 } }));
+    expect(answers).toEqual(Array(4).fill({ status: 200, body: { count: 3 } }));
   });
 
   test('the query string takes no part in matching', async () => {

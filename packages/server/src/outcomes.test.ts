@@ -115,6 +115,28 @@ describe('serve: a Success', () => {
     expect(await response.json()).toEqual(order);
   });
 
+  test('a header value with a tab inside, or U+00FF, travels', async () => {
+    const { http } = serveWith(() =>
+      success({ headers: { 'x-total': 3, etag: 'v\t\u00ff' }, body: order }),
+    );
+
+    const response = await http(getRequest.clone());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('etag')).toBe('v\t\u00ff');
+  });
+
+  test('an optional header the Handler gives as undefined is not sent', async () => {
+    const { http } = serveWith(() =>
+      success({ headers: { 'x-total': 3, etag: undefined }, body: order }),
+    );
+
+    const response = await http(getRequest.clone());
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has('etag')).toBe(false);
+  });
+
   test('an optional header the Handler leaves out is not sent', async () => {
     const { http } = serveWith(() => success({ headers: { 'x-total': 3 }, body: order }));
 
@@ -129,6 +151,10 @@ describe('serve: a Success', () => {
     ['with a line feed', 'v\n1'],
     ['with a carriage return', 'v\r1'],
     ['with a NUL', 'v\u00001'],
+    ['with U+0100', 'v\u0100'],
+    ['with a control character', 'v\u0001'],
+    ['with DEL', 'v\u007f'],
+    ['with a leading space', ' v1'],
   ])('a header value %s cannot travel, so it is INVALID_OUTCOME', async (_case, etag) => {
     const { http, faults } = serveWith(() =>
       success({ headers: { 'x-total': 3, etag }, body: order }),

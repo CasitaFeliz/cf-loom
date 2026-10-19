@@ -110,8 +110,11 @@ export function isInputPart(part: IssuePart): part is InputPart {
   return sent.includes(part);
 }
 
+/** The part of the request an invalid-input issue says it read: its `in`. */
+export type InputIn = 'params' | 'query' | 'headers' | 'body';
+
 /** Where an invalid-input issue says it sits, `in`: the part of the request it read. */
-export function inOf(part: InputPart): 'params' | 'query' | 'headers' | 'body' {
+export function inOf(part: InputPart): InputIn {
   return partFieldOf(part);
 }
 
