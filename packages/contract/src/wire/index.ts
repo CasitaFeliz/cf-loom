@@ -1,5 +1,11 @@
 export type { Body, BodyMessage, ReceivedBody } from './body.ts';
-export { bodyOf, discardBodyOf, receivedBodyOf } from './body.ts';
+export {
+  bodyOf,
+  discardBodyOf,
+  malformedBodyIssueOf,
+  notJsonBodyIssue,
+  receivedBodyOf,
+} from './body.ts';
 export { isJsonContentType, jsonContentType } from './content-type.ts';
 export {
   deprecatedAtOfHeader,

@@ -16,6 +16,8 @@ import {
   isQueryText,
   isSegmentText,
   jsonContentType,
+  malformedBodyIssueOf,
+  notJsonBodyIssue,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionEnvelopeOf,
@@ -340,7 +342,17 @@ describe('the content type', () => {
 });
 
 describe('bodyOf', () => {
-  test('a body sent with another content type is malformed, its Issue at input.body', async () => {
+  test('the Issue serve answers for a body it cannot read sits at the whole of input.body', () => {
+    expect(malformedBodyIssueOf('The body is not JSON')).toEqual(notJsonBodyIssue);
+    expect(notJsonBodyIssue).toEqual({
+      part: 'input.body',
+      path: [],
+      code: 'malformed',
+      message: 'The body is not JSON',
+    });
+  });
+
+  test('a body sent with another content type is malformed', async () => {
     const request = new Request('http://test/', {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },
@@ -351,16 +363,11 @@ describe('bodyOf', () => {
 
     expect(body).toEqual({
       kind: 'malformed',
-      issue: {
-        part: 'input.body',
-        path: [],
-        code: 'malformed',
-        message: 'The content type is not application/json',
-      },
+      message: 'The content type is not application/json',
     });
   });
 
-  test('a body that is no JSON is malformed, its Issue at input.body', async () => {
+  test('a body that is no JSON is malformed', async () => {
     const request = new Request('http://test/', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -369,10 +376,7 @@ describe('bodyOf', () => {
 
     const body = await bodyOf(request, undefined);
 
-    expect(body).toEqual({
-      kind: 'malformed',
-      issue: { part: 'input.body', path: [], code: 'malformed', message: 'The body is not JSON' },
-    });
+    expect(body).toEqual({ kind: 'malformed', message: 'The body is not JSON' });
   });
 });
 
@@ -400,7 +404,7 @@ describe('bodyOf, reading a Response', () => {
     expect(body).toMatchObject({
       kind: 'unreadable',
       error: failure,
-      issue: { code: 'malformed' },
+      message: 'The body is not JSON',
     });
   });
 });
@@ -480,11 +484,17 @@ describe('a number literal in exponent form', () => {
 
 describe('the received Deprecation header out of range', () => {
   test('an instant before 1970 is read, one past the Date range is none', () => {
-    const headers = ['@-1', '@99999999999999999', '@-99999999999999'];
+    const headers = [
+      '@-1',
+      '@99999999999999999',
+      '@-99999999999999',
+      '@253402300800',
+      '@-8639977881600',
+    ];
 
     const stamps = headers.map(deprecatedAtOfHeader);
 
-    expect(stamps).toEqual(['1969-12-31T23:59:59Z', undefined, undefined]);
+    expect(stamps).toEqual(['1969-12-31T23:59:59Z', undefined, undefined, undefined, undefined]);
   });
 });
 
@@ -535,8 +545,28 @@ describe('receivedBodyOf', () => {
 
     expect(bodies).toMatchObject([
       { kind: 'value', value: large },
-      { kind: 'malformed', issue: { code: 'malformed' } },
+      { kind: 'malformed', message: 'The content type is not application/json' },
     ]);
+  });
+});
+
+describe('receivedBodyOf, discarding', () => {
+  test('a body that is no JSON by its content type is cancelled unread', async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        cancel: () => {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const html = new Response(stream, { headers: { 'content-type': 'text/html' } });
+
+    const body = await receivedBodyOf(html);
+
+    expect(body.kind).toBe('malformed');
+    expect(cancelled).toBe(true);
   });
 });
 

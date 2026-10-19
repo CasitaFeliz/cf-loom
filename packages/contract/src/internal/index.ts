@@ -10,8 +10,8 @@ export {
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
-export type { Parsed, SchemaIssue } from '../issues/index.ts';
-export { parseValue } from '../issues/index.ts';
+export type { Parsed, ParsedParts, SchemaIssue } from '../issues/index.ts';
+export { parsedPartsOf, parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
   ApplicationSnapshot,
@@ -174,7 +174,9 @@ export {
   isSegmentText,
   isTextValue,
   jsonContentType,
+  malformedBodyIssueOf,
   matchOf,
+  notJsonBodyIssue,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionEnvelopeOf,
