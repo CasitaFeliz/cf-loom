@@ -6,9 +6,14 @@ export type ListedRejection =
   | { readonly kind: 'not-found' }
   | { readonly kind: 'declared'; readonly code: string };
 
+/** Whether an Element still works, so it has a Handler and a Contract Package may export it: not Retired. */
+export function isLive(element: { readonly lifecycle?: string | undefined }): boolean {
+  return element.lifecycle !== 'retired';
+}
+
 /** Whether a Contract Package exports an Endpoint: Public or Internal, and not Retired. */
 export function isExportedEndpoint(endpoint: EndpointSnapshot): boolean {
-  return endpoint.visibility !== 'private' && endpoint.lifecycle !== 'retired';
+  return endpoint.visibility !== 'private' && isLive(endpoint);
 }
 
 /**

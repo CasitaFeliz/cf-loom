@@ -1,6 +1,5 @@
 export type { Kind, StandardRejections } from '../declarations/index.ts';
 export {
-  addedStandardRejectionNames,
   isEndpoint,
   isGuard,
   isRejection,
@@ -38,6 +37,7 @@ export {
   canonicalTextOf,
   hashedTextOf,
   isExportedEndpoint,
+  isLive,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,
@@ -86,17 +86,10 @@ export {
   validateContract,
 } from '../validation/index.ts';
 export type {
-  AllOfNode,
-  ArrayNode,
-  BooleanNode,
-  Child,
   Defs,
   EnumNode,
   Field,
   HashFormat,
-  JsonNode,
-  JsonPrimitive,
-  LiteralNode,
   LocatedSchema,
   NotAllowed,
   NumberNode,
@@ -104,14 +97,12 @@ export type {
   Origin,
   OriginOf,
   Path,
-  RecordNode,
   RefNode,
   SchemaNode,
   StringFormat,
   StringNode,
   TaggedNode,
   TupleNode,
-  UnionNode,
   WalkedLocation,
   WalkedSchemas,
 } from '../walker/index.ts';
