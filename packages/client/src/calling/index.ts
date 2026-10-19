@@ -5,5 +5,6 @@ export type {
   Client,
   ClientOptions,
   DeprecationNotice,
+  Fetch,
+  OnDeprecation,
 } from './client-types.ts';
-export type { ReceivedOutcome, ReceivedRejection, ReceivedSuccess } from './outcome-types.ts';

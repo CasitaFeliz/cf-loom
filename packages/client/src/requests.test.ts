@@ -4,6 +4,7 @@ import {
   defineDependencies,
   defineEndpoint,
   defineGroup,
+  defineGuard,
   type Endpoint,
   type StandardRejections,
 } from '@casitafeliz/loom-contract';
@@ -191,6 +192,25 @@ describe('what a call sends', () => {
     expect(withFragment).toThrow(/query or a fragment/);
   });
 
+  test('a baseUrl ending in an empty query or fragment is refused too', () => {
+    const emptyQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?' });
+    const emptyFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#' });
+
+    expect(emptyQuery).toThrow(/query or a fragment/);
+    expect(emptyFragment).toThrow(/query or a fragment/);
+  });
+
+  test('an optional query param passed as undefined sends no key', async () => {
+    const { orders, sent } = recording(counted);
+
+    await orders.searchOrders({
+      params: { shopId: 's' },
+      query: { ids: ['1'], minimum: undefined },
+    });
+
+    expect(new URL(sent[0]?.url ?? '').search).toBe('?ids=1');
+  });
+
   test('numbers like 1e21 and 1.5e-7 reach serve as the same numbers', async () => {
     const handlers = {
       endpoints: {
@@ -280,18 +300,21 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
-  test.each(['..', '.', ''])('a path param of %j cannot travel as a segment', async (shopId) => {
-    const { orders, calls } = unsent();
+  test.each(['..', '.', '', 'a\uD800'])(
+    'a path param of %j cannot travel as a segment',
+    async (shopId) => {
+      const { orders, calls } = unsent();
 
-    const outcome = await orders.searchOrders({ params: { shopId }, query: { ids: ['1'] } });
+      const outcome = await orders.searchOrders({ params: { shopId }, query: { ids: ['1'] } });
 
-    expect(outcome).toMatchObject({
-      kind: 'rejection',
-      code: 'INVALID_INPUT',
-      body: { issues: [{ in: 'params', path: ['shopId'], code: 'invalid_value' }] },
-    });
-    expect(calls()).toBe(0);
-  });
+      expect(outcome).toMatchObject({
+        kind: 'rejection',
+        code: 'INVALID_INPUT',
+        body: { issues: [{ in: 'params', path: ['shopId'], code: 'invalid_format' }] },
+      });
+      expect(calls()).toBe(0);
+    },
+  );
 
   test('a required list with no items is refused, as serve reads no key as absent', async () => {
     const { orders, calls } = unsent();
@@ -304,5 +327,115 @@ describe('Input that cannot be sent', () => {
       body: { issues: [{ in: 'query', path: ['ids'], code: 'required' }] },
     });
     expect(calls()).toBe(0);
+  });
+
+  test('a query value or header with a lone surrogate cannot travel', async () => {
+    const { orders, calls } = unsent();
+
+    const outcomes = [
+      await orders.searchOrders({ params: { shopId: 's' }, query: { ids: ['a\uDC00'] } }),
+      await orders.searchOrders({
+        params: { shopId: 's' },
+        query: { ids: ['1'] },
+        headers: { 'x-trace': 'a\uD800' },
+      }),
+    ];
+
+    expect(outcomes).toMatchObject([
+      { body: { issues: [{ in: 'query', path: ['ids', 0], code: 'invalid_format' }] } },
+      { body: { issues: [{ in: 'headers', path: ['x-trace'], code: 'invalid_format' }] } },
+    ]);
+    expect(calls()).toBe(0);
+  });
+
+  test('a body left out is missing, not an empty object', async () => {
+    const { orders } = unsent();
+    const leftOut = { params: { shopId: 's' } } as Parameters<typeof orders.createOrder>[0];
+
+    const outcome = await orders.createOrder(leftOut);
+
+    expect(outcome).toMatchObject({
+      body: { issues: [{ in: 'body', path: [], code: 'required' }] },
+    });
+  });
+});
+
+describe('a Guard’s demands, checked before the Input, as serve checks them', () => {
+  const apiKey = defineGuard({
+    name: 'apiKey',
+    description: 'A key per client',
+    demands: { headers: z.object({ 'x-api-key': z.string().min(2) }) },
+  });
+  const makeOrder = defineEndpoint({
+    name: 'makeOrder',
+    method: 'POST',
+    path: '/make',
+    visibility: 'public',
+    description: 'A new order',
+    guards: [apiKey],
+    input: {
+      headers: z.object({ 'x-api-key': z.string().min(2) }),
+      body: z.object({ quantity: z.int().max(3) }),
+    },
+    success: { status: 204 },
+  });
+  const making = contractPackageOf({ makeOrder }, defaultStandards);
+  const makingDeps = defineDependencies(making, { endpoints: [makeOrder] });
+
+  test('a demand that fails gives only its Issues, though the body fails too', async () => {
+    const makers = client(makingDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => counted(),
+    });
+
+    const outcome = await makers.makeOrder({
+      headers: { 'x-api-key': 'a' },
+      body: { quantity: 9 },
+    });
+
+    expect(outcome).toMatchObject({
+      code: 'INVALID_INPUT',
+      body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'too_small' }] },
+    });
+    expect(outcome.kind === 'rejection' && outcome.known && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
+  });
+});
+
+describe('a number literal in exponent form, end to end against serve', () => {
+  const echoLarge = defineEndpoint({
+    name: 'echoLarge',
+    method: 'GET',
+    path: '/large/:size',
+    visibility: 'public',
+    description: 'Echoes a large literal',
+    input: { params: z.object({ size: z.literal(1e21) }) },
+    success: { status: 204, headers: z.object({ 'x-small': z.literal(1.5e-7) }) },
+  });
+  const echoing = contractPackageOf({ echoLarge }, defaultStandards);
+  const echoingDeps = defineDependencies(echoing, { endpoints: [echoLarge] });
+
+  test('travels as plain decimal both ways and reads back as its literal', async () => {
+    const handlers = {
+      endpoints: {
+        echoLarge: handle(echoLarge, () => success({ headers: { 'x-small': 1.5e-7 } })),
+      },
+      guards: {},
+      deprecatedAt: {},
+    };
+    const provider = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'large', description: 'Large', endpoints: [echoLarge] })],
+    });
+    const http = serve(provider, handlers);
+    const echoes = client(echoingDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: (url, init) => http(new Request(url, init)),
+    });
+
+    const outcome = await echoes.echoLarge({ params: { size: 1e21 } });
+
+    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-small': 1.5e-7 } });
   });
 });

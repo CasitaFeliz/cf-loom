@@ -1,4 +1,5 @@
 import { type ReservedCode, reservedCodes } from '../declarations/index.ts';
+import { type BodyMessage, receivedBodyOf } from './body.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
@@ -112,21 +113,21 @@ export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope
   return undefined;
 }
 
-type ReceivedRejection = {
+type RejectionFields = {
   readonly code: string;
   readonly message: string;
   readonly body?: unknown;
 };
 
-type ReceivedFault = Omit<TravelingFault, 'code'> & { readonly code?: unknown };
+type FaultFields = Omit<TravelingFault, 'code'> & { readonly code?: unknown };
 
-function isRejectionShape(value: unknown): value is ReceivedRejection {
+function isRejectionShape(value: unknown): value is RejectionFields {
   return (
     typeof fieldOf(value, 'code') === 'string' && typeof fieldOf(value, 'message') === 'string'
   );
 }
 
-function isFaultShape(value: unknown): value is ReceivedFault {
+function isFaultShape(value: unknown): value is FaultFields {
   const committed: unknown = fieldOf(value, 'committed');
   const isCommitted = committedValues.some((known) => known === committed);
   return (
@@ -146,4 +147,25 @@ function fieldOf(value: unknown, field: string): unknown {
     return undefined;
   }
   return Object.hasOwn(value, field) ? Reflect.get(value, field) : undefined;
+}
+
+/** What a Caller reads of a body that may be an Envelope: the Envelope, none, or a failed stream. */
+export type ReceivedEnvelope =
+  | { readonly kind: 'envelope'; readonly envelope: RejectionEnvelope | FaultEnvelope }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'unreadable'; readonly error: unknown };
+
+/** The Envelope a response's body is, read only when its content type is JSON. */
+export async function receivedEnvelopeOf(message: BodyMessage): Promise<ReceivedEnvelope> {
+  const body = await receivedBodyOf(message);
+  switch (body.kind) {
+    case 'unreadable':
+      return { kind: 'unreadable', error: body.error };
+    case 'malformed':
+      return { kind: 'none' };
+    case 'value': {
+      const envelope = envelopeOf(body.value);
+      return envelope === undefined ? { kind: 'none' } : { kind: 'envelope', envelope };
+    }
+  }
 }

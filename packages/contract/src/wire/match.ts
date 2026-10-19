@@ -1,5 +1,6 @@
 import type { PathSegment } from '../validation/index.ts';
 import type { TextSource } from './text-parts.ts';
+import { isSegmentText, segmentTextOf } from './url-text.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
@@ -11,7 +12,8 @@ export type Match<Matched extends Matchable> =
 
 /**
  * What a request's method and path match exactly, segment by segment, each percent-decoded on its
- * own; among several, the one with a literal at the first segment where they differ.
+ * own; a segment no param can travel as, an empty one, matches nothing; among several, the one
+ * with a literal at the first segment where they differ.
  */
 export function matchOf<Matched extends Matchable>(
   declared: readonly Matched[],
@@ -19,7 +21,7 @@ export function matchOf<Matched extends Matchable>(
 ): Match<Matched> {
   const url = new URL(request.url);
   const texts = segmentTextsOf(url.pathname);
-  if (texts.includes('')) {
+  if (!texts.every(isSegmentText)) {
     return { kind: 'none' };
   }
   let best: Matched | undefined;
@@ -36,21 +38,12 @@ export function matchOf<Matched extends Matchable>(
   return { kind: 'matched', matched: best, source };
 }
 
-/** The decoded segments of a request path; the root has none, and an empty one matches nothing. */
+/** The decoded segments of a request path; the root has none. */
 function segmentTextsOf(pathname: string): readonly string[] {
   if (pathname === '/') {
     return [];
   }
-  return pathname.slice(1).split('/').map(decodedOf);
-}
-
-/** A segment percent-decoded, or as sent when it is not valid percent-encoding. */
-function decodedOf(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
+  return pathname.slice(1).split('/').map(segmentTextOf);
 }
 
 function isMatchedBy(segments: readonly PathSegment[], texts: readonly string[]): boolean {

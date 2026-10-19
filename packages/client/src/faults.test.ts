@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { type AddressInfo, createServer as createNetServer } from 'node:net';
 import {
   type ContractPackage,
   defineContract,
@@ -240,7 +240,91 @@ describe('row 2: a timeout, a reset or an abort after sending is committed unkno
   });
 });
 
+describe('row 2, more', () => {
+  test('an abort with a reason of its own is an abort, and one named TimeoutError from any realm a timeout', async () => {
+    const custom = new AbortController();
+    const foreign = new AbortController();
+    const orders = (controller: AbortController) =>
+      ordersOver(async () => {
+        controller.abort(controller === custom ? 'stop' : { name: 'TimeoutError' });
+        throw new TypeError('fetch failed');
+      });
+
+    const outcomes = [
+      await orders(custom).getOrder(input, { signal: custom.signal }),
+      await orders(foreign).getOrder(input, { signal: foreign.signal }),
+    ];
+
+    expect(outcomes).toMatchObject([
+      { committed: 'unknown', retryable: true, message: 'The request was aborted' },
+      { committed: 'unknown', retryable: true, message: 'The request timed out' },
+    ]);
+  });
+
+  test('an abort while the body is read is an abort, after the request was sent', async () => {
+    const controller = new AbortController();
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull: (streamController) => {
+          controller.abort();
+          streamController.error(new DOMException('Aborted', 'AbortError'));
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const json = { 'content-type': 'application/json' };
+    const orders = ordersOver(async () => new Response(stream, { status: 200, headers: json }));
+
+    const outcome = await orders.getOrder(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({
+      committed: 'unknown',
+      retryable: true,
+      message: 'The request was aborted',
+    });
+  });
+
+  test('Retry-After is kept on a Fault whose body failed while it was read', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('reset')),
+    });
+    const headers = { 'content-type': 'application/json', 'retry-after': '30' };
+    const orders = ordersOver(async () => new Response(stream, { status: 503, headers }));
+
+    const outcome = await orders.getOrder(input);
+
+    expect(outcome).toMatchObject({ message: 'The connection failed', retryAfter: '30' });
+  });
+});
+
 describe('row 3: any other failure is committed unknown and not retryable', () => {
+  test('a TypeError caused by another system error, EPIPE, is not retryable', async () => {
+    const outcome = await ordersOver(throwing(networkError('EPIPE'))).getOrder(input);
+
+    expect(outcome).toMatchObject({ committed: 'unknown', retryable: false });
+  });
+
+  test('a declared Success status of another kind, a 204 on a 200 Endpoint, is inferred', async () => {
+    const outcome = await ordersOver(answering(204)).getOrder(input);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 204',
+    });
+  });
+
+  test('an Envelope sent with a content type that is not JSON is no Envelope', async () => {
+    const envelope = JSON.stringify({ rejection: { code: 'NOT_FOUND', message: 'Not found' } });
+
+    const outcome = await ordersOver(
+      answering(404, envelope, { 'content-type': 'text/plain' }),
+    ).getOrder(input);
+
+    expect(outcome).toMatchObject({ kind: 'fault', message: 'The Provider answered 404' });
+  });
+
   test('a TypeError with no cause, as a browser throws for any network failure', async () => {
     const error = new TypeError('Failed to fetch');
 
@@ -296,6 +380,14 @@ describe('what is no network failure', () => {
     await expect(called).rejects.toBe(error);
   });
 
+  test('a plain Error from fetch reaches the caller unchanged', async () => {
+    const error = new Error('not a network failure');
+
+    const called = ordersOver(throwing(error)).getOrder(input);
+
+    await expect(called).rejects.toBe(error);
+  });
+
   test('a thrown value that is no error reaches the caller unchanged', async () => {
     const called = ordersOver(throwing('text')).getOrder(input);
 
@@ -331,6 +423,22 @@ describe('inferFault', () => {
         { committed: 'unknown', retryable: false },
       ],
     ]);
+  });
+
+  test('is given cf-loom’s own inference as its second argument', async () => {
+    const inferred: InferredFault[] = [];
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: answering(429),
+      inferFault: (_happened, ours) => {
+        inferred.push(ours);
+        return undefined;
+      },
+    });
+
+    await orders.getOrder(input);
+
+    expect(inferred).toEqual([{ committed: 'no', retryable: true }]);
   });
 
   test('returning undefined keeps cf-loom’s inference', async () => {
@@ -528,5 +636,45 @@ describe('the network rows against node:http', () => {
       retryable: true,
       message: 'The connection failed',
     });
+  });
+
+  test('bytes that are no HTTP, from a real socket, are any other network failure', async () => {
+    const socketServer = createNetServer((socket) => socket.end('garbage\r\n\r\n'));
+    await new Promise<void>((resolve) => socketServer.listen(0, '127.0.0.1', resolve));
+    const { port } = socketServer.address() as AddressInfo;
+
+    const outcome = await ordersAt(`http://127.0.0.1:${port}`).getOrder(input);
+    socketServer.close();
+
+    expect(outcome).toMatchObject({
+      committed: 'unknown',
+      retryable: false,
+      message: 'The connection failed',
+    });
+  });
+
+  test('a 502 page cut off by a reset, seen after the stream failed, is still a Fault', async () => {
+    const socketServer = createNetServer((socket) =>
+      socket.once('data', () => {
+        const head =
+          'HTTP/1.1 502 Bad Gateway\r\ncontent-type: text/html\r\ncontent-length: 1000\r\n\r\n';
+        socket.write(`${head}<html>`, () => socket.resetAndDestroy());
+      }),
+    );
+    await new Promise<void>((resolve) => socketServer.listen(0, '127.0.0.1', resolve));
+    const { port } = socketServer.address() as AddressInfo;
+    const late = client(ordersDeps, {
+      baseUrl: `http://127.0.0.1:${port}`,
+      fetch: async (url, init) => {
+        const response = await fetch(url, init);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return response;
+      },
+    });
+
+    const outcome = await late.getOrder(input);
+    socketServer.close();
+
+    expect(outcome).toMatchObject({ kind: 'fault', message: 'The Provider answered 502' });
   });
 });

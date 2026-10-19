@@ -158,7 +158,7 @@ describe('the client’s types', () => {
   });
 
   test('checking known narrows a Rejection by code, the Provider’s Standard codes included', () => {
-    type Outcome = ReceivedOutcome<typeof getOrder, typeof standards>;
+    type Outcome = ReceivedOutcome<typeof ordersDeps, 'getOrder'>;
     type Known = Extract<Outcome, { readonly kind: 'rejection'; readonly known: true }>;
 
     expectTypeOf<Known['code']>().toEqualTypeOf<
@@ -169,5 +169,14 @@ describe('the client’s types', () => {
     }>();
     expectTypeOf<Extract<Known, { readonly code: 'MISSING' }>['body']>().toEqualTypeOf<undefined>();
     expect(standards.notFound.code).toBe('MISSING');
+  });
+
+  test('a method returns exactly ReceivedOutcome of its Dependency and Endpoint name', () => {
+    type Returned = Awaited<ReturnType<Client<typeof ordersDeps>['listOrders']>>;
+
+    expectTypeOf<Returned>().toEqualTypeOf<ReceivedOutcome<typeof ordersDeps, 'listOrders'>>();
+    // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
+    expectTypeOf<ReceivedOutcome<typeof ordersDeps, 'ping'>>().toBeObject();
+    expect(ordersDeps.endpoints.listOrders.name).toBe('listOrders');
   });
 });

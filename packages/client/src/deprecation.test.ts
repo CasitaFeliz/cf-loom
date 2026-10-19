@@ -132,6 +132,55 @@ describe('the Deprecation warning', () => {
     ]);
   });
 
+  test('an instant before 1970 is told, and one past the Date range is not', async () => {
+    const notices: DeprecationNotice[] = [];
+    const answering = (deprecation: string) =>
+      client(ordersDeps, {
+        baseUrl: 'http://orders.test',
+        fetch: async () => Response.json({ ids: [] }, { headers: { deprecation } }),
+        onDeprecation: (notice) => notices.push(notice),
+      });
+
+    const outcomes = [
+      await answering('@-1').listOrders(),
+      await answering('@99999999999999999').listOrders(),
+      await answering('@-99999999999999').listOrders(),
+    ];
+
+    expect(outcomes.map((outcome) => outcome.kind)).toEqual(['success', 'success', 'success']);
+    expect(notices.map((notice) => notice.deprecatedAt)).toEqual(['1969-12-31T23:59:59Z']);
+  });
+
+  test('what onDeprecation throws reaches the caller, once the Outcome was decoded', async () => {
+    const error = new Error('a bug in the hook');
+    let read = false;
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => {
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull: (controller) => {
+              read = true;
+              controller.enqueue(new TextEncoder().encode('{"ids":[]}'));
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        const headers = { deprecation: '@1792229400', 'content-type': 'application/json' };
+        return new Response(body, { headers });
+      },
+      onDeprecation: () => {
+        throw error;
+      },
+    });
+
+    const called = orders.listOrders();
+
+    await expect(called).rejects.toBe(error);
+    expect(read).toBe(true);
+  });
+
   test('is not told for an Active Endpoint', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const orders = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });

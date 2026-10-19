@@ -1,6 +1,7 @@
 import type { Endpoint, InputOf } from '@casitafeliz/loom-contract';
+import type { ReceivedOutcome } from '../decoding/index.ts';
+import type { AnyDependencies } from '../endpoints/index.ts';
 import type { InferFault } from '../inference/index.ts';
-import type { AnyDependencies, ReceivedOutcome } from './outcome-types.ts';
 
 type EndpointOf<Deps extends AnyDependencies> = Deps['endpoints'][keyof Deps['endpoints']];
 
@@ -46,10 +47,16 @@ export type ClientOptions<Deps extends AnyDependencies, Configured extends strin
   readonly headers?: {
     readonly [Name in Configured]: ConfiguredHeader<ConfiguredValueOf<Deps, Name>>;
   };
-  readonly fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  readonly fetch?: Fetch;
   readonly inferFault?: InferFault;
-  readonly onDeprecation?: (notice: DeprecationNotice) => void;
+  readonly onDeprecation?: OnDeprecation;
 };
+
+/** A `fetch`: the global one, or the one given to `client()`. */
+export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/** Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console. */
+export type OnDeprecation = (notice: DeprecationNotice) => void;
 
 /** An Input's headers, those given to `client()` no longer required. */
 type CallHeaders<Headers, Configured extends string> = Omit<Headers, Configured> & {
@@ -91,20 +98,25 @@ export type CallInput<Target extends Endpoint, Configured extends string = never
 /** What one call may carry besides its Input. */
 export type CallOptions = { readonly signal?: AbortSignal };
 
-type Method<Target extends Endpoint, Configured extends string, Deps extends AnyDependencies> =
+type Method<
+  Target extends Endpoint,
+  Configured extends string,
+  Deps extends AnyDependencies,
+  Name extends keyof Deps['endpoints'],
+> =
   Readonly<Record<never, never>> extends CallInput<Target, Configured>
     ? (
         input?: CallInput<Target, Configured>,
         call?: CallOptions,
-      ) => Promise<ReceivedOutcome<Target, Deps['standardRejections']>>
+      ) => Promise<ReceivedOutcome<Deps, Name>>
     : (
         input: CallInput<Target, Configured>,
         call?: CallOptions,
-      ) => Promise<ReceivedOutcome<Target, Deps['standardRejections']>>;
+      ) => Promise<ReceivedOutcome<Deps, Name>>;
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
 export type Client<Deps extends AnyDependencies, Configured extends string = never> = {
   readonly [Name in keyof Deps['endpoints']]: Deps['endpoints'][Name] extends Endpoint
-    ? Method<Deps['endpoints'][Name], Configured, Deps>
+    ? Method<Deps['endpoints'][Name], Configured, Deps, Name>
     : never;
 };

@@ -1,14 +1,10 @@
 import { type InputIssue, invalidInputBodyOf } from '@casitafeliz/loom-contract/internal';
-import type { DecodedOutcome } from '../decoding/index.ts';
-import { outcomeOf } from '../decoding/index.ts';
+import { type DecodedOutcome, outcomeOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
 import { readyInputOf, sendingOf } from '../request/index.ts';
-import type { CallOptions } from './client-types.ts';
+import type { CallOptions, Fetch } from './client-types.ts';
 import { type ConfiguredHeaders, withConfiguredHeaders } from './configured.ts';
-
-/** A `fetch`, the global one or the one given to `client()`. */
-export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
 /** What every call of one client shares: where it sends, how, and what it does with an answer. */
 export type Calling = {
@@ -18,45 +14,45 @@ export type Calling = {
   readonly inferFault: InferFault | undefined;
 };
 
-/** One method of a client: an Endpoint called, and each response watched for its Deprecation. */
-export type MethodOf = {
-  readonly called: CalledEndpoint;
-  readonly watch: (response: Response) => void;
-};
+/** One method of a client, before its Endpoint types what it takes and returns. */
+export type ClientMethod = (input?: unknown, call?: CallOptions) => Promise<DecodedOutcome>;
 
 /**
- * One call top to bottom: the Input made ready to travel, or the invalid-input Rejection the
- * Provider would answer, unsent; then sent, unless the signal already aborted; then decoded.
+ * One Endpoint's method: each call top to bottom, its Input made ready to travel, or the
+ * invalid-input Rejection the Provider would answer, unsent; then sent; then decoded, and only
+ * then is the response's Deprecation told, so what that throws comes after the Outcome.
  */
-export async function callOf(
-  method: MethodOf,
+export function methodOf(
+  called: CalledEndpoint,
   calling: Calling,
-  passed: { readonly input: unknown; readonly call: CallOptions | undefined },
-): Promise<DecodedOutcome> {
-  const { called } = method;
-  const headers = await withConfiguredHeaders(
-    called,
-    calling.headers,
-    fieldOf(passed.input, 'headers'),
-  );
-  const ready = readyInputOf(called.endpoint, { ...fieldsOf(passed.input), headers });
-  if (ready.kind === 'invalid') {
-    return invalidInputOf(called, ready.issues);
-  }
-  const signal = passed.call?.signal;
-  if (signal?.aborted === true) {
-    return notSentFaultOf(signal);
-  }
-  const { url, init } = sendingOf(called.endpoint, calling.base, ready.input);
-  const inferring = { signal, inferFault: calling.inferFault };
-  let response: Response;
-  try {
-    response = await calling.fetch(url, signal === undefined ? init : { ...init, signal });
-  } catch (e) {
-    return thrownFaultOf(e, inferring) ?? rethrown(e);
-  }
-  method.watch(response);
-  return await outcomeOf(response, called, inferring);
+  watch: (response: Response) => void,
+): ClientMethod {
+  return async (input, call) => {
+    const signal = call?.signal;
+    if (signal !== undefined && isAborted(signal)) {
+      return notSentFaultOf(signal);
+    }
+    const passed = fieldsOf(input);
+    const headers = await withConfiguredHeaders(called, calling.headers, passed['headers']);
+    const ready = readyInputOf(called.endpoint, { ...passed, headers });
+    if (ready.kind === 'invalid') {
+      return invalidInputOf(called, ready.issues);
+    }
+    if (signal !== undefined && isAborted(signal)) {
+      return notSentFaultOf(signal);
+    }
+    const { url, init } = sendingOf(called.endpoint, calling.base, ready.input);
+    const inferring = { signal, inferFault: calling.inferFault };
+    let response: Response;
+    try {
+      response = await calling.fetch(url, signal === undefined ? init : { ...init, signal });
+    } catch (e) {
+      return thrownFaultOf(e, inferring) ?? rethrown(e);
+    }
+    const outcome = await outcomeOf(response, called, inferring);
+    watch(response);
+    return outcome;
+  };
 }
 
 /** The invalid-input Rejection the Provider would answer, with its code and message, never sent. */
@@ -65,14 +61,15 @@ function invalidInputOf(called: CalledEndpoint, issues: readonly InputIssue[]): 
   return { kind: 'rejection', known: true, code, message, body: invalidInputBodyOf(issues) };
 }
 
+/** Whether a signal is aborted now: a header function awaited before may have aborted it. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 function rethrown(error: unknown): never {
   throw error;
 }
 
 function fieldsOf(value: unknown): Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null ? { ...value } : {};
-}
-
-function fieldOf(value: unknown, field: string): unknown {
-  return fieldsOf(value)[field];
 }

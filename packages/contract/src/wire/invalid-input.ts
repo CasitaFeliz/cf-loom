@@ -5,7 +5,7 @@ import { type InputIn, type InputPart, type Issue, inOf } from '../validation/in
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
 export type InputIssue = Issue & { readonly part: InputPart };
 
-/** The body of the invalid-input Rejection, cf-loom's own, as it travels and as the client decodes it. */
+/** The body of the invalid-input Rejection, cf-loom's own, as the runtime writes it. */
 export type InvalidInputBody = {
   readonly issues: readonly (Omit<Issue, 'part'> & { readonly in: InputIn })[];
 };

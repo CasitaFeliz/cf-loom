@@ -1,9 +1,8 @@
-import { calledEndpointOf } from '../endpoints/index.ts';
+import { type AnyDependencies, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
-import { type Calling, callOf, type Fetch } from './call.ts';
-import type { CallOptions, Client, ClientOptions, ConfiguredName } from './client-types.ts';
+import { type Calling, methodOf } from './call.ts';
+import type { Client, ClientOptions, ConfiguredName, Fetch } from './client-types.ts';
 import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
-import type { AnyDependencies } from './outcome-types.ts';
 
 /**
  * A client of the Endpoints a Dependency lists, one method each, named after it: each returns the
@@ -19,20 +18,12 @@ export function client<
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
-  const providing = {
-    provider: deps.provider,
-    standards: deps.standardRejections,
-    exportedSnapshot: deps.exportedSnapshot,
-  };
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
   const methods = Object.entries(deps.endpoints).map(([name, endpoint]) => {
-    const called = calledEndpointOf(endpoint, providing);
-    const method = { called, watch: deprecationWatchOf(called, onDeprecation) };
-    const call = (input?: unknown, options?: CallOptions) =>
-      callOf(method, calling, { input, call: options });
-    return [name, call] as const;
+    const called = calledEndpointOf(endpoint, deps);
+    return [name, methodOf(called, calling, deprecationWatchOf(called, onDeprecation))] as const;
   });
-  return Object.freeze(Object.fromEntries(methods)) as unknown as Client<Deps, Configured>;
+  return Object.freeze(Object.fromEntries(methods)) as Client<Deps, Configured>;
 }
 
 /** The global `fetch` as it is when a call is made, not when the client was created. */

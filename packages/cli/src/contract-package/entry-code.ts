@@ -26,8 +26,8 @@ export type ServiceEntry = {
 /**
  * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
  * Rejections resolved and its exported Snapshot, checked against `ContractPackage`; its
- * `snapshot`; and the types
- * of its recursive defs, so a Consumer that emits declarations can name them.
+ * `snapshot`; and the types of its recursive defs, so a Consumer that emits declarations can
+ * name them.
  */
 export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEntry): PackageFile {
   const names = endpoints.map(({ endpoint }) => endpoint.name);

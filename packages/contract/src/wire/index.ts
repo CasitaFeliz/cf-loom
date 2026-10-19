@@ -1,5 +1,5 @@
-export type { Body, BodyMessage } from './body.ts';
-export { bodyOf } from './body.ts';
+export type { Body, BodyMessage, ReceivedBody } from './body.ts';
+export { bodyOf, discardBodyOf, receivedBodyOf } from './body.ts';
 export { isJsonContentType, jsonContentType } from './content-type.ts';
 export {
   deprecatedAtOfHeader,
@@ -10,6 +10,7 @@ export {
 export type {
   Committed,
   FaultEnvelope,
+  ReceivedEnvelope,
   RejectionEnvelope,
   TravelingFault,
 } from './envelopes.ts';
@@ -19,6 +20,7 @@ export {
   faultEnvelopeOf,
   faultStatusOf,
   internalError,
+  receivedEnvelopeOf,
   rejectionEnvelopeOf,
   reservedFaults,
 } from './envelopes.ts';
@@ -38,4 +40,5 @@ export {
 export type { TextValue } from './text.ts';
 export { isTextValue, textOfValue, valueOfText } from './text.ts';
 export type { TextSource } from './text-parts.ts';
-export { textPartsOf } from './text-parts.ts';
+export { headerValuesOf, textPartsOf } from './text-parts.ts';
+export { isQueryText, isSegmentText, segmentOf, segmentTextOf } from './url-text.ts';

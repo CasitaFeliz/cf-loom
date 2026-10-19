@@ -1,4 +1,10 @@
-import { bodyOf, type Issue, parseValue, valueOfText } from '@casitafeliz/loom-contract/internal';
+import {
+  discardBodyOf,
+  headerValuesOf,
+  type Issue,
+  parseValue,
+  receivedBodyOf,
+} from '@casitafeliz/loom-contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { answeredFaultOf, type Inferring } from '../inference/index.ts';
 import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
@@ -45,17 +51,10 @@ export async function successOf(
 /** The declared Success headers, each text converted by its node, then read with its schema. */
 function successHeadersOf(received: Headers, called: CalledEndpoint): SuccessHeaders {
   const schema = called.endpoint.success.headers;
-  if (schema === undefined) {
+  if (schema === undefined || called.successHeaders === undefined) {
     return { value: {}, issues: [] };
   }
-  const values: (readonly [string, unknown])[] = [];
-  for (const [name, field] of Object.entries(called.successHeaders?.fields ?? {})) {
-    const text = received.get(name);
-    if (text !== null) {
-      values.push([name, valueOfText(field.schema, [text])]);
-    }
-  }
-  const parsed = parseValue(schema, Object.fromEntries(values));
+  const parsed = parseValue(schema, headerValuesOf(called.successHeaders, received));
   const value: Readonly<Record<string, unknown>> = parsed.kind === 'value' ? parsed.value : {};
   return { value, issues: issuesAt('success.headers', parsed) };
 }
@@ -63,10 +62,10 @@ function successHeadersOf(received: Headers, called: CalledEndpoint): SuccessHea
 async function successBodyOf(response: Response, called: CalledEndpoint): Promise<SuccessBody> {
   const schema = called.endpoint.success.body;
   if (schema === undefined) {
-    await response.body?.cancel();
+    await discardBodyOf(response);
     return { kind: 'value', value: undefined, issues: [] };
   }
-  const read = await bodyOf(response, undefined);
+  const read = await receivedBodyOf(response);
   switch (read.kind) {
     case 'value': {
       const parsed = parseValue(schema, read.value);
@@ -77,7 +76,5 @@ async function successBodyOf(response: Response, called: CalledEndpoint): Promis
       return { kind: 'value', value: undefined, issues: [{ ...read.issue, part: 'success.body' }] };
     case 'unreadable':
       return { kind: 'unreadable', error: read.error };
-    case 'too-large':
-      throw new Error('A response body is read with no limit, so it is never too large');
   }
 }

@@ -4,9 +4,9 @@ export type {
   Client,
   ClientOptions,
   DeprecationNotice,
-  ReceivedOutcome,
-  ReceivedRejection,
-  ReceivedSuccess,
+  Fetch,
+  OnDeprecation,
 } from './calling/index.ts';
 export { client } from './calling/index.ts';
+export type { ReceivedOutcome, ReceivedRejection, ReceivedSuccess } from './decoding/index.ts';
 export type { Happened, InferFault, InferredFault, ReceivedFault } from './inference/index.ts';

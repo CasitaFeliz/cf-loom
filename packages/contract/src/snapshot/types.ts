@@ -139,10 +139,7 @@ export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapsh
  * Retired, with the Guards, codes and defs they reach, keyed as in the Snapshot, so a Caller reads
  * their nodes and no Private Element reaches a browser.
  */
-export type ExportedSnapshot = {
-  readonly format: SnapshotFormat;
-  readonly defs: ByKey<SchemaNode>;
-  readonly endpoints: ByKey<EndpointSnapshot>;
-  readonly guards: ByKey<GuardSnapshot>;
-  readonly codes: ByKey<CodeSnapshot>;
-};
+export type ExportedSnapshot = Pick<
+  ServiceSnapshot,
+  'format' | 'defs' | 'endpoints' | 'guards' | 'codes'
+>;

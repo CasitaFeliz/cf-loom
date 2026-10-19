@@ -159,6 +159,44 @@ describe('headers given to client()', () => {
     expect(called).toBe(0);
   });
 
+  test('the headers a call passes are sent beside those given to client()', async () => {
+    const { sent, fetch } = recorded();
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: { authorization: 'Bearer configured' },
+    });
+
+    await orders.getOrder({ ...params, headers: { 'x-api-key': 'key-2' } });
+
+    expect(sent[0]?.headers.get('x-api-key')).toBe('key-2');
+    expect(sent[0]?.headers.get('authorization')).toBe('Bearer configured');
+  });
+
+  test('an aborted signal sends nothing and calls no header function', async () => {
+    let called = 0;
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: recorded().fetch,
+      headers: {
+        'x-api-key': 'key-1',
+        authorization: () => {
+          called += 1;
+          return 'Bearer t';
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: AbortSignal.abort() });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      committed: 'no',
+      message: 'The request was aborted',
+    });
+    expect(called).toBe(0);
+  });
+
   test('a header function that throws reaches the caller unchanged', async () => {
     const error = new Error('no token');
     const orders = client(ordersDeps, {

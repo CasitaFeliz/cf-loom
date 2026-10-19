@@ -97,7 +97,7 @@ function booleanOf(text: string): unknown {
   return text === 'false' ? false : text;
 }
 
-/** The declared value whose text is the one received, keeping its JSON type. */
+/** The declared value whose text, as it travels, is the one received, keeping its JSON type. */
 function declaredValueOf(values: readonly JsonPrimitive[], text: string): unknown {
-  return values.find((value) => String(value) === text) ?? text;
+  return values.find((value) => isTextValue(value) && textOfValue(value) === text) ?? text;
 }

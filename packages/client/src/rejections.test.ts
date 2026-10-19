@@ -201,6 +201,35 @@ describe('a Rejection', () => {
   });
 });
 
+describe('telling a Rejection', () => {
+  test('a code is known only as written, case included', async () => {
+    const orders = rejecting(409, {
+      code: 'order_locked',
+      message: 'Locked',
+      body: { lockedAt: '2026-10-18T10:00:00Z' },
+    });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).toMatchObject({ kind: 'rejection', known: false, code: 'order_locked' });
+  });
+
+  test('a body that is both a Rejection and a Fault Envelope is the Rejection', async () => {
+    const both = {
+      rejection: { code: 'UNAUTHENTICATED', message: 'No' },
+      fault: { committed: 'no', retryable: true, message: 'Busy' },
+    };
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => Response.json(both, { status: 401 }),
+    });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'UNAUTHENTICATED' });
+  });
+});
+
 describe('Standard Rejections', () => {
   test('are known by the Provider’s codes, as its Definitions Package resolved them', async () => {
     const missing = rejecting(404, { code: 'MISSING', message: 'Nothing here' });

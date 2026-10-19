@@ -1,3 +1,5 @@
+import { isStampable, stampOf } from '../declarations/index.ts';
+
 /** The header every response of a Deprecated Endpoint carries (RFC 9745). */
 export const deprecationHeader = 'deprecation';
 
@@ -14,11 +16,12 @@ export function withDeprecation(response: Response, deprecatedAt: string | undef
   return response;
 }
 
-/** A received `Deprecation` header's instant as a `deprecatedAt` stamp; none for any other text. */
+/**
+ * A received `Deprecation` header's instant as a `deprecatedAt` stamp; none for any other text, or
+ * for an instant no `Date` can hold.
+ */
 export function deprecatedAtOfHeader(header: string): string | undefined {
   const seconds = /^@(-?\d+)$/.exec(header)?.[1];
-  if (seconds === undefined) {
-    return undefined;
-  }
-  return new Date(Number(seconds) * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const instant = Number(seconds) * 1000;
+  return isStampable(instant) ? stampOf(instant) : undefined;
 }

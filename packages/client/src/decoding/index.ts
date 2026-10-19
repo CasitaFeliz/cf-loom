@@ -1,2 +1,7 @@
 export { outcomeOf } from './decode.ts';
-export type { DecodedOutcome, DecodedRejection, DecodedSuccess } from './outcomes.ts';
+export type {
+  DecodedOutcome,
+  ReceivedOutcome,
+  ReceivedRejection,
+  ReceivedSuccess,
+} from './outcomes.ts';

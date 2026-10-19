@@ -1,4 +1,4 @@
-import type { Endpoint, ExportedSnapshot, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Dependencies, Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
@@ -7,6 +7,19 @@ import {
   type ObjectNode,
   resolutionOf,
 } from '@casitafeliz/loom-contract/internal';
+
+/** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
+export type AnyDependencies = Dependencies<
+  Readonly<Record<string, Endpoint>>,
+  unknown,
+  StandardRejections
+>;
+
+/** What an Endpoint is called through of its Dependency: its Provider, Standard codes and nodes. */
+export type Providing = Pick<
+  AnyDependencies,
+  'provider' | 'standardRejections' | 'exportedSnapshot'
+>;
 
 /**
  * One listed Endpoint as the client calls it and reads its answers, prepared once: the header
@@ -22,18 +35,12 @@ export type CalledEndpoint = {
   readonly standards: StandardRejections;
 };
 
-/** The Dependency an Endpoint is called through: its Provider, its resolved Standard codes and nodes. */
-export type Providing = {
-  readonly provider: string;
-  readonly standards: StandardRejections;
-  readonly exportedSnapshot: ExportedSnapshot;
-};
-
 /** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */
 export function calledEndpointOf(endpoint: Endpoint, providing: Providing): CalledEndpoint {
   const entry = snapshotEntryOf(endpoint, providing);
+  const standards = providing.standardRejections;
   const rejections = answerableRejectionsOf(endpoint).map(
-    (rejection) => [resolutionOf(rejection, providing.standards).code, rejection] as const,
+    (rejection) => [resolutionOf(rejection, standards).code, rejection] as const,
   );
   return {
     provider: providing.provider,
@@ -42,7 +49,7 @@ export function calledEndpointOf(endpoint: Endpoint, providing: Providing): Call
     inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),
     successHeaders: entry.success.headers ?? undefined,
     rejectionsByCode: new Map(rejections),
-    standards: providing.standards,
+    standards,
   };
 }
 

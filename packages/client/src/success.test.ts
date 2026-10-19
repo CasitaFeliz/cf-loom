@@ -120,7 +120,11 @@ describe('a Success', () => {
 
     const outcome = await orders.getOrder(params);
 
-    expect(outcome).toMatchObject({ kind: 'success', value: { id: 'o-1', total: 3 } });
+    expect(outcome).toEqual({
+      kind: 'success',
+      value: { id: 'o-1', total: 3 },
+      headers: { 'x-total': 3 },
+    });
   });
 
   test('a 204 carries no value and no headers', async () => {
@@ -257,5 +261,50 @@ describe('an Open Enum Success header', () => {
       { kind: 'success', value: undefined, headers: { 'x-stage': 'shipped' } },
       { kind: 'success', value: undefined, headers: { 'x-stage': { unknown: 'lost' } } },
     ]);
+  });
+
+  test('an Open Enum value it does not know in a Success body is its Unknown case too', async () => {
+    const stageOrder = defineEndpoint({
+      name: 'stageOrder',
+      method: 'GET',
+      path: '/orders/:orderId/stage',
+      visibility: 'public',
+      description: 'The stage of an order',
+      input: { params: z.object({ orderId: z.string() }) },
+      success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
+    });
+    const stageOrderReader = defineEndpoint({
+      name: 'stageOrder',
+      method: 'GET',
+      path: '/orders/:orderId/stage',
+      visibility: 'public',
+      description: 'The stage of an order',
+      input: { params: z.object({ orderId: z.string() }) },
+      success: {
+        status: 200,
+        body: z.object({
+          stage: z.union([
+            z.enum(['packed', 'shipped']),
+            z.string().transform((unknown) => ({ unknown })),
+          ]),
+        }),
+      },
+    });
+    const staging = contractPackageOf({ stageOrder: stageOrderReader }, defaultStandards, [
+      stageOrder,
+    ]);
+    const stagingDeps = defineDependencies(staging, { endpoints: [stageOrderReader] });
+    const stages = client(stagingDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => Response.json({ stage: 'lost' }),
+    });
+
+    const outcome = await stages.stageOrder(params);
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      value: { stage: { unknown: 'lost' } },
+      headers: {},
+    });
   });
 });

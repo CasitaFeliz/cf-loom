@@ -3,6 +3,7 @@ import {
   jsonContentType,
   type PathSegment,
   pathSegmentsOf,
+  segmentOf,
 } from '@casitafeliz/loom-contract/internal';
 import { type ParsedInput, textOf } from './input.ts';
 
@@ -15,7 +16,7 @@ export type Sending = { readonly url: string; readonly init: RequestInit };
  */
 export function baseUrlOf(baseUrl: string | URL): URL {
   const base = new URL(baseUrl);
-  if (base.search !== '' || base.hash !== '') {
+  if (base.search !== '' || base.hash !== '' || /[?#]$/.test(base.href)) {
     throw new Error(`The baseUrl ${base.href} has a query or a fragment, which no Endpoint takes`);
   }
   return base;
@@ -49,7 +50,7 @@ function segmentTextOf(segment: PathSegment, params: Readonly<Record<string, unk
     case 'literal':
       return segment.text;
     case 'param':
-      return encodeURIComponent(textOf(params[segment.name]));
+      return segmentOf(textOf(params[segment.name]));
   }
 }
 
