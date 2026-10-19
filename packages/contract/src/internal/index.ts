@@ -1,5 +1,6 @@
 export type { Kind, ReservedCode, StandardRejections } from '../declarations/index.ts';
 export {
+  invalidInputBody,
   isContract,
   isEndpoint,
   isGuard,
@@ -135,6 +136,7 @@ export type {
   BodyMessage,
   Committed,
   FaultEnvelope,
+  HeaderTexts,
   InputIssue,
   InvalidInputBody,
   Match,
@@ -142,7 +144,6 @@ export type {
   RejectionEnvelope,
   SentRejection,
   SentSuccess,
-  SuccessHeaderTexts,
   TextSource,
   TextValue,
   TravelingFault,
@@ -157,6 +158,7 @@ export {
   faultEnvelopeOf,
   faultResponseOf,
   faultStatusOf,
+  headerTextsOf,
   internalError,
   invalidInputBodyOf,
   isHeaderText,
@@ -168,7 +170,6 @@ export {
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,
-  successHeaderTextsOf,
   successResponseOf,
   textOfValue,
   textPartsOf,

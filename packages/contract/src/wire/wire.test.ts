@@ -7,6 +7,7 @@ import {
   envelopeOf,
   faultEnvelopeOf,
   faultStatusOf,
+  headerTextsOf,
   invalidInputBodyOf,
   isHeaderText,
   isJsonContentType,
@@ -15,7 +16,6 @@ import {
   reservedCodes,
   reservedFaults,
   type SchemaNode,
-  successHeaderTextsOf,
   textOfValue,
   valueOfText,
 } from '../internal/index.ts';
@@ -76,7 +76,7 @@ describe('valueOfText', () => {
   });
 });
 
-describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
+describe('textOfValue, isHeaderText and headerTextsOf', () => {
   test('a value travels as the text JavaScript writes it', () => {
     expect([textOfValue(3), textOfValue(-1.5), textOfValue(true), textOfValue('v1')]).toEqual([
       '3',
@@ -134,7 +134,7 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   });
 
   test('a Success’s headers travel as text, an undefined one left out', () => {
-    const sent = successHeaderTextsOf({
+    const sent = headerTextsOf('success.headers', {
       'x-total': 3,
       'x-ok': true,
       etag: 'v1',
@@ -152,7 +152,7 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
   });
 
   test('a Success header that cannot travel is an Issue at success.headers, by its name', () => {
-    const sent = successHeaderTextsOf({ etag: ' v1', 'x-total': 3, 'x-list': ['a'] });
+    const sent = headerTextsOf('success.headers', { etag: ' v1', 'x-total': 3, 'x-list': ['a'] });
 
     expect(sent).toEqual({
       kind: 'issues',
@@ -168,6 +168,22 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
           path: ['x-list'],
           code: 'invalid_format',
           message: expect.any(String),
+        },
+      ],
+    });
+  });
+
+  test('an Input header that cannot travel is an Issue at input.headers, by its name', () => {
+    const sent = headerTextsOf('input.headers', { 'x-api-key': 'a\nb', 'x-id': 'ok' });
+
+    expect(sent).toEqual({
+      kind: 'issues',
+      issues: [
+        {
+          part: 'input.headers',
+          path: ['x-api-key'],
+          code: 'invalid_format',
+          message: 'The header value cannot travel as HTTP field text',
         },
       ],
     });

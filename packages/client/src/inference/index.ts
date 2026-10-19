@@ -1,0 +1,4 @@
+export type { Happened, InferFault, InferredFault, ReceivedFault } from './faults.ts';
+export { withRetryAfter } from './faults.ts';
+export type { Inferring } from './infer.ts';
+export { answeredFaultOf, notSentFaultOf, thrownFaultOf } from './infer.ts';

@@ -22,8 +22,8 @@ export {
   rejectionEnvelopeOf,
   reservedFaults,
 } from './envelopes.ts';
-export type { SuccessHeaderTexts } from './header-text.ts';
-export { isHeaderText, successHeaderTextsOf } from './header-text.ts';
+export type { HeaderTexts } from './header-text.ts';
+export { headerTextsOf, isHeaderText } from './header-text.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
 export { invalidInputBodyOf } from './invalid-input.ts';
 export type { Match, Matchable } from './match.ts';

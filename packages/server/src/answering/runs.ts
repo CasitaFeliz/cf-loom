@@ -1,6 +1,7 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
 import {
   faultResponseOf,
+  headerTextsOf,
   type InputIssue,
   internalError,
   invalidInputBodyOf,
@@ -8,7 +9,6 @@ import {
   rejectionResponseOf,
   reservedResponseOf,
   type SentRejection,
-  successHeaderTextsOf,
   successResponseOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
@@ -53,7 +53,7 @@ export function answeredOfFailedRun(
 
 /** A Success a Handler answered, sent only when each of its headers can travel as text. */
 export function answeredOfSuccess(success: ResolvedSuccess, faultedBy: FaultedBy): Answered {
-  const headers = successHeaderTextsOf(success.headers);
+  const headers = headerTextsOf('success.headers', success.headers);
   if (headers.kind === 'issues') {
     return invalidOutcomeOf(headers.issues, faultedBy);
   }

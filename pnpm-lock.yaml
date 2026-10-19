@@ -223,6 +223,12 @@ importers:
       '@casitafeliz/loom-contract':
         specifier: workspace:^
         version: link:../contract
+      '@casitafeliz/loom-handlers':
+        specifier: workspace:^
+        version: link:../handlers
+      '@casitafeliz/loom-server':
+        specifier: workspace:^
+        version: link:../server
       zod:
         specifier: 'catalog:'
         version: 4.6.7
