@@ -131,6 +131,7 @@ export {
 } from '../walker/index.ts';
 export type {
   Body,
+  BodyMessage,
   Committed,
   FaultEnvelope,
   InputIssue,
@@ -148,8 +149,10 @@ export type {
 export {
   bodyOf,
   committedValues,
+  deprecatedAtOfHeader,
   deprecationHeader,
   deprecationHeaderOf,
+  envelopeOf,
   faultEnvelopeOf,
   faultResponseOf,
   faultStatusOf,

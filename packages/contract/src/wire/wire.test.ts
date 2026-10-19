@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import {
   bodyOf,
   committedValues,
+  deprecatedAtOfHeader,
   deprecationHeaderOf,
+  envelopeOf,
   faultEnvelopeOf,
   faultStatusOf,
   invalidInputBodyOf,
@@ -82,6 +84,29 @@ describe('textOfValue, isHeaderText and successHeaderTextsOf', () => {
       'true',
       'v1',
     ]);
+  });
+
+  test('a number travels as plain decimal, never in exponent form, and reads back as itself', () => {
+    const numbers = [1e21, 1.5e-7, -2.5e-10, 1.23e25, 0.1, -0, 123456.789, 5e-324];
+
+    const texts = numbers.map(textOfValue);
+
+    expect(texts.slice(0, 4)).toEqual([
+      '1000000000000000000000',
+      '0.00000015',
+      '-0.00000000025',
+      '12300000000000000000000000',
+    ]);
+    expect(texts.every((text) => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(text))).toBe(true);
+    expect(texts.map((text) => valueOfText(number, [text]))).toEqual(numbers.map((n) => n + 0));
+  });
+
+  test('a number that is not finite cannot travel, a bug', () => {
+    const notFinite = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+    for (const value of notFinite) {
+      expect(() => textOfValue(value)).toThrow(/finite/);
+    }
   });
 
   test('a header value is RFC 9110 field text: tab, visible ASCII, space and U+0080 to U+00FF', () => {
@@ -189,6 +214,55 @@ describe('the Envelopes', () => {
   });
 });
 
+describe('envelopeOf', () => {
+  test('a Rejection Envelope is read with its code, message and body, extra keys ignored', () => {
+    const received = { rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 }, x: 1 } };
+
+    const envelope = envelopeOf(received);
+
+    expect(envelope).toStrictEqual({
+      rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 } },
+    });
+  });
+
+  test('a Rejection Envelope without a body is read with no body key', () => {
+    const envelope = envelopeOf({ rejection: { code: 'GONE', message: 'Gone' } });
+
+    expect(envelope).toStrictEqual({ rejection: { code: 'GONE', message: 'Gone' } });
+  });
+
+  test('a Fault Envelope is read with its reserved code, and a code that is not reserved is dropped', () => {
+    const reserved = envelopeOf({
+      fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' },
+    });
+    const unreserved = envelopeOf({
+      fault: { code: 'DB_DOWN', committed: 'unknown', retryable: true, message: 'Down', at: 1 },
+    });
+
+    expect([reserved, unreserved]).toStrictEqual([
+      { fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' } },
+      { fault: { committed: 'unknown', retryable: true, message: 'Down' } },
+    ]);
+  });
+
+  test('anything else is no Envelope', () => {
+    const received = [
+      null,
+      'text',
+      [],
+      {},
+      { rejection: { code: 1, message: 'm' } },
+      { rejection: { code: 'C' } },
+      { fault: { committed: 'maybe', retryable: true, message: 'm' } },
+      { fault: { committed: 'no', retryable: 'yes', message: 'm' } },
+      { fault: { committed: 'no', retryable: true } },
+      { error: 'boom' },
+    ];
+
+    expect(received.map(envelopeOf)).toEqual(received.map(() => undefined));
+  });
+});
+
 describe('the reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
     expect(Object.entries(reservedFaults)).toEqual([
@@ -279,9 +353,46 @@ describe('bodyOf', () => {
   });
 });
 
+describe('bodyOf, reading a Response', () => {
+  test('a JSON Response body is read as its value', async () => {
+    const response = Response.json({ id: 'o-1' });
+
+    const body = await bodyOf(response, undefined);
+
+    expect(body).toEqual({ kind: 'value', value: { id: 'o-1' } });
+  });
+
+  test('a body whose stream fails while it is read is unreadable, with the error, told from no JSON', async () => {
+    const failure = new Error('socket hang up');
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"id":'));
+        controller.error(failure);
+      },
+    });
+    const response = new Response(stream, { headers: { 'content-type': 'application/json' } });
+
+    const body = await bodyOf(response, undefined);
+
+    expect(body).toMatchObject({
+      kind: 'unreadable',
+      error: failure,
+      issue: { code: 'malformed' },
+    });
+  });
+});
+
 describe('the Deprecation header', () => {
   test('a deprecatedAt stamp is sent as @ and its unix seconds', () => {
     expect(deprecationHeaderOf('2026-10-17T09:30:00Z')).toBe('@1792229400');
+  });
+
+  test('a received Deprecation header is read back as the stamp, and anything else as none', () => {
+    const headers = ['@1792229400', '1792229400', '@soon', '@1.5', ''];
+
+    const stamps = headers.map(deprecatedAtOfHeader);
+
+    expect(stamps).toEqual(['2026-10-17T09:30:00Z', undefined, undefined, undefined, undefined]);
   });
 });
 

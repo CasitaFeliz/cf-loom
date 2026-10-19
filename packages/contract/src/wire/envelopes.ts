@@ -1,4 +1,4 @@
-import type { ReservedCode } from '../declarations/index.ts';
+import { type ReservedCode, reservedCodes } from '../declarations/index.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
 export const committedValues = ['no', 'yes', 'unknown'] as const;
@@ -88,4 +88,62 @@ export function faultStatusOf(fault: {
     return reservedFaults[fault.code].status;
   }
   return fault.retryable ? 503 : 500;
+}
+
+/**
+ * The Envelope a received body is, read by its fields alone, extra keys ignored; a Fault's code
+ * that is not reserved is dropped, since a new one only comes with a cf-loom major. None otherwise.
+ */
+export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope | undefined {
+  const rejection = fieldOf(received, 'rejection');
+  if (isRejectionShape(rejection)) {
+    return rejectionEnvelopeOf(rejection);
+  }
+  const fault = fieldOf(received, 'fault');
+  if (isFaultShape(fault)) {
+    const { committed, retryable, message } = fault;
+    const code = reservedCodeOf(fault.code);
+    return faultEnvelopeOf(
+      code === undefined
+        ? { committed, retryable, message }
+        : { code, committed, retryable, message },
+    );
+  }
+  return undefined;
+}
+
+type ReceivedRejection = {
+  readonly code: string;
+  readonly message: string;
+  readonly body?: unknown;
+};
+
+type ReceivedFault = Omit<TravelingFault, 'code'> & { readonly code?: unknown };
+
+function isRejectionShape(value: unknown): value is ReceivedRejection {
+  return (
+    typeof fieldOf(value, 'code') === 'string' && typeof fieldOf(value, 'message') === 'string'
+  );
+}
+
+function isFaultShape(value: unknown): value is ReceivedFault {
+  const committed: unknown = fieldOf(value, 'committed');
+  const isCommitted = committedValues.some((known) => known === committed);
+  return (
+    isCommitted &&
+    typeof fieldOf(value, 'retryable') === 'boolean' &&
+    typeof fieldOf(value, 'message') === 'string'
+  );
+}
+
+function reservedCodeOf(code: unknown): ReservedCode | undefined {
+  return reservedCodes.find((reserved) => reserved === code);
+}
+
+/** A field of a received JSON object; none for anything that is no object, a list included. */
+function fieldOf(value: unknown, field: string): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  return Object.hasOwn(value, field) ? Reflect.get(value, field) : undefined;
 }

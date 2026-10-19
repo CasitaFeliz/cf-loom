@@ -1,7 +1,12 @@
-export type { Body } from './body.ts';
+export type { Body, BodyMessage } from './body.ts';
 export { bodyOf } from './body.ts';
 export { isJsonContentType, jsonContentType } from './content-type.ts';
-export { deprecationHeader, deprecationHeaderOf, withDeprecation } from './deprecation.ts';
+export {
+  deprecatedAtOfHeader,
+  deprecationHeader,
+  deprecationHeaderOf,
+  withDeprecation,
+} from './deprecation.ts';
 export type {
   Committed,
   FaultEnvelope,
@@ -10,6 +15,7 @@ export type {
 } from './envelopes.ts';
 export {
   committedValues,
+  envelopeOf,
   faultEnvelopeOf,
   faultStatusOf,
   internalError,
