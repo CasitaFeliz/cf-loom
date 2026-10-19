@@ -33,7 +33,12 @@ export function openEnum<const Values extends readonly [string, ...string[]]>(va
   return schema;
 }
 
-/** Declares a discriminated union whose readers handle unknown variants, so more can be added. */
+/**
+ * Declares a discriminated union whose readers handle unknown variants, so more can be added.
+ * Its types refuse a variant without a string-literal discriminator; what zod's own union also
+ * takes, an enum or several-literal discriminator, a nested union or intersection variant or a
+ * `.default()`, only `generate` refuses.
+ */
 export function openUnion<
   const Discriminator extends string,
   const Variants extends readonly [Variant<Discriminator>, ...Variant<Discriminator>[]],

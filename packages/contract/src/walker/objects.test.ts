@@ -261,3 +261,33 @@ describe('walkSchemas: intersections', () => {
     );
   });
 });
+
+describe('walkSchemas: a field named __proto__', () => {
+  const construct = 'a field named __proto__ (zod drops it when parsing)';
+
+  test('an object field named __proto__ is not allowed', () => {
+    const schema = z.object({ ['__proto__']: z.string(), b: z.string() });
+
+    expect(walkBody(schema)).toEqual(refusedAt(['body', 'fields', '__proto__'], construct));
+  });
+
+  test('a discriminator named __proto__ is not allowed', () => {
+    const schema = z.discriminatedUnion('__proto__', [z.object({ ['__proto__']: z.literal('a') })]);
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(['body', 'variants', 0, 'fields', '__proto__'], construct),
+    );
+  });
+
+  test('a record keyed by an enum holding __proto__ is not allowed', () => {
+    const schema = z.record(z.enum(['__proto__', 'a']), z.number());
+
+    expect(walkBody(schema)).toEqual(refusedAt(['body'], construct));
+  });
+
+  test('a record keyed by any string is allowed', () => {
+    const schema = z.record(z.string(), z.number());
+
+    expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
+  });
+});

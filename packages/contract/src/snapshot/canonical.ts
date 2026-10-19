@@ -19,11 +19,11 @@ export function canonicalSnapshotOf<Read extends Snapshot>(snapshot: Read): Read
 }
 
 /**
- * The canonical text a Snapshot's hash is taken of: the canonical form without `generator`, the
- * declared Snapshot holding no `version`, so a new CLI alone never changes it.
+ * The canonical text a Snapshot's hash is taken of: the canonical form without `version` and
+ * `generator`, so a publish or a new CLI alone never changes it.
  */
-export function hashedTextOf(snapshot: Snapshot): string {
-  const { generator: _generator, ...hashed } = snapshot;
+export function hashedTextOf(snapshot: Snapshot & { readonly version?: string }): string {
+  const { generator: _generator, version: _version, ...hashed } = snapshot;
   return canonicalFormOf(hashed);
 }
 
