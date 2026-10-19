@@ -2,18 +2,17 @@ import type { Endpoint } from '@casitafeliz/loom-contract';
 import {
   attachmentsOf,
   demandParts,
-  fieldsOf,
   headerTextsOf,
   type InputIssue,
-  type InputPart,
   inputParts,
   isQueryText,
   isSegmentText,
-  parseValue,
+  isTextValue,
+  notJsonBodyIssue,
+  parsedPartsOf,
   schemaOf,
   textOfValue,
 } from '@casitafeliz/loom-contract/internal';
-import type * as core from 'zod/v4/core';
 
 /** An Input's parts as parsed, unknown keys stripped, by the field a Caller passes each under. */
 export type ParsedInput = {
@@ -28,70 +27,52 @@ export type ReadyInput =
   | { readonly kind: 'ready'; readonly input: ParsedInput }
   | { readonly kind: 'invalid'; readonly issues: readonly InputIssue[] };
 
-/** The parts of one party parsed, by field, and every Issue found in them. */
-type ParsedParts = {
-  readonly values: Readonly<Partial<Record<string, unknown>>>;
-  readonly issues: readonly InputIssue[];
-};
-
 /**
  * The Input a Caller passed, checked as the Provider checks it: each attached Guard's demands in
- * Attachment order, the first that fails answering alone; then each declared part of the Input,
- * parsed with its schema; then its text, that it can travel.
+ * Attachment order, the first that fails answering alone; then a declared body left out, which is
+ * no JSON and answers alone; then each declared part of the Input, parsed with its schema; then
+ * its text, that it can travel.
  */
 export function readyInputOf(endpoint: Endpoint, passed: unknown): ReadyInput {
+  const sent = sentInputOf(passed);
   for (const { guard } of attachmentsOf(endpoint)) {
-    const demands = parsedPartsOf(demandParts, (part) => schemaOf(guard, part), passed);
-    if (demands.issues.length > 0) {
+    const demands = parsedPartsOf(demandParts, (part) => schemaOf(guard, part), sent);
+    if (demands.kind === 'issues') {
       return { kind: 'invalid', issues: demands.issues };
     }
   }
-  const input = parsedPartsOf(inputParts, (part) => schemaOf(endpoint, part), passed);
-  if (input.issues.length > 0) {
+  if (schemaOf(endpoint, 'input.body') !== undefined && sent['body'] === undefined) {
+    return { kind: 'invalid', issues: [notJsonBodyIssue] };
+  }
+  const input = parsedPartsOf(inputParts, (part) => schemaOf(endpoint, part), sent);
+  if (input.kind === 'issues') {
     return { kind: 'invalid', issues: input.issues };
   }
-  return travelingInputOf(input.values);
-}
-
-/** Each part of one party, a Guard's demands or an Endpoint's Input, parsed by its schema. */
-function parsedPartsOf<Part extends InputPart>(
-  parts: readonly Part[],
-  schemaAt: (part: Part) => core.$ZodType | undefined,
-  passed: unknown,
-): ParsedParts {
-  const values: Partial<Record<string, unknown>> = {};
-  const issues: InputIssue[] = [];
-  for (const part of parts) {
-    const schema = schemaAt(part);
-    if (schema === undefined) {
-      continue;
-    }
-    const field = fieldsOf(part)[1];
-    const parsed = parseValue(schema, sentValueOf(part, fieldOf(passed, field)));
-    if (parsed.kind === 'issues') {
-      issues.push(...parsed.issues.map((issue) => ({ part, ...issue })));
-    } else {
-      values[field] = parsed.value;
-    }
-  }
-  return { values, issues };
+  return travelingInputOf(input.value);
 }
 
 /**
- * A part's value as the Provider will read it: a text part left out sends no field, and a query
- * list with no items sends no key, which the Provider reads as absent, so it is parsed as absent.
+ * The Input as the Provider will read it: a text part left out sends no field, and a query list
+ * with no items sends no key, which the Provider reads as absent, so each is parsed as absent.
  */
-function sentValueOf(part: InputPart, value: unknown): unknown {
-  if (part !== 'input.body' && value === undefined) {
-    return {};
-  }
-  if ((part !== 'input.query' && part !== 'demands.query') || !isFields(value)) {
-    return value;
-  }
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => !isEmptyList(item)));
+function sentInputOf(passed: unknown): Readonly<Record<string, unknown>> {
+  const fields = fieldsIn(passed);
+  const query = fields['query'] ?? {};
+  return {
+    ...fields,
+    params: fields['params'] ?? {},
+    headers: fields['headers'] ?? {},
+    query: isFields(query) ? withoutEmptyListsOf(query) : query,
+  };
 }
 
-function travelingInputOf(parsed: Readonly<Partial<Record<string, unknown>>>): ReadyInput {
+function withoutEmptyListsOf(
+  query: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(query).filter(([, item]) => !isEmptyList(item)));
+}
+
+function travelingInputOf(parsed: Readonly<Record<string, unknown>>): ReadyInput {
   const params = fieldsIn(parsed['params']);
   const query = definedFieldsOf(fieldsIn(parsed['query']));
   const headers = headerTextsOf('input.headers', fieldsIn(parsed['headers']));
@@ -148,7 +129,7 @@ function itemsOf(
 
 /** A parsed value of a text part as its text: a Contract's text parts hold nothing else. */
 export function textOf(value: unknown): string {
-  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+  if (!isTextValue(value)) {
     throw new Error('A text part holds a value that is no string, number or boolean');
   }
   return textOfValue(value);
@@ -170,8 +151,4 @@ function isFields(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function fieldsIn(value: unknown): Readonly<Record<string, unknown>> {
   return isFields(value) ? value : {};
-}
-
-function fieldOf(value: unknown, field: string): unknown {
-  return isFields(value) ? value[field] : undefined;
 }

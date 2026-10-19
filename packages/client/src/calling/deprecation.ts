@@ -9,7 +9,8 @@ export function warnDeprecation({ provider, endpoint, deprecatedAt }: Deprecatio
 
 /**
  * What one method does with each response: the first that carries a `Deprecation` instant is told,
- * once for this method of this client, so a Deprecation made after the Caller's version shows too.
+ * once for this method of this client, so a Deprecation made after the Caller's version shows too;
+ * what the hook throws goes to the console, so the Outcome is never lost.
  */
 export function deprecationWatchOf(
   called: CalledEndpoint,
@@ -23,6 +24,11 @@ export function deprecationWatchOf(
       return;
     }
     told = true;
-    onDeprecation({ provider: called.provider, endpoint: called.name, deprecatedAt });
+    const { provider, name: endpoint } = called;
+    try {
+      onDeprecation({ provider, endpoint, deprecatedAt });
+    } catch (e) {
+      console.error(`${provider}: ${endpoint}: onDeprecation threw`, e);
+    }
   };
 }

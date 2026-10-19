@@ -31,7 +31,7 @@ export type DecodedRejection = {
 export type DecodedOutcome = DecodedSuccess | DecodedRejection | ReceivedFault;
 
 /** A Success as a Caller receives it: its body as `value` and its declared headers, both read. */
-export type ReceivedSuccess<Target extends Endpoint> = DecodedSuccess & {
+export type ReceivedSuccess<Target extends Endpoint> = Omit<DecodedSuccess, 'value' | 'headers'> & {
   readonly value: Target['success'] extends { readonly body: infer Body }
     ? Output<Body>
     : undefined;

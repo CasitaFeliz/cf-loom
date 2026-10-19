@@ -73,8 +73,13 @@ async function successBodyOf(response: Response, called: CalledEndpoint): Promis
       return { kind: 'value', value, issues: issuesAt('success.body', parsed) };
     }
     case 'malformed':
-      return { kind: 'value', value: undefined, issues: [{ ...read.issue, part: 'success.body' }] };
+      return { kind: 'value', value: undefined, issues: [malformedSuccessIssueOf(read.message)] };
     case 'unreadable':
       return { kind: 'unreadable', error: read.error };
   }
+}
+
+/** A Success body that is no JSON: an Issue at the whole of `success.body`. */
+function malformedSuccessIssueOf(message: string): Issue {
+  return { part: 'success.body', path: [], code: 'malformed', message };
 }

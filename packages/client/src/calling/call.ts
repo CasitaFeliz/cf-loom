@@ -19,8 +19,8 @@ export type ClientMethod = (input?: unknown, call?: CallOptions) => Promise<Deco
 
 /**
  * One Endpoint's method: each call top to bottom, its Input made ready to travel, or the
- * invalid-input Rejection the Provider would answer, unsent; then sent; then decoded, and only
- * then is the response's Deprecation told, so what that throws comes after the Outcome.
+ * invalid-input Rejection the Provider would answer, unsent; then sent; then decoded, and the
+ * response's Deprecation told.
  */
 export function methodOf(
   called: CalledEndpoint,

@@ -151,34 +151,24 @@ describe('the Deprecation warning', () => {
     expect(notices.map((notice) => notice.deprecatedAt)).toEqual(['1969-12-31T23:59:59Z']);
   });
 
-  test('what onDeprecation throws reaches the caller, once the Outcome was decoded', async () => {
+  test('what onDeprecation throws is caught and written to the console, and the Outcome returned', async () => {
     const error = new Error('a bug in the hook');
-    let read = false;
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const orders = client(ordersDeps, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
-        const body = new ReadableStream<Uint8Array>(
-          {
-            pull: (controller) => {
-              read = true;
-              controller.enqueue(new TextEncoder().encode('{"ids":[]}'));
-              controller.close();
-            },
-          },
-          { highWaterMark: 0 },
-        );
-        const headers = { deprecation: '@1792229400', 'content-type': 'application/json' };
-        return new Response(body, { headers });
+        const headers = { deprecation: '@1792229400' };
+        return Response.json({ ids: ['o-1'] }, { headers });
       },
       onDeprecation: () => {
         throw error;
       },
     });
 
-    const called = orders.listOrders();
+    const outcome = await orders.listOrders();
 
-    await expect(called).rejects.toBe(error);
-    expect(read).toBe(true);
+    expect(outcome).toEqual({ kind: 'success', value: { ids: ['o-1'] }, headers: {} });
+    expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
   });
 
   test('is not told for an Active Endpoint', async () => {

@@ -197,6 +197,23 @@ describe('headers given to client()', () => {
     expect(called).toBe(0);
   });
 
+  test('an already aborted signal is answered before a header function could throw', async () => {
+    const orders = client(ordersDeps, {
+      baseUrl: 'http://orders.test',
+      fetch: recorded().fetch,
+      headers: {
+        'x-api-key': 'key-1',
+        authorization: () => {
+          throw new Error('no token');
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: AbortSignal.abort() });
+
+    expect(outcome).toMatchObject({ kind: 'fault', committed: 'no' });
+  });
+
   test('a header function that throws reaches the caller unchanged', async () => {
     const error = new Error('no token');
     const orders = client(ordersDeps, {

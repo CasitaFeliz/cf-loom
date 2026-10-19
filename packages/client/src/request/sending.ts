@@ -41,11 +41,11 @@ export function sendingOf(endpoint: Endpoint, base: URL, input: ParsedInput): Se
 
 /** The declared path with each param's text percent-encoded as one segment. */
 function pathOf(path: string, params: Readonly<Record<string, unknown>>): string {
-  const segments = pathSegmentsOf(path).map((segment) => segmentTextOf(segment, params));
+  const segments = pathSegmentsOf(path).map((segment) => pathSegmentOf(segment, params));
   return `/${segments.join('/')}`;
 }
 
-function segmentTextOf(segment: PathSegment, params: Readonly<Record<string, unknown>>): string {
+function pathSegmentOf(segment: PathSegment, params: Readonly<Record<string, unknown>>): string {
   switch (segment.kind) {
     case 'literal':
       return segment.text;

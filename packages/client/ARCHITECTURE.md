@@ -6,7 +6,7 @@ The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/` and `inference/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
@@ -22,8 +22,8 @@ The wire rules the client shares with `serve` and `@casitafeliz/loom-testing` li
 
 1. A signal already aborted returns its Fault, `committed: 'no'`, and nothing is sent.
 2. The headers given to `client()` that the Endpoint declares and the call did not pass are added, a function among them called now.
-3. Each attached Guard's demands are parsed in order, then each declared part of the Input, and its text checked that it can travel; what fails returns the Provider's invalid-input Rejection, and nothing is sent. A signal aborted meanwhile returns its Fault, `committed: 'no'`.
+3. Each attached Guard's demands are parsed in order, then a declared body left out is refused, then each declared part of the Input, and its text checked that it can travel; what fails returns the Provider's invalid-input Rejection, and nothing is sent. A signal aborted meanwhile returns its Fault, `committed: 'no'`.
 4. `fetch` is called with the URL and init. What it throws is inferred as a Fault, or reaches the Caller unchanged when it is no network failure, abort or timeout.
-5. The response is decoded, then its `Deprecation` is told the first time a method sees it.
+5. The response is decoded, then its `Deprecation` is told the first time a method sees it; what `onDeprecation` throws goes to the console.
 
 Each method returns its decoded Outcome typed by its Endpoint: the decoding is one function for every Endpoint, and each typed Outcome is its decoded form narrowed, so the methods are cast to `Client` once, in `client()`.

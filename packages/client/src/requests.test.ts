@@ -348,14 +348,38 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
-  test('a body left out is missing, not an empty object', async () => {
-    const { orders } = unsent();
-    const leftOut = { params: { shopId: 's' } } as Parameters<typeof orders.createOrder>[0];
+  test('a body left out is no JSON, as serve answers it, and alone', async () => {
+    const { orders, calls } = unsent();
+    const leftOut = { params: {} } as Parameters<typeof orders.createOrder>[0];
 
     const outcome = await orders.createOrder(leftOut);
 
     expect(outcome).toMatchObject({
-      body: { issues: [{ in: 'body', path: [], code: 'required' }] },
+      body: {
+        issues: [{ in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' }],
+      },
+    });
+    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(calls()).toBe(0);
+  });
+
+  test('a param and a query text that cannot travel are answered with a header that cannot', async () => {
+    const { orders } = unsent();
+
+    const outcome = await orders.searchOrders({
+      params: { shopId: '..' },
+      query: { ids: ['a\uDC00'] },
+      headers: { 'x-trace': 'a\nb' },
+    });
+
+    expect(outcome).toMatchObject({
+      body: {
+        issues: [
+          { in: 'params', path: ['shopId'] },
+          { in: 'query', path: ['ids', 0] },
+          { in: 'headers', path: ['x-trace'] },
+        ],
+      },
     });
   });
 });
@@ -437,5 +461,82 @@ describe('a number literal in exponent form, end to end against serve', () => {
     const outcome = await echoes.echoLarge({ params: { size: 1e21 } });
 
     expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-small': 1.5e-7 } });
+  });
+});
+
+describe('several Guards, checked in Attachment order', () => {
+  const region = defineGuard({
+    name: 'region',
+    description: 'A region and its tags',
+    demands: {
+      headers: z.object({ 'x-region': z.enum(['eu', 'us']) }),
+      query: z.object({ tags: z.array(z.string()).min(1).optional(), zone: z.string().min(2) }),
+    },
+  });
+  const tenant = defineGuard({
+    name: 'tenant',
+    description: 'A tenant',
+    demands: { headers: z.object({ 'x-tenant': z.string().min(3) }) },
+  });
+  const listShops = defineEndpoint({
+    name: 'listShops',
+    method: 'GET',
+    path: '/shops',
+    visibility: 'public',
+    description: 'Every shop',
+    guards: [region, tenant],
+    input: {
+      query: z.object({
+        tags: z.array(z.string()).min(1).optional(),
+        zone: z.string().min(2),
+        page: z.int(),
+      }),
+      headers: z.object({ 'x-region': z.enum(['eu', 'us']), 'x-tenant': z.string().min(3) }),
+    },
+    success: { status: 204 },
+  });
+  const shops = contractPackageOf({ listShops }, defaultStandards);
+  const shopsDeps = defineDependencies(shops, { endpoints: [listShops] });
+  const shopsClient = () =>
+    client(shopsDeps, {
+      baseUrl: 'http://shops.test',
+      fetch: async () => new Response(null, { status: 204 }),
+    });
+  const valid = {
+    query: { zone: 'eu-1', page: 1 },
+    headers: { 'x-region': 'eu', 'x-tenant': 'acme' },
+  } as const;
+
+  test('two Guards that both fail answer with the first one’s Issues', async () => {
+    const outcome = await shopsClient().listShops({
+      ...valid,
+      headers: { 'x-region': 'fr' as 'eu', 'x-tenant': 'a' },
+    });
+
+    expect(outcome).toMatchObject({
+      body: { issues: [{ in: 'headers', path: ['x-region'], code: 'invalid_value' }] },
+    });
+    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+  });
+
+  test('a demand in a Guard’s query failing beside the Input answers alone', async () => {
+    const outcome = await shopsClient().listShops({
+      ...valid,
+      query: { zone: 'e', page: 'x' as unknown as number },
+    });
+
+    expect(outcome).toMatchObject({
+      body: { issues: [{ in: 'query', path: ['zone'], code: 'too_small' }] },
+    });
+    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+  });
+
+  test('an empty list in a Guard’s query is dropped before its demands are parsed', async () => {
+    const outcome = await shopsClient().listShops({
+      ...valid,
+      query: { ...valid.query, tags: [] },
+    });
+
+    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
   });
 });

@@ -111,6 +111,8 @@ describe('a Success', () => {
     if (outcome.kind === 'success') {
       expectTypeOf(outcome.value).toEqualTypeOf<{ id: string; total: number }>();
       expectTypeOf(outcome.headers['x-total']).toEqualTypeOf<number>();
+      // @ts-expect-error: a header the Endpoint does not declare is not read, so it is not typed
+      expectTypeOf(outcome.headers['x-undeclared']).toBeUnknown();
     }
   });
 
@@ -133,6 +135,18 @@ describe('a Success', () => {
     const outcome = await orders.cancelOrder(params);
 
     expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+  });
+
+  test('a Success declaring no body, whose stream already failed, is still the Success', async () => {
+    const failed = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('reset')),
+    });
+    const headers = { 'x-total': '7' };
+    const orders = ordersAnswering(() => new Response(failed, { status: 200, headers }));
+
+    const outcome = await orders.headOrder(params);
+
+    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
   });
 
   test('a HEAD Success carries its headers only', async () => {
