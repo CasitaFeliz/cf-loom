@@ -24,8 +24,9 @@ export type ServiceEntry = {
 };
 
 /**
- * A Service's entry: `contract`, its Endpoints by name, its Events by name in code and its
- * Standard Rejections resolved, checked against `ContractPackage`; its `snapshot`; and the types
+ * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
+ * Rejections resolved and its exported Snapshot, checked against `ContractPackage`; its
+ * `snapshot`; and the types
  * of its recursive defs, so a Consumer that emits declarations can name them.
  */
 export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEntry): PackageFile {
@@ -42,6 +43,7 @@ export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEnt
     ...endpointsLines,
     '  events: {},',
     '  standardRejections,',
+    '  exportedSnapshot,',
     '} satisfies loom.ContractPackage;',
     '',
     'export { snapshot };',
@@ -50,6 +52,7 @@ export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEnt
   const siblings: readonly Sibling[] = [
     ...names.map((endpoint) => siblingOf({ kind: 'endpoint', name: endpoint })),
     { name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' },
+    { name: 'exportedSnapshot', path: packagePaths.exportedSnapshot, kind: 'value' },
     { name: 'standardRejections', path: packagePaths.standardRejections, kind: 'value' },
   ];
   return packageModuleOf({ path: packagePaths.entry, body, siblings, needs: loomNeeds() });

@@ -16,6 +16,7 @@ import {
   snapshotModuleOf,
   standardRejectionsModuleOf,
 } from './entry-code.ts';
+import { exportedSnapshotModuleOf, exportedSnapshotOf } from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';
@@ -81,8 +82,10 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
+  const defIds = new Set(defUses.map(({ id }) => id));
   const files = [
     serviceEntryOf({ name: snapshot.name, version, endpoints: reached.endpoints, defUses }),
+    exportedSnapshotModuleOf(exportedSnapshotOf(snapshot, reached, defIds)),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(snapshot, defUses),

@@ -24,8 +24,8 @@ export {
 } from './envelopes.ts';
 export type { HeaderTexts } from './header-text.ts';
 export { headerTextsOf, isHeaderText } from './header-text.ts';
-export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
-export { invalidInputBodyOf } from './invalid-input.ts';
+export type { InputIssue, InvalidInputBody, ReceivedInvalidInputBody } from './invalid-input.ts';
+export { invalidInputBodyOf, invalidInputBodyReader } from './invalid-input.ts';
 export type { Match, Matchable } from './match.ts';
 export { matchOf } from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';

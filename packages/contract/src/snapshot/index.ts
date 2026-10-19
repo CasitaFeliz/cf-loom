@@ -14,6 +14,7 @@ export type {
   DependencySnapshot,
   EndpointSnapshot,
   EventSnapshot,
+  ExportedSnapshot,
   GuardSnapshot,
   InputSnapshot,
   ServiceSnapshot,

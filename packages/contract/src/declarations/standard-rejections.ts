@@ -81,6 +81,9 @@ export const issueCodes = [
 /** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
 export type IssueCode = (typeof issueCodes)[number];
 
+/** The parts of a request an issue of invalid Input may sit in, as values. */
+export const inputIns = ['params', 'query', 'headers', 'body'] as const;
+
 /**
  * The body of the invalid-input Rejection: always cf-loom's, whatever a Definitions Package
  * declares, so every Caller reads the issues one way. An issue never carries the received value.
@@ -88,7 +91,7 @@ export type IssueCode = (typeof issueCodes)[number];
 export const invalidInputBody = z.object({
   issues: z.array(
     z.object({
-      in: z.enum(['params', 'query', 'headers', 'body']),
+      in: z.enum(inputIns),
       path: z.array(z.union([z.string(), z.number()])),
       code: z.enum(issueCodes),
       message: z.string(),

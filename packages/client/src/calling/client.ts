@@ -19,7 +19,11 @@ export function client<
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
-  const providing = { provider: deps.provider, standards: deps.standardRejections };
+  const providing = {
+    provider: deps.provider,
+    standards: deps.standardRejections,
+    exportedSnapshot: deps.exportedSnapshot,
+  };
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
   const methods = Object.entries(deps.endpoints).map(([name, endpoint]) => {
     const called = calledEndpointOf(endpoint, providing);

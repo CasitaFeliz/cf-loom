@@ -53,6 +53,7 @@ export type {
 } from './standard-rejections.ts';
 export {
   addedStandardRejectionNames,
+  inputIns,
   invalidInput,
   invalidInputBody,
   issueCodes,

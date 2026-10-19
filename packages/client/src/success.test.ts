@@ -1,8 +1,14 @@
 import {
   type ContractPackage,
+  defineContract,
   defineDependencies,
   defineEndpoint,
+  defineGroup,
+  type Endpoint,
+  openEnum,
+  type StandardRejections,
 } from '@casitafeliz/loom-contract';
+import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { client } from './index.ts';
@@ -41,17 +47,44 @@ const headOrder = defineEndpoint({
   success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
 });
 
-const orders = {
-  name: 'orders-service',
-  version: '1.0.0',
-  endpoints: { getOrder, cancelOrder, headOrder },
-  events: {},
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
+/**
+ * The Provider's Contract Package as `cf-loom package` writes it: its Endpoints, its resolved
+ * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
+ */
+function contractPackageOf<
+  const Endpoints extends ContractPackage['endpoints'],
+  const Standards extends StandardRejections,
+>(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
+  const listed = declared as unknown as [Endpoint];
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
+  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const rootPackage = {
+    packageName: 'orders-service',
+    originOf: () => undefined,
+    exportsOf: () => [],
+  };
+  const validated = validateContract(root, rootPackage);
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const snapshot = snapshotOf(validated, context);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The fixture is no Service');
+  }
+  const { format, defs, guards, codes } = snapshot;
+  const exportedSnapshot = { format, defs, endpoints: snapshot.endpoints, guards, codes };
+  const name = 'orders-service';
+  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+}
+
+const defaultStandards = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+} as const;
+
+const orders = contractPackageOf({ getOrder, cancelOrder, headOrder }, defaultStandards);
 
 const ordersDeps = defineDependencies(orders, {
   endpoints: [getOrder, cancelOrder, headOrder],
@@ -172,6 +205,57 @@ describe('a Success that breaks its Reader schemas', () => {
         committed: 'yes',
         issues: [{ part: 'success.body', code: 'malformed' }],
       },
+    ]);
+  });
+});
+
+describe('an Open Enum Success header', () => {
+  const trackOrder = defineEndpoint({
+    name: 'trackOrder',
+    method: 'GET',
+    path: '/orders/:orderId/track',
+    visibility: 'public',
+    description: 'Where an order stands',
+    input: { params: z.object({ orderId: z.string() }) },
+    success: { status: 204, headers: z.object({ 'x-stage': openEnum(['packed', 'shipped']) }) },
+  });
+  /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
+  const trackOrderReader = defineEndpoint({
+    name: 'trackOrder',
+    method: 'GET',
+    path: '/orders/:orderId/track',
+    visibility: 'public',
+    description: 'Where an order stands',
+    input: { params: z.object({ orderId: z.string() }) },
+    success: {
+      status: 204,
+      headers: z.object({
+        'x-stage': z.union([
+          z.enum(['packed', 'shipped']),
+          z.string().transform((unknown) => ({ unknown })),
+        ]),
+      }),
+    },
+  });
+  const tracking = contractPackageOf({ trackOrder: trackOrderReader }, defaultStandards, [
+    trackOrder,
+  ]);
+  const trackingDeps = defineDependencies(tracking, { endpoints: [trackOrderReader] });
+
+  function trackingAnswering(stage: string) {
+    const response = () => new Response(null, { status: 204, headers: { 'x-stage': stage } });
+    return client(trackingDeps, { baseUrl: 'http://orders.test', fetch: async () => response() });
+  }
+
+  test('a declared value is read as itself, and one it does not know as its Unknown case', async () => {
+    const outcomes = [
+      await trackingAnswering('shipped').trackOrder(params),
+      await trackingAnswering('lost').trackOrder(params),
+    ];
+
+    expect(outcomes).toEqual([
+      { kind: 'success', value: undefined, headers: { 'x-stage': 'shipped' } },
+      { kind: 'success', value: undefined, headers: { 'x-stage': { unknown: 'lost' } } },
     ]);
   });
 });

@@ -2,9 +2,14 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   type ContractPackage,
+  defineContract,
   defineDependencies,
   defineEndpoint,
+  defineGroup,
+  type Endpoint,
+  type StandardRejections,
 } from '@casitafeliz/loom-contract';
+import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { client, type Happened, type InferredFault } from './index.ts';
@@ -19,17 +24,44 @@ const getOrder = defineEndpoint({
   success: { status: 200, body: z.object({ id: z.string() }) },
 });
 
-const orders = {
-  name: 'orders-service',
-  version: '1.0.0',
-  endpoints: { getOrder },
-  events: {},
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
+/**
+ * The Provider's Contract Package as `cf-loom package` writes it: its Endpoints, its resolved
+ * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
+ */
+function contractPackageOf<
+  const Endpoints extends ContractPackage['endpoints'],
+  const Standards extends StandardRejections,
+>(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
+  const listed = declared as unknown as [Endpoint];
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
+  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const rootPackage = {
+    packageName: 'orders-service',
+    originOf: () => undefined,
+    exportsOf: () => [],
+  };
+  const validated = validateContract(root, rootPackage);
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const snapshot = snapshotOf(validated, context);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The fixture is no Service');
+  }
+  const { format, defs, guards, codes } = snapshot;
+  const exportedSnapshot = { format, defs, endpoints: snapshot.endpoints, guards, codes };
+  const name = 'orders-service';
+  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+}
+
+const defaultStandards = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+} as const;
+
+const orders = contractPackageOf({ getOrder }, defaultStandards);
 
 const ordersDeps = defineDependencies(orders, { endpoints: [getOrder] });
 

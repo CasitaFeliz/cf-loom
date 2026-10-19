@@ -1,6 +1,5 @@
 export type { Kind, ReservedCode, StandardRejections } from '../declarations/index.ts';
 export {
-  invalidInputBody,
   isContract,
   isEndpoint,
   isGuard,
@@ -22,6 +21,7 @@ export type {
   DependencySnapshot,
   EndpointSnapshot,
   EventSnapshot,
+  ExportedSnapshot,
   GuardSnapshot,
   InputSnapshot,
   ListedRejection,
@@ -87,6 +87,7 @@ export {
   failureLineOf,
   fieldsOf,
   follows,
+  identityOf,
   inOf,
   inputParts,
   isInputPart,
@@ -141,6 +142,7 @@ export type {
   InvalidInputBody,
   Match,
   Matchable,
+  ReceivedInvalidInputBody,
   RejectionEnvelope,
   SentRejection,
   SentSuccess,
@@ -161,6 +163,7 @@ export {
   headerTextsOf,
   internalError,
   invalidInputBodyOf,
+  invalidInputBodyReader,
   isHeaderText,
   isJsonContentType,
   isTextValue,

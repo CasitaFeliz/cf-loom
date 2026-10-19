@@ -1,12 +1,12 @@
-import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, ExportedSnapshot, StandardRejections } from '@casitafeliz/loom-contract';
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
+  type EndpointSnapshot,
+  identityOf,
   type ObjectNode,
   resolutionOf,
-  walkSchemas,
 } from '@casitafeliz/loom-contract/internal';
-import type * as core from 'zod/v4/core';
 
 /**
  * One listed Endpoint as the client calls it and reads its answers, prepared once: the header
@@ -22,12 +22,16 @@ export type CalledEndpoint = {
   readonly standards: StandardRejections;
 };
 
-/** The Dependency an Endpoint is called through: its Provider and the Standard codes it resolved. */
-export type Providing = { readonly provider: string; readonly standards: StandardRejections };
+/** The Dependency an Endpoint is called through: its Provider, its resolved Standard codes and nodes. */
+export type Providing = {
+  readonly provider: string;
+  readonly standards: StandardRejections;
+  readonly exportedSnapshot: ExportedSnapshot;
+};
 
-/** An Endpoint a Dependency lists, prepared for calling. */
+/** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */
 export function calledEndpointOf(endpoint: Endpoint, providing: Providing): CalledEndpoint {
-  const inputHeaders = objectNodeOf(endpoint, endpoint.input?.headers);
+  const entry = snapshotEntryOf(endpoint, providing);
   const rejections = answerableRejectionsOf(endpoint).map(
     (rejection) => [resolutionOf(rejection, providing.standards).code, rejection] as const,
   );
@@ -35,24 +39,19 @@ export function calledEndpointOf(endpoint: Endpoint, providing: Providing): Call
     provider: providing.provider,
     name: endpoint.name,
     endpoint,
-    inputHeaderNames: new Set(Object.keys(inputHeaders?.fields ?? {})),
-    successHeaders: objectNodeOf(endpoint, endpoint.success.headers),
+    inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),
+    successHeaders: entry.success.headers ?? undefined,
     rejectionsByCode: new Map(rejections),
     standards: providing.standards,
   };
 }
 
-/** The node of a headers object, which a Contract Package's Endpoint always declares walkably. */
-function objectNodeOf(
-  endpoint: Endpoint,
-  schema: core.$ZodType | undefined,
-): ObjectNode | undefined {
-  if (schema === undefined) {
-    return undefined;
+/** An Endpoint's entry in its Provider's exported Snapshot, which every exported Endpoint has. */
+function snapshotEntryOf(endpoint: Endpoint, providing: Providing): EndpointSnapshot {
+  const identity = identityOf(endpoint.method, endpoint.path);
+  const entry = providing.exportedSnapshot.endpoints[identity];
+  if (entry === undefined) {
+    throw new Error(`The exported Snapshot of ${providing.provider} has no ${identity}`);
   }
-  const [located] = walkSchemas([{ at: [], schema }], () => undefined).located;
-  if (located?.walked.kind !== 'walked' || located.walked.value.type !== 'object') {
-    throw new Error(`The headers of ${endpoint.name} are no object of text fields`);
-  }
-  return located.walked.value;
+  return entry;
 }

@@ -5,6 +5,7 @@ export const packagePaths = {
   tsconfig: 'tsconfig.json',
   entry: 'src/index.ts',
   snapshotModule: 'src/snapshot.ts',
+  exportedSnapshot: 'src/exported-snapshot.ts',
   standardRejections: 'src/standard-rejections.ts',
   defs: 'src/defs.ts',
 } as const;

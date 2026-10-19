@@ -9,6 +9,7 @@ import {
   faultStatusOf,
   headerTextsOf,
   invalidInputBodyOf,
+  invalidInputBodyReader,
   isHeaderText,
   isJsonContentType,
   jsonContentType,
@@ -427,6 +428,31 @@ describe('the invalid-input body', () => {
         { in: 'params', path: ['orderId'], code: 'invalid_format', message: 'Invalid UUID' },
         { in: 'headers', path: ['x-api-key'], code: 'required', message: 'Required' },
         { in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
+      ],
+    });
+  });
+});
+
+describe('the invalid-input body as a Caller reads it', () => {
+  test('an issue code or part a later cf-loom adds is read as its Unknown case', () => {
+    const received = {
+      issues: [
+        { in: 'params', path: ['id'], code: 'too_small', message: 'Too small', extra: 1 },
+        { in: 'cookies', path: [], code: 'too_late', message: 'Too late' },
+      ],
+    };
+
+    const read = invalidInputBodyReader.safeParse(received);
+
+    expect(read.data).toEqual({
+      issues: [
+        { in: 'params', path: ['id'], code: 'too_small', message: 'Too small' },
+        {
+          in: { unknown: 'cookies' },
+          path: [],
+          code: { unknown: 'too_late' },
+          message: 'Too late',
+        },
       ],
     });
   });

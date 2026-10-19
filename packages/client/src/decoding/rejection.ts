@@ -1,6 +1,6 @@
 import {
   type AnswerableRejection,
-  invalidInputBody,
+  invalidInputBodyReader,
   isStandardRejection,
   parseValue,
   type RejectionEnvelope,
@@ -34,10 +34,10 @@ export function rejectionOf(
   return { kind: 'rejection', known: true, code, message, body: parsed.value };
 }
 
-/** The schema a Rejection's body is read with: cf-loom's for invalid input, else its declared one. */
+/** The schema a Rejection's body is read with: cf-loom's reader for invalid input, else its declared one. */
 function bodySchemaOf(rejection: AnswerableRejection): core.$ZodType | undefined {
   if (!isStandardRejection(rejection)) {
     return schemaOf(rejection, 'body');
   }
-  return rejection.name === 'invalidInput' ? invalidInputBody : undefined;
+  return rejection.name === 'invalidInput' ? invalidInputBodyReader : undefined;
 }

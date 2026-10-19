@@ -1,11 +1,16 @@
 import {
   type ContractPackage,
+  defineContract,
   defineDependencies,
   defineEndpoint,
+  defineGroup,
   defineGuard,
   defineRejection,
+  type Endpoint,
   notFound,
+  type StandardRejections,
 } from '@casitafeliz/loom-contract';
+import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { client } from './index.ts';
@@ -56,18 +61,49 @@ const getOrder = defineEndpoint({
   success: { status: 200, body: z.object({ id: z.string() }) },
 });
 
+/**
+ * The Provider's Contract Package as `cf-loom package` writes it: its Endpoints, its resolved
+ * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
+ */
+function contractPackageOf<
+  const Endpoints extends ContractPackage['endpoints'],
+  const Standards extends StandardRejections,
+>(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
+  const listed = declared as unknown as [Endpoint];
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
+  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const rootPackage = {
+    packageName: 'orders-service',
+    originOf: () => undefined,
+    exportsOf: () => [],
+  };
+  const validated = validateContract(root, rootPackage);
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const snapshot = snapshotOf(validated, context);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The fixture is no Service');
+  }
+  const { format, defs, guards, codes } = snapshot;
+  const exportedSnapshot = { format, defs, endpoints: snapshot.endpoints, guards, codes };
+  const name = 'orders-service';
+  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+}
+
+const defaultStandards = {
+  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+} as const;
+
 /** A Provider whose Definitions Package resolved its Standard Rejections to codes of its own. */
-const orders = {
-  name: 'orders-service',
-  version: '1.0.0',
-  endpoints: { editOrder, getOrder },
-  events: {},
-  standardRejections: {
-    invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
-    notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
-    notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
-  },
-} as const satisfies ContractPackage;
+const orders = contractPackageOf({ editOrder, getOrder }, {
+  invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
+  notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
+  notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
+} as const);
 
 const ordersDeps = defineDependencies(orders, { endpoints: [editOrder, getOrder] });
 
@@ -215,5 +251,22 @@ describe('Standard Rejections', () => {
       { kind: 'rejection', known: true, code: 'BAD_REQUEST', body: { issues: [issue] } },
       { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown' },
     ]);
+  });
+
+  test('an issue code or part a later cf-loom adds arrives as its Unknown case', async () => {
+    const issue = { in: 'cookies', path: [], code: 'too_late', message: 'Too late' };
+    const orders = rejecting(400, {
+      code: 'BAD_REQUEST',
+      message: 'The request is invalid',
+      body: { issues: [issue] },
+    });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).toMatchObject({
+      known: true,
+      code: 'BAD_REQUEST',
+      body: { issues: [{ in: { unknown: 'cookies' }, code: { unknown: 'too_late' } }] },
+    });
   });
 });

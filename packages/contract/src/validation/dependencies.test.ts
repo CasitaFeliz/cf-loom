@@ -66,6 +66,7 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
 /** A selection the types refuse, as a cast lets an author write it. */

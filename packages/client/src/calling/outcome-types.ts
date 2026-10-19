@@ -4,7 +4,7 @@ import type {
   RejectionsOf,
   StandardRejections,
 } from '@casitafeliz/loom-contract';
-import type { InvalidInputBody } from '@casitafeliz/loom-contract/internal';
+import type { ReceivedInvalidInputBody } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
 import type { ReceivedFault } from '../inference/index.ts';
 
@@ -53,7 +53,7 @@ type KnownRejectionOf<Answerable, Standards extends StandardRejections> = Answer
 }
   ? KnownRejection<
       Standards[Name]['code'],
-      Name extends 'invalidInput' ? InvalidInputBody : undefined
+      Name extends 'invalidInput' ? ReceivedInvalidInputBody : undefined
     >
   : Answerable extends { readonly kind: 'rejection'; readonly code: infer Code }
     ? KnownRejection<

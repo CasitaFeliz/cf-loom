@@ -39,6 +39,7 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
 describe('defineDependencies', () => {
@@ -58,6 +59,12 @@ describe('defineDependencies', () => {
       paymentsDeps.standardRejections.invalidInput.code,
     ).toEqualTypeOf<'INVALID_INPUT'>();
     expect(paymentsDeps.standardRejections.notFound.code).toBe('NOT_FOUND');
+  });
+
+  test('a Dependency keeps its Provider’s exported Snapshot, for its client to read nodes from', () => {
+    const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
+
+    expect(paymentsDeps.exportedSnapshot).toEqual(payments.exportedSnapshot);
   });
 
   test('a Dependency keeps the Elements its Provider exports, by identity', () => {
