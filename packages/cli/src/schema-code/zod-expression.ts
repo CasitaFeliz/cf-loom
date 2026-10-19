@@ -14,7 +14,6 @@ import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
 import { addDefUse, type Writing } from './needs.ts';
-import { openEnumReaderOf } from './open.ts';
 
 /**
  * The zod expression of a Snapshot node in a mode, with its nullability and annotations, so the
@@ -95,7 +94,11 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
   return `${min}${max}`;
 }
 
-/** An enum: an Open Enum's reader has its Unknown case; values that are not all strings are literals. */
+/**
+ * An enum; values that are not all strings are literals. An Open Enum's reader reads a declared
+ * value as itself and any other string as its Unknown case, `{ unknown: 'refunded' }`, so
+ * TypeScript tells them apart.
+ */
 function enumOf(node: EnumNode, writing: Writing): string {
   const values = node.values.map(literalOf).join(', ');
   const allStrings = node.values.every((value) => typeof value === 'string');
@@ -103,7 +106,7 @@ function enumOf(node: EnumNode, writing: Writing): string {
     return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
   }
   if (writing.mode === 'reader') {
-    return openEnumReaderOf(`z.enum([${values}])`);
+    return `z.union([z.enum([${values}]), z.string().transform((unknown) => ({ unknown }))])`;
   }
   writing.needs.modules.add('loom');
   return `loom.openEnum([${values}])`;

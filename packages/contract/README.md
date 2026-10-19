@@ -255,7 +255,7 @@ payment: z.object({
 
 Readers get a type with an Unknown case and must handle it: an unknown value arrives as `{ unknown: 'refunded' }`, so TypeScript can tell it from the declared ones. Writers may only use the declared values. `openEnum()` infers the writer type only; reader types and schemas are generated from the Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 
-A set of variants that grows is an object whose `type` is an Open Enum and whose variants' fields are optional, as `payment` above: a reader handles a `type` it does not know, and a new variant adds a value and its optional fields. A `z.discriminatedUnion()` is closed: adding a variant is Breaking for its readers (see [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) in COMPATIBILITY.md).
+A set of variants that grows is an object whose `type` is an Open Enum and whose variants' fields are optional, as `payment` above: a reader handles a `type` it does not know, and a new variant adds a value and its optional fields. A `z.discriminatedUnion()` is closed (see [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) in COMPATIBILITY.md).
 
 `openEnum()` takes string values. Inside an intersection, use `.extend()` (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema `openEnum()` returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` described the same way stays closed.
 

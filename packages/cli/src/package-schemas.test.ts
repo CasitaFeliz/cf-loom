@@ -450,8 +450,11 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(written.filter((text) => text.includes('strictObject'))).toEqual([]);
   });
 
-  test('no file of the package reads an unknown variant', () => {
-    const written = filesUnder(join(folder, 'contract-shapes-service', 'src'));
+  test('no file of the package or of generate reads an unknown variant', () => {
+    const generated = ['readers.generated.ts', 'handlers.generated.ts'].map((file) =>
+      readFileSync(join(folder, 'project', 'src', file), 'utf8'),
+    );
+    const written = [...filesUnder(join(folder, 'contract-shapes-service', 'src')), ...generated];
 
     expect(written.filter((text) => /openUnion|\braw\b/.test(text))).toEqual([]);
   });

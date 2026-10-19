@@ -2,7 +2,6 @@ import type {
   EnumNode,
   ObjectNode,
   SchemaNode,
-  TaggedNode,
   TupleNode,
 } from '@casitafeliz/loom-contract/internal';
 import { keyOf, literalOf } from '../source-text/index.ts';
@@ -48,7 +47,9 @@ function shapeTypeOf(node: SchemaNode, writing: Writing): string {
     case 'union':
       return `(${node.options.map((option) => typeOf(option, writing)).join(' | ')})`;
     case 'tagged':
-      return taggedTypeOf(node, writing);
+      return `(${Object.values(node.variants)
+        .map((variant) => typeOf(variant, writing))
+        .join(' | ')})`;
     case 'allOf':
       return `(${node.items.map((item) => typeOf(item, writing)).join(' & ')})`;
     case 'json':
@@ -78,10 +79,4 @@ function tupleTypeOf(node: TupleNode, writing: Writing): string {
   const items = node.items.map((item) => typeOf(item, writing));
   const rest = node.rest === undefined ? [] : [`...Array<${typeOf(node.rest, writing)}>`];
   return `[${[...items, ...rest].join(', ')}]`;
-}
-
-/** A discriminated union's variants. */
-function taggedTypeOf(node: TaggedNode, writing: Writing): string {
-  const variants = Object.values(node.variants).map((variant) => typeOf(variant, writing));
-  return `(${variants.join(' | ')})`;
 }

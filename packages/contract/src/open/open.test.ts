@@ -3,14 +3,13 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import * as contract from '../index.ts';
-import { openEnum } from '../index.ts';
 import { isOpen } from '../internal/index.ts';
 
-type Status = ReturnType<typeof openEnum<readonly ['pending', 'paid']>>;
+type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
 
 describe('openEnum', () => {
   test('openEnum is open and its writer type is the declared values', () => {
-    const status = openEnum(['pending', 'paid']);
+    const status = contract.openEnum(['pending', 'paid']);
 
     expect(isOpen(status)).toBe(true);
     expect(isOpen(z.enum(['pending', 'paid']))).toBe(false);
@@ -24,7 +23,7 @@ describe('openEnum', () => {
     ['zod/mini describe', (status: Status) => status.check(zm.describe('The order status'))],
     ['zod/mini meta', (status: Status) => status.check(zm.meta({ description: 'Status' }))],
   ])('an openEnum described with %s stays open', (_name, described) => {
-    const status = openEnum(['pending', 'paid']);
+    const status = contract.openEnum(['pending', 'paid']);
 
     expect(isOpen(described(status))).toBe(true);
   });
@@ -35,7 +34,7 @@ describe('openEnum', () => {
 
   test('openEnum takes string values only', () => {
     // @ts-expect-error an Open Enum's values are strings
-    const declare = () => openEnum([1, 2]);
+    const declare = () => contract.openEnum([1, 2]);
 
     expect(declare).not.toThrow();
   });
