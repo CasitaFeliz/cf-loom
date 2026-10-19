@@ -1,56 +1,56 @@
 import type { NotAllowed, Path, SchemaNode } from './nodes.ts';
 import { refused } from './not-allowed.ts';
-
-/** The recursive defs a node's `ref`s name. */
-type Defs = Readonly<Record<string, SchemaNode>>;
+import type { Defs } from './walk.ts';
 
 /** A node inside another, with the steps of the path that lead to it. */
 type Child = { readonly steps: Path; readonly node: SchemaNode };
 
 /**
- * Every `allOf` in a node that reaches an Open Enum or an Open Union, at any depth and through
- * `ref`s: a reader of an intersection merges what each item read, and an Unknown case and the
- * value it came from never merge.
+ * Every `allOf` in a schema, or in a def at `['defs', <id>]`, that reaches an Open Enum or an
+ * Open Union: a reader of an intersection merges what each item read, and an Unknown case and the
+ * value it came from never merge. A `ref` is not entered, since each def is judged once itself.
  */
 export function openIntersectionsOf(node: SchemaNode, at: Path, defs: Defs): readonly NotAllowed[] {
-  return intersectionsIn(node, at, { defs, seen: new Set() });
-}
-
-/** What one search shares: the defs, and the ones already searched, so a cycle ends. */
-type Search = { readonly defs: Defs; readonly seen: ReadonlySet<string> };
-
-function intersectionsIn(node: SchemaNode, at: Path, search: Search): readonly NotAllowed[] {
-  if (node.type === 'allOf' && reachesOpen(node, { defs: search.defs, seen: new Set() })) {
+  if (node.type === 'allOf' && reachesOpen(node, defs, new Set())) {
     return [{ kind: 'not-allowed', at, ...refused.openIntersection }];
   }
-  if (node.type === 'ref') {
-    return insideRef(node.name, at, search);
-  }
   return childrenOf(node).flatMap(({ steps, node: child }) =>
-    intersectionsIn(child, [...at, ...steps], search),
+    openIntersectionsOf(child, [...at, ...steps], defs),
   );
 }
 
-function insideRef(name: string, at: Path, search: Search): readonly NotAllowed[] {
-  const def = search.defs[name];
-  if (def === undefined || search.seen.has(name)) {
-    return [];
+/** Whether a node reaches an Open Enum or an Open Union, through `ref`s, each def once. */
+function reachesOpen(node: SchemaNode, defs: Defs, seen: ReadonlySet<string>): boolean {
+  switch (node.type) {
+    case 'enum':
+      return node.open;
+    case 'tagged':
+      return node.open || childrenReachOpen(node, defs, seen);
+    case 'ref': {
+      const def = defs[node.name];
+      if (def === undefined || seen.has(node.name)) {
+        return false;
+      }
+      return reachesOpen(def, defs, new Set([...seen, node.name]));
+    }
+    case 'object':
+    case 'record':
+    case 'array':
+    case 'tuple':
+    case 'union':
+    case 'allOf':
+      return childrenReachOpen(node, defs, seen);
+    case 'string':
+    case 'number':
+    case 'boolean':
+    case 'literal':
+    case 'json':
+      return false;
   }
-  return intersectionsIn(def, at, { defs: search.defs, seen: new Set([...search.seen, name]) });
 }
 
-function reachesOpen(node: SchemaNode, search: Search): boolean {
-  if ((node.type === 'enum' || node.type === 'tagged') && node.open) {
-    return true;
-  }
-  if (node.type !== 'ref') {
-    return childrenOf(node).some(({ node: child }) => reachesOpen(child, search));
-  }
-  const def = search.defs[node.name];
-  if (def === undefined || search.seen.has(node.name)) {
-    return false;
-  }
-  return reachesOpen(def, { defs: search.defs, seen: new Set([...search.seen, node.name]) });
+function childrenReachOpen(node: SchemaNode, defs: Defs, seen: ReadonlySet<string>): boolean {
+  return childrenOf(node).some(({ node: child }) => reachesOpen(child, defs, seen));
 }
 
 /** The nodes directly inside a node, each with the steps the walker's paths take to it. */

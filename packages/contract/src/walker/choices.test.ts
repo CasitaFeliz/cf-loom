@@ -176,6 +176,26 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
+  test('an openUnion variant whose discriminator is not a string fails', () => {
+    const numbered = z.object({ type: z.literal(1) });
+    const variants = [card, numbered] as unknown as [typeof card, typeof card];
+
+    expect(walkBody(openUnion('type', variants))).toEqual(
+      refusedAt(
+        ['body', 'variants', 1],
+        'an openUnion() variant whose discriminator is not a string literal',
+      ),
+    );
+  });
+
+  test('a closed discriminated union variant whose discriminator is a number is allowed', () => {
+    const numbered = z.object({ type: z.literal(1) });
+
+    expect(walkBody(z.discriminatedUnion('type', [card, numbered]))).toMatchObject(
+      walkedTo({ type: 'tagged', discriminator: 'type', variants: {}, open: false }),
+    );
+  });
+
   test('two variants with the same discriminator value fail', () => {
     const otherCard = z.object({ type: z.literal('card'), token: z.string() });
 

@@ -1,7 +1,7 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
-  pathOf,
+  methodAndPathOf,
   type ServiceSnapshot,
 } from '@casitafeliz/loom-contract/internal';
 import { type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
@@ -77,9 +77,7 @@ function endpointBodyOf(
 
 /** The method and path of an identity, its params' names put back in order. */
 function identityLinesOf(id: string, endpoint: EndpointSnapshot): readonly string[] {
-  const separator = id.indexOf(' ');
-  const method = id.slice(0, separator);
-  const path = pathOf(id.slice(separator + 1), endpoint.params);
+  const { method, path } = methodAndPathOf(id, endpoint.params);
   return [`  method: ${stringLiteralOf(method)},`, `  path: ${stringLiteralOf(path)},`];
 }
 

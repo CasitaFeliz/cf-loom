@@ -11,7 +11,8 @@ export function canonicalTextOf(snapshot: Snapshot): string {
 
 /**
  * A Snapshot as its canonical text reads back, every map in code point order, so whatever is
- * generated from it in order is a function of the canonical Snapshot alone.
+ * generated from it in order is a function of the canonical Snapshot alone. `JSON.parse`'s result
+ * is trusted as `Read`, since it is the text of that very Snapshot.
  */
 export function canonicalSnapshotOf<Read extends Snapshot>(snapshot: Read): Read {
   return JSON.parse(canonicalFormOf(snapshot));

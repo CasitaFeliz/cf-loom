@@ -472,7 +472,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('an Endpoint named handle exits 1, since its stub imports handle', () => {
+  test('an Endpoint named handle fails the name grammar, since its stub imports handle', () => {
     const service = aService();
     const project = aProject({
       ...service,
@@ -495,7 +495,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'endpoints.handle cannot be named handle: its stub imports handle from @casitafeliz/loom-handlers\n',
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase and no reserved word: handle\n',
     });
   });
 

@@ -64,6 +64,9 @@ export const refused = {
   unliteralDiscriminator: {
     construct: 'a discriminated union variant whose discriminator is not a literal',
   },
+  unstringOpenDiscriminator: {
+    construct: 'an openUnion() variant whose discriminator is not a string literal',
+  },
   objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
   strictIntersection: { construct: 'an intersection with a strict object', instead: '.extend()' },

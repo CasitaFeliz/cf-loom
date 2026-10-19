@@ -24,8 +24,11 @@ export type WalkedLocation = { readonly at: Path; readonly walked: Walked };
  */
 export type WalkedSchemas = {
   readonly located: readonly WalkedLocation[];
-  readonly defs: Readonly<Record<string, SchemaNode>>;
+  readonly defs: Defs;
 };
+
+/** The schemas written once under a Snapshot's `defs`, by the id that names each cycle. */
+export type Defs = Readonly<Record<string, SchemaNode>>;
 
 /** What every schema of one walk shares: how to walk inside, the recursion, and origins. */
 type WalkState = {

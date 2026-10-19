@@ -6,6 +6,7 @@ export {
   isRejection,
   isStandardRejection,
   standardRejectionDefaults,
+  standardRejectionNames,
 } from '../declarations/index.ts';
 export type { Parsed, SchemaIssue } from '../issues/index.ts';
 export { parseValue } from '../issues/index.ts';
@@ -74,8 +75,8 @@ export {
   isSameRejection,
   kebabCase,
   listedDefinitionsOf,
+  methodAndPathOf,
   partFieldOf,
-  pathOf,
   schemaOf,
   standardRejectionsOf,
   successParts,

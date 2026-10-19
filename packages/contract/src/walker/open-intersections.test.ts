@@ -71,6 +71,25 @@ describe('validateContract: an intersection reaching an Open Enum or an Open Uni
     expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
   });
 
+  test('an intersection inside a recursive def is not allowed once, where the def is', () => {
+    const tree = z
+      .object({
+        both: z.intersection(z.object({ status: openEnum(['a']) }), z.record(z.string(), z.json())),
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+    const body = z.object({ first: tree, second: tree });
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...refusal, at: ['defs', 'tree', 'fields', 'both'] }],
+    });
+  });
+
   test('an intersection with no Open Enum or Open Union is allowed', () => {
     const body = z.intersection(
       z.object({ status: z.enum(['a']) }),

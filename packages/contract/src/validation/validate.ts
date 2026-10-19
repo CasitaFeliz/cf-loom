@@ -14,7 +14,8 @@ import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import type { Root } from './located.ts';
-import { groupFailures, nameFailures, packageNameFailures, uniquenessFailures } from './names.ts';
+import { nameFailures } from './name-grammars.ts';
+import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { type ObjectPart, objectParts, type Part } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
@@ -88,6 +89,9 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...nodes.slots.flatMap(({ at, node }) => openIntersectionsOf(node, at, nodes.defs)),
+    ...Object.entries(nodes.defs).flatMap(([id, def]) =>
+      openIntersectionsOf(def, ['defs', id], nodes.defs),
+    ),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {

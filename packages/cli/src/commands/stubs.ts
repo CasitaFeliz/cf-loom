@@ -7,9 +7,6 @@ import { type BuiltService, type Stopped, stopped } from './built.ts';
 import { toolingError } from './exit.ts';
 import type { GeneratedFile } from './writing.ts';
 
-/** The name every stub imports from `@casitafeliz/loom-handlers`, which no Element may take. */
-const stubImport = 'handle';
-
 /**
  * The stubs `generate` writes, and a line for every handled Element a stub could not import as
  * it is named.
@@ -50,10 +47,6 @@ function locatedOf(
   exportsOf: (declaration: unknown) => readonly FileExport[],
 ): Located {
   const where = `${handled.kind}s.${handled.name}`;
-  if (handled.name === stubImport) {
-    const line = `${where} cannot be named ${stubImport}: its stub imports ${stubImport} from @casitafeliz/loom-handlers`;
-    return { kind: 'refused', line };
-  }
   const packaged = packageOf(service, handled);
   if (packaged !== undefined) {
     return packageExportOf(handled, packaged);
