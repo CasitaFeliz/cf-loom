@@ -18,7 +18,7 @@ import {
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
 import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
-import { serve } from '@casitafeliz/loom-server';
+import { type ServedFault, serve } from '@casitafeliz/loom-server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';
@@ -41,7 +41,11 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     input: { params: z.object({ paymentId: z.string().min(3) }) },
     success: {
       status: 200,
-      headers: z.object({ 'x-stage': stage, 'x-count': z.number() }),
+      headers: z.object({
+        'x-stage': stage,
+        'x-count': z.number(),
+        'x-note': z.string().optional(),
+      }),
       body: z.object({ stage, id: z.string(), amount: z.int() }),
     },
     rejections: [notFound, paymentLocked],
@@ -104,7 +108,11 @@ const paymentsDeps = defineDependencies(
 
 const headers = { 'x-stage': 'settled', 'x-count': 0.000_000_15 } as const;
 const body = { stage: 'pending', id: 'pay-1', amount: 5 } as const;
+const unsendable = { ...headers, 'x-note': 'a\nb' } as const;
 const locked = { reason: 'settled', lockedAt: '2026-10-19T10:00:00Z' } as const;
+
+/** What the Provider reports to its Service through `onServiceFault`. */
+const serviceFaults: ServedFault[] = [];
 
 /** The Provider itself, its Handler answering by the payment asked for. */
 const served = serve(
@@ -128,6 +136,8 @@ const served = serve(
             return reject(paymentLocked, locked);
           case 'down':
             return fault({ committed: 'no', retryable: true });
+          case 'unsendable':
+            return success({ headers: unsendable, body });
           default:
             return success({ headers, body });
         }
@@ -137,6 +147,7 @@ const served = serve(
     guards: {},
     deprecatedAt: { getPayment: '1970-01-01T00:00:00Z' },
   },
+  { onServiceFault: (serviceFault) => serviceFaults.push(serviceFault) },
 );
 
 /** The fake, scripted to answer each payment as the Provider's Handler does. */
@@ -193,6 +204,33 @@ describe('fakeProvider and serve answer alike', () => {
     const fromFake = await seenOf(await scriptedFake().fetch(url, init));
 
     expect(fromFake).toEqual(fromServe);
+  });
+
+  test('a Success header that cannot travel: serve answers INVALID_OUTCOME and the fake calls the script a mistake at the same header', async () => {
+    const url = 'http://payments.test/payments/unsendable';
+    const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+    payments.on('getPayment').otherwise((r) => r.success({ headers: unsendable, body }));
+    serviceFaults.length = 0;
+
+    const fromServe = await served(new Request(url));
+    const fromFake = payments.fetch(url, {});
+
+    await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+    expect(serviceFaults).toEqual([
+      {
+        kind: 'invalid-outcome',
+        endpoint: 'getPayment',
+        issues: [
+          {
+            part: 'success.headers',
+            path: ['x-note'],
+            code: 'invalid_format',
+            message: expect.any(String),
+          },
+        ],
+      },
+    ]);
   });
 });
 

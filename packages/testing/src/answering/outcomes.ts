@@ -26,11 +26,12 @@ export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpo
   const texts = headerTextsOf('success.headers', fieldsOf(headers.value));
   const textIssues = texts.kind === 'issues' ? texts.issues : [];
   const issues = [...headers.issues, ...body.issues, ...textIssues];
-  if (texts.kind === 'issues' || issues.length > 0) {
+  if (issues.length > 0) {
     const what = 'the scripted Success breaks its readers';
     throw mistakeOf({ ...whoOf(listed), what, issues });
   }
-  return successResponseOf({ status: success.status, headers: texts.texts, body: body.value });
+  const sent = { status: success.status, headers: fieldsOf(headers.value), body: body.value };
+  return successResponseOf(sent);
 }
 
 type KnownRejection = Extract<Answer, { readonly kind: 'rejection' }>;

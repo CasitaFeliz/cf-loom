@@ -306,6 +306,67 @@ describe('an EndpointHandler’s Success', () => {
     ]);
   });
 
+  test.each([
+    ['above U+00FF', 'v€'],
+    ['with a line feed', 'v\n1'],
+    ['with a carriage return', 'v\r1'],
+    ['with a NUL', 'v\u00001'],
+    ['with U+0100', 'vĀ'],
+    ['with a control character', 'v\u0001'],
+    ['with DEL', 'v\u007f'],
+    ['with a leading space', ' v1'],
+    ['with a trailing tab', 'v1\t'],
+  ])(
+    'a Success header value %s cannot travel, so the direct call throws InvalidOutcomeError at success.headers',
+    async (_case, location) => {
+      const createOrderHandler = handle(createOrder, () =>
+        success({ headers: { location }, body: { id: ORDER_ID } }),
+      );
+
+      const issues = await issuesOf(() => createOrderHandler(createInput, {}));
+
+      expect(issues).toEqual([
+        {
+          part: 'success.headers',
+          path: ['location'],
+          code: 'invalid_format',
+          message: expect.any(String),
+        },
+      ]);
+    },
+  );
+
+  test('a header value with a tab inside, or U+00FF, is returned as given', async () => {
+    const createOrderHandler = handle(createOrder, () =>
+      success({ headers: { location: 'v\tÿ' }, body: { id: ORDER_ID } }),
+    );
+
+    const outcome = await createOrderHandler(createInput, {});
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      status: 201,
+      headers: { location: 'v\tÿ' },
+      body: { id: ORDER_ID },
+    });
+  });
+
+  test('an undeclared Success header that cannot travel is dropped, never checked', async () => {
+    const given = { location: '/o/1', 'x-extra': 'a\nb' };
+    const createOrderHandler = handle(createOrder, () =>
+      success({ headers: given, body: { id: ORDER_ID } }),
+    );
+
+    const outcome = await createOrderHandler(createInput, {});
+
+    expect(outcome).toStrictEqual({
+      kind: 'success',
+      status: 201,
+      headers: { location: '/o/1' },
+      body: { id: ORDER_ID },
+    });
+  });
+
   test('a body given to a 204 throws InvalidOutcomeError', async () => {
     const deleteOrderHandler = handle(deleteOrder, () => success({ id: ORDER_ID }) as never);
 

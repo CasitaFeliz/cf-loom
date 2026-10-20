@@ -1,4 +1,4 @@
-import { type InputIssue, invalidInputBodyOf } from '@casitafeliz/loom-contract/internal';
+import { type InputIssue, invalidInputRejectionOf } from '@casitafeliz/loom-contract/internal';
 import { type DecodedOutcome, outcomeOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
@@ -57,8 +57,8 @@ export function methodOf(
 
 /** The invalid-input Rejection the Provider would answer, with its code and message, never sent. */
 function invalidInputOf(called: CalledEndpoint, issues: readonly InputIssue[]): DecodedOutcome {
-  const { code, message } = called.standards.invalidInput;
-  return { kind: 'rejection', known: true, code, message, body: invalidInputBodyOf(issues) };
+  const { code, message, body } = invalidInputRejectionOf(issues, called.standards);
+  return { kind: 'rejection', known: true, code, message, body };
 }
 
 /** Whether a signal is aborted now: a header function awaited before may have aborted it. */

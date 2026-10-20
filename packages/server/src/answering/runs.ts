@@ -1,7 +1,6 @@
 import type { StandardRejections } from '@casitafeliz/loom-contract';
 import {
   faultResponseOf,
-  headerTextsOf,
   type InputIssue,
   internalError,
   invalidInputResponseOf,
@@ -9,6 +8,7 @@ import {
   rejectionResponseOf,
   reservedResponseOf,
   type SentRejection,
+  type SentSuccess,
   successResponseOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { Fault, Issue } from '@casitafeliz/loom-handlers';
@@ -22,13 +22,6 @@ export type Answered =
 
 /** A run that did not answer: given what broke the Contract, built what broke it, or threw. */
 export type FailedRun = Exclude<EndpointRun, { readonly kind: 'answered' }>;
-
-/** A Success as the run resolved it: its declared status, and its headers and body when declared. */
-type ResolvedSuccess = {
-  readonly status: number;
-  readonly headers?: Readonly<Record<string, unknown>> | undefined;
-  readonly body?: unknown;
-};
 
 /** What a Handler answered that is not a Success: a resolved Rejection, or a Fault it returned. */
 type NotSuccess = (SentRejection & { readonly kind: 'rejection' }) | Fault;
@@ -46,19 +39,14 @@ export function answeredOfFailedRun(
       return invalidOutcomeOf(run.issues, faultedBy);
     case 'thrown': {
       const servedFault = { ...faultedBy, kind: 'thrown' as const, fault: run.fault };
-      return { kind: 'fault', response: handlerFaultResponseOf(run.fault), servedFault };
+      return { kind: 'fault', response: faultResponseOf(run.fault), servedFault };
     }
   }
 }
 
-/** A Success a Handler answered, sent only when each of its headers can travel as text. */
-export function answeredOfSuccess(success: ResolvedSuccess, faultedBy: FaultedBy): Answered {
-  const headers = headerTextsOf('success.headers', success.headers);
-  if (headers.kind === 'issues') {
-    return invalidOutcomeOf(headers.issues, faultedBy);
-  }
-  const sent = { status: success.status, headers: headers.texts, body: success.body };
-  return { kind: 'success', response: successResponseOf(sent) };
+/** A Success a Handler answered, as its run checked it. */
+export function answeredOfSuccess(success: SentSuccess): Answered {
+  return { kind: 'success', response: successResponseOf(success) };
 }
 
 /** A Rejection or a Fault a Handler answered, as sent; a returned Fault is the Service's too. */
@@ -68,7 +56,7 @@ export function answeredOfNotSuccess(answer: NotSuccess, faultedBy: FaultedBy): 
       return { kind: 'rejection', response: rejectionResponseOf(answer) };
     case 'fault': {
       const servedFault = { ...faultedBy, kind: 'returned' as const, fault: answer };
-      return { kind: 'fault', response: handlerFaultResponseOf(answer), servedFault };
+      return { kind: 'fault', response: faultResponseOf(answer), servedFault };
     }
   }
 }
@@ -89,14 +77,6 @@ export function answeredOfInvalidInput(
   }
   const response = invalidInputResponseOf(issues.filter(isInputIssue), standards);
   return { kind: 'rejection', response };
-}
-
-/**
- * The response of a Fault a Handler built or the run made of a throw: only what a Handler's
- * Fault says travels, so no field it adds can make it a reserved Fault.
- */
-function handlerFaultResponseOf({ committed, retryable, message }: Fault): Response {
-  return faultResponseOf({ committed, retryable, message });
 }
 
 /**
