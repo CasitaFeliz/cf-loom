@@ -28,7 +28,10 @@ export const notJsonContentType = {
   message: 'The content type is not application/json',
 } as const;
 
-/** The Issue `serve` answers for a body that cannot be read as JSON: at the whole of `input.body`. */
+/**
+ * The Issue every reader answers for a body that cannot be read as JSON: at the whole of
+ * `input.body`.
+ */
 export function malformedBodyIssueOf(message: string): InputIssue {
   return { part: 'input.body', path: [], code: 'malformed', message };
 }

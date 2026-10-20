@@ -215,6 +215,26 @@ describe('serve: Guards', () => {
     });
   });
 
+  test('a body is never pulled when a GuardHandler rejects the request', async () => {
+    let pulls = 0;
+    const body = new ReadableStream(
+      {
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(new TextEncoder().encode('{"text":"a"}'));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const headers = { authorization: 'Bearer x', 'content-type': 'application/json' };
+    const init = { method: 'POST', headers, body, duplex: 'half' } as RequestInit;
+
+    await serve(contract, handlers)(new Request('http://test/notes', init));
+
+    expect(pulls).toBe(0);
+  });
+
   test('a GuardHandler stub answers not implemented once its demands are valid', async () => {
     const stubbed = {
       ...handlers,

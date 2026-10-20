@@ -34,10 +34,13 @@ export type ReadingSource<Answer = never> = {
   ) => Promise<{ readonly kind: 'admitted' } | Stop<Answer>>;
 };
 
-/** What a step before the Input leaves: the reading goes on with what it gives, or it ends. */
-type Step<Answer, Given> =
-  | { readonly kind: 'read'; readonly given: Given }
-  | Exclude<Reading<Answer>, { readonly kind: 'input' }>;
+/** A reading that ends before its Input is read. */
+type Ended<Answer> = Exclude<Reading<Answer>, { readonly kind: 'input' }>;
+
+/** The body step's end: the body under its field, read or not declared, or the reading's end. */
+type BodyStep<Answer> =
+  | { readonly kind: 'read'; readonly given: { readonly body?: unknown } }
+  | Ended<Answer>;
 
 /**
  * A request read in the one order every Provider reads it, so `serve`, the client and the fakes
@@ -47,11 +50,11 @@ export async function readingOf<Answer = never>(
   endpoint: Endpoint,
   source: ReadingSource<Answer>,
 ): Promise<Reading<Answer>> {
-  const admitted = await admittedOf(endpoint, source);
-  if (admitted.kind !== 'read') {
-    return admitted;
+  const admission = await admissionStepOf(endpoint, source);
+  if (admission.kind !== 'admitted') {
+    return admission;
   }
-  const body = await bodyOf(endpoint, source);
+  const body = await bodyStepOf(endpoint, source);
   if (body.kind !== 'read') {
     return body;
   }
@@ -67,10 +70,10 @@ export async function readingOf<Answer = never>(
  * Each Guard's demands in Attachment order, then its run once they are met; the first that fails
  * answers alone.
  */
-async function admittedOf<Answer>(
+async function admissionStepOf<Answer>(
   endpoint: Endpoint,
   source: ReadingSource<Answer>,
-): Promise<Step<Answer, undefined>> {
+): Promise<{ readonly kind: 'admitted' } | Ended<Answer>> {
   for (const [index, { guard }] of attachmentsOf(endpoint).entries()) {
     const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
     const demands = parsedPartsOf(demandParts, schemaAt, source.textOf(guard));
@@ -82,14 +85,14 @@ async function admittedOf<Answer>(
       return run;
     }
   }
-  return { kind: 'read', given: undefined };
+  return { kind: 'admitted' };
 }
 
 /** The body under its field, when the Endpoint declares one; one not read answers alone. */
-async function bodyOf<Answer>(
+async function bodyStepOf<Answer>(
   endpoint: Endpoint,
   source: ReadingSource<Answer>,
-): Promise<Step<Answer, { readonly body?: unknown }>> {
+): Promise<BodyStep<Answer>> {
   if (schemaOf(endpoint, 'input.body') === undefined) {
     return { kind: 'read', given: {} };
   }

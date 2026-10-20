@@ -21,7 +21,7 @@ export type Call = {
  */
 export function partsOf(
   call: Call,
-  served: ServedContract,
+  served: Pick<ServedContract, 'nodes' | 'maxBodyBytes'>,
 ): Omit<ReadingSource<Answered>, 'admit'> {
   return {
     textOf: (party) => textPartsOf(served.nodes.get(party) ?? {}, call.source),

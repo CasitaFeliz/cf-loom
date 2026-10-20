@@ -56,6 +56,16 @@ function sourceOf(text: Readonly<Record<string, unknown>>, body: unknown = { tex
 /** A body port that stops the reading, as a reader stops a body too large to read. */
 const stoppingBody = () => Promise.resolve({ kind: 'stopped' as const, answer: 'too large' });
 
+/** A body port that counts how often the reading asks for the body. */
+function countedBody() {
+  let asked = 0;
+  const body = () => {
+    asked += 1;
+    return Promise.resolve({ kind: 'value' as const, value: { text: 'hi' } });
+  };
+  return { body, asked: () => asked };
+}
+
 describe('readingOf', () => {
   test('a request every Guard admits reads as its Input, each part parsed, unknown keys stripped', async () => {
     const text = { ...admitted, params: { noteId: 'n-1', other: 'o' } };
@@ -127,16 +137,27 @@ describe('readingOf', () => {
     ]);
   });
 
-  test('a body is not read when a Guard’s demands fail', async () => {
+  test('a body is not asked for when a Guard’s demands fail', async () => {
     const text = { headers: {}, query: { tenant: 't' }, params: { noteId: 'n-1' } };
-    const source = { textOf: () => text, body: stoppingBody };
+    const counted = countedBody();
 
-    const reading = await readingOf(addNote, source);
+    await readingOf(addNote, { textOf: () => text, body: counted.body });
 
-    expect(reading).toMatchObject({
-      kind: 'invalid',
-      issues: [{ part: 'demands.headers', path: ['x-api-key'], code: 'required' }],
-    });
+    expect(counted.asked()).toBe(0);
+  });
+
+  test('a body is not asked for when a Guard’s run stops the request', async () => {
+    const text = { ...admitted, params: { noteId: 'n-1' } };
+    const counted = countedBody();
+    const source = {
+      textOf: () => text,
+      body: counted.body,
+      admit: () => Promise.resolve({ kind: 'stopped' as const, answer: 'UNAUTHENTICATED' }),
+    };
+
+    await readingOf(addNote, source);
+
+    expect(counted.asked()).toBe(0);
   });
 
   test('a body is not read for an Endpoint that declares none', async () => {

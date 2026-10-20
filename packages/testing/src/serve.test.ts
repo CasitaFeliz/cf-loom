@@ -323,7 +323,7 @@ describe('serve, the client and fakeProvider read a request alike', () => {
       { ...valid, query: { merchant: 'm-1' }, headers: { ...valid.headers, 'x-region': 'mars' } },
     ],
     [
-      'a Guard’s demands failing beside a malformed body and a bad param answer alone',
+      'a Guard’s demands failing beside a body left out and a bad param answer alone',
       { params: { paymentId: 'ab' }, query: valid.query, headers: { 'x-region': 'eu' } },
     ],
     ['a declared body left out', { ...valid, body: undefined }],

@@ -1,16 +1,18 @@
-import type { StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
 import {
   matchOf,
   type Reading,
+  type ReadingSource,
   readingOf,
   reservedResponseOf,
   withDeprecation,
 } from '@casitafeliz/loom-contract/internal';
-import { fault } from '@casitafeliz/loom-handlers';
-import { type EndpointGiven, runEndpoint } from '@casitafeliz/loom-handlers/internal';
+import type { Fault } from '@casitafeliz/loom-handlers';
+import { type EndpointRun, notRunFaultOf, runEndpoint } from '@casitafeliz/loom-handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, partsOf } from './call.ts';
-import { type GuardRuns, guardRunsOf } from './guards.ts';
+import { guardRunsOf } from './guards.ts';
+import type { FaultedBy } from './hooks.ts';
 import {
   type Answered,
   answeredOfFailedRun,
@@ -41,53 +43,46 @@ export async function answerOf(served: ServedContract, request: Request): Promis
 }
 
 async function answeredCallOf(call: Call, served: ServedContract): Promise<Answered> {
+  const faultedBy = { endpoint: call.endpoint.declared.name };
   const runs = guardRunsOf(call, served.standards);
-  const reading = await readingOrThrownOf(call, served, runs.admit);
+  const source = { ...partsOf(call, served), admit: runs.admit };
+  const reading = await readingOrThrownOf(call.endpoint.declared, source);
   switch (reading.kind) {
     case 'stopped':
       return reading.answer;
-    case 'invalid': {
-      const faultedBy = { endpoint: call.endpoint.declared.name };
+    case 'thrown':
+      return answeredOfFailedRun(reading, faultedBy, served.standards);
+    case 'invalid':
       return answeredOfInvalidInput(reading.issues, faultedBy, served.standards);
-    }
     case 'input': {
       const given = { input: reading.input, context: runs.context() };
-      return await answeredRunOf(call, given, served.standards);
+      const run = await runEndpoint(call.endpoint.handler, given, served.standards);
+      return answeredRunOf(run, faultedBy, served.standards);
     }
   }
 }
 
 /**
  * The request read with its Guards' runs; a throw while parsing it, such as a stack overflow on
- * deeply nested Input, is answered as a Handler's throw would be, not committed, since none ran.
+ * deeply nested Input, is a throw before any Handler ran.
  */
 async function readingOrThrownOf(
-  call: Call,
-  served: ServedContract,
-  admit: GuardRuns['admit'],
-): Promise<Reading<Answered>> {
+  endpoint: Endpoint,
+  source: ReadingSource<Answered>,
+): Promise<Reading<Answered> | { readonly kind: 'thrown'; readonly fault: Fault }> {
   try {
-    return await readingOf(call.endpoint.declared, { ...partsOf(call, served), admit });
+    return await readingOf(endpoint, source);
   } catch (e) {
-    const thrown = fault({ committed: 'no', retryable: false, cause: e });
-    const faultedBy = { endpoint: call.endpoint.declared.name };
-    const answer = answeredOfFailedRun(
-      { kind: 'thrown', fault: thrown },
-      faultedBy,
-      served.standards,
-    );
-    return { kind: 'stopped', answer };
+    return { kind: 'thrown', fault: notRunFaultOf(e) };
   }
 }
 
-/** The EndpointHandler's run on the parsed Input and the admitted Context, answered. */
-async function answeredRunOf(
-  call: Call,
-  given: EndpointGiven,
+/** The EndpointHandler's run answered: its Outcome, or what it did not answer. */
+function answeredRunOf(
+  run: EndpointRun,
+  faultedBy: FaultedBy,
   standards: StandardRejections,
-): Promise<Answered> {
-  const run = await runEndpoint(call.endpoint.handler, given, standards);
-  const faultedBy = { endpoint: call.endpoint.declared.name };
+): Answered {
   if (run.kind !== 'answered') {
     return answeredOfFailedRun(run, faultedBy, standards);
   }

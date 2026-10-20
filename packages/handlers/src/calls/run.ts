@@ -134,8 +134,17 @@ function checkedGiven<Value>(
     }
     return checked;
   } catch (e) {
-    return { kind: 'thrown', fault: fault({ committed: 'no', retryable: false, cause: e }) };
+    return { kind: 'thrown', fault: notRunFaultOf(e) };
   }
+}
+
+/**
+ * The Fault of a throw before an implementation ran, such as a stack overflow while its input is
+ * parsed: not committed, since nothing was done, and not retryable, since the same request throws
+ * again.
+ */
+export function notRunFaultOf(cause: unknown): Fault {
+  return fault({ committed: 'no', retryable: false, cause });
 }
 
 function answeredRunOf<Answer>(checked: Checked<Answer>): Run<Answer> {
