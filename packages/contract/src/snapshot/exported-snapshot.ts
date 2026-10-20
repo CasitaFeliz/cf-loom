@@ -33,16 +33,14 @@ export function exportedSnapshotOf(snapshot: ServiceSnapshot): ExportedSnapshot 
 }
 
 /** The Elements of a Snapshot map a Contract Package exports, in the map's order. */
-function exportedOf<Element extends ExportedElement>(
+function exportedOf<Element extends Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>>(
   elements: Readonly<Record<string, Element>>,
 ): Readonly<Record<string, Element>> {
   return Object.fromEntries(Object.entries(elements).filter(([, element]) => isExported(element)));
 }
 
-type ExportedElement = Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>;
-
 /** Whether a Contract Package exports an Element: Public or Internal, and not Retired. */
-function isExported(element: ExportedElement): boolean {
+function isExported(element: Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>): boolean {
   return element.visibility !== 'private' && isLive(element);
 }
 

@@ -20,6 +20,8 @@ import {
 } from './entry-code.ts';
 import { eventModuleOf } from './event-code.ts';
 import {
+  type ExportedEndpoint,
+  type ExportedEvent,
   exportedEndpointsOf,
   exportedEventsOf,
   exportedSnapshotModuleOf,
@@ -75,7 +77,7 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
   const events = exportedEventsOf(exported);
-  const schemaFiles = schemaFilesOf(exported, snapshot);
+  const schemaFiles = schemaFilesOf({ endpoints, events }, exported, snapshot);
   const defUses = reachedDefUsesOf(
     exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
@@ -94,14 +96,21 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
   return { kind: 'files', files };
 }
 
+/** The Endpoints and Events the exported Snapshot holds, in the order the entry lists them. */
+type ExportedElements = {
+  readonly endpoints: readonly ExportedEndpoint[];
+  readonly events: readonly ExportedEvent[];
+};
+
 /** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */
 function schemaFilesOf(
+  { endpoints, events }: ExportedElements,
   exported: ExportedSnapshot,
   snapshot: ServiceSnapshot,
 ): readonly SchemaFile[] {
   return [
-    ...exportedEndpointsOf(exported).map((endpoint) => endpointModuleOf(endpoint, snapshot)),
-    ...exportedEventsOf(exported).map(eventModuleOf),
+    ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),
+    ...events.map(eventModuleOf),
     ...Object.entries(exported.guards).map(([name, guard]) =>
       guardModuleOf({ kind: 'guard', name }, guard),
     ),

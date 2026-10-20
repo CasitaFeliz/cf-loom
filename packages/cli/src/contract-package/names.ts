@@ -6,7 +6,7 @@ import {
   messageVersionStemOf,
 } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
-import { declaredFolders } from './paths.ts';
+import { declaredFiles } from './paths.ts';
 
 /**
  * A declaration the package writes a file of its own for: an Endpoint or a Guard by name, a
@@ -20,7 +20,7 @@ export type PackagedDeclaration =
 
 /** The file of a declaration in the package, its name in kebab-case. */
 export function fileOf(declared: PackagedDeclaration): string {
-  const folder = declaredFolders[declared.kind];
+  const { folder } = declaredFiles[declared.kind];
   switch (declared.kind) {
     case 'endpoint':
     case 'guard':

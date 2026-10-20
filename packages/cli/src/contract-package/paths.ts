@@ -10,17 +10,26 @@ export const packagePaths = {
   defs: 'src/defs.ts',
 } as const;
 
-const declaredKinds = ['endpoint', 'guard', 'rejection', 'event'] as const;
-
 /** A kind of declaration the package writes one file for, by its name. */
-export type DeclaredKind = (typeof declaredKinds)[number];
+export type DeclaredKind = 'endpoint' | 'guard' | 'rejection' | 'event';
 
-/** The folder of each kind of declaration's files. */
-export const declaredFolders: Readonly<Record<DeclaredKind, string>> = {
-  endpoint: 'src/endpoints',
-  guard: 'src/guards',
-  rejection: 'src/rejections',
-  event: 'src/events',
+/** A name in kebab-case, as the name grammars give it. */
+const kebabName = '[a-z0-9]+(-[a-z0-9]+)*';
+
+/** A declaration's file name: its name in kebab-case, then `.ts`. */
+const kebabFileName = new RegExp(`^${kebabName}\\.ts$`);
+
+/**
+ * The folder of each kind of declaration's files, and their names; a Message Version's adds its
+ * version, as README's Layout names it.
+ */
+export const declaredFiles: Readonly<
+  Record<DeclaredKind, { readonly folder: string; readonly fileName: RegExp }>
+> = {
+  endpoint: { folder: 'src/endpoints', fileName: kebabFileName },
+  guard: { folder: 'src/guards', fileName: kebabFileName },
+  rejection: { folder: 'src/rejections', fileName: kebabFileName },
+  event: { folder: 'src/events', fileName: new RegExp(`^${kebabName}\\.v[1-9][0-9]*\\.ts$`) },
 };
 
 const fixedPaths: ReadonlySet<string> = new Set(Object.values(packagePaths));
@@ -28,26 +37,14 @@ const fixedPaths: ReadonlySet<string> = new Set(Object.values(packagePaths));
 /** The folder a package's build writes, `tsc -p` from `src`. */
 export const builtFolder = 'dist';
 
-/** A declaration's file name: its name in kebab-case, as the name grammars give it, then `.ts`. */
-const kebabFileName = /^[a-z0-9]+(-[a-z0-9]+)*\.ts$/;
-
-/** Each kind's file name; a Message Version's adds its version, as README's Layout names it. */
-const declaredFileNames: Readonly<Record<DeclaredKind, RegExp>> = {
-  endpoint: kebabFileName,
-  guard: kebabFileName,
-  rejection: kebabFileName,
-  event: /^[a-z0-9]+(-[a-z0-9]+)*\.v[1-9][0-9]*\.ts$/,
-};
-
 /** Whether a path in a package's folder is one `package` writes, in any Contract Package. */
 export function isPackagePath(path: string): boolean {
   if (fixedPaths.has(path)) {
     return true;
   }
-  return declaredKinds.some((kind) => {
-    const folder = declaredFolders[kind];
+  return Object.values(declaredFiles).some(({ folder, fileName }) => {
     const name = path.startsWith(`${folder}/`) ? path.slice(folder.length + 1) : '';
-    return declaredFileNames[kind].test(name);
+    return fileName.test(name);
   });
 }
 

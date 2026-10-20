@@ -1288,16 +1288,19 @@ describe('cf-loom package: where it writes', () => {
     expect(existsSync(join(project, 'contract-package/src/events/order-placed.v2.ts'))).toBe(true);
   });
 
-  test('a file under src/events that package would not name is refused and kept', () => {
-    const project = aProject(service);
-    packageIn(project);
-    write(project, { 'contract-package/src/events/stray.ts': 'export {};\n' });
+  test.each(['stray.ts', 'order-placed.v0.ts', 'order-placed.v01.ts'])(
+    'a file under src/events that package would not name, %s, is refused and kept',
+    (file) => {
+      const project = aProject(service);
+      packageIn(project);
+      write(project, { [`contract-package/src/events/${file}`]: 'export {};\n' });
 
-    const ran = packageIn(project);
+      const ran = packageIn(project);
 
-    expect(ran.status).toBe(3);
-    expect(read(project, 'contract-package/src/events/stray.ts')).toBe('export {};\n');
-  });
+      expect(ran.status).toBe(3);
+      expect(read(project, `contract-package/src/events/${file}`)).toBe('export {};\n');
+    },
+  );
 
   test('a previous output holding a stray file under src is refused and kept', () => {
     const project = aProject(service);

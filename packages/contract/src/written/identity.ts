@@ -50,7 +50,7 @@ export function messageIdentityOf(name: unknown, version: unknown): string {
  * A Message Version's name and version from its identity, `OrderCreated@2`: the reverse of
  * `messageIdentityOf`, since the Snapshot keys a Message Version by its identity alone.
  */
-export function messageVersionOf(identity: string): {
+export function nameAndVersionOf(identity: string): {
   readonly name: string;
   readonly version: number;
 } {

@@ -4,7 +4,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   type ExportedSnapshot,
-  messageVersionOf,
+  nameAndVersionOf,
 } from '@cf-loom/contract/internal';
 import { loomNeeds } from '../schema-code/index.ts';
 import { jsonLiteralOf } from '../source-text/index.ts';
@@ -21,12 +21,8 @@ export function exportedEndpointsOf(exported: ExportedSnapshot): readonly Export
     .sort((left, right) => byCodePoint(left.endpoint.name, right.endpoint.name));
 }
 
-/**
- * An Event's Message Version the package exports: the identity the Snapshot keys it by, its name
- * and version, and its entry.
- */
+/** An Event's Message Version the package exports: its name and version, and its entry. */
 export type ExportedEvent = {
-  readonly id: string;
   readonly name: string;
   readonly version: number;
   readonly event: EventSnapshot;
@@ -35,7 +31,7 @@ export type ExportedEvent = {
 /** The Events of the exported Snapshot in code point order of their names in code, as the entry lists them. */
 export function exportedEventsOf(exported: ExportedSnapshot): readonly ExportedEvent[] {
   return Object.entries(exported.events)
-    .map(([id, event]): ExportedEvent => ({ id, ...messageVersionOf(id), event }))
+    .map(([id, event]): ExportedEvent => ({ ...nameAndVersionOf(id), event }))
     .sort((left, right) => byCodePoint(codeNameOf(left), codeNameOf(right)));
 }
 

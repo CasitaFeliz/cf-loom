@@ -11,8 +11,18 @@ export function elementLinesOf(
   return [
     `  visibility: ${stringLiteralOf(element.visibility)},`,
     `  description: ${stringLiteralOf(element.description)},`,
-    ...(element.lifecycle === 'active'
-      ? []
-      : [`  lifecycle: ${stringLiteralOf(element.lifecycle)},`]),
+    ...lifecycleLinesOf(element.lifecycle),
   ];
+}
+
+/** A lifecycle as `define*` takes it: Active left out, Deprecated written. */
+function lifecycleLinesOf(lifecycle: EventSnapshot['lifecycle']): readonly string[] {
+  switch (lifecycle) {
+    case 'active':
+      return [];
+    case 'deprecated':
+      return [`  lifecycle: ${stringLiteralOf(lifecycle)},`];
+    case 'retired':
+      throw new Error('The exported Snapshot holds no Retired Element: a bug.');
+  }
 }

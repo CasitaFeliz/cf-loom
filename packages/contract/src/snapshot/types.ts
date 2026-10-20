@@ -137,7 +137,7 @@ export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapsh
 /**
  * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints and Events
  * that are not Retired, with the Guards, codes and defs they reach, keyed as in the Snapshot, so a
- * Caller reads their nodes and no Private Element reaches a browser.
+ * Consumer reads their nodes and no Private Element reaches a browser.
  */
 export type ExportedSnapshot = Pick<
   ServiceSnapshot,
