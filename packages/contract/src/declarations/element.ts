@@ -16,9 +16,9 @@ export const eventVisibilities = ['internal', 'private'] as const;
 /** How far an Event reaches: never Public, since a Message travels only through the broker. */
 export type EventVisibility = (typeof eventVisibilities)[number];
 
-/** An Element's lifecycle: the one it declares, or Active when it declares none. */
+/** An Element's lifecycle: the one it declares, or Active when it leaves it out. */
 export function lifecycleOf(element: { readonly lifecycle?: Lifecycle | undefined }): Lifecycle {
-  return element.lifecycle ?? 'active';
+  return element.lifecycle === undefined ? 'active' : element.lifecycle;
 }
 
 /** Whether an Element still works, so it has a Handler and a Contract Package may export it: not Retired. */
