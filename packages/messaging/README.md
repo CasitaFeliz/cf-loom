@@ -11,7 +11,7 @@ The EventPublisher and CommandSender are created once, in their own module, and 
 ```ts
 // src/messaging.ts
 import { messaging } from '@casitafeliz/loom-messaging';
-import { contract } from './contract';
+import { contract } from './contract/index.ts';
 
 export const { publisher, sender, consume, connect, close } = messaging(contract);
 ```
@@ -24,7 +24,7 @@ export const { publisher, sender, consume, connect, close } = messaging(contract
 
 ```ts
 // in any Handler
-import { publisher, sender } from '../../messaging';
+import { publisher, sender } from '../../messaging.ts';
 
 await publisher.publish('OrderCreated', {
   v1: { orderId, total: total.amount },   // Deprecated, still published
@@ -70,9 +70,9 @@ Messages are validated with the generated Reader schemas (see [The Contract Pack
 
 ```ts
 import { memory } from '@casitafeliz/loom-messaging/memory';
-import { connect, consume, close } from '../src/messaging';
-import handlers from '../src/handlers.generated';
-import createOrderHandler from '../src/endpoints/orders/create-order.handler';
+import { connect, consume, close } from '../src/messaging.ts';
+import handlers from '../src/handlers.generated.ts';
+import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 
 const broker = memory();
 await connect(broker);

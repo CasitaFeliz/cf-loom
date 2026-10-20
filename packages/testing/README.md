@@ -8,7 +8,7 @@ Each fake is checked against the Provider's Snapshot, as its Contract Package ex
 
 ```ts
 import { fakeProvider } from '@casitafeliz/loom-testing';
-import { paymentsDeps } from '../src/contract/dependencies/payments-service.dependencies';
+import { paymentsDeps } from '../src/contract/dependencies/payments-service.dependencies.ts';
 
 const payments = fakeProvider(paymentsDeps);
 payments.on('getPayment')
@@ -45,7 +45,7 @@ payments.calls('getPayment');                            // the requests the cod
 
 ```ts
 import { fakeEvent } from '@casitafeliz/loom-testing';
-import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler';
+import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler.ts';
 
 const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
 await notifyOnSettledHandler(settled, { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 });
