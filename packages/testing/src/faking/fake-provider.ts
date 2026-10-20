@@ -49,7 +49,7 @@ export function fakeProvider<const Deps extends AnyDependencies>(
   const fake: FakeProvider<Deps> = {
     fetch,
     client: (clientOptions) => client(deps, { ...clientOptions, baseUrl: base, fetch }),
-    on: (name) => faking.scriptedOf(name).script as ScriptOf<Deps, typeof name>,
+    on: (name) => faking.scriptedByNameOf(name).script as ScriptOf<Deps, typeof name>,
     calls: (name) => faking.calls.callsOf(name) as readonly FakeCallOf<Deps, typeof name>[],
   };
   return Object.freeze(fake);

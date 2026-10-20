@@ -12,10 +12,15 @@ export type Sending = { readonly url: string; readonly init: RequestInit };
 
 /**
  * The URL a Provider is reached at, checked once: its path is kept as a prefix, such as a
- * gateway's mount, and a query or fragment, which no Endpoint's URL can carry, is a bug.
+ * gateway's mount; a username or a password, which `fetch` refuses in a URL, or a query or
+ * fragment, which no Endpoint's URL can carry, is a bug.
  */
 export function baseUrlOf(baseUrl: string | URL): URL {
   const base = new URL(baseUrl);
+  if (base.username !== '' || base.password !== '') {
+    const shown = `${base.protocol}//${base.host}${base.pathname}`;
+    throw new Error(`The baseUrl ${shown} has a username or a password, which fetch refuses`);
+  }
   if (base.search !== '' || base.hash !== '' || /[?#]$/.test(base.href)) {
     throw new Error(`The baseUrl ${base.href} has a query or a fragment, which no Endpoint takes`);
   }

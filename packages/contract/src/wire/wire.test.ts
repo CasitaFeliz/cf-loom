@@ -17,6 +17,7 @@ import {
   isHeaderText,
   isJsonContentType,
   isQueryText,
+  isReservedCode,
   isSegmentText,
   jsonContentType,
   malformedBodyIssueOf,
@@ -306,6 +307,12 @@ describe('the reserved codes and statuses', () => {
         { status: 500, committed: 'unknown', message: 'The Outcome broke the Contract' },
       ],
     ]);
+  });
+
+  test('a reserved code is one of the four, any other value is none', () => {
+    const values = ['RETIRED', 'INVALID_OUTCOME', 'NOT_FOUND', 'retired', 1, undefined];
+
+    expect(values.map(isReservedCode)).toEqual([true, true, false, false, false, false]);
   });
 
   test('every reserved code a declaration may not take has its row', () => {

@@ -1,4 +1,4 @@
-import { isRejectionStatus, reservedCodes } from '../declarations/index.ts';
+import { isRejectionStatus, isReservedCode } from '../declarations/index.ts';
 import type { Path, SchemaNode } from '../walker/index.ts';
 import type { Declarations } from './declarations.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -63,8 +63,7 @@ function statusFailures({ at, rejection }: LocatedRejection): readonly Declarati
 }
 
 function reservedFailures(at: Path, code: unknown): readonly DeclarationFailure[] {
-  const reserved: readonly unknown[] = reservedCodes;
-  if (!reserved.includes(code)) {
+  if (!isReservedCode(code)) {
     return [];
   }
   const message = `A code cf-loom answers as a Fault is reserved: ${textOf(code)}`;

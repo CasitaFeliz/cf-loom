@@ -242,6 +242,13 @@ describe('fakeProvider: requests', () => {
     expect(create).toThrow('has a query or a fragment');
   });
 
+  test('a baseUrl with a username or a password is a bug, refused when the fake is created', () => {
+    const create = () =>
+      fakeProvider(paymentsDeps, { baseUrl: 'https://ann:secret@gateway.test/' });
+
+    expect(create).toThrow('has a username or a password');
+  });
+
   test('a path that only begins like the base URL’s path lies outside it', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/api' });
 

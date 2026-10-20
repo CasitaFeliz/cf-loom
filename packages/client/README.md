@@ -29,7 +29,7 @@ switch (outcome.kind) {
 
 The client has one method per Endpoint listed in the Dependency, named after it, and returns an Outcome: it never throws for a Rejection or a Fault. It reads the Provider's Standard Rejection codes from the Provider's Contract Package, so a Caller receives the Provider's codes, not its own. Every method takes an optional second argument, `{ signal }`, to abort the call; cf-loom sets no timeout, the organization does (`AbortSignal.timeout(ms)` is one). The first argument may be left out when no part of the Input is required, counting the headers given to `client()`.
 
-`baseUrl` is a string or a `URL`. Its path is kept as a prefix, such as a gateway's mount, with one trailing slash removed: `client(deps, { baseUrl: 'https://gw.example/payments/' })` calls `getPayment` at `https://gw.example/payments/payments/<id>`. A `baseUrl` with a query or a fragment, even an empty one, is a bug, and `client()` throws.
+`baseUrl` is a string or a `URL`. Its path is kept as a prefix, such as a gateway's mount, with one trailing slash removed: `client(deps, { baseUrl: 'https://gw.example/payments/' })` calls `getPayment` at `https://gw.example/payments/payments/<id>`. A `baseUrl` with a username or a password, which `fetch` refuses in a URL, or with a query or a fragment, even an empty one, is a bug, and `client()` throws, never showing the password.
 
 ### What a call sends
 

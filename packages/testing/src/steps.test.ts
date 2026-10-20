@@ -320,23 +320,112 @@ describe('fakeProvider: steps', () => {
       .on('capturePayment')
       .once((r, { body }) => r.success({ amount: body.amount }))
       .once((r) => r.success({ amount: 0 }));
-    const gate = Promise.withResolvers<void>();
-    const held = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        await gate.promise;
-        controller.enqueue(new TextEncoder().encode('{"amount":1}'));
-        controller.close();
-      },
-    });
-    const url = `${at}/capture`;
-    const headers = { 'content-type': 'application/json' };
+    const gated = gatedBodyOf(1);
 
-    const first = payments.fetch(url, { method: 'POST', headers, body: held, duplex: 'half' });
-    const second = payments.fetch(url, { method: 'POST', headers, body: '{"amount":2}' });
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    gate.resolve();
+    const first = capture(payments, gated.body);
+    const second = capture(payments, '{"amount":2}');
+    await settling();
+    gated.open();
     const bodies = await Promise.all([first, second].map(async (sent) => (await sent).json()));
 
     expect(bodies).toEqual([{ amount: 1 }, { amount: 0 }]);
   });
+
+  test('an invalid request between two valid ones takes no turn from the first', async () => {
+    const payments = fakeProvider(paymentsDeps);
+    payments
+      .on('capturePayment')
+      .once((r, { body }) => r.success({ amount: body.amount }))
+      .once((r) => r.success({ amount: 0 }));
+    const gated = gatedBodyOf(1);
+
+    const first = capture(payments, gated.body);
+    const invalid = await capture(payments, '{"amount":"x"}');
+    const third = capture(payments, '{"amount":3}');
+    await settling();
+    gated.open();
+    const bodies = await Promise.all([first, third].map(async (sent) => (await sent).json()));
+
+    expect(invalid.status).toBe(400);
+    expect(bodies).toEqual([{ amount: 1 }, { amount: 0 }]);
+  });
+
+  test('a request aborted while its body is read holds no later request back', async () => {
+    const payments = fakeProvider(paymentsDeps);
+    payments.on('capturePayment').otherwise((r, { body }) => r.success({ amount: body.amount }));
+    const controller = new AbortController();
+    const reason = new Error('Gave up');
+
+    const first = capture(payments, gatedBodyOf(1).body, controller.signal);
+    const second = capture(payments, '{"amount":2}');
+    await settling();
+    controller.abort(reason);
+
+    await expect(first).rejects.toBe(reason);
+    expect(await (await second).json()).toEqual({ amount: 2 });
+  });
+
+  test('a request aborted while it waits for its turn records no call and takes no step', async () => {
+    const payments = fakeProvider(paymentsDeps);
+    payments
+      .on('capturePayment')
+      .once((r, { body }) => r.success({ amount: body.amount }))
+      .once((r, { body }) => r.success({ amount: body.amount + 10 }))
+      .once((r) => r.success({ amount: 0 }));
+    const gated = gatedBodyOf(1);
+    const controller = new AbortController();
+    const reason = new Error('Gave up');
+
+    const first = capture(payments, gated.body);
+    const second = capture(payments, '{"amount":2}', controller.signal);
+    await settling();
+    controller.abort(reason);
+    gated.open();
+    const third = capture(payments, '{"amount":3}');
+    const bodies = await Promise.all([first, third].map(async (sent) => (await sent).json()));
+
+    await expect(second).rejects.toBe(reason);
+    expect(bodies).toEqual([{ amount: 1 }, { amount: 13 }]);
+    expect(payments.calls('capturePayment')).toHaveLength(2);
+  });
+
+  test('a mistake gives up its turn, so the next request is answered once a step is added', async () => {
+    const payments = fakeProvider(paymentsDeps);
+
+    const unscripted = capture(payments, '{"amount":1}');
+    await expect(unscripted).rejects.toThrow('it was never scripted');
+    payments.on('capturePayment').otherwise((r, { body }) => r.success({ amount: body.amount }));
+    const answered = await capture(payments, '{"amount":2}');
+
+    expect(await answered.json()).toEqual({ amount: 2 });
+  });
 });
+
+/** A JSON body whose stream is held until `open()` is called. */
+function gatedBodyOf(amount: number) {
+  const gate = Promise.withResolvers<void>();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      await gate.promise;
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({ amount })));
+      controller.close();
+    },
+  });
+  return { body, open: () => gate.resolve() };
+}
+
+/** A capture of the payment, its body JSON text or a stream. */
+function capture(
+  payments: ReturnType<typeof fakeProvider<typeof paymentsDeps>>,
+  body: string | ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const headers = { 'content-type': 'application/json' };
+  const init: RequestInit = { method: 'POST', headers, body, duplex: 'half' };
+  return payments.fetch(`${at}/capture`, signal === undefined ? init : { ...init, signal });
+}
+
+/** Lets every request sent so far read what it can. */
+function settling(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 5));
+}

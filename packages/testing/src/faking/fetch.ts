@@ -25,7 +25,7 @@ import { type CallLog, callLogOf } from './calls.ts';
 export type Faking = {
   readonly provided: Provided;
   readonly calls: CallLog;
-  readonly scriptedOf: (name: string) => Scripted;
+  readonly scriptedByNameOf: (name: string) => Scripted;
 };
 
 /** A fake with no script and no call yet. */
@@ -36,7 +36,7 @@ export function fakingOf(provided: Provided): Faking {
     scriptedByName.set(name, found);
     return found;
   };
-  return { provided, calls: callLogOf(), scriptedOf: scripted };
+  return { provided, calls: callLogOf(), scriptedByNameOf: scripted };
 }
 
 /**
@@ -47,7 +47,7 @@ export function fakeFetchOf(faking: Faking): Fetch {
   return async (url, init) => {
     init.signal?.throwIfAborted();
     const request = new Request(url, init);
-    return await abortableOf(fakeResponseOf(faking, request), init.signal);
+    return await abortableOf(fakeResponseOf(faking, request), request.signal);
   };
 }
 
@@ -67,7 +67,7 @@ async function answeredOf(faking: Faking, matched: Matched, request: Request): P
   if (taken.kind === 'answered') {
     return taken.response;
   }
-  const scripted = await scriptedAnswerOf(taken.step, matched.listed, taken.input);
+  const scripted = await stepAnswerOf(taken.step, matched.listed, taken.input);
   return responseOf(answerOf(scripted), matched.listed);
 }
 
@@ -81,22 +81,26 @@ type Taken =
     };
 
 /**
- * A request's call recorded in the order it arrived, then its step taken once every request that
- * arrived before it took its own; the step runs after, so a slow step holds no other back.
+ * A request's place kept among its Endpoint's calls from its arrival, then its step taken once
+ * every request that arrived before it took its own, and its call recorded; the step runs after,
+ * so a slow step holds no other back. One aborted before it takes its step records nothing.
  */
 async function takenOf(faking: Faking, matched: Matched, request: Request): Promise<Taken> {
   const { listed, source } = matched;
+  const { signal } = request;
   const slot = faking.calls.arrived(listed.name);
-  const scripted = faking.scriptedOf(listed.name);
+  const scripted = faking.scriptedByNameOf(listed.name);
   const turn = scripted.turn();
   try {
-    const received = await receivedOf(listed, request, source);
-    slot.fill(received);
+    const received = await abortableOf(receivedOf(listed, request, source), signal);
     if (received.kind === 'invalid') {
+      signal.throwIfAborted();
+      slot.fill(received);
       const response = invalidInputResponseOf(received.issues, listed.standards);
       return { kind: 'answered', response };
     }
-    const step = await turn.next();
+    const step = await turn.next(signal);
+    slot.fill(received);
     if (step === undefined) {
       throw mistakeOf({ ...whoOf(listed), what: missingStepOf(scripted, listed) });
     }
@@ -114,37 +118,33 @@ function missingStepOf(scripted: Scripted, listed: ListedEndpoint): string {
 }
 
 /** What a step answered, given the builder and the parsed Input; anything else is the test's mistake. */
-async function scriptedAnswerOf(
+async function stepAnswerOf(
   step: AnyStep,
   listed: ListedEndpoint,
   input: Readonly<Record<string, unknown>>,
 ): Promise<ScriptedAnswer> {
+  let isAnswer: boolean;
   let returned: unknown;
   try {
     returned = await step(stepBuilder, input);
+    isAnswer = isScriptedAnswer(returned);
   } catch (e) {
     throw mistakeOf({ ...whoOf(listed), what: 'a step threw', cause: e });
   }
-  if (!isScriptedAnswer(returned)) {
+  if (!isAnswer) {
     throw mistakeOf({ ...whoOf(listed), what: 'a step returned no answer built with its r' });
   }
-  return returned;
+  return returned as ScriptedAnswer;
 }
 
-/** A response, or the signal's reason, as `fetch` rejects with it, once the signal is aborted. */
-function abortableOf(
-  responding: Promise<Response>,
-  signal: AbortSignal | null | undefined,
-): Promise<Response> {
-  if (signal === null || signal === undefined) {
-    return responding;
-  }
+/**
+ * What a request waits for, or the signal's reason, as `fetch` rejects with it, once the signal
+ * is aborted; a signal is never already aborted here, since `fetch` refuses one first.
+ */
+function abortableOf<Value>(waited: Promise<Value>, signal: AbortSignal): Promise<Value> {
   const aborted = Promise.withResolvers<never>();
   const abort = () => aborted.reject(signal.reason);
-  if (signal.aborted) {
-    abort();
-  }
   signal.addEventListener('abort', abort, { once: true });
-  const settled = Promise.race([responding, aborted.promise]);
+  const settled = Promise.race([waited, aborted.promise]);
   return settled.finally(() => signal.removeEventListener('abort', abort));
 }

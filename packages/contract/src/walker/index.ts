@@ -1,4 +1,9 @@
-export { byCodePoint, canonicalJson, indentedCanonicalJson } from './canonical-json.ts';
+export {
+  byCodePoint,
+  canonicalJson,
+  indentedCanonicalJson,
+  isJsonValue,
+} from './canonical-json.ts';
 export { childrenOf } from './children.ts';
 export type { HashAlgorithm, HashEncoding, HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';

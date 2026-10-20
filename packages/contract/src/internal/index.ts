@@ -4,6 +4,7 @@ export {
   isEndpoint,
   isGuard,
   isRejection,
+  isReservedCode,
   isStamp,
   isStandardRejection,
   reservedCodes,
@@ -133,6 +134,7 @@ export {
   childrenOf,
   hashPartsOf,
   isHashFormat,
+  isJsonValue,
   walkSchemas,
 } from '../walker/index.ts';
 export type {

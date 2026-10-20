@@ -20,9 +20,12 @@ export type Script<Target extends Endpoint, Standards extends StandardRejections
 /** A step as the fake runs it, whatever its Endpoint. */
 export type AnyStep = Step<Endpoint, StandardRejections>;
 
-/** A request's turn to take a step: after the requests that arrived before it took theirs. */
+/**
+ * A request's turn to take a step: after the requests that arrived before it took theirs, and
+ * never once its signal is aborted.
+ */
 export type Turn = {
-  readonly next: () => Promise<AnyStep | undefined>;
+  readonly next: (signal: AbortSignal) => Promise<AnyStep | undefined>;
   readonly done: () => void;
 };
 
@@ -55,8 +58,9 @@ export function scriptedOf(): Scripted {
     const before = arrived;
     const taken = Promise.withResolvers<void>();
     arrived = before.then(() => taken.promise);
-    const next = async () => {
+    const next = async (signal: AbortSignal) => {
       await before;
+      signal.throwIfAborted();
       return onces.shift() ?? otherwise;
     };
     return { next, done: () => taken.resolve() };
