@@ -220,7 +220,7 @@ export const chargeCardV1 = defineCommand({
 
 An Event takes `visibility`, a Command none, and a Public Event is a type error; which Visibilities each kind of Element may have is in [Visibility and Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#visibility-and-guards) in ARCHITECTURE.md.
 
-`version` counts from 1, and a literal `version` that is not a whole number from 1 is a type error; a Message Version's name and version are declared once, and a name belongs to an Event or a Command, never both, or `generate` fails; how versions are numbered, and when a Command may have a second Active version, is in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
+A literal `version` that is not a whole number from 1 is a type error; which Message Versions `generate` refuses, how versions are numbered, and that a Command has at most one Active version are in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
 
 ## Lifecycle
 

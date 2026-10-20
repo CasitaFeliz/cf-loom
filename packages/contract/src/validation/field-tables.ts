@@ -1,6 +1,5 @@
 import type {
   Endpoint,
-  Group,
   Guard,
   QualifiedAttachment,
   Rejection,
@@ -11,14 +10,6 @@ import type { Fields } from './declared-fields.ts';
 
 /** The parts of a Guard's `demands` the Guard demands rule leaves to this one. */
 type Demanded = Pick<NonNullable<Guard['demands']>, 'headers' | 'query'>;
-
-/** The fields of a Group. */
-export const groupFields = {
-  declared: { kind: true, name: true, description: true, endpoints: true },
-  required: { kind: true, name: true, description: true, endpoints: true },
-  strings: { kind: true, name: true, description: true },
-  objects: {},
-} satisfies Fields<Group>;
 
 /** The fields of an Endpoint. */
 export const endpointFields = {

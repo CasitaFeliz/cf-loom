@@ -5,7 +5,7 @@ import type { SnapshotContext, SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
 import { guardSnapshotsOf } from './guards.ts';
-import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messages.ts';
+import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
 import type { DefinitionsSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
 
 /**

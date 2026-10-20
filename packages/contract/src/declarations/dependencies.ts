@@ -43,7 +43,8 @@ type SelectedIn<Chosen, Part extends keyof Selection<ContractPackage>> = Chosen 
   ? Element
   : never;
 
-type EventName<Event extends ProvidedEvent> = `${Uncapitalize<Event['name']>}V${Event['version']}`;
+type EventName<Provided extends ProvidedEvent> =
+  `${Uncapitalize<Provided['name']>}V${Provided['version']}`;
 
 type EndpointsByName<Endpoints> = {
   readonly [Provided in Endpoints as Provided extends Endpoint

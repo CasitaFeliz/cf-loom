@@ -15,7 +15,6 @@ import {
   attachmentFields,
   demandsFields,
   endpointFields,
-  groupFields,
   guardFields,
   inputFields,
   rejectionFields,
@@ -29,6 +28,7 @@ import {
   dependenciesFields,
   eventFields,
   exportedFields,
+  groupFields,
   rootFields,
   subscriptionFields,
 } from './root-field-tables.ts';

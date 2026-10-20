@@ -1,4 +1,4 @@
-import { eventVisibilities, lifecycleOf } from '../declarations/index.ts';
+import { eventVisibilities } from '../declarations/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -62,6 +62,12 @@ function isIdentified(located: LocatedMessage): boolean {
   return isNamed(located) && typeof located.message.version === 'number';
 }
 
+/** Whether a Message Version is Active as written: a lifecycle left out or `active`; any other already fails as a field. */
+function isActive({ message }: LocatedMessage): boolean {
+  const written: unknown = message.lifecycle;
+  return written === undefined || written === 'active';
+}
+
 function identityOf({ message }: LocatedMessage): string {
   return messageIdentityOf(message.name, message.version);
 }
@@ -98,7 +104,7 @@ function kindFailures(
 /** Every Active version of a Command after its first fails; a repeated identity is one version. */
 function activeCommandFailures(commands: readonly LocatedMessage[]): readonly DeclarationFailure[] {
   const identified = commands.filter(isIdentified);
-  const active = identified.filter(({ message }) => lifecycleOf(message) === 'active');
+  const active = identified.filter(isActive);
   const repeatedIdentities = new Set(repeated(active, identityOf));
   const versions = active.filter((located) => !repeatedIdentities.has(located));
   return repeated(versions, ({ message }) => message.name).map(({ at, message }) =>

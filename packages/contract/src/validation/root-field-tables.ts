@@ -6,6 +6,7 @@ import type {
   Dependencies,
   Event,
   ExportedElements,
+  Group,
   Subscription,
 } from '../declarations/index.ts';
 import type { Declarations } from '../written/index.ts';
@@ -94,6 +95,14 @@ export const definitionsFields = {
   strings: { kind: true, name: true },
   objects: { schemas: true, standardRejections: true },
 } satisfies Fields<Definitions>;
+
+/** The fields of a Group. */
+export const groupFields = {
+  declared: { kind: true, name: true, description: true, endpoints: true },
+  required: { kind: true, name: true, description: true, endpoints: true },
+  strings: { kind: true, name: true, description: true },
+  objects: {},
+} satisfies Fields<Group>;
 
 /** The fields of a Dependency, as `defineDependencies` builds it. */
 export const dependenciesFields = {

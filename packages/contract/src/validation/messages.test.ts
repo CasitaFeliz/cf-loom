@@ -320,4 +320,69 @@ describe('validateContract: Events and Commands', () => {
     expect(rules).not.toContain('message-kind');
     expect(rules).not.toContain('duplicate-message-identity');
   });
+
+  test('two Active Command versions and a repeat of the first fail as a duplicate and as a second Active version', () => {
+    const result = validateMessages([], [aCommand(), aCommand(), aCommand({ version: 2 })]);
+
+    expect(result).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['commands', 'ChargeCard@1', 'version'],
+          rule: 'duplicate-message-identity',
+          message: 'A Message Version is identified by its name and version, once: ChargeCard@1',
+        },
+        {
+          kind: 'declaration',
+          at: ['commands', 'ChargeCard@2', 'lifecycle'],
+          rule: 'command-active-versions',
+          message: 'A Command has at most one Active version: ChargeCard',
+        },
+      ],
+    });
+  });
+});
+
+/** The rules a result fails, in order; none when it is valid. */
+function rulesOf(result: ReturnType<typeof validateMessages>): readonly unknown[] {
+  if (result.kind === 'valid') {
+    return [];
+  }
+  return result.failures.map((broken) =>
+    broken.kind === 'declaration' ? broken.rule : broken.kind,
+  );
+}
+
+describe('validateContract: Message Versions that fail only as fields', () => {
+  test.each([
+    ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],
+    [
+      'two Commands with no version',
+      [],
+      [aCommand({ version: undefined }), aCommand({ version: undefined })],
+    ],
+    [
+      'two Commands with a version written as text',
+      [],
+      [aCommand({ version: '1' }), aCommand({ version: '1' })],
+    ],
+    [
+      'two Commands with no name',
+      [],
+      [aCommand({ name: undefined }), aCommand({ name: undefined, version: 2 })],
+    ],
+    [
+      'two Commands with a null lifecycle',
+      [],
+      [aCommand({ lifecycle: null }), aCommand({ lifecycle: null, version: 2 })],
+    ],
+  ])('%s fail only as fields', (_case, events, commands) => {
+    const result = validateMessages(events, commands);
+
+    const rules = rulesOf(result);
+    expect(rules.length).toBeGreaterThan(0);
+    expect(rules).not.toContain('duplicate-message-identity');
+    expect(rules).not.toContain('command-active-versions');
+  });
 });

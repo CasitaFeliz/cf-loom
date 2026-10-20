@@ -18,7 +18,7 @@ type Selected = { readonly at: Path; readonly name: string; readonly element: un
 
 /**
  * A Service reaches the Elements its Provider exports, and never a Private one; an Application,
- * outside the network, Public Endpoints only.
+ * outside the network, Public Endpoints only. A Dependency lists only Events a Subscription uses.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, dependencies, subscriptions } = declarations;
@@ -29,10 +29,9 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
       ...selectedOf(located, 'endpoints').flatMap((selected) =>
         selectedEndpointFailures(selected, exported, root.kind),
       ),
-      ...selectedOf(located, 'events').flatMap((selected) => {
-        const failures = selectedEventFailures(selected, exported, root.kind);
-        return failures.length > 0 ? failures : unusedEventFailures(selected, subscribed);
-      }),
+      ...selectedOf(located, 'events').flatMap((selected) =>
+        eventFailures(selected, { exported, rootKind: root.kind, subscribed }),
+      ),
     ];
   });
 }
@@ -86,6 +85,22 @@ function selectedEndpointFailures(
   }
   const message = `An Application depends on Public Endpoints only: ${name} is ${textOf(element.visibility)}`;
   return [failure(at, 'application-dependency', message)];
+}
+
+/** What a Dependency's selected Event is judged against: its Provider's exports, its root and the Events subscribed to. */
+type EventContext = {
+  readonly exported: Exported;
+  readonly rootKind: Root['kind'];
+  readonly subscribed: ReadonlySet<unknown>;
+};
+
+/** An Event that fails selection is not also reported as unused: one cause, once. */
+function eventFailures(selected: Selected, context: EventContext): readonly DeclarationFailure[] {
+  const failures = selectedEventFailures(selected, context.exported, context.rootKind);
+  if (failures.length > 0) {
+    return failures;
+  }
+  return unusedEventFailures(selected, context.subscribed);
 }
 
 function selectedEventFailures(
