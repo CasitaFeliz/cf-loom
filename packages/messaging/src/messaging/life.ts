@@ -38,7 +38,7 @@ export class MessagingLife {
     }
   }
 
-  /** A call in flight, a `publish` or a `send`, which `close` waits for. */
+  /** A call in flight, a `publish`, a `send`, the adapter's `consume` or a Handler running, which `close` waits for. */
   tracked<Settled>(call: Promise<Settled>): Promise<Settled> {
     this.#inFlight.add(call);
     const forget = () => this.#forget(call);
@@ -127,8 +127,14 @@ export class MessagingLife {
     });
   }
 
+  /**
+   * Waits until nothing is in flight, a call started in the microtask after one settles included,
+   * then closes; it awaits at least once, so `close()` has set the state to closing first.
+   */
   async #closed(): Promise<void> {
-    await this.#settled();
+    do {
+      await this.#settled();
+    } while (this.#inFlight.size > 0);
     this.#ended();
     await this.#connection.close();
   }

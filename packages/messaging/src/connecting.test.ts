@@ -275,6 +275,22 @@ describe('messaging() and close', () => {
     expect(log).toEqual(['publish', 'published', 'close', 'closed']);
   });
 
+  test('close waits for a publish chained right after another one it waited for', async () => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ publish: gate.opened });
+    const { publisher, close } = await messaging(contract, broker);
+    const chained = (async () => {
+      await publisher.publish('OrderCreated', { v1: body });
+      await publisher.publish('OrderCreated', { v1: body });
+    })();
+
+    const closing = close();
+    gate.open();
+    await Promise.all([chained, closing]);
+
+    expect(log).toEqual(['publish', 'published', 'publish', 'published', 'close', 'closed']);
+  });
+
   test('close waits for a consume in flight before it closes the connection', async () => {
     const gate = aGate();
     const { broker, log } = aLoggingBroker({ consume: gate.opened });
