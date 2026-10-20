@@ -1,5 +1,6 @@
 export type { ReservedCode } from '../declarations/index.ts';
 export {
+  codeNameOf,
   isCommand,
   isContract,
   isEndpoint,
@@ -136,6 +137,7 @@ export {
   listedDefinitionsOf,
   messageIdentityOf,
   methodAndPathOf,
+  nameAndVersionOf,
   partFieldOf,
   pathSegmentsOf,
   resolutionOf,

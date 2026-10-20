@@ -1,4 +1,4 @@
-export type { DeprecationStamp, Handled } from './handled.ts';
+export type { DeclarationHandled, DeprecationStamp, Handled } from './handled.ts';
 export {
   deprecationStampsOf,
   handledOf,
@@ -6,10 +6,6 @@ export {
   handlerPathOf,
   namedHandlerPathsOf,
 } from './handled.ts';
-export {
-  handlerMapFile,
-  handlerMapTextOf,
-  readersFile,
-  readersTextOf,
-  stubTextOf,
-} from './service-files.ts';
+export type { RootLists } from './readers.ts';
+export { pairingAtOf, readersFile, readersTextOf } from './readers.ts';
+export { handlerMapFile, handlerMapTextOf, stubTextOf } from './service-files.ts';

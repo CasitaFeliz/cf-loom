@@ -144,9 +144,21 @@ describe('validateContract: Subscriptions', () => {
       failed(
         ['subscriptions', 'NotifyOnSettled', 'name'],
         'name-grammar',
-        'A Subscription name is kebab-case: NotifyOnSettled',
+        'A Subscription name is kebab-case from a letter: NotifyOnSettled',
       ),
     );
+  });
+
+  test.each([
+    ['1st-audit', 'A Subscription name is kebab-case from a letter: 1st-audit'],
+    ['delete', 'A Subscription name is kebab-case from a letter and no reserved word: delete'],
+    ['handle', 'A Subscription name is kebab-case from a letter and no reserved word: handle'],
+  ])('a Subscription name %s, which code cannot name, fails the name grammar', (name, message) => {
+    const named = defineSubscription({ name, event: paymentSettledV1 });
+
+    const result = validateSubscriptions([named]);
+
+    expect(result).toEqual(failed(['subscriptions', name, 'name'], 'name-grammar', message));
   });
 
   test('two Subscriptions with one name fail', () => {

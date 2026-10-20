@@ -2,7 +2,14 @@ import { join } from 'node:path';
 import { byCodePoint, isLive } from '@cf-loom/contract/internal';
 import { contractExportsOf, type ExportedAt, type FileExport } from '../loading/index.ts';
 import type { BuiltService, Tooling } from '../project/index.ts';
-import { type Handled, handledOf, handlerPathOf, stubTextOf } from '../service-code/index.ts';
+import {
+  type DeclarationHandled,
+  type Handled,
+  handledOf,
+  handlerPathOf,
+  pairingAtOf,
+  stubTextOf,
+} from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
 import { isNothingAt } from './handler-files.ts';
 
@@ -40,9 +47,28 @@ export async function stubsOf(service: BuiltService): Promise<Stubs | Tooling> {
   return { kind: 'stubs', stubs: sorted, failureLines };
 }
 
+/**
+ * Where a stub imports what its Handler is written for: an Endpoint or Guard where it is exported,
+ * a Command's Message Version or Subscription from the readers, which pair it with its Reader.
+ */
 function locatedOf(
   service: BuiltService,
   handled: Handled,
+  exportsOf: (declaration: unknown) => readonly FileExport[],
+): Located {
+  switch (handled.kind) {
+    case 'endpoint':
+    case 'guard':
+      return declarationLocatedOf(service, handled, exportsOf);
+    case 'command':
+    case 'subscription':
+      return { kind: 'exported', handled, at: pairingAtOf(handled) };
+  }
+}
+
+function declarationLocatedOf(
+  service: BuiltService,
+  handled: DeclarationHandled,
   exportsOf: (declaration: unknown) => readonly FileExport[],
 ): Located {
   const where = `${handled.kind}s.${handled.name}`;
@@ -97,7 +123,7 @@ function packageOf(service: BuiltService, handled: Handled): PackagedGuard | und
 }
 
 /** The declaration a handled Element is, as the root holds it: a Retired Endpoint is never one. */
-function declarationOf(service: BuiltService, handled: Handled): unknown {
+function declarationOf(service: BuiltService, handled: DeclarationHandled): unknown {
   const { declarations } = service.validated;
   switch (handled.kind) {
     case 'endpoint':

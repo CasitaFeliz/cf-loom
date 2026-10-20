@@ -56,7 +56,7 @@ src/
 ├── commands/charge-card.v1.handler.ts
 ├── subscriptions/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  regenerated, never edited
-├── readers.generated.ts                   Reader schemas and types of the Service's own Events; regenerated, never edited
+├── readers.generated.ts                   Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── messaging.ts                           EventPublisher, CommandSender
 └── main.ts                                starts HTTP and messaging
 contract-package/                          the Contract Package cf-loom package writes; built, not edited
@@ -78,7 +78,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Implement
 
-Replace each stub with `handle(element, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, a [Message Handler](packages/messaging/README.md#message-handlers) the same way. The EventPublisher and CommandSender come from `messaging(contract)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
+Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub imports from `readers.generated.ts` (`handle(chargeCardV1, …)`). The EventPublisher and CommandSender come from `messaging(contract)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
 
 ### Serve
 

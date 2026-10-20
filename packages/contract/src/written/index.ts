@@ -12,6 +12,7 @@ export {
   identityOf,
   messageIdentityOf,
   methodAndPathOf,
+  nameAndVersionOf,
   paramNamesOf,
   pathSegmentsOf,
   segmentsOf,

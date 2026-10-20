@@ -27,7 +27,10 @@ export async function verify(run: Run): Promise<Exit> {
     return verifiedExit(snapshotLines, [snapshotFile]);
   }
   const regenerated = serviceFilesOf(built);
-  const compared = regenerated.map((file) => ({ file, compared: comparedOf(run.cwd, file) }));
+  if (regenerated.kind === 'unnamed') {
+    return toolingError(regenerated.line);
+  }
+  const compared = regenerated.files.map((file) => ({ file, compared: comparedOf(run.cwd, file) }));
   const unreadable = compared.find(({ compared: { kind } }) => kind === 'failed')?.compared;
   if (unreadable?.kind === 'failed') {
     return toolingError(unreadable.message);
@@ -45,7 +48,7 @@ export async function verify(run: Run): Promise<Exit> {
     ...serviceFailuresOf(built),
     ...orphans.lines,
   ];
-  return verifiedExit(failures, [snapshotFile, ...regenerated.map(({ path }) => path)]);
+  return verifiedExit(failures, [snapshotFile, ...regenerated.files.map(({ path }) => path)]);
 }
 
 /** Every failure found, or each file compared up to date. */

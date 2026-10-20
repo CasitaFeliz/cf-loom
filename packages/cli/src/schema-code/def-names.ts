@@ -1,5 +1,6 @@
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { camelCaseOf, pascalCaseOf } from '../source-text/index.ts';
-import { type SchemaMode, schemaModes } from './needs.ts';
+import { type DefUse, type SchemaMode, schemaModes } from './needs.ts';
 
 /**
  * The identifier of a recursive def's schema in a mode: the camelCase of its id's words, then
@@ -21,7 +22,7 @@ export function defTypeNameOf(id: string, mode: SchemaMode): string {
 }
 
 /** Why the defs of a Snapshot cannot all be named in code. */
-export type DefNamesProblem =
+type DefNamesProblem =
   | { readonly kind: 'no-name'; readonly id: string }
   | { readonly kind: 'colliding'; readonly ids: readonly [string, string] };
 
@@ -29,7 +30,7 @@ export type DefNamesProblem =
  * The first id that gives no name in code, or the first two whose names in code are one, over
  * every identifier either mode gives; none when every def has names of its own.
  */
-export function defNamesProblemOf(ids: readonly string[]): DefNamesProblem | undefined {
+function defNamesProblemOf(ids: readonly string[]): DefNamesProblem | undefined {
   const unnamed = ids.find((id) => !/^[A-Za-z]/.test(camelCaseOf(id)));
   if (unnamed !== undefined) {
     return { kind: 'no-name', id: unnamed };
@@ -45,4 +46,21 @@ export function defNamesProblemOf(ids: readonly string[]): DefNamesProblem | und
     }
   }
   return undefined;
+}
+
+/**
+ * The line saying which recursion ids of the def uses cannot be names of their own, as `package`
+ * and `generate` print it.
+ */
+export function defNamesLineOf(uses: readonly DefUse[]): string | undefined {
+  const ids = [...new Set(uses.map(({ id }) => id))].sort(byCodePoint);
+  const problem = defNamesProblemOf(ids);
+  switch (problem?.kind) {
+    case undefined:
+      return undefined;
+    case 'no-name':
+      return `The recursion id ${problem.id} is no name in code: rename it`;
+    case 'colliding':
+      return `The recursion ids ${problem.ids[0]} and ${problem.ids[1]} are one name in code: rename one of them`;
+  }
 }

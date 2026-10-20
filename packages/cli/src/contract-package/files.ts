@@ -1,16 +1,10 @@
 import {
   type ApplicationSnapshot,
-  byCodePoint,
   type ExportedSnapshot,
   exportedSnapshotOf,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
-import {
-  type DefUse,
-  defNamesProblemOf,
-  defsCodeOf,
-  reachedDefUsesOf,
-} from '../schema-code/index.ts';
+import { type DefUse, defNamesLineOf, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
 import {
   applicationEntryOf,
@@ -102,16 +96,7 @@ function unnamedLineOf(codes: readonly string[], defUses: readonly DefUse[]): st
   if (colliding !== undefined) {
     return `The codes ${colliding[0]} and ${colliding[1]} are one name in code: rename one of them`;
   }
-  const ids = [...new Set(defUses.map(({ id }) => id))].sort(byCodePoint);
-  const problem = defNamesProblemOf(ids);
-  switch (problem?.kind) {
-    case undefined:
-      return undefined;
-    case 'no-name':
-      return `The recursion id ${problem.id} is no name in code: rename it`;
-    case 'colliding':
-      return `The recursion ids ${problem.ids[0]} and ${problem.ids[1]} are one name in code: rename one of them`;
-  }
+  return defNamesLineOf(defUses);
 }
 
 function defsFilesOf(

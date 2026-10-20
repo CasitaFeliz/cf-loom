@@ -1,11 +1,22 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
-import { byCodePoint, isLive } from '@cf-loom/contract/internal';
-import { kebabCaseOf } from '../source-text/index.ts';
+import { byCodePoint, codeNameOf, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
+import { kebabCaseOf, messageVersionStemOf } from '../source-text/index.ts';
 
-/** An Endpoint or a Guard a Service writes a Handler for, by what names its Handler file. */
-export type Handled =
+/** An Endpoint or a Guard, whose stub imports its declaration. */
+export type DeclarationHandled =
   | { readonly kind: 'endpoint'; readonly name: string; readonly group: string }
   | { readonly kind: 'guard'; readonly name: string };
+
+/** A Command's Message Version or a Subscription, whose Handler reads a Message. */
+export type MessageHandled =
+  | { readonly kind: 'command'; readonly name: string; readonly version: number }
+  | { readonly kind: 'subscription'; readonly name: string };
+
+/**
+ * An Endpoint, a Guard, a Command's Message Version or a Subscription a Service writes a Handler
+ * for, by what names its Handler file.
+ */
+export type Handled = DeclarationHandled | MessageHandled;
 
 /** The folders a Service's Handlers live in, under `src/`; a `*.handler.ts` in them is a Handler. */
 export const handlerFolders: readonly string[] = [
@@ -17,7 +28,7 @@ export const handlerFolders: readonly string[] = [
 
 /**
  * Where a Handler lives, from its Element's names alone: an Endpoint under its Group's folder, a
- * Guard under `src/guards/`, each by its name in kebab-case.
+ * Guard, a Command's Message Version or a Subscription under its kind's folder.
  */
 export function handlerPathOf(handled: Handled): string {
   switch (handled.kind) {
@@ -25,18 +36,29 @@ export function handlerPathOf(handled: Handled): string {
       return `src/endpoints/${handled.group}/${kebabCaseOf(handled.name)}.handler.ts`;
     case 'guard':
       return `src/guards/${kebabCaseOf(handled.name)}.handler.ts`;
+    case 'command':
+      return `src/commands/${messageVersionStemOf(handled)}.handler.ts`;
+    case 'subscription':
+      return `src/subscriptions/${handled.name}.handler.ts`;
   }
 }
 
-/** A declared Endpoint or Guard, and whether the Handler map holds its Handler. */
+/** A declared Element with a Handler, and whether the Handler map holds its Handler. */
 type DeclaredHandled = { readonly handled: Handled; readonly isMapped: boolean };
 
-/**
- * Every Endpoint and Guard a Service declares: each Endpoint, by name, mapped unless Retired,
- * then each Guard, in the canonical Snapshot's order, mapped when a mapped Endpoint attaches it.
- */
+/** Every Element a Service declares a Handler for, kind by kind, each kind in its map's order. */
 function declaredHandledOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
-  const endpoints = Object.values(snapshot.endpoints)
+  return [
+    ...declaredEndpointsOf(snapshot),
+    ...declaredGuardsOf(snapshot),
+    ...declaredCommandsOf(snapshot),
+    ...declaredSubscriptionsOf(snapshot),
+  ];
+}
+
+/** Each Endpoint, by name, mapped unless Retired. */
+function declaredEndpointsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+  return Object.values(snapshot.endpoints)
     .map(
       (endpoint): DeclaredHandled => ({
         handled: { kind: 'endpoint', name: endpoint.name, group: endpoint.group },
@@ -44,15 +66,39 @@ function declaredHandledOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[
       }),
     )
     .sort((left, right) => byCodePoint(left.handled.name, right.handled.name));
-  const live = Object.values(snapshot.endpoints).filter(isLive);
-  const attached = new Set(live.flatMap(({ guards }) => guards.map(({ guard }) => guard)));
-  const guards = Object.keys(snapshot.guards).map(
-    (name): DeclaredHandled => ({ handled: { kind: 'guard', name }, isMapped: attached.has(name) }),
-  );
-  return [...endpoints, ...guards];
 }
 
-/** What the Handler map holds: every Endpoint that is not Retired, then every Guard those attach. */
+/** Each Guard, in the canonical Snapshot's order, mapped when a mapped Endpoint attaches it. */
+function declaredGuardsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+  const live = Object.values(snapshot.endpoints).filter(isLive);
+  const attached = new Set(live.flatMap(({ guards }) => guards.map(({ guard }) => guard)));
+  return Object.keys(snapshot.guards).map(
+    (name): DeclaredHandled => ({ handled: { kind: 'guard', name }, isMapped: attached.has(name) }),
+  );
+}
+
+/** Each Command's Message Version, by name in code, mapped unless Retired. */
+function declaredCommandsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+  const commands = Object.entries(snapshot.commands).map(([identity, command]) => ({
+    handled: { kind: 'command' as const, ...nameAndVersionOf(identity) },
+    isMapped: isLive(command),
+  }));
+  return commands.sort((left, right) =>
+    byCodePoint(codeNameOf(left.handled), codeNameOf(right.handled)),
+  );
+}
+
+/** Each Subscription, in the canonical Snapshot's order, always mapped: it has no lifecycle. */
+function declaredSubscriptionsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+  return Object.keys(snapshot.subscriptions).map(
+    (name): DeclaredHandled => ({ handled: { kind: 'subscription', name }, isMapped: true }),
+  );
+}
+
+/**
+ * What the Handler map holds: every Endpoint that is not Retired, every Guard those attach, every
+ * Command's Message Version that is not Retired, and every Subscription.
+ */
 export function handledOf(snapshot: ServiceSnapshot): readonly Handled[] {
   return declaredHandledOf(snapshot)
     .filter(({ isMapped }) => isMapped)
@@ -74,8 +120,9 @@ export function deprecationStampsOf(snapshot: ServiceSnapshot): readonly Depreca
 }
 
 /**
- * The Handler paths a Service's declarations name, a Retired Endpoint's and the Guards only it
- * attaches included, so any other Handler file is an orphan.
+ * The Handler paths a Service's declarations name, a Retired Endpoint's, the Guards only it
+ * attaches and a Retired Command's Message Version's included, so any other Handler file is an
+ * orphan.
  */
 export function namedHandlerPathsOf(snapshot: ServiceSnapshot): ReadonlySet<string> {
   return new Set(declaredHandledOf(snapshot).map(({ handled }) => handlerPathOf(handled)));
