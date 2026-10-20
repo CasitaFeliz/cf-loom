@@ -1,7 +1,6 @@
 export type { Failure } from './failures.ts';
 export { failureLineOf } from './failures.ts';
 export { follows, kebabCase, upperSnakeCase } from './grammars.ts';
-export type { NodeLookup } from './schemas.ts';
 export type {
   RootPackage,
   ValidatedContract,
