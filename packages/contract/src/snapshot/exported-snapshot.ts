@@ -11,29 +11,39 @@ import type {
 } from './types.ts';
 
 /**
- * The Snapshot a Service's Contract Package exports: its Public and Internal Endpoints that are not
- * Retired, and the Guards, codes and recursive defs they reach, keyed and ordered as in the Snapshot.
+ * The Snapshot a Service's Contract Package exports: its Public and Internal Endpoints and its
+ * Internal Events that are not Retired, and the Guards, codes and recursive defs they reach, keyed
+ * and ordered as in the Snapshot.
  */
 export function exportedSnapshotOf(snapshot: ServiceSnapshot): ExportedSnapshot {
-  const endpoints = Object.fromEntries(
-    Object.entries(snapshot.endpoints).filter(([, endpoint]) => isExportedEndpoint(endpoint)),
-  );
+  const endpoints = exportedOf(snapshot.endpoints);
+  const events = exportedOf(snapshot.events);
   const exportedEndpoints = Object.values(endpoints);
   const attached = exportedEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
   const guards = keptOf(snapshot.guards, reachedGuardNamesOf(attached, snapshot.guards));
   const codes = keptOf(snapshot.codes, reachedCodesOf(exportedEndpoints, guards, snapshot));
   const nodes = [
     ...exportedEndpoints.flatMap(endpointNodesOf),
+    ...Object.values(events).map(({ body }) => body),
     ...Object.values(guards).flatMap(guardNodesOf),
     ...Object.values(codes).flatMap(codeNodesOf),
   ];
   const defs = keptOf(snapshot.defs, new Set(reachedDefsOf(nodes, snapshot.defs)));
-  return { format: snapshot.format, defs, endpoints, guards, codes };
+  return { format: snapshot.format, defs, endpoints, events, guards, codes };
 }
 
-/** Whether a Contract Package exports an Endpoint: Public or Internal, and not Retired. */
-function isExportedEndpoint(endpoint: EndpointSnapshot): boolean {
-  return endpoint.visibility !== 'private' && isLive(endpoint);
+/** The Elements of a Snapshot map a Contract Package exports, in the map's order. */
+function exportedOf<Element extends ExportedElement>(
+  elements: Readonly<Record<string, Element>>,
+): Readonly<Record<string, Element>> {
+  return Object.fromEntries(Object.entries(elements).filter(([, element]) => isExported(element)));
+}
+
+type ExportedElement = Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>;
+
+/** Whether a Contract Package exports an Element: Public or Internal, and not Retired. */
+function isExported(element: ExportedElement): boolean {
+  return element.visibility !== 'private' && isLive(element);
 }
 
 /**

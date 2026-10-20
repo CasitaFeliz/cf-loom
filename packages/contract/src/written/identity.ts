@@ -47,6 +47,18 @@ export function messageIdentityOf(name: unknown, version: unknown): string {
 }
 
 /**
+ * A Message Version's name and version from its identity, `OrderCreated@2`: the reverse of
+ * `messageIdentityOf`, since the Snapshot keys a Message Version by its identity alone.
+ */
+export function messageVersionOf(identity: string): {
+  readonly name: string;
+  readonly version: number;
+} {
+  const separator = identity.lastIndexOf('@');
+  return { name: identity.slice(0, separator), version: Number(identity.slice(separator + 1)) };
+}
+
+/**
  * The method and the path an Endpoint declares, from its identity and its param names in order:
  * the reverse of `identityOf`, since the Snapshot stores the names apart from the identity.
  */

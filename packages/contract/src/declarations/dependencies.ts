@@ -92,7 +92,7 @@ export function defineDependencies<
   Provider['standardRejections']
 > {
   const endpoints = (selection.endpoints ?? []).map((endpoint) => [endpoint.name, endpoint]);
-  const events = (selection.events ?? []).map((event) => [eventName(event), event]);
+  const events = (selection.events ?? []).map((event) => [codeNameOf(event), event]);
   return freezeDeclaration('dependencies', {
     provider: provider.name,
     against: provider.version,
@@ -104,6 +104,7 @@ export function defineDependencies<
   });
 }
 
-function eventName(event: ProvidedEvent): string {
-  return `${event.name.charAt(0).toLowerCase()}${event.name.slice(1)}V${event.version}`;
+/** A Message Version's name in code, `orderCreatedV2`, which a Dependency and a Contract Package key it by. */
+export function codeNameOf(message: { readonly name: string; readonly version: number }): string {
+  return `${message.name.charAt(0).toLowerCase()}${message.name.slice(1)}V${message.version}`;
 }

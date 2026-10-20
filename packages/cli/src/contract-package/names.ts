@@ -1,13 +1,22 @@
 import { byCodePoint } from '@cf-loom/contract/internal';
-import { camelCaseOf, kebabCaseOf, kebabCaseOfCode } from '../source-text/index.ts';
+import {
+  camelCaseOf,
+  kebabCaseOf,
+  kebabCaseOfCode,
+  messageVersionStemOf,
+} from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFolders } from './paths.ts';
 
-/** A declaration the package writes a file of its own for: an Endpoint or a Guard by name, a Rejection by code. */
+/**
+ * A declaration the package writes a file of its own for: an Endpoint or a Guard by name, a
+ * Rejection by code, an Event's Message Version by name and version.
+ */
 export type PackagedDeclaration =
   | { readonly kind: 'endpoint'; readonly name: string }
   | { readonly kind: 'guard'; readonly name: string }
-  | { readonly kind: 'rejection'; readonly code: string };
+  | { readonly kind: 'rejection'; readonly code: string }
+  | { readonly kind: 'event'; readonly name: string; readonly version: number };
 
 /** The file of a declaration in the package, its name in kebab-case. */
 export function fileOf(declared: PackagedDeclaration): string {
@@ -18,6 +27,8 @@ export function fileOf(declared: PackagedDeclaration): string {
       return `${folder}/${kebabCaseOf(declared.name)}.ts`;
     case 'rejection':
       return `${folder}/${kebabCaseOfCode(declared.code)}.ts`;
+    case 'event':
+      return `${folder}/${messageVersionStemOf(declared)}.ts`;
   }
 }
 
@@ -33,6 +44,8 @@ export function bindingOf(declared: PackagedDeclaration): string {
       return `${declared.name}Guard`;
     case 'rejection':
       return `${camelCaseOf(kebabCaseOfCode(declared.code))}Rejection`;
+    case 'event':
+      return `${camelCaseOf(declared.name)}EventV${declared.version}`;
   }
 }
 

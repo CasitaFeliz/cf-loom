@@ -18,10 +18,15 @@ import {
   snapshotModuleOf,
   standardRejectionsModuleOf,
 } from './entry-code.ts';
-import { exportedEndpointsOf, exportedSnapshotModuleOf } from './exported-snapshot.ts';
+import { eventModuleOf } from './event-code.ts';
+import {
+  exportedEndpointsOf,
+  exportedEventsOf,
+  exportedSnapshotModuleOf,
+} from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
-import { type PackageFile, packageModuleOf } from './modules.ts';
+import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts';
 import { collidingCodesOf } from './names.ts';
 import { packagePaths } from './paths.ts';
 import { rejectionModuleOf } from './rejection-code.ts';
@@ -63,21 +68,14 @@ export function contractPackageFilesOf(
 
 /**
  * A Service's sources, written from the Snapshot cut to what it exports: the entry, each exported
- * Endpoint, the Guards and codes they reach, and the recursive defs those reach; or why their
- * names cannot be written.
+ * Endpoint and Event, the Guards and codes they reach, and the recursive defs those reach; or why
+ * their names cannot be written.
  */
 function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractPackageFiles {
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
-  const schemaFiles = [
-    ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),
-    ...Object.entries(exported.guards).map(([name, guard]) =>
-      guardModuleOf({ kind: 'guard', name }, guard),
-    ),
-    ...Object.entries(exported.codes).map(([code, declared]) =>
-      rejectionModuleOf({ kind: 'rejection', code }, declared),
-    ),
-  ];
+  const events = exportedEventsOf(exported);
+  const schemaFiles = schemaFilesOf(exported, snapshot);
   const defUses = reachedDefUsesOf(
     exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
@@ -87,13 +85,30 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
     return { kind: 'unnamed', line: unnamed };
   }
   const files = [
-    serviceEntryOf({ name: snapshot.name, version, endpoints, defUses }),
+    serviceEntryOf({ name: snapshot.name, version, endpoints, events, defUses }),
     exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(exported, defUses),
   ];
   return { kind: 'files', files };
+}
+
+/** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */
+function schemaFilesOf(
+  exported: ExportedSnapshot,
+  snapshot: ServiceSnapshot,
+): readonly SchemaFile[] {
+  return [
+    ...exportedEndpointsOf(exported).map((endpoint) => endpointModuleOf(endpoint, snapshot)),
+    ...exportedEventsOf(exported).map(eventModuleOf),
+    ...Object.entries(exported.guards).map(([name, guard]) =>
+      guardModuleOf({ kind: 'guard', name }, guard),
+    ),
+    ...Object.entries(exported.codes).map(([code, declared]) =>
+      rejectionModuleOf({ kind: 'rejection', code }, declared),
+    ),
+  ];
 }
 
 /** The codes or recursion ids the package writes that cannot be names of their own, in one line. */

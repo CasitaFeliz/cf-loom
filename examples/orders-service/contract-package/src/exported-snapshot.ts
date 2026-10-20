@@ -278,6 +278,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
       "visibility": "public"
     }
   },
+  "events": {},
   "guards": {
     "apiKey": {
       "context": {

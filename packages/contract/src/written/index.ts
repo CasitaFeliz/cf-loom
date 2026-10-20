@@ -11,6 +11,7 @@ export type { PathSegment } from './identity.ts';
 export {
   identityOf,
   messageIdentityOf,
+  messageVersionOf,
   methodAndPathOf,
   paramNamesOf,
   pathSegmentsOf,
