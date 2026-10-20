@@ -61,7 +61,16 @@ function paymentEndpointsOf<const Stage extends z.ZodType, const Reason extends 
     input: { params: z.object({ paymentId: z.string() }) },
     success: { status: 200, headers: z.object({ 'x-count': z.int() }) },
   });
-  return { getPayment, cancelPayment, checkPayment };
+  const capturePayment = defineEndpoint({
+    name: 'capturePayment',
+    method: 'POST',
+    path: '/payments/:paymentId/capture',
+    visibility: 'internal',
+    description: 'Captures a payment',
+    input: { params: z.object({ paymentId: z.string() }), body: z.object({ amount: z.int() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  });
+  return { getPayment, cancelPayment, checkPayment, capturePayment };
 }
 
 const declared = paymentEndpointsOf(openEnum(['pending', 'settled']), openEnum(['fraud']));
@@ -104,7 +113,12 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
 }
 
 const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values(declared)), {
-  endpoints: [readers.getPayment, readers.cancelPayment, readers.checkPayment],
+  endpoints: [
+    readers.getPayment,
+    readers.cancelPayment,
+    readers.checkPayment,
+    readers.capturePayment,
+  ],
 });
 
 const params = { paymentId: 'pay-1' };
@@ -303,16 +317,26 @@ describe('fakeProvider: steps', () => {
   test('steps are taken in the order requests arrived, whichever finishes reading first', async () => {
     const payments = fakeProvider(paymentsDeps);
     payments
-      .on('getPayment')
-      .once((r) => r.reject('NO_PAYMENT'))
-      .once((r) => r.success(success));
-    const client = payments.client();
+      .on('capturePayment')
+      .once((r, { body }) => r.success({ amount: body.amount }))
+      .once((r) => r.success({ amount: 0 }));
+    const gate = Promise.withResolvers<void>();
+    const held = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        await gate.promise;
+        controller.enqueue(new TextEncoder().encode('{"amount":1}'));
+        controller.close();
+      },
+    });
+    const url = `${at}/capture`;
+    const headers = { 'content-type': 'application/json' };
 
-    const outcomes = await Promise.all([
-      client.getPayment({ params }),
-      client.getPayment({ params }),
-    ]);
+    const first = payments.fetch(url, { method: 'POST', headers, body: held, duplex: 'half' });
+    const second = payments.fetch(url, { method: 'POST', headers, body: '{"amount":2}' });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    gate.resolve();
+    const bodies = await Promise.all([first, second].map(async (sent) => (await sent).json()));
 
-    expect(outcomes.map((outcome) => outcome.kind)).toEqual(['rejection', 'success']);
+    expect(bodies).toEqual([{ amount: 1 }, { amount: 0 }]);
   });
 });

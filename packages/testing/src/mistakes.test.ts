@@ -82,6 +82,12 @@ const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values
 });
 
 const params = { paymentId: 'pay-1' };
+
+function circular(): unknown {
+  const value: Record<string, unknown> = {};
+  value['self'] = value;
+  return value;
+}
 const headers = { 'x-note': 'fine' };
 const body = { id: 'pay-1', amount: 5, stage: 'pending' } as const;
 
@@ -156,14 +162,35 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toThrow(/success\.headers at x-note: invalid_format/);
   });
 
-  test('an Unknown code the Endpoint answers is a mistake', async () => {
+  test.each([
+    ['a code the Endpoint answers', 'NOT_FOUND', 'NOT_FOUND is a code the Endpoint answers'],
+    ['a reserved code', 'RETIRED', 'RETIRED is a reserved code'],
+    ['a code that is no UPPER_SNAKE_CASE', 'card-expired', 'card-expired is no UPPER_SNAKE_CASE'],
+  ])('r.reject({ unknown }) with %s is a mistake', async (_name, code, message) => {
     const payments = fakeProvider(paymentsDeps);
-    payments.on('getPayment').otherwise((r) => r.reject({ unknown: 'NOT_FOUND' }, {}));
+    payments.on('getPayment').otherwise((r) => r.reject({ unknown: code }, {}));
 
     const calling = payments.client().getPayment({ params });
 
-    await expect(calling).rejects.toThrow('NOT_FOUND is a code the Endpoint answers');
+    await expect(calling).rejects.toThrow(FakeProviderError);
+    await expect(calling).rejects.toThrow(message);
   });
+
+  test.each([
+    ['a BigInt', 1n],
+    ['a circular object', circular()],
+  ])(
+    'a body that is no JSON, %s, for a code the Provider does not declare is a mistake',
+    async (_name, value) => {
+      const payments = fakeProvider(paymentsDeps);
+      payments.on('getPayment').otherwise((r) => r.reject({ unknown: 'CARD_EXPIRED' }, value));
+
+      const calling = payments.client().getPayment({ params });
+
+      await expect(calling).rejects.toThrow(FakeProviderError);
+      await expect(calling).rejects.toThrow('the scripted CARD_EXPIRED body is no JSON');
+    },
+  );
 
   test('a code the Endpoint does not answer, given as declared, is a mistake', async () => {
     const payments = fakeProvider(paymentsDeps);
@@ -175,7 +202,7 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toThrow('the Endpoint answers no code PAYMENT_LOST');
   });
 
-  test.each([200, 199, 600])(
+  test.each([200, 199, 600, 502.5])(
     'r.status(%i) is a mistake: the client would not infer a Fault',
     async (status) => {
       const payments = fakeProvider(paymentsDeps);
@@ -186,6 +213,19 @@ describe('fakeProvider: a test’s mistakes', () => {
       await expect(calling).rejects.toThrow(`other than the Success's, not ${status}`);
     },
   );
+
+  test.each([
+    ['a value that cannot be sent', { 'retry-after': 'a\nb' }],
+    ['a name that cannot be sent', { 'bad name': '1' }],
+  ])('r.status with a header holding %s is a mistake', async (_name, headers) => {
+    const payments = fakeProvider(paymentsDeps);
+    payments.on('getPayment').otherwise((r) => r.status(503, headers));
+
+    const calling = payments.client().getPayment({ params });
+
+    await expect(calling).rejects.toThrow(FakeProviderError);
+    await expect(calling).rejects.toThrow('the headers given to r.status cannot be sent');
+  });
 
   test('a step that returns no answer built with its r is a mistake', async () => {
     const payments = fakeProvider(paymentsDeps);

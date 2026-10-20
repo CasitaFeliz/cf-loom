@@ -23,8 +23,8 @@ import {
   notJsonBodyIssue,
   receivedBodyOf,
   receivedEnvelopeOf,
+  rejectionBodyReaderOf,
   rejectionEnvelopeOf,
-  rejectionReaderOf,
   reservedCodes,
   reservedFaults,
   type SchemaNode,
@@ -473,7 +473,7 @@ describe('the invalid-input Rejection', () => {
   });
 });
 
-describe('rejectionReaderOf', () => {
+describe('rejectionBodyReaderOf', () => {
   test('a Rejection’s body is read by its declared schema, invalid input’s by cf-loom’s reader', () => {
     const locked = z.object({ lockedAt: z.iso.datetime() });
     const orderLocked = defineRejection({
@@ -484,7 +484,7 @@ describe('rejectionReaderOf', () => {
     });
     const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });
 
-    const readers = [orderLocked, gone, invalidInput, notFound].map(rejectionReaderOf);
+    const readers = [orderLocked, gone, invalidInput, notFound].map(rejectionBodyReaderOf);
 
     expect(readers).toEqual([locked, undefined, invalidInputBodyReader, undefined]);
   });

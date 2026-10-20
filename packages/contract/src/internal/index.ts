@@ -103,6 +103,7 @@ export {
   schemaOf,
   standardRejectionsOf,
   successParts,
+  upperSnakeCase,
   validateContract,
   walkedTextPartsOf,
 } from '../validation/index.ts';
@@ -182,8 +183,8 @@ export {
   notJsonBodyIssue,
   receivedBodyOf,
   receivedEnvelopeOf,
+  rejectionBodyReaderOf,
   rejectionEnvelopeOf,
-  rejectionReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,

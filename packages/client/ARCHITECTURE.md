@@ -6,7 +6,7 @@ The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) the types `@casitafeliz/loom-testing` builds its fake's client with: `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@casitafeliz/loom-testing` builds its fake and its client with: the types `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`, and `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |

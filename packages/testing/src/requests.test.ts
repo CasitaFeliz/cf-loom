@@ -236,6 +236,57 @@ describe('fakeProvider: requests', () => {
     expect(taken.getPayment).toBe(0);
   });
 
+  test('a baseUrl with a query is a bug, refused when the fake is created', () => {
+    const create = () => fakeProvider(paymentsDeps, { baseUrl: 'https://gateway.test/api?x=1' });
+
+    expect(create).toThrow('has a query or a fragment');
+  });
+
+  test('a path that only begins like the base URL’s path lies outside it', async () => {
+    const { fake } = countingFake({ baseUrl: 'https://gateway.test/api' });
+
+    const answering = fake.fetch('https://gateway.test/apix/payments/pay-1', {});
+
+    await expect(answering).rejects.toThrow(
+      "the path /apix/payments/pay-1 is outside the base URL's path /api/",
+    );
+  });
+
+  test('a path that begins with an empty segment is matched as a path, never as a host', async () => {
+    const { fake, taken } = countingFake();
+
+    const answering = fake.fetch(`${at}//elsewhere/payments/pay-1`, {
+      headers: { 'x-api-key': 'k' },
+    });
+
+    await expect(answering).rejects.toThrow(FakeProviderError);
+    expect(taken.getPayment).toBe(0);
+  });
+
+  test('a signal already aborted rejects with its reason, recording no call and taking no step', async () => {
+    const { fake, taken } = countingFake();
+    const reason = new Error('Gave up');
+
+    const answering = fake.fetch(`${at}/payments/pay-1`, {
+      headers: { 'x-api-key': 'k' },
+      signal: AbortSignal.abort(reason),
+    });
+
+    await expect(answering).rejects.toBe(reason);
+    expect(fake.calls('getPayment')).toEqual([]);
+    expect(taken.getPayment).toBe(0);
+  });
+
+  test('calls are a frozen copy', async () => {
+    const { fake } = countingFake();
+    await fake.fetch(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } });
+
+    const calls = fake.calls('getPayment');
+
+    expect(Object.isFrozen(calls)).toBe(true);
+    expect(fake.calls('getPayment')).not.toBe(calls);
+  });
+
   test('a path no exported Endpoint matches is a mistake naming the path and the base URL', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
 

@@ -1,3 +1,4 @@
+import { basePathOf } from '@casitafeliz/loom-client/internal';
 import { matchOf, type TextSource } from '@casitafeliz/loom-contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { ListedEndpoint, Provided } from './provided.ts';
@@ -13,13 +14,12 @@ export type Matched = { readonly listed: ListedEndpoint; readonly source: TextSo
 export function matchedOf(provided: Provided, request: Request): Matched {
   const url = new URL(request.url);
   const path = pathUnderOf(provided, url.pathname);
-  const routed = new Request(new URL(`${path}${url.search}`, url.origin), {
-    method: request.method,
-    headers: request.headers,
-  });
+  const routedUrl = new URL(url);
+  routedUrl.pathname = path;
+  const routed = new Request(routedUrl, { method: request.method, headers: request.headers });
   const match = matchOf(provided.exported, routed);
   if (match.kind === 'none') {
-    const what = `no Endpoint it exports is ${request.method} ${path} under ${prefixOf(provided)}/`;
+    const what = `no Endpoint it exports is ${request.method} ${path} under ${basePathOf(provided.base)}/`;
     throw mistakeOf({ provider: provided.provider, what });
   }
   const { listed, identity } = match.matched;
@@ -32,7 +32,7 @@ export function matchedOf(provided: Provided, request: Request): Matched {
 
 /** A request's path with the base URL's path taken off, or the test's mistake when it lies outside. */
 function pathUnderOf(provided: Provided, pathname: string): string {
-  const prefix = prefixOf(provided);
+  const prefix = basePathOf(provided.base);
   if (prefix === '') {
     return pathname;
   }
@@ -41,9 +41,4 @@ function pathUnderOf(provided: Provided, pathname: string): string {
     throw mistakeOf({ provider: provided.provider, what });
   }
   return pathname.slice(prefix.length) || '/';
-}
-
-/** The base URL's path, as the client prefixes every Endpoint's path with it. */
-function prefixOf(provided: Provided): string {
-  return provided.base.pathname.replace(/\/$/, '');
 }

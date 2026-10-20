@@ -2,7 +2,13 @@ import type { Fetch } from '@casitafeliz/loom-client';
 import { invalidInputResponseOf, withDeprecation } from '@casitafeliz/loom-contract/internal';
 import { responseOf } from '../answering/index.ts';
 import { mistakeOf } from '../mistakes/index.ts';
-import { type ListedEndpoint, type Matched, matchedOf, type Provided } from '../provided/index.ts';
+import {
+  type ListedEndpoint,
+  type Matched,
+  matchedOf,
+  type Provided,
+  whoOf,
+} from '../provided/index.ts';
 import { receivedOf } from '../receiving/index.ts';
 import {
   type AnyStep,
@@ -33,20 +39,30 @@ export function fakingOf(provided: Provided): Faking {
   return { provided, calls: callLogOf(), scriptedOf: scripted };
 }
 
-/** The fake's `fetch`: each request answered as its Provider would, or aborted by its signal. */
+/**
+ * The fake's `fetch`: each request answered as its Provider would, or aborted by its signal; one
+ * already aborted is refused before anything is read, recorded or taken.
+ */
 export function fakeFetchOf(faking: Faking): Fetch {
   return async (url, init) => {
+    init.signal?.throwIfAborted();
     const request = new Request(url, init);
     return await abortableOf(fakeResponseOf(faking, request), init.signal);
   };
 }
 
 /**
- * One request top to bottom: matched to a listed Endpoint, read as its Provider reads it and
- * answered by the invalid-input Rejection, or by the step it takes in the order it arrived.
+ * One request top to bottom: matched to a listed Endpoint, then answered, with `Deprecation` when
+ * that Endpoint is Deprecated, whatever it answers.
  */
 async function fakeResponseOf(faking: Faking, request: Request): Promise<Response> {
   const matched = matchedOf(faking.provided, request);
+  const response = await answeredOf(faking, matched, request);
+  return withDeprecation(response, matched.listed.deprecatedAt);
+}
+
+/** A request read as its Provider reads it and answered by the invalid-input Rejection, or its step. */
+async function answeredOf(faking: Faking, matched: Matched, request: Request): Promise<Response> {
   const taken = await takenOf(faking, matched, request);
   if (taken.kind === 'answered') {
     return taken.response;
@@ -78,7 +94,7 @@ async function takenOf(faking: Faking, matched: Matched, request: Request): Prom
     slot.fill(received);
     if (received.kind === 'invalid') {
       const response = invalidInputResponseOf(received.issues, listed.standards);
-      return { kind: 'answered', response: withDeprecation(response, listed.deprecatedAt) };
+      return { kind: 'answered', response };
     }
     const step = await turn.next();
     if (step === undefined) {
@@ -113,10 +129,6 @@ async function scriptedAnswerOf(
     throw mistakeOf({ ...whoOf(listed), what: 'a step returned no answer built with its r' });
   }
   return returned;
-}
-
-function whoOf(listed: ListedEndpoint): { readonly provider: string; readonly endpoint: string } {
-  return { provider: listed.provider, endpoint: listed.name };
 }
 
 /** A response, or the signal's reason, as `fetch` rejects with it, once the signal is aborted. */

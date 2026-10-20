@@ -1,26 +1,21 @@
 import {
   faultResponseOf,
+  follows,
   rejectionResponseOf,
+  reservedCodes,
   reservedResponseOf,
-  withDeprecation,
+  upperSnakeCase,
 } from '@casitafeliz/loom-contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
-import type { ListedEndpoint } from '../provided/index.ts';
+import { type ListedEndpoint, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
 import { knownRejectionResponseOf, scriptedSuccessResponseOf } from './outcomes.ts';
 
 /** The status a scripted code the Provider does not declare travels with. */
 const unknownRejectionStatus = 422;
 
-/**
- * A scripted answer as the Provider would send it, its `Deprecation` included when the Endpoint is
- * Deprecated; a network failure is thrown as `fetch` throws it.
- */
+/** A scripted answer as the Provider would send it; a network failure thrown as `fetch` throws it. */
 export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
-  return withDeprecation(sentResponseOf(answer, listed), listed.deprecatedAt);
-}
-
-function sentResponseOf(answer: Answer, listed: ListedEndpoint): Response {
   switch (answer.kind) {
     case 'success':
       return scriptedSuccessResponseOf(answer.success, listed);
@@ -50,24 +45,58 @@ function networkFailureOf(code: 'ECONNREFUSED' | 'ECONNRESET'): TypeError {
 
 type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;
 
-/** A code the Endpoint does not answer, as a later Provider might send it; never one it answers. */
+/**
+ * A code the Provider does not declare, as a later Provider might send it: never one the Endpoint
+ * answers, a reserved one or one no Contract could declare, and with a JSON body.
+ */
 function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
-  if (listed.rejectionsByCode.has(answer.code)) {
-    const what = `${answer.code} is a code the Endpoint answers, so it is no Unknown code`;
-    throw mistakeOf({ provider: listed.provider, endpoint: listed.name, what });
+  const refused = refusedUnknownCodeOf(answer.code, listed);
+  if (refused !== undefined) {
+    throw mistakeOf({ ...whoOf(listed), what: refused });
   }
   const { code, message, body } = answer;
-  return rejectionResponseOf({ code, status: unknownRejectionStatus, message, body });
+  const what = `the scripted ${code} body is no JSON`;
+  return builtOf(listed, what, () =>
+    rejectionResponseOf({ code, status: unknownRejectionStatus, message, body }),
+  );
+}
+
+/** Why a code cannot stand for one the Provider does not declare, if it cannot. */
+function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | undefined {
+  if (listed.rejectionsByCode.has(code)) {
+    return `${code} is a code the Endpoint answers, not one the Provider does not declare`;
+  }
+  if (reservedCodes.some((reserved) => reserved === code)) {
+    return `${code} is a reserved code, which r.fault({ code }) answers`;
+  }
+  if (!follows(upperSnakeCase, code)) {
+    return `${code} is no ${upperSnakeCase.name}, so no Contract can declare it`;
+  }
+  return undefined;
 }
 
 type BareStatus = Extract<Answer, { readonly kind: 'status' }>;
 
 /** A status with no Envelope, from which the client infers its Fault; never the Success's. */
 function bareStatusResponseOf({ status, headers }: BareStatus, listed: ListedEndpoint): Response {
-  const isInferred = status >= 200 && status <= 599 && status !== listed.endpoint.success.status;
+  const isInferred =
+    Number.isInteger(status) &&
+    status >= 200 &&
+    status <= 599 &&
+    status !== listed.endpoint.success.status;
   if (!isInferred) {
-    const what = `r.status takes a status from 200 to 599 other than the Success's, not ${status}`;
-    throw mistakeOf({ provider: listed.provider, endpoint: listed.name, what });
+    const what = `r.status takes an integer status from 200 to 599 other than the Success's, not ${status}`;
+    throw mistakeOf({ ...whoOf(listed), what });
   }
-  return new Response(null, { status, headers });
+  const what = 'the headers given to r.status cannot be sent';
+  return builtOf(listed, what, () => new Response(null, { status, headers }));
+}
+
+/** A response built from what a step scripted, or the test's mistake, what failed kept as `cause`. */
+function builtOf(listed: ListedEndpoint, what: string, build: () => Response): Response {
+  try {
+    return build();
+  } catch (e) {
+    throw mistakeOf({ ...whoOf(listed), what, cause: e });
+  }
 }

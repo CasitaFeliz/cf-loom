@@ -22,10 +22,15 @@ export function baseUrlOf(baseUrl: string | URL): URL {
   return base;
 }
 
+/** The base URL's path every Endpoint's path is called under, with one trailing slash removed. */
+export function basePathOf(base: URL): string {
+  return base.pathname.replace(/\/$/, '');
+}
+
 /** A parsed Input as it travels to its Endpoint under the base URL. */
 export function sendingOf(endpoint: Endpoint, base: URL, input: ParsedInput): Sending {
   const url = new URL(base);
-  url.pathname = `${base.pathname.replace(/\/$/, '')}${pathOf(endpoint.path, input.params)}`;
+  url.pathname = `${basePathOf(base)}${pathOf(endpoint.path, input.params)}`;
   url.search = queryOf(input.query).toString();
   const headers = new Headers();
   for (const [name, text] of input.headers) {

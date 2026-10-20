@@ -37,7 +37,7 @@ export {
   invalidInputBodyOf,
   invalidInputBodyReader,
   invalidInputResponseOf,
-  rejectionReaderOf,
+  rejectionBodyReaderOf,
 } from './invalid-input.ts';
 export type { Match, Matchable } from './match.ts';
 export { matchOf } from './match.ts';

@@ -80,3 +80,11 @@ function listedEndpointOf(
     standards,
   };
 }
+
+/** Who made a mistake with a listed Endpoint: its Provider and its name in code. */
+export function whoOf(listed: ListedEndpoint): Who {
+  return { provider: listed.provider, endpoint: listed.name };
+}
+
+/** A Provider and one of its listed Endpoints, as a mistake names them. */
+export type Who = { readonly provider: string; readonly endpoint: string };

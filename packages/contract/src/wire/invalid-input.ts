@@ -64,7 +64,7 @@ export const invalidInputBodyReader = z.object({
 export type ReceivedInvalidInputBody = z.output<typeof invalidInputBodyReader>;
 
 /** The schema a Rejection's body is read with: cf-loom's reader for invalid input, else its declared one. */
-export function rejectionReaderOf(rejection: AnswerableRejection): core.$ZodType | undefined {
+export function rejectionBodyReaderOf(rejection: AnswerableRejection): core.$ZodType | undefined {
   if (!isStandardRejection(rejection)) {
     return schemaOf(rejection, 'body');
   }

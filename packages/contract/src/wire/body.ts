@@ -56,7 +56,7 @@ export async function bodyOf(
 }
 
 /**
- * A response's JSON body, read whole by the same reader with no limit. A body that is not JSON by
+ * A message's JSON body, read whole with no limit by the same reader. A body that is not JSON by
  * its content type is discarded unread.
  */
 export async function receivedBodyOf(message: BodyMessage): Promise<ReceivedBody> {

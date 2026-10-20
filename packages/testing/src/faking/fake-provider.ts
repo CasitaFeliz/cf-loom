@@ -1,5 +1,9 @@
 import { type Client, type ClientOptions, client, type Fetch } from '@casitafeliz/loom-client';
-import type { AnyDependencies, ConfiguredName } from '@casitafeliz/loom-client/internal';
+import {
+  type AnyDependencies,
+  baseUrlOf,
+  type ConfiguredName,
+} from '@casitafeliz/loom-client/internal';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { FakeCall } from './calls.ts';
@@ -39,7 +43,7 @@ export function fakeProvider<const Deps extends AnyDependencies>(
   deps: Deps,
   options: FakeProviderOptions = {},
 ): FakeProvider<Deps> {
-  const base = new URL(options.baseUrl ?? `https://${deps.provider}.test`);
+  const base = baseUrlOf(options.baseUrl ?? `https://${deps.provider}.test`);
   const faking: Faking = fakingOf(providedOf(deps, base));
   const fetch = fakeFetchOf(faking);
   const fake: FakeProvider<Deps> = {

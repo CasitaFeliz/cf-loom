@@ -79,7 +79,10 @@ describe('fakeProvider: Deprecation', () => {
   test.each([
     ['a Success', (r: Builder) => r.success({ id: 'pay-1' })],
     ['a Rejection', (r: Builder) => r.reject('NOT_FOUND')],
-    ['an Unknown code', (r: Builder) => r.reject({ unknown: 'CARD_EXPIRED' }, {})],
+    [
+      'a code the Provider does not declare',
+      (r: Builder) => r.reject({ unknown: 'CARD_EXPIRED' }, {}),
+    ],
     ['a Fault', (r: Builder) => r.fault({ committed: 'no', retryable: true })],
     ['a reserved code', (r: Builder) => r.fault({ code: 'INVALID_OUTCOME' })],
     ['a bare status', (r: Builder) => r.status(502)],

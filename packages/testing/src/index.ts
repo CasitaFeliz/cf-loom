@@ -9,8 +9,6 @@ export { FakeProviderError } from './mistakes/index.ts';
 export type {
   Script,
   ScriptedAnswer,
-  ScriptedFault,
   Step,
   StepBuilder,
-  UnknownCode,
 } from './scripting/index.ts';

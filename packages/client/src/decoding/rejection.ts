@@ -1,7 +1,7 @@
 import {
   parseValue,
   type RejectionEnvelope,
-  rejectionReaderOf,
+  rejectionBodyReaderOf,
 } from '@casitafeliz/loom-contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
@@ -19,7 +19,7 @@ export function rejectionOf(
   if (rejection === undefined) {
     return { kind: 'rejection', known: false, code, message, body };
   }
-  const schema = rejectionReaderOf(rejection);
+  const schema = rejectionBodyReaderOf(rejection);
   if (schema === undefined) {
     return { kind: 'rejection', known: true, code, message, body: undefined };
   }

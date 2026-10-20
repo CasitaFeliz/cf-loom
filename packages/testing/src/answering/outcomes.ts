@@ -4,14 +4,14 @@ import {
   type Issue,
   type IssuePart,
   type Parsed,
-  rejectionReaderOf,
+  rejectionBodyReaderOf,
   rejectionResponseOf,
   resolutionOf,
   successResponseOf,
 } from '@casitafeliz/loom-contract/internal';
 import type * as core from 'zod/v4/core';
 import { mistakeOf } from '../mistakes/index.ts';
-import type { ListedEndpoint } from '../provided/index.ts';
+import { type ListedEndpoint, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
 
 /**
@@ -28,7 +28,7 @@ export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpo
   const issues = [...headers.issues, ...body.issues, ...textIssues];
   if (texts.kind === 'issues' || issues.length > 0) {
     const what = 'the scripted Success breaks its readers';
-    throw mistakeOf({ provider: listed.provider, endpoint: listed.name, what, issues });
+    throw mistakeOf({ ...whoOf(listed), what, issues });
   }
   return successResponseOf({ status: success.status, headers: texts.texts, body: body.value });
 }
@@ -40,17 +40,12 @@ export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedE
   const rejection = listed.rejectionsByCode.get(answer.code);
   if (rejection === undefined) {
     const what = `the Endpoint answers no code ${answer.code}; r.reject({ unknown }) sends one`;
-    throw mistakeOf({ provider: listed.provider, endpoint: listed.name, what });
+    throw mistakeOf({ ...whoOf(listed), what });
   }
-  const body = writtenOf('body', rejectionReaderOf(rejection), answer.body);
+  const body = writtenOf('body', rejectionBodyReaderOf(rejection), answer.body);
   if (body.issues.length > 0) {
     const what = `the scripted ${answer.code} body breaks its reader`;
-    throw mistakeOf({
-      provider: listed.provider,
-      endpoint: listed.name,
-      what,
-      issues: body.issues,
-    });
+    throw mistakeOf({ ...whoOf(listed), what, issues: body.issues });
   }
   const resolved = resolutionOf(rejection, listed.standards);
   return rejectionResponseOf({ ...resolved, body: body.value });

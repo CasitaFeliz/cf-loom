@@ -9,7 +9,7 @@ export { endpointsOf, listedDefinitionsOf } from './declarations.ts';
 export type { ExportsOf } from './definitions.ts';
 export type { DeclarationFailure, Failure, Rule } from './failures.ts';
 export { failureLineOf } from './failures.ts';
-export { follows, kebabCase } from './grammars.ts';
+export { follows, kebabCase, upperSnakeCase } from './grammars.ts';
 export type { PathSegment } from './identity.ts';
 export { identityOf, methodAndPathOf, paramNamesOf, pathSegmentsOf } from './identity.ts';
 export type {
