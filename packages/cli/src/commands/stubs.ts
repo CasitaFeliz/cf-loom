@@ -90,7 +90,7 @@ function declarationLocatedOf(
 
 /** A Definitions Package's Guard, imported from the package's `.` entry under its name. */
 function packageExportOf(
-  handled: Handled,
+  handled: DeclarationHandled,
   { packageName, exports, guard }: PackagedGuard,
 ): Located {
   if (exports[handled.name] === guard) {
@@ -108,7 +108,7 @@ type PackagedGuard = {
 };
 
 /** The listed Definitions Package a handled Guard comes from; none for the Service's own. */
-function packageOf(service: BuiltService, handled: Handled): PackagedGuard | undefined {
+function packageOf(service: BuiltService, handled: DeclarationHandled): PackagedGuard | undefined {
   if (handled.kind !== 'guard') {
     return undefined;
   }

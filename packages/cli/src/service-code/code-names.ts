@@ -1,4 +1,4 @@
-import { codeNameOf } from '@cf-loom/contract/internal';
+import { byCodePoint, codeNameOf } from '@cf-loom/contract/internal';
 import { camelCaseOf } from '../source-text/index.ts';
 import type { Handled, MessageHandled } from './handled.ts';
 
@@ -13,6 +13,14 @@ export function pairingNameOf(handled: MessageHandled): string {
     case 'subscription':
       return camelCaseOf(handled.name);
   }
+}
+
+/** Orders Commands' Message Versions by name in code, as the Handler map and the readers list them. */
+export function byCommandName(
+  left: { readonly name: string; readonly version: number },
+  right: { readonly name: string; readonly version: number },
+): number {
+  return byCodePoint(codeNameOf(left), codeNameOf(right));
 }
 
 /** The name of an own Message Version's Reader schema: `orderCreatedV2Reader`. */

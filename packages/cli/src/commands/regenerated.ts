@@ -48,8 +48,11 @@ function rootListsOf({ validated, snapshot }: BuiltService): RootLists {
   );
   const subscriptionEntries = subscriptions.map(({ subscription, service }, position) => {
     const { name, version } = subscription.event;
-    const ownEvent = service === snapshot.name ? { name, version } : undefined;
-    return [subscription.name, { position, ownEvent }] as const;
+    const receives =
+      service === snapshot.name
+        ? ({ kind: 'own', event: { name, version } } as const)
+        : ({ kind: 'dependency' } as const);
+    return [subscription.name, { position, receives }] as const;
   });
   return { commands: new Map(commandEntries), subscriptions: new Map(subscriptionEntries) };
 }

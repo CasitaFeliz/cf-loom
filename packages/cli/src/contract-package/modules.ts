@@ -7,6 +7,7 @@ import {
   type Needs,
   noNeeds,
   schemaImportsOf,
+  sortedImportLinesOf,
 } from '../schema-code/index.ts';
 import {
   headerOf,
@@ -61,9 +62,10 @@ export function packageModuleOf(module: PackageModule): PackageFile {
       }),
     ),
   ];
-  const imports = [...siblingImportsOf(path, siblings), ...schemaImportsOf(needs)];
-  const sorted = imports.sort((left, right) => byCodePoint(left.specifier, right.specifier));
-  const lines = sorted.map(({ line }) => line);
+  const lines = sortedImportLinesOf([
+    ...siblingImportsOf(path, siblings),
+    ...schemaImportsOf(needs),
+  ]);
   return { path, text: moduleTextOf({ first: [headerOf('package')], imports: lines, body }) };
 }
 

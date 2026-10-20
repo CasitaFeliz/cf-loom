@@ -1132,6 +1132,37 @@ describe('cf-loom generate: what it refuses', () => {
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
   });
 
+  test.each([
+    [['a-1', 'a1'], 'subscriptions.a1 is a1 in code, as subscriptions.a-1 is'],
+    [
+      ['order-created-v2-reader'],
+      'subscriptions.order-created-v2-reader is orderCreatedV2Reader in code, as the Reader of events.OrderCreated@2 is',
+    ],
+    [
+      ['charge-card-v1-reader'],
+      'subscriptions.charge-card-v1-reader is chargeCardV1Reader in code, as the Reader of commands.ChargeCard@1 is',
+    ],
+    [
+      ['tree-reader-def'],
+      'subscriptions.tree-reader-def is treeReaderDef in code, as defs.tree is',
+    ],
+    [['contract'], 'subscriptions.contract is contract in code, as the import contract is'],
+  ])(
+    'Subscriptions %j, one paired under a name readers.generated.ts already takes, exit 3 naming both',
+    (names, line) => {
+      const declared = names.map(
+        (name) => `defineSubscription({ name: '${name}', event: orderCreatedV2 })`,
+      );
+      const project = aProject(
+        aMessagingService({ subscriptions: [notifyOnSettled, ...declared] }),
+      );
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}: rename the Subscription\n` });
+    },
+  );
+
   test('a recursion id an own Message reaches that is no name in code exits 3 in one line', () => {
     const project = aProject(aMessagingService());
     edit(project, 'src/contract/messages.ts', (text) =>
@@ -1505,6 +1536,44 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr: 'src/readers.generated.ts was edited or is out of date: run cf-loom generate\n',
+    });
+  });
+
+  test('verify exits 3 when a Subscription is paired under a name readers.generated.ts already takes', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    write(project, {
+      'src/contract/index.ts': aMessagingRoot({
+        subscriptions: [
+          notifyOnSettled,
+          "defineSubscription({ name: 'charge-card-v1', event: orderCreatedV2 })",
+        ],
+      }),
+    });
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'subscriptions.charge-card-v1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
+    });
+  });
+
+  test('verify exits 3 on a recursion id an own Message reaches that is no name in code', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/messages.ts', (text) =>
+      text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'The recursion id 2-tree is no name in code: rename it\n',
     });
   });
 

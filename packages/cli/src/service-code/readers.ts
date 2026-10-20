@@ -1,16 +1,19 @@
 import type { SchemaNode, ServiceSnapshot } from '@cf-loom/contract/internal';
-import { byCodePoint, codeNameOf, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
+import { byCodePoint, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
 import { type ExportedAt, rootPlaces } from '../loading/index.ts';
 import {
+  addModulesOf,
   type DefUse,
   defIdentifierOf,
   defNamesLineOf,
   defsCodeOf,
   type ImportLine,
+  importedBindings,
   type Needs,
   noNeeds,
   reachedDefUsesOf,
   schemaImportsOf,
+  sortedImportLinesOf,
   zodExpressionOf,
 } from '../schema-code/index.ts';
 import {
@@ -20,6 +23,7 @@ import {
   relativeSpecifierOf,
 } from '../source-text/index.ts';
 import {
+  byCommandName,
   collidingSubscriptionLineOf,
   type NamedInCode,
   pairingNameOf,
@@ -33,11 +37,13 @@ export const readersFile = 'src/readers.generated.ts';
 /** A Message Version by its name and version. */
 type MessageVersion = { readonly name: string; readonly version: number };
 
-/** Where the root lists a Subscription, and the Service's own Event it receives; none for a Dependency's. */
-export type ListedSubscription = {
-  readonly position: number;
-  readonly ownEvent: MessageVersion | undefined;
-};
+/** The Event a Subscription receives: the Service's own, by name and version, or a Dependency's. */
+type ReceivedEvent =
+  | { readonly kind: 'own'; readonly event: MessageVersion }
+  | { readonly kind: 'dependency' };
+
+/** Where the root lists a Subscription, and whose Event it receives. */
+type ListedSubscription = { readonly position: number; readonly receives: ReceivedEvent };
 
 /**
  * Where the root lists each Command's Message Version, by identity, and each Subscription, by
@@ -73,28 +79,34 @@ type Readable = {
 export function readersTextOf(snapshot: ServiceSnapshot, lists: RootLists): ReadersText {
   const needs = noNeeds();
   const readables = readablesOf(snapshot);
-  const readers = readables.map(({ message, body }) => {
-    const reader = zodExpressionOf(body, { mode: 'reader', needs });
-    return `export const ${readerNameOf(message)} = ${reader};`;
-  });
+  const commands = readables
+    .filter(isCommandReadable)
+    .sort((left, right) => byCommandName(left.message, right.message));
+  const readers = readerLinesOf(readables, needs);
   const defUses = reachedDefUsesOf(snapshot.defs, [...needs.defs.values()]);
   const subscriptions = Object.keys(snapshot.subscriptions);
-  const taken = takenNamesOf(readables, defUses);
+  const taken = takenNamesOf({ readables, commands, defUses });
   const unnamed = defNamesLineOf(defUses) ?? collidingSubscriptionLineOf(taken, subscriptions);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
   const defs = defsCodeOf(snapshot.defs, defUses);
-  for (const module of defs.needs.modules) {
-    needs.modules.add(module);
-  }
+  addModulesOf(needs, defs.needs);
   const pairings = [
-    ...commandPairingLinesOf(readables, lists),
+    ...commandPairingLinesOf(commands, lists),
     ...subscriptionPairingLinesOf(subscriptions, lists),
   ];
   const imports = importsOf(needs, pairings);
   const body = bodyOf([defs.body, readers, pairings]);
   return { kind: 'text', text: moduleTextOf({ first: [headerOf('generate')], imports, body }) };
+}
+
+/** A Reader schema per own Message Version, recording what each needs imported. */
+function readerLinesOf(readables: readonly Readable[], needs: Needs): readonly string[] {
+  return readables.map(({ message, body }) => {
+    const reader = zodExpressionOf(body, { mode: 'reader', needs });
+    return `export const ${readerNameOf(message)} = ${reader};`;
+  });
 }
 
 /**
@@ -119,14 +131,31 @@ function readableOf(kind: Readable['kind'], identity: string, body: SchemaNode):
   return { kind, identity, message: nameAndVersionOf(identity), body };
 }
 
+function isCommandReadable(
+  readable: Readable,
+): readable is Readable & { readonly kind: 'commands' } {
+  return readable.kind === 'commands';
+}
+
+/** `withReader`, which pairs a declaration with its Reader, and the package it is imported from. */
+const withReaderImport = { name: 'withReader', specifier: '@cf-loom/handlers' } as const;
+
 /** The names the file imports, whether it writes their imports or not, so none flips a check. */
-const importedNames: readonly string[] = [rootPlaces.service.exported, 'loom', 'withReader', 'z'];
+const importedNames: readonly string[] = [
+  rootPlaces.service.exported,
+  withReaderImport.name,
+  ...Object.values(importedBindings),
+];
+
+/** What the file declares beside its pairings of Subscriptions: its Readers, Commands and defs. */
+type Declared = {
+  readonly readables: readonly Readable[];
+  readonly commands: readonly Readable[];
+  readonly defUses: readonly DefUse[];
+};
 
 /** Every name the file declares or imports but the Subscriptions' pairings, with what it names. */
-function takenNamesOf(
-  readables: readonly Readable[],
-  defUses: readonly DefUse[],
-): readonly NamedInCode[] {
+function takenNamesOf({ readables, commands, defUses }: Declared): readonly NamedInCode[] {
   const imports = importedNames.map((code) => ({ code, names: `the import ${code}` }));
   const defs = defUses.map(({ id, mode }) => ({
     code: defIdentifierOf(id, mode),
@@ -134,26 +163,21 @@ function takenNamesOf(
   }));
   const readers = readables.map(({ kind, identity, message }) => ({
     code: readerNameOf(message),
-    names: `${kind}.${identity}`,
+    names: `the Reader of ${kind}.${identity}`,
   }));
-  const commands = readables
-    .filter(({ kind }) => kind === 'commands')
-    .map(({ identity, message }) => ({ code: codeNameOf(message), names: `commands.${identity}` }));
-  return [...imports, ...defs, ...readers, ...commands];
+  const pairings = commands.map(({ identity, message }) => ({
+    code: pairingNameOf({ kind: 'command', ...message }),
+    names: `commands.${identity}`,
+  }));
+  return [...imports, ...defs, ...readers, ...pairings];
 }
 
-/** Each Command's Message Version paired with its Reader, by name in code. */
-function commandPairingLinesOf(
-  readables: readonly Readable[],
-  lists: RootLists,
-): readonly string[] {
-  const commands = readables
-    .filter(({ kind }) => kind === 'commands')
-    .sort((left, right) => byCodePoint(codeNameOf(left.message), codeNameOf(right.message)));
+/** Each Command's Message Version paired with its Reader, in the order given. */
+function commandPairingLinesOf(commands: readonly Readable[], lists: RootLists): readonly string[] {
   return commands.map(({ identity, message }) => {
     const element = `${rootPlaces.service.exported}.commands[${positionOf(lists.commands, identity)}]`;
     const name = pairingNameOf({ kind: 'command', ...message });
-    return `export const ${name} = withReader(${element}, ${readerNameOf(message)});`;
+    return `export const ${name} = ${withReaderImport.name}(${element}, ${readerNameOf(message)});`;
   });
 }
 
@@ -171,11 +195,20 @@ function subscriptionPairingLinesOf(
       throw new Error(`The root lists no Subscription ${name}, which its Snapshot holds: a bug.`);
     }
     const element = `${rootPlaces.service.exported}.subscriptions[${listed.position}]`;
-    const reader =
-      listed.ownEvent === undefined ? `${element}.event.body` : readerNameOf(listed.ownEvent);
+    const reader = receivedReaderOf(listed.receives, element);
     const pairing = pairingNameOf({ kind: 'subscription', name });
-    return `export const ${pairing} = withReader(${element}, ${reader});`;
+    return `export const ${pairing} = ${withReaderImport.name}(${element}, ${reader});`;
   });
+}
+
+/** The Reader a Subscription's Handler reads: its own Event's, or its Dependency's Event's body. */
+function receivedReaderOf(receives: ReceivedEvent, element: string): string {
+  switch (receives.kind) {
+    case 'own':
+      return readerNameOf(receives.event);
+    case 'dependency':
+      return `${element}.event.body`;
+  }
 }
 
 function positionOf(positions: ReadonlyMap<string, number>, identity: string): number {
@@ -193,13 +226,15 @@ function positionOf(positions: ReadonlyMap<string, number>, identity: string): n
 function importsOf(needs: Needs, pairings: readonly string[]): readonly string[] {
   const { file, exported } = rootPlaces.service;
   const root = relativeSpecifierOf(readersFile, file);
+  const { name, specifier } = withReaderImport;
   const pairingImports: readonly ImportLine[] = [
     { specifier: root, line: namedImportOf([exported], root) },
-    { specifier: '@cf-loom/handlers', line: namedImportOf(['withReader'], '@cf-loom/handlers') },
+    { specifier, line: namedImportOf([name], specifier) },
   ];
-  const imports = [...(pairings.length > 0 ? pairingImports : []), ...schemaImportsOf(needs)];
-  const sorted = imports.sort((left, right) => byCodePoint(left.specifier, right.specifier));
-  return sorted.map(({ line }) => line);
+  return sortedImportLinesOf([
+    ...(pairings.length > 0 ? pairingImports : []),
+    ...schemaImportsOf(needs),
+  ]);
 }
 
 /** The groups of the body, a blank line between two, or an empty module when none holds a line. */
