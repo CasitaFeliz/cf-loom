@@ -351,6 +351,22 @@ describe('an EndpointHandler’s Success', () => {
     });
   });
 
+  test('an undeclared Success header that cannot travel is dropped, never checked', async () => {
+    const given = { location: '/o/1', 'x-extra': 'a\nb' };
+    const createOrderHandler = handle(createOrder, () =>
+      success({ headers: given, body: { id: ORDER_ID } }),
+    );
+
+    const outcome = await createOrderHandler(createInput, {});
+
+    expect(outcome).toStrictEqual({
+      kind: 'success',
+      status: 201,
+      headers: { location: '/o/1' },
+      body: { id: ORDER_ID },
+    });
+  });
+
   test('a body given to a 204 throws InvalidOutcomeError', async () => {
     const deleteOrderHandler = handle(deleteOrder, () => success({ id: ORDER_ID }) as never);
 
