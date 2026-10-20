@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { checkedBody, type Issue } from '../checks/index.ts';
+import type { Checked, Issue } from '../checks/index.ts';
 import { type Fault, isFault } from '../outcomes/index.ts';
 import type { MessageElement } from './elements.ts';
 import { returnedOf } from './implementation.ts';
@@ -25,6 +25,9 @@ export type MessageRun =
   | { readonly kind: 'thrown'; readonly cause: unknown }
   | { readonly kind: 'answered'; readonly answer: Fault | undefined };
 
+/** How a run reads its body with its Reader: as a direct call is given it, or as `consume` receives it. */
+export type BodyReading = (reader: core.$ZodType, body: unknown) => Checked<unknown>;
+
 /**
  * Runs one call of a Message Handler: reads its body with its Reader, then runs it. It never throws:
  * anything thrown, or a return that is neither nothing nor a Fault, is `thrown`.
@@ -32,9 +35,10 @@ export type MessageRun =
 export async function messageRunOf(
   written: MessageWritten,
   given: MessageGiven,
+  readBody: BodyReading,
 ): Promise<MessageRun> {
   try {
-    return await messageCallOf(written, given);
+    return await messageCallOf(written, given, readBody);
   } catch (e) {
     return { kind: 'thrown', cause: e };
   }
@@ -43,8 +47,9 @@ export async function messageRunOf(
 async function messageCallOf(
   { element, reader, implementation }: MessageWritten,
   { body, meta }: MessageGiven,
+  readBody: BodyReading,
 ): Promise<MessageRun> {
-  const checked = checkedBody(reader, body);
+  const checked = readBody(reader, body);
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }

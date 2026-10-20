@@ -7,7 +7,7 @@ export {
   InvalidOutcomeError,
   messageAnswerOf,
 } from './errors.ts';
-export type { MessageMeta, MessageWritten } from './message-run.ts';
+export type { MessageMeta, MessageRun, MessageWritten } from './message-run.ts';
 export { messageRunOf } from './message-run.ts';
 export type {
   EndpointRun,

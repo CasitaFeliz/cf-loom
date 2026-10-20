@@ -5,12 +5,14 @@ import {
   defineGuard,
   defineSubscription,
   notFound,
+  openEnum,
+  openEnumReader,
   type StandardRejections,
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, fault, handle, reject, success, withReader } from '../index.ts';
-import { isStub, isWrittenFor, runEndpoint, runGuard } from './index.ts';
+import { isStub, mappedHandlerOf, runEndpoint, runGuard, runMessage } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -279,36 +281,122 @@ describe('isStub', () => {
   });
 });
 
-describe('isWrittenFor', () => {
-  test('a Handler is told written for its own Element, not another, and a plain function never', () => {
+describe('mappedHandlerOf, by the Element a Handler was written for', () => {
+  test('a Handler is found for its own Element, not another, and a plain function never', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const lookalike = Object.assign(() => undefined, { element: getOrder });
 
     const written = [
-      isWrittenFor(getOrderHandler, getOrder),
-      isWrittenFor(apiKeyHandler, apiKey),
-      isWrittenFor(getOrderHandler, apiKey),
-      isWrittenFor(handle.stub(permission), apiKey),
-      isWrittenFor(lookalike, getOrder),
-      isWrittenFor(undefined, getOrder),
+      isFoundFor(getOrderHandler, getOrder),
+      isFoundFor(apiKeyHandler, apiKey),
+      isFoundFor(getOrderHandler, apiKey),
+      isFoundFor(handle.stub(permission), apiKey),
+      isFoundFor(lookalike, getOrder),
+      isFoundFor(undefined, getOrder),
     ];
 
     expect(written).toEqual([true, true, false, false, false, false]);
   });
 
-  test('isWrittenFor tells a Message Handler written for its own Command or Subscription, never another', () => {
+  test('a Message Handler is found for its own Command or Subscription, never another', () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const notifyOnPaidHandler = handle.stub(notifyOnPaid);
 
     const written = [
-      isWrittenFor(chargeCardHandler, chargeCardV1),
-      isWrittenFor(notifyOnPaidHandler, notifyOnPaidV1),
-      isWrittenFor(chargeCardHandler, notifyOnPaidV1),
-      isWrittenFor(notifyOnPaidHandler, orderPaidV1 as never),
-      isWrittenFor(chargeCard, chargeCardV1),
+      isFoundFor(chargeCardHandler, chargeCardV1),
+      isFoundFor(notifyOnPaidHandler, notifyOnPaidV1),
+      isFoundFor(chargeCardHandler, notifyOnPaidV1),
+      isFoundFor(notifyOnPaidHandler, orderPaidV1 as never),
+      isFoundFor(chargeCard, chargeCardV1),
     ];
 
     expect(written).toEqual([true, true, false, false, false]);
   });
 });
+
+describe('runMessage', () => {
+  const statuses = ['pending', 'paid'] as const;
+  const shippedV1 = defineCommand({
+    name: 'Ship',
+    version: 1,
+    description: 'Ships the order',
+    body: z.object({ orderId: z.uuid(), status: openEnum(statuses) }),
+  });
+  const shipping = withReader(
+    shippedV1,
+    z.object({ orderId: z.uuid(), status: openEnumReader(statuses) }),
+  );
+  const meta = { messageId: 'Ship.v1:o-1', factId: 'o-1', deliveryCount: 1, headers: {} };
+
+  test('runMessage reads a received body with its Reader, without writing it back', async () => {
+    const received: unknown[] = [];
+    const shipHandler = handle(shipping, (body) => {
+      received.push(body);
+    });
+
+    const run = await runMessage(shipHandler, {
+      body: { orderId: ORDER_ID, status: 'refunded', extra: 'dropped' },
+      meta,
+    });
+
+    expect(run).toEqual({ kind: 'answered', answer: undefined });
+    expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
+  });
+
+  test('runMessage given a value handle() did not return throws', () => {
+    const lookalike = Object.assign(() => undefined, { element: chargeCardV1 });
+
+    const run = () => runMessage(lookalike, { body: {}, meta });
+
+    expect(run).toThrow('Not a Handler');
+  });
+});
+
+describe('mappedHandlerOf, by its key', () => {
+  test('mappedHandlerOf names the key of a missing Handler, or of one written for another Element', () => {
+    const chargeCardHandler = handle(chargeCard, () => undefined);
+    const at = { map: 'commands', key: 'chargeCardV1' } as const;
+
+    const lookups = [
+      () => mappedHandlerOf({}, at, chargeCardV1),
+      () => mappedHandlerOf(Object.create({ chargeCardV1: chargeCardHandler }), at, chargeCardV1),
+      () =>
+        mappedHandlerOf({ chargeCardV1: handle(notifyOnPaid, () => undefined) }, at, chargeCardV1),
+    ];
+
+    expect(lookups.map(errorMessageOf)).toEqual([
+      'commands.chargeCardV1 has no Handler in the Handler map',
+      'commands.chargeCardV1 has no Handler in the Handler map',
+      'commands.chargeCardV1 holds no Handler handle() returned for it: run cf-loom generate',
+    ]);
+  });
+
+  test('mappedHandlerOf finds the Handler the map holds under its key', () => {
+    const chargeCardHandler = handle(chargeCard, () => undefined);
+
+    const found = mappedHandlerOf(
+      { chargeCardV1: chargeCardHandler },
+      { map: 'commands', key: 'chargeCardV1' },
+      chargeCardV1,
+    );
+
+    expect(found).toBe(chargeCardHandler);
+  });
+});
+
+/** Whether `mappedHandlerOf` finds a Handler for an Element in a map that holds it. */
+function isFoundFor(handler: unknown, element: Parameters<typeof mappedHandlerOf>[2]): boolean {
+  return errorMessageOf(() => mappedHandlerOf({ handler }, anyKey, element)) === undefined;
+}
+
+const anyKey = { map: 'endpoints', key: 'handler' } as const;
+
+function errorMessageOf(lookup: () => unknown): string | undefined {
+  try {
+    lookup();
+    return undefined;
+  } catch (e) {
+    return e instanceof Error ? e.message : undefined;
+  }
+}

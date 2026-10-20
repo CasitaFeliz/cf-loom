@@ -6,7 +6,7 @@ import {
   type TextPartNodes,
   walkedTextPartsOf,
 } from '@cf-loom/contract/internal';
-import { isWrittenFor } from '@cf-loom/handlers/internal';
+import { mappedHandlerOf, ownOf } from '@cf-loom/handlers/internal';
 import type { serve } from '../answering/index.ts';
 
 /**
@@ -28,7 +28,7 @@ export function endpointHandlerOf(
   handlers: ServedHandlers,
   endpoint: Endpoint,
 ): { readonly element: Endpoint } {
-  return writtenHandlerOf(handlers.endpoints, `endpoints.${endpoint.name}`, endpoint);
+  return mappedHandlerOf(handlers.endpoints, { map: 'endpoints', key: endpoint.name }, endpoint);
 }
 
 /** The Handler the map holds for a Guard a live Endpoint attaches, written for that very Guard. */
@@ -36,7 +36,7 @@ export function guardHandlerOf(
   handlers: ServedHandlers,
   guard: Guard,
 ): { readonly element: Guard } {
-  return writtenHandlerOf(handlers.guards, `guards.${guard.name}`, guard);
+  return mappedHandlerOf(handlers.guards, { map: 'guards', key: guard.name }, guard);
 }
 
 /** The walked text parts of every Endpoint and Guard, which must be what `generate` accepts. */
@@ -65,27 +65,4 @@ export function deprecatedAtOf(handlers: ServedHandlers, endpoint: Endpoint): st
     throw new Error(message);
   }
   return stamp;
-}
-
-function writtenHandlerOf<Element extends Endpoint | Guard>(
-  byName: unknown,
-  key: string,
-  element: Element,
-): { readonly element: Element } {
-  const handler = ownOf(byName, element.name);
-  if (handler === undefined) {
-    throw new Error(`${key} has no Handler in the Handler map`);
-  }
-  if (!isWrittenFor(handler, element)) {
-    throw new Error(`${key} holds no Handler handle() returned for it: run cf-loom generate`);
-  }
-  return handler;
-}
-
-/** A value the map holds itself under a name, whatever the map is; nothing it only inherits. */
-function ownOf(byName: unknown, name: string): unknown {
-  if (typeof byName !== 'object' || byName === null || !Object.hasOwn(byName, name)) {
-    return undefined;
-  }
-  return Reflect.get(byName, name);
 }

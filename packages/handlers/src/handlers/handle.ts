@@ -18,6 +18,7 @@ import {
   messageRunOf,
   type Written,
 } from '../calls/index.ts';
+import { checkedBody } from '../checks/index.ts';
 import { reject } from '../outcomes/index.ts';
 import type {
   DirectCall,
@@ -148,7 +149,7 @@ function guardCallOf(written: Written<Guard>) {
 function messageCallOf(written: MessageWritten) {
   return async (body: unknown, { messageId, factId, deliveryCount, headers = {} }: DirectMeta) => {
     const meta = { messageId, factId, deliveryCount, headers };
-    const run = await messageRunOf(written, { body, meta });
+    const run = await messageRunOf(written, { body, meta }, checkedBody);
     return messageAnswerOf(written.element, run);
   };
 }

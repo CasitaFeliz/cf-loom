@@ -13,3 +13,8 @@ export function checkedBody(reader: core.$ZodType, body: unknown): Checked<unkno
   }
   return checkedPart('body', reader, { value: written.value });
 }
+
+/** A Message body as received, read with its Reader schema alone; its Issues sit at `body`. */
+export function checkedReceivedBody(reader: core.$ZodType, body: unknown): Checked<unknown> {
+  return checkedPart('body', reader, { value: body });
+}

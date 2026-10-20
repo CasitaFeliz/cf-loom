@@ -1,11 +1,21 @@
 import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
-import { type EndpointRun, endpointRunOf, type GuardRun, guardRunOf } from '../calls/index.ts';
-import type { EndpointGiven, GuardGiven } from '../checks/index.ts';
+import {
+  type EndpointRun,
+  endpointRunOf,
+  type GuardRun,
+  guardRunOf,
+  type MessageElement,
+  type MessageMeta,
+  type MessageRun,
+  messageRunOf,
+} from '../calls/index.ts';
+import { checkedReceivedBody, type EndpointGiven, type GuardGiven } from '../checks/index.ts';
 import {
   type AnyHandler,
   isAnyWritten,
   isEndpointWritten,
   isGuardWritten,
+  isMessageWritten,
   writtenOf,
 } from './written.ts';
 
@@ -30,4 +40,12 @@ export function runGuard(
   standards: StandardRejections,
 ): Promise<GuardRun> {
   return guardRunOf(writtenOf(handler, isGuardWritten), given, standards);
+}
+
+/** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */
+export function runMessage(
+  handler: { readonly element: MessageElement },
+  received: { readonly body: unknown; readonly meta: MessageMeta },
+): Promise<MessageRun> {
+  return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedReceivedBody);
 }
