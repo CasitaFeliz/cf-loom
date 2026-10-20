@@ -320,6 +320,27 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toThrow('the headers given to r.status cannot be sent');
   });
 
+  test.each([
+    ['r.status given a symbol', (r: Builder) => r.status(Symbol('s') as never)],
+    [
+      'r.reject({ unknown }) given a symbol',
+      (r: Builder) => r.reject({ unknown: Symbol('s') as never }, null),
+    ],
+  ])('%s is a mistake, never a TypeError the client takes for a Fault', async (_name, step) => {
+    const payments = fakeProvider(paymentsDeps);
+    payments.on('getPayment').otherwise(step);
+
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FakeProviderError);
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: the scripted answer cannot be sent',
+    );
+  });
+
   test('a step that returns no answer built with its r is a mistake', async () => {
     const payments = fakeProvider(paymentsDeps);
     payments.on('getPayment').otherwise(() => ({}) as ScriptedAnswer);

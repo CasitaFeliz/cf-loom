@@ -29,7 +29,7 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
     case 'rejection':
       return builtOf(listed, unsendable, () => knownRejectionResponseOf(answer, listed));
     case 'unknown-rejection':
-      return unknownRejectionResponseOf(answer, listed);
+      return builtOf(listed, unsendable, () => unknownRejectionResponseOf(answer, listed));
     case 'fault': {
       const { committed, retryable, message } = answer;
       return builtOf(listed, unsendable, () => faultResponseOf({ committed, retryable, message }));
@@ -41,7 +41,7 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
     case 'reset':
       throw networkFailureOf('ECONNRESET');
     case 'status':
-      return bareStatusResponseOf(answer, listed);
+      return builtOf(listed, unsendable, () => bareStatusResponseOf(answer, listed));
   }
 }
 

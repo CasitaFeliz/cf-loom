@@ -139,7 +139,8 @@ async function stepAnswerOf(
 
 /**
  * What a request waits for, or the signal's reason, as `fetch` rejects with it, once the signal
- * is aborted; a signal is never already aborted here, since `fetch` refuses one first.
+ * is aborted; it is never already aborted here, since `request.signal` follows `init.signal`, which
+ * `fetch` checked first.
  */
 function abortableOf<Value>(waited: Promise<Value>, signal: AbortSignal): Promise<Value> {
   const aborted = Promise.withResolvers<never>();
