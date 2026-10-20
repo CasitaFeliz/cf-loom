@@ -109,7 +109,7 @@ _Avoid_: extensible enum, loose enum
 ### Messaging
 
 **Message**:
-A Command or an Event: what travels through the broker rather than over HTTP.
+A Command or an Event: what travels through the Broker rather than over HTTP.
 _Avoid_: payload (for the Message itself), envelope (for the Message itself)
 
 **Command**:
