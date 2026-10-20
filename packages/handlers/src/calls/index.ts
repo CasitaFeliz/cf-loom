@@ -5,6 +5,7 @@ export {
   elementNameOf,
   InvalidInputError,
   InvalidOutcomeError,
+  issueLineOf,
   messageAnswerOf,
 } from './errors.ts';
 export type { MessageMeta, MessageRun, MessageWritten } from './message-run.ts';

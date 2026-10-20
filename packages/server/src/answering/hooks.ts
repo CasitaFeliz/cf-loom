@@ -1,4 +1,5 @@
 import type { Fault, Issue } from '@cf-loom/handlers';
+import { issueLineOf } from '@cf-loom/handlers/internal';
 
 /**
  * A Fault the Service's side produced, which `onServiceFault` receives, naming the Endpoint and,
@@ -49,8 +50,8 @@ function logServedFault(servedFault: ServedFault): void {
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
-      for (const { part, path, code, message } of servedFault.issues) {
-        console.error(`${where}: ${[part, ...path].join('.')} ${code}: ${message}`);
+      for (const issue of servedFault.issues) {
+        console.error(issueLineOf(where, issue));
       }
   }
 }
