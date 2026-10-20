@@ -1,13 +1,16 @@
 import {
   defineEndpoint,
+  defineEvent,
   defineGuard,
   defineRejection,
+  defineSubscription,
   notFound,
   openEnum,
+  openEnumReader,
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { admit, handle, isRejectionOf, reject, success } from './index.ts';
+import { admit, handle, isRejectionOf, reject, success, withReader } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -113,7 +116,48 @@ const permissionHandler = handle(permission, async (_demands, { userToken }, qua
   return granted ? admit() : reject(forbidden);
 });
 
+const paymentSettledV1 = defineEvent({
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled, as its Contract Package declares it with its Reader',
+  body: z.object({ paymentId: z.string(), method: openEnumReader(['card', 'transfer']) }),
+});
+
+const notifyOnSettled = withReader(
+  defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 }),
+  paymentSettledV1.body,
+);
+
+const sent: unknown[] = [];
+const notifications = { send: async (...given: unknown[]) => void sent.push(given) };
+
+const notifyOnSettledHandler = handle(
+  notifyOnSettled,
+  async (body, { messageId, factId, deliveryCount, headers }) => {
+    await notifications.send(body.paymentId, { messageId, factId, deliveryCount, headers });
+  },
+);
+
 describe('the handlers README', () => {
+  test('the direct call of an EventHandler receives its body and meta, headers defaulting to {}', async () => {
+    const settled = { paymentId: 'pay-1', method: { unknown: 'wallet' } };
+
+    const answer = await notifyOnSettledHandler(settled, {
+      messageId: 'PaymentSettled.v1:pay-1',
+      factId: 'pay-1',
+      deliveryCount: 1,
+    });
+
+    expect(answer).toBeUndefined();
+    expect(sent).toEqual([
+      [
+        'pay-1',
+        { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1, headers: {} },
+      ],
+    ]);
+  });
+
   test('the EndpointHandler example answers its Success', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },

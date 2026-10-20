@@ -1,7 +1,15 @@
-import { defineEndpoint, defineGuard, notFound, type StandardRejections } from '@cf-loom/contract';
+import {
+  defineCommand,
+  defineEndpoint,
+  defineEvent,
+  defineGuard,
+  defineSubscription,
+  notFound,
+  type StandardRejections,
+} from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { admit, fault, handle, reject, success } from '../index.ts';
+import { admit, fault, handle, reject, success, withReader } from '../index.ts';
 import { isStub, isWrittenFor, runEndpoint, runGuard } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -39,6 +47,28 @@ const getOrder = defineEndpoint({
 });
 
 const getContext = { apiKey: { callerId: 'c-1' } };
+
+const orderBody = z.object({ orderId: z.uuid() });
+
+const chargeCardV1 = defineCommand({
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the order’s card',
+  body: orderBody,
+});
+
+const orderPaidV1 = defineEvent({
+  name: 'OrderPaid',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was paid',
+  body: orderBody,
+});
+
+const notifyOnPaidV1 = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+
+const chargeCard = withReader(chargeCardV1, orderBody);
+const notifyOnPaid = withReader(notifyOnPaidV1, orderBody);
 
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
@@ -234,6 +264,19 @@ describe('isStub', () => {
 
     expect(stubs).toEqual([false, true]);
   });
+
+  test('isStub tells a Message Handler stub from a written one', () => {
+    const handlers = [
+      handle(chargeCard, () => undefined),
+      handle.stub(chargeCard),
+      handle(notifyOnPaid, () => undefined),
+      handle.stub(notifyOnPaid),
+    ];
+
+    const stubs = handlers.map(isStub);
+
+    expect(stubs).toEqual([false, true, false, true]);
+  });
 });
 
 describe('isWrittenFor', () => {
@@ -252,5 +295,20 @@ describe('isWrittenFor', () => {
     ];
 
     expect(written).toEqual([true, true, false, false, false, false]);
+  });
+
+  test('isWrittenFor tells a Message Handler written for its own Command or Subscription, never another', () => {
+    const chargeCardHandler = handle(chargeCard, () => undefined);
+    const notifyOnPaidHandler = handle.stub(notifyOnPaid);
+
+    const written = [
+      isWrittenFor(chargeCardHandler, chargeCardV1),
+      isWrittenFor(notifyOnPaidHandler, notifyOnPaidV1),
+      isWrittenFor(chargeCardHandler, notifyOnPaidV1),
+      isWrittenFor(notifyOnPaidHandler, orderPaidV1 as never),
+      isWrittenFor(chargeCard, chargeCardV1),
+    ];
+
+    expect(written).toEqual([true, true, false, false, false]);
   });
 });

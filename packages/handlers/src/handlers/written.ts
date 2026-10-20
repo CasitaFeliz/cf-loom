@@ -1,12 +1,13 @@
-import type { Endpoint, Guard } from '@cf-loom/contract';
+import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
 import { isEndpoint, isGuard } from '@cf-loom/contract/internal';
-import type { Written } from '../calls/index.ts';
+import type { MessageWritten, Written } from '../calls/index.ts';
+import { isMessageElement } from './reader.ts';
 
-/** What any Handler was written with, an Endpoint's or a Guard's. */
-export type AnyWritten = Written<Endpoint> | Written<Guard>;
+/** What any Handler was written with: an Endpoint's, a Guard's, or a Message Handler's with its Reader. */
+export type AnyWritten = Written<Endpoint> | Written<Guard> | MessageWritten;
 
-/** A Handler as the runtime takes it: by the Endpoint or Guard it was written for, whatever its signature. */
-export type AnyHandler = { readonly element: Endpoint | Guard };
+/** A Handler as the runtime takes it: by the Element it was written for, whatever its signature. */
+export type AnyHandler = { readonly element: Endpoint | Guard | Command | Subscription };
 
 const writtenByHandler = new WeakMap<object, AnyWritten>();
 
@@ -27,8 +28,8 @@ export function writtenOf<Kind extends AnyWritten>(
   return written;
 }
 
-/** Whether a value is a Handler `handle()` returned for this very Endpoint or Guard. */
-export function isWrittenFor<Element extends Endpoint | Guard>(
+/** Whether a value is a Handler `handle()` returned for this very Endpoint, Guard, Command or Subscription. */
+export function isWrittenFor<Element extends Endpoint | Guard | Command | Subscription>(
   handler: unknown,
   element: Element,
 ): handler is { readonly element: Element } {
@@ -48,7 +49,12 @@ export function isGuardWritten(written: AnyWritten): written is Written<Guard> {
   return isGuard(written.element);
 }
 
-/** Whether a Handler was written for an Endpoint or a Guard: any Handler. */
+/** Whether a Handler was written for a Command or a Subscription: a Message Handler. */
+export function isMessageWritten(written: AnyWritten): written is MessageWritten {
+  return isMessageElement(written.element);
+}
+
+/** Whether a Handler was written for any Element. */
 export function isAnyWritten(written: AnyWritten): written is AnyWritten {
-  return isEndpointWritten(written) || isGuardWritten(written);
+  return isEndpointWritten(written) || isGuardWritten(written) || isMessageWritten(written);
 }

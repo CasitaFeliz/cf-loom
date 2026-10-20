@@ -23,8 +23,8 @@ export async function returnedOf<Built>(
   return { kind: 'thrown', fault: thrownFault(new TypeError(message)) };
 }
 
-/** What a Handler returned instead of an Outcome, by its type or kind, never its content. */
-function describedOf(built: unknown): string {
+/** What a Handler returned instead of what it answers, by its type or kind, never its content. */
+export function describedOf(built: unknown): string {
   if (built === null) {
     return 'null';
   }

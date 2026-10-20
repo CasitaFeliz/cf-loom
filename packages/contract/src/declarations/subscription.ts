@@ -9,7 +9,7 @@ type SubscriptionDeclaration = {
   readonly event: Event & { readonly lifecycle?: Exclude<Lifecycle, 'retired'> };
 };
 
-/** A declared Subscription, kept with its Event itself, so its Handler reads that Event's body. */
+/** A declared Subscription, kept with its Event itself, the Event its Handler's Reader reads. */
 export type Subscription<Declaration extends SubscriptionDeclaration = SubscriptionDeclaration> =
   Readonly<Declaration> & { readonly kind: 'subscription' };
 

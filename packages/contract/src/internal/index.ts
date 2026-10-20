@@ -1,5 +1,6 @@
 export type { ReservedCode } from '../declarations/index.ts';
 export {
+  isCommand,
   isContract,
   isEndpoint,
   isGuard,
@@ -8,6 +9,7 @@ export {
   isReservedCode,
   isStamp,
   isStandardRejection,
+  isSubscription,
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
@@ -130,7 +132,9 @@ export {
   inputParts,
   isInputPart,
   isSameRejection,
+  isSchema,
   listedDefinitionsOf,
+  messageIdentityOf,
   methodAndPathOf,
   partFieldOf,
   pathSegmentsOf,

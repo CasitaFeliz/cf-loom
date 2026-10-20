@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import type { Command, Endpoint, Guard, StandardRejections, Subscription } from '@cf-loom/contract';
 import {
   type Checked,
   checkedAdmission,
@@ -20,11 +20,11 @@ import {
 } from '../outcomes/index.ts';
 import { returnedOf } from './implementation.ts';
 
-/** An implementation as the runtime calls it, whatever Endpoint or Guard it was written for. */
+/** An implementation as the runtime calls it, whatever Element it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Endpoint or Guard, its implementation, and whether it is a stub. */
-export type Written<Answering extends Endpoint | Guard> = {
+/** What a Handler was written with: its Element, its implementation, and whether it is a stub. */
+export type Written<Answering extends Endpoint | Guard | Command | Subscription> = {
   readonly element: Answering;
   readonly implementation: Implementation;
   readonly stub: boolean;

@@ -1,14 +1,20 @@
+export type { MessageMeta } from './calls/index.ts';
 export { InvalidInputError, InvalidOutcomeError } from './calls/index.ts';
 export type { Issue } from './checks/index.ts';
 export type {
+  CommandHandler,
+  CommandImplementation,
   DirectCall,
   EndpointHandler,
   EndpointImplementation,
+  EventHandler,
+  EventImplementation,
   GuardHandler,
   GuardImplementation,
   HandlerMap,
+  WithReader,
 } from './handlers/index.ts';
-export { handle } from './handlers/index.ts';
+export { handle, withReader } from './handlers/index.ts';
 export type {
   Admission,
   Committed,
