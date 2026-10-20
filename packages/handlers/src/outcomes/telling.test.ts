@@ -1,9 +1,4 @@
-import {
-  defineEndpoint,
-  defineRejection,
-  notFound,
-  notImplemented,
-} from '@casitafeliz/loom-contract';
+import { defineEndpoint, defineRejection, notFound, notImplemented } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { handle, isRejectionOf, reject } from '../index.ts';

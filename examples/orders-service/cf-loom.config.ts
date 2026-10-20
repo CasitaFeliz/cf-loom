@@ -1,3 +1,3 @@
-import { defineConfig } from '@casitafeliz/loom-cli';
+import { defineConfig } from '@cf-loom/cli';
 
 export const config = defineConfig({ scope: '@org' });

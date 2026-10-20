@@ -1,4 +1,4 @@
-import { deprecatedAtOfHeader, deprecationHeader } from '@casitafeliz/loom-contract/internal';
+import { deprecatedAtOfHeader, deprecationHeader } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import type { DeprecationNotice, OnDeprecation } from './client-types.ts';
 

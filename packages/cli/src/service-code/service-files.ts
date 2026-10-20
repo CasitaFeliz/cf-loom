@@ -1,4 +1,4 @@
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import type { ExportedAt } from '../loading/index.ts';
 import {
   defaultImportOf,
@@ -53,7 +53,7 @@ export function readersTextOf(): string {
 export function stubTextOf(handled: Handled, exported: ExportedAt): string {
   const specifier = specifierOf(handlerPathOf(handled), exported);
   const imports = [
-    namedImportOf(['handle'], '@casitafeliz/loom-handlers'),
+    namedImportOf(['handle'], '@cf-loom/handlers'),
     namedImportOf([exported.name], specifier),
   ];
   return moduleTextOf({

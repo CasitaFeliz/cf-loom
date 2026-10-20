@@ -1,4 +1,4 @@
-import type { Committed, ReservedCode } from '@casitafeliz/loom-contract/internal';
+import type { Committed, ReservedCode } from '@cf-loom/contract/internal';
 
 /**
  * What a step scripted, as written, before its Endpoint checks it: a Success, a Rejection by a
@@ -30,7 +30,7 @@ export type Answer =
     };
 
 /** The key a scripted answer is held under, which no test can name. */
-const answerKey: unique symbol = Symbol('@casitafeliz/loom-testing.answer');
+const answerKey: unique symbol = Symbol('@cf-loom/testing.answer');
 
 /** What a step returns, built only by its `r`, so a test cannot answer what no builder offers. */
 export type ScriptedAnswer = { readonly [answerKey]: Answer };

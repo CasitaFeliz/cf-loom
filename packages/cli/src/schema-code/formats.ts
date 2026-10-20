@@ -3,7 +3,7 @@ import {
   hashPartsOf,
   isHashFormat,
   type StringFormat,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { jsonLiteralOf, keyOf, stringLiteralOf } from '../source-text/index.ts';
 
 /** The zod constructor of each format zod builds by name, as generated code calls it. */

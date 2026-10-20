@@ -1,4 +1,4 @@
-import { receivedEnvelopeOf } from '@casitafeliz/loom-contract/internal';
+import { receivedEnvelopeOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { answeredFaultOf, type Inferring, withRetryAfter } from '../inference/index.ts';
 import type { DecodedOutcome } from './outcomes.ts';

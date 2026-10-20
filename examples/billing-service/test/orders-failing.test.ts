@@ -1,7 +1,7 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { serve } from '@casitafeliz/loom-server';
+import { serve } from '@cf-loom/server';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';

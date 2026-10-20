@@ -1,6 +1,6 @@
-import type { ReceivedFault, ReceivedRejection, ReceivedSuccess } from '@casitafeliz/loom-client';
-import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
-import { internalError } from '@casitafeliz/loom-contract/internal';
+import type { ReceivedFault, ReceivedRejection, ReceivedSuccess } from '@cf-loom/client';
+import type { Endpoint, StandardRejections } from '@cf-loom/contract';
+import { internalError } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
 

@@ -1,4 +1,4 @@
-import type { Failure } from '@casitafeliz/loom-contract/internal';
+import type { Failure } from '@cf-loom/contract/internal';
 
 /** A project that cannot be used: a tooling error in one line. */
 export type Tooling = { readonly kind: 'tooling'; readonly message: string };

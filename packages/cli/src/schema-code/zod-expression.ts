@@ -9,7 +9,7 @@ import type {
   StringNode,
   TaggedNode,
   TupleNode,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';

@@ -1,11 +1,11 @@
-import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   contextProvidersOf,
   demandParts,
   inputParts,
   parsedPartsOf,
   schemaOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import {
   type Checked,
   checkedAll,

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const serviceDir = join(import.meta.dirname, '..');
-const bin = join(serviceDir, 'node_modules/@casitafeliz/loom-cli/dist/bin.js');
+const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 
 describe('the committed generated files', () => {
   test('cf-loom verify finds them up to date', () => {

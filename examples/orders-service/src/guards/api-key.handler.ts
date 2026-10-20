@@ -1,4 +1,4 @@
-import { admit, handle, reject } from '@casitafeliz/loom-handlers';
+import { admit, handle, reject } from '@cf-loom/handlers';
 import { callerIdOf } from '../api-keys/api-keys.ts';
 import { apiKey } from '../contract/guards/api-key.guard.ts';
 import { unauthenticated } from '../contract/rejections/unauthenticated.rejection.ts';

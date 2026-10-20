@@ -2,7 +2,7 @@ import {
   byCodePoint,
   type EndpointSnapshot,
   type ExportedSnapshot,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { loomNeeds } from '../schema-code/index.ts';
 import { jsonLiteralOf } from '../source-text/index.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';

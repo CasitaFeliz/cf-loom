@@ -1,9 +1,9 @@
-import type { Endpoint, InputOf } from '@casitafeliz/loom-contract';
+import type { Endpoint, InputOf } from '@cf-loom/contract';
 import {
   type InvalidInputBody,
   invalidInputBodyOf,
   type Reading,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 
 /**
  * A request a fake received, as its Provider read it: valid, with its Input parsed, or invalid,

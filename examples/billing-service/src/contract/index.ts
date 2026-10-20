@@ -1,4 +1,4 @@
-import { defineContract } from '@casitafeliz/loom-contract';
+import { defineContract } from '@cf-loom/contract';
 import { ordersDeps } from './dependencies/orders-service.dependencies.ts';
 import { invoicesGroup } from './endpoints/invoices/invoices.group.ts';
 

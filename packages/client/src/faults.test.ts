@@ -8,12 +8,8 @@ import {
   defineGroup,
   type Endpoint,
   type StandardRejections,
-} from '@casitafeliz/loom-contract';
-import {
-  exportedSnapshotOf,
-  snapshotOf,
-  validateContract,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract';
+import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { client, type Happened, type InferredFault } from './index.ts';

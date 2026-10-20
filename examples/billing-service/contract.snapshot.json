@@ -232,7 +232,7 @@
   },
   "events": {},
   "format": 1,
-  "generator": "@casitafeliz/loom-cli@0.0.0",
+  "generator": "@cf-loom/cli@0.0.0",
   "guards": {},
   "kind": "service",
   "name": "billing-service",

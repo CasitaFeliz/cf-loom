@@ -8,16 +8,16 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 | Package | Used by | Provides |
 | --- | --- | --- |
-| [`@casitafeliz/loom-contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| [`@casitafeliz/loom-handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`); `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
-| [`@casitafeliz/loom-server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
-| [`@casitafeliz/loom-server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
-| [`@casitafeliz/loom-client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
-| [`@casitafeliz/loom-messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
-| [`@casitafeliz/loom-messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
-| [`@casitafeliz/loom-messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
-| [`@casitafeliz/loom-testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
-| [`@casitafeliz/loom-cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig`; Contract directories under `@casitafeliz/loom-cli/directories` |
+| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
+| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`); `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
+| [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
+| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
+| [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
+| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
+| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
+| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
+| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
+| [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig`; Contract directories under `@cf-loom/cli/directories` |
 
 How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
@@ -62,13 +62,13 @@ src/
 contract-package/                          the Contract Package cf-loom package writes; built, not edited
 ```
 
-File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@casitafeliz/loom-contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
+File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
-The examples in the package READMEs follow this layout and leave out imports of `zod`, `@casitafeliz/loom-contract` and sibling files.
+The examples in the package READMEs follow this layout and leave out imports of `zod`, `@cf-loom/contract` and sibling files.
 
 ### Declare
 
-`cf-loom init service` creates the root under `src/contract/`, and `cf-loom add-endpoint`, `add-guard`, `add-rejection`, `add-event`, `add-command`, `add-subscription` and `add-dependency` create each declaration (see [Commands](packages/cli/README.md#commands)). What each declaration holds is in the [`@casitafeliz/loom-contract` README](packages/contract/README.md); the tools are configured in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
+`cf-loom init service` creates the root under `src/contract/`, and `cf-loom add-endpoint`, `add-guard`, `add-rejection`, `add-event`, `add-command`, `add-subscription` and `add-dependency` create each declaration (see [Commands](packages/cli/README.md#commands)). What each declaration holds is in the [`@cf-loom/contract` README](packages/contract/README.md); the tools are configured in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Generate
 
@@ -76,7 +76,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Implement
 
-Replace each stub with `handle(element, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@casitafeliz/loom-handlers`, a [Message Handler](packages/messaging/README.md#message-handlers) the same way. The EventPublisher and CommandSender come from `messaging(contract)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
+Replace each stub with `handle(element, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, a [Message Handler](packages/messaging/README.md#message-handlers) the same way. The EventPublisher and CommandSender come from `messaging(contract)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
 
 ### Serve
 
@@ -84,7 +84,7 @@ Replace each stub with `handle(element, async (…) => …)`: an [EndpointHandle
 
 ### Test
 
-A Handler is called directly (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through the [in-memory adapter](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@casitafeliz/loom-testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
+A Handler is called directly (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through the [in-memory adapter](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@cf-loom/testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
 
 ### Publish
 

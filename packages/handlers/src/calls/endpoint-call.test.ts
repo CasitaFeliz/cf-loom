@@ -8,7 +8,7 @@ import {
   invalidInput,
   notFound,
   notImplemented,
-} from '@casitafeliz/loom-contract';
+} from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -697,7 +697,7 @@ describe('more of what a direct call answers', () => {
   });
 });
 
-describe('a Standard Rejection from another copy of loom-contract', () => {
+describe('a Standard Rejection from another copy of @cf-loom/contract', () => {
   test('the not-implemented Rejection of the contract source resolves', async () => {
     const sourceUrl = new URL('../../../contract/src/index.ts', import.meta.url).href;
     const source: { readonly notImplemented: unknown } = await import(sourceUrl);

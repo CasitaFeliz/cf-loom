@@ -1,5 +1,5 @@
-import type { Contract } from '@casitafeliz/loom-contract';
-import type { HandlerMap } from '@casitafeliz/loom-handlers';
+import type { Contract } from '@cf-loom/contract';
+import type { HandlerMap } from '@cf-loom/handlers';
 import { servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
 import { type AnsweredRequest, reportServedFault, type ServedFault } from './hooks.ts';

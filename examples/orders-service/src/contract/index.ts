@@ -1,4 +1,4 @@
-import { defineContract } from '@casitafeliz/loom-contract';
+import { defineContract } from '@cf-loom/contract';
 import { infrastructureGroup } from './endpoints/infrastructure/infrastructure.group.ts';
 import { ordersGroup } from './endpoints/orders/orders.group.ts';
 

@@ -1,5 +1,5 @@
-import type { ServiceSnapshot } from '@casitafeliz/loom-contract/internal';
-import { byCodePoint, isLive } from '@casitafeliz/loom-contract/internal';
+import type { ServiceSnapshot } from '@cf-loom/contract/internal';
+import { byCodePoint, isLive } from '@cf-loom/contract/internal';
 import { kebabCaseOf } from '../source-text/index.ts';
 
 /** An Endpoint or a Guard a Service writes a Handler for, by what names its Handler file. */

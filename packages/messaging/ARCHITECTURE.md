@@ -1,4 +1,4 @@
-# Internals of @casitafeliz/loom-messaging
+# Internals of @cf-loom/messaging
 
 How `messaging` (see [README.md](README.md)) keeps a Message in flight while its Handler runs. The broker interface and its adapters are in [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md; what the broker must hold is in [Applying the plan](README.md#applying-the-plan).
 

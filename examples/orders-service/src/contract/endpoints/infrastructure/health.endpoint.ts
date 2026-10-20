@@ -1,4 +1,4 @@
-import { defineEndpoint } from '@casitafeliz/loom-contract';
+import { defineEndpoint } from '@cf-loom/contract';
 import { z } from 'zod';
 
 export const health = defineEndpoint({

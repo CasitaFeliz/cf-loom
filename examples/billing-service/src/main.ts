@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
-import { serve } from '@casitafeliz/loom-server';
-import { nodeHttp } from '@casitafeliz/loom-server/node-http';
+import { serve } from '@cf-loom/server';
+import { nodeHttp } from '@cf-loom/server/node-http';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 import { ordersClient } from './orders-client/orders-client.ts';

@@ -1,4 +1,4 @@
-import { defineGuard } from '@casitafeliz/loom-contract';
+import { defineGuard } from '@cf-loom/contract';
 import { z } from 'zod';
 import { unauthenticated } from '../rejections/unauthenticated.rejection.ts';
 

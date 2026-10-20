@@ -1,6 +1,6 @@
-# @casitafeliz/loom-cli
+# @cf-loom/cli
 
-The `cf-loom` command and `defineConfig`; the Contract directories are under `@casitafeliz/loom-cli/directories`. How the command reads and writes the registry and the Contract directory is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the Compatibility Check the command runs is in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md), and the Snapshot it writes in [SNAPSHOT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md).
+The `cf-loom` command and `defineConfig`; the Contract directories are under `@cf-loom/cli/directories`. How the command reads and writes the registry and the Contract directory is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the Compatibility Check the command runs is in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md), and the Snapshot it writes in [SNAPSHOT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md).
 
 ## Configuration
 
@@ -8,8 +8,8 @@ Each Service, Application or Definitions Package configures the tools in `cf-loo
 
 ```ts
 // cf-loom.config.ts
-import { defineConfig } from '@casitafeliz/loom-cli';
-import { github } from '@casitafeliz/loom-cli/directories';
+import { defineConfig } from '@cf-loom/cli';
+import { github } from '@cf-loom/cli/directories';
 
 export const config = defineConfig({
   scope: '@org',                     // publishes @org/contract-orders-service
@@ -24,7 +24,7 @@ export const config = defineConfig({
 
 `scope` is always required; `registry` and `directory` are required by `check`, `publish`, `broker-plan` and `route-plan`; `generate`, `verify` and `package` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
 
-npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. `@casitafeliz/loom-cli/directories` ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry (see [Publishing to the directory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md#publishing-to-the-directory)), and a fixed list for tests. Versions and metadata always come from the standard package metadata. The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. The directory is read with the same credentials the check uses, which must be able to read the whole scope.
+npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. `@cf-loom/cli/directories` ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry (see [Publishing to the directory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md#publishing-to-the-directory)), and a fixed list for tests. Versions and metadata always come from the standard package metadata. The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. The directory is read with the same credentials the check uses, which must be able to read the whole scope.
 
 A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package `<scope>/<name>`. A Contract Package `cf-loom package` writes is `0.0.0`, in its package.json and in `contract.version`, so a Dependency declared on it records `against: '0.0.0'`; only `publish` derives a version.
 
@@ -98,7 +98,7 @@ Exit 3, a tooling error:
 | `<dir> holds files package did not write: package writes to a missing or empty folder, or over its own output` | `package` |
 | `<dir> is no folder: package writes a folder` | `package` |
 | `<dir> is a symbolic link: package writes a folder of its own` | `package` |
-| `<peer> is not installed: a Contract Package is built with it`, for `zod` or `@casitafeliz/loom-contract` | `package` |
+| `<peer> is not installed: a Contract Package is built with it`, for `zod` or `@cf-loom/contract` | `package` |
 | `<peer> has no version in its package.json: a Contract Package is built with it` | `package` |
 | `A Definitions Package has no Contract Package: it is published from its own source` | `package` |
 | `The codes <code> and <code> are one name in code: rename one of them` | `package` |

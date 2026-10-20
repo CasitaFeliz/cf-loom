@@ -1,4 +1,4 @@
-# @casitafeliz/loom-client
+# @cf-loom/client
 
 `client` and its types (see [Types](#types)). How an Outcome travels, how the client decodes it and which Fault it infers when there is none are in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md; how the package is built is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
@@ -7,7 +7,7 @@ The example leaves out the import of `paymentsDeps`, a Dependency declared as in
 ## Consuming a Contract
 
 ```ts
-import { client } from '@casitafeliz/loom-client';
+import { client } from '@cf-loom/client';
 
 const payments = client(paymentsDeps, {
   baseUrl,

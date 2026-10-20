@@ -6,7 +6,7 @@ export function rootTemplateOf(kind: RootKind, name: string): string {
   const fields =
     kind === 'application' ? [`  name: '${name}',`, '  dependencies: [],'] : [`  name: '${name}',`];
   return lines([
-    `import { ${define} } from '@casitafeliz/loom-contract';`,
+    `import { ${define} } from '@cf-loom/contract';`,
     '',
     `export const ${exported} = ${define}({`,
     ...fields,
@@ -17,7 +17,7 @@ export function rootTemplateOf(kind: RootKind, name: string): string {
 /** The configuration `init` writes, with the scope of the project's package.json. */
 export function configTemplateOf(scope: string): string {
   return lines([
-    "import { defineConfig } from '@casitafeliz/loom-cli';",
+    "import { defineConfig } from '@cf-loom/cli';",
     '',
     `export const config = defineConfig({ scope: '${scope}' });`,
   ]);

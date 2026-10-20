@@ -1,4 +1,4 @@
-import { defineEndpoint, defineGuard, defineRejection } from '@casitafeliz/loom-contract';
+import { defineEndpoint, defineGuard, defineRejection } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, handle, reject, success } from '../index.ts';

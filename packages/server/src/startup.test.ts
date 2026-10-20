@@ -5,8 +5,8 @@ import {
   defineGroup,
   defineGuard,
   type Endpoint,
-} from '@casitafeliz/loom-contract';
-import { admit, handle, success } from '@casitafeliz/loom-handlers';
+} from '@cf-loom/contract';
+import { admit, handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { serve } from './index.ts';

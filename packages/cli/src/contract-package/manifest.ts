@@ -4,7 +4,7 @@ import {
   hashedTextOf,
   type ServiceSnapshot,
   type Snapshot,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
@@ -16,7 +16,7 @@ export type Packaging = { readonly scope: string; readonly version: string; read
 
 /**
  * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and
- * `@casitafeliz/loom-contract` only with a caret on the versions built with, and the `cfLoom`
+ * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom`
  * metadata the dependency graph is read from.
  */
 export function manifestOf(
@@ -33,7 +33,7 @@ export function manifestOf(
     files: [builtFolder, packagePaths.snapshot],
     sideEffects: false,
     peerDependencies: {
-      '@casitafeliz/loom-contract': `^${peers.contract}`,
+      '@cf-loom/contract': `^${peers.contract}`,
       zod: `^${peers.zod}`,
     },
     cfLoom: {

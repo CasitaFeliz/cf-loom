@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ReceivedOutcome } from '@casitafeliz/loom-client';
+import type { ReceivedOutcome } from '@cf-loom/client';
 import type { ordersDeps } from '../contract/dependencies/orders-service.dependencies.ts';
 import type { OrdersClient } from '../orders-client/orders-client.ts';
 

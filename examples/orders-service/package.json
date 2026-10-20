@@ -8,13 +8,13 @@
     "start": "node src/main.ts"
   },
   "dependencies": {
-    "@casitafeliz/loom-contract": "workspace:*",
-    "@casitafeliz/loom-handlers": "workspace:*",
-    "@casitafeliz/loom-server": "workspace:*",
+    "@cf-loom/contract": "workspace:*",
+    "@cf-loom/handlers": "workspace:*",
+    "@cf-loom/server": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@casitafeliz/loom-cli": "workspace:*",
+    "@cf-loom/cli": "workspace:*",
     "@types/node": "catalog:"
   }
 }

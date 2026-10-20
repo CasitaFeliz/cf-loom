@@ -1,4 +1,4 @@
-import type { Endpoint, InputOf } from '@casitafeliz/loom-contract';
+import type { Endpoint, InputOf } from '@cf-loom/contract';
 import type { ReceivedOutcome } from '../decoding/index.ts';
 import type { AnyDependencies } from '../endpoints/index.ts';
 import type { InferFault } from '../inference/index.ts';

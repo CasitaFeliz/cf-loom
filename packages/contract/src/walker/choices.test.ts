@@ -1,4 +1,4 @@
-import * as built from '@casitafeliz/loom-contract';
+import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
@@ -74,7 +74,7 @@ describe('walkSchemas: enums', () => {
     );
   });
 
-  test('an openEnum from another copy of loom-contract is open', () => {
+  test('an openEnum from another copy of @cf-loom/contract is open', () => {
     expect(walkBody(built.openEnum(['pending']))).toEqual(
       walkedTo({ type: 'enum', values: ['pending'], open: true }),
     );

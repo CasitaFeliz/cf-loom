@@ -3,7 +3,7 @@ import {
   kebabCase,
   listedDefinitionsOf,
   type ResolvedDefinitions,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { installedPackageOf, type LookedUp } from './installed-package.ts';
 
 /** A listed Definitions Package as installed, with what its module exports, by name. */

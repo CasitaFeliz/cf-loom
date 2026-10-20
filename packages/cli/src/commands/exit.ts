@@ -1,4 +1,4 @@
-import { failureLineOf } from '@casitafeliz/loom-contract/internal';
+import { failureLineOf } from '@cf-loom/contract/internal';
 import { type Committed, type ProjectFailure, snapshotFile } from '../project/index.ts';
 
 /** The exit statuses of the CLI's README: done, the check failed, a tooling error. */

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 

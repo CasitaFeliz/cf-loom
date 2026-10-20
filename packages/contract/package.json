@@ -1,5 +1,5 @@
 {
-  "name": "@casitafeliz/loom-contract",
+  "name": "@cf-loom/contract",
   "version": "0.0.0",
   "repository": {
     "type": "git",
@@ -34,6 +34,6 @@
     "node": ">=24"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "restricted"
   }
 }

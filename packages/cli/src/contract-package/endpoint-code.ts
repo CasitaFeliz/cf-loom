@@ -6,7 +6,7 @@ import {
   methodAndPathOf,
   ownRejectionsOf,
   type ServiceSnapshot,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';

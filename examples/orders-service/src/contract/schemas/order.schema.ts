@@ -1,4 +1,4 @@
-import { openEnum } from '@casitafeliz/loom-contract';
+import { openEnum } from '@cf-loom/contract';
 import { z } from 'zod';
 
 export const money = z.object({

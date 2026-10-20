@@ -1,4 +1,4 @@
-import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import type { Issue } from '../checks/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { Run } from './run.ts';

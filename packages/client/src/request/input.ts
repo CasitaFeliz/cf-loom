@@ -1,4 +1,4 @@
-import type { Endpoint } from '@casitafeliz/loom-contract';
+import type { Endpoint } from '@cf-loom/contract';
 import {
   headerTextsOf,
   type InputIssue,
@@ -8,7 +8,7 @@ import {
   notJsonContentType,
   readingOf,
   textOfValue,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 
 /** An Input's parts as parsed, unknown keys stripped, by the field a Caller passes each under. */
 export type ParsedInput = {

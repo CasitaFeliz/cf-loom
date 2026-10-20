@@ -1,4 +1,4 @@
-import { defineGroup } from '@casitafeliz/loom-contract';
+import { defineGroup } from '@cf-loom/contract';
 import { health } from './health.endpoint.ts';
 
 export const infrastructureGroup = defineGroup({

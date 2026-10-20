@@ -4,7 +4,7 @@ import {
   defineRejection,
   notFound,
   openEnum,
-} from '@casitafeliz/loom-contract';
+} from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, handle, isRejectionOf, reject, success } from './index.ts';

@@ -1,10 +1,10 @@
-import type { Dependencies, Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Dependencies, Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
   exportedEntryOf,
   type ObjectNode,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 
 /** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
 export type AnyDependencies = Dependencies<

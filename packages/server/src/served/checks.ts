@@ -1,12 +1,12 @@
-import type { Contract, Endpoint, Guard } from '@casitafeliz/loom-contract';
+import type { Contract, Endpoint, Guard } from '@cf-loom/contract';
 import {
   failureLineOf,
   isContract,
   isStamp,
   type TextPartNodes,
   walkedTextPartsOf,
-} from '@casitafeliz/loom-contract/internal';
-import { isWrittenFor } from '@casitafeliz/loom-handlers/internal';
+} from '@cf-loom/contract/internal';
+import { isWrittenFor } from '@cf-loom/handlers/internal';
 import type { serve } from '../answering/index.ts';
 
 /**

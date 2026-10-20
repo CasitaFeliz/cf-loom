@@ -1,9 +1,4 @@
-import type {
-  EnumNode,
-  ObjectNode,
-  SchemaNode,
-  TupleNode,
-} from '@casitafeliz/loom-contract/internal';
+import type { EnumNode, ObjectNode, SchemaNode, TupleNode } from '@cf-loom/contract/internal';
 import { keyOf, literalOf } from '../source-text/index.ts';
 import { defTypeNameOf } from './def-names.ts';
 import { addDefUse, type Needs, noNeeds, type SchemaMode, type Writing } from './needs.ts';

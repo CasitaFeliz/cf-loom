@@ -1,10 +1,10 @@
-import type { Endpoint, RejectionsOf, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, RejectionsOf, StandardRejections } from '@cf-loom/contract';
 import {
   type Issue,
   type Parsed,
   type ReceivedInvalidInputBody,
   reservedFaults,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { AnyDependencies } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';

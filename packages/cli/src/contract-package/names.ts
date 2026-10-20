@@ -1,4 +1,4 @@
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { camelCaseOf, kebabCaseOf, kebabCaseOfCode } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFolders } from './paths.ts';

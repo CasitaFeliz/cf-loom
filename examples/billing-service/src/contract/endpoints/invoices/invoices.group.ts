@@ -1,4 +1,4 @@
-import { defineGroup } from '@casitafeliz/loom-contract';
+import { defineGroup } from '@cf-loom/contract';
 import { createInvoice } from './create-invoice.endpoint.ts';
 
 export const invoicesGroup = defineGroup({

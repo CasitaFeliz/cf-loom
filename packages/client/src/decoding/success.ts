@@ -4,7 +4,7 @@ import {
   type Issue,
   parseValue,
   receivedBodyOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { answeredFaultOf, type Inferring } from '../inference/index.ts';
 import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';

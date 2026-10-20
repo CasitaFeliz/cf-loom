@@ -1,4 +1,4 @@
-import { defineRejection } from '@casitafeliz/loom-contract';
+import { defineRejection } from '@cf-loom/contract';
 import { z } from 'zod';
 
 export const orderNotBillable = defineRejection({

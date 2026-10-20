@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { byCodePoint, isLive } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint, isLive } from '@cf-loom/contract/internal';
 import { contractExportsOf, type ExportedAt, type FileExport } from '../loading/index.ts';
 import type { BuiltService, Tooling } from '../project/index.ts';
 import { type Handled, handledOf, handlerPathOf, stubTextOf } from '../service-code/index.ts';

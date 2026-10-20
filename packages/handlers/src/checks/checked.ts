@@ -1,12 +1,12 @@
-import type { Issue, IssuePart, Part, SchemaIssue } from '@casitafeliz/loom-contract/internal';
-import { parseValue } from '@casitafeliz/loom-contract/internal';
+import type { Issue, IssuePart, Part, SchemaIssue } from '@cf-loom/contract/internal';
+import { parseValue } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 
 /** Where in a value an Issue sits, inside its part. */
 type Path = readonly (string | number)[];
 
 /** One way a value broke its part of the Contract, as contract defines it for every package. */
-export type { Issue } from '@casitafeliz/loom-contract/internal';
+export type { Issue } from '@cf-loom/contract/internal';
 
 /** A value checked against the Contract: parsed, or every Issue it broke. */
 export type Checked<Value> =

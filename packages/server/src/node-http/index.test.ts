@@ -2,13 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type AddressInfo, connect } from 'node:net';
 import { PassThrough, Readable } from 'node:stream';
-import {
-  defineContract,
-  defineEndpoint,
-  defineGroup,
-  defineGuard,
-} from '@casitafeliz/loom-contract';
-import { admit, handle, success } from '@casitafeliz/loom-handlers';
+import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
+import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Http, serve } from '../index.ts';

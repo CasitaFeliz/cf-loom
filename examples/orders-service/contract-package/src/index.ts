@@ -4,7 +4,7 @@ import { getOrderEndpoint } from './endpoints/get-order.ts';
 import { exportedSnapshot } from './exported-snapshot.ts';
 import { snapshot } from './snapshot.ts';
 import { standardRejections } from './standard-rejections.ts';
-import * as loom from '@casitafeliz/loom-contract';
+import * as loom from '@cf-loom/contract';
 
 export const contract = {
   name: 'orders-service',

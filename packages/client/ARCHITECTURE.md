@@ -1,12 +1,12 @@
-# Internals of @casitafeliz/loom-client
+# Internals of @cf-loom/client
 
 How a call (see [README.md](README.md)) is sent and its response decoded, and how the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires. How an Outcome travels over HTTP, the decoding order and the inference table included, is in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md.
 
-The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in it can lean on Node: Applications run it in browsers. Its tests also run it against `serve` and `node:http`, so `@casitafeliz/loom-server` and `@casitafeliz/loom-handlers` are devDependencies, referenced by `tsconfig.test.json` only.
+The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in it can lean on Node: Applications run it in browsers. Its tests also run it against `serve` and `node:http`, so `@cf-loom/server` and `@cf-loom/handlers` are devDependencies, referenced by `tsconfig.test.json` only.
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@casitafeliz/loom-testing` builds its fake and its client with: the types `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`, and `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@cf-loom/testing` builds its fake and its client with: the types `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`, and `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `infe
 | `decoding/` | the Outcome types, decoded and as each Endpoint types them; a response decoded in order: the Success with its headers and body read by their Reader schemas, else an Envelope, else the inferred Fault; a Rejection known by code, its body read or dropped; the client's own `INVALID_OUTCOME` | `endpoints`, `inference` |
 | `calling/` | `client()` and its types; one call top to bottom; the headers given to `client()`; the Deprecation told once per method | `endpoints`, `request`, `inference`, `decoding` |
 
-The wire rules the client shares with `serve` and `@casitafeliz/loom-testing` live in `@casitafeliz/loom-contract`'s `wire/`: a value as text and text as a value, which text can travel as a header, a path segment or a query value, reading a received body whole and recognizing an Envelope in it, the reserved codes with their texts, the invalid-input Rejection from Issues and its body's reader, and the `Deprecation` header both ways. Which Rejections an Endpoint answers, by the code each resolves to, its entry in the exported Snapshot, and the reading of a request are in the contract's `./internal` too.
+The wire rules the client shares with `serve` and `@cf-loom/testing` live in `@cf-loom/contract`'s `wire/`: a value as text and text as a value, which text can travel as a header, a path segment or a query value, reading a received body whole and recognizing an Envelope in it, the reserved codes with their texts, the invalid-input Rejection from Issues and its body's reader, and the `Deprecation` header both ways. Which Rejections an Endpoint answers, by the code each resolves to, its entry in the exported Snapshot, and the reading of a request are in the contract's `./internal` too.
 
 ## A call
 

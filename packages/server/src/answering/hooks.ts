@@ -1,4 +1,4 @@
-import type { Fault, Issue } from '@casitafeliz/loom-handlers';
+import type { Fault, Issue } from '@cf-loom/handlers';
 
 /**
  * A Fault the Service's side produced, which `onServiceFault` receives, naming the Endpoint and,

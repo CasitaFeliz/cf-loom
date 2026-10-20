@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
 import {
   attachmentsOf,
   endpointsOf,
@@ -7,7 +7,7 @@ import {
   pathSegmentsOf,
   standardRejectionsOf,
   type TextPartNodes,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import {
   checkedTextPartsOf,
   contractOf,
