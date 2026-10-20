@@ -14,14 +14,13 @@ import {
 import { endpointModuleOf } from './endpoint-code.ts';
 import {
   applicationEntryOf,
+  type ServiceEntry,
   serviceEntryOf,
   snapshotModuleOf,
   standardRejectionsModuleOf,
 } from './entry-code.ts';
 import { eventModuleOf } from './event-code.ts';
 import {
-  type ExportedEndpoint,
-  type ExportedEvent,
   exportedEndpointsOf,
   exportedEventsOf,
   exportedSnapshotModuleOf,
@@ -96,15 +95,9 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
   return { kind: 'files', files };
 }
 
-/** The Endpoints and Events the exported Snapshot holds, in the order the entry lists them. */
-type ExportedElements = {
-  readonly endpoints: readonly ExportedEndpoint[];
-  readonly events: readonly ExportedEvent[];
-};
-
 /** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */
 function schemaFilesOf(
-  { endpoints, events }: ExportedElements,
+  { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
   exported: ExportedSnapshot,
   snapshot: ServiceSnapshot,
 ): readonly SchemaFile[] {

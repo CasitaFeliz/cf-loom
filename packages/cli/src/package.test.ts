@@ -1288,6 +1288,18 @@ describe('cf-loom package: where it writes', () => {
     expect(existsSync(join(project, 'contract-package/src/events/order-placed.v2.ts'))).toBe(true);
   });
 
+  test('a previous output holding an Event’s file at version 10 is replaced, the file kept', () => {
+    const tenth =
+      "export const placed = defineEvent({ name: 'OrderPlaced', version: 10, visibility: 'internal', description: 'Placed', body: z.object({}) });";
+    const project = aProject(withEvents([tenth], 'placed'));
+    packageIn(project);
+
+    const ran = packageIn(project);
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'contract-package/src/events/order-placed.v10.ts'))).toBe(true);
+  });
+
   test.each(['stray.ts', 'order-placed.v0.ts', 'order-placed.v01.ts'])(
     'a file under src/events that package would not name, %s, is refused and kept',
     (file) => {
