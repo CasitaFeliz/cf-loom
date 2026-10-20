@@ -25,10 +25,14 @@ export async function generate(run: Run): Promise<Exit> {
 }
 
 /**
- * A Service's files, or every line that stops them: an Element no stub could import, a Handler
- * file nothing names, a Handler path that is no file.
+ * A Service's files, or every line that stops them: a name the readers cannot write, an Element
+ * no stub could import, a Handler file nothing names, a Handler path that is no file.
  */
 async function generateService(run: Run, service: BuiltService): Promise<Exit> {
+  const regenerated = serviceFilesOf(service);
+  if (regenerated.kind === 'unnamed') {
+    return toolingError(regenerated.line);
+  }
   const stubs = await stubsOf(service);
   if (stubs.kind === 'tooling') {
     return toolingError(stubs.message);
@@ -41,7 +45,7 @@ async function generateService(run: Run, service: BuiltService): Promise<Exit> {
   if (failures.length > 0) {
     return checkFailed(failures);
   }
-  const files = [snapshotFileOf(service), ...serviceFilesOf(service), ...stubs.stubs];
+  const files = [snapshotFileOf(service), ...regenerated.files, ...stubs.stubs];
   return writtenExit(run, files);
 }
 

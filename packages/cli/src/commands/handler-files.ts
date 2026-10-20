@@ -61,8 +61,8 @@ export type OrphanLines =
 
 /**
  * Every Handler file under the Handlers' folders, through linked folders too, that nothing
- * declared names, a Retired Endpoint still declared counting as naming its Handler: after a
- * rename, the map would import a fresh stub.
+ * declared names, a Retired Endpoint or Command's Message Version still declared counting as
+ * naming its Handler: after a rename, the map would import a fresh stub.
  */
 export function orphanLinesOf({
   snapshot,

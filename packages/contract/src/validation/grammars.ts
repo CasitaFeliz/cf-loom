@@ -8,7 +8,7 @@ export type Grammar = {
   readonly reserved?: ReadonlySet<string>;
 };
 
-/** The grammar of a Service, Application, Definitions Package, Group or Subscription name. */
+/** The grammar of a Service, Application, Definitions Package or Group name. */
 export const kebabCase: Grammar = { name: 'kebab-case', pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ };
 
 /** The grammar of an Endpoint or Guard name, and of a path param's name. */
@@ -72,6 +72,16 @@ const reservedWords: ReadonlySet<string> = new Set([
 
 /** The grammar of an Endpoint or Guard name: camelCase, and a name its stub can import it by. */
 export const elementName: Grammar = { ...camelCase, reserved: reservedWords };
+
+/**
+ * The grammar of a Subscription name: kebab-case from a letter, and no word code cannot use, since
+ * its camelCase names its pairing, which its stub imports.
+ */
+export const subscriptionName: Grammar = {
+  name: 'kebab-case from a letter',
+  pattern: /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/,
+  reserved: reservedWords,
+};
 
 /** The grammar of a Message name. */
 export const pascalCase: Grammar = { name: 'PascalCase', pattern: /^[A-Z][a-zA-Z0-9]*$/ };

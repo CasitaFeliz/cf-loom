@@ -9,13 +9,11 @@ import {
   relativeSpecifierOf,
   stringLiteralOf,
 } from '../source-text/index.ts';
+import { handlerLocalOf, pairingNameOf } from './code-names.ts';
 import { type DeprecationStamp, type Handled, handlerPathOf } from './handled.ts';
 
 /** The file of the Handler map, under the Service's `src/`. */
 export const handlerMapFile = 'src/handlers.generated.ts';
-
-/** The file of the Reader schemas of the Service's own Events. */
-export const readersFile = 'src/readers.generated.ts';
 
 /**
  * The Handler map: plain data importing each Handler, with the stamps of the Deprecated Endpoints,
@@ -26,27 +24,24 @@ export function handlerMapTextOf(
   stamps: readonly DeprecationStamp[],
 ): string {
   const imports = handled
-    .map((element) => ({ local: localNameOf(element), path: handlerPathOf(element) }))
+    .map((element) => ({ local: handlerLocalOf(element), path: handlerPathOf(element) }))
     .map(({ local, path }) => ({ local, specifier: relativeSpecifierOf(handlerMapFile, path) }))
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ local, specifier }) => defaultImportOf(local, specifier));
   const endpoints = handled.filter((element) => element.kind === 'endpoint');
   const guards = handled.filter((element) => element.kind === 'guard');
+  const commands = handled.filter((element) => element.kind === 'command');
+  const subscriptions = handled.filter((element) => element.kind === 'subscription');
   const body = [
     'export default {',
     ...mapLinesOf('endpoints', endpoints),
     ...mapLinesOf('guards', guards),
-    '  commands: {},',
-    '  subscriptions: {},',
+    ...mapLinesOf('commands', commands),
+    ...mapLinesOf('subscriptions', subscriptions),
     ...stampLinesOf(stamps),
     '};',
   ];
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
-}
-
-/** The Reader schemas of the Service's own Events: none until a Service declares Events. */
-export function readersTextOf(): string {
-  return moduleTextOf({ first: [headerOf('generate')], imports: [], body: ['export {};'] });
 }
 
 /** The stub of a Handler not written yet, importing its Element from where it is exported. */
@@ -77,7 +72,9 @@ function mapLinesOf(key: string, handled: readonly Handled[]): readonly string[]
   if (handled.length === 0) {
     return [`  ${key}: {},`];
   }
-  const entries = handled.map((element) => `    ${keyOf(element.name)}: ${localNameOf(element)},`);
+  const entries = handled.map(
+    (element) => `    ${keyOf(mapKeyOf(element))}: ${handlerLocalOf(element)},`,
+  );
   return [`  ${key}: {`, ...entries, '  },'];
 }
 
@@ -91,12 +88,17 @@ function stampLinesOf(stamps: readonly DeprecationStamp[]): readonly string[] {
   return ['  deprecatedAt: {', ...entries, '  },'];
 }
 
-/** The map's local name of a Handler, by its Element's name and kind. */
-function localNameOf(handled: Handled): string {
+/**
+ * The key a Handler is mapped under: an Endpoint's, Guard's or Subscription's name, a Command's
+ * Message Version's name in code.
+ */
+function mapKeyOf(handled: Handled): string {
   switch (handled.kind) {
     case 'endpoint':
-      return `${handled.name}EndpointHandler`;
     case 'guard':
-      return `${handled.name}GuardHandler`;
+    case 'subscription':
+      return handled.name;
+    case 'command':
+      return pairingNameOf(handled);
   }
 }

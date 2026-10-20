@@ -1,3 +1,4 @@
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { namedImportOf, namespaceImportOf } from '../source-text/index.ts';
 
 /** The modes a generated schema is written in, each def in each it is referenced in. */
@@ -12,6 +13,12 @@ export type SchemaMode = (typeof schemaModes)[number];
 
 /** A module generated code imports: `zod` as `z`, or `@cf-loom/contract` as `loom`. */
 export type ImportedModule = 'zod' | 'loom';
+
+/** The binding generated code imports each module under, so no generated name takes it. */
+export const importedBindings: Readonly<Record<ImportedModule, string>> = {
+  zod: 'z',
+  loom: 'loom',
+};
 
 /** A recursive def as generated code references it: by its id, in one mode. */
 export type DefUse = { readonly id: string; readonly mode: SchemaMode };
@@ -47,6 +54,13 @@ function defUseKeyOf(use: DefUse): string {
   return JSON.stringify([use.mode, use.id]);
 }
 
+/** Adds the modules one piece of generated code needs to those of the module that holds it. */
+export function addModulesOf(needs: Needs, piece: Needs): void {
+  for (const module of piece.modules) {
+    needs.modules.add(module);
+  }
+}
+
 /** What a module needs that writes `loom.` itself, beside the schemas it writes. */
 export function loomNeeds(): Needs {
   const needs = noNeeds();
@@ -64,10 +78,16 @@ export type ImportLine = { readonly specifier: string; readonly line: string };
  */
 export function schemaImportsOf(needs: Needs): readonly ImportLine[] {
   const loom = '@cf-loom/contract';
-  const loomImport = { specifier: loom, line: namespaceImportOf('loom', loom) };
-  const zodImport = { specifier: 'zod', line: namedImportOf(['z'], 'zod') };
+  const loomImport = { specifier: loom, line: namespaceImportOf(importedBindings.loom, loom) };
+  const zodImport = { specifier: 'zod', line: namedImportOf([importedBindings.zod], 'zod') };
   return [
     ...(needs.modules.has('loom') ? [loomImport] : []),
     ...(needs.modules.has('zod') ? [zodImport] : []),
   ];
+}
+
+/** The lines of a generated module's imports, in code point order of their specifiers. */
+export function sortedImportLinesOf(imports: readonly ImportLine[]): readonly string[] {
+  const sorted = [...imports].sort((left, right) => byCodePoint(left.specifier, right.specifier));
+  return sorted.map(({ line }) => line);
 }

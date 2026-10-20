@@ -407,10 +407,11 @@ function builtPackage(): string {
 
 /**
  * `@org/billing-service`, a Service subscribing to both of orders' Events through a Dependency,
- * its contract file ending with the lines given.
+ * its contract file ending with the lines given, with `@cf-loom/handlers`, which the readers and
+ * stubs `generate` writes for its Subscriptions import.
  */
 function aSubscriber(more: readonly string[]): string {
-  return aProject({
+  const project = aProject({
     'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
     'cf-loom.config.ts': config,
     'tsconfig.json': JSON.stringify({
@@ -447,6 +448,8 @@ function aSubscriber(more: readonly string[]): string {
       ...more,
     ]),
   });
+  link(join(packagesDir, 'handlers'), join(project, 'node_modules/@cf-loom/handlers'));
+  return project;
 }
 
 describe('cf-loom package: the files', () => {

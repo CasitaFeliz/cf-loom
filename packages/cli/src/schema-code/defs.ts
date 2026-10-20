@@ -1,7 +1,14 @@
 import { byCodePoint, type Defs, reachedDefsOf, type SchemaNode } from '@cf-loom/contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
-import { type DefUse, type Needs, noNeeds, type SchemaMode, schemaModes } from './needs.ts';
+import {
+  addModulesOf,
+  type DefUse,
+  type Needs,
+  noNeeds,
+  type SchemaMode,
+  schemaModes,
+} from './needs.ts';
 import { typeTextOf } from './type-text.ts';
 import { zodExpressionOf } from './zod-expression.ts';
 
@@ -49,9 +56,7 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
     `export type ${typeName} = ${typeTextOf(node, mode, own)};`,
     `export const ${defIdentifierOf(id, mode)}: ${annotationOf(node, { typeName, mode })} = ${schema};`,
   ];
-  for (const module of own.modules) {
-    needs.modules.add(module);
-  }
+  addModulesOf(needs, own);
   return lines;
 }
 
