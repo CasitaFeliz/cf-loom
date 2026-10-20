@@ -7,7 +7,11 @@ import {
   defineGroup,
   type Endpoint,
 } from '@casitafeliz/loom-contract';
-import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
+import {
+  exportedSnapshotOf,
+  snapshotOf,
+  validateContract,
+} from '@casitafeliz/loom-contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';
@@ -43,8 +47,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, endpoints: entries, guards, codes } = snapshot;
-  const exportedSnapshot = { format, defs, endpoints: entries, guards, codes };
+  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
     invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },

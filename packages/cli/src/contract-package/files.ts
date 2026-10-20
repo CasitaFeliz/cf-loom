@@ -1,6 +1,8 @@
 import {
   type ApplicationSnapshot,
   byCodePoint,
+  type ExportedSnapshot,
+  exportedSnapshotOf,
   type ServiceSnapshot,
 } from '@casitafeliz/loom-contract/internal';
 import {
@@ -16,13 +18,12 @@ import {
   snapshotModuleOf,
   standardRejectionsModuleOf,
 } from './entry-code.ts';
-import { exportedSnapshotModuleOf, exportedSnapshotOf } from './exported-snapshot.ts';
+import { exportedEndpointsOf, exportedSnapshotModuleOf } from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';
 import { collidingCodesOf } from './names.ts';
 import { packagePaths } from './paths.ts';
-import { type Reached, reachedOf } from './reached.ts';
 import { rejectionModuleOf } from './rejection-code.ts';
 
 /** The files of a Contract Package, or the line saying which names cannot be written as code. */
@@ -61,43 +62,45 @@ export function contractPackageFilesOf(
 }
 
 /**
- * A Service's sources: the entry, each exported Endpoint, the Guards and codes they reach, and
- * the recursive defs those reach; or why their names cannot be written.
+ * A Service's sources, written from the Snapshot cut to what it exports: the entry, each exported
+ * Endpoint, the Guards and codes they reach, and the recursive defs those reach; or why their
+ * names cannot be written.
  */
 function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractPackageFiles {
-  const reached = reachedOf(snapshot);
-  const endpoints = reached.endpoints.map((exported) => endpointModuleOf(exported, snapshot));
-  const guards = reached.guards.map((name) =>
-    guardModuleOf({ kind: 'guard', name }, declaredIn(snapshot.guards, name)),
-  );
-  const rejections = reached.codes.map((code) =>
-    rejectionModuleOf({ kind: 'rejection', code }, declaredIn(snapshot.codes, code)),
-  );
-  const schemaFiles = [...endpoints, ...guards, ...rejections];
+  const exported = exportedSnapshotOf(snapshot);
+  const endpoints = exportedEndpointsOf(exported);
+  const schemaFiles = [
+    ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),
+    ...Object.entries(exported.guards).map(([name, guard]) =>
+      guardModuleOf({ kind: 'guard', name }, guard),
+    ),
+    ...Object.entries(exported.codes).map(([code, declared]) =>
+      rejectionModuleOf({ kind: 'rejection', code }, declared),
+    ),
+  ];
   const defUses = reachedDefUsesOf(
-    snapshot.defs,
+    exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
-  const unnamed = unnamedLineOf(reached, defUses);
+  const unnamed = unnamedLineOf(Object.keys(exported.codes), defUses);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
-  const defIds = new Set(defUses.map(({ id }) => id));
   const files = [
-    serviceEntryOf({ name: snapshot.name, version, endpoints: reached.endpoints, defUses }),
-    exportedSnapshotModuleOf(exportedSnapshotOf(snapshot, reached, defIds)),
+    serviceEntryOf({ name: snapshot.name, version, endpoints, defUses }),
+    exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
-    ...defsFilesOf(snapshot, defUses),
+    ...defsFilesOf(exported, defUses),
   ];
   return { kind: 'files', files };
 }
 
 /** The codes or recursion ids the package writes that cannot be names of their own, in one line. */
-function unnamedLineOf(reached: Reached, defUses: readonly DefUse[]): string | undefined {
-  const codes = collidingCodesOf(reached.codes);
-  if (codes !== undefined) {
-    return `The codes ${codes[0]} and ${codes[1]} are one name in code: rename one of them`;
+function unnamedLineOf(codes: readonly string[], defUses: readonly DefUse[]): string | undefined {
+  const colliding = collidingCodesOf(codes);
+  if (colliding !== undefined) {
+    return `The codes ${colliding[0]} and ${colliding[1]} are one name in code: rename one of them`;
   }
   const ids = [...new Set(defUses.map(({ id }) => id))].sort(byCodePoint);
   const problem = defNamesProblemOf(ids);
@@ -112,21 +115,12 @@ function unnamedLineOf(reached: Reached, defUses: readonly DefUse[]): string | u
 }
 
 function defsFilesOf(
-  snapshot: ServiceSnapshot,
+  exported: ExportedSnapshot,
   defUses: readonly DefUse[],
 ): readonly PackageFile[] {
   if (defUses.length === 0) {
     return [];
   }
-  const { body, needs } = defsCodeOf(snapshot.defs, defUses);
+  const { body, needs } = defsCodeOf(exported.defs, defUses);
   return [packageModuleOf({ path: packagePaths.defs, body, needs })];
-}
-
-/** A Guard or code the Snapshot holds, since every one an Endpoint reaches is written in it. */
-function declaredIn<Declared>(declared: Readonly<Record<string, Declared>>, key: string): Declared {
-  const found = declared[key];
-  if (found === undefined) {
-    throw new Error(`The Snapshot reaches ${key} without declaring it`);
-  }
-  return found;
 }

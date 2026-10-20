@@ -4,7 +4,7 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export { childrenOf } from './children.ts';
+export { childrenOf, reachedDefsOf } from './children.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';

@@ -1,6 +1,7 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
+  isDeclaredRejection,
   type ListedRejection,
   methodAndPathOf,
   ownRejectionsOf,
@@ -8,9 +9,9 @@ import {
 } from '@casitafeliz/loom-contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
+import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, siblingOf } from './names.ts';
-import { type ExportedEndpoint, isDeclaredRejection } from './reached.ts';
 import { partsLinesOf } from './schema-lines.ts';
 
 /**

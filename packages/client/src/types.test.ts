@@ -9,7 +9,11 @@ import {
   notFound,
   type StandardRejections,
 } from '@casitafeliz/loom-contract';
-import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
+import {
+  exportedSnapshotOf,
+  snapshotOf,
+  validateContract,
+} from '@casitafeliz/loom-contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Client, client, type ReceivedOutcome } from './index.ts';
@@ -82,8 +86,7 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, guards, codes } = snapshot;
-  const exportedSnapshot = { format, defs, endpoints: snapshot.endpoints, guards, codes };
+  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }

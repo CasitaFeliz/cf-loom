@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { walkSchemas } from '../internal/index.ts';
+import { reachedDefsOf, type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
   return walkSchemas([{ at: ['body'], schema }], () => undefined);
@@ -615,5 +615,18 @@ describe('walkSchemas: recursion', () => {
       failures: [{ construct: 'z.date()' }],
     });
     expect(elapsed).toBeLessThan(1000);
+  });
+});
+
+describe('reachedDefsOf', () => {
+  test('the defs nodes reach are each def entered through a ref, directly or through another def, once', () => {
+    const ref = (name: string): SchemaNode => ({ type: 'ref', name });
+    const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
+    const defs = { a: holding(ref('b')), b: holding(ref('a')), c: holding(ref('a')), d: ref('a') };
+    const nodes = [holding(ref('a')), ref('a')];
+
+    const reached = reachedDefsOf(nodes, defs);
+
+    expect(reached).toEqual(['a', 'b']);
   });
 });

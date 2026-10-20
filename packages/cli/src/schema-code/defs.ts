@@ -1,12 +1,12 @@
 import {
   byCodePoint,
-  childrenOf,
   type Defs,
+  reachedDefsOf,
   type SchemaNode,
 } from '@casitafeliz/loom-contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
-import { type DefUse, defUseKeyOf, type Needs, noNeeds, type SchemaMode } from './needs.ts';
+import { type DefUse, type Needs, noNeeds, type SchemaMode, schemaModes } from './needs.ts';
 import { typeTextOf } from './type-text.ts';
 import { zodExpressionOf } from './zod-expression.ts';
 
@@ -15,21 +15,16 @@ export type DefsCode = { readonly body: readonly string[]; readonly needs: Needs
 
 /**
  * The def uses the referenced ones reach through their own `ref`s, the referenced included,
- * each once, in code point order of its identifier.
+ * each once per mode, in code point order of its identifier.
  */
 export function reachedDefUsesOf(defs: Defs, referenced: readonly DefUse[]): readonly DefUse[] {
-  const reached = new Map<string, DefUse>();
-  const pending = [...referenced];
-  for (let use = pending.pop(); use !== undefined; use = pending.pop()) {
-    const node = defs[use.id];
-    const key = defUseKeyOf(use);
-    if (node === undefined || reached.has(key)) {
-      continue;
-    }
-    reached.set(key, use);
-    pending.push(...refsOf(node).map((id): DefUse => ({ id, mode: use.mode })));
-  }
-  return [...reached.values()].sort((left, right) =>
+  const uses = schemaModes.flatMap((mode) => {
+    const refs = referenced
+      .filter((use) => use.mode === mode)
+      .map(({ id }): SchemaNode => ({ type: 'ref', name: id }));
+    return reachedDefsOf(refs, defs).map((id): DefUse => ({ id, mode }));
+  });
+  return uses.sort((left, right) =>
     byCodePoint(defIdentifierOf(left.id, left.mode), defIdentifierOf(right.id, right.mode)),
   );
 }
@@ -49,7 +44,9 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   const { id, mode } = use;
   const node = defs[id];
   if (node === undefined) {
-    return [];
+    throw new Error(
+      `The generated code references the def ${id}, which the exported Snapshot lacks`,
+    );
   }
   const own = noNeeds();
   const typeName = defTypeNameOf(id, mode);
@@ -78,12 +75,4 @@ function annotationOf(node: SchemaNode, { typeName, mode }: DefNames): string {
     mode === 'declared' ? `z.ZodType<${typeName}, ${typeName}>` : `z.ZodType<${typeName}>`;
   const isObject = node.type === 'object' && node.nullable !== true;
   return isObject ? `${output} & z.core.$ZodTypeDiscriminable` : output;
-}
-
-/** The ids of the recursive defs a node references directly, at any depth but through a `ref`. */
-export function refsOf(node: SchemaNode): readonly string[] {
-  if (node.type === 'ref') {
-    return [node.name];
-  }
-  return childrenOf(node).flatMap((child) => refsOf(child.node));
 }
