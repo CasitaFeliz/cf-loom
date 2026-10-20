@@ -437,7 +437,7 @@ export const snapshot = {
     "apiKey": {
       "context": {
         "fields": {
-          "clientId": {
+          "callerId": {
             "required": true,
             "schema": {
               "type": "string"

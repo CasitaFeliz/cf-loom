@@ -12,7 +12,7 @@ const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const LOCKED_ORDER_ID = '5e8b2c7a-1d4f-4a9e-b3c6-7f8e9d0a1b2c';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
-const context = { apiKey: { clientId: 'billing-service' } };
+const context = { apiKey: { callerId: 'billing-service' } };
 
 describe('getOrder', () => {
   test('a seeded order is answered with its status and total', async () => {
@@ -80,7 +80,7 @@ describe('apiKey', () => {
 
     const admission = await apiKeyHandler(demands, {});
 
-    expect(admission).toEqual({ kind: 'admitted', context: { clientId: 'billing-service' } });
+    expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'billing-service' } });
   });
 
   test('an unknown key is answered UNAUTHENTICATED', async () => {

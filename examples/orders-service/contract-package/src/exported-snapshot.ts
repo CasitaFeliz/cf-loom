@@ -279,7 +279,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
     "apiKey": {
       "context": {
         "fields": {
-          "clientId": {
+          "callerId": {
             "required": true,
             "schema": {
               "type": "string"

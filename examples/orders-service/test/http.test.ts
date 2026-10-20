@@ -27,7 +27,7 @@ describe('serve', () => {
   });
 
   test('a test replaces the GuardHandler by spreading the Handler map', async () => {
-    const anyKey = handle(apiKey, async () => admit({ clientId: 'test' }));
+    const anyKey = handle(apiKey, async () => admit({ callerId: 'test' }));
     const admitting = serve(contract, {
       ...handlers,
       guards: { ...handlers.guards, apiKey: anyKey },

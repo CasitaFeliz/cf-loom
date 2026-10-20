@@ -8,6 +8,6 @@ export const apiKey = defineGuard({
   demands: {
     headers: z.object({ 'x-api-key': z.string() }),
   },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
