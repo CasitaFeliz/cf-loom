@@ -1,3 +1,4 @@
+import { ownOf } from '@cf-loom/contract/internal';
 import type { HandledElement } from '../calls/index.ts';
 import type { HandlerMap } from './handler.ts';
 import { isWrittenFor } from './written.ts';
@@ -27,12 +28,4 @@ export function mappedHandlerOf<Element extends HandledElement>(
     );
   }
   return handler;
-}
-
-/** A value a map holds itself under a name, whatever the map is; nothing it only inherits. */
-export function ownOf(byName: unknown, name: string): unknown {
-  if (typeof byName !== 'object' || byName === null || !Object.hasOwn(byName, name)) {
-    return undefined;
-  }
-  return Reflect.get(byName, name);
 }

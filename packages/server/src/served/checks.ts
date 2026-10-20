@@ -3,10 +3,11 @@ import {
   failureLineOf,
   isContract,
   isStamp,
+  ownOf,
   type TextPartNodes,
   walkedTextPartsOf,
 } from '@cf-loom/contract/internal';
-import { mappedHandlerOf, ownOf } from '@cf-loom/handlers/internal';
+import { mappedHandlerOf } from '@cf-loom/handlers/internal';
 import type { serve } from '../answering/index.ts';
 
 /**

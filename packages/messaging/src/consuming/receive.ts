@@ -1,14 +1,14 @@
-import { jsonOfBytes } from '@cf-loom/contract/internal';
+import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { elementNameOf, type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
-import type { ConsumedRoute } from '../routing/index.ts';
+import type { ConsumedVersion } from '../subjects/index.ts';
 import type { Report } from './faults.ts';
 
-/** A pulled Subscription or Command Version: its route, and the Handler the map holds for it. */
+/** A pulled Subscription or Command Version, and the Handler the map holds for it. */
 export type Pulled = {
-  readonly route: ConsumedRoute;
-  readonly handler: { readonly element: ConsumedRoute['element'] };
+  readonly consumed: ConsumedVersion;
+  readonly handler: { readonly element: ConsumedVersion['element'] };
 };
 
 /** What became of one delivery once its Handler ran, reported when it ended or failed. */
@@ -29,8 +29,7 @@ export async function settlementOf(
 async function runOf({ handler }: Pulled, delivery: Delivery): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
-    const issue = { part: 'body', path: [], code: 'malformed', message: json.message } as const;
-    return { kind: 'invalid-input', issues: [issue] };
+    return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
   }
   const { messageId, factId, deliveryCount, headers } = delivery;
   const meta = { messageId, factId, deliveryCount, headers };
@@ -40,8 +39,9 @@ async function runOf({ handler }: Pulled, delivery: Delivery): Promise<MessageRu
 /** What a fault says of where it came from: the Element handled and the Message. */
 type About = Pick<ConsumedFault, 'element' | 'subject' | 'messageId' | 'factId'>;
 
-function aboutOf({ route }: Pulled, { messageId, factId }: Delivery): About {
-  return { element: elementNameOf(route.element), subject: route.subject, messageId, factId };
+function aboutOf({ consumed }: Pulled, { messageId, factId }: Delivery): About {
+  const element = elementNameOf(consumed.element);
+  return { element, subject: consumed.subject, messageId, factId };
 }
 
 /** A run as the broker settles it: a body that breaks its Reader ends, a throw stays pending. */

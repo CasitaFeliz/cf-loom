@@ -73,6 +73,15 @@ export function issueLineOf(source: string, { part, path, code, message }: Issue
   return `${source}: ${[part, ...path].join('.')} ${code}: ${message}`;
 }
 
+/** A Fault as the console logs it, after what it came from: its message, then its `cause` when it has one. */
+export function faultLogOf(
+  source: string,
+  fault: { readonly message: string; readonly cause?: unknown },
+): readonly unknown[] {
+  const line = `${source}: ${fault.message}`;
+  return fault.cause === undefined ? [line] : [line, fault.cause];
+}
+
 /** One line per Issue, naming the Element. */
 function messageOf(element: HandledElement, issues: readonly Issue[]): string {
   return issues.map((issue) => issueLineOf(elementNameOf(element), issue)).join('\n');

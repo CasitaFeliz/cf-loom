@@ -95,10 +95,9 @@ function aBroker(failingAt?: number) {
   return { broker, published, error };
 }
 
-async function connected(failingAt?: number) {
+async function opened(failingAt?: number) {
   const recording = aBroker(failingAt);
-  const { connect, publisher, sender } = messaging(contract);
-  await connect(recording.broker);
+  const { publisher, sender } = await messaging(contract, recording.broker);
   return { ...recording, publisher, sender };
 }
 
@@ -115,7 +114,7 @@ async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
 
 describe('publisher.publish', () => {
   test('publish sends one Message per Active and Deprecated version, in version order, on <service>.event.<Name>.v<n>', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 });
 
@@ -126,7 +125,7 @@ describe('publisher.publish', () => {
   });
 
   test('a Retired version is never sent, even given a body', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v1: { orderId: ORDER_ID }, v2, v3 } as never);
 
@@ -136,7 +135,7 @@ describe('publisher.publish', () => {
   });
 
   test('each body leaves as the UTF-8 JSON of the parsed body, unknown keys stripped', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
     const withExtra = { ...v2, extra: 'dropped' };
 
     await publisher.publish('OrderCreated', { v2: withExtra, v3 });
@@ -145,7 +144,7 @@ describe('publisher.publish', () => {
   });
 
   test('the Messages of one call share a random Fact id, and two calls differ', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 });
     await publisher.publish('OrderCreated', { v2, v3 });
@@ -157,7 +156,7 @@ describe('publisher.publish', () => {
   });
 
   test('a Fact id given is the Fact id sent', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
 
@@ -165,7 +164,7 @@ describe('publisher.publish', () => {
   });
 
   test('each broker message id is <Name>.v<n>:<factId>', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
 
@@ -176,7 +175,7 @@ describe('publisher.publish', () => {
   });
 
   test('transport headers reach the broker as given', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
     const headers = { traceparent: '00-abc-def-01' };
 
     await publisher.publish('OrderCreated', { v2, v3 }, { headers });
@@ -187,7 +186,7 @@ describe('publisher.publish', () => {
   test.each(['Nats-Msg-Id', 'Cf-Loom-Fact-Id', 'nats-msg-id', 'CF-LOOM-FACT-ID'])(
     'a header named %s throws and nothing is sent',
     async (name) => {
-      const { publisher, published } = await connected();
+      const { publisher, published } = await opened();
 
       const publishing = publisher.publish(
         'OrderCreated',
@@ -203,7 +202,7 @@ describe('publisher.publish', () => {
   );
 
   test('an empty Fact id throws and nothing is sent', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: '' });
 
@@ -212,7 +211,7 @@ describe('publisher.publish', () => {
   });
 
   test('a body that breaks its version’s schema throws InvalidMessageError naming the version and the path, and no version is sent', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
     const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
 
     const error = await rejectionOf(publisher.publish('OrderCreated', { v2, v3: broken }));
@@ -220,13 +219,39 @@ describe('publisher.publish', () => {
     expect(error).toBeInstanceOf(InvalidMessageError);
     expect(error).toMatchObject({
       message: expect.stringMatching(/^OrderCreated@3: body\.total\.amount too_small: /),
-      issues: [{ part: 'body', path: ['total', 'amount'], code: 'too_small' }],
+      invalid: [
+        {
+          identity: 'OrderCreated@3',
+          issues: [{ part: 'body', path: ['total', 'amount'], code: 'too_small' }],
+        },
+      ],
     });
     expect(published).toEqual([]);
   });
 
+  test('InvalidMessageError groups the Issues by version, one line per Issue in its message', async () => {
+    const { publisher } = await opened();
+    const brokenV2 = { ...v2, total: -1 };
+    const brokenV3 = { ...v3, orderId: 'nope' };
+
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', { v2: brokenV2, v3: brokenV3 }),
+    );
+
+    expect(error).toMatchObject({
+      invalid: [
+        { identity: 'OrderCreated@2', issues: [{ path: ['total'], code: 'too_small' }] },
+        { identity: 'OrderCreated@3', issues: [{ path: ['orderId'], code: 'invalid_format' }] },
+      ],
+    });
+    expect(error instanceof Error && error.message.split('\n')).toEqual([
+      expect.stringMatching(/^OrderCreated@2: body\.total too_small: /),
+      expect.stringMatching(/^OrderCreated@3: body\.orderId invalid_format: /),
+    ]);
+  });
+
   test('a version the broker fails throws PublishError naming the Fact id and the versions already sent, with the broker’s error as cause', async () => {
-    const { publisher, error } = await connected(2);
+    const { publisher, error } = await opened(2);
 
     const thrown = await rejectionOf(
       publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' }),
@@ -237,7 +262,7 @@ describe('publisher.publish', () => {
   });
 
   test('retrying with the same Fact id sends the same broker message ids', async () => {
-    const { publisher, published } = await connected(2);
+    const { publisher, published } = await opened(2);
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' }).catch(() => undefined);
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' });
@@ -250,7 +275,7 @@ describe('publisher.publish', () => {
   });
 
   test('a name the root does not publish throws at runtime', async () => {
-    const { publisher } = await connected();
+    const { publisher } = await opened();
 
     const publishing = publisher.publish('OrderShipped' as never, {} as never);
 
@@ -258,18 +283,22 @@ describe('publisher.publish', () => {
   });
 
   test('bodies missing a live version throw InvalidMessageError at runtime', async () => {
-    const { publisher, published } = await connected();
+    const { publisher, published } = await opened();
 
     const error = await rejectionOf(publisher.publish('OrderCreated', { v3 } as never));
 
-    expect(error).toMatchObject({ issues: [{ part: 'body', path: [], code: 'required' }] });
+    expect(error).toMatchObject({
+      invalid: [
+        { identity: 'OrderCreated@2', issues: [{ part: 'body', path: [], code: 'required' }] },
+      ],
+    });
     expect(published).toEqual([]);
   });
 });
 
 describe('sender.send', () => {
   test('send sends the Command’s one Active version on <service>.command.<Name>.v<n>, never a Deprecated one', async () => {
-    const { sender, published } = await connected();
+    const { sender, published } = await opened();
 
     await sender.send('ChargeCard', charge);
 
@@ -279,7 +308,7 @@ describe('sender.send', () => {
   });
 
   test('send’s Message carries a Fact id and a broker message id as publish’s does', async () => {
-    const { sender, published } = await connected();
+    const { sender, published } = await opened();
 
     await sender.send('ChargeCard', charge, { factId: 'o-1:charge' });
 
@@ -290,7 +319,7 @@ describe('sender.send', () => {
   });
 
   test('a body that breaks the schema throws InvalidMessageError and nothing is sent', async () => {
-    const { sender, published } = await connected();
+    const { sender, published } = await opened();
 
     const error = await rejectionOf(sender.send('ChargeCard', { ...charge, amount: -1 }));
 
@@ -300,7 +329,7 @@ describe('sender.send', () => {
   });
 
   test('a broker failure rejects send with the broker’s error', async () => {
-    const { sender, error } = await connected(1);
+    const { sender, error } = await opened(1);
 
     const sending = sender.send('ChargeCard', charge);
 

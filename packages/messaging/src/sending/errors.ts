@@ -1,19 +1,17 @@
-import type { Command, Event } from '@cf-loom/contract';
-import { messageIdentityOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import { issueLineOf } from '@cf-loom/handlers/internal';
 
-/** A Message Version whose body broke its schema, with the Issues it broke, at `body`. */
-export type InvalidBody = { readonly version: Event | Command; readonly issues: readonly Issue[] };
+/** A Message Version whose body broke its schema, by its identity, with the Issues it broke at `body`. */
+export type InvalidBody = { readonly identity: string; readonly issues: readonly Issue[] };
 
 /** Thrown by `publish` or `send` given a body that breaks its version's schema; nothing was sent. */
 export class InvalidMessageError extends Error {
   override readonly name = 'InvalidMessageError';
-  readonly issues: readonly Issue[];
+  readonly invalid: readonly InvalidBody[];
 
   constructor(invalid: readonly InvalidBody[]) {
     super(invalid.flatMap(linesOf).join('\n'));
-    this.issues = invalid.flatMap((body) => body.issues);
+    this.invalid = invalid;
   }
 }
 
@@ -37,7 +35,6 @@ export class PublishError extends Error {
   }
 }
 
-function linesOf({ version, issues }: InvalidBody): readonly string[] {
-  const identity = messageIdentityOf(version.name, version.version);
+function linesOf({ identity, issues }: InvalidBody): readonly string[] {
   return issues.map((issue) => issueLineOf(identity, issue));
 }

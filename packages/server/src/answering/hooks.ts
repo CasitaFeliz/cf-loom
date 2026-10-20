@@ -1,5 +1,5 @@
 import type { Fault, Issue } from '@cf-loom/handlers';
-import { issueLineOf } from '@cf-loom/handlers/internal';
+import { faultLogOf, issueLineOf } from '@cf-loom/handlers/internal';
 
 /**
  * A Fault the Service's side produced, which `onServiceFault` receives, naming the Endpoint and,
@@ -46,7 +46,7 @@ function logServedFault(servedFault: ServedFault): void {
   switch (servedFault.kind) {
     case 'returned':
     case 'thrown':
-      logFault(where, servedFault.fault);
+      console.error(...faultLogOf(where, servedFault.fault));
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
@@ -54,12 +54,4 @@ function logServedFault(servedFault: ServedFault): void {
         console.error(issueLineOf(where, issue));
       }
   }
-}
-
-function logFault(where: string, fault: Fault): void {
-  if (fault.cause === undefined) {
-    console.error(`${where}: ${fault.message}`);
-    return;
-  }
-  console.error(`${where}: ${fault.message}`, fault.cause);
 }

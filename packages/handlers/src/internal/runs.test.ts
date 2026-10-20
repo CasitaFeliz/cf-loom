@@ -12,7 +12,16 @@ import {
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, fault, handle, reject, success, withReader } from '../index.ts';
-import { isStub, mappedHandlerOf, readerOf, runEndpoint, runGuard, runMessage } from './index.ts';
+import {
+  checkedMessageBody,
+  faultLogOf,
+  isStub,
+  mappedHandlerOf,
+  readerOf,
+  runEndpoint,
+  runGuard,
+  runMessage,
+} from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -408,3 +417,35 @@ function errorMessageOf(lookup: () => unknown): string | undefined {
     return e instanceof Error ? e.message : undefined;
   }
 }
+
+describe('checkedMessageBody', () => {
+  test('a Message body is parsed with its schema, unknown keys stripped, its Issues at body', () => {
+    const checks = [
+      checkedMessageBody(orderBody, { orderId: ORDER_ID, extra: 'dropped' }),
+      checkedMessageBody(orderBody, { orderId: 'nope' }),
+    ];
+
+    expect(checks).toEqual([
+      { kind: 'value', value: { orderId: ORDER_ID } },
+      {
+        kind: 'issues',
+        issues: [
+          { part: 'body', path: ['orderId'], code: 'invalid_format', message: expect.any(String) },
+        ],
+      },
+    ]);
+  });
+});
+
+describe('faultLogOf', () => {
+  test('a Fault is logged as its source and message, then its cause when it has one', () => {
+    const error = new Error('gateway down');
+
+    const logs = [
+      faultLogOf('getOrder', { message: 'Internal error', cause: error }),
+      faultLogOf('getOrder apiKey', { message: 'Try again' }),
+    ];
+
+    expect(logs).toEqual([['getOrder: Internal error', error], ['getOrder apiKey: Try again']]);
+  });
+});

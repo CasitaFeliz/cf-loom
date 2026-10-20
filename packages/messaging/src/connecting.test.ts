@@ -13,6 +13,7 @@ import {
   type BrokerConsumer,
   type BrokerService,
   type Delivery,
+  type Messaging,
   messaging,
   type OutgoingMessage,
   type Settlement,
@@ -55,12 +56,15 @@ const handlers = {
 
 const body = { orderId: ORDER_ID };
 
+type Opened = Messaging<typeof contract>;
+
 /** A broker that records what messaging asks of it, built on the public `Broker` type. */
-function aBroker(failing: { readonly connect?: Error } = {}) {
+function aBroker(failing: { readonly connect?: Error; readonly consumes?: number } = {}) {
   const recorded = {
     connectedWith: [] as BrokerService[],
     published: [] as OutgoingMessage[],
     consumers: [] as BrokerConsumer[],
+    consumes: 0,
     closes: 0,
   };
   const broker: Broker = {
@@ -74,6 +78,10 @@ function aBroker(failing: { readonly connect?: Error } = {}) {
           recorded.published.push(message);
         },
         consume: async (consumers) => {
+          recorded.consumes += 1;
+          if (recorded.consumes <= (failing.consumes ?? 0)) {
+            throw new Error('no such durable consumer');
+          }
           recorded.consumers.push(...consumers);
         },
         close: async () => {
@@ -106,108 +114,72 @@ function aGate() {
   return { opened, open };
 }
 
-describe('messaging(), connect and close', () => {
-  test('creating messaging opens no connection; connect does', async () => {
+/** A messaging consuming, whose `notify-on-created` Handler is the one given. */
+async function consumingWith(notifying: (typeof handlers.subscriptions)['notify-on-created']) {
+  const recording = aBroker();
+  const opened = await messaging(contract, recording.broker);
+  await opened.consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+  return { ...recording, ...opened };
+}
+
+describe('messaging() and close', () => {
+  test('messaging() connects through the broker, telling it the Service’s name, which names its stream', async () => {
     const { broker, recorded } = aBroker();
-    const { connect } = messaging(contract);
 
-    const connectedBefore = [...recorded.connectedWith];
-    await connect(broker);
+    await messaging(contract, broker);
 
-    expect(connectedBefore).toEqual([]);
-    expect(recorded.connectedWith).toHaveLength(1);
+    expect(recorded.connectedWith).toEqual([{ name: 'orders-service' }]);
   });
 
-  test('messaging() given something that is no Contract throws', () => {
+  test('messaging() given something that is no Contract rejects and connects nothing', async () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
+    const { broker, recorded } = aBroker();
 
-    const creating = () => messaging(application as never);
+    const opening = messaging(application as never, broker);
 
-    expect(creating).toThrow('messaging() takes a Contract declared with defineContract');
+    await expect(opening).rejects.toThrow(
+      'messaging() takes a Contract declared with defineContract',
+    );
+    expect(recorded.connectedWith).toEqual([]);
   });
 
-  test('a Subscription whose Event neither the root nor a Dependency lists throws at messaging(), naming it', () => {
+  test('a Subscription whose Event neither the root nor a Dependency lists rejects messaging(), naming it', async () => {
     const unlisted = defineContract({ name: 'orders-service', subscriptions: [notifyOnCreated] });
 
-    const creating = () => messaging(unlisted);
+    const opening = messaging(unlisted, aBroker().broker);
 
-    expect(creating).toThrow(
+    await expect(opening).rejects.toThrow(
       'notify-on-created subscribes to an Event neither the root nor a Dependency lists',
     );
   });
 
-  test.each([
-    ['publishing', () => messaging(contract).publisher.publish('OrderCreated', { v1: body })],
-    ['sending', () => messaging(contract).sender.send('ChargeCard', body)],
-    ['consuming', () => messaging(contract).consume(handlers)],
-  ])('%s before connect throws', async (_name, call) => {
-    const calling = call();
-
-    await expect(calling).rejects.toThrow('messaging is not connected: call connect(broker) first');
-  });
-
-  test('connecting while connected throws', async () => {
-    const { broker } = aBroker();
-    const { connect } = messaging(contract);
-    await connect(broker);
-
-    const connecting = connect(broker);
-
-    await expect(connecting).rejects.toThrow('messaging is already connected: close() it first');
-  });
-
-  test('connect tells the broker the Service’s name, which names its stream', async () => {
-    const { broker, recorded } = aBroker();
-    const { connect } = messaging(contract);
-
-    await connect(broker);
-
-    expect(recorded.connectedWith).toEqual([{ name: 'orders-service' }]);
-  });
-
-  test('a broker that fails to connect leaves messaging not connected, so connect works again', async () => {
+  test('a broker that fails to connect rejects messaging() with its error', async () => {
     const error = new Error('no route to the broker');
-    const { connect } = messaging(contract);
-    await connect(aBroker({ connect: error }).broker).catch(() => undefined);
-    const { broker, recorded } = aBroker();
 
-    await connect(broker);
+    const opening = messaging(contract, aBroker({ connect: error }).broker);
 
-    expect(recorded.connectedWith).toEqual([{ name: 'orders-service' }]);
+    await expect(opening).rejects.toBe(error);
   });
 
-  test('a broker that fails to connect rejects connect with its error', async () => {
-    const error = new Error('no route to the broker');
-    const { connect } = messaging(contract);
-
-    const connecting = connect(aBroker({ connect: error }).broker);
-
-    await expect(connecting).rejects.toBe(error);
-  });
-
-  test('after close, publishing throws and connect works again', async () => {
+  test('each messaging() is its own connection: closing one leaves the other open', async () => {
     const { broker, recorded } = aBroker();
-    const { connect, close, publisher } = messaging(contract);
-    await connect(broker);
-    await close();
+    const first = await messaging(contract, broker);
+    const second = await messaging(contract, broker);
 
-    const publishing = publisher.publish('OrderCreated', { v1: body });
-    await connect(broker);
+    await first.close();
+    await second.publisher.publish('OrderCreated', { v1: body });
 
-    await expect(publishing).rejects.toThrow('messaging is not connected');
-    expect(recorded.closes).toBe(1);
     expect(recorded.connectedWith).toHaveLength(2);
+    expect(recorded.closes).toBe(1);
+    expect(recorded.published).toHaveLength(1);
   });
 
   test('close waits for the Handlers running before it closes the connection', async () => {
     const gate = aGate();
-    const { broker, recorded, deliver } = aBroker();
     const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
       await gate.opened;
     });
-    const { connect, consume, close } = messaging(contract);
-    await connect(broker);
-    await consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+    const { recorded, deliver, close } = await consumingWith(notifying);
     const delivered = deliver('orders-service.event.OrderCreated.v1', body);
 
     const closing = close();
@@ -223,14 +195,13 @@ describe('messaging(), connect and close', () => {
 
   test('a Handler running during close can still publish', async () => {
     const gate = aGate();
-    const { broker, recorded, deliver } = aBroker();
-    const { connect, consume, close, publisher } = messaging(contract);
+    let publish = (): Promise<void> => Promise.resolve();
     const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
       await gate.opened;
-      await publisher.publish('OrderCreated', { v1: body });
+      await publish();
     });
-    await connect(broker);
-    await consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+    const { recorded, deliver, close, publisher } = await consumingWith(notifying);
+    publish = () => publisher.publish('OrderCreated', { v1: body });
     const delivered = deliver('orders-service.event.OrderCreated.v1', body);
 
     const closing = close();
@@ -244,14 +215,11 @@ describe('messaging(), connect and close', () => {
   test('a Message delivered while closing is left pending and its Handler never runs', async () => {
     const gate = aGate();
     const runs: unknown[] = [];
-    const { broker, deliver } = aBroker();
     const notifying = handle(withReader(notifyOnCreated, orderBody), async (given) => {
       runs.push(given);
       await gate.opened;
     });
-    const { connect, consume, close } = messaging(contract);
-    await connect(broker);
-    await consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+    const { deliver, close } = await consumingWith(notifying);
     const first = deliver('orders-service.event.OrderCreated.v1', body);
     const closing = close();
 
@@ -263,21 +231,66 @@ describe('messaging(), connect and close', () => {
     expect(runs).toHaveLength(1);
   });
 
-  test('close when not connected resolves and does nothing', async () => {
-    const { close } = messaging(contract);
+  test('close called twice returns the same promise and closes the connection once', async () => {
+    const { broker, recorded } = aBroker();
+    const { close } = await messaging(contract, broker);
 
+    const closings = [close(), close()];
+    await Promise.all(closings);
+    await close();
+
+    expect(closings[1]).toBe(closings[0]);
+    expect(recorded.closes).toBe(1);
+  });
+
+  test.each([
+    ['publishing', (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body })],
+    ['sending', (opened: Opened) => opened.sender.send('ChargeCard', body)],
+    ['consuming', (opened: Opened) => opened.consume(handlers)],
+  ])(
+    '%s after close throws messaging is closed, and nothing reaches the broker',
+    async (_name, call) => {
+      const { broker, recorded } = aBroker();
+      const opened = await messaging(contract, broker);
+      await opened.close();
+
+      const calling = call(opened);
+
+      await expect(calling).rejects.toThrow('messaging is closed');
+      expect(recorded.published).toEqual([]);
+      expect(recorded.consumes).toBe(0);
+    },
+  );
+
+  test('consuming while closing throws, and the broker consumes nothing', async () => {
+    const { broker, recorded } = aBroker();
+    const { consume, close } = await messaging(contract, broker);
     const closing = close();
 
-    await expect(closing).resolves.toBeUndefined();
+    const consuming = consume(handlers);
+    await closing;
+
+    await expect(consuming).rejects.toThrow('messaging is closing');
+    expect(recorded.consumes).toBe(0);
+  });
+
+  test('a consume the broker rejects can be retried', async () => {
+    const { broker, recorded } = aBroker({ consumes: 1 });
+    const { consume } = await messaging(contract, broker);
+    const failed = await consume(handlers).catch((e: unknown) => e);
+
+    await consume(handlers);
+
+    expect(failed).toEqual(new Error('no such durable consumer'));
+    expect(recorded.consumers).toHaveLength(2);
   });
 
   test('the functions messaging() returns work destructured', async () => {
     const { broker, recorded } = aBroker();
-    const { connect, consume, close, publisher, sender } = messaging(contract);
+    const { consume, close, publisher, sender } = await messaging(contract, broker);
     const { publish } = publisher;
     const { send } = sender;
 
-    await connect(broker);
     await consume(handlers);
     await publish('OrderCreated', { v1: body });
     await send('ChargeCard', body);

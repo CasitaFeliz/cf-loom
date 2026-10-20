@@ -1,2 +1,2 @@
-export type { ConsumedRoute, Routes, SentRoute } from './routes.ts';
-export { publishedRoutesOf, routesOf, sentRouteOf } from './routes.ts';
+export type { ConsumedVersion, PublishedVersion, SentVersion, Subjects } from './subjects.ts';
+export { publishedVersionsOf, sentVersionOf, subjectsOf } from './subjects.ts';

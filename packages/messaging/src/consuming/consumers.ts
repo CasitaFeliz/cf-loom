@@ -1,7 +1,7 @@
 import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedHandlerOf, readerOf } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer } from '../broker/index.ts';
-import type { ConsumedRoute } from '../routing/index.ts';
+import type { ConsumedVersion } from '../subjects/index.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
@@ -9,31 +9,31 @@ import { settlementOf } from './receive.ts';
 export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions'>;
 
 /**
- * The consumers of one `consume`: each route's Handler looked up as `serve` looks one up, a stub
- * left out with a warning, since `consume` does not pull from it.
+ * The consumers of one `consume`: each Handler looked up as `serve` looks one up, a stub left out
+ * with a warning, since `consume` does not pull from it.
  */
 export function consumersOf(
-  routes: readonly ConsumedRoute[],
+  versions: readonly ConsumedVersion[],
   handlers: ConsumedHandlers,
   report: Report,
 ): readonly BrokerConsumer[] {
-  const pulled = routes.map((route) => ({
-    route,
-    handler: mappedHandlerOf(handlers[route.at.map], route.at, route.element),
+  const pulled = versions.map((consumed) => ({
+    consumed,
+    handler: mappedHandlerOf(handlers[consumed.at.map], consumed.at, consumed.element),
   }));
-  for (const { route } of pulled.filter(({ handler }) => isStub(handler))) {
+  for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
     console.warn(
-      `${elementNameOf(route.element)}'s Handler is a stub: consume does not pull its Messages`,
+      `${elementNameOf(consumed.element)}'s Handler is a stub: consume does not pull its Messages`,
     );
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))
-    .map(({ route, handler }) => ({
-      durable: route.durable,
-      stream: route.stream,
-      subject: route.subject,
-      element: route.element,
+    .map(({ consumed, handler }) => ({
+      durable: consumed.durable,
+      stream: consumed.stream,
+      subject: consumed.subject,
+      element: consumed.element,
       reader: readerOf(handler),
-      receive: (delivery) => settlementOf({ route, handler }, delivery, report),
+      receive: (delivery) => settlementOf({ consumed, handler }, delivery, report),
     }));
 }

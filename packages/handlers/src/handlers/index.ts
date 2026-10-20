@@ -7,7 +7,7 @@ export type {
   GuardImplementation,
   HandlerMap,
 } from './handler.ts';
-export { mappedHandlerOf, ownOf } from './mapped.ts';
+export { mappedHandlerOf } from './mapped.ts';
 export type {
   CommandHandler,
   CommandImplementation,

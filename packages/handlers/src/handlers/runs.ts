@@ -10,7 +10,7 @@ import {
   type MessageRun,
   messageRunOf,
 } from '../calls/index.ts';
-import { checkedReceivedBody, type EndpointGiven, type GuardGiven } from '../checks/index.ts';
+import { checkedMessageBody, type EndpointGiven, type GuardGiven } from '../checks/index.ts';
 import {
   type AnyHandler,
   isAnyWritten,
@@ -48,7 +48,7 @@ export function runMessage(
   handler: { readonly element: MessageElement },
   received: { readonly body: unknown; readonly meta: MessageMeta },
 ): Promise<MessageRun> {
-  return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedReceivedBody);
+  return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedMessageBody);
 }
 
 /** The Reader schema a Message Handler reads a body with, as `withReader` paired it. */

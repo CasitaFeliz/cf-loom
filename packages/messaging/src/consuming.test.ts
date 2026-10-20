@@ -156,10 +156,9 @@ async function consuming(
 ) {
   const faults: ConsumedFault[] = [];
   const recording = aBroker();
-  const { connect, consume } = messaging(contract, {
+  const { consume } = await messaging(contract, recording.broker, {
     onServiceFault: (consumedFault) => faults.push(consumedFault),
   });
-  await connect(recording.broker);
   await consume({
     commands: { ...handlers.commands, ...replaced.commands },
     subscriptions: { ...handlers.subscriptions, ...replaced.subscriptions },
@@ -266,9 +265,7 @@ describe('consume', () => {
     'a %s Handler missing from the map throws, naming its key',
     async (map, key, named) => {
       const { [key]: _missing, ...kept } = handlers[map] as Record<string, unknown>;
-      const { broker } = aBroker();
-      const { connect, consume } = messaging(contract);
-      await connect(broker);
+      const { consume } = await messaging(contract, aBroker().broker);
 
       const consumingAll = consume({ ...handlers, [map]: kept });
 
@@ -276,38 +273,38 @@ describe('consume', () => {
     },
   );
 
-  test('a Handler written for another Subscription, or one the map only inherits, throws', async () => {
+  test('a Handler written for another Subscription throws, naming its key', async () => {
     const swapped = {
       ...handlers.subscriptions,
       'notify-on-settled': handlers.subscriptions['notify-on-created'],
     };
-    const inherited = Object.create(handlers.subscriptions);
-    const { broker } = aBroker();
-    const { connect, consume, close } = messaging(contract);
-    await connect(broker);
+    const { consume } = await messaging(contract, aBroker().broker);
 
     const swapping = consume({ ...handlers, subscriptions: swapped });
-    await close();
-    await connect(broker);
-    const inheriting = consume({ ...handlers, subscriptions: inherited });
 
     await expect(swapping).rejects.toThrow(
       'subscriptions.notify-on-settled holds no Handler handle() returned for it: run cf-loom generate',
     );
+  });
+
+  test('a Handler the map only inherits throws, as if it had none', async () => {
+    const inherited = Object.create(handlers.subscriptions);
+    const { consume } = await messaging(contract, aBroker().broker);
+
+    const inheriting = consume({ ...handlers, subscriptions: inherited });
+
     await expect(inheriting).rejects.toThrow(
       'subscriptions.notify-on-created has no Handler in the Handler map',
     );
   });
 
   test('consuming twice throws', async () => {
-    const { broker } = aBroker();
-    const { connect, consume } = messaging(contract);
-    await connect(broker);
+    const { consume } = await messaging(contract, aBroker().broker);
     await consume(handlers);
 
     const again = consume(handlers);
 
-    await expect(again).rejects.toThrow('consume() was already called on this connection');
+    await expect(again).rejects.toThrow('consume() was already called on this messaging');
   });
 });
 
@@ -471,11 +468,10 @@ describe('a Message delivered', () => {
     expect(settlement).toEqual({ kind: 'pending', fault: faults[0] });
   });
 
-  test('without onServiceFault, an ended Message is logged one line per Issue with its subject and ids, never the value', async () => {
+  test('without onServiceFault, an ended Message is logged one line per Issue with its subject, broker message id and Fact id, never the value', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { broker, deliver } = aBroker();
-    const { connect, consume } = messaging(contract);
-    await connect(broker);
+    const { consume } = await messaging(contract, broker);
     await consume(handlers);
 
     await deliver(created, { orderId: 'secret-value', status: 7 });
@@ -483,12 +479,12 @@ describe('a Message delivered', () => {
     expect(logged.mock.calls).toEqual([
       [
         expect.stringMatching(
-          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1: body\.orderId invalid_format: /,
+          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.orderId invalid_format: /,
         ),
       ],
       [
         expect.stringMatching(
-          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1: body\.status invalid_value: /,
+          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.status invalid_value: /,
         ),
       ],
     ]);
@@ -505,8 +501,7 @@ describe('a Message delivered', () => {
       cause: error,
     });
     const { broker, deliver } = aBroker();
-    const { connect, consume } = messaging(contract);
-    await connect(broker);
+    const { consume } = await messaging(contract, broker);
     await consume({
       commands: {
         ...handlers.commands,
@@ -524,20 +519,19 @@ describe('a Message delivered', () => {
     await deliver(created, body);
 
     expect(logged.mock.calls).toEqual([
-      ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1: Card refused', error],
-      ['notify-on-created orders-service.event.OrderCreated.v1 m-1: the Handler threw', error],
+      ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1: Card refused', error],
+      ['notify-on-created orders-service.event.OrderCreated.v1 m-1 f-1: the Handler threw', error],
     ]);
   });
 
   test('what onServiceFault throws rejects the delivery', async () => {
     const error = new Error('the hook broke');
     const { broker, deliver } = aBroker();
-    const { connect, consume } = messaging(contract, {
+    const { consume } = await messaging(contract, broker, {
       onServiceFault: () => {
         throw error;
       },
     });
-    await connect(broker);
     await consume(handlers);
 
     const delivering = deliver(created, {});

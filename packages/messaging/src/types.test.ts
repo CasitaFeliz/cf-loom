@@ -2,7 +2,13 @@ import { defineCommand, defineContract, defineEvent, defineSubscription } from '
 import { type HandlerMap, handle, withReader } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type ConsumedFault, type MessagingOptions, messaging } from './index.ts';
+import {
+  type Broker,
+  type ConsumedFault,
+  type Messaging,
+  type MessagingOptions,
+  messaging,
+} from './index.ts';
 
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
@@ -71,13 +77,28 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated],
 });
 
-const { publisher, sender, consume } = messaging(contract);
+const broker: Broker = {
+  connect: async () => ({
+    publish: async () => undefined,
+    consume: async () => undefined,
+    close: async () => undefined,
+  }),
+};
+
+const { publisher, sender, consume } = await messaging(contract, broker);
 
 const v2 = { orderId: 'o-1', total: 12 };
 
 const v3 = { orderId: 'o-1', total: 12, currency: 'EUR' };
 
 describe('publish and send types', () => {
+  test('messaging() takes a Contract and a Broker and resolves to its Messaging', () => {
+    const opening = messaging(contract, broker);
+
+    expectTypeOf(opening).resolves.toEqualTypeOf<Messaging<typeof contract>>();
+    expect(opening).toBeInstanceOf(Promise);
+  });
+
   test('publish takes one body per Active and Deprecated version, keyed v<n>, each typed by its schema', () => {
     const publishing = () => publisher.publish('OrderCreated', { v2, v3 });
 

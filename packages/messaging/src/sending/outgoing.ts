@@ -1,15 +1,16 @@
 import type { Command, Event } from '@cf-loom/contract';
-import { brokerMessageIdOf, isReservedHeader, parseValue } from '@cf-loom/contract/internal';
+import { brokerMessageIdOf, isReservedHeader, messageIdentityOf } from '@cf-loom/contract/internal';
+import { checkedMessageBody } from '@cf-loom/handlers/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
-import type { SentRoute } from '../routing/index.ts';
+import type { PublishedVersion, SentVersion } from '../subjects/index.ts';
 import { type InvalidBody, InvalidMessageError } from './errors.ts';
 import type { MessageOptions } from './types.ts';
 
 /** A Message Version of one call and the body the calling code gave it. */
-export type Given = { readonly route: SentRoute<Event | Command>; readonly body: unknown };
+export type Given = { readonly version: PublishedVersion | SentVersion; readonly body: unknown };
 
 /** A body as its version's schema parsed it. */
-type Parsed = { readonly route: Given['route']; readonly value: unknown };
+type Parsed = { readonly version: Given['version']; readonly value: unknown };
 
 /** A Message ready to leave, beside the Message Version it carries. */
 export type Outgoing = { readonly version: Event | Command; readonly message: OutgoingMessage };
@@ -24,11 +25,11 @@ export function outgoingOf(
 ): readonly Outgoing[] {
   const factId = factIdOf(options.factId);
   const headers = transportHeadersOf(options.headers ?? {});
-  return parsedBodiesOf(given).map(({ route, value }) => ({
-    version: route.message,
+  return parsedBodiesOf(given).map(({ version, value }) => ({
+    version: version.message,
     message: {
-      subject: route.subject,
-      messageId: brokerMessageIdOf(route.message, factId),
+      subject: version.subject,
+      messageId: brokerMessageIdOf(version.message, factId),
       factId,
       headers,
       body: new TextEncoder().encode(JSON.stringify(value)),
@@ -40,14 +41,14 @@ export function outgoingOf(
 function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
   const parsed: Parsed[] = [];
   const invalid: InvalidBody[] = [];
-  for (const { route, body } of given) {
-    const checked = parseValue(route.message.body, body);
+  for (const { version, body } of given) {
+    const checked = checkedMessageBody(version.message.body, body);
     if (checked.kind === 'value') {
-      parsed.push({ route, value: checked.value });
+      parsed.push({ version, value: checked.value });
       continue;
     }
-    const issues = checked.issues.map((issue) => ({ part: 'body' as const, ...issue }));
-    invalid.push({ version: route.message, issues });
+    const identity = messageIdentityOf(version.message.name, version.message.version);
+    invalid.push({ identity, issues: checked.issues });
   }
   if (invalid.length > 0) {
     throw new InvalidMessageError(invalid);
