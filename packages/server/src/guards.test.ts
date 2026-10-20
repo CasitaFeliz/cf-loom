@@ -37,6 +37,12 @@ const permission = defineGuard({
   rejections: [forbidden],
 });
 
+const tenant = defineGuard({
+  name: 'tenant',
+  description: 'The tenant a request acts for',
+  demands: { headers: z.object({ 'x-tenant': z.string() }) },
+});
+
 const updateOrder = defineEndpoint({
   name: 'updateOrder',
   method: 'PUT',
@@ -69,13 +75,23 @@ const addNote = defineEndpoint({
   success: { status: 204 },
 });
 
+const listOrders = defineEndpoint({
+  name: 'listOrders',
+  method: 'GET',
+  path: '/orders',
+  visibility: 'public',
+  description: 'A tenant’s orders',
+  guards: [userToken, tenant],
+  success: { status: 204 },
+});
+
 const contract = defineContract({
   name: 'orders-service',
   groups: [
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [updateOrder, misattached, addNote],
+      endpoints: [updateOrder, misattached, addNote, listOrders],
     }),
   ],
 });
@@ -105,8 +121,13 @@ const handlers = {
     updateOrder: updateOrderHandler,
     misattached: handle.stub(misattached),
     addNote: handle(addNote, () => success()),
+    listOrders: handle(listOrders, () => success()),
   },
-  guards: { userToken: userTokenHandler, permission: permissionHandler },
+  guards: {
+    userToken: userTokenHandler,
+    permission: permissionHandler,
+    tenant: handle(tenant, () => admit()),
+  },
   deprecatedAt: {},
 };
 
@@ -181,6 +202,17 @@ describe('serve: Guards', () => {
       rejection: { code: 'UNAUTHENTICATED', message: 'Unauthenticated' },
     });
     expect(calls).toEqual(['userToken']);
+  });
+
+  test('a GuardHandler’s Rejection is answered though a later Guard’s demands fail', async () => {
+    const request = new Request('http://test/orders', { headers: { authorization: 'Bearer x' } });
+
+    const response = await serve(contract, handlers)(request);
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'UNAUTHENTICATED', message: 'Unauthenticated' },
+    });
   });
 
   test('a GuardHandler stub answers not implemented once its demands are valid', async () => {

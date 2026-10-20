@@ -359,7 +359,7 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
-  test('a body left out is no JSON, as serve answers it, and alone', async () => {
+  test('a body left out answers that the content type is not application/json, as serve answers the request sent without one, and alone', async () => {
     const { orders, calls } = unsent();
     const leftOut = { params: {} } as Parameters<typeof orders.createOrder>[0];
 
@@ -367,7 +367,14 @@ describe('Input that cannot be sent', () => {
 
     expect(outcome).toMatchObject({
       body: {
-        issues: [{ in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' }],
+        issues: [
+          {
+            in: 'body',
+            path: [],
+            code: 'malformed',
+            message: 'The content type is not application/json',
+          },
+        ],
       },
     });
     expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });

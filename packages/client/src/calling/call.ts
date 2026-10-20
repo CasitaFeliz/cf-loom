@@ -34,7 +34,7 @@ export function methodOf(
     }
     const passed = fieldsOf(input);
     const headers = await withConfiguredHeaders(called, calling.headers, passed['headers']);
-    const ready = readyInputOf(called.endpoint, { ...passed, headers });
+    const ready = await readyInputOf(called.endpoint, { ...passed, headers });
     if (ready.kind === 'invalid') {
       return invalidInputOf(called, ready.issues);
     }

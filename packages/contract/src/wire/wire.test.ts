@@ -14,8 +14,6 @@ import {
   isReservedCode,
   isSegmentText,
   jsonContentType,
-  malformedBodyIssueOf,
-  notJsonBodyIssue,
   parseValue,
   type ReservedCode,
   receivedBodyOf,
@@ -363,16 +361,6 @@ describe('the content type', () => {
 });
 
 describe('bodyOf', () => {
-  test('the Issue serve answers for a body it cannot read sits at the whole of input.body', () => {
-    expect(malformedBodyIssueOf('The body is not JSON')).toEqual(notJsonBodyIssue);
-    expect(notJsonBodyIssue).toEqual({
-      part: 'input.body',
-      path: [],
-      code: 'malformed',
-      message: 'The body is not JSON',
-    });
-  });
-
   test('a body sent with another content type is malformed', async () => {
     const request = new Request('http://test/', {
       method: 'POST',

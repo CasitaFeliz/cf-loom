@@ -1,10 +1,12 @@
 import {
-  type Body,
   bodyOf,
+  type ReadingSource,
+  reservedResponseOf,
   type TextSource,
   textPartsOf,
 } from '@casitafeliz/loom-contract/internal';
-import type { LiveEndpoint } from '../served/index.ts';
+import type { LiveEndpoint, ServedContract } from '../served/index.ts';
+import type { Answered } from './runs.ts';
 
 /** One request to a live Endpoint: the Endpoint, the request, and where its text comes from. */
 export type Call = {
@@ -13,30 +15,23 @@ export type Call = {
   readonly source: TextSource;
 };
 
-/** Why a body could not be read: too large to read, no JSON, or a stream that failed. */
-export type UnreadBody = Exclude<Body, { readonly kind: 'value' }>;
-
-/** The Endpoint's Input as the request carries it, or why its body could not be read. */
-export type ReadInput =
-  | { readonly kind: 'input'; readonly input: Readonly<Record<string, unknown>> }
-  | UnreadBody;
-
 /**
- * The Endpoint's Input: its text parts, and its body only when it declares one, read within the
- * limit; a body that cannot be read as JSON is the Input that cannot be read at all.
+ * Where `serve` reads a request's parts from: each party's text by its walked nodes, and the body
+ * within `maxBodyBytes`, one too large answered unread.
  */
-export async function inputOf(call: Call, maxBodyBytes: number | undefined): Promise<ReadInput> {
-  const text = textPartsOf(call.endpoint.nodes, call.source);
-  if (!call.endpoint.readsBody) {
-    return { kind: 'input', input: text };
-  }
-  const body = await bodyOf(call.request, maxBodyBytes);
-  switch (body.kind) {
-    case 'value':
-      return { kind: 'input', input: { ...text, body: body.value } };
-    case 'too-large':
-    case 'malformed':
-    case 'unreadable':
+export function partsOf(
+  call: Call,
+  served: ServedContract,
+): Omit<ReadingSource<Answered>, 'admit'> {
+  return {
+    textOf: (party) => textPartsOf(served.nodes.get(party) ?? {}, call.source),
+    body: async () => {
+      const body = await bodyOf(call.request, served.maxBodyBytes);
+      if (body.kind === 'too-large') {
+        const response = reservedResponseOf('BODY_TOO_LARGE');
+        return { kind: 'stopped', answer: { kind: 'fault', response } };
+      }
       return body;
-  }
+    },
+  };
 }

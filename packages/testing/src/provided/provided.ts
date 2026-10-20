@@ -8,7 +8,6 @@ import {
   type Matchable,
   methodAndPathOf,
   pathSegmentsOf,
-  schemaOf,
   type TextPartNodes,
   textPartNodesOf,
 } from '@casitafeliz/loom-contract/internal';
@@ -19,7 +18,6 @@ export type ListedEndpoint = {
   readonly name: string;
   readonly endpoint: Endpoint;
   readonly nodes: TextPartNodes;
-  readonly readsBody: boolean;
   readonly deprecatedAt: string | undefined;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
   readonly standards: StandardRejections;
@@ -74,7 +72,6 @@ function listedEndpointOf(
     name,
     endpoint,
     nodes: textPartNodesOf(entry),
-    readsBody: schemaOf(endpoint, 'input.body') !== undefined,
     deprecatedAt: entry.deprecatedAt,
     rejectionsByCode: answerableByCodeOf(endpoint, standards),
     standards,

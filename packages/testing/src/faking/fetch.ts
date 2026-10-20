@@ -1,5 +1,12 @@
 import type { Fetch } from '@casitafeliz/loom-client';
-import { invalidInputResponseOf, withDeprecation } from '@casitafeliz/loom-contract/internal';
+import {
+  invalidInputResponseOf,
+  type Reading,
+  readingOf,
+  receivedBodyOf,
+  textPartsOf,
+  withDeprecation,
+} from '@casitafeliz/loom-contract/internal';
 import { responseOf } from '../answering/index.ts';
 import { mistakeOf } from '../mistakes/index.ts';
 import {
@@ -9,7 +16,6 @@ import {
   type Provided,
   whoOf,
 } from '../provided/index.ts';
-import { receivedOf } from '../receiving/index.ts';
 import {
   type AnyStep,
   answerOf,
@@ -86,28 +92,39 @@ type Taken =
  * so a slow step holds no other back. One aborted before it takes its step records nothing.
  */
 async function takenOf(faking: Faking, matched: Matched, request: Request): Promise<Taken> {
-  const { listed, source } = matched;
+  const { listed } = matched;
   const { signal } = request;
   const slot = faking.calls.arrived(listed.name);
   const scripted = faking.scriptedByNameOf(listed.name);
   const turn = scripted.turn();
   try {
-    const received = await abortableOf(receivedOf(listed, request, source), signal);
-    if (received.kind === 'invalid') {
+    const reading = await abortableOf(readingOfRequest(matched, request), signal);
+    if (reading.kind === 'stopped') {
+      return reading.answer;
+    }
+    if (reading.kind === 'invalid') {
       signal.throwIfAborted();
-      slot.fill(received);
-      const response = invalidInputResponseOf(received.issues, listed.standards);
+      slot.fill(reading);
+      const response = invalidInputResponseOf(reading.issues, listed.standards);
       return { kind: 'answered', response };
     }
     const step = await turn.next(signal);
-    slot.fill(received);
+    slot.fill(reading);
     if (step === undefined) {
       throw mistakeOf({ ...whoOf(listed), what: missingStepOf(scripted, listed) });
     }
-    return { kind: 'step', step, input: received.input };
+    return { kind: 'step', step, input: reading.input };
   } finally {
     turn.done();
   }
+}
+
+/** A request read as its Provider reads it, every Guard admitting: a step answers for them. */
+function readingOfRequest({ listed, source }: Matched, request: Request): Promise<Reading> {
+  return readingOf(listed.endpoint, {
+    textOf: () => textPartsOf(listed.nodes, source),
+    body: () => receivedBodyOf(request),
+  });
 }
 
 function missingStepOf(scripted: Scripted, listed: ListedEndpoint): string {

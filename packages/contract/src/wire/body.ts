@@ -22,7 +22,8 @@ export type BodyMessage = {
 /** What a body that was not JSON, or whose stream failed, says, never what was received. */
 const notJsonMessage = 'The body is not JSON';
 
-const notJsonContentType = {
+/** A body whose content type is not JSON, a missing one included, as every reader reads it: unread. */
+export const notJsonContentType = {
   kind: 'malformed',
   message: 'The content type is not application/json',
 } as const;
@@ -31,9 +32,6 @@ const notJsonContentType = {
 export function malformedBodyIssueOf(message: string): InputIssue {
   return { part: 'input.body', path: [], code: 'malformed', message };
 }
-
-/** The Issue of a request that carries no JSON body where one is declared. */
-export const notJsonBodyIssue = malformedBodyIssueOf(notJsonMessage);
 
 /** The bytes of a body as read, counting them against the limit, or why they were not. */
 type Bytes =
