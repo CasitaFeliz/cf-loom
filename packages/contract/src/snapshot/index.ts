@@ -11,6 +11,7 @@ export type {
   AttachmentSnapshot,
   CodeSnapshot,
   EndpointSnapshot,
+  EventSnapshot,
   ExportedSnapshot,
   GuardSnapshot,
   ServiceSnapshot,

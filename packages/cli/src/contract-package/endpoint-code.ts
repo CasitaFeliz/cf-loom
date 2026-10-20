@@ -9,6 +9,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
+import { elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, siblingOf } from './names.ts';
@@ -51,11 +52,7 @@ function endpointBodyOf(
     `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.defineEndpoint({`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
-    `  visibility: ${stringLiteralOf(endpoint.visibility)},`,
-    `  description: ${stringLiteralOf(endpoint.description)},`,
-    ...(endpoint.lifecycle === 'active'
-      ? []
-      : [`  lifecycle: ${stringLiteralOf(endpoint.lifecycle)},`]),
+    ...elementLinesOf(endpoint),
     ...guardsLinesOf(endpoint.guards),
     ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,

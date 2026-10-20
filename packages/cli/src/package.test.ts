@@ -154,7 +154,9 @@ const definitions: Readonly<Record<string, string>> = {
 
 /**
  * A Service with a Public Endpoint attaching the Definitions Package's Guards, a Deprecated
- * Internal one, a Private one with its own Guard, code and recursive schema, and a Retired one.
+ * Internal one, a Private one with its own Guard, code and recursive schema, and a Retired one;
+ * a Deprecated and an Active Internal Event, a Private and a Retired one, a Command and a
+ * Subscription.
  */
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/orders-service', type: 'module' }),
@@ -162,11 +164,14 @@ const service: Readonly<Record<string, string>> = {
   ...definitions,
   'src/contract/index.ts': lines([
     'import {',
+    '  defineCommand,',
     '  defineContract,',
     '  defineEndpoint,',
+    '  defineEvent,',
     '  defineGroup,',
     '  defineGuard,',
     '  defineRejection,',
+    '  defineSubscription,',
     '  notFound,',
     '  openEnum,',
     "} from '@cf-loom/contract';",
@@ -239,10 +244,50 @@ const service: Readonly<Record<string, string>> = {
     "  description: 'Orders',",
     '  endpoints: [getOrder, listOrders, adminOrder, oldOrders],',
     '});',
+    'export const orderPlacedV1 = defineEvent({',
+    "  name: 'OrderPlaced',",
+    '  version: 1,',
+    "  visibility: 'internal',",
+    "  description: 'An order was placed',",
+    "  lifecycle: 'deprecated',",
+    '  body: z.object({ orderId: z.uuid() }),',
+    '});',
+    'export const orderPlacedV2 = defineEvent({',
+    "  name: 'OrderPlaced',",
+    '  version: 2,',
+    "  visibility: 'internal',",
+    "  description: 'An order was placed, with its total',",
+    "  body: z.object({ orderId: z.uuid(), status: openEnum(['pending', 'paid']), total: money }),",
+    '});',
+    'export const stockReserved = defineEvent({',
+    "  name: 'StockReserved',",
+    '  version: 1,',
+    "  visibility: 'private',",
+    "  description: 'Stock was reserved',",
+    '  body: z.object({ sku: z.string() }),',
+    '});',
+    'export const orderPurged = defineEvent({',
+    "  name: 'OrderPurged',",
+    '  version: 1,',
+    "  visibility: 'internal',",
+    "  description: 'An order was purged',",
+    "  lifecycle: 'retired',",
+    '  body: z.object({ purgedId: z.uuid() }),',
+    '});',
+    'export const chargeCard = defineCommand({',
+    "  name: 'ChargeCard',",
+    '  version: 1,',
+    "  description: 'Charge a card',",
+    '  body: z.object({ cardToken: z.string() }),',
+    '});',
+    "export const auditPlaced = defineSubscription({ name: 'audit-placed', event: orderPlacedV2 });",
     'export const contract = defineContract({',
     "  name: 'orders-service',",
     '  definitions: [definitions],',
     '  groups: [orders],',
+    '  events: [orderPlacedV1, orderPlacedV2, stockReserved, orderPurged],',
+    '  commands: [chargeCard],',
+    '  subscriptions: [auditPlaced],',
     '});',
   ]),
 };
@@ -273,6 +318,19 @@ function withDeclarations(
       "export const contract = defineContract({ name: 'orders-service', groups: [pings] });",
     ]),
   };
+}
+
+/** A Service as `withDeclarations` writes it, its root also listing the Events given. */
+function withEvents(
+  declarations: readonly string[],
+  events: string,
+  body = 'z.object({})',
+): Readonly<Record<string, string>> {
+  const files = withDeclarations(declarations, '', body);
+  const root = (files['src/contract/index.ts'] ?? '')
+    .replace('defineRejection }', 'defineRejection, defineEvent }')
+    .replace('groups: [pings] }', `groups: [pings], events: [${events}] }`);
+  return { ...files, 'src/contract/index.ts': root };
 }
 
 /** Rewrites one file of a folder from what it holds. */
@@ -347,8 +405,55 @@ function builtPackage(): string {
   return out;
 }
 
+/**
+ * `@org/billing-service`, a Service subscribing to both of orders' Events through a Dependency,
+ * its contract file ending with the lines given, with `@cf-loom/handlers`, which the readers and
+ * stubs `generate` writes for its Subscriptions import.
+ */
+function aSubscriber(more: readonly string[]): string {
+  const project = aProject({
+    'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    'cf-loom.config.ts': config,
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        allowImportingTsExtensions: true,
+        module: 'nodenext',
+        noEmit: true,
+        strict: true,
+        target: 'es2024',
+        types: [],
+      },
+      include: ['src'],
+    }),
+    'src/contract/index.ts': lines([
+      "import { defineContract, defineDependencies, defineSubscription } from '@cf-loom/contract';",
+      "import { contract as orders } from '@org/contract-orders-service';",
+      '',
+      'export const ordersDeps = defineDependencies(orders, {',
+      '  events: [orders.events.orderPlacedV1, orders.events.orderPlacedV2],',
+      '});',
+      'const auditPlacedV1 = defineSubscription({',
+      "  name: 'audit-placed-v1',",
+      '  event: ordersDeps.events.orderPlacedV1,',
+      '});',
+      'const auditPlacedV2 = defineSubscription({',
+      "  name: 'audit-placed-v2',",
+      '  event: ordersDeps.events.orderPlacedV2,',
+      '});',
+      'export const contract = defineContract({',
+      "  name: 'billing-service',",
+      '  subscriptions: [auditPlacedV1, auditPlacedV2],',
+      '  dependencies: [ordersDeps],',
+      '});',
+      ...more,
+    ]),
+  });
+  link(join(packagesDir, 'handlers'), join(project, 'node_modules/@cf-loom/handlers'));
+  return project;
+}
+
 describe('cf-loom package: the files', () => {
-  test('package writes the Contract Package of the Public and Internal Endpoints', () => {
+  test('package writes the Contract Package of the Public and Internal Endpoints and the Internal Events', () => {
     const project = aProject(service);
 
     const ran = packageIn(project);
@@ -361,6 +466,9 @@ describe('cf-loom package: the files', () => {
       'src/endpoints',
       'src/endpoints/get-order.ts',
       'src/endpoints/list-orders.ts',
+      'src/events',
+      'src/events/order-placed.v1.ts',
+      'src/events/order-placed.v2.ts',
       'src/exported-snapshot.ts',
       'src/guards',
       'src/guards/permission.ts',
@@ -437,7 +545,7 @@ describe('cf-loom package: the files', () => {
     );
   });
 
-  test('nothing Private and no Definitions Package is written into the package', () => {
+  test('nothing Private, no Retired Event, no Command, no Subscription and no Definitions Package is written into the package', () => {
     const project = aProject(service);
 
     packageIn(project);
@@ -447,7 +555,8 @@ describe('cf-loom package: the files', () => {
       .filter((file) => file.endsWith('.ts') && file !== 'src/snapshot.ts')
       .map((file) => read(out, file))
       .join('\n');
-    for (const absent of ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category']) {
+    const absents = ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category', 'StockReserved'];
+    for (const absent of [...absents, 'OrderPurged', 'ChargeCard', 'audit-placed']) {
       expect(code).not.toContain(absent);
     }
     const imports = code.replace(read(out, 'src/exported-snapshot.ts'), '');
@@ -466,6 +575,88 @@ describe('cf-loom package: the files', () => {
     expect(read(project, 'contract-package/src/endpoints/get-order.ts')).toContain(
       'total: z.object({ amount: z.int(), currency: z.string() })',
     );
+  });
+
+  test('an Event’s file declares it with defineEvent: its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    const out = join(project, 'contract-package');
+    expect(read(out, 'src/events/order-placed.v1.ts')).toContain(
+      [
+        'export const orderPlacedEventV1 = loom.defineEvent({',
+        "  name: 'OrderPlaced',",
+        '  version: 1,',
+        "  visibility: 'internal',",
+        "  description: 'An order was placed',",
+        "  lifecycle: 'deprecated',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ].join('\n'),
+    );
+    expect(read(out, 'src/events/order-placed.v2.ts')).toContain(
+      [
+        'export const orderPlacedEventV2 = loom.defineEvent({',
+        "  name: 'OrderPlaced',",
+        '  version: 2,',
+        "  visibility: 'internal',",
+        "  description: 'An order was placed, with its total',",
+        '  body: z.object({',
+      ].join('\n'),
+    );
+  });
+
+  test('an Event’s body is written as a reader, an Open Enum as loom.openEnumReader', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    expect(read(project, 'contract-package/src/events/order-placed.v2.ts')).toContain(
+      "status: loom.openEnumReader(['paid', 'pending'])",
+    );
+  });
+
+  test('the entry keys Events by name in code, each bound as <name>EventV<n>', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    expect(read(project, 'contract-package/src/index.ts')).toContain(
+      [
+        '  events: {',
+        '    orderPlacedV1: orderPlacedEventV1,',
+        '    orderPlacedV2: orderPlacedEventV2,',
+        '  },',
+      ].join('\n'),
+    );
+  });
+
+  test('the entry lists Events in code point order of their names in code, which may differ from the Snapshot’s', () => {
+    const ship = (name: string) =>
+      `export const ${name} = defineEvent({ name: '${name}', version: 1, visibility: 'internal', description: '${name}', body: z.object({}) });`;
+    const project = aProject(withEvents([ship('Ship'), ship('ShipUpdated')], 'Ship, ShipUpdated'));
+
+    packageIn(project);
+
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(Object.keys(snapshot.events)).toEqual(['Ship@1', 'ShipUpdated@1']);
+    expect(read(project, 'contract-package/src/index.ts')).toContain(
+      [
+        '  events: {',
+        '    shipUpdatedV1: shipUpdatedEventV1,',
+        '    shipV1: shipEventV1,',
+        '  },',
+      ].join('\n'),
+    );
+  });
+
+  test('a Service exporting no Event writes events: {}', () => {
+    const project = aProject(withDeclarations([], ''));
+
+    packageIn(project);
+
+    expect(read(project, 'contract-package/src/index.ts')).toContain('\n  events: {},\n');
   });
   test('every binding is suffixed by its kind, and the entry keys Endpoints by name', () => {
     const project = aProject(service);
@@ -592,7 +783,6 @@ describe('cf-loom package: the built package', () => {
     expect(built.contract).toMatchObject({
       name: 'orders-service',
       version: '0.0.0',
-      events: {},
       standardRejections: {
         invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
         notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -600,12 +790,38 @@ describe('cf-loom package: the built package', () => {
       },
     });
     expect(Object.keys(built.contract.endpoints)).toEqual(['getOrder', 'listOrders']);
+    expect(Object.keys(built.contract.events)).toEqual(['orderPlacedV1', 'orderPlacedV2']);
     expect(built.contract.endpoints.listOrders.lifecycle).toBe('deprecated');
     expect(built.contract.endpoints.getOrder.lifecycle).toBeUndefined();
     expect(built.snapshot).toEqual(JSON.parse(read(out, 'snapshot.json')));
   });
 
-  test('its contract carries the Snapshot cut to the Endpoints it exports and what they reach', async () => {
+  test('its Events are Event declarations with the Snapshot’s Visibility and description, a Deprecated one’s lifecycle kept and an Active one’s left out', async () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    const { orderPlacedV1, orderPlacedV2 } = built.contract.events;
+    expect(orderPlacedV1).toMatchObject({
+      kind: 'event',
+      name: 'OrderPlaced',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was placed',
+      lifecycle: 'deprecated',
+    });
+    expect(orderPlacedV2).toMatchObject({
+      kind: 'event',
+      name: 'OrderPlaced',
+      version: 2,
+      visibility: 'internal',
+      description: 'An order was placed, with its total',
+    });
+    expect(Object.keys(orderPlacedV2)).not.toContain('lifecycle');
+  });
+
+  test('its contract carries the Snapshot cut to the Endpoints and Events it exports and what they reach', async () => {
     const out = builtPackage();
     expect(typeCheck(out).status).toBe(0);
 
@@ -619,6 +835,10 @@ describe('cf-loom package: the built package', () => {
       endpoints: {
         'GET /orders': snapshot.endpoints['GET /orders'],
         'GET /orders/{}': snapshot.endpoints['GET /orders/{}'],
+      },
+      events: {
+        'OrderPlaced@1': snapshot.events['OrderPlaced@1'],
+        'OrderPlaced@2': snapshot.events['OrderPlaced@2'],
       },
       guards: { permission: snapshot.guards.permission, userToken: snapshot.guards.userToken },
       codes: {
@@ -676,6 +896,46 @@ describe('cf-loom package: the built package', () => {
         events: [],
       },
     });
+  });
+
+  test('a Consumer Service subscribes to its Event through a Dependency, type-checks and generates', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([]);
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+
+    const ran = cfLoom(consumer, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(typeCheck(consumer)).toEqual({ status: 0, stdout: '' });
+    const snapshot = JSON.parse(read(consumer, 'contract.snapshot.json'));
+    expect(snapshot.subscriptions).toEqual({
+      'audit-placed-v1': { event: 'orders-service:OrderPlaced@1' },
+      'audit-placed-v2': { event: 'orders-service:OrderPlaced@2' },
+    });
+    expect(snapshot.dependencies['orders-service'].events).toEqual([
+      'OrderPlaced@1',
+      'OrderPlaced@2',
+    ]);
+  });
+
+  test('a Subscriber’s body type is the Event’s Reader output: an Unknown case type-checks and a bare undeclared value does not', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([
+      "import type { z } from 'zod';",
+      'type Placed = z.output<typeof ordersDeps.events.orderPlacedV2.body>;',
+      'const total = { amount: 1, currency: "EUR" };',
+      'const orderId = "6f1c1b9e-6c1e-4f9b-9d4c-1f2e3d4c5b6a";',
+      "export const read: Placed = { orderId, status: { unknown: 'refunded' }, total };",
+      '// @ts-expect-error an undeclared value is read as its Unknown case only',
+      "export const bare: Placed = { orderId, status: 'refunded', total };",
+    ]);
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+
+    const checked = typeCheck(consumer);
+
+    expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
   test('a discriminated union’s variants are in canonical order, whatever order they are declared in', () => {
@@ -892,6 +1152,27 @@ describe('cf-loom package: the built package', () => {
     expect(Object.keys(built.contract.exportedSnapshot.defs).sort()).toEqual(['branch', 'leaf']);
   });
 
+  test('a recursive def only an exported Event reaches is written to defs.ts and kept in the exported Snapshot', async () => {
+    const project = aProject(
+      withEvents(
+        [
+          "export const leaf = z.object({ get up() { return z.array(leaf); } }).meta({ id: 'leaf' });",
+          "export const grown = defineEvent({ name: 'Grown', version: 1, visibility: 'internal', description: 'Grown', body: z.object({ leaf }) });",
+        ],
+        'grown',
+      ),
+    );
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    expect(Object.keys(built.contract.exportedSnapshot.defs)).toEqual(['leaf']);
+    expect(read(out, 'src/defs.ts')).toContain('export const leafReaderDef');
+  });
+
   test('defs reached through an array and through a tuple’s rest are both written', () => {
     const files = withDeclarations(
       [
@@ -992,6 +1273,49 @@ describe('cf-loom package: where it writes', () => {
     expect(existsSync(join(out, 'dist/index.js'))).toBe(true);
     expect(lstatSync(join(out, 'node_modules/zod')).isSymbolicLink()).toBe(true);
   });
+
+  test('a previous output holding an Event’s file is replaced whole, the Event no longer exported', () => {
+    const project = aProject(service);
+    packageIn(project);
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace(
+        "  name: 'OrderPlaced',\n  version: 1,\n  visibility: 'internal',",
+        "  name: 'OrderPlaced',\n  version: 1,\n  visibility: 'private',",
+      ),
+    );
+
+    const ran = packageIn(project);
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'contract-package/src/events/order-placed.v1.ts'))).toBe(false);
+    expect(existsSync(join(project, 'contract-package/src/events/order-placed.v2.ts'))).toBe(true);
+  });
+
+  test('a previous output holding an Event’s file at version 10 is replaced, the file kept', () => {
+    const tenth =
+      "export const placed = defineEvent({ name: 'OrderPlaced', version: 10, visibility: 'internal', description: 'Placed', body: z.object({}) });";
+    const project = aProject(withEvents([tenth], 'placed'));
+    packageIn(project);
+
+    const ran = packageIn(project);
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'contract-package/src/events/order-placed.v10.ts'))).toBe(true);
+  });
+
+  test.each(['stray.ts', 'order-placed.v0.ts', 'order-placed.v01.ts'])(
+    'a file under src/events that package would not name, %s, is refused and kept',
+    (file) => {
+      const project = aProject(service);
+      packageIn(project);
+      write(project, { [`contract-package/src/events/${file}`]: 'export {};\n' });
+
+      const ran = packageIn(project);
+
+      expect(ran.status).toBe(3);
+      expect(read(project, `contract-package/src/events/${file}`)).toBe('export {};\n');
+    },
+  );
 
   test('a previous output holding a stray file under src is refused and kept', () => {
     const project = aProject(service);

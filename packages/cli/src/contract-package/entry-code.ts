@@ -1,5 +1,6 @@
 import {
   byCodePoint,
+  codeNameOf,
   type ServiceSnapshot,
   standardRejectionNames,
 } from '@cf-loom/contract/internal';
@@ -10,18 +11,22 @@ import {
   relativeSpecifierOf,
   stringLiteralOf,
 } from '../source-text/index.ts';
-import type { ExportedEndpoint } from './exported-snapshot.ts';
+import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
-import { bindingOf, siblingOf } from './names.ts';
+import { bindingOf, type PackagedDeclaration, siblingOf } from './names.ts';
 import { packagePaths } from './paths.ts';
 
-/** What a Service's entry exports: its name and version, its Endpoints, its defs' types. */
+/** What a Service's entry exports: its name and version, its Endpoints and Events, its defs' types. */
 export type ServiceEntry = {
   readonly name: string;
   readonly version: string;
   readonly endpoints: readonly ExportedEndpoint[];
+  readonly events: readonly ExportedEvent[];
   readonly defUses: readonly DefUse[];
 };
+
+/** A declaration as a map of `contract` lists it, by its key there. */
+type Keyed = { readonly key: string; readonly declared: PackagedDeclaration };
 
 /**
  * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
@@ -29,19 +34,21 @@ export type ServiceEntry = {
  * `snapshot`; and the types of its recursive defs, so a Consumer that emits declarations can
  * name them.
  */
-export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEntry): PackageFile {
-  const names = endpoints.map(({ endpoint }) => endpoint.name);
-  const entries = names.map(
-    (endpoint) => `    ${keyOf(endpoint)}: ${bindingOf({ kind: 'endpoint', name: endpoint })},`,
-  );
-  const endpointsLines =
-    entries.length === 0 ? ['  endpoints: {},'] : ['  endpoints: {', ...entries, '  },'];
+export function serviceEntryOf(entry: ServiceEntry): PackageFile {
+  const { name, version, defUses } = entry;
+  const endpoints = entry.endpoints.map(({ endpoint }): Keyed => {
+    return { key: endpoint.name, declared: { kind: 'endpoint', name: endpoint.name } };
+  });
+  const events = entry.events.map((event): Keyed => {
+    const declared = { kind: 'event', name: event.name, version: event.version } as const;
+    return { key: codeNameOf(event), declared };
+  });
   const body = [
     'export const contract = {',
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${stringLiteralOf(version)},`,
-    ...endpointsLines,
-    '  events: {},',
+    ...mapLinesOf('endpoints', endpoints),
+    ...mapLinesOf('events', events),
     '  standardRejections,',
     '  exportedSnapshot,',
     '} satisfies loom.ContractPackage;',
@@ -50,12 +57,21 @@ export function serviceEntryOf({ name, version, endpoints, defUses }: ServiceEnt
     ...defTypesExportOf(defUses),
   ];
   const siblings: readonly Sibling[] = [
-    ...names.map((endpoint) => siblingOf({ kind: 'endpoint', name: endpoint })),
+    ...[...endpoints, ...events].map(({ declared }) => siblingOf(declared)),
     { name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' },
     { name: 'exportedSnapshot', path: packagePaths.exportedSnapshot, kind: 'value' },
     { name: 'standardRejections', path: packagePaths.standardRejections, kind: 'value' },
   ];
   return packageModuleOf({ path: packagePaths.entry, body, siblings, needs: loomNeeds() });
+}
+
+/** A map of `contract`, each declaration by its key bound to its name in the package. */
+function mapLinesOf(field: string, keyed: readonly Keyed[]): readonly string[] {
+  if (keyed.length === 0) {
+    return [`  ${field}: {},`];
+  }
+  const lines = keyed.map(({ key, declared }) => `    ${keyOf(key)}: ${bindingOf(declared)},`);
+  return [`  ${field}: {`, ...lines, '  },'];
 }
 
 function defTypesExportOf(defUses: readonly DefUse[]): readonly string[] {
