@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import { orderLocked } from '../src/contract/rejections/order-locked.rejection.ts';
 import { unauthenticated } from '../src/contract/rejections/unauthenticated.rejection.ts';
-import healthHandler from '../src/endpoints/operations/health.handler.ts';
+import healthHandler from '../src/endpoints/infrastructure/health.handler.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 import getOrderHandler from '../src/endpoints/orders/get-order.handler.ts';
 import apiKeyHandler from '../src/guards/api-key.handler.ts';

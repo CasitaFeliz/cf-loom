@@ -50,15 +50,32 @@ describe('invoiceFor', () => {
     expect(invoicing).toEqual({ kind: 'not-billable', orderStatus: 'refunded' });
   });
 
-  test('a locked order is not billable', async () => {
+  test('a cancelled order is not billable', async () => {
     const { fake, client } = fakeOrders();
-    fake
-      .on('getOrder')
-      .otherwise((r) => r.reject('ORDER_LOCKED', { lockedAt: '2026-01-15T09:30:00Z' }));
+    fake.on('getOrder').otherwise((r) => r.success({ ...paidOrder, status: 'cancelled' }));
 
     const invoicing = await invoiceFor(client, ORDER_ID);
 
-    expect(invoicing).toEqual({ kind: 'not-billable', orderStatus: 'locked' });
+    expect(invoicing).toEqual({ kind: 'not-billable', orderStatus: 'cancelled' });
+  });
+
+  test('a shipped order is billed, since it was paid', async () => {
+    const { fake, client } = fakeOrders();
+    fake.on('getOrder').otherwise((r) => r.success({ ...paidOrder, status: 'shipped' }));
+
+    const invoicing = await invoiceFor(client, ORDER_ID);
+
+    expect(invoicing.kind).toBe('invoice');
+  });
+
+  test('a locked order is locked, with the instant orders-service locked it', async () => {
+    const { fake, client } = fakeOrders();
+    const lockedAt = '2026-01-15T09:30:00Z';
+    fake.on('getOrder').otherwise((r) => r.reject('ORDER_LOCKED', { lockedAt }));
+
+    const invoicing = await invoiceFor(client, ORDER_ID);
+
+    expect(invoicing).toEqual({ kind: 'locked', lockedAt });
   });
 
   test('an order orders-service does not know is not found', async () => {
@@ -83,38 +100,72 @@ describe('invoiceFor', () => {
     expect(fake.calls('getOrder')).toHaveLength(2);
   });
 
-  test('a second retryable Fault is not retried again', async () => {
+  test('no connection after the retry leaves orders-service unavailable, retryable', async () => {
     const { fake, client } = fakeOrders();
-    fake.on('getOrder').otherwise((r) => r.fault({ committed: 'no', retryable: true }));
+    fake.on('getOrder').otherwise((r) => r.noConnection());
 
     const invoicing = await invoiceFor(client, ORDER_ID);
 
-    expect(invoicing).toEqual({ kind: 'unavailable' });
+    expect(invoicing).toEqual({ kind: 'unavailable', retryable: true });
     expect(fake.calls('getOrder')).toHaveLength(2);
   });
 
-  test.each([
-    ['a reset after sending', 'reset'],
-    ['a 502', 'status'],
-    ['a code orders-service does not declare', 'unknown-code'],
-  ] as const)('%s leaves orders-service unavailable, never retried', async (_, answer) => {
+  test('a Fault that changed nothing but is not retryable is not retried', async () => {
     const { fake, client } = fakeOrders();
-    fake.on('getOrder').otherwise((respond) => {
-      switch (answer) {
-        case 'reset':
-          return respond.reset();
-        case 'status':
-          return respond.status(502);
-        case 'unknown-code':
-          return respond.reject({ unknown: 'ORDER_ARCHIVED' }, {});
-      }
-    });
+    fake.on('getOrder').otherwise((r) => r.fault({ committed: 'no', retryable: false }));
 
     const invoicing = await invoiceFor(client, ORDER_ID);
 
-    expect(invoicing).toEqual({ kind: 'unavailable' });
+    expect(invoicing).toEqual({ kind: 'unavailable', retryable: false });
     expect(fake.calls('getOrder')).toHaveLength(1);
   });
+
+  test.each([
+    ['a reset after sending', 'reset', true],
+    ['a 502', 'status', false],
+    ['a code orders-service does not declare', 'unknown-code', false],
+  ] as const)(
+    '%s leaves orders-service unavailable, never retried',
+    async (_, answer, retryable) => {
+      const { fake, client } = fakeOrders();
+      fake.on('getOrder').otherwise((respond) => {
+        switch (answer) {
+          case 'reset':
+            return respond.reset();
+          case 'status':
+            return respond.status(502);
+          case 'unknown-code':
+            return respond.reject({ unknown: 'ORDER_ARCHIVED' }, {});
+        }
+      });
+
+      const invoicing = await invoiceFor(client, ORDER_ID);
+
+      expect(invoicing).toEqual({ kind: 'unavailable', retryable });
+      expect(fake.calls('getOrder')).toHaveLength(1);
+    },
+  );
+
+  test.each(['UNAUTHENTICATED', 'NOT_IMPLEMENTED', 'INVALID_INPUT'] as const)(
+    '%s leaves orders-service unavailable, not retryable',
+    async (code) => {
+      const { fake, client } = fakeOrders();
+      fake.on('getOrder').otherwise((respond) => {
+        switch (code) {
+          case 'UNAUTHENTICATED':
+            return respond.reject('UNAUTHENTICATED');
+          case 'NOT_IMPLEMENTED':
+            return respond.reject('NOT_IMPLEMENTED');
+          case 'INVALID_INPUT':
+            return respond.reject('INVALID_INPUT', { issues: [] });
+        }
+      });
+
+      const invoicing = await invoiceFor(client, ORDER_ID);
+
+      expect(invoicing).toEqual({ kind: 'unavailable', retryable: false });
+    },
+  );
 
   test('a scripted order that breaks orders-service’s Contract fails the test', async () => {
     const { fake, client } = fakeOrders();

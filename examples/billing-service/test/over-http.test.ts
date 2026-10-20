@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import type { Readable } from 'node:stream';
 import { client } from '@casitafeliz/loom-client';
 import { serve } from '@casitafeliz/loom-server';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
@@ -17,25 +18,24 @@ const billing = serve(contract, handlers);
 let orders: ChildProcess | undefined;
 let ordersUrl = '';
 
-/** orders-service's `main.ts` in a process of its own, on a free port, and the port it printed. */
-async function startOrders(): Promise<{ process: ChildProcess; port: string }> {
+/** The port orders-service's `main.ts` prints once it listens. */
+async function portOf(stdout: Readable): Promise<string> {
+  for await (const line of createInterface({ input: stdout })) {
+    const port = /listening on (\d+)$/.exec(line)?.[1];
+    if (port !== undefined) return port;
+  }
+  throw new Error('orders-service exited before it listened');
+}
+
+beforeAll(async () => {
   const started = spawn(process.execPath, ['src/main.ts'], {
     cwd: ordersDir,
     // biome-ignore lint/style/useNamingConvention: the environment variable orders-service reads
     env: { ...process.env, PORT: '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  for await (const line of createInterface({ input: started.stdout })) {
-    const port = /listening on (\d+)$/.exec(line)?.[1];
-    if (port !== undefined) return { process: started, port };
-  }
-  throw new Error('orders-service exited before it listened');
-}
-
-beforeAll(async () => {
-  const started = await startOrders();
-  orders = started.process;
-  ordersUrl = `http://127.0.0.1:${started.port}`;
+  orders = started;
+  ordersUrl = `http://127.0.0.1:${await portOf(started.stdout)}`;
   vi.stubEnv('ORDERS_SERVICE_URL', ordersUrl);
   vi.stubEnv('ORDERS_SERVICE_API_KEY', 'billing-key');
 });
@@ -80,7 +80,18 @@ describe('billing-service calling orders-service over HTTP', () => {
     });
   });
 
-  test('the client receives ORDER_LOCKED with the instant the order was locked', async () => {
+  test('a locked order is answered ORDER_LOCKED with the instant it was locked', async () => {
+    const response = await billing(anInvoiceRequest(LOCKED_ORDER_ID));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      rejection: { code: 'ORDER_LOCKED', body: { lockedAt: '2026-01-15T09:30:00Z' } },
+    });
+  });
+});
+
+describe('a client of orders-service over HTTP', () => {
+  test('it receives ORDER_LOCKED with the instant the order was locked', async () => {
     const ordersClient = client(ordersDeps, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
@@ -96,7 +107,7 @@ describe('billing-service calling orders-service over HTTP', () => {
     });
   });
 
-  test('a client with an unknown key receives UNAUTHENTICATED', async () => {
+  test('with an unknown key it receives UNAUTHENTICATED', async () => {
     const ordersClient = client(ordersDeps, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'stolen-key' },

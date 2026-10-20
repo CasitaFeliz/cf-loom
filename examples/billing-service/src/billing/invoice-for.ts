@@ -18,10 +18,11 @@ export type Invoice = {
 export type Invoicing =
   | { readonly kind: 'invoice'; readonly invoice: Invoice }
   | { readonly kind: 'not-found' }
+  | { readonly kind: 'locked'; readonly lockedAt: string }
   | { readonly kind: 'not-billable'; readonly orderStatus: string }
-  | { readonly kind: 'unavailable' };
+  | { readonly kind: 'unavailable'; readonly retryable: boolean };
 
-/** Bills the order if orders-service says it is paid; only a paid order can be billed. */
+/** Bills the order if orders-service says it was paid; only a paid order can be billed. */
 export async function invoiceFor(orders: OrdersClient, orderId: string): Promise<Invoicing> {
   const outcome = await orderOf(orders, orderId);
   switch (outcome.kind) {
@@ -30,7 +31,7 @@ export async function invoiceFor(orders: OrdersClient, orderId: string): Promise
     case 'rejection':
       return invoicingOfRejection(outcome);
     case 'fault':
-      return { kind: 'unavailable' };
+      return { kind: 'unavailable', retryable: outcome.retryable };
   }
 }
 
@@ -45,25 +46,33 @@ async function orderOf(orders: OrdersClient, orderId: string): Promise<OrderOutc
 }
 
 function invoicingOf(order: Order): Invoicing {
-  if (order.status !== 'paid') return { kind: 'not-billable', orderStatus: statusText(order) };
-  const invoice = { id: randomUUID(), orderId: order.id, total: order.total };
-  return { kind: 'invoice', invoice };
+  if (typeof order.status !== 'string') {
+    return { kind: 'not-billable', orderStatus: order.status.unknown };
+  }
+  switch (order.status) {
+    case 'paid':
+    case 'shipped':
+      return { kind: 'invoice', invoice: invoiceOf(order) };
+    case 'pending':
+    case 'cancelled':
+      return { kind: 'not-billable', orderStatus: order.status };
+  }
 }
 
-function statusText(order: Order): string {
-  return typeof order.status === 'string' ? order.status : order.status.unknown;
+function invoiceOf(order: Order): Invoice {
+  return { id: randomUUID(), orderId: order.id, total: order.total };
 }
 
 function invoicingOfRejection(rejection: OrderRejection): Invoicing {
-  if (!rejection.known) return { kind: 'unavailable' };
+  if (!rejection.known) return { kind: 'unavailable', retryable: false };
   switch (rejection.code) {
     case 'NOT_FOUND':
       return { kind: 'not-found' };
     case 'ORDER_LOCKED':
-      return { kind: 'not-billable', orderStatus: 'locked' };
+      return { kind: 'locked', lockedAt: rejection.body.lockedAt };
     case 'UNAUTHENTICATED':
     case 'INVALID_INPUT':
     case 'NOT_IMPLEMENTED':
-      return { kind: 'unavailable' };
+      return { kind: 'unavailable', retryable: false };
   }
 }

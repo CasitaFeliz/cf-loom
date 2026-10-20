@@ -127,7 +127,7 @@ export const snapshot = {
   "endpoints": {
     "GET /health": {
       "description": "Whether the Service is up, for its infrastructure",
-      "group": "operations",
+      "group": "infrastructure",
       "guards": [],
       "input": {
         "body": null,

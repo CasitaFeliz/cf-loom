@@ -92,6 +92,25 @@
       "removed": false,
       "status": 501
     },
+    "ORDER_LOCKED": {
+      "body": {
+        "fields": {
+          "lockedAt": {
+            "required": true,
+            "schema": {
+              "format": "datetime",
+              "type": "string"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "message": "The order is locked and cannot be billed",
+      "origin": "local",
+      "removed": false,
+      "status": 409
+    },
     "ORDER_NOT_BILLABLE": {
       "body": {
         "fields": {
@@ -156,6 +175,7 @@
         "INVALID_INPUT",
         "NOT_FOUND",
         "NOT_IMPLEMENTED",
+        "ORDER_LOCKED",
         "ORDER_NOT_BILLABLE"
       ],
       "success": {

@@ -1,12 +1,8 @@
+import type { z } from 'zod';
+import type { order } from './contract/schemas/order.schema.ts';
+
 /** An order as the Service keeps it: what `getOrder` answers, and when it was locked, if it was. */
-export type SeededOrder = {
-  readonly id: string;
-  readonly customerId: string;
-  readonly status: 'pending' | 'paid' | 'shipped' | 'cancelled';
-  readonly total: { readonly amount: number; readonly currency: string };
-  readonly placedAt: string;
-  readonly lockedAt?: string;
-};
+export type SeededOrder = z.infer<typeof order> & { readonly lockedAt?: string };
 
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 

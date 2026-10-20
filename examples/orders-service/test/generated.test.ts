@@ -19,12 +19,12 @@ function cfLoom(...args: string[]) {
 
 /** Every file `cf-loom package` writes under `dir`, by its path, leaving out a build's and an install's. */
 function filesOf(dir: string): Record<string, string> {
-  const entries = readdirSync(dir, { recursive: true, withFileTypes: true });
+  const dirents = readdirSync(dir, { recursive: true, withFileTypes: true });
   const files: Record<string, string> = {};
-  for (const entry of entries) {
-    const path = relative(dir, join(entry.parentPath, entry.name));
+  for (const dirent of dirents) {
+    const path = relative(dir, join(dirent.parentPath, dirent.name));
     const isBuildOrInstall = path.startsWith('dist') || path.startsWith('node_modules');
-    if (entry.isFile() && !isBuildOrInstall) {
+    if (dirent.isFile() && !isBuildOrInstall) {
       files[path] = readFileSync(join(dir, path), 'utf8');
     }
   }
