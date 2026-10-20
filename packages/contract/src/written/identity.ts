@@ -39,6 +39,14 @@ export function identityOf(method: unknown, path: unknown): string {
 }
 
 /**
+ * A Message Version's identity, `OrderCreated@2`; one that breaks its rules still gets one, so every
+ * failure of it has a location.
+ */
+export function messageIdentityOf(name: unknown, version: unknown): string {
+  return `${textOf(name)}@${textOf(version)}`;
+}
+
+/**
  * The method and the path an Endpoint declares, from its identity and its param names in order:
  * the reverse of `identityOf`, since the Snapshot stores the names apart from the identity.
  */

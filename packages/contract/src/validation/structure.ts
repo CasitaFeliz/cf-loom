@@ -1,11 +1,14 @@
 import {
+  isCommand,
   isDefinitions,
   isDependencies,
   isEndpoint,
+  isEvent,
   isGroup,
   isGuard,
   isRejection,
   isStandardRejection,
+  isSubscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { type Declarations, isPlainObject, listOf, textOf } from '../written/index.ts';
@@ -88,6 +91,14 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           fits: isDefinitions,
         },
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
+        { at: ['events'], list: root.events, noun: 'an Event', fits: isEvent },
+        { at: ['commands'], list: root.commands, noun: 'a Command', fits: isCommand },
+        {
+          at: ['subscriptions'],
+          list: root.subscriptions,
+          noun: 'a Subscription',
+          fits: isSubscription,
+        },
         {
           at: ['dependencies'],
           list: root.dependencies,

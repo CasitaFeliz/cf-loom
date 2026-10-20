@@ -145,7 +145,10 @@ function identityOfEndpoint({ endpoint }: LocatedEndpoint): string {
 }
 
 /** Every item after the first with the same key, in order, so each repeat is reported once. */
-function repeated<Item>(items: readonly Item[], keyOf: (item: Item) => string): readonly Item[] {
+export function repeated<Item>(
+  items: readonly Item[],
+  keyOf: (item: Item) => string,
+): readonly Item[] {
   const seen = new Set<string>();
   const repeats: Item[] = [];
   for (const item of items) {

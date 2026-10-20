@@ -15,18 +15,23 @@ import {
   attachmentFields,
   definitionsFields,
   demandsFields,
-  dependenciesFields,
   endpointFields,
-  exportedFields,
   groupFields,
   guardFields,
   inputFields,
   rejectionFields,
-  rootFields,
   standardRejectionFields,
   standardRejectionsFields,
   successFields,
 } from './field-tables.ts';
+import {
+  commandFields,
+  dependenciesFields,
+  eventFields,
+  exportedFields,
+  rootFields,
+  subscriptionFields,
+} from './root-field-tables.ts';
 
 /** An object an author wrote, where it sits, and the fields its kind declares. */
 export type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };
@@ -79,6 +84,16 @@ function writtenOf(declarations: Declarations): readonly Written[] {
       written([...at, 'exported'], listed.exported, exportedFields),
     ]),
     ...allPackages.flatMap(standardRejectionsOf),
+    ...messagesWrittenOf(declarations),
+  ];
+}
+
+/** The Message Versions and Subscriptions a Contract lists. */
+function messagesWrittenOf({ events, commands, subscriptions }: Declarations): readonly Written[] {
+  return [
+    ...events.map(({ at, event }) => written(at, event, eventFields)),
+    ...commands.map(({ at, command }) => written(at, command, commandFields)),
+    ...subscriptions.map(({ at, subscription }) => written(at, subscription, subscriptionFields)),
   ];
 }
 

@@ -1,0 +1,226 @@
+import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { type Command, defineCommand, defineContract, defineEvent, type Event } from '../index.ts';
+import { validateContract } from '../internal/index.ts';
+
+const body = z.object({ orderId: z.uuid() });
+
+/** An Event's declaration with sensible defaults, as an author writes it. */
+function anEvent(overrides: Record<string, unknown> = {}): Event {
+  const written = {
+    name: 'OrderCreated',
+    version: 1,
+    visibility: 'internal',
+    description: 'An order was placed',
+    body,
+    ...overrides,
+  } as const;
+  return defineEvent(written as unknown as Parameters<typeof defineEvent>[0]);
+}
+
+/** A Command's declaration with sensible defaults, as an author writes it. */
+function aCommand(overrides: Record<string, unknown> = {}): Command {
+  const written = {
+    name: 'ChargeCard',
+    version: 1,
+    description: 'Charges the order’s card',
+    body,
+    ...overrides,
+  } as const;
+  return defineCommand(written as unknown as Parameters<typeof defineCommand>[0]);
+}
+
+function validateMessages(events: readonly unknown[], commands: readonly Command[] = []) {
+  const contract = defineContract({
+    name: 'orders-service',
+    events: events as readonly Event[],
+    commands,
+  });
+  return validateContract(contract, {
+    originOf: () => undefined,
+    packageName: 'orders-service',
+    exportsOf: () => [],
+  });
+}
+
+function failed(at: readonly (string | number)[], rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+}
+
+describe('validateContract: Events and Commands', () => {
+  test('a Contract with Events and Commands validates', () => {
+    const result = validateMessages([anEvent()], [aCommand()]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test('a Message name that is not PascalCase fails', () => {
+    const result = validateMessages([anEvent({ name: 'orderCreated' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'orderCreated@1', 'name'],
+        'name-grammar',
+        'A Message name is PascalCase: orderCreated',
+      ),
+    );
+  });
+
+  test('a version that is not a whole number from 1 fails, as a cast lets it through', () => {
+    const result = validateMessages([], [aCommand({ version: 0 })]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@0', 'version'],
+        'message-version',
+        'A Message version is a whole number from 1: 0',
+      ),
+    );
+  });
+
+  test('a Public Event fails, as a cast lets it through', () => {
+    const result = validateMessages([anEvent({ visibility: 'public' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'OrderCreated@1', 'visibility'],
+        'visibility',
+        "An Event's Visibility is internal or private: public",
+      ),
+    );
+  });
+
+  test('a Command declaring a Visibility fails', () => {
+    const result = validateMessages([], [aCommand({ visibility: 'private' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'visibility'],
+        'undeclared-field',
+        'visibility is not a declared field',
+      ),
+    );
+  });
+
+  test('a Message lifecycle that is none of the three fails', () => {
+    const result = validateMessages([anEvent({ lifecycle: 'gone' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'OrderCreated@1', 'lifecycle'],
+        'lifecycle',
+        'A lifecycle is active, deprecated or retired: gone',
+      ),
+    );
+  });
+
+  test('an Event without a body fails as a required field', () => {
+    const result = validateMessages([anEvent({ body: undefined })]);
+
+    expect(result).toEqual(
+      failed(['events', 'OrderCreated@1', 'body'], 'required-field', 'body is a required field'),
+    );
+  });
+
+  test('an Event body that is not a zod schema fails', () => {
+    const result = validateMessages([anEvent({ body: { orderId: 'uuid' } })]);
+
+    expect(result).toEqual(
+      failed(['events', 'OrderCreated@1', 'body'], 'not-a-schema', 'body is not a zod schema'),
+    );
+  });
+
+  test('an Event body holding a record keyed by an enum fails, as in any Read shape', () => {
+    const totals = z.record(z.enum(['eur', 'usd']), z.int());
+    const result = validateMessages([anEvent({ body: z.object({ totals }) })]);
+
+    expect(result).toMatchObject({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          at: ['events', 'OrderCreated@1', 'body', 'fields', 'totals'],
+          construct: 'a record keyed by an enum or literal in a Read shape',
+        },
+      ],
+    });
+  });
+
+  test('something listed under events that is not an Event fails', () => {
+    const result = validateMessages([{ kind: 'event', name: 'OrderCreated', version: 1 }]);
+
+    expect(result).toEqual(failed(['events', 0], 'not-a-declaration', 'events.0 is not an Event'));
+  });
+
+  test('two Message Versions with one name and version fail', () => {
+    const result = validateMessages([anEvent(), anEvent({ visibility: 'private' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'OrderCreated@1', 'version'],
+        'duplicate-message-identity',
+        'A Message Version is identified by its name and version, once: OrderCreated@1',
+      ),
+    );
+  });
+
+  test('an Event and a Command with one name fail', () => {
+    const result = validateMessages(
+      [anEvent({ name: 'ChargeCard', version: 2 })],
+      [aCommand({ version: 1 })],
+    );
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'name'],
+        'message-kind',
+        'A Message name belongs to one kind: ChargeCard is an Event and a Command',
+      ),
+    );
+  });
+
+  test('two Active versions of a Command fail', () => {
+    const result = validateMessages([], [aCommand(), aCommand({ version: 2 })]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@2', 'lifecycle'],
+        'command-active-versions',
+        'A Command has at most one Active version: ChargeCard',
+      ),
+    );
+  });
+
+  test('an Active and a Deprecated version of a Command validate', () => {
+    const result = validateMessages(
+      [],
+      [aCommand({ lifecycle: 'deprecated' }), aCommand({ version: 2 })],
+    );
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test('two Active versions of an Event validate', () => {
+    const result = validateMessages([anEvent(), anEvent({ version: 2 })]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test('declared versions with a gap validate, since a deleted Retired version leaves one', () => {
+    const result = validateMessages([anEvent({ version: 2 }), anEvent({ version: 4 })]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test('an Event without a description fails', () => {
+    const result = validateMessages([anEvent({ description: undefined })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'OrderCreated@1', 'description'],
+        'required-field',
+        'description is a required string',
+      ),
+    );
+  });
+});

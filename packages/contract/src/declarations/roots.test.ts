@@ -3,11 +3,14 @@ import { z } from 'zod';
 import {
   type ContractPackage,
   defineApplication,
+  defineCommand,
   defineContract,
   defineDefinitions,
   defineDependencies,
   defineEndpoint,
+  defineEvent,
   defineGroup,
+  defineSubscription,
 } from '../index.ts';
 
 const getPayment = defineEndpoint({
@@ -30,12 +33,13 @@ const refundPayment = defineEndpoint({
   success: { status: 204 },
 });
 
-const paymentSettledV1 = {
-  kind: 'event',
+const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
-} as const;
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
 
 const payments = {
   name: 'payments-service',
@@ -71,6 +75,37 @@ describe('defineContract', () => {
     expect(contract.definitions[0]).toBe(definitions);
     expect(contract.dependencies[0]).toBe(paymentsDeps);
     expect(contract.kind).toBe('contract');
+  });
+
+  test('a Contract keeps its Events, Commands and Subscriptions by identity', () => {
+    const orderCreatedV1 = defineEvent({
+      name: 'OrderCreated',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was placed',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const chargeCardV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const notifyOnCreated = defineSubscription({
+      name: 'notify-on-created',
+      event: orderCreatedV1,
+    });
+
+    const contract = defineContract({
+      name: 'orders-service',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    });
+
+    expect(contract.events[0]).toBe(orderCreatedV1);
+    expect(contract.commands[0]).toBe(chargeCardV1);
+    expect(contract.subscriptions[0]).toBe(notifyOnCreated);
   });
 });
 
@@ -111,8 +146,8 @@ describe('defineApplication', () => {
 
 describe('the roots’ fields', () => {
   test('an undeclared field on a Contract is a type error', () => {
-    // @ts-expect-error events come with the messaging declarations
-    const declare = () => defineContract({ name: 'orders-service', events: [] });
+    // @ts-expect-error a Contract lists its Endpoints through its Groups
+    const declare = () => defineContract({ name: 'orders-service', endpoints: [] });
 
     expect(declare).not.toThrow();
   });

@@ -10,6 +10,7 @@ export { declarationsOf, endpointAt, endpointsOf, listedDefinitionsOf } from './
 export type { PathSegment } from './identity.ts';
 export {
   identityOf,
+  messageIdentityOf,
   methodAndPathOf,
   paramNamesOf,
   pathSegmentsOf,
@@ -17,15 +18,19 @@ export {
 } from './identity.ts';
 export type {
   LocatedCode,
+  LocatedCommand,
   LocatedDefinitions,
   LocatedDependencies,
   LocatedEndpoint,
+  LocatedEvent,
   LocatedGroup,
   LocatedGuard,
   LocatedRejection,
   LocatedStandardRejection,
+  LocatedSubscription,
   Root,
 } from './located.ts';
+export { eventServiceOf } from './messages.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,

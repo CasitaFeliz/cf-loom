@@ -1,12 +1,16 @@
 export type { Attachment, QualifiedAttachment } from './attachment.ts';
+export type { Command } from './command.ts';
+export { defineCommand } from './command.ts';
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
 export type { ContractPackage, Dependencies, ExportedElements } from './dependencies.ts';
 export { defineDependencies } from './dependencies.ts';
 export type { Lifecycle, Visibility } from './element.ts';
-export { lifecycles, visibilities } from './element.ts';
+export { eventVisibilities, lifecycles, visibilities } from './element.ts';
 export type { Endpoint } from './endpoint.ts';
 export { defineEndpoint } from './endpoint.ts';
+export type { Event } from './event.ts';
+export { defineEvent } from './event.ts';
 export { isDeclaration } from './freeze-declaration.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';
@@ -26,6 +30,7 @@ export type {
 } from './inference.ts';
 export {
   isApplication,
+  isCommand,
   isContract,
   isDefinitions,
   isDependencies,
@@ -35,6 +40,7 @@ export {
   isGuard,
   isRejection,
   isStandardRejection,
+  isSubscription,
 } from './predicates.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
@@ -62,3 +68,5 @@ export {
   standardRejectionDefaults,
   standardRejectionNames,
 } from './standard-rejections.ts';
+export type { Subscription } from './subscription.ts';
+export { defineSubscription } from './subscription.ts';

@@ -75,6 +75,7 @@ export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
     ...declarations.guards.flatMap(guardSlots),
     ...declarations.codes.flatMap(codeSlots),
     ...sharedSlots(declarations),
+    ...messageSlots(declarations),
   ];
   return schemaSlotsAmong(slots);
 }
@@ -176,6 +177,14 @@ function sharedSlots({ root }: Declarations): readonly Slot[] {
     value,
     role: 'snapshot' as const,
   }));
+}
+
+/** A Message Version owns its body; a Dependency's Events are the Provider's, recorded by identity only. */
+function messageSlots({ events, commands }: Declarations): readonly Slot[] {
+  return [
+    ...events.map(({ at, event }) => slot({ at, owner: event }, 'body', event.body)),
+    ...commands.map(({ at, command }) => slot({ at, owner: command }, 'body', command.body)),
+  ];
 }
 
 function slot(

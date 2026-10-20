@@ -1,12 +1,15 @@
+import type { Command } from './command.ts';
 import type { Definitions } from './definitions.ts';
 import type { Dependencies } from './dependencies.ts';
 import type { Endpoint } from './endpoint.ts';
+import type { Event } from './event.ts';
 import { isDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { Guard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
 import type { Application, Contract } from './roots.ts';
 import type { StandardRejection } from './standard-rejections.ts';
+import type { Subscription } from './subscription.ts';
 
 /** The `kind` every declaration carries, which tells them apart at runtime. */
 export type Kind =
@@ -18,7 +21,10 @@ export type Kind =
   | Guard['kind']
   | Rejection['kind']
   | StandardRejection['kind']
-  | Dependencies['kind'];
+  | Dependencies['kind']
+  | Event['kind']
+  | Command['kind']
+  | Subscription['kind'];
 
 /** Whether a value is a declared Contract, from any copy of this package. */
 export function isContract(value: unknown): value is Contract {
@@ -65,15 +71,17 @@ export function isDependencies(value: unknown): value is Dependencies {
   return isDeclaration(value) && value.kind === 'dependencies';
 }
 
-/**
- * Whether a value is an Event as a Contract Package exports it. A kind check until `defineEvent`
- * brands Events (milestone 2): a Contract Package's Events are plain objects for now.
- */
-export function isEvent(value: unknown): value is {
-  readonly kind: 'event';
-  readonly name: unknown;
-  readonly version: unknown;
-  readonly visibility: unknown;
-} {
-  return typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'event';
+/** Whether a value is a declared Event's Message Version, from any copy of this package. */
+export function isEvent(value: unknown): value is Event {
+  return isDeclaration(value) && value.kind === 'event';
+}
+
+/** Whether a value is a declared Command's Message Version, from any copy of this package. */
+export function isCommand(value: unknown): value is Command {
+  return isDeclaration(value) && value.kind === 'command';
+}
+
+/** Whether a value is a declared Subscription, from any copy of this package. */
+export function isSubscription(value: unknown): value is Subscription {
+  return isDeclaration(value) && value.kind === 'subscription';
 }

@@ -39,3 +39,23 @@ export type IsOneLiteral<Value> = [Value] extends [never]
   : [Value] extends [LastOf<Value>]
     ? true
     : false;
+
+type VersionRefusal = 'A Message version is a whole number from 1';
+
+/** Whether a literal number is not a whole number from 1, judged on its text. */
+type IsNotWholeFromOne<Version extends number> = `${Version}` extends
+  | '0'
+  | `-${string}`
+  | `${string}.${string}`
+  ? true
+  : false;
+
+/** What every Message Version must also satisfy: a literal version counts from 1. */
+export type VersionRule<Declaration extends { readonly version: number }> =
+  number extends Declaration['version']
+    ? unknown
+    : IsOneLiteral<Declaration['version']> extends true
+      ? IsNotWholeFromOne<Declaration['version']> extends true
+        ? { readonly version: Refusal<VersionRefusal> }
+        : unknown
+      : unknown;

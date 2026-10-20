@@ -3,13 +3,16 @@ import { z } from 'zod';
 import {
   type ContractPackage,
   defineApplication,
+  defineCommand,
   defineContract,
   defineDefinitions,
   defineDependencies,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineSubscription,
   notFound,
 } from '../index.ts';
 import {
@@ -136,18 +139,20 @@ const listPayments = defineEndpoint({
   success: { status: 200, body: z.object({ count: z.int() }) },
 });
 
-const paymentSettledV1 = {
-  kind: 'event',
+const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
-} as const;
-const paymentFailedV1 = {
-  kind: 'event',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
+const paymentFailedV1 = defineEvent({
   name: 'PaymentFailed',
   version: 1,
   visibility: 'internal',
-} as const;
+  description: 'A payment failed',
+  body: z.object({ paymentId: z.uuid() }),
+});
 
 const payments = {
   name: 'payments-service',
@@ -173,10 +178,20 @@ const orgPackage: ResolvedDefinitions = {
   version: '4.2.0',
 };
 
+const notifyOnSettled = defineSubscription({
+  name: 'notify-on-settled',
+  event: paymentsDeps.events.paymentSettledV1,
+});
+const notifyOnFailed = defineSubscription({
+  name: 'notify-on-failed',
+  event: paymentsDeps.events.paymentFailedV1,
+});
+
 const contract = defineContract({
   name: 'orders-service',
   definitions: [orgDefinitions],
   groups: [ordersGroup],
+  subscriptions: [notifyOnSettled, notifyOnFailed],
   dependencies: [paymentsDeps],
 });
 
@@ -620,6 +635,135 @@ describe('snapshotOf: a Service', () => {
   });
 });
 
+const orderBody = z.object({ orderId: z.uuid() });
+
+const orderCreatedV1 = defineEvent({
+  name: 'OrderCreated',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was placed',
+  lifecycle: 'deprecated',
+  body: orderBody,
+});
+const orderCreatedV2 = defineEvent({
+  name: 'OrderCreated',
+  version: 2,
+  visibility: 'private',
+  description: 'An order was placed, with its total',
+  body: z.object({ orderId: z.uuid(), total: z.int() }),
+});
+const chargeCardV1 = defineCommand({
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the order’s card',
+  body: orderBody,
+});
+
+/** A Service that declares Messages and subscribes to its own Event and to a Dependency's. */
+function messagingSnapshot(declared: {
+  readonly events?: readonly (typeof orderCreatedV1 | typeof orderCreatedV2)[];
+  readonly commands?: readonly (typeof chargeCardV1)[];
+}) {
+  const auditOrders = defineSubscription({ name: 'audit-orders', event: orderCreatedV2 });
+  const root = defineContract({
+    name: 'orders-service',
+    events: declared.events ?? [orderCreatedV1, orderCreatedV2],
+    commands: declared.commands ?? [chargeCardV1],
+    subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
+    dependencies: [paymentsDeps],
+  });
+  return serviceSnapshot(root, aContext({ packages: [] }));
+}
+
+const orderIdBody = {
+  type: 'object',
+  mode: 'open',
+  fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
+};
+
+describe('snapshotOf: Messages and Subscriptions', () => {
+  test('Events are written by identity with their Visibility, lifecycle, description and body', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.events['OrderCreated@1']).toEqual({
+      visibility: 'internal',
+      lifecycle: 'deprecated',
+      description: 'An order was placed',
+      body: orderIdBody,
+    });
+  });
+
+  test('Commands are written by identity with no Visibility', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.commands).toEqual({
+      'ChargeCard@1': {
+        lifecycle: 'active',
+        description: 'Charges the order’s card',
+        body: orderIdBody,
+      },
+    });
+  });
+
+  test('a Message Version declared without a lifecycle is written active', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.events['OrderCreated@2']?.lifecycle).toBe('active');
+  });
+
+  test('a Retired Message Version still declared keeps its full entry', () => {
+    const retiredV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      lifecycle: 'retired',
+      body: orderBody,
+    });
+
+    const snapshot = messagingSnapshot({ commands: [retiredV1] });
+
+    expect(snapshot.commands['ChargeCard@1']).toEqual({
+      lifecycle: 'retired',
+      description: 'Charges the order’s card',
+      body: orderIdBody,
+    });
+  });
+
+  test('a Subscription to the Service’s own Event writes the Service’s name before the Event’s identity', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions['audit-orders']).toEqual({
+      event: 'orders-service:OrderCreated@2',
+    });
+  });
+
+  test('a Subscription to a Dependency’s Event writes the Provider’s name before the Event’s identity', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions['notify-on-settled']).toEqual({
+      event: 'payments-service:PaymentSettled@1',
+    });
+  });
+
+  test('Message Versions are keyed in code point order in the canonical text', () => {
+    const orderCreatedV10 = defineEvent({
+      name: 'OrderCreated',
+      version: 10,
+      visibility: 'internal',
+      description: 'An order was placed',
+      body: orderBody,
+    });
+    const root = defineContract({
+      name: 'orders-service',
+      events: [orderCreatedV2, orderCreatedV10],
+    });
+
+    const text = textOf(serviceSnapshot(root, aContext({ packages: [] })));
+
+    expect(text.indexOf('"OrderCreated@10"')).toBeLessThan(text.indexOf('"OrderCreated@2"'));
+  });
+});
+
 describe('snapshotOf: deprecatedAt', () => {
   test('a Deprecated Endpoint keeps the deprecatedAt of the committed Snapshot', () => {
     const committed = {
@@ -756,6 +900,7 @@ describe('canonicalTextOf', () => {
           endpoints: [editOrder, aGetOrder([notFound, orderLocked])],
         }),
       ],
+      subscriptions: [notifyOnFailed, notifyOnSettled],
       dependencies: [
         defineDependencies(payments, {
           endpoints: [payments.endpoints.listPayments, payments.endpoints.getPayment],

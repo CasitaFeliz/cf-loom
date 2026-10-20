@@ -53,6 +53,14 @@ export type Rule =
   | 'standard-rejections-once'
   | 'dependency-selection'
   | 'application-dependency'
+  | 'unused-dependency-event'
+  | 'message-version'
+  | 'duplicate-message-identity'
+  | 'message-kind'
+  | 'command-active-versions'
+  | 'subscription-event'
+  | 'retired-event-subscribed'
+  | 'duplicate-subscription-name'
   | 'definitions-unlisted'
   | 'package-name';
 

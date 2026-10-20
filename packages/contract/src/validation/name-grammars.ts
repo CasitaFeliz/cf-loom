@@ -7,6 +7,7 @@ import {
   type Grammar,
   isReserved,
   kebabCase,
+  pascalCase,
   upperSnakeCase,
 } from './grammars.ts';
 
@@ -17,14 +18,20 @@ type Named = { readonly at: Path; readonly value: unknown; readonly noun: string
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, groups, listedDefinitions, endpoints, guards, rejections, standardRejections } =
     declarations;
+  const { events, commands, subscriptions } = declarations;
   const kebab = [
     { at: ['name'], value: root.name, noun: rootNoun(root.kind) },
     ...named(listedDefinitions, (listed) => listed.definitions.name, 'A Definitions Package name'),
     ...named(groups, (listed) => listed.group.name, 'A Group name'),
+    ...named(subscriptions, (listed) => listed.subscription.name, 'A Subscription name'),
   ];
   const camel = [
     ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
     ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
+  ];
+  const pascal = [
+    ...named(events, (listed) => listed.event.name, 'A Message name'),
+    ...named(commands, (listed) => listed.command.name, 'A Message name'),
   ];
   const upperSnake = [
     ...codes(rejections, (listed) => listed.rejection.code),
@@ -33,6 +40,7 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   return [
     ...grammarFailures(kebab, kebabCase),
     ...grammarFailures(camel, elementName),
+    ...grammarFailures(pascal, pascalCase),
     ...grammarFailures(upperSnake, upperSnakeCase),
   ];
 }
