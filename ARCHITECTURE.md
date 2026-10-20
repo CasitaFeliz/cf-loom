@@ -4,7 +4,7 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 ## Tooling, not Contracts
 
-- This repository holds the tools, and in `examples/` fictional Services used as end-to-end tests. It contains no real Service's Contract.
+- This repository holds the tools, and in `examples/` fictional Services and the Definitions Package they share, used as end-to-end tests. It contains no real Service's Contract.
 - The tools know no organization: package scope, registry and Approvers are configuration of whoever uses them.
 - Every Contract Package is published to an internal registry; the tools are published to npmjs.com as `@cf-loom/<name>`, with restricted access.
 

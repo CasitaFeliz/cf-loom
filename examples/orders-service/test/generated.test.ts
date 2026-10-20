@@ -72,7 +72,7 @@ describe('the Contract Package', () => {
     const manifest = JSON.parse(files['package.json'] ?? '{}');
 
     const importing = Object.keys(files).filter((path) =>
-      files[path]?.includes("from '@org/definitions'"),
+      /(from|import)\s*\(?\s*['"]@org\/definitions['"]/.test(files[path] ?? ''),
     );
 
     expect(files['src/endpoints/create-order.ts']).toContain(
