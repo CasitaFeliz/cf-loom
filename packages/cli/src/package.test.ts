@@ -889,10 +889,7 @@ describe('cf-loom package: the built package', () => {
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
-    const declared = [...read(out, 'src/defs.ts').matchAll(/\.meta\(\{ id: '(\w+)' \}\)/g)];
-    const ids = declared.map(([, id]) => id).sort();
-    expect(ids).toEqual(['branch', 'leaf']);
-    expect(Object.keys(built.contract.exportedSnapshot.defs).sort()).toEqual(ids);
+    expect(Object.keys(built.contract.exportedSnapshot.defs).sort()).toEqual(['branch', 'leaf']);
   });
 
   test('defs reached through an array and through a tuple’s rest are both written', () => {

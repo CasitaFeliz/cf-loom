@@ -44,9 +44,7 @@ function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   const { id, mode } = use;
   const node = defs[id];
   if (node === undefined) {
-    throw new Error(
-      `The generated code references the def ${id}, which the exported Snapshot lacks`,
-    );
+    throw new Error(`The generated code references the def ${id}, which the defs given lack`);
   }
   const own = noNeeds();
   const typeName = defTypeNameOf(id, mode);

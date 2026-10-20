@@ -619,14 +619,25 @@ describe('walkSchemas: recursion', () => {
 });
 
 describe('reachedDefsOf', () => {
-  test('the defs nodes reach are each def entered through a ref, directly or through another def, once', () => {
-    const ref = (name: string): SchemaNode => ({ type: 'ref', name });
-    const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
-    const defs = { a: holding(ref('b')), b: holding(ref('a')), c: holding(ref('a')), d: ref('a') };
+  const ref = (name: string): SchemaNode => ({ type: 'ref', name });
+  const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
+
+  test.each([
+    {
+      reach: 'a chain whose last def closes a cycle',
+      defs: { a: holding(ref('b')), b: holding(ref('c')), c: holding(ref('a')), d: ref('a') },
+      reached: ['a', 'b', 'c'],
+    },
+    {
+      reach: 'a ref that names no def',
+      defs: { a: holding(ref('gone')), d: ref('a') },
+      reached: ['a', 'gone'],
+    },
+  ])('the def names nodes reach through $reach are each named once', ({ defs, reached }) => {
     const nodes = [holding(ref('a')), ref('a')];
 
-    const reached = reachedDefsOf(nodes, defs);
+    const names = reachedDefsOf(nodes, defs);
 
-    expect(reached).toEqual(['a', 'b']);
+    expect(names).toEqual(reached);
   });
 });

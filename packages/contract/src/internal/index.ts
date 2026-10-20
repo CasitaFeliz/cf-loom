@@ -69,7 +69,6 @@ export type {
 } from '../walker/index.ts';
 export {
   byCodePoint,
-  childrenOf,
   hashPartsOf,
   isHashFormat,
   isJsonValue,

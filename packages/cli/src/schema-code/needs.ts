@@ -43,7 +43,7 @@ export function addDefUse(uses: DefUses, use: DefUse): void {
 }
 
 /** The one key of a def use, whatever its id spells. */
-export function defUseKeyOf(use: DefUse): string {
+function defUseKeyOf(use: DefUse): string {
   return JSON.stringify([use.mode, use.id]);
 }
 

@@ -193,7 +193,7 @@ describe('exportedSnapshotOf', () => {
       kept: [orderLocked],
     },
     { reach: 'only a Private Endpoint lists', entry: anEndpointEntry(), guards: {}, kept: [] },
-  ])('a code $reach is kept: $kept', ({ entry, guards, kept }) => {
+  ])('a code $reach: the codes kept are $kept', ({ entry, guards, kept }) => {
     const purging = { ...privateEntry, rejections: [orderLocked] };
     const endpoints = { 'GET /orders': entry, 'DELETE /orders': purging };
     const codes = { [orderLocked]: aCode() };
@@ -260,27 +260,51 @@ describe('exportedSnapshotOf', () => {
   });
 
   test('a def reached only through another def is kept, a cycle once', () => {
-    const defs = { a: anObjectWith(aRef('b')), b: anObjectWith(aRef('a')), c: aString };
+    const defs = {
+      a: anObjectWith(aRef('b')),
+      b: anObjectWith(aRef('c')),
+      c: anObjectWith(aRef('a')),
+      d: aString,
+    };
     const endpoint = anEndpointEntry({ success: { status: 200, headers: null, body: aRef('a') } });
 
     const cut = exportedSnapshotOf(
       aServiceSnapshot({ endpoints: { 'GET /orders': endpoint }, defs }),
     );
 
-    expect(cut.defs).toEqual({ a: defs.a, b: defs.b });
+    expect(cut.defs).toEqual({ a: defs.a, b: defs.b, c: defs.c });
   });
 
-  test('a def only a Private Endpoint reaches is cut', () => {
-    const purging = {
-      ...privateEntry,
-      success: { status: 200, headers: null, body: aRef('tree') },
-    };
-    const endpoints = { 'GET /orders': anEndpointEntry(), 'DELETE /orders': purging };
+  test.each([
+    {
+      through: 'its own success body',
+      purging: { ...privateEntry, success: { status: 200, headers: null, body: aRef('tree') } },
+      guards: {},
+      codes: {},
+    },
+    {
+      through: 'the context of a Guard only it attaches',
+      purging: { ...privateEntry, guards: [{ guard: 'admin', qualifier: null }] },
+      guards: { admin: aGuardEntry({ context: aRef('tree') }) },
+      codes: {},
+    },
+    {
+      through: 'the body of a code only it lists',
+      purging: { ...privateEntry, rejections: [orderLocked] },
+      guards: {},
+      codes: { [orderLocked]: aCode({ body: aRef('tree') }) },
+    },
+  ])(
+    'a def only a Private Endpoint reaches, through $through, is cut',
+    ({ purging, guards, codes }) => {
+      const endpoints = { 'GET /orders': anEndpointEntry(), 'DELETE /orders': purging };
+      const snapshot = aServiceSnapshot({ endpoints, guards, codes, defs: { tree: aString } });
 
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints, defs: { tree: aString } }));
+      const cut = exportedSnapshotOf(snapshot);
 
-    expect(cut.defs).toEqual({});
-  });
+      expect(cut.defs).toEqual({});
+    },
+  );
 
   test('every map keeps the Snapshot’s order', () => {
     const endpoint = {
