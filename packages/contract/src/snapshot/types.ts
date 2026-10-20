@@ -135,11 +135,11 @@ export type DefinitionsSnapshot = Heading<'definitions'> & {
 export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapshot;
 
 /**
- * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints that are not
- * Retired, with the Guards, codes and defs they reach, keyed as in the Snapshot, so a Caller reads
- * their nodes and no Private Element reaches a browser.
+ * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints and Events
+ * that are not Retired, with the Guards, codes and defs they reach, keyed as in the Snapshot, so a
+ * Consumer reads their nodes and no Private Element reaches a browser.
  */
 export type ExportedSnapshot = Pick<
   ServiceSnapshot,
-  'format' | 'defs' | 'endpoints' | 'guards' | 'codes'
+  'format' | 'defs' | 'endpoints' | 'events' | 'guards' | 'codes'
 >;

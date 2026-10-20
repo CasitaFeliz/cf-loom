@@ -1,5 +1,6 @@
 export type { ReservedCode } from '../declarations/index.ts';
 export {
+  codeNameOf,
   isCommand,
   isContract,
   isEndpoint,
@@ -22,6 +23,7 @@ export type {
   AttachmentSnapshot,
   CodeSnapshot,
   EndpointSnapshot,
+  EventSnapshot,
   ExportedSnapshot,
   GuardSnapshot,
   ListedRejection,
@@ -136,6 +138,7 @@ export {
   listedDefinitionsOf,
   messageIdentityOf,
   methodAndPathOf,
+  nameAndVersionOf,
   partFieldOf,
   pathSegmentsOf,
   resolutionOf,

@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type ContractPackage, defineDependencies, defineEndpoint, defineEvent } from '../index.ts';
+import { codeNameOf } from '../internal/index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',
@@ -40,7 +41,7 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
 describe('defineDependencies', () => {
@@ -173,5 +174,15 @@ describe('a Dependency on an Endpoint named kind', () => {
 
     expect(Object.isFrozen(paymentsDeps.endpoints)).toBe(true);
     expect(paymentsDeps.endpoints.kind).toBe(kind);
+  });
+});
+
+describe('codeNameOf', () => {
+  test('a Message Version’s name in code lower-cases its first letter and appends V and its version', () => {
+    const message = { name: 'OrderCreated', version: 12 };
+
+    const name = codeNameOf(message);
+
+    expect(name).toBe('orderCreatedV12');
   });
 });

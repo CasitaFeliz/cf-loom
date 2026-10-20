@@ -4,6 +4,7 @@ import {
   defineContract,
   defineDefinitions,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
@@ -11,6 +12,7 @@ import {
 import {
   type CodeSnapshot,
   type EndpointSnapshot,
+  type EventSnapshot,
   exportedSnapshotOf,
   type GuardSnapshot,
   type ObjectNode,
@@ -86,6 +88,16 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
   };
 }
 
+function anEventEntry(fields: Partial<EventSnapshot> = {}): EventSnapshot {
+  return {
+    visibility: 'internal',
+    lifecycle: 'active',
+    description: 'An order was placed',
+    body: { type: 'object', mode: 'strict', fields: {} },
+    ...fields,
+  };
+}
+
 function aRef(name: string): SchemaNode {
   return { type: 'ref', name };
 }
@@ -128,12 +140,44 @@ describe('exportedSnapshotOf', () => {
     },
   );
 
-  test('the exported Snapshot holds format, defs, endpoints, guards and codes, nothing of the heading but format', () => {
+  test('the exported Snapshot holds format, defs, endpoints, events, guards and codes, nothing of the heading but format', () => {
     const snapshot = aServiceSnapshot();
 
     const cut = exportedSnapshotOf(snapshot);
 
-    expect(cut).toEqual({ format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} });
+    expect(cut).toEqual({ format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} });
+  });
+
+  test('an Internal Event that is not Retired is kept by identity; a Private or a Retired one is cut', () => {
+    const events = {
+      'OrderPlaced@1': anEventEntry(),
+      'StockReserved@1': anEventEntry({ visibility: 'private' }),
+      'OrderPurged@1': anEventEntry({ lifecycle: 'retired' }),
+    };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
+
+    expect(cut.events).toEqual({ 'OrderPlaced@1': events['OrderPlaced@1'] });
+  });
+
+  test('a Deprecated Internal Event is kept', () => {
+    const events = { 'OrderPlaced@1': anEventEntry({ lifecycle: 'deprecated' }) };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
+
+    expect(cut.events).toEqual(events);
+  });
+
+  test('a def only an exported Event’s body reaches is kept; one only a Private Event’s reaches is cut', () => {
+    const events = {
+      'OrderPlaced@1': anEventEntry({ body: anObjectWith(aRef('tree')) }),
+      'StockReserved@1': anEventEntry({ visibility: 'private', body: aRef('stock') }),
+    };
+    const defs = { stock: aString, tree: aString };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ events, defs }));
+
+    expect(cut.defs).toEqual({ tree: aString });
   });
 
   test('a Guard an exported Endpoint attaches is kept; one only a Private or Retired Endpoint attaches is cut', () => {
@@ -355,12 +399,14 @@ describe('exportedSnapshotOf', () => {
         ['A_CODE', aCode()],
         ['Z_CODE', aCode()],
       ]),
+      events: { 'Z@1': anEventEntry(), 'A@1': anEventEntry() },
       defs: { a: aString, z: aString },
     });
 
     const cut = exportedSnapshotOf(snapshot);
 
     expect(Object.keys(cut.endpoints)).toEqual(['GET /z', 'GET /a']);
+    expect(Object.keys(cut.events)).toEqual(['Z@1', 'A@1']);
     expect(Object.keys(cut.guards)).toEqual(['alpha', 'zeta']);
     expect(Object.keys(cut.codes)).toEqual(['A_CODE', 'Z_CODE']);
     expect(Object.keys(cut.defs)).toEqual(['a', 'z']);
@@ -375,8 +421,20 @@ describe('exportedSnapshotOf', () => {
       format: 1,
       defs: {},
       endpoints: { 'GET /orders/{}': snapshot.endpoints['GET /orders/{}'] },
+      events: {},
       guards: { apiKey: snapshot.guards['apiKey'] },
       codes: { [orderLocked]: snapshot.codes[orderLocked] },
+    });
+  });
+
+  test('the cut of a declared Contract keeps each exported Event’s entry as the Snapshot writes it', () => {
+    const snapshot = eventsSnapshot();
+
+    const cut = exportedSnapshotOf(snapshot);
+
+    expect(cut.events).toEqual({
+      'OrderPlaced@1': snapshot.events['OrderPlaced@1'],
+      'OrderPlaced@2': snapshot.events['OrderPlaced@2'],
     });
   });
 
@@ -427,6 +485,34 @@ function declaredSnapshot(): ServiceSnapshot {
     endpoints: [getOrder, purgeOrders],
   });
   const root = defineContract({ name: 'orders-service', groups: [group] });
+  return serviceSnapshotOf(root);
+}
+
+/** A Service with a Deprecated and an Active Internal Event, and a Private one. */
+function eventsSnapshot(): ServiceSnapshot {
+  const placed = { name: 'OrderPlaced', visibility: 'internal', description: 'Placed' } as const;
+  const events = [
+    defineEvent({
+      ...placed,
+      version: 1,
+      lifecycle: 'deprecated',
+      body: z.object({ id: z.string() }),
+    }),
+    defineEvent({ ...placed, version: 2, body: z.object({ id: z.string(), total: z.int() }) }),
+    defineEvent({
+      name: 'StockReserved',
+      version: 1,
+      visibility: 'private',
+      description: 'Stock was reserved',
+      body: z.object({ sku: z.string() }),
+    }),
+  ];
+  const root = defineContract({ name: 'orders-service', events });
+  return serviceSnapshotOf(root);
+}
+
+/** The Snapshot of a Service root that lists no Definitions Package. */
+function serviceSnapshotOf(root: ReturnType<typeof defineContract>): ServiceSnapshot {
   const rootPackage = {
     packageName: 'orders-service',
     originOf: () => undefined,

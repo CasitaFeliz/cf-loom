@@ -187,6 +187,7 @@ const service: Readonly<Record<string, string>> = {
     'import {',
     '  defineContract,',
     '  defineEndpoint,',
+    '  defineEvent,',
     '  defineGroup,',
     '  defineGuard,',
     '  defineRejection,',
@@ -215,7 +216,8 @@ const service: Readonly<Record<string, string>> = {
     '  success: { status: 204 },',
     '});',
     "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto] });",
-    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
+    "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
+    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes], events: [shaped] });",
   ]),
 };
 
@@ -292,12 +294,21 @@ type Rich = {
   }[];
 };
 type Parsed = { readonly success: boolean; readonly data?: Record<string, unknown> };
+type Shaped = {
+  readonly kind: string;
+  readonly name: string;
+  readonly version: number;
+  readonly visibility: string;
+  readonly description: string;
+  readonly body: Reader & { readonly shape: Record<string, core.$ZodType> };
+};
 
 let folder = '';
 let echo: Endpoint;
 let entrySnapshot: unknown;
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
+let shaped: Shaped;
 let snapshot: {
   readonly defs: Readonly<Record<string, unknown>>;
   readonly endpoints: Readonly<
@@ -329,6 +340,7 @@ beforeAll(async () => {
   entrySnapshot = entry.snapshot;
   rich = entry.contract.endpoints.rich;
   proto = entry.contract.endpoints.proto;
+  shaped = entry.contract.events.shapedV1;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
 
@@ -581,6 +593,59 @@ describe('cf-loom package: an exported Endpoint’s slots', () => {
     expect(walkedOf(rich.input.query)).toEqual({
       kind: 'walked',
       value: snapshot.endpoints['GET /orders/{}/items/{}']?.input.query,
+    });
+  });
+});
+
+describe('cf-loom package: an exported Event’s body', () => {
+  test('it reads a value the Contract declares, unknown keys stripped', () => {
+    const parsed = shaped.body.safeParse(sample);
+
+    expect(parsed.data?.['tree']).toEqual(sample.tree);
+    expect(parsed.data).not.toHaveProperty('extra');
+  });
+
+  test('it reads an unknown Open Enum value as its Unknown case', () => {
+    const parsed = shaped.body.safeParse({ ...sample, status: 'refunded' });
+
+    expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
+  });
+
+  test('it writes an Unknown case back as its text and refuses one holding a declared value, as fakeEvent writes a body', () => {
+    const read = { ...sample, extra: undefined, status: { unknown: 'refunded' } };
+
+    const written = [
+      encodedValueOf(shaped.body, read),
+      encodedValueOf(shaped.body, { ...read, status: { unknown: 'paid' } }),
+    ];
+
+    expect(written).toMatchObject([
+      { kind: 'value', value: { status: 'refunded' } },
+      { kind: 'issues', issues: [{ path: ['status'], code: 'invalid_value' }] },
+    ]);
+  });
+
+  test('it refuses a value that breaks a constraint', () => {
+    const parsed = shaped.body.safeParse({ ...sample, plain: '' });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test('it refuses a discriminated union variant it does not know', () => {
+    const parsed = shaped.body.safeParse({ ...sample, shape: { kind: 'triangle', side: 1 } });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test('its name, version, Visibility and description are as declared, and its kind is event', () => {
+    const { kind, name, version, visibility, description } = shaped;
+
+    expect({ kind, name, version, visibility, description }).toEqual({
+      kind: 'event',
+      name: 'Shaped',
+      version: 1,
+      visibility: 'internal',
+      description: 'Shaped',
     });
   });
 });
