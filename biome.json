@@ -8,6 +8,9 @@
       }
     }
   },
+  "files": {
+    "includes": ["**", "!examples/*/contract.snapshot.json", "!examples/*/contract-package"]
+  },
   "formatter": {
     "indentStyle": "space",
     "indentWidth": 2,
@@ -107,7 +110,11 @@
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
-      "includes": ["**/*.config.ts"],
+      "includes": [
+        "**/*.config.ts",
+        "examples/**/*.handler.ts",
+        "examples/*/src/handlers.generated.ts"
+      ],
       "linter": {
         "rules": {
           "style": {

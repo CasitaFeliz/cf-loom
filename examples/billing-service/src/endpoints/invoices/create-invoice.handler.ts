@@ -1,0 +1,20 @@
+import { notFound } from '@casitafeliz/loom-contract';
+import { fault, handle, reject, success } from '@casitafeliz/loom-handlers';
+import { invoiceFor } from '../../billing/invoice-for.ts';
+import { createInvoice } from '../../contract/endpoints/invoices/create-invoice.endpoint.ts';
+import { orderNotBillable } from '../../contract/rejections/order-not-billable.rejection.ts';
+import { ordersClient } from '../../orders-client/orders-client.ts';
+
+export default handle(createInvoice, async ({ body }) => {
+  const invoicing = await invoiceFor(ordersClient(), body.orderId);
+  switch (invoicing.kind) {
+    case 'invoice':
+      return success(invoicing.invoice);
+    case 'not-found':
+      return reject(notFound);
+    case 'not-billable':
+      return reject(orderNotBillable, { orderStatus: invoicing.orderStatus });
+    case 'unavailable':
+      return fault({ committed: 'no', retryable: true, message: 'orders-service is unavailable' });
+  }
+});

@@ -1,0 +1,20 @@
+{
+  "name": "@org/orders-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "cf-loom generate && cf-loom package",
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@casitafeliz/loom-contract": "workspace:*",
+    "@casitafeliz/loom-handlers": "workspace:*",
+    "@casitafeliz/loom-server": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@casitafeliz/loom-cli": "workspace:*",
+    "@types/node": "catalog:"
+  }
+}
