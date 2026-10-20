@@ -395,7 +395,7 @@ describe('Input that cannot be sent', () => {
 describe('a Guard’s demands, checked before the Input, as serve checks them', () => {
   const apiKey = defineGuard({
     name: 'apiKey',
-    description: 'A key per client',
+    description: 'A key per Caller',
     demands: { headers: z.object({ 'x-api-key': z.string().min(2) }) },
   });
   const makeOrder = defineEndpoint({

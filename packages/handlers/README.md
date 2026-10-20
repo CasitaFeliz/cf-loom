@@ -19,7 +19,7 @@ A stub's path comes from names alone: an EndpointHandler's is `src/endpoints/<gr
 import { handle, reject, success } from '@casitafeliz/loom-handlers';
 
 export default handle(getOrder, async ({ params }, context) => {
-  const order = await orders.find(params.orderId, context.apiKey.clientId);
+  const order = await orders.find(params.orderId, context.apiKey.callerId);
   if (!order) return reject(notFound);
   if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
   return success({ id: order.id, status: order.status, total: order.total });
@@ -36,9 +36,9 @@ export default handle(getOrder, async ({ params }, context) => {
 ```ts
 // src/guards/api-key.handler.ts
 export default handle(apiKey, async ({ headers }) => {
-  const client = await clients.byKey(headers['x-api-key']);
-  if (!client) return reject(unauthenticated);
-  return admit({ clientId: client.id });
+  const caller = await callers.byKey(headers['x-api-key']);
+  if (!caller) return reject(unauthenticated);
+  return admit({ callerId: caller.id });
 });
 ```
 
@@ -73,7 +73,7 @@ import getOrderHandler from '../src/endpoints/orders/get-order.handler.ts';
 
 const outcome = await getOrderHandler(
   { params: { orderId: ORDER_ID } },
-  { apiKey: { clientId: 'c-1' } },          // the Context, one key per Guard that provides one
+  { apiKey: { callerId: 'c-1' } },          // the Context, one key per Guard that provides one
 );
 ```
 
@@ -82,7 +82,7 @@ The Handler map `handlers.generated.ts` exports is plain data (see [Stubs and th
 ```ts
 const http = serve(contract, {
   ...handlers,
-  guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ clientId: 'c-1' })) },
+  guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ callerId: 'c-1' })) },
 });
 const res = await http(new Request(`http://test/orders/${ORDER_ID}`, {
   headers: { 'x-api-key': 'any' },          // still demanded by the Contract

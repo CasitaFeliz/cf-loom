@@ -30,9 +30,9 @@ const orderLocked = defineRejection({
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 
@@ -71,7 +71,7 @@ const getOrder = defineEndpoint({
 
 type Order = {
   id: string;
-  clientId: string;
+  callerId: string;
   status: 'pending' | 'paid';
   total: { amount: number; currency: string };
   locked: boolean;
@@ -80,7 +80,7 @@ type Order = {
 
 const stored: Order = {
   id: ORDER_ID,
-  clientId: 'c-1',
+  callerId: 'c-1',
   status: 'paid',
   total: { amount: 1200, currency: 'EUR' },
   locked: false,
@@ -88,23 +88,23 @@ const stored: Order = {
 };
 
 const orders = {
-  find: async (orderId: string, clientId: string) =>
-    orderId === stored.id && clientId === stored.clientId ? stored : undefined,
+  find: async (orderId: string, callerId: string) =>
+    orderId === stored.id && callerId === stored.callerId ? stored : undefined,
 };
-const clients = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
+const callers = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
 const permissions = { of: async (_userId: string): Promise<string[]> => ['orders:edit'] };
 
 const getOrderHandler = handle(getOrder, async ({ params }, context) => {
-  const order = await orders.find(params.orderId, context.apiKey.clientId);
+  const order = await orders.find(params.orderId, context.apiKey.callerId);
   if (!order) return reject(notFound);
   if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
   return success({ id: order.id, status: order.status, total: order.total });
 });
 
 const apiKeyHandler = handle(apiKey, async ({ headers }) => {
-  const client = await clients.byKey(headers['x-api-key']);
-  if (!client) return reject(unauthenticated);
-  return admit({ clientId: client.id });
+  const caller = await callers.byKey(headers['x-api-key']);
+  if (!caller) return reject(unauthenticated);
+  return admit({ callerId: caller.id });
 });
 
 const permissionHandler = handle(permission, async (_demands, { userToken }, qualifier) => {
@@ -117,7 +117,7 @@ describe('the handlers README', () => {
   test('the EndpointHandler example answers its Success', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
-      { apiKey: { clientId: 'c-1' } },
+      { apiKey: { callerId: 'c-1' } },
     );
 
     expect(outcome).toEqual({
@@ -130,7 +130,7 @@ describe('the handlers README', () => {
   test('the EndpointHandler example answers not found, told by its declaration', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
-      { apiKey: { clientId: 'c-2' } },
+      { apiKey: { callerId: 'c-2' } },
     );
 
     expect(isRejectionOf(outcome, notFound)).toBe(true);
@@ -143,7 +143,7 @@ describe('the handlers README', () => {
     ];
 
     expect(admissions).toMatchObject([
-      { kind: 'admitted', context: { clientId: 'c-1' } },
+      { kind: 'admitted', context: { callerId: 'c-1' } },
       { kind: 'rejection', rejection: unauthenticated },
     ]);
   });

@@ -27,7 +27,7 @@ const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Fo
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
   rejections: [unauthenticated],
 });

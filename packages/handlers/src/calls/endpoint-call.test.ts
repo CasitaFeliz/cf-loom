@@ -42,9 +42,9 @@ const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Fo
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 
@@ -109,7 +109,7 @@ const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' 
 const { note: _note, ...withoutNote } = validOrder;
 const createInput = { headers: { 'x-request-id': 'r-1' }, body: validOrder };
 const getInput = { params: { orderId: ORDER_ID } };
-const getContext = { apiKey: { clientId: 'c-1' } };
+const getContext = { apiKey: { callerId: 'c-1' } };
 
 async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]> {
   try {
@@ -200,13 +200,13 @@ describe('an EndpointHandler’s Context', () => {
 
   test('a Context that breaks its Guard’s context schema throws', async () => {
     const issues = await issuesOf(() =>
-      getOrderHandler(getInput, { apiKey: { clientId: 7 } } as never),
+      getOrderHandler(getInput, { apiKey: { callerId: 7 } } as never),
     );
 
     expect(issues).toEqual([
       {
         part: 'context',
-        path: ['apiKey', 'clientId'],
+        path: ['apiKey', 'callerId'],
         code: 'invalid_type',
         message: expect.any(String),
       },
@@ -526,7 +526,7 @@ describe('what an EndpointHandler returns', () => {
       return reject(notFound);
     });
 
-    await getOrderHandler(getInput, { apiKey: { clientId: 'c-1', extra: true } } as never);
+    await getOrderHandler(getInput, { apiKey: { callerId: 'c-1', extra: true } } as never);
 
     expect(received).toEqual([getContext]);
   });

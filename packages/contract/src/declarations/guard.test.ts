@@ -24,9 +24,9 @@ const unauthenticated = defineRejection({
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 
@@ -88,7 +88,7 @@ describe('defineGuard', () => {
     const declare = () =>
       defineGuard({
         name: 'tenant',
-        description: 'The tenant the client acts for',
+        description: 'The tenant the Caller acts for',
         // @ts-expect-error a Guard lists declared Rejections only
         rejections: [notFound],
       });
@@ -100,7 +100,7 @@ describe('defineGuard', () => {
     const declare = () =>
       defineGuard({
         name: 'apiKey',
-        description: 'A key per client',
+        description: 'A key per Caller',
         // @ts-expect-error header names are lower-case
         demands: { headers: z.object({ 'X-Api-Key': z.string() }) },
       });
@@ -109,7 +109,7 @@ describe('defineGuard', () => {
   });
 
   test('a Guard’s provided Context is typed by its context schema', () => {
-    expectTypeOf<ProvidedContextOf<typeof apiKey>>().toEqualTypeOf<{ clientId: string }>();
+    expectTypeOf<ProvidedContextOf<typeof apiKey>>().toEqualTypeOf<{ callerId: string }>();
   });
 
   test('a Guard whose type leaves its context open provides unknown', () => {
@@ -132,7 +132,7 @@ describe('defineGuard', () => {
     });
 
     expectTypeOf<ContextOf<typeof getOrder>>().toEqualTypeOf<{
-      readonly apiKey: { clientId: string };
+      readonly apiKey: { callerId: string };
     }>();
   });
 
@@ -209,7 +209,7 @@ describe('a declared Guard’s containers', () => {
 
     const tenant = defineGuard({
       name: 'tenant',
-      description: 'The tenant the client acts for',
+      description: 'The tenant the Caller acts for',
       demands,
       guards,
       rejections: [unauthenticated],
@@ -230,7 +230,7 @@ describe('defineGuard nested fields', () => {
     const declare = () =>
       defineGuard({
         name: 'apiKey',
-        description: 'A key per client',
+        description: 'A key per Caller',
         demands: {
           query: z.object({ page: z.int() }),
           // @ts-expect-error header is not a part of demands

@@ -14,9 +14,9 @@ const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
 });
 
 const getOrder = defineEndpoint({
@@ -27,7 +27,7 @@ const getOrder = defineEndpoint({
   description: 'One order by id',
   guards: [apiKey],
   input: { params: z.object({ orderId: z.uuid() }) },
-  success: { status: 200, body: z.object({ id: z.uuid(), clientId: z.string() }) },
+  success: { status: 200, body: z.object({ id: z.uuid(), callerId: z.string() }) },
   rejections: [notFound],
 });
 
@@ -40,7 +40,7 @@ const contract = defineContract({
 const handlers = {
   endpoints: {
     getOrder: handle(getOrder, ({ params }, context) =>
-      success({ id: params.orderId, clientId: context.apiKey.clientId }),
+      success({ id: params.orderId, callerId: context.apiKey.callerId }),
     ),
   },
   guards: { apiKey: handle(apiKey, () => reject(notFound) as never) },
@@ -55,7 +55,7 @@ describe('the READMEs', () => {
       ...handlers,
       guards: {
         ...handlers.guards,
-        apiKey: handle(apiKey, async () => admit({ clientId: 'c-1' })),
+        apiKey: handle(apiKey, async () => admit({ callerId: 'c-1' })),
       },
     });
     const res = await http(
@@ -65,7 +65,7 @@ describe('the READMEs', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: ORDER_ID, clientId: 'c-1' });
+    expect(await res.json()).toEqual({ id: ORDER_ID, callerId: 'c-1' });
   });
 
   test('serve takes the generated map and its options, and returns the web-standard handler', () => {

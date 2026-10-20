@@ -16,7 +16,7 @@ import { fakeProvider } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
 });
 

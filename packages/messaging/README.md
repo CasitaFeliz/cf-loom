@@ -78,7 +78,7 @@ const broker = memory();
 await connect(broker);
 await consume(handlers);
 
-await createOrderHandler({ body: newOrder }, { apiKey: { clientId: 'c-1' } });
+await createOrderHandler({ body: newOrder }, { apiKey: { callerId: 'c-1' } });
 await broker.settled();   // OrderCreated v1 and v2 published, ChargeCard v1 sent and handled
 broker.messages;          // each with its subject, body, Fact id, broker message id and transport headers
 

@@ -15,9 +15,9 @@ const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
 });
 
 function anEndpoint<const Name extends string>(name: Name) {
@@ -75,9 +75,9 @@ describe('handle', () => {
       name: 'tenantKey',
       description: 'An API key per tenant',
       demands: { headers: z.object({ 'x-api-key': z.string() }) },
-      context: z.object({ clientId: z.string() }),
+      context: z.object({ callerId: z.string() }),
     });
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     // @ts-expect-error a Handler is nominal over its Guard
     const tenantKeyHandler: GuardHandler<typeof tenantKey> = apiKeyHandler;

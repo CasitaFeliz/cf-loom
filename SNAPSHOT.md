@@ -118,7 +118,7 @@ Subjects and stream names are derived from these identities at runtime and are n
 ```json
 "apiKey": {
   "origin": "local",
-  "description": "An API key per client",
+  "description": "An API key per Caller",
   "guards": [],
   "qualifier": null,
   "demands": { "headers": {}, "query": null },
