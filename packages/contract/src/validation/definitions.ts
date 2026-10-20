@@ -1,9 +1,12 @@
 import { type Definitions, isGuard, isRejection } from '../declarations/index.ts';
-import type { Declarations } from './declarations.ts';
+import {
+  type Declarations,
+  type LocatedDefinitions,
+  listOf,
+  reachedGuardsOf,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { LocatedDefinitions } from './located.ts';
-import { reachedGuardsOf } from './references.ts';
-import { listOf, textOf } from './written.ts';
 
 /** What a Definitions Package's module exports, as the tooling imported it: nothing when unknown. */
 export type ExportsOf = (definitions: Definitions) => readonly unknown[];

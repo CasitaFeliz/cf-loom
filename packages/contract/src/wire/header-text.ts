@@ -1,4 +1,4 @@
-import type { Issue } from '../validation/index.ts';
+import type { Issue } from '../written/index.ts';
 import { isTextValue, textOfValue } from './text.ts';
 
 /** The parts whose headers travel: an Input's, or a Success's. */

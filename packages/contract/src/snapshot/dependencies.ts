@@ -1,5 +1,5 @@
-import { identityOf, type LocatedDependencies } from '../validation/index.ts';
 import { byCodePoint } from '../walker/index.ts';
+import { identityOf, type LocatedDependencies } from '../written/index.ts';
 import type { DependencySnapshot } from './types.ts';
 
 /**

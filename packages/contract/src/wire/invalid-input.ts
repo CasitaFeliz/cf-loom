@@ -14,7 +14,7 @@ import {
   type Issue,
   inOf,
   schemaOf,
-} from '../validation/index.ts';
+} from '../written/index.ts';
 import { rejectionResponseOf } from './responses.ts';
 
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */

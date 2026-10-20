@@ -8,20 +8,23 @@ import type {
   WalkedLocation,
   WalkedSchemas,
 } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
-import { type DeclarationFailure, failure } from './failures.ts';
-import type { LocatedCode, LocatedEndpoint, LocatedGuard } from './located.ts';
 import {
+  type Declarations,
   endpointParts,
+  entriesOf,
   guardParts,
   isObjectPart,
   isSchema,
+  type LocatedCode,
+  type LocatedEndpoint,
+  type LocatedGuard,
   type ObjectPart,
   type Part,
   slotAt,
+  textOf,
   writtenAt,
-} from './parts.ts';
-import { entriesOf, textOf } from './written.ts';
+} from '../written/index.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
 
 /**
  * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared

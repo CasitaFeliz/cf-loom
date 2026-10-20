@@ -1,5 +1,6 @@
-import type { TextIn, TextPartNodes } from '../validation/index.ts';
+import type { TextPartNodes } from '../validation/index.ts';
 import type { ObjectNode } from '../walker/index.ts';
+import type { TextIn } from '../written/index.ts';
 import { valueOfText } from './text.ts';
 
 /** Where a request's text comes from: its matched params by name, its query and its headers. */

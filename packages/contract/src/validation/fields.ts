@@ -1,6 +1,14 @@
 import { isDeclaration } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
+import {
+  type Declarations,
+  entriesOf,
+  isMissing,
+  isPlainObject,
+  isWithoutValue,
+  listOf,
+  type WrittenObject,
+} from '../written/index.ts';
 import type { KnownFields } from './declared-fields.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import {
@@ -19,14 +27,6 @@ import {
   standardRejectionsFields,
   successFields,
 } from './field-tables.ts';
-import {
-  entriesOf,
-  isMissing,
-  isPlainObject,
-  isWithoutValue,
-  listOf,
-  type WrittenObject,
-} from './written.ts';
 
 /** An object an author wrote, where it sits, and the fields its kind declares. */
 export type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };

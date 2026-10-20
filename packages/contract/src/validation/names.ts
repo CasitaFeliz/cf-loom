@@ -1,12 +1,17 @@
 import type { Endpoint } from '../declarations/index.ts';
 import { isEndpoint } from '../declarations/index.ts';
-import type { Declarations } from './declarations.ts';
-import { endpointAt } from './declarations.ts';
+import {
+  type Declarations,
+  endpointAt,
+  identityOf,
+  type LocatedEndpoint,
+  type LocatedGroup,
+  listOf,
+  type Root,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { identityOf } from './identity.ts';
-import type { LocatedEndpoint, LocatedGroup, Root } from './located.ts';
 import { isCanonicalPath } from './paths.ts';
-import { listOf, textOf } from './written.ts';
 
 /**
  * A root is named as its package.json without the scope, so its Contract Package's name follows

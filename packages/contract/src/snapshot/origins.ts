@@ -1,5 +1,5 @@
-import type { LocatedDefinitions, ResolvedStandard } from '../validation/index.ts';
 import type { Origin, OriginOf } from '../walker/index.ts';
+import type { LocatedDefinitions, ResolvedStandard } from '../written/index.ts';
 import type { ResolvedDefinitions } from './context.ts';
 
 /**

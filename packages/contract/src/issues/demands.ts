@@ -1,5 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { attachmentsOf, demandParts, type Issue, schemaOf } from '../validation/index.ts';
+import { attachmentsOf, demandParts, type Issue, schemaOf } from '../written/index.ts';
 import { parsedPartsOf } from './parsed-parts.ts';
 
 /** An Issue in what a Guard demands of a request. */

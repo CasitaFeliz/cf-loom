@@ -1,6 +1,6 @@
 import type { ObjectNode, SchemaNode, TupleNode } from '../walker/index.ts';
 import { canonicalJson } from '../walker/index.ts';
-import { isPlainObject } from './written.ts';
+import { isPlainObject } from '../written/index.ts';
 
 /** Where in a value the judgement is, and the `defs` its schema's refs resolve through. */
 type Within = {

@@ -6,20 +6,20 @@ import {
   type Path,
   type SchemaNode,
 } from '../walker/index.ts';
-import { type DeclarationFailure, type Failure, failure } from './failures.ts';
-import type { LocatedEndpoint } from './located.ts';
 import {
+  attachedGuardsOf,
   isObjectPart,
   isQueryOrHeadersPart,
+  type LocatedEndpoint,
   type Part,
   partFieldOf,
   slotAt,
   type TextIn,
-} from './parts.ts';
-import { attachedGuardsOf } from './references.ts';
+  textOf,
+} from '../written/index.ts';
+import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
-import { textOf } from './written.ts';
 
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };

@@ -1,5 +1,5 @@
 import { $ZodType } from 'zod/v4/core';
-import type { Endpoint, Guard, IssueCode, Rejection } from '../declarations/index.ts';
+import type { Endpoint, Guard, IssueCode, inputIns, Rejection } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { partOf } from './written.ts';
 
@@ -111,7 +111,7 @@ export function isInputPart(part: IssuePart): part is InputPart {
 }
 
 /** The part of the request an invalid-input issue says it read: its `in`. */
-export type InputIn = 'params' | 'query' | 'headers' | 'body';
+export type InputIn = (typeof inputIns)[number];
 
 /** The parts of a request that travel as text, by the field a Handler reads them under. */
 export type TextIn = Exclude<InputIn, 'body'>;

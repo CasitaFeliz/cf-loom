@@ -2,13 +2,19 @@ import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
 import { isDeclaration, isGuard } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
+import {
+  attachedGuardOf,
+  isPlainObject,
+  isSchema,
+  isWithoutValue,
+  type LocatedEndpoint,
+  type LocatedGuard,
+  listOf,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { LocatedEndpoint, LocatedGuard } from './located.ts';
-import { isSchema } from './parts.ts';
 import { undeclaredKeysOf } from './qualifiers.ts';
-import { attachedGuardOf } from './references.ts';
 import type { Nodes } from './schemas.ts';
-import { isPlainObject, isWithoutValue, listOf, textOf } from './written.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
 type Listed = {

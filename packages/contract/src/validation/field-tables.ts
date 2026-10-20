@@ -12,7 +12,7 @@ import type {
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,
 } from '../declarations/index.ts';
-import type { Declarations } from './declarations.ts';
+import type { Declarations } from '../written/index.ts';
 
 import type { Fields, KnownFields } from './declared-fields.ts';
 
