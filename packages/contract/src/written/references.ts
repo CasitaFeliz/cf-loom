@@ -8,6 +8,7 @@ import type {
   LocatedRejection,
   Root,
 } from './located.ts';
+import { reachedGuardsOf } from './reach.ts';
 import { isPlainObject, listOf, textOf } from './written.ts';
 
 /** What the Guards and Rejections of a root are gathered from. */
@@ -78,25 +79,6 @@ export function guardsOf({ root, allPackages, endpoints }: Sources): readonly Lo
     ...attached.map((guard) => locatedGuardOf(guard, true)),
     ...listedOnly.map((guard) => locatedGuardOf(guard, root.kind === 'definitions')),
   ];
-}
-
-/**
- * Every Guard the given ones reach, each once, the Guards one lists before it: themselves and,
- * through `guards`, the ones they name; what names no Guard is left out.
- */
-export function reachedGuardsOf(guards: readonly unknown[]): readonly Guard[] {
-  const seen = new Set<Guard>();
-  const reached: Guard[] = [];
-  const visit = (guard: unknown): void => {
-    if (!isGuard(guard) || seen.has(guard)) {
-      return;
-    }
-    seen.add(guard);
-    listOf(guard.guards).forEach(visit);
-    reached.push(guard);
-  };
-  guards.forEach(visit);
-  return reached;
 }
 
 /** Every Rejection a root reaches, each once: a Definitions Package's, a Guard's, an Endpoint's. */

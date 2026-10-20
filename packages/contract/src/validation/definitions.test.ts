@@ -38,6 +38,12 @@ const permission = defineGuard({
   guards: [userToken],
   rejections: [forbidden],
 });
+const admin = defineGuard({
+  name: 'admin',
+  description: 'The user administers',
+  guards: [permission],
+});
+const owner = defineGuard({ name: 'owner', description: 'The user owns', guards: [admin] });
 
 function failuresOf(root: unknown) {
   const validated = validateInPackage(root, noOrigin);
@@ -57,25 +63,30 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
     expect(validated.kind).toBe('valid');
   });
 
-  test('a Guard a listed Guard names, left out of the list, fails', () => {
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [permission],
-      rejections: [unauthenticated, forbidden],
-    });
+  test.each([
+    { depth: 1, listed: [permission] },
+    { depth: 2, listed: [admin] },
+    { depth: 3, listed: [owner] },
+  ])(
+    'a Guard a listed Guard reaches at depth $depth, left out of the list, fails naming it',
+    ({ listed }) => {
+      const definitions = defineDefinitions({
+        name: 'definitions',
+        guards: listed,
+        rejections: [unauthenticated, forbidden],
+      });
 
-    const failures = failuresOf(definitions);
+      const failures = failuresOf(definitions);
 
-    expect(failures).toEqual([
-      {
+      expect(failures).toContainEqual({
         kind: 'declaration',
         at: ['guards'],
         rule: 'definitions-unlisted',
         message:
           'A Definitions Package lists every Guard it exports or its Guards reach: userToken',
-      },
-    ]);
-  });
+      });
+    },
+  );
 
   test('a Rejection a listed Guard answers, left out of the list, fails', () => {
     const definitions = defineDefinitions({
