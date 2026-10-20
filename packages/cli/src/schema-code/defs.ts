@@ -1,9 +1,4 @@
-import {
-  byCodePoint,
-  type Defs,
-  reachedDefsOf,
-  type SchemaNode,
-} from '@casitafeliz/loom-contract/internal';
+import { byCodePoint, type Defs, reachedDefsOf, type SchemaNode } from '@cf-loom/contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
 import { type DefUse, type Needs, noNeeds, type SchemaMode, schemaModes } from './needs.ts';

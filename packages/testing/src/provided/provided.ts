@@ -1,5 +1,5 @@
-import type { AnyDependencies } from '@casitafeliz/loom-client/internal';
-import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
+import type { AnyDependencies } from '@cf-loom/client/internal';
+import type { Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -10,7 +10,7 @@ import {
   pathSegmentsOf,
   type TextPartNodes,
   textPartNodesOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 
 /** An Endpoint a Dependency lists, prepared once for the requests that reach it. */
 export type ListedEndpoint = {

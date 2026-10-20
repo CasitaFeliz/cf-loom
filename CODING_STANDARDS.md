@@ -17,7 +17,7 @@ report, never a third copy to add.
 if (status >= 400 && status < 500) return decodeRejection(body);   // client
 if (status >= 400 && status < 500) return encodeRejection(outcome); // server
 
-// good: the wire rule lives once, in loom-contract's ./internal; both call it
+// good: the wire rule lives once, in @cf-loom/contract's ./internal; both call it
 export function isRejectionStatus(status: number): boolean
 ```
 

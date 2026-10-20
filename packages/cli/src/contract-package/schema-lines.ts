@@ -1,4 +1,4 @@
-import type { SchemaNode } from '@casitafeliz/loom-contract/internal';
+import type { SchemaNode } from '@cf-loom/contract/internal';
 import { type Writing, zodExpressionOf } from '../schema-code/index.ts';
 
 /** An object of schema parts, each declared one written in a mode; none when no part is. */

@@ -1,4 +1,4 @@
-import type { CodeSnapshot } from '@casitafeliz/loom-contract/internal';
+import type { CodeSnapshot } from '@cf-loom/contract/internal';
 import { loomNeeds, type Writing } from '../schema-code/index.ts';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';

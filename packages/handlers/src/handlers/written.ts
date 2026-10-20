@@ -1,5 +1,5 @@
-import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
-import { isEndpoint, isGuard } from '@casitafeliz/loom-contract/internal';
+import type { Endpoint, Guard } from '@cf-loom/contract';
+import { isEndpoint, isGuard } from '@cf-loom/contract/internal';
 import type { Written } from '../calls/index.ts';
 
 /** What any Handler was written with, an Endpoint's or a Guard's. */

@@ -1,5 +1,5 @@
-import type { Rejection, StandardRejection } from '@casitafeliz/loom-contract';
-import type { AnswerableRejection } from '@casitafeliz/loom-contract/internal';
+import type { Rejection, StandardRejection } from '@cf-loom/contract';
+import type { AnswerableRejection } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 
 /** A Success as a Handler builds it, its value read by the Endpoint it answers. */

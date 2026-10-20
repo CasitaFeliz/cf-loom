@@ -1,4 +1,4 @@
-import * as built from '@casitafeliz/loom-contract';
+import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -194,7 +194,7 @@ describe('a Definitions Package with containers the author froze', () => {
   });
 });
 
-describe('declarations from another copy of loom-contract', () => {
+describe('declarations from another copy of @cf-loom/contract', () => {
   const ordersBody = z.array(z.object({ id: z.uuid() }));
 
   test('a Group keeps an Endpoint declared by another copy', () => {

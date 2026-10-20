@@ -184,7 +184,7 @@ const stampedAt = '2026-10-17T09:30:00Z';
 
 function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
   return {
-    generator: '@casitafeliz/loom-cli@2.1.0',
+    generator: '@cf-loom/cli@2.1.0',
     packages: [orgPackage],
     committed: undefined,
     now: Date.parse('2026-10-18T12:00:00.750Z'),
@@ -251,7 +251,7 @@ describe('snapshotOf: a Service', () => {
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: '@casitafeliz/loom-cli@2.1.0',
+      generator: '@cf-loom/cli@2.1.0',
       definitions: { '@org/definitions': '4.2.0' },
       events: {},
       commands: {},
@@ -678,7 +678,7 @@ describe('snapshotOf: an Application', () => {
       format: 1,
       kind: 'application',
       name: 'web-admin',
-      generator: '@casitafeliz/loom-cli@2.1.0',
+      generator: '@cf-loom/cli@2.1.0',
       dependencies: {
         'payments-service': {
           against: '5.1.0',
@@ -698,7 +698,7 @@ describe('snapshotOf: a Definitions Package', () => {
       format: 1,
       kind: 'definitions',
       name: 'definitions',
-      generator: '@casitafeliz/loom-cli@2.1.0',
+      generator: '@cf-loom/cli@2.1.0',
       defs: {},
       schemas: {
         money: {
@@ -736,7 +736,7 @@ describe('canonicalTextOf', () => {
         '{',
         '  "dependencies": {},',
         '  "format": 1,',
-        '  "generator": "@casitafeliz/loom-cli@2.1.0",',
+        '  "generator": "@cf-loom/cli@2.1.0",',
         '  "kind": "application",',
         '  "name": "web-admin"',
         '}',

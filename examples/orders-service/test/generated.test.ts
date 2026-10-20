@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { afterAll, describe, expect, test } from 'vitest';
 
 const serviceDir = join(import.meta.dirname, '..');
-const bin = join(serviceDir, 'node_modules/@casitafeliz/loom-cli/dist/bin.js');
+const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 const outDir = mkdtempSync(join(tmpdir(), 'orders-contract-package-'));
 
 afterAll(() => {

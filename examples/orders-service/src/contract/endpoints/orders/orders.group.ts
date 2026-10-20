@@ -1,4 +1,4 @@
-import { defineGroup } from '@casitafeliz/loom-contract';
+import { defineGroup } from '@cf-loom/contract';
 import { createOrder } from './create-order.endpoint.ts';
 import { getOrder } from './get-order.endpoint.ts';
 

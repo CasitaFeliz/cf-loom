@@ -1,10 +1,5 @@
-import {
-  defineContract,
-  defineEndpoint,
-  defineGroup,
-  type Endpoint,
-} from '@casitafeliz/loom-contract';
-import { handle, success } from '@casitafeliz/loom-handlers';
+import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '@cf-loom/contract';
+import { handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { serve } from './index.ts';

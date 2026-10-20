@@ -1,6 +1,6 @@
-# @casitafeliz/loom-messaging
+# @cf-loom/messaging
 
-`messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close`. `@casitafeliz/loom-messaging/jetstream` is its adapter for NATS JetStream and `@casitafeliz/loom-messaging/memory` an in-memory one for tests and local development (see [Adapters](#adapters)). What the broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Pruning](#pruning); how a Message travels is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close`. `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream and `@cf-loom/messaging/memory` an in-memory one for tests and local development (see [Adapters](#adapters)). What the broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Pruning](#pruning); how a Message travels is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
@@ -10,7 +10,7 @@ The EventPublisher and CommandSender are created once, in their own module, and 
 
 ```ts
 // src/messaging.ts
-import { messaging } from '@casitafeliz/loom-messaging';
+import { messaging } from '@cf-loom/messaging';
 import { contract } from './contract/index.ts';
 
 export const { publisher, sender, consume, connect, close } = messaging(contract);
@@ -62,14 +62,14 @@ Messages are validated with the generated Reader schemas (see [The Contract Pack
 
 ### JetStream
 
-`jetstream({ servers, prefix })` from `@casitafeliz/loom-messaging/jetstream` connects to NATS JetStream, as `src/main.ts` does in [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README; its broker client is an optional peer dependency (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md) and `prefix` is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) there. The adapter's `apply` applies the broker plan (see [Applying the plan](#applying-the-plan)).
+`jetstream({ servers, prefix })` from `@cf-loom/messaging/jetstream` connects to NATS JetStream, as `src/main.ts` does in [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README; its broker client is an optional peer dependency (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md) and `prefix` is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) there. The adapter's `apply` applies the broker plan (see [Applying the plan](#applying-the-plan)).
 
 ### In memory
 
-`@casitafeliz/loom-messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
+`@cf-loom/messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
 
 ```ts
-import { memory } from '@casitafeliz/loom-messaging/memory';
+import { memory } from '@cf-loom/messaging/memory';
 import { connect, consume, close } from '../src/messaging.ts';
 import handlers from '../src/handlers.generated.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';

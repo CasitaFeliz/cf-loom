@@ -12,15 +12,11 @@ import {
   openEnum,
   openEnumReader,
   type StandardRejections,
-} from '@casitafeliz/loom-contract';
-import {
-  exportedSnapshotOf,
-  snapshotOf,
-  validateContract,
-} from '@casitafeliz/loom-contract/internal';
-import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
-import { serve } from '@casitafeliz/loom-server';
-import { nodeHttp } from '@casitafeliz/loom-server/node-http';
+} from '@cf-loom/contract';
+import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
+import { serve } from '@cf-loom/server';
+import { nodeHttp } from '@cf-loom/server/node-http';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { client, type DeprecationNotice } from './index.ts';

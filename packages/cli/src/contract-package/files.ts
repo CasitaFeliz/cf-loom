@@ -4,7 +4,7 @@ import {
   type ExportedSnapshot,
   exportedSnapshotOf,
   type ServiceSnapshot,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import {
   type DefUse,
   defNamesProblemOf,

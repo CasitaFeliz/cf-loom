@@ -1,4 +1,4 @@
-import type { Issue } from '@casitafeliz/loom-contract/internal';
+import type { Issue } from '@cf-loom/contract/internal';
 
 /**
  * A mistake in a test, never an Outcome: thrown out of a fake's `fetch` under its own name, which

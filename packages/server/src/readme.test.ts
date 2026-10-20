@@ -4,8 +4,8 @@ import {
   defineGroup,
   defineGuard,
   notFound,
-} from '@casitafeliz/loom-contract';
-import { admit, handle, reject, success } from '@casitafeliz/loom-handlers';
+} from '@cf-loom/contract';
+import { admit, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Http, serve } from './index.ts';

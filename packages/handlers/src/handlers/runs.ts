@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
 import { type EndpointRun, endpointRunOf, type GuardRun, guardRunOf } from '../calls/index.ts';
 import type { EndpointGiven, GuardGiven } from '../checks/index.ts';
 import {

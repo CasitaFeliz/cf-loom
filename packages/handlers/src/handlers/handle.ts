@@ -1,11 +1,11 @@
-import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { notImplemented } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import { notImplemented } from '@cf-loom/contract';
 import {
   isEndpoint,
   isGuard,
   standardRejectionDefaults,
   standardRejectionsOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import {
   answerOf,
   endpointRunOf,
@@ -72,7 +72,7 @@ function writtenFor(
   if (isGuard(element)) {
     return { element, ...how };
   }
-  throw new Error('handle() takes an Endpoint or a Guard declared with @casitafeliz/loom-contract');
+  throw new Error('handle() takes an Endpoint or a Guard declared with @cf-loom/contract');
 }
 
 function endpointCallOf(written: Written<Endpoint>) {

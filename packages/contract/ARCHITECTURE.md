@@ -1,4 +1,4 @@
-# Internals of @casitafeliz/loom-contract
+# Internals of @cf-loom/contract
 
 How the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires. The entries `src/index.ts` (`.`) and `src/internal/index.ts` (`./internal`) re-export from the modules' `index.ts`.
 

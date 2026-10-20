@@ -1,4 +1,4 @@
-import { client } from '@casitafeliz/loom-client';
+import { client } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
@@ -6,12 +6,8 @@ import {
   defineEndpoint,
   defineGroup,
   type Endpoint,
-} from '@casitafeliz/loom-contract';
-import {
-  exportedSnapshotOf,
-  snapshotOf,
-  validateContract,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract';
+import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';

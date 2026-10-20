@@ -1,4 +1,4 @@
-import { defineEndpoint, notFound } from '@casitafeliz/loom-contract';
+import { defineEndpoint, notFound } from '@cf-loom/contract';
 import { z } from 'zod';
 import { apiKey } from '../../guards/api-key.guard.ts';
 import { orderLocked } from '../../rejections/order-locked.rejection.ts';

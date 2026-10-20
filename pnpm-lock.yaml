@@ -211,16 +211,16 @@ importers:
 
   examples/billing-service:
     dependencies:
-      '@casitafeliz/loom-client':
+      '@cf-loom/client':
         specifier: workspace:*
         version: link:../../packages/client
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:*
         version: link:../../packages/handlers
-      '@casitafeliz/loom-server':
+      '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
       '@org/contract-orders-service':
@@ -230,13 +230,13 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@casitafeliz/loom-cli':
+      '@cf-loom/cli':
         specifier: workspace:*
         version: link:../../packages/cli
-      '@casitafeliz/loom-messaging':
+      '@cf-loom/messaging':
         specifier: workspace:*
         version: link:../../packages/messaging
-      '@casitafeliz/loom-testing':
+      '@cf-loom/testing':
         specifier: workspace:*
         version: link:../../packages/testing
       '@types/node':
@@ -245,20 +245,20 @@ importers:
 
   examples/orders-service:
     dependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:*
         version: link:../../packages/contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:*
         version: link:../../packages/handlers
-      '@casitafeliz/loom-server':
+      '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
       zod:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
-      '@casitafeliz/loom-cli':
+      '@cf-loom/cli':
         specifier: workspace:*
         version: link:../../packages/cli
       '@types/node':
@@ -269,7 +269,7 @@ importers:
 
   packages/cli:
     devDependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
       zod:
@@ -278,13 +278,13 @@ importers:
 
   packages/client:
     devDependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:^
         version: link:../handlers
-      '@casitafeliz/loom-server':
+      '@cf-loom/server':
         specifier: workspace:^
         version: link:../server
       zod:
@@ -299,7 +299,7 @@ importers:
 
   packages/handlers:
     devDependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
       zod:
@@ -308,10 +308,10 @@ importers:
 
   packages/messaging:
     devDependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:^
         version: link:../handlers
       zod:
@@ -320,10 +320,10 @@ importers:
 
   packages/server:
     devDependencies:
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:^
         version: link:../handlers
       zod:
@@ -332,19 +332,19 @@ importers:
 
   packages/testing:
     devDependencies:
-      '@casitafeliz/loom-client':
+      '@cf-loom/client':
         specifier: workspace:^
         version: link:../client
-      '@casitafeliz/loom-contract':
+      '@cf-loom/contract':
         specifier: workspace:^
         version: link:../contract
-      '@casitafeliz/loom-handlers':
+      '@cf-loom/handlers':
         specifier: workspace:^
         version: link:../handlers
-      '@casitafeliz/loom-messaging':
+      '@cf-loom/messaging':
         specifier: workspace:^
         version: link:../messaging
-      '@casitafeliz/loom-server':
+      '@cf-loom/server':
         specifier: workspace:^
         version: link:../server
       zod:

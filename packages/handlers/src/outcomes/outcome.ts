@@ -6,8 +6,8 @@ import type {
   RejectionsOf,
   StandardRejection,
   SuccessOf,
-} from '@casitafeliz/loom-contract';
-import type { AnswerableRejection } from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract';
+import type { AnswerableRejection } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { BuiltAdmitted, BuiltRejection, BuiltSuccess } from './built.ts';
 import type { Fault } from './fault.ts';

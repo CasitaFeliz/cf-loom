@@ -1,4 +1,4 @@
-import type { Endpoint, Guard } from '@casitafeliz/loom-contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import { type Fault, thrownFault } from '../outcomes/index.ts';
 
 /** What an implementation returned: what it built, or the Fault for a value that is no Outcome. */

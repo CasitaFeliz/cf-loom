@@ -1,4 +1,4 @@
-# @casitafeliz/loom-testing
+# @cf-loom/testing
 
 `fakeProvider`, `FakeProviderError` and `fakeEvent`, and their types (see [Types](#types)). cf-loom keeps its API test-friendly and ships testing helpers only where hand-written test doubles would drift from a Contract: this package fakes the Providers a Consumer depends on. How the package is built is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/testing/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
@@ -7,7 +7,7 @@
 Each fake is checked against the Provider's Snapshot, as its Contract Package exports it in `contract.exportedSnapshot` (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md), so a fake can never answer what the Provider could not:
 
 ```ts
-import { fakeProvider } from '@casitafeliz/loom-testing';
+import { fakeProvider } from '@cf-loom/testing';
 import { paymentsDeps } from '../src/contract/dependencies/payments-service.dependencies.ts';
 
 const payments = fakeProvider(paymentsDeps);
@@ -27,7 +27,7 @@ payments.calls('getPayment');                            // the requests the cod
 
 - **Requests.** `fakeProvider` reads each request as the Provider would (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), every Guard admitting it, since a step answers for its GuardHandlers. A request that fails answers the Provider's invalid-input Rejection, with the Provider's code, status and message and cf-loom's body, and takes no step. The client never sends Input that breaks its schema (see [What a call sends](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#what-a-call-sends) in the client README), so through `payments.client()` only the requests the code sends reach the fake; `payments.fetch` reads whatever it is given.
 - **Where requests go.** `fakeProvider(deps, { baseUrl })` is reached at `baseUrl`, `https://<provider>.test` by default, and `payments.client()` always calls it there; a `baseUrl` with a username or a password, or with a query or a fragment, is a bug, and `fakeProvider` throws, as `client()` does. Only a request's path is compared, under the base URL's path, from any origin. It is matched against every Endpoint the Contract Package exports, so routing precedence is the Provider's among them (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md). A test that wants `NO_SUCH_ENDPOINT` scripts it, `r.fault({ code: 'NO_SUCH_ENDPOINT' })`.
-- **Steps.** Each step, in `once` or `otherwise`, receives a builder typed by the Endpoint and the request, so codes and bodies autocomplete from the Provider's Contract and nothing collides with `@casitafeliz/loom-contract` or `@casitafeliz/loom-handlers`, and the request's Input as the Provider parses it. A step may be async.
+- **Steps.** Each step, in `once` or `otherwise`, receives a builder typed by the Endpoint and the request, so codes and bodies autocomplete from the Provider's Contract and nothing collides with `@cf-loom/contract` or `@cf-loom/handlers`, and the request's Input as the Provider parses it. A step may be async.
   - `r.success(body)` answers the Success; `r.success({ headers, body })` when the Endpoint declares `success.headers`, `r.success({ headers })` with no body, and `r.success()` with neither.
   - `r.reject(code, body?)` answers a code the Endpoint answers, a Standard one by the Provider's code, with its status and message, and its body when it declares one.
   - `r.reject({ unknown: code, message? }, body)` answers a code the Provider does not declare, with status 422, its message the code unless given, and any JSON value as its body.
@@ -44,7 +44,7 @@ payments.calls('getPayment');                            // the requests the cod
 ## Faking Events
 
 ```ts
-import { fakeEvent } from '@casitafeliz/loom-testing';
+import { fakeEvent } from '@cf-loom/testing';
 import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler.ts';
 
 const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });

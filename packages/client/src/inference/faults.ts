@@ -1,4 +1,4 @@
-import type { Committed, Issue, ReservedCode } from '@casitafeliz/loom-contract/internal';
+import type { Committed, Issue, ReservedCode } from '@cf-loom/contract/internal';
 
 /** What happened to a call that answered no Outcome of its own, as `inferFault` is offered it. */
 export type Happened = { readonly kind: 'thrown'; readonly error: unknown } | Answered;

@@ -1,4 +1,4 @@
-import { InvalidInputError, isRejectionOf } from '@casitafeliz/loom-handlers';
+import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import { orderLocked } from '../src/contract/rejections/order-locked.rejection.ts';

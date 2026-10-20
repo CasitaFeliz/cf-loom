@@ -1,5 +1,5 @@
-import { notFound } from '@casitafeliz/loom-contract';
-import { handle, reject, success } from '@casitafeliz/loom-handlers';
+import { notFound } from '@cf-loom/contract';
+import { handle, reject, success } from '@cf-loom/handlers';
 import { getOrder } from '../../contract/endpoints/orders/get-order.endpoint.ts';
 import { orderLocked } from '../../contract/rejections/order-locked.rejection.ts';
 import { seededOrderOf } from '../../seeded-orders.ts';

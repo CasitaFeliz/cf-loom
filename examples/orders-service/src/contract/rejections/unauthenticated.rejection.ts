@@ -1,4 +1,4 @@
-import { defineRejection } from '@casitafeliz/loom-contract';
+import { defineRejection } from '@cf-loom/contract';
 
 export const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',

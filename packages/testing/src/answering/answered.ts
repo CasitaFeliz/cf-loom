@@ -6,7 +6,7 @@ import {
   rejectionResponseOf,
   reservedResponseOf,
   upperSnakeCase,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import { type ListedEndpoint, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';

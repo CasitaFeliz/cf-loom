@@ -1,4 +1,4 @@
-import { committedValues } from '@casitafeliz/loom-contract/internal';
+import { committedValues } from '@cf-loom/contract/internal';
 import type { AnyRejection, BuiltAdmitted, BuiltSuccess } from './built.ts';
 import type { Fault } from './fault.ts';
 

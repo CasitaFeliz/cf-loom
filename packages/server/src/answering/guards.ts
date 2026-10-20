@@ -1,6 +1,6 @@
-import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { contextProvidersOf, type ReadingSource } from '@casitafeliz/loom-contract/internal';
-import { runGuard } from '@casitafeliz/loom-handlers/internal';
+import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import { contextProvidersOf, type ReadingSource } from '@cf-loom/contract/internal';
+import { runGuard } from '@cf-loom/handlers/internal';
 import type { Call } from './call.ts';
 import { type Answered, answeredOfFailedRun, answeredOfNotSuccess } from './runs.ts';
 

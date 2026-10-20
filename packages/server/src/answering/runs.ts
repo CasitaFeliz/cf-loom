@@ -1,4 +1,4 @@
-import type { StandardRejections } from '@casitafeliz/loom-contract';
+import type { StandardRejections } from '@cf-loom/contract';
 import {
   faultResponseOf,
   type InputIssue,
@@ -10,9 +10,9 @@ import {
   type SentRejection,
   type SentSuccess,
   successResponseOf,
-} from '@casitafeliz/loom-contract/internal';
-import type { Fault, Issue } from '@casitafeliz/loom-handlers';
-import type { EndpointRun } from '@casitafeliz/loom-handlers/internal';
+} from '@cf-loom/contract/internal';
+import type { Fault, Issue } from '@cf-loom/handlers';
+import type { EndpointRun } from '@cf-loom/handlers/internal';
 import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
 /** How one request was answered; only a Fault may be the Service's, for `onServiceFault`. */

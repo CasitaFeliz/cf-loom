@@ -1,4 +1,4 @@
-import { defineEndpoint, defineGuard, notFound } from '@casitafeliz/loom-contract';
+import { defineEndpoint, defineGuard, notFound } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {

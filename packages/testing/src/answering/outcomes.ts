@@ -8,7 +8,7 @@ import {
   rejectionResponseOf,
   resolutionOf,
   successResponseOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import { mistakeOf } from '../mistakes/index.ts';
 import { type ListedEndpoint, whoOf } from '../provided/index.ts';

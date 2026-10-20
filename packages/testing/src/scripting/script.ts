@@ -1,4 +1,4 @@
-import type { Endpoint, InputOf, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, InputOf, StandardRejections } from '@cf-loom/contract';
 import type { ScriptedAnswer } from './answers.ts';
 import type { StepBuilder } from './builder.ts';
 

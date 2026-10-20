@@ -1,4 +1,4 @@
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import {
   type DefUse,
   defIdentifierOf,
@@ -39,7 +39,7 @@ export type PackageModule = {
 
 /**
  * A module of the package with its header line and its imports in code point order of their
- * specifiers: its siblings, `@casitafeliz/loom-contract` as `loom`, and `zod` as `z`.
+ * specifiers: its siblings, `@cf-loom/contract` as `loom`, and `zod` as `z`.
  */
 export function packageModuleOf(module: PackageModule): PackageFile {
   const { path, body } = module;

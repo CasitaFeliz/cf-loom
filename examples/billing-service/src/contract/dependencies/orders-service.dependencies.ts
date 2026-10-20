@@ -1,4 +1,4 @@
-import { defineDependencies } from '@casitafeliz/loom-contract';
+import { defineDependencies } from '@cf-loom/contract';
 import { contract as orders } from '@org/contract-orders-service';
 
 export const ordersDeps = defineDependencies(orders, {

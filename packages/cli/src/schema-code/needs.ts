@@ -10,7 +10,7 @@ export const schemaModes = ['declared', 'reader'] as const;
  */
 export type SchemaMode = (typeof schemaModes)[number];
 
-/** A module generated code imports: `zod` as `z`, or `@casitafeliz/loom-contract` as `loom`. */
+/** A module generated code imports: `zod` as `z`, or `@cf-loom/contract` as `loom`. */
 export type ImportedModule = 'zod' | 'loom';
 
 /** A recursive def as generated code references it: by its id, in one mode. */
@@ -58,12 +58,12 @@ export function loomNeeds(): Needs {
 export type ImportLine = { readonly specifier: string; readonly line: string };
 
 /**
- * The imports the modules a generated module needs: `@casitafeliz/loom-contract` whole as
+ * The imports the modules a generated module needs: `@cf-loom/contract` whole as
  * `loom`, so nothing it exports can meet a generated name, and `z` by name, which no generated
  * name can be.
  */
 export function schemaImportsOf(needs: Needs): readonly ImportLine[] {
-  const loom = '@casitafeliz/loom-contract';
+  const loom = '@cf-loom/contract';
   const loomImport = { specifier: loom, line: namespaceImportOf('loom', loom) };
   const zodImport = { specifier: 'zod', line: namedImportOf(['z'], 'zod') };
   return [

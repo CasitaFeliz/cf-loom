@@ -4,7 +4,7 @@ import type {
   Rejection,
   StandardRejection,
   StandardRejections,
-} from '@casitafeliz/loom-contract';
+} from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
@@ -13,7 +13,7 @@ import {
   isStandardRejection,
   resolutionOf,
   schemaOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type { AnyRejection, ResolvedRejection } from '../outcomes/index.ts';
 import { type Checked, checkedPart, fieldOf, mapValue } from './checked.ts';
 
@@ -64,7 +64,7 @@ function isGuardRejection(
   return isAnsweredBy(guard, rejection);
 }
 
-/** Whether an Endpoint or a Guard answers a Rejection; a Standard one is told by its name, from any copy of loom-contract. */
+/** Whether an Endpoint or a Guard answers a Rejection; a Standard one is told by its name, from any copy of @cf-loom/contract. */
 function isAnsweredBy(answering: Endpoint | Guard, rejection: AnswerableRejection): boolean {
   return answerableRejectionsOf(answering).some((listed) => isSameRejection(listed, rejection));
 }

@@ -2,7 +2,7 @@ import {
   byCodePoint,
   type ServiceSnapshot,
   standardRejectionNames,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { type DefUse, defTypeNameOf, loomNeeds } from '../schema-code/index.ts';
 import {
   jsonLiteralOf,

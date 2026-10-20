@@ -1,4 +1,4 @@
-import { FakeProviderError, fakeProvider } from '@casitafeliz/loom-testing';
+import { FakeProviderError, fakeProvider } from '@cf-loom/testing';
 import { contract as orders } from '@org/contract-orders-service';
 import { describe, expect, test } from 'vitest';
 import { invoiceFor } from '../src/billing/invoice-for.ts';

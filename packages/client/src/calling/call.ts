@@ -1,4 +1,4 @@
-import { type InputIssue, invalidInputRejectionOf } from '@casitafeliz/loom-contract/internal';
+import { type InputIssue, invalidInputRejectionOf } from '@cf-loom/contract/internal';
 import { type DecodedOutcome, outcomeOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';

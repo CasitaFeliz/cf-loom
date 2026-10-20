@@ -1,4 +1,4 @@
-# Internals of @casitafeliz/loom-handlers
+# Internals of @cf-loom/handlers
 
 How the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires. The entries `src/index.ts` (`.`) and `src/internal/index.ts` (`./internal`) re-export from the modules' `index.ts`.
 
@@ -6,8 +6,8 @@ How the package's `src/` is split into modules, as [Package layout](../../ARCHIT
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `outcomes/` | `success`, `reject`, `admit`, `fault`; the built and resolved Outcome and Admission types, `Fault`, and `Committed` and `Internal error` from `@casitafeliz/loom-contract`'s `wire/`; the runtime shapes, telling an Outcome or an Admission by its kind and fields | none |
-| `checks/` | what a call is given and what a Handler built, part by part with `schemaOf`, against the schemas of its Endpoint or Guard, and that a Success's headers can travel as text, by the wire rule in `@casitafeliz/loom-contract`, as Issues with their part; the resolution of a Rejection against the Standard Rejections | `outcomes` |
+| `outcomes/` | `success`, `reject`, `admit`, `fault`; the built and resolved Outcome and Admission types, `Fault`, and `Committed` and `Internal error` from `@cf-loom/contract`'s `wire/`; the runtime shapes, telling an Outcome or an Admission by its kind and fields | none |
+| `checks/` | what a call is given and what a Handler built, part by part with `schemaOf`, against the schemas of its Endpoint or Guard, and that a Success's headers can travel as text, by the wire rule in `@cf-loom/contract`, as Issues with their part; the resolution of a Rejection against the Standard Rejections | `outcomes` |
 | `calls/` | running one call: check what it is given, run the implementation, check what it built; a return that is no Outcome, or anything thrown while running or checking what it built, is the Fault with its `cause`, and anything thrown while checking what it is given is that Fault with `committed: 'no'`, so a run never throws, and `notRunFaultOf` builds that Fault for `serve` too, for a throw while it reads a request; `InvalidInputError`, `InvalidOutcomeError` and the direct call's answer, which throws on them | `checks`, `outcomes` |
 | `handlers/` | `handle`, `handle.stub`, the Handler types and `HandlerMap`; what a Handler was written with, its stub mark included, hidden from its call signature; `runEndpoint`, `runGuard`, `isStub` and `isWrittenFor` for `./internal` | `calls`, `checks`, `outcomes` |
 

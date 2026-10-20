@@ -29,8 +29,8 @@ afterEach(() => {
 function aProject(files: Readonly<Record<string, string>> = {}, prefix = 'cf-loom-'): string {
   const project = mkdtempSync(join(tmpdir(), prefix));
   projects.push(project);
-  link(join(cliDir, '..', 'contract'), join(project, 'node_modules/@casitafeliz/loom-contract'));
-  link(cliDir, join(project, 'node_modules/@casitafeliz/loom-cli'));
+  link(join(cliDir, '..', 'contract'), join(project, 'node_modules/@cf-loom/contract'));
+  link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
   link(realpathSync(join(cliDir, 'node_modules/zod')), join(project, 'node_modules/zod'));
   const packageJson = JSON.stringify({ name: '@org/orders-service', type: 'module' });
   write(project, { 'package.json': packageJson, ...files });
@@ -65,7 +65,7 @@ const usage =
   'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>]';
 
 const config = [
-  "import { defineConfig } from '@casitafeliz/loom-cli';",
+  "import { defineConfig } from '@cf-loom/cli';",
   '',
   "export const config = defineConfig({ scope: '@org' });",
   '',
@@ -77,7 +77,7 @@ function aRoot({
 } = {}): Readonly<Record<string, string>> {
   return {
     'src/contract/ping.endpoint.ts': [
-      "import { defineEndpoint } from '@casitafeliz/loom-contract';",
+      "import { defineEndpoint } from '@cf-loom/contract';",
       "import { z } from 'zod';",
       '',
       'export const ping = defineEndpoint({',
@@ -92,7 +92,7 @@ function aRoot({
       '',
     ].join('\n'),
     'src/contract/index.ts': [
-      "import { defineContract, defineGroup } from '@casitafeliz/loom-contract';",
+      "import { defineContract, defineGroup } from '@cf-loom/contract';",
       "import { ping } from './ping.endpoint.ts';",
       '',
       "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
@@ -116,7 +116,7 @@ function installedDefinitions(
       ...manifest,
     }),
     [`${at}/@org/definitions/index.js`]: [
-      "import { defineDefinitions, defineRejection } from '@casitafeliz/loom-contract';",
+      "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
       "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
       'export const definitions = defineDefinitions({',
       "  name: 'definitions',",
@@ -174,7 +174,7 @@ describe('cf-loom init', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     expect(read(project, 'src/contract/index.ts')).toBe(
       [
-        "import { defineContract } from '@casitafeliz/loom-contract';",
+        "import { defineContract } from '@cf-loom/contract';",
         '',
         'export const contract = defineContract({',
         "  name: 'orders-service',",
@@ -202,7 +202,7 @@ describe('cf-loom init', () => {
     expect(ran.status).toBe(0);
     expect(read(project, 'src/contract/index.ts')).toBe(
       [
-        "import { defineApplication } from '@casitafeliz/loom-contract';",
+        "import { defineApplication } from '@cf-loom/contract';",
         '',
         'export const application = defineApplication({',
         "  name: 'orders-service',",
@@ -221,7 +221,7 @@ describe('cf-loom init', () => {
     expect(ran.status).toBe(0);
     expect(read(project, 'src/definitions/index.ts')).toBe(
       [
-        "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions } from '@cf-loom/contract';",
         '',
         'export const definitions = defineDefinitions({',
         "  name: 'orders-service',",
@@ -362,7 +362,7 @@ describe('cf-loom generate', () => {
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: `@casitafeliz/loom-cli@${cliVersion}`,
+      generator: `@cf-loom/cli@${cliVersion}`,
       definitions: {},
       endpoints: { 'GET /ping': { name: 'ping', group: 'health', lifecycle: 'active' } },
     });
@@ -555,7 +555,7 @@ describe('cf-loom generate', () => {
       'cf-loom.config.ts': config,
       ...aRoot(),
       'src/contract/definitions.ts': [
-        "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions } from '@cf-loom/contract';",
         "export const definitions = defineDefinitions({ name: 'definitions' });",
         '',
       ].join('\n'),
@@ -941,7 +941,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
       'node_modules/@org/definitions/dist/index.d.ts':
         'export declare const definitions: unknown;\nexport declare const apiKey: unknown;\nexport declare const money: unknown;\n',
       'node_modules/@org/definitions/dist/index.js': [
-        "import { defineDefinitions, defineGuard } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         'export const money = z.object({ amount: z.int() });',
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
@@ -953,7 +953,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         '',
       ].join('\n'),
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@casitafeliz/loom-contract';",
+        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { apiKey, definitions, money } from '@org/definitions';",
         '',
         'export const price = defineEndpoint({',
@@ -988,7 +988,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
 
 describe('cf-loom generate: a Definitions Package whose entry is missing', () => {
   const guards = [
-    "import { defineDefinitions, defineGuard } from '@casitafeliz/loom-contract';",
+    "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
     "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
     "export const definitions = defineDefinitions({ name: 'definitions', guards: [apiKey] });",
     '',
@@ -1037,7 +1037,7 @@ describe('cf-loom generate: a Definitions Package root', () => {
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'cf-loom.config.ts': config,
       'src/definitions/index.ts': [
-        "import { defineDefinitions, defineGuard, defineRejection } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';",
         '',
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
         "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
@@ -1073,7 +1073,7 @@ describe('cf-loom generate: what a listed Definitions Package lists', () => {
         exports: './index.js',
       }),
       'node_modules/@org/definitions/index.js': [
-        "import { defineDefinitions, defineRejection } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
         "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
         "export const definitions = defineDefinitions({ name: 'definitions' });",
         '',
@@ -1096,7 +1096,7 @@ describe('cf-loom generate: what a listed Definitions Package lists', () => {
       'cf-loom.config.ts': config,
       ...aRoot(),
       'src/contract/definitions.ts': [
-        "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+        "import { defineDefinitions } from '@cf-loom/contract';",
         "export const definitions = defineDefinitions({ name: 'Org Definitions' });",
         '',
       ].join('\n'),
@@ -1189,7 +1189,7 @@ describe('cf-loom verify', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
     );
 
     const ran = cfLoom(project, 'verify');
@@ -1201,7 +1201,7 @@ describe('cf-loom verify', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
     );
     write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
 
@@ -1214,13 +1214,13 @@ describe('cf-loom verify', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@casitafeliz/loom-cli@${cliVersion}`, '@casitafeliz/loom-cli@0.0.1'),
+      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
     );
 
     cfLoom(project, 'generate');
 
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    expect(snapshot.generator).toBe(`@casitafeliz/loom-cli@${cliVersion}`);
+    expect(snapshot.generator).toBe(`@cf-loom/cli@${cliVersion}`);
   });
 
   test('verify exits 1 when a deprecatedAt was edited into no instant', () => {

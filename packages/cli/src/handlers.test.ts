@@ -34,9 +34,9 @@ afterEach(() => {
 function aProject(files: Readonly<Record<string, string>>): string {
   const project = mkdtempSync(join(tmpdir(), 'cf-loom-handlers-'));
   projects.push(project);
-  link(join(packagesDir, 'contract'), join(project, 'node_modules/@casitafeliz/loom-contract'));
-  link(join(packagesDir, 'handlers'), join(project, 'node_modules/@casitafeliz/loom-handlers'));
-  link(cliDir, join(project, 'node_modules/@casitafeliz/loom-cli'));
+  link(join(packagesDir, 'contract'), join(project, 'node_modules/@cf-loom/contract'));
+  link(join(packagesDir, 'handlers'), join(project, 'node_modules/@cf-loom/handlers'));
+  link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
   link(realpathSync(join(cliDir, 'node_modules/zod')), join(project, 'node_modules/zod'));
   write(project, files);
   return project;
@@ -94,13 +94,13 @@ function lines(written: readonly string[]): string {
 const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' });
 
 const config = lines([
-  "import { defineConfig } from '@casitafeliz/loom-cli';",
+  "import { defineConfig } from '@cf-loom/cli';",
   '',
   "export const config = defineConfig({ scope: '@org' });",
 ]);
 
 const apiKeyGuard = lines([
-  "import { defineGuard } from '@casitafeliz/loom-contract';",
+  "import { defineGuard } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   '',
   'export const apiKey = defineGuard({',
@@ -112,7 +112,7 @@ const apiKeyGuard = lines([
 ]);
 
 const legacyKeyGuard = lines([
-  "import { defineGuard } from '@casitafeliz/loom-contract';",
+  "import { defineGuard } from '@cf-loom/contract';",
   '',
   "export const legacyKey = defineGuard({ name: 'legacyKey', description: 'An old key' });",
 ]);
@@ -136,7 +136,7 @@ function anEndpoint({
   readonly imports?: readonly string[];
 }): string {
   return lines([
-    "import { defineEndpoint } from '@casitafeliz/loom-contract';",
+    "import { defineEndpoint } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...imports,
     '',
@@ -157,7 +157,7 @@ function anEndpoint({
 function aRoot(endpoints: Readonly<Record<string, string>>): string {
   const names = Object.keys(endpoints);
   return lines([
-    "import { defineContract, defineGroup } from '@casitafeliz/loom-contract';",
+    "import { defineContract, defineGroup } from '@cf-loom/contract';",
     ...names.map((name) => `import { ${name} } from '${endpoints[name]}';`),
     '',
     'const orders = defineGroup({',
@@ -235,7 +235,7 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
       exports: './index.js',
     }),
     'node_modules/@org/definitions/index.js': lines([
-      "import { defineDefinitions, defineGuard } from '@casitafeliz/loom-contract';",
+      "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
       "export const userToken = defineGuard({ name: 'userToken', description: 'A user' });",
       "export const definitions = defineDefinitions({ name: 'definitions', guards: [userToken] });",
     ]),
@@ -248,8 +248,8 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
     }),
     'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
       .replace(
-        "import { defineContract, defineGroup } from '@casitafeliz/loom-contract';",
-        "import { defineContract, defineGroup } from '@casitafeliz/loom-contract';\nimport { definitions } from '@org/definitions';",
+        "import { defineContract, defineGroup } from '@cf-loom/contract';",
+        "import { defineContract, defineGroup } from '@cf-loom/contract';\nimport { definitions } from '@org/definitions';",
       )
       .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
   };
@@ -336,7 +336,7 @@ describe('cf-loom generate: stubs', () => {
     ]);
     expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(
       lines([
-        "import { handle } from '@casitafeliz/loom-handlers';",
+        "import { handle } from '@cf-loom/handlers';",
         "import { getOrder } from '../../contract/endpoints/orders/get-order.endpoint.ts';",
         '',
         'export default handle.stub(getOrder);',
@@ -344,7 +344,7 @@ describe('cf-loom generate: stubs', () => {
     );
     expect(read(project, 'src/guards/api-key.handler.ts')).toBe(
       lines([
-        "import { handle } from '@casitafeliz/loom-handlers';",
+        "import { handle } from '@cf-loom/handlers';",
         "import { apiKey } from '../contract/guards/api-key.guard.ts';",
         '',
         'export default handle.stub(apiKey);',
@@ -374,7 +374,7 @@ describe('cf-loom generate: stubs', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     expect(read(project, 'src/guards/user-token.handler.ts')).toBe(
       lines([
-        "import { handle } from '@casitafeliz/loom-handlers';",
+        "import { handle } from '@cf-loom/handlers';",
         "import { userToken } from '@org/definitions';",
         '',
         'export default handle.stub(userToken);',
@@ -426,7 +426,7 @@ describe('cf-loom generate: what it refuses', () => {
         .replace(
           'const orders = defineGroup({',
           [
-            "import { defineEndpoint } from '@casitafeliz/loom-contract';",
+            "import { defineEndpoint } from '@cf-loom/contract';",
             "import { z } from 'zod';",
             'const createOrder = defineEndpoint({',
             "  name: 'createOrder', method: 'POST', path: '/orders', visibility: 'private',",
@@ -594,7 +594,7 @@ describe('cf-loom generate: roots that offer no Elements', () => {
       'an Application',
       {
         'src/contract/index.ts': lines([
-          "import { defineApplication } from '@casitafeliz/loom-contract';",
+          "import { defineApplication } from '@cf-loom/contract';",
           "export const application = defineApplication({ name: 'orders-service', dependencies: [] });",
         ]),
       },
@@ -603,7 +603,7 @@ describe('cf-loom generate: roots that offer no Elements', () => {
       'a Definitions Package',
       {
         'src/definitions/index.ts': lines([
-          "import { defineDefinitions } from '@casitafeliz/loom-contract';",
+          "import { defineDefinitions } from '@cf-loom/contract';",
           "export const definitions = defineDefinitions({ name: 'orders-service' });",
         ]),
       },

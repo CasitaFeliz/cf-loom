@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 
-const openKey = Symbol.for('@casitafeliz/loom-contract.open');
+const openKey = Symbol.for('@cf-loom/contract.open');
 
 /** Kept on `globalThis`, so a schema made open by one copy of this package is open to every copy. */
 const openHolder = globalThis as typeof globalThis & { [openKey]?: WeakSet<core.$ZodType> };

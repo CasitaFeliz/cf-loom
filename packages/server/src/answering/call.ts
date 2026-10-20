@@ -4,7 +4,7 @@ import {
   reservedResponseOf,
   type TextSource,
   textPartsOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import type { LiveEndpoint, ServedContract } from '../served/index.ts';
 import type { Answered } from './runs.ts';
 

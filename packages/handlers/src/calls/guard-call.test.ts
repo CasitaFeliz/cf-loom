@@ -1,4 +1,4 @@
-import { defineGuard, defineRejection, notImplemented } from '@casitafeliz/loom-contract';
+import { defineGuard, defineRejection, notImplemented } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {

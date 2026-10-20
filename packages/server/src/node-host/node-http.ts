@@ -7,7 +7,7 @@ import {
 } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { reservedResponseOf } from '@casitafeliz/loom-contract/internal';
+import { reservedResponseOf } from '@cf-loom/contract/internal';
 import type { Http } from '../answering/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */

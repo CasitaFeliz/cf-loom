@@ -7,7 +7,7 @@ import type {
   InputOf,
   QualifierOf,
   RequiredContextOf,
-} from '@casitafeliz/loom-contract';
+} from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { Admission, Outcome, ResolvedAdmission, ResolvedOutcome } from '../outcomes/index.ts';
 

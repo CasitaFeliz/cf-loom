@@ -1,14 +1,14 @@
-# @casitafeliz/loom-server
+# @cf-loom/server
 
-`serve`, which answers a Contract's Endpoints with their Handlers, and its types (see [Types](#types)); `@casitafeliz/loom-server/node-http` is its adapter for `node:http`, `nodeHttp` and `nodeListener`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`serve`, which answers a Contract's Endpoints with their Handlers, and its types (see [Types](#types)); `@cf-loom/server/node-http` is its adapter for `node:http`, `nodeHttp` and `nodeListener`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 ## Serving
 
 ```ts
 // src/main.ts
-import { serve } from '@casitafeliz/loom-server';
-import { nodeHttp } from '@casitafeliz/loom-server/node-http';
-import { jetstream } from '@casitafeliz/loom-messaging/jetstream';
+import { serve } from '@cf-loom/server';
+import { nodeHttp } from '@cf-loom/server/node-http';
+import { jetstream } from '@cf-loom/messaging/jetstream';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 import { connect, consume, close } from './messaging.ts';
@@ -46,7 +46,7 @@ Both hooks are called before the response is returned; what one throws is the Se
 
 ## node-http
 
-`@casitafeliz/loom-server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. A target in origin form (`/orders/o-1`) or absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept) is routed on its path and query, and a path that starts with `//` is a path, never a host. The adapter answers two kinds of request itself, as Node already answers a malformed request before any listener runs, so `onOutcome` sees neither: a target in any other form (`*`, `host:port`, another scheme, credentials), one a web-standard `Request` cannot be built from, or a `Host` header that is missing or is more than a host and an optional port, gets 400; a method a web-standard `Request` refuses (`CONNECT`, `TRACE`, `TRACK`) gets `NO_SUCH_ENDPOINT` (404), since no Endpoint can have it. A request's body is streamed to `serve` for every method but `GET` and `HEAD`, and a response to `HEAD` carries no body. A response that fails while it is written, such as when the Caller disconnects, destroys the socket. What the handler rejects with, a hook's throw, reaches the process; nothing else does.
+`@cf-loom/server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. A target in origin form (`/orders/o-1`) or absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept) is routed on its path and query, and a path that starts with `//` is a path, never a host. The adapter answers two kinds of request itself, as Node already answers a malformed request before any listener runs, so `onOutcome` sees neither: a target in any other form (`*`, `host:port`, another scheme, credentials), one a web-standard `Request` cannot be built from, or a `Host` header that is missing or is more than a host and an optional port, gets 400; a method a web-standard `Request` refuses (`CONNECT`, `TRACE`, `TRACK`) gets `NO_SUCH_ENDPOINT` (404), since no Endpoint can have it. A request's body is streamed to `serve` for every method but `GET` and `HEAD`, and a response to `HEAD` carries no body. A response that fails while it is written, such as when the Caller disconnects, destroys the socket. What the handler rejects with, a hook's throw, reaches the process; nothing else does.
 
 ## Types
 

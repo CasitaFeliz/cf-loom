@@ -1,10 +1,10 @@
-import type { Endpoint } from '@casitafeliz/loom-contract';
+import type { Endpoint } from '@cf-loom/contract';
 import {
   jsonContentType,
   type PathSegment,
   pathSegmentsOf,
   segmentOf,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { type ParsedInput, textOf } from './input.ts';
 
 /** What `fetch` is called with: the URL and the init, the signal left to the caller. */

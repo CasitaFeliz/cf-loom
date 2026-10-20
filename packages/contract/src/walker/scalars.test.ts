@@ -1,4 +1,4 @@
-import * as built from '@casitafeliz/loom-contract/internal';
+import * as built from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';

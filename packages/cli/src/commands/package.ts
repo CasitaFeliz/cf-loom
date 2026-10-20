@@ -75,7 +75,7 @@ function peersOf(
   | { readonly kind: 'found'; readonly peers: Peers }
   | { readonly kind: 'failed'; readonly message: string } {
   const rootPath = join(built.project.directory, built.project.rootFile);
-  const contract = installedVersionOf('@casitafeliz/loom-contract', rootPath);
+  const contract = installedVersionOf('@cf-loom/contract', rootPath);
   const zod = installedVersionOf('zod', rootPath);
   const builtWith = 'a Contract Package is built with it';
   if (contract.kind === 'failed') {

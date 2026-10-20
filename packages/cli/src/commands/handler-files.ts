@@ -1,6 +1,6 @@
 import { lstatSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { byCodePoint } from '@casitafeliz/loom-contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { filesUnder } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
 import {

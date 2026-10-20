@@ -1,4 +1,4 @@
-import type { Fetch } from '@casitafeliz/loom-client';
+import type { Fetch } from '@cf-loom/client';
 import {
   invalidInputResponseOf,
   type Reading,
@@ -6,7 +6,7 @@ import {
   receivedBodyOf,
   textPartsOf,
   withDeprecation,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { responseOf } from '../answering/index.ts';
 import { mistakeOf } from '../mistakes/index.ts';
 import {

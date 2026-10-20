@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { encodedValueOf, walkSchemas } from '@casitafeliz/loom-contract/internal';
+import { encodedValueOf, walkSchemas } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
@@ -180,7 +180,7 @@ const richEndpoint = [
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
-    "import { defineConfig } from '@casitafeliz/loom-cli';",
+    "import { defineConfig } from '@cf-loom/cli';",
     "export const config = defineConfig({ scope: '@org' });",
   ]),
   'src/contract/index.ts': lines([
@@ -191,7 +191,7 @@ const service: Readonly<Record<string, string>> = {
     '  defineGuard,',
     '  defineRejection,',
     '  openEnum,',
-    "} from '@casitafeliz/loom-contract';",
+    "} from '@cf-loom/contract';",
     "import { z } from 'zod';",
     '',
     ...everything,
@@ -310,8 +310,8 @@ beforeAll(async () => {
   folder = mkdtempSync(join(tmpdir(), 'cf-loom-schemas-'));
   const project = join(folder, 'project');
   const out = join(folder, 'contract-shapes-service');
-  link(join(packagesDir, 'contract'), join(project, 'node_modules/@casitafeliz/loom-contract'));
-  link(cliDir, join(project, 'node_modules/@casitafeliz/loom-cli'));
+  link(join(packagesDir, 'contract'), join(project, 'node_modules/@cf-loom/contract'));
+  link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
   link(zodDir, join(project, 'node_modules/zod'));
   write(project, service);
   spawnSync(process.execPath, [bin, 'generate'], { cwd: project, encoding: 'utf8' });
@@ -320,7 +320,7 @@ beforeAll(async () => {
     encoding: 'utf8',
   });
   expect(packaged.stderr).toBe('');
-  link(join(packagesDir, 'contract'), join(out, 'node_modules/@casitafeliz/loom-contract'));
+  link(join(packagesDir, 'contract'), join(out, 'node_modules/@cf-loom/contract'));
   link(zodDir, join(out, 'node_modules/zod'));
   const built = spawnSync(tsc, ['-p', out], { encoding: 'utf8' });
   expect(built.stdout).toBe('');

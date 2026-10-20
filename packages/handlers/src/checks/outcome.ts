@@ -1,10 +1,5 @@
-import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import {
-  headerTextsOf,
-  partFieldOf,
-  schemaOf,
-  successParts,
-} from '@casitafeliz/loom-contract/internal';
+import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import { headerTextsOf, partFieldOf, schemaOf, successParts } from '@cf-loom/contract/internal';
 import type {
   AnyAdmission,
   AnyOutcome,

@@ -8,17 +8,17 @@
     "start": "node src/main.ts"
   },
   "dependencies": {
-    "@casitafeliz/loom-client": "workspace:*",
-    "@casitafeliz/loom-contract": "workspace:*",
-    "@casitafeliz/loom-handlers": "workspace:*",
-    "@casitafeliz/loom-server": "workspace:*",
+    "@cf-loom/client": "workspace:*",
+    "@cf-loom/contract": "workspace:*",
+    "@cf-loom/handlers": "workspace:*",
+    "@cf-loom/server": "workspace:*",
     "@org/contract-orders-service": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@casitafeliz/loom-cli": "workspace:*",
-    "@casitafeliz/loom-messaging": "workspace:*",
-    "@casitafeliz/loom-testing": "workspace:*",
+    "@cf-loom/cli": "workspace:*",
+    "@cf-loom/messaging": "workspace:*",
+    "@cf-loom/testing": "workspace:*",
     "@types/node": "catalog:"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@casitafeliz/loom-server",
+  "name": "@cf-loom/server",
   "version": "0.0.0",
   "repository": {
     "type": "git",
@@ -25,19 +25,19 @@
     "!src/**/*.test.ts"
   ],
   "devDependencies": {
-    "@casitafeliz/loom-contract": "workspace:^",
-    "@casitafeliz/loom-handlers": "workspace:^",
+    "@cf-loom/contract": "workspace:^",
+    "@cf-loom/handlers": "workspace:^",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@casitafeliz/loom-contract": "workspace:^",
-    "@casitafeliz/loom-handlers": "workspace:^",
+    "@cf-loom/contract": "workspace:^",
+    "@cf-loom/handlers": "workspace:^",
     "zod": "catalog:"
   },
   "engines": {
     "node": ">=24"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "restricted"
   }
 }

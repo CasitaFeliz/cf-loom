@@ -1,5 +1,5 @@
-import { admit, handle } from '@casitafeliz/loom-handlers';
-import { serve } from '@casitafeliz/loom-server';
+import { admit, handle } from '@cf-loom/handlers';
+import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { apiKey } from '../src/contract/guards/api-key.guard.ts';
 import { contract } from '../src/contract/index.ts';

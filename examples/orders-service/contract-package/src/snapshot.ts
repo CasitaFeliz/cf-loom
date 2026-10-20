@@ -432,7 +432,7 @@ export const snapshot = {
   },
   "events": {},
   "format": 1,
-  "generator": "@casitafeliz/loom-cli@0.0.0",
+  "generator": "@cf-loom/cli@0.0.0",
   "guards": {
     "apiKey": {
       "context": {

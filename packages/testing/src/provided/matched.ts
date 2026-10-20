@@ -1,5 +1,5 @@
-import { basePathOf } from '@casitafeliz/loom-client/internal';
-import { matchOf, type TextSource } from '@casitafeliz/loom-contract/internal';
+import { basePathOf } from '@cf-loom/client/internal';
+import { matchOf, type TextSource } from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { ListedEndpoint, Provided } from './provided.ts';
 

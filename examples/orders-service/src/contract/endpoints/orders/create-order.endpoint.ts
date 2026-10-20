@@ -1,4 +1,4 @@
-import { defineEndpoint } from '@casitafeliz/loom-contract';
+import { defineEndpoint } from '@cf-loom/contract';
 import { z } from 'zod';
 import { apiKey } from '../../guards/api-key.guard.ts';
 import { money, order } from '../../schemas/order.schema.ts';

@@ -1,4 +1,4 @@
-import { type AnswerableRejection, isSameRejection } from '@casitafeliz/loom-contract/internal';
+import { type AnswerableRejection, isSameRejection } from '@cf-loom/contract/internal';
 
 /**
  * Whether what a direct call returned is a given Rejection, told by its declaration, a Standard

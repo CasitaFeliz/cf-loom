@@ -1,4 +1,4 @@
-import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   matchOf,
   type Reading,
@@ -6,9 +6,9 @@ import {
   readingOf,
   reservedResponseOf,
   withDeprecation,
-} from '@casitafeliz/loom-contract/internal';
-import type { Fault } from '@casitafeliz/loom-handlers';
-import { type EndpointRun, notRunFaultOf, runEndpoint } from '@casitafeliz/loom-handlers/internal';
+} from '@cf-loom/contract/internal';
+import type { Fault } from '@cf-loom/handlers';
+import { type EndpointRun, notRunFaultOf, runEndpoint } from '@cf-loom/handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, partsOf } from './call.ts';
 import { guardRunsOf } from './guards.ts';

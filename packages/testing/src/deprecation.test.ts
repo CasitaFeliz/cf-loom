@@ -1,4 +1,4 @@
-import type { DeprecationNotice } from '@casitafeliz/loom-client';
+import type { DeprecationNotice } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
@@ -7,12 +7,8 @@ import {
   defineGroup,
   type Endpoint,
   notFound,
-} from '@casitafeliz/loom-contract';
-import {
-  exportedSnapshotOf,
-  snapshotOf,
-  validateContract,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract';
+import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider, type StepBuilder } from './index.ts';

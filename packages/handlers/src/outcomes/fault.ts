@@ -1,4 +1,4 @@
-import { type Committed, internalError } from '@casitafeliz/loom-contract/internal';
+import { type Committed, internalError } from '@cf-loom/contract/internal';
 
 /** A technical failure no Endpoint, Guard or Message declares, as a Handler builds it and a direct call returns it. */
 export type Fault = {

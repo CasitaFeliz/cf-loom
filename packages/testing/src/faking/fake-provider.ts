@@ -1,9 +1,5 @@
-import { type Client, type ClientOptions, client, type Fetch } from '@casitafeliz/loom-client';
-import {
-  type AnyDependencies,
-  baseUrlOf,
-  type ConfiguredName,
-} from '@casitafeliz/loom-client/internal';
+import { type Client, type ClientOptions, client, type Fetch } from '@cf-loom/client';
+import { type AnyDependencies, baseUrlOf, type ConfiguredName } from '@cf-loom/client/internal';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { FakeCall } from './calls.ts';

@@ -1,4 +1,4 @@
-import { client } from '@casitafeliz/loom-client';
+import { client } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
@@ -11,14 +11,10 @@ import {
   notFound,
   openEnum,
   openEnumReader,
-} from '@casitafeliz/loom-contract';
-import {
-  exportedSnapshotOf,
-  snapshotOf,
-  validateContract,
-} from '@casitafeliz/loom-contract/internal';
-import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
-import { type ServedFault, serve } from '@casitafeliz/loom-server';
+} from '@cf-loom/contract';
+import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
+import { type ServedFault, serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';

@@ -12,7 +12,7 @@ import {
   type ValidatedContract,
   type ValidContract,
   validateContract,
-} from '@casitafeliz/loom-contract/internal';
+} from '@cf-loom/contract/internal';
 import { oneLineOf } from '../loading/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type ProjectFailure, type Tooling, tooling } from './failures.ts';
