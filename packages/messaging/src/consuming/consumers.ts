@@ -1,7 +1,7 @@
 import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedHandlerOf, readerOf } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer } from '../broker/index.ts';
-import type { ConsumedVersion } from '../subjects/index.ts';
+import type { Consumed } from '../subjects/index.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
@@ -13,11 +13,11 @@ export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions'>;
  * with a warning, since `consume` does not pull from it.
  */
 export function consumersOf(
-  versions: readonly ConsumedVersion[],
+  toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
   report: Report,
 ): readonly BrokerConsumer[] {
-  const pulled = versions.map((consumed) => ({
+  const pulled = toConsume.map((consumed) => ({
     consumed,
     handler: mappedHandlerOf(handlers[consumed.at.map], consumed.at, consumed.element),
   }));

@@ -16,7 +16,7 @@ export type PublishedVersion = { readonly message: Event; readonly subject: stri
 export type SentVersion = { readonly message: Command; readonly subject: string };
 
 /** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its durable consumer. */
-export type ConsumedVersion = {
+export type Consumed = {
   readonly element: Subscription | Command;
   readonly at: { readonly map: 'commands' | 'subscriptions'; readonly key: string };
   readonly subject: string;
@@ -32,7 +32,7 @@ export type Subjects = {
   readonly service: string;
   readonly published: readonly PublishedVersion[];
   readonly sent: readonly SentVersion[];
-  readonly consumed: readonly ConsumedVersion[];
+  readonly consumed: readonly Consumed[];
 };
 
 /** The subjects of a root, which must be a Contract whose every Subscription's Event is listed. */
@@ -84,7 +84,7 @@ function byVersion(left: Event, right: Event): number {
   return left.version - right.version;
 }
 
-function consumedCommandOf(service: string, command: Command): ConsumedVersion {
+function consumedCommandOf(service: string, command: Command): Consumed {
   return {
     element: command,
     at: { map: 'commands', key: codeNameOf(command) },
@@ -94,7 +94,7 @@ function consumedCommandOf(service: string, command: Command): ConsumedVersion {
   };
 }
 
-function consumedSubscriptionOf(contract: Contract, subscription: Subscription): ConsumedVersion {
+function consumedSubscriptionOf(contract: Contract, subscription: Subscription): Consumed {
   const stream = eventServiceOf(contract, subscription.event);
   if (stream === undefined) {
     const message = `${subscription.name} subscribes to an Event neither the root nor a Dependency lists`;

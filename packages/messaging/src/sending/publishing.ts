@@ -6,7 +6,7 @@ import { type Outgoing, outgoingOf } from './outgoing.ts';
 import type { MessageOptions } from './types.ts';
 
 /** The broker connection publishing and sending go through, which throws once messaging is closed. */
-export type ConnectionOf = () => BrokerConnection;
+type ConnectionOf = () => BrokerConnection;
 
 /** `publish`: every live version of the named Event, checked, then sent in version order. */
 export function publishOf(subjects: Subjects, connectionOf: ConnectionOf) {

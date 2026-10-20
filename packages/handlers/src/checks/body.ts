@@ -11,7 +11,7 @@ export function checkedBody(reader: core.$ZodType, body: unknown): Checked<unkno
   if (written.kind === 'issues') {
     return { kind: 'issues', issues: written.issues.map((issue) => issueAt('body', [], issue)) };
   }
-  return checkedPart('body', reader, { value: written.value });
+  return checkedMessageBody(reader, written.value);
 }
 
 /**

@@ -27,11 +27,13 @@ export async function messaging<const C extends Contract>(
 ): Promise<Messaging<C>> {
   const subjects = subjectsOf(contract);
   const life = new MessagingLife(await broker.connect({ name: subjects.service }));
-  const sending = () => life.sending();
+  const connectionOf = () => life.connectionOf();
+  const publish = publishOf(subjects, connectionOf);
+  const send = sendOf(subjects, connectionOf);
   const report = reportOf(options.onServiceFault);
   return {
-    publisher: { publish: publishOf(subjects, sending) },
-    sender: { send: sendOf(subjects, sending) },
+    publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
+    sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers) => life.consume(() => consumersOf(subjects.consumed, handlers, report)),
     close: () => life.close(),
   };

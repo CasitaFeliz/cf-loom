@@ -114,6 +114,34 @@ function aGate() {
   return { opened, open };
 }
 
+/** A broker that logs each call it starts and ends, holding `publish` and `consume` on the gates given. */
+function aLoggingBroker(held: {
+  readonly publish?: Promise<void>;
+  readonly consume?: Promise<void>;
+}) {
+  const log: string[] = [];
+  const broker: Broker = {
+    connect: async () => ({
+      publish: async () => {
+        log.push('publish');
+        await held.publish;
+        log.push('published');
+      },
+      consume: async () => {
+        log.push('consume');
+        await held.consume;
+        log.push('consumed');
+      },
+      close: async () => {
+        log.push('close');
+        await Promise.resolve();
+        log.push('closed');
+      },
+    }),
+  };
+  return { broker, log };
+}
+
 /** A messaging consuming, whose `notify-on-created` Handler is the one given. */
 async function consumingWith(notifying: (typeof handlers.subscriptions)['notify-on-created']) {
   const recording = aBroker();
@@ -229,6 +257,49 @@ describe('messaging() and close', () => {
 
     expect(second).toEqual({ kind: 'pending', fault: undefined });
     expect(runs).toHaveLength(1);
+  });
+
+  test.each([
+    ['publish', (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body })],
+    ['send', (opened: Opened) => opened.sender.send('ChargeCard', body)],
+  ])('close waits for a %s in flight before it closes the connection', async (_name, call) => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ publish: gate.opened });
+    const opened = await messaging(contract, broker);
+    const sending = call(opened);
+
+    const closing = opened.close();
+    gate.open();
+    await Promise.all([sending, closing]);
+
+    expect(log).toEqual(['publish', 'published', 'close', 'closed']);
+  });
+
+  test('close waits for a consume in flight before it closes the connection', async () => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ consume: gate.opened });
+    const { consume, close } = await messaging(contract, broker);
+    const consuming = consume(handlers);
+
+    const closing = close();
+    gate.open();
+    await Promise.all([consuming, closing]);
+
+    expect(log).toEqual(['consume', 'consumed', 'close', 'closed']);
+  });
+
+  test('a consume called while another is with the broker throws, and the broker consumes once', async () => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ consume: gate.opened });
+    const { consume } = await messaging(contract, broker);
+    const first = consume(handlers);
+
+    const second = consume(handlers);
+    gate.open();
+    await first;
+
+    await expect(second).rejects.toThrow('consume() was already called on this messaging');
+    expect(log.filter((call) => call === 'consume')).toHaveLength(1);
   });
 
   test('close called twice returns the same promise and closes the connection once', async () => {

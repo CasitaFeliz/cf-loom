@@ -2,13 +2,13 @@ import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { elementNameOf, type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
-import type { ConsumedVersion } from '../subjects/index.ts';
+import type { Consumed } from '../subjects/index.ts';
 import type { Report } from './faults.ts';
 
 /** A pulled Subscription or Command Version, and the Handler the map holds for it. */
 export type Pulled = {
-  readonly consumed: ConsumedVersion;
-  readonly handler: { readonly element: ConsumedVersion['element'] };
+  readonly consumed: Consumed;
+  readonly handler: { readonly element: Consumed['element'] };
 };
 
 /** What became of one delivery once its Handler ran, reported when it ended or failed. */
@@ -19,10 +19,22 @@ export async function settlementOf(
 ): Promise<Settlement> {
   const run = await runOf(pulled, delivery);
   const settlement = settlementOfRun(run, aboutOf(pulled, delivery));
-  if (settlement.kind !== 'acked' && settlement.fault !== undefined) {
-    report(settlement.fault);
+  const fault = faultOf(settlement);
+  if (fault !== undefined) {
+    report(fault);
   }
   return settlement;
+}
+
+/** What `onServiceFault` hears of a settlement: nothing when acknowledged or a retryable Fault. */
+function faultOf(settlement: Settlement): ConsumedFault | undefined {
+  switch (settlement.kind) {
+    case 'acked':
+      return undefined;
+    case 'pending':
+    case 'ended':
+      return settlement.fault;
+  }
 }
 
 /** The Handler's run on the body received, or the body's one Issue when it is no UTF-8 JSON. */
