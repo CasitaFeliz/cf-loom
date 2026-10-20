@@ -12,14 +12,7 @@ import {
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { admit, fault, handle, reject, success, withReader } from '../index.ts';
-import {
-  isStub,
-  mappedHandlerOf,
-  readerOf,
-  runEndpoint,
-  runGuard,
-  runMessage,
-} from './index.ts';
+import { isStub, mappedHandlerOf, readerOf, runEndpoint, runGuard, runMessage } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 

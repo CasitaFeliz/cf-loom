@@ -8,7 +8,7 @@ The entry `src/index.ts` (`.`) re-exports from `answering/`, and `src/node-http/
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `served/` | what `serve()` prepares once: each declared Endpoint with its segments, lifecycle, Handler, Attachments with their Handlers and Qualifiers, and stamp, the walked text nodes by declaration, the resolved Standard Rejections and the body limit; the startup failures it throws, naming the Element | none (a type-only import of `serve`'s signature for the Handler map it takes) |
+| `served/` | what `serve()` prepares once: each declared Endpoint with its segments, lifecycle, Handler, Attachments with their Handlers and Qualifiers, and stamp, the walked text nodes by declaration, the resolved Standard Rejections and the body limit; the startup failures it throws, naming the Element, its Handler lookups through `@cf-loom/handlers`'s `mappedHandlerOf` | none (a type-only import of `serve`'s signature for the Handler map it takes) |
 | `answering/` | `serve` and its types; one request top to bottom; the Guards' runs plugged into the contract's reading, each with its Context and Qualifier; a run's kinds as a `Response` and a `ServedFault`, the invalid-input Rejection answered in one place, and the runtime's own bug; the hooks and their console fallback | `served` |
 | `node-host/` | `nodeHttp` and `nodeListener`: a `Request` from an `IncomingMessage`, or the answer when it cannot be one; a `Response` written to a `ServerResponse` | `answering` |
 

@@ -13,7 +13,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
 | [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
-| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
+| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close`; `PublishError`, `InvalidMessageError`; the `Broker` type an adapter implements |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
