@@ -23,6 +23,12 @@
       "path": "./packages/cli"
     },
     {
+      "path": "./examples/org-definitions/tsconfig.build.json"
+    },
+    {
+      "path": "./examples/org-definitions"
+    },
+    {
       "path": "./examples/orders-service"
     },
     {

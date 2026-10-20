@@ -1,0 +1,264 @@
+{
+  "codes": {
+    "BAD_REQUEST": {
+      "body": {
+        "fields": {
+          "issues": {
+            "required": true,
+            "schema": {
+              "items": {
+                "fields": {
+                  "code": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "invalid_format",
+                        "invalid_type",
+                        "invalid_value",
+                        "malformed",
+                        "not_multiple",
+                        "required",
+                        "too_big",
+                        "too_small",
+                        "unrecognized_key"
+                      ]
+                    }
+                  },
+                  "in": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "body",
+                        "headers",
+                        "params",
+                        "query"
+                      ]
+                    }
+                  },
+                  "message": {
+                    "required": true,
+                    "schema": {
+                      "type": "string"
+                    }
+                  },
+                  "path": {
+                    "required": true,
+                    "schema": {
+                      "items": {
+                        "options": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "type": "union"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "mode": "open",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "message": "The request is invalid",
+      "origin": "local",
+      "removed": false,
+      "status": 400
+    },
+    "NOT_YET_IMPLEMENTED": {
+      "body": null,
+      "message": "Not implemented yet",
+      "origin": "local",
+      "removed": false,
+      "status": 501
+    },
+    "RESOURCE_NOT_FOUND": {
+      "body": null,
+      "message": "The resource does not exist",
+      "origin": "local",
+      "removed": false,
+      "status": 404
+    },
+    "UNAUTHENTICATED": {
+      "body": null,
+      "message": "The API key is missing or unknown",
+      "origin": "local",
+      "removed": false,
+      "status": 401
+    }
+  },
+  "defs": {},
+  "format": 1,
+  "generator": "@cf-loom/cli@0.0.0",
+  "guards": {
+    "apiKey": {
+      "context": {
+        "fields": {
+          "callerId": {
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "demands": {
+        "headers": {
+          "fields": {
+            "x-api-key": {
+              "required": false,
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "mode": "open",
+          "type": "object"
+        },
+        "query": null
+      },
+      "description": "An API key per Caller",
+      "guards": [],
+      "origin": "local",
+      "qualifier": null,
+      "rejections": [
+        "UNAUTHENTICATED"
+      ]
+    }
+  },
+  "kind": "definitions",
+  "name": "definitions",
+  "schemas": {
+    "money": {
+      "fields": {
+        "amount": {
+          "required": true,
+          "schema": {
+            "description": "In minor units, such as cents",
+            "int": true,
+            "min": 0,
+            "type": "number"
+          }
+        },
+        "currency": {
+          "required": true,
+          "schema": {
+            "description": "An ISO 4217 code",
+            "max": 3,
+            "min": 3,
+            "type": "string"
+          }
+        }
+      },
+      "mode": "open",
+      "type": "object"
+    }
+  },
+  "standardRejections": {
+    "invalidInput": {
+      "body": {
+        "fields": {
+          "issues": {
+            "required": true,
+            "schema": {
+              "items": {
+                "fields": {
+                  "code": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "invalid_format",
+                        "invalid_type",
+                        "invalid_value",
+                        "malformed",
+                        "not_multiple",
+                        "required",
+                        "too_big",
+                        "too_small",
+                        "unrecognized_key"
+                      ]
+                    }
+                  },
+                  "in": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "body",
+                        "headers",
+                        "params",
+                        "query"
+                      ]
+                    }
+                  },
+                  "message": {
+                    "required": true,
+                    "schema": {
+                      "type": "string"
+                    }
+                  },
+                  "path": {
+                    "required": true,
+                    "schema": {
+                      "items": {
+                        "options": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "type": "union"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "mode": "open",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "code": "BAD_REQUEST",
+      "message": "The request is invalid",
+      "origin": "local",
+      "status": 400
+    },
+    "notFound": {
+      "code": "RESOURCE_NOT_FOUND",
+      "message": "The resource does not exist",
+      "origin": "local",
+      "status": 404
+    },
+    "notImplemented": {
+      "code": "NOT_YET_IMPLEMENTED",
+      "message": "Not implemented yet",
+      "origin": "local",
+      "status": 501
+    }
+  }
+}

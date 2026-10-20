@@ -267,6 +267,21 @@ importers:
 
   examples/orders-service/contract-package: {}
 
+  examples/org-definitions:
+    devDependencies:
+      '@cf-loom/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@cf-loom/contract':
+        specifier: workspace:^
+        version: link:../../packages/contract
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+
   packages/cli:
     devDependencies:
       '@cf-loom/contract':

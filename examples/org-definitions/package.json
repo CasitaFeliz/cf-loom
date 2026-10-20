@@ -1,0 +1,26 @@
+{
+  "name": "@org/definitions",
+  "version": "0.0.0",
+  "private": true,
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/definitions/index.d.ts",
+      "default": "./dist/definitions/index.js"
+    }
+  },
+  "scripts": {
+    "generate": "cf-loom generate"
+  },
+  "devDependencies": {
+    "@cf-loom/cli": "workspace:*",
+    "@cf-loom/contract": "workspace:^",
+    "@types/node": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@cf-loom/contract": "workspace:^",
+    "zod": "catalog:"
+  }
+}
