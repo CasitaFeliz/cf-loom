@@ -26,7 +26,7 @@ export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpo
   const texts = headerTextsOf('success.headers', fieldsOf(headers.value));
   const textIssues = texts.kind === 'issues' ? texts.issues : [];
   const issues = [...headers.issues, ...body.issues, ...textIssues];
-  if (texts.kind === 'issues' || issues.length > 0) {
+  if (issues.length > 0) {
     const what = 'the scripted Success breaks its readers';
     throw mistakeOf({ ...whoOf(listed), what, issues });
   }

@@ -80,11 +80,6 @@ export function faultEnvelopeOf(fault: TravelingFault): FaultEnvelope {
   };
 }
 
-/** The status a Fault with no reserved code travels with: 503 when retryable, else 500. */
-export function faultStatusOf(fault: Pick<TravelingFault, 'retryable'>): number {
-  return fault.retryable ? 503 : 500;
-}
-
 /**
  * The Envelope a received body is, read by its fields alone, extra keys ignored; a Fault's code
  * that is not reserved is dropped, since a new one only comes with a cf-loom major. None otherwise.

@@ -35,7 +35,7 @@ How `serve` validates every Outcome before sending it is in [Validation](https:/
 
 - `returned`, a Fault the Handler returned, as `fault`; only its `committed`, `retryable` and `message` travel, never its `cause` or any field it adds;
 - `thrown`, a throw or a return that is no Outcome, as the Fault answered, with the error (or a `TypeError` naming what came back) as its `cause`;
-- `invalid-outcome`, an Outcome that broke a constraint, or a Success header whose value cannot travel as HTTP text, answered `INVALID_OUTCOME`, with the issues;
+- `invalid-outcome`, an Outcome that broke a constraint, or a Success header whose value cannot travel as HTTP field text, answered `INVALID_OUTCOME`, with the issues;
 - `runtime-bug`, a Context or Qualifier `serve` built that breaks the Contract, answered as a Fault with `committed: 'no'`, with the issues.
 
 The Caller's Faults, `RETIRED`, `NO_SUCH_ENDPOINT` and `BODY_TOO_LARGE`, never reach it; `onOutcome` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue, `<endpoint>[ <guard>]: <part>.<path> <code>: <message>`, or the Fault's message and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.

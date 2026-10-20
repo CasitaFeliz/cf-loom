@@ -18,7 +18,7 @@ import {
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
 import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
-import { serve } from '@casitafeliz/loom-server';
+import { type ServedFault, serve } from '@casitafeliz/loom-server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';
@@ -111,6 +111,9 @@ const body = { stage: 'pending', id: 'pay-1', amount: 5 } as const;
 const unsendable = { ...headers, 'x-note': 'a\nb' } as const;
 const locked = { reason: 'settled', lockedAt: '2026-10-19T10:00:00Z' } as const;
 
+/** What the Provider reports to its Service through `onServiceFault`. */
+const serviceFaults: ServedFault[] = [];
+
 /** The Provider itself, its Handler answering by the payment asked for. */
 const served = serve(
   defineContract({
@@ -144,6 +147,7 @@ const served = serve(
     guards: {},
     deprecatedAt: { getPayment: '1970-01-01T00:00:00Z' },
   },
+  { onServiceFault: (serviceFault) => serviceFaults.push(serviceFault) },
 );
 
 /** The fake, scripted to answer each payment as the Provider's Handler does. */
@@ -206,12 +210,27 @@ describe('fakeProvider and serve answer alike', () => {
     const url = 'http://payments.test/payments/unsendable';
     const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
     payments.on('getPayment').otherwise((r) => r.success({ headers: unsendable, body }));
+    serviceFaults.length = 0;
 
     const fromServe = await served(new Request(url));
     const fromFake = payments.fetch(url, {});
 
-    expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
     await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+    expect(serviceFaults).toEqual([
+      {
+        kind: 'invalid-outcome',
+        endpoint: 'getPayment',
+        issues: [
+          {
+            part: 'success.headers',
+            path: ['x-note'],
+            code: 'invalid_format',
+            message: expect.any(String),
+          },
+        ],
+      },
+    ]);
   });
 });
 
