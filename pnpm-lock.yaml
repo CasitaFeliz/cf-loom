@@ -254,6 +254,9 @@ importers:
       '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@org/definitions':
+        specifier: workspace:*
+        version: link:../org-definitions
       zod:
         specifier: 'catalog:'
         version: 4.6.7

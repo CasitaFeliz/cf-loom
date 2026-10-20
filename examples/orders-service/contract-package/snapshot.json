@@ -1,6 +1,6 @@
 {
   "codes": {
-    "INVALID_INPUT": {
+    "BAD_REQUEST": {
       "body": {
         "fields": {
           "issues": {
@@ -73,22 +73,15 @@
         "mode": "open",
         "type": "object"
       },
-      "message": "Invalid input",
-      "origin": "standard",
+      "message": "The request is invalid",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 400
     },
-    "NOT_FOUND": {
+    "NOT_YET_IMPLEMENTED": {
       "body": null,
-      "message": "Not found",
-      "origin": "standard",
-      "removed": false,
-      "status": 404
-    },
-    "NOT_IMPLEMENTED": {
-      "body": null,
-      "message": "Not implemented",
-      "origin": "standard",
+      "message": "Not implemented yet",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 501
     },
@@ -111,16 +104,25 @@
       "removed": false,
       "status": 409
     },
+    "RESOURCE_NOT_FOUND": {
+      "body": null,
+      "message": "The resource does not exist",
+      "origin": "@org/definitions@0.0.0",
+      "removed": false,
+      "status": 404
+    },
     "UNAUTHENTICATED": {
       "body": null,
-      "message": "The API key is unknown",
-      "origin": "local",
+      "message": "The API key is missing or unknown",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 401
     }
   },
   "commands": {},
-  "definitions": {},
+  "definitions": {
+    "@org/definitions": "0.0.0"
+  },
   "defs": {},
   "dependencies": {},
   "endpoints": {
@@ -138,8 +140,8 @@
       "name": "health",
       "params": [],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_IMPLEMENTED"
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED"
       ],
       "success": {
         "body": {
@@ -173,7 +175,7 @@
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -203,10 +205,10 @@
         "orderId"
       ],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_FOUND",
-        "NOT_IMPLEMENTED",
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED",
         "ORDER_LOCKED",
+        "RESOURCE_NOT_FOUND",
         "UNAUTHENTICATED"
       ],
       "success": {
@@ -270,6 +272,7 @@
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -325,6 +328,7 @@
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -335,7 +339,7 @@
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -351,8 +355,8 @@
       "name": "createOrder",
       "params": [],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_IMPLEMENTED",
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED",
         "UNAUTHENTICATED"
       ],
       "success": {
@@ -416,6 +420,7 @@
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -450,7 +455,7 @@
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -463,7 +468,7 @@
       },
       "description": "An API key per Caller",
       "guards": [],
-      "origin": "local",
+      "origin": "@org/definitions@0.0.0",
       "qualifier": null,
       "rejections": [
         "UNAUTHENTICATED"
@@ -546,21 +551,21 @@
         "mode": "open",
         "type": "object"
       },
-      "code": "INVALID_INPUT",
-      "message": "Invalid input",
-      "origin": "standard",
+      "code": "BAD_REQUEST",
+      "message": "The request is invalid",
+      "origin": "@org/definitions@0.0.0",
       "status": 400
     },
     "notFound": {
-      "code": "NOT_FOUND",
-      "message": "Not found",
-      "origin": "standard",
+      "code": "RESOURCE_NOT_FOUND",
+      "message": "The resource does not exist",
+      "origin": "@org/definitions@0.0.0",
       "status": 404
     },
     "notImplemented": {
-      "code": "NOT_IMPLEMENTED",
-      "message": "Not implemented",
-      "origin": "standard",
+      "code": "NOT_YET_IMPLEMENTED",
+      "message": "Not implemented yet",
+      "origin": "@org/definitions@0.0.0",
       "status": 501
     }
   },
