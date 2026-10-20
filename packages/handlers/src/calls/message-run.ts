@@ -2,8 +2,7 @@ import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import { checkedBody, type Issue } from '../checks/index.ts';
 import { type Fault, isFault } from '../outcomes/index.ts';
-import { elementNameOf } from './errors.ts';
-import { describedOf } from './implementation.ts';
+import { returnedOf } from './implementation.ts';
 import type { Written } from './run.ts';
 
 /** What a Message Handler was written with: its Command or Subscription, the Reader schema it reads a body with, its implementation, and whether it is a stub. */
@@ -49,10 +48,14 @@ async function messageCallOf(
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }
-  const returned = await implementation(checked.value, meta);
-  if (returned === undefined || isFault(returned)) {
-    return { kind: 'answered', answer: returned };
+  const returned = await returnedOf(element, () => implementation(checked.value, meta), isAnswered);
+  if (returned.kind === 'not-built') {
+    return { kind: 'thrown', cause: returned.cause };
   }
-  const message = `${elementNameOf(element)}'s Handler returned no Fault but ${describedOf(returned)}`;
-  return { kind: 'thrown', cause: new TypeError(message) };
+  return { kind: 'answered', answer: returned.built };
+}
+
+/** Whether a Message Handler returned what it may: nothing, which acknowledges, or a Fault. */
+function isAnswered(value: unknown): value is Fault | undefined {
+  return value === undefined || isFault(value);
 }

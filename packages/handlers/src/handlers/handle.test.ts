@@ -177,6 +177,13 @@ describe('handle', () => {
     expect(write).not.toThrow();
   });
 
+  test('an implementation returning any value but nothing or a Fault is a type error', () => {
+    // @ts-expect-error a Message Handler returns nothing or a Fault, never a value
+    const write = () => handle(chargeCard, async () => 42);
+
+    expect(write).not.toThrow();
+  });
+
   test('a stub is the Handler of the Endpoint or Guard it was written for', () => {
     const endpointStub = handle.stub(getOrder);
     const guardStub = handle.stub(apiKey);

@@ -3,12 +3,9 @@ import { isCommand, messageIdentityOf } from '@cf-loom/contract/internal';
 import type { Issue } from '../checks/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { MessageRun } from './message-run.ts';
-import type { Run } from './run.ts';
+import type { HandledElement, Run } from './run.ts';
 
-/** Any Element a Handler is written for. */
-type HandledElement = Endpoint | Guard | Command | Subscription;
-
-/** Thrown by a direct call given Input, demands, Context or a Qualifier that breaks the Contract. */
+/** Thrown by a direct call given Input, demands, Context, a Qualifier or a Message body that breaks the Contract. */
 export class InvalidInputError extends Error {
   override readonly name = 'InvalidInputError';
   readonly issues: readonly Issue[];

@@ -13,12 +13,13 @@ export function withReader<
   const Element extends Command | Subscription,
   Reader extends core.$ZodType,
 >(element: Element, reader: Reader): WithReader<Element, Reader> {
-  if (!isMessageElement(element) || !isSchema(reader)) {
+  const pairing = { element, reader };
+  if (!isWithReader(pairing)) {
     throw new Error(
       'withReader() takes a Command or a Subscription declared with @cf-loom/contract and a zod schema',
     );
   }
-  return Object.freeze({ element, reader });
+  return Object.freeze(pairing);
 }
 
 /** Whether a value is a Command or Subscription paired with its Reader, which `handle()` takes. */

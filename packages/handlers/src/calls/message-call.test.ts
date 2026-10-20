@@ -187,6 +187,16 @@ describe("a Message Handler's meta", () => {
     expect(received[1]).toEqual({ ...meta, headers: {} });
   });
 
+  test('two direct calls without headers each give the implementation its own headers', async () => {
+    const { received, chargeCardHandler } = receiving();
+
+    await chargeCardHandler(body, meta);
+    await chargeCardHandler(body, meta);
+
+    const [first, second] = [received[1], received[3]] as { headers: object }[];
+    expect(first?.headers).not.toBe(second?.headers);
+  });
+
   test('headers given reach the implementation as given', async () => {
     const { received, chargeCardHandler } = receiving();
     const headers = { traceparent: '00-abc-def-01' };
@@ -199,7 +209,7 @@ describe("a Message Handler's meta", () => {
 
 describe("what a Message Handler's direct call answers", () => {
   test('a Handler that returns nothing answers undefined', async () => {
-    const chargeCardHandler = handle(chargeCard, async () => {});
+    const chargeCardHandler = handle(chargeCard, async (_body) => {});
 
     const answer = await chargeCardHandler(body, meta);
 
@@ -224,6 +234,27 @@ describe("what a Message Handler's direct call answers", () => {
     const call = chargeCardHandler(body, meta);
 
     await expect(call).rejects.toBe(error);
+  });
+
+  test('a value the Handler throws that is no Error is rethrown as it is', async () => {
+    const chargeCardHandler = handle(chargeCard, () => {
+      throw 'gateway down';
+    });
+
+    const call = chargeCardHandler(body, meta);
+
+    await expect(call).rejects.toBe('gateway down');
+  });
+
+  test('a Handler that returns the fields of a Fault without its kind throws a TypeError', async () => {
+    const lookalike = { committed: 'no', retryable: true, message: 'x' };
+    const chargeCardHandler = handle(chargeCard, () => lookalike as never);
+
+    const call = chargeCardHandler(body, meta);
+
+    await expect(call).rejects.toEqual(
+      new TypeError("ChargeCard@1's Handler returned no Fault but object"),
+    );
   });
 
   test('a Handler that returns something other than a Fault throws a TypeError naming what came back', async () => {

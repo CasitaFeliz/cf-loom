@@ -13,8 +13,7 @@ export type DirectMeta = Omit<MessageMeta, 'headers'> & {
 };
 
 /** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a Fault. */
-// biome-ignore lint/suspicious/noConfusingVoidType: an implementation that returns no value returns nothing
-type Answered = void | Fault;
+type Answered = undefined | Fault;
 
 /** What a CommandHandler's implementation returns: nothing, which acknowledges the Command, or a Fault; may be async. */
 export type CommandImplementation<Target extends WithReader<Command>> = (
