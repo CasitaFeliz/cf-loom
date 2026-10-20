@@ -16,6 +16,7 @@ export {
   paramNamesOf,
   pathSegmentsOf,
   segmentsOf,
+  subjectVersionOf,
 } from './identity.ts';
 export type {
   LocatedCode,

@@ -93,7 +93,7 @@ async function jsonOf(
     case 'unreadable':
       return { kind: 'unreadable', message: notJsonMessage, error: read.error };
     case 'bytes':
-      return parsedOf(read.bytes);
+      return jsonOfBytes(read.bytes);
   }
 }
 
@@ -132,7 +132,8 @@ function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return bytes;
 }
 
-function parsedOf(bytes: Uint8Array): ReceivedBody {
+/** A body's JSON from its bytes, read as fatal UTF-8, or why it is no JSON, in a fixed text. */
+export function jsonOfBytes(bytes: Uint8Array): Exclude<ReceivedBody, { kind: 'unreadable' }> {
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     return { kind: 'value', value: JSON.parse(text) };

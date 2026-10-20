@@ -46,6 +46,14 @@ export function messageIdentityOf(name: unknown, version: unknown): string {
   return `${textOf(name)}@${textOf(version)}`;
 }
 
+/** A Message Version as a subject and a broker message id spell it, `OrderCreated.v2`. */
+export function subjectVersionOf(message: {
+  readonly name: string;
+  readonly version: number;
+}): string {
+  return `${message.name}.v${message.version}`;
+}
+
 /**
  * A Message Version's name and version from its identity, `OrderCreated@2`: the reverse of
  * `messageIdentityOf`, since the Snapshot keys a Message Version by its identity alone.

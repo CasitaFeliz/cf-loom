@@ -2,10 +2,12 @@ export type { ReceivedBody } from './body.ts';
 export {
   bodyOf,
   discardBodyOf,
+  jsonOfBytes,
   malformedBodyIssueOf,
   notJsonContentType,
   receivedBodyOf,
 } from './body.ts';
+export { brokerMessageIdOf, durableNameOf, isReservedHeader, subjectOf } from './broker.ts';
 export { jsonContentType } from './content-type.ts';
 export { deprecatedAtOfHeader, deprecationHeader, withDeprecation } from './deprecation.ts';
 export type { Committed, RejectionEnvelope } from './envelopes.ts';
