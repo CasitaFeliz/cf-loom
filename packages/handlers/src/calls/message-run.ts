@@ -1,12 +1,12 @@
-import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import { checkedBody, type Issue } from '../checks/index.ts';
 import { type Fault, isFault } from '../outcomes/index.ts';
+import type { MessageElement } from './elements.ts';
 import { returnedOf } from './implementation.ts';
 import type { Written } from './run.ts';
 
 /** What a Message Handler was written with: its Command or Subscription, the Reader schema it reads a body with, its implementation, and whether it is a stub. */
-export type MessageWritten = Written<Command | Subscription> & { readonly reader: core.$ZodType };
+export type MessageWritten = Written<MessageElement> & { readonly reader: core.$ZodType };
 
 /** What a Message Handler receives beside its body: the Message's ids, which attempt this is, and the transport headers it was published with. */
 export type MessageMeta = {

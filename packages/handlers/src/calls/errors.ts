@@ -1,9 +1,10 @@
-import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import { isCommand, messageIdentityOf } from '@cf-loom/contract/internal';
 import type { Issue } from '../checks/index.ts';
 import type { Fault } from '../outcomes/index.ts';
+import type { HandledElement, MessageElement } from './elements.ts';
 import type { MessageRun } from './message-run.ts';
-import type { HandledElement, Run } from './run.ts';
+import type { Run } from './run.ts';
 
 /** Thrown by a direct call given Input, demands, Context, a Qualifier or a Message body that breaks the Contract. */
 export class InvalidInputError extends Error {
@@ -45,10 +46,7 @@ export function answerOf<Answer>(element: Endpoint | Guard, run: Run<Answer>): A
  * What a Message Handler's direct call answers: nothing or the Fault it returned; a throw is
  * rethrown, and a body that breaks its Reader throws.
  */
-export function messageAnswerOf(
-  element: Command | Subscription,
-  run: MessageRun,
-): Fault | undefined {
+export function messageAnswerOf(element: MessageElement, run: MessageRun): Fault | undefined {
   switch (run.kind) {
     case 'invalid-input':
       throw new InvalidInputError(element, run.issues);

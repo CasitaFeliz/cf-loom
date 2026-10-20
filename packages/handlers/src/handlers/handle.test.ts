@@ -278,6 +278,14 @@ describe('handle', () => {
 });
 
 describe('withReader', () => {
+  test('withReader returns a frozen pairing', () => {
+    const pairing = withReader(chargeCardV1, statusReader);
+
+    const frozen = Object.isFrozen(pairing);
+
+    expect(frozen).toBe(true);
+  });
+
   test('withReader given something that is no Command or Subscription, or no zod schema, throws', () => {
     const pairs = [
       () => withReader(getOrder as never, statusReader),

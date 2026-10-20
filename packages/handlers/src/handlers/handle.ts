@@ -12,6 +12,7 @@ import {
   endpointRunOf,
   guardRunOf,
   type Implementation,
+  type MessageElement,
   type MessageWritten,
   messageAnswerOf,
   messageRunOf,
@@ -161,7 +162,7 @@ function standardsOf(directCall: DirectCall | undefined): StandardRejections {
 
 const notImplementedStub: Implementation = () => reject(notImplemented);
 
-function messageStubOf(element: Command | Subscription): Implementation {
+function messageStubOf(element: MessageElement): Implementation {
   return () => {
     throw new Error(`${elementNameOf(element)}'s Handler is a stub, which consume never runs`);
   };

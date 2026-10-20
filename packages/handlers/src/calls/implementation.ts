@@ -1,6 +1,5 @@
-import { isCommand, isSubscription } from '@cf-loom/contract/internal';
+import { type HandledElement, isMessageElement } from './elements.ts';
 import { elementNameOf } from './errors.ts';
-import type { HandledElement } from './run.ts';
 
 /** What an implementation returned: what it built, or a `TypeError` naming a value it may not return. */
 export type Returned<Built> =
@@ -26,7 +25,7 @@ export async function returnedOf<Built>(
 
 /** What a Handler answers, by its Element: a Message Handler a Fault or nothing, any other an Outcome. */
 function answeredOf(element: HandledElement): string {
-  return isCommand(element) || isSubscription(element) ? 'Fault' : 'Outcome';
+  return isMessageElement(element) ? 'Fault' : 'Outcome';
 }
 
 /** What a Handler returned instead of what it answers, by its type or kind, never its content. */

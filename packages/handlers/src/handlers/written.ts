@@ -1,7 +1,11 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
 import { isEndpoint, isGuard } from '@cf-loom/contract/internal';
-import type { HandledElement, MessageWritten, Written } from '../calls/index.ts';
-import { isMessageElement } from './reader.ts';
+import {
+  type HandledElement,
+  isMessageElement,
+  type MessageWritten,
+  type Written,
+} from '../calls/index.ts';
 
 /** What any Handler was written with: an Endpoint's, a Guard's, or a Message Handler's with its Reader. */
 export type AnyWritten = Written<Endpoint> | Written<Guard> | MessageWritten;

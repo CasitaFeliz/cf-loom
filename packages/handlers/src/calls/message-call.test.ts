@@ -257,6 +257,37 @@ describe("what a Message Handler's direct call answers", () => {
     );
   });
 
+  test('a Handler that returns the fields of a Fault under another kind throws a TypeError', async () => {
+    const lookalike = { kind: 'success', committed: 'no', retryable: true, message: 'x' };
+    const chargeCardHandler = handle(chargeCard, () => lookalike as never);
+
+    const call = chargeCardHandler(body, meta);
+
+    await expect(call).rejects.toEqual(
+      new TypeError("ChargeCard@1's Handler returned no Fault but the kind success"),
+    );
+  });
+
+  test('a Handler that returns null throws a TypeError naming null', async () => {
+    const chargeCardHandler = handle(chargeCard, () => null as never);
+
+    const call = chargeCardHandler(body, meta);
+
+    await expect(call).rejects.toEqual(
+      new TypeError("ChargeCard@1's Handler returned no Fault but null"),
+    );
+  });
+
+  test('an EventHandler that returns something other than a Fault throws a TypeError naming no Fault', async () => {
+    const notifyOnSettledHandler = handle(notifyOnSettledReader, () => success() as never);
+
+    const call = notifyOnSettledHandler(body, meta);
+
+    await expect(call).rejects.toEqual(
+      new TypeError("notify-on-settled's Handler returned no Fault but the kind success"),
+    );
+  });
+
   test('a Handler that returns something other than a Fault throws a TypeError naming what came back', async () => {
     const chargeCardHandler = handle(chargeCard, () => success() as never);
 
