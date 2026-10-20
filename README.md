@@ -23,6 +23,8 @@ How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages)
 
 ## A first Service
 
+Two fictional Services in `examples/` follow these steps end to end, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, a Rejection, an Open Enum and a Private Endpoint, and [`billing-service`](examples/billing-service), which depends on it through its Contract Package, calls it with `client` and fakes it with `fakeProvider`.
+
 ### Layout
 
 ```
