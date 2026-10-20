@@ -10,6 +10,8 @@ import {
   type EndpointImplementation,
   fault,
   handle,
+  InvalidOutcomeError,
+  type Issue,
   reject,
   success,
 } from '@casitafeliz/loom-handlers';
@@ -199,6 +201,60 @@ describe('serve: a Success', () => {
     expect(response.headers.get('x-total')).toBe('3');
     expect(response.headers.get('content-type')).toBeNull();
     expect(await response.text()).toBe('');
+  });
+});
+
+describe('a direct call and serve agree', () => {
+  const getInput = { params: { orderId: 'o-1' } };
+
+  async function issuesThrownBy(call: () => Promise<unknown>): Promise<readonly Issue[]> {
+    try {
+      await call();
+    } catch (e) {
+      if (e instanceof InvalidOutcomeError) {
+        return e.issues;
+      }
+      throw e;
+    }
+    throw new Error('the direct call did not throw');
+  }
+
+  test.each([
+    ['above U+00FF', 'v€'],
+    ['with a line feed', 'v\n1'],
+    ['with a leading space', ' v1'],
+    ['with a trailing tab', 'v1\t'],
+  ])(
+    'a Success header value %s: serve answers INVALID_OUTCOME with the Issues the direct call throws',
+    async (_case, etag) => {
+      const implementation = () => success({ headers: { 'x-total': 3, etag }, body: order });
+      const { http, faults } = serveWith(implementation);
+
+      const thrown = await issuesThrownBy(() => handle(getOrder, implementation)(getInput, {}));
+      const response = await http(getRequest.clone());
+
+      expect(response.status).toBe(500);
+      expect(faults).toEqual([{ kind: 'invalid-outcome', endpoint: 'getOrder', issues: thrown }]);
+    },
+  );
+
+  test('a Fault built with a reserved code: the direct call returns it as built, serve sends it without its code', async () => {
+    const forged = {
+      kind: 'fault',
+      code: 'NO_SUCH_ENDPOINT',
+      committed: 'yes',
+      retryable: true,
+      message: 'forged',
+    };
+    const { http } = serveWith(() => forged as never);
+
+    const returned = await handle(getOrder, () => forged as never)(getInput, {});
+    const response = await http(getRequest.clone());
+
+    expect(returned).toStrictEqual(forged);
+    expect(await response.json()).toStrictEqual({
+      fault: { committed: 'yes', retryable: true, message: 'forged' },
+    });
   });
 });
 

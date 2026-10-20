@@ -1,5 +1,10 @@
 import type { Endpoint, Guard, StandardRejections } from '@casitafeliz/loom-contract';
-import { partFieldOf, schemaOf, successParts } from '@casitafeliz/loom-contract/internal';
+import {
+  headerTextsOf,
+  partFieldOf,
+  schemaOf,
+  successParts,
+} from '@casitafeliz/loom-contract/internal';
 import type {
   AnyAdmission,
   AnyOutcome,
@@ -53,13 +58,32 @@ export function checkedAdmission(
 }
 
 /**
- * The value a Handler gave `success()`, read by its Endpoint: the body, or `{ headers, body }`
- * when the Endpoint declares headers; only the parts it declares come back.
+ * The value a Handler gave `success()`, read by its Endpoint and sendable: parsed, then each
+ * header checked to travel as text, by the wire rule `serve` sends it with.
  */
 function checkedSuccess(
   endpoint: Endpoint,
-  { value }: BuiltSuccess<unknown>,
+  built: BuiltSuccess<unknown>,
 ): Checked<ResolvedOutcome<Endpoint>> {
+  const parsed = parsedSuccessOf(endpoint, built);
+  if (parsed.kind === 'issues') {
+    return parsed;
+  }
+  const headers = headerTextsOf('success.headers', parsed.value.headers);
+  return headers.kind === 'issues' ? headers : parsed;
+}
+
+/** The Success member of what a direct call returns. */
+type ResolvedSuccess = Extract<ResolvedOutcome<Endpoint>, { readonly kind: 'success' }>;
+
+/**
+ * The value a Handler gave `success()`, read by its Endpoint: the body, or `{ headers, body }`
+ * when the Endpoint declares headers; only the parts it declares come back.
+ */
+function parsedSuccessOf(
+  endpoint: Endpoint,
+  { value }: BuiltSuccess<unknown>,
+): Checked<ResolvedSuccess> {
   const given = schemaOf(endpoint, 'success.headers') === undefined ? { body: value } : value;
   const parts = successParts.map((part) => ({
     part,

@@ -30,10 +30,8 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
       return builtOf(listed, unsendable, () => knownRejectionResponseOf(answer, listed));
     case 'unknown-rejection':
       return builtOf(listed, unsendable, () => unknownRejectionResponseOf(answer, listed));
-    case 'fault': {
-      const { committed, retryable, message } = answer;
-      return builtOf(listed, unsendable, () => faultResponseOf({ committed, retryable, message }));
-    }
+    case 'fault':
+      return builtOf(listed, unsendable, () => faultResponseOf(answer));
     case 'reserved':
       return builtOf(listed, unsendable, () => reservedResponseOf(answer.code));
     case 'no-connection':

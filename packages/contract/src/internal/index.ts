@@ -85,6 +85,7 @@ export type {
   ReceivedInvalidInputBody,
   RejectionEnvelope,
   SentRejection,
+  SentSuccess,
   TextSource,
 } from '../wire/index.ts';
 export {
@@ -98,6 +99,7 @@ export {
   headerValuesOf,
   internalError,
   invalidInputBodyOf,
+  invalidInputRejectionOf,
   invalidInputResponseOf,
   isQueryText,
   isSegmentText,

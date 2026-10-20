@@ -15,7 +15,7 @@ import {
   inOf,
   schemaOf,
 } from '../written/index.ts';
-import { rejectionResponseOf } from './responses.ts';
+import { rejectionResponseOf, type SentRejection } from './responses.ts';
 
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
 export type InputIssue = Issue & { readonly part: InputPart };
@@ -37,12 +37,20 @@ export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputB
   };
 }
 
+/** The invalid-input Rejection: the Provider's code, status and message, with cf-loom's body of the Issues. */
+export function invalidInputRejectionOf(
+  issues: readonly InputIssue[],
+  standards: StandardRejections,
+): SentRejection {
+  return { ...standards.invalidInput, body: invalidInputBodyOf(issues) };
+}
+
 /** The response of the invalid-input Rejection: the Provider's code, status and message, cf-loom's body. */
 export function invalidInputResponseOf(
   issues: readonly InputIssue[],
   standards: StandardRejections,
 ): Response {
-  return rejectionResponseOf({ ...standards.invalidInput, body: invalidInputBodyOf(issues) });
+  return rejectionResponseOf(invalidInputRejectionOf(issues, standards));
 }
 
 /**

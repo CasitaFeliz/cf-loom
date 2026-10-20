@@ -30,7 +30,8 @@ export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpo
     const what = 'the scripted Success breaks its readers';
     throw mistakeOf({ ...whoOf(listed), what, issues });
   }
-  return successResponseOf({ status: success.status, headers: texts.texts, body: body.value });
+  const sent = { status: success.status, headers: fieldsOf(headers.value), body: body.value };
+  return successResponseOf(sent);
 }
 
 type KnownRejection = Extract<Answer, { readonly kind: 'rejection' }>;

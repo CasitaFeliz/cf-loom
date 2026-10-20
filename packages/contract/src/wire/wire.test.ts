@@ -9,6 +9,7 @@ import {
   headerTextsOf,
   headerValuesOf,
   invalidInputBodyOf,
+  invalidInputRejectionOf,
   invalidInputResponseOf,
   isQueryText,
   isReservedCode,
@@ -21,8 +22,10 @@ import {
   rejectionBodyReaderOf,
   rejectionResponseOf,
   reservedFaults,
+  reservedResponseOf,
   type SchemaNode,
   segmentOf,
+  successResponseOf,
   type TextPartNodes,
   textOfValue,
   textPartsOf,
@@ -261,12 +264,7 @@ describe('the Envelopes as they travel', () => {
   });
 
   test('a reserved Fault carries its code, a Handler’s Fault none', async () => {
-    const reserved = faultResponseOf({
-      code: 'RETIRED',
-      committed: 'no',
-      retryable: false,
-      message: 'The Endpoint is retired',
-    });
+    const reserved = reservedResponseOf('RETIRED');
     const returned = faultResponseOf({ committed: 'yes', retryable: true, message: 'Lost' });
 
     const envelopes = [await reserved.json(), await returned.json()];
@@ -282,6 +280,38 @@ describe('the Envelopes as they travel', () => {
       },
       { fault: { committed: 'yes', retryable: true, message: 'Lost' } },
     ]);
+  });
+
+  test('faultResponseOf sends only committed, retryable and message; a code given beside them never travels', async () => {
+    const forged = {
+      code: 'RETIRED',
+      committed: 'no',
+      retryable: false,
+      message: 'Forged',
+    } as const;
+
+    const response = faultResponseOf(forged);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toStrictEqual({
+      fault: { committed: 'no', retryable: false, message: 'Forged' },
+    });
+  });
+
+  test('successResponseOf sends each header value as its text, one left undefined unsent', async () => {
+    const response = successResponseOf({
+      status: 200,
+      headers: { 'x-total': 3, etag: 'v1', 'x-note': undefined },
+      body: { id: 'o-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect([...response.headers]).toEqual([
+      ['content-type', jsonContentType],
+      ['etag', 'v1'],
+      ['x-total', '3'],
+    ]);
+    expect(await response.json()).toEqual({ id: 'o-1' });
   });
 });
 
@@ -313,12 +343,7 @@ describe('the reserved codes and statuses', () => {
 
   test('a Fault travels with its reserved code’s status, else 503 when retryable and 500 otherwise', () => {
     const responses = [
-      faultResponseOf({
-        code: 'BODY_TOO_LARGE',
-        committed: 'no',
-        retryable: false,
-        message: 'Too large',
-      }),
+      reservedResponseOf('BODY_TOO_LARGE'),
       faultResponseOf({ committed: 'unknown', retryable: true, message: 'Down' }),
       faultResponseOf({ committed: 'unknown', retryable: false, message: 'Broke' }),
     ];
@@ -503,6 +528,30 @@ describe('the invalid-input Rejection', () => {
         body: {
           issues: [{ in: 'query', path: ['page'], code: 'invalid_type', message: 'A number' }],
         },
+      },
+    });
+  });
+});
+
+describe('invalidInputRejectionOf', () => {
+  test('invalidInputRejectionOf is the Provider’s code, status and message with cf-loom’s body of the Issues', () => {
+    const standards = {
+      invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
+      notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+      notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+    } as const;
+    const issues = [
+      { part: 'input.body', path: ['amount'], code: 'too_small', message: 'At least 1' },
+    ] as const;
+
+    const rejection = invalidInputRejectionOf(issues, standards);
+
+    expect(rejection).toStrictEqual({
+      code: 'BAD_REQUEST',
+      status: 422,
+      message: 'The request is invalid',
+      body: {
+        issues: [{ in: 'body', path: ['amount'], code: 'too_small', message: 'At least 1' }],
       },
     });
   });

@@ -88,7 +88,7 @@ function answeredRunOf(
   }
   const outcome = run.answer;
   if (outcome.kind === 'success') {
-    return answeredOfSuccess(outcome, faultedBy);
+    return answeredOfSuccess(outcome);
   }
   return answeredOfNotSuccess(outcome, faultedBy);
 }

@@ -41,7 +41,11 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     input: { params: z.object({ paymentId: z.string().min(3) }) },
     success: {
       status: 200,
-      headers: z.object({ 'x-stage': stage, 'x-count': z.number() }),
+      headers: z.object({
+        'x-stage': stage,
+        'x-count': z.number(),
+        'x-note': z.string().optional(),
+      }),
       body: z.object({ stage, id: z.string(), amount: z.int() }),
     },
     rejections: [notFound, paymentLocked],
@@ -104,6 +108,7 @@ const paymentsDeps = defineDependencies(
 
 const headers = { 'x-stage': 'settled', 'x-count': 0.000_000_15 } as const;
 const body = { stage: 'pending', id: 'pay-1', amount: 5 } as const;
+const unsendable = { ...headers, 'x-note': 'a\nb' } as const;
 const locked = { reason: 'settled', lockedAt: '2026-10-19T10:00:00Z' } as const;
 
 /** The Provider itself, its Handler answering by the payment asked for. */
@@ -128,6 +133,8 @@ const served = serve(
             return reject(paymentLocked, locked);
           case 'down':
             return fault({ committed: 'no', retryable: true });
+          case 'unsendable':
+            return success({ headers: unsendable, body });
           default:
             return success({ headers, body });
         }
@@ -193,6 +200,18 @@ describe('fakeProvider and serve answer alike', () => {
     const fromFake = await seenOf(await scriptedFake().fetch(url, init));
 
     expect(fromFake).toEqual(fromServe);
+  });
+
+  test('a Success header that cannot travel: serve answers INVALID_OUTCOME and the fake calls the script a mistake at the same header', async () => {
+    const url = 'http://payments.test/payments/unsendable';
+    const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+    payments.on('getPayment').otherwise((r) => r.success({ headers: unsendable, body }));
+
+    const fromServe = await served(new Request(url));
+    const fromFake = payments.fetch(url, {});
+
+    expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+    await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
   });
 });
 

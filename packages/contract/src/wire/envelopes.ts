@@ -80,14 +80,8 @@ export function faultEnvelopeOf(fault: TravelingFault): FaultEnvelope {
   };
 }
 
-/** The status a Fault travels with: its reserved code's, else 503 when retryable and 500 otherwise. */
-export function faultStatusOf(fault: {
-  readonly code?: ReservedCode;
-  readonly retryable: boolean;
-}): number {
-  if (fault.code !== undefined) {
-    return reservedFaults[fault.code].status;
-  }
+/** The status a Fault with no reserved code travels with: 503 when retryable, else 500. */
+export function faultStatusOf(fault: Pick<TravelingFault, 'retryable'>): number {
   return fault.retryable ? 503 : 500;
 }
 
