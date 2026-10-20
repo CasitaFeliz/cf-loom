@@ -5,31 +5,23 @@ export {
   isJsonValue,
 } from './canonical-json.ts';
 export { childrenOf } from './children.ts';
-export type { HashAlgorithm, HashEncoding, HashFormat } from './hash-formats.ts';
+export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
-export type { KeyedRecordSlots } from './keyed-records.ts';
 export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';
 export type {
-  AllOfNode,
-  ArrayNode,
-  BooleanNode,
   EnumNode,
   Field,
-  JsonNode,
   JsonPrimitive,
-  LiteralNode,
   NotAllowed,
   NumberNode,
   ObjectNode,
   Origin,
   Path,
-  RecordNode,
   RefNode,
   SchemaNode,
   StringNode,
   TaggedNode,
   TupleNode,
-  UnionNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
 export { openIntersectionsOf } from './open-intersections.ts';

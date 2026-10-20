@@ -2,17 +2,26 @@ import * as built from '@casitafeliz/loom-contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
+import type * as core from 'zod/v4/core';
 import * as contract from '../index.ts';
-import { encodedValueOf, isOpen } from '../internal/index.ts';
+import { encodedValueOf, walkSchemas } from '../internal/index.ts';
 
 type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
+
+/** Whether the walker reads a schema as an Open Enum: its enum node's `open`, none for any other node. */
+function openOf(schema: core.$ZodType): boolean | undefined {
+  const { located } = walkSchemas([{ at: ['body'], schema }], () => undefined);
+  const walked = located[0]?.walked;
+  const node = walked?.kind === 'walked' ? walked.value : undefined;
+  return node?.type === 'enum' ? node.open : undefined;
+}
 
 describe('openEnum', () => {
   test('openEnum is open and its writer type is the declared values', () => {
     const status = contract.openEnum(['pending', 'paid']);
 
-    expect(isOpen(status)).toBe(true);
-    expect(isOpen(z.enum(['pending', 'paid']))).toBe(false);
+    expect(openOf(status)).toBe(true);
+    expect(openOf(z.enum(['pending', 'paid']))).toBe(false);
     expect(status.safeParse('refunded').success).toBe(false);
     expectTypeOf<z.output<typeof status>>().toEqualTypeOf<'pending' | 'paid'>();
   });
@@ -25,11 +34,11 @@ describe('openEnum', () => {
   ])('an openEnum described with %s stays open', (_name, described) => {
     const status = contract.openEnum(['pending', 'paid']);
 
-    expect(isOpen(described(status))).toBe(true);
+    expect(openOf(described(status))).toBe(true);
   });
 
   test('a described z.enum() stays closed', () => {
-    expect(isOpen(z.enum(['pending', 'paid']).describe('The order status'))).toBe(false);
+    expect(openOf(z.enum(['pending', 'paid']).describe('The order status'))).toBe(false);
   });
 
   test('openEnum takes string values only', () => {
@@ -94,13 +103,5 @@ describe('the entry', () => {
     expectTypeOf(contract).not.toHaveProperty('openUnion');
     expect(contract).not.toHaveProperty('openUnion');
     expect(built).not.toHaveProperty('openUnion');
-  });
-});
-
-describe('openness from another copy of loom-contract', () => {
-  test('an openEnum from another copy is open', () => {
-    const status = built.openEnum(['pending', 'paid']);
-
-    expect(isOpen(status)).toBe(true);
   });
 });
