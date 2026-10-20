@@ -1,15 +1,12 @@
 import type { Endpoint } from '@casitafeliz/loom-contract';
 import {
-  demandIssuesOf,
   headerTextsOf,
   type InputIssue,
-  inputParts,
   isQueryText,
   isSegmentText,
   isTextValue,
-  notJsonBodyIssue,
-  parsedPartsOf,
-  schemaOf,
+  notJsonContentType,
+  readingOf,
   textOfValue,
 } from '@casitafeliz/loom-contract/internal';
 
@@ -27,25 +24,27 @@ export type ReadyInput =
   | { readonly kind: 'invalid'; readonly issues: readonly InputIssue[] };
 
 /**
- * The Input a Caller passed, checked as the Provider checks it: each attached Guard's demands in
- * Attachment order, the first that fails answering alone; then a declared body left out, which is
- * no JSON and answers alone; then each declared part of the Input, parsed with its schema; then
- * its text, that it can travel.
+ * The Input a Caller passed, read as the Provider reads the request it would send, every Guard
+ * admitting it and a body left out sent with no content type; then its text, that it can travel.
  */
-export function readyInputOf(endpoint: Endpoint, passed: unknown): ReadyInput {
+export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise<ReadyInput> {
   const sent = sentInputOf(passed);
-  const demandIssues = demandIssuesOf(endpoint, sent);
-  if (demandIssues.length > 0) {
-    return { kind: 'invalid', issues: demandIssues };
+  const body =
+    sent['body'] === undefined
+      ? notJsonContentType
+      : { kind: 'value' as const, value: sent['body'] };
+  const reading = await readingOf(endpoint, {
+    textOf: () => sent,
+    body: () => Promise.resolve(body),
+  });
+  switch (reading.kind) {
+    case 'stopped':
+      return reading.answer;
+    case 'invalid':
+      return reading;
+    case 'input':
+      return travelingInputOf(reading.input);
   }
-  if (schemaOf(endpoint, 'input.body') !== undefined && sent['body'] === undefined) {
-    return { kind: 'invalid', issues: [notJsonBodyIssue] };
-  }
-  const input = parsedPartsOf(inputParts, (part) => schemaOf(endpoint, part), sent);
-  if (input.kind === 'issues') {
-    return { kind: 'invalid', issues: input.issues };
-  }
-  return travelingInputOf(input.value);
 }
 
 /**

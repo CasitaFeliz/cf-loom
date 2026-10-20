@@ -2,15 +2,15 @@ import { isJsonContentType } from './content-type.ts';
 import type { InputIssue } from './invalid-input.ts';
 
 /**
- * A body a Caller received: its parsed JSON, why it is no JSON, or the error its stream failed
- * with; each failure says it in a fixed text that carries nothing received.
+ * A body as read whole: its parsed JSON, why it is no JSON, or the error its stream failed with;
+ * each failure says it in a fixed text that carries nothing received.
  */
 export type ReceivedBody =
   | { readonly kind: 'value'; readonly value: unknown }
   | { readonly kind: 'malformed'; readonly message: string }
   | { readonly kind: 'unreadable'; readonly message: string; readonly error: unknown };
 
-/** A body as `serve` reads it: as a Caller receives one, or too large to read. */
+/** A body as `serve` reads it: read whole as any reader reads one, or too large to read. */
 export type Body = ReceivedBody | { readonly kind: 'too-large' };
 
 /** What a body travels in, a request or a response: its headers and its stream. */
@@ -22,18 +22,19 @@ export type BodyMessage = {
 /** What a body that was not JSON, or whose stream failed, says, never what was received. */
 const notJsonMessage = 'The body is not JSON';
 
-const notJsonContentType = {
+/** A body whose content type is not JSON, a missing one included, as every reader reads it: unread. */
+export const notJsonContentType = {
   kind: 'malformed',
   message: 'The content type is not application/json',
 } as const;
 
-/** The Issue `serve` answers for a body that cannot be read as JSON: at the whole of `input.body`. */
+/**
+ * The Issue every reader answers for a body that cannot be read as JSON: at the whole of
+ * `input.body`.
+ */
 export function malformedBodyIssueOf(message: string): InputIssue {
   return { part: 'input.body', path: [], code: 'malformed', message };
 }
-
-/** The Issue of a request that carries no JSON body where one is declared. */
-export const notJsonBodyIssue = malformedBodyIssueOf(notJsonMessage);
 
 /** The bytes of a body as read, counting them against the limit, or why they were not. */
 type Bytes =

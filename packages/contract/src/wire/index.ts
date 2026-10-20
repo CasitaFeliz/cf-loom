@@ -1,9 +1,9 @@
-export type { Body } from './body.ts';
+export type { ReceivedBody } from './body.ts';
 export {
   bodyOf,
   discardBodyOf,
   malformedBodyIssueOf,
-  notJsonBodyIssue,
+  notJsonContentType,
   receivedBodyOf,
 } from './body.ts';
 export { jsonContentType } from './content-type.ts';

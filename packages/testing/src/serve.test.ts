@@ -1,9 +1,11 @@
+import { client } from '@casitafeliz/loom-client';
 import {
   type ContractPackage,
   defineContract,
   defineDependencies,
   defineEndpoint,
   defineGroup,
+  defineGuard,
   defineRejection,
   type Endpoint,
   notFound,
@@ -15,7 +17,7 @@ import {
   snapshotOf,
   validateContract,
 } from '@casitafeliz/loom-contract/internal';
-import { fault, handle, reject, success } from '@casitafeliz/loom-handlers';
+import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
 import { serve } from '@casitafeliz/loom-server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -191,5 +193,158 @@ describe('fakeProvider and serve answer alike', () => {
     const fromFake = await seenOf(await scriptedFake().fetch(url, init));
 
     expect(fromFake).toEqual(fromServe);
+  });
+});
+
+const merchant = defineGuard({
+  name: 'merchant',
+  description: 'The merchant a request acts for',
+  demands: {
+    headers: z.object({ 'x-merchant-key': z.string().min(4) }),
+    query: z.object({ merchant: z.string() }),
+  },
+});
+
+const region = defineGuard({
+  name: 'region',
+  description: 'The region a request is served in',
+  demands: {
+    headers: z.object({ 'x-region': z.enum(['eu', 'us']) }),
+    query: z.object({ zone: z.string() }),
+  },
+});
+
+const refundPayment = defineEndpoint({
+  name: 'refundPayment',
+  method: 'POST',
+  path: '/payments/:paymentId/refund',
+  visibility: 'internal',
+  description: 'Refunds a payment',
+  guards: [merchant, region],
+  input: {
+    params: z.object({ paymentId: z.string().min(3) }),
+    body: z.object({ amount: z.int() }),
+  },
+  success: { status: 204 },
+});
+
+/** `refundPayment` as its Contract Package rebuilds it, the Guards' demands merged into its Input. */
+const packagedRefund = defineEndpoint({
+  name: 'refundPayment',
+  method: 'POST',
+  path: '/payments/:paymentId/refund',
+  visibility: 'internal',
+  description: 'Refunds a payment',
+  guards: [merchant, region],
+  input: {
+    params: z.object({ paymentId: z.string().min(3) }),
+    query: z.object({ merchant: z.string(), zone: z.string() }),
+    headers: z.object({ 'x-merchant-key': z.string().min(4), 'x-region': z.enum(['eu', 'us']) }),
+    body: z.object({ amount: z.int() }),
+  },
+  success: { status: 204 },
+});
+
+const refundDeps = defineDependencies(
+  contractPackageOf({ refundPayment: packagedRefund }, [refundPayment]),
+  { endpoints: [packagedRefund] },
+);
+
+/** The Provider of `refundPayment`, every GuardHandler admitting, so no run stops the reading. */
+const servedRefund = serve(
+  defineContract({
+    name: 'payments-service',
+    groups: [
+      defineGroup({ name: 'payments', description: 'Payments', endpoints: [refundPayment] }),
+    ],
+  }),
+  {
+    endpoints: { refundPayment: handle(refundPayment, () => success()) },
+    guards: { merchant: handle(merchant, () => admit()), region: handle(region, () => admit()) },
+    deprecatedAt: {},
+  },
+);
+
+/** A call's Input as a Caller passes it to `refundPayment`. */
+type RefundInput = {
+  readonly params: { readonly paymentId: string };
+  readonly query: Readonly<Record<string, string>>;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body?: unknown;
+};
+
+/** The request a call's Input travels as: no content type and no body when the body is left out. */
+function requestOf({ params, query, headers, body }: RefundInput): [string, RequestInit] {
+  const search = new URLSearchParams(query).toString();
+  const url = `http://payments.test/payments/${params.paymentId}/refund?${search}`;
+  if (body === undefined) {
+    return [url, { method: 'POST', headers }];
+  }
+  const withType = { ...headers, 'content-type': 'application/json' };
+  return [url, { method: 'POST', headers: withType, body: JSON.stringify(body) }];
+}
+
+/** What serve and the client agree on: a Success, or a Rejection's code and body. */
+function answerOf(outcome: {
+  readonly kind: string;
+  readonly code?: string;
+  readonly body?: unknown;
+}) {
+  if (outcome.kind !== 'rejection') {
+    return { kind: outcome.kind };
+  }
+  return { kind: outcome.kind, code: outcome.code, body: outcome.body };
+}
+
+/** A response as `answerOf` reads an Outcome: a Rejection Envelope's code and body, or a Success. */
+function answerOfSeen(seen: Awaited<ReturnType<typeof seenOf>>) {
+  if (seen.body === undefined) {
+    return answerOf({ kind: 'success' });
+  }
+  return answerOf({ kind: 'rejection', ...seen.body.rejection });
+}
+
+const valid = {
+  params: { paymentId: 'pay-1' },
+  query: { merchant: 'm-1', zone: 'z-1' },
+  headers: { 'x-merchant-key': 'key-1', 'x-region': 'eu' },
+  body: { amount: 5 },
+} as const;
+
+describe('serve, the client and fakeProvider read a request alike', () => {
+  test.each<[string, RefundInput]>([
+    ['a valid request', valid],
+    [
+      'both Guards’ demands failing answer the first Guard’s alone',
+      { ...valid, query: {}, headers: {} },
+    ],
+    [
+      'the second Guard’s demands failing answer alone',
+      { ...valid, query: { merchant: 'm-1' }, headers: { ...valid.headers, 'x-region': 'mars' } },
+    ],
+    [
+      'a Guard’s demands failing beside a body left out and a bad param answer alone',
+      { params: { paymentId: 'ab' }, query: valid.query, headers: { 'x-region': 'eu' } },
+    ],
+    ['a declared body left out', { ...valid, body: undefined }],
+    [
+      'a body that breaks its schema beside a bad param answers both together',
+      { ...valid, params: { paymentId: 'ab' }, body: { amount: 'x' } },
+    ],
+  ])('%s', async (_name, input) => {
+    const [url, init] = requestOf(input);
+    const fake = fakeProvider(refundDeps, { baseUrl: 'http://payments.test' });
+    fake.on('refundPayment').otherwise((r) => r.success());
+    const caller = client(refundDeps, {
+      baseUrl: 'http://payments.test',
+      fetch: (sentUrl, sentInit) => servedRefund(new Request(sentUrl, sentInit)),
+    });
+
+    const fromServe = await seenOf(await servedRefund(new Request(url, init)));
+    const fromFake = await seenOf(await fake.fetch(url, init));
+    const fromClient = await caller.refundPayment(input as never);
+
+    expect(fromFake).toEqual(fromServe);
+    expect(answerOf(fromClient)).toEqual(answerOfSeen(fromServe));
   });
 });

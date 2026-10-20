@@ -11,7 +11,9 @@ export {
   standardRejectionNames,
 } from '../declarations/index.ts';
 export type { Parsed, SchemaIssue } from '../issues/index.ts';
-export { demandIssuesOf, encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
+export { encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
+export type { Reading, ReadingSource } from '../reading/index.ts';
+export { readingOf } from '../reading/index.ts';
 export type {
   ApplicationSnapshot,
   AttachmentSnapshot,
@@ -76,7 +78,6 @@ export {
   walkSchemas,
 } from '../walker/index.ts';
 export type {
-  Body,
   Committed,
   InputIssue,
   InvalidInputBody,
@@ -102,9 +103,8 @@ export {
   isSegmentText,
   isTextValue,
   jsonContentType,
-  malformedBodyIssueOf,
   matchOf,
-  notJsonBodyIssue,
+  notJsonContentType,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionBodyReaderOf,

@@ -1,14 +1,18 @@
-import type { StandardRejections } from '@casitafeliz/loom-contract';
+import type { Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
 import {
-  malformedBodyIssueOf,
   matchOf,
+  type Reading,
+  type ReadingSource,
+  readingOf,
   reservedResponseOf,
   withDeprecation,
 } from '@casitafeliz/loom-contract/internal';
-import { runEndpoint } from '@casitafeliz/loom-handlers/internal';
+import type { Fault } from '@casitafeliz/loom-handlers';
+import { type EndpointRun, notRunFaultOf, runEndpoint } from '@casitafeliz/loom-handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
-import { type Call, inputOf, type UnreadBody } from './call.ts';
-import { admittedOf } from './guards.ts';
+import { type Call, partsOf } from './call.ts';
+import { guardRunsOf } from './guards.ts';
+import type { FaultedBy } from './hooks.ts';
 import {
   type Answered,
   answeredOfFailedRun,
@@ -20,7 +24,7 @@ import {
 /** How a request was answered, and the declared Endpoint it matched, if any. */
 export type AnsweredFor = { readonly endpoint?: ServedEndpoint; readonly answered: Answered };
 
-/** One request answered: matched to its Endpoint, then its Guards, its Input and its Handler. */
+/** One request answered: matched to its Endpoint, read with its Guards' runs, then its Handler. */
 export async function answerOf(served: ServedContract, request: Request): Promise<AnsweredFor> {
   const match = matchOf(served.endpoints, request);
   if (match.kind === 'none') {
@@ -39,32 +43,52 @@ export async function answerOf(served: ServedContract, request: Request): Promis
 }
 
 async function answeredCallOf(call: Call, served: ServedContract): Promise<Answered> {
-  const admitted = await admittedOf(call, served.standards);
-  if (admitted.kind === 'answered') {
-    return admitted.answered;
-  }
-  const read = await inputOf(call, served.maxBodyBytes);
-  if (read.kind !== 'input') {
-    return answeredOfUnread(read, call, served.standards);
-  }
-  const given = { input: read.input, context: admitted.context };
-  const run = await runEndpoint(call.endpoint.handler, given, served.standards);
   const faultedBy = { endpoint: call.endpoint.declared.name };
+  const runs = guardRunsOf(call, served.standards);
+  const source = { ...partsOf(call, served), admit: runs.admit };
+  const reading = await readingOrThrownOf(call.endpoint.declared, source);
+  switch (reading.kind) {
+    case 'stopped':
+      return reading.answer;
+    case 'thrown':
+      return answeredOfFailedRun(reading, faultedBy, served.standards);
+    case 'invalid':
+      return answeredOfInvalidInput(reading.issues, faultedBy, served.standards);
+    case 'input': {
+      const given = { input: reading.input, context: runs.context() };
+      const run = await runEndpoint(call.endpoint.handler, given, served.standards);
+      return answeredRunOf(run, faultedBy, served.standards);
+    }
+  }
+}
+
+/**
+ * The request read with its Guards' runs; a throw while parsing it, such as a stack overflow on
+ * deeply nested Input, is a throw before any Handler ran.
+ */
+async function readingOrThrownOf(
+  endpoint: Endpoint,
+  source: ReadingSource<Answered>,
+): Promise<Reading<Answered> | { readonly kind: 'thrown'; readonly fault: Fault }> {
+  try {
+    return await readingOf(endpoint, source);
+  } catch (e) {
+    return { kind: 'thrown', fault: notRunFaultOf(e) };
+  }
+}
+
+/** The EndpointHandler's run answered: its Outcome, or what it did not answer. */
+function answeredRunOf(
+  run: EndpointRun,
+  faultedBy: FaultedBy,
+  standards: StandardRejections,
+): Answered {
   if (run.kind !== 'answered') {
-    return answeredOfFailedRun(run, faultedBy, served.standards);
+    return answeredOfFailedRun(run, faultedBy, standards);
   }
   const outcome = run.answer;
   if (outcome.kind === 'success') {
     return answeredOfSuccess(outcome, faultedBy);
   }
   return answeredOfNotSuccess(outcome, faultedBy);
-}
-
-/** A body that could not be read, answered alone: too large unread, or not JSON. */
-function answeredOfUnread(read: UnreadBody, call: Call, standards: StandardRejections): Answered {
-  if (read.kind === 'too-large') {
-    return { kind: 'fault', response: reservedResponseOf('BODY_TOO_LARGE') };
-  }
-  const faultedBy = { endpoint: call.endpoint.declared.name };
-  return answeredOfInvalidInput([malformedBodyIssueOf(read.message)], faultedBy, standards);
 }

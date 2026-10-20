@@ -1,6 +1,9 @@
 import type { Endpoint, InputOf } from '@casitafeliz/loom-contract';
-import { type InvalidInputBody, invalidInputBodyOf } from '@casitafeliz/loom-contract/internal';
-import type { Received } from '../receiving/index.ts';
+import {
+  type InvalidInputBody,
+  invalidInputBodyOf,
+  type Reading,
+} from '@casitafeliz/loom-contract/internal';
 
 /**
  * A request a fake received, as its Provider read it: valid, with its Input parsed, or invalid,
@@ -11,7 +14,7 @@ export type FakeCall<Target extends Endpoint> =
   | { readonly kind: 'invalid'; readonly issues: InvalidInputBody['issues'] };
 
 /** A request's place among its Endpoint's calls, kept from its arrival, filled once it is read. */
-export type CallSlot = { readonly fill: (received: Received) => void };
+export type CallSlot = { readonly fill: (reading: Reading) => void };
 
 /** Every Endpoint's calls, each in the order its requests arrived. */
 export type CallLog = {
@@ -34,8 +37,8 @@ export function callLogOf(): CallLog {
     const slot: Slot = { call: undefined };
     slotsOf(name).push(slot);
     return {
-      fill: (received) => {
-        slot.call = callOf(received);
+      fill: (reading) => {
+        slot.call = callOf(reading);
       },
     };
   };
@@ -46,11 +49,13 @@ export function callLogOf(): CallLog {
   return { arrived, callsOf };
 }
 
-function callOf(received: Received): unknown {
-  switch (received.kind) {
-    case 'valid':
-      return { kind: 'valid', input: received.input };
+function callOf(reading: Reading): unknown {
+  switch (reading.kind) {
+    case 'stopped':
+      return reading.answer;
+    case 'input':
+      return { kind: 'valid', input: reading.input };
     case 'invalid':
-      return { kind: 'invalid', issues: invalidInputBodyOf(received.issues).issues };
+      return { kind: 'invalid', issues: invalidInputBodyOf(reading.issues).issues };
   }
 }

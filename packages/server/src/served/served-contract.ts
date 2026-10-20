@@ -5,7 +5,6 @@ import {
   isLive,
   type PathSegment,
   pathSegmentsOf,
-  schemaOf,
   standardRejectionsOf,
   type TextPartNodes,
 } from '@casitafeliz/loom-contract/internal';
@@ -18,12 +17,11 @@ import {
   type ServedHandlers,
 } from './checks.ts';
 
-/** A Guard as a live Endpoint attaches it: its Qualifier, its Handler and the text it demands. */
+/** A Guard as a live Endpoint attaches it: its Qualifier and its Handler. */
 export type ServedAttachment = {
   readonly guard: Guard;
   readonly qualifier: unknown;
   readonly handler: { readonly element: Guard };
-  readonly nodes: TextPartNodes;
 };
 
 /** What every declared Endpoint is matched by: its method and its path's segments. */
@@ -33,22 +31,24 @@ type Declared = {
   readonly segments: readonly PathSegment[];
 };
 
-/** A live Endpoint, ready to answer: its Handler, Attachments, text nodes, body and stamp. */
+/** A live Endpoint, ready to answer: its Handler, its Attachments and its stamp. */
 export type LiveEndpoint = Declared & {
   readonly kind: 'live';
   readonly handler: { readonly element: Endpoint };
   readonly attachments: readonly ServedAttachment[];
-  readonly nodes: TextPartNodes;
-  readonly readsBody: boolean;
   readonly deprecatedAt: string | undefined;
 };
 
 /** A declared Endpoint as `serve` answers it: live, or Retired and still matched. */
 export type ServedEndpoint = LiveEndpoint | (Declared & { readonly kind: 'retired' });
 
-/** What `serve()` prepares once: every declared Endpoint, the Standard Rejections and the body limit. */
+/**
+ * What `serve()` prepares once: every declared Endpoint, the walked text parts of each Endpoint and
+ * Guard, the Standard Rejections and the body limit.
+ */
 export type ServedContract = {
   readonly endpoints: readonly ServedEndpoint[];
+  readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
   readonly standards: StandardRejections;
   readonly maxBodyBytes: number | undefined;
 };
@@ -60,21 +60,16 @@ export function servedContractOf(
   maxBodyBytes: number | undefined,
 ): ServedContract {
   const contract = contractOf(root);
-  const preparing = { handlers, nodes: checkedTextPartsOf(contract) };
+  const nodes = checkedTextPartsOf(contract);
   return {
-    endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, preparing)),
+    endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
+    nodes,
     standards: standardRejectionsOf(contract),
     maxBodyBytes,
   };
 }
 
-/** What each Endpoint is prepared from: the Handler map and the walked text parts by declaration. */
-type Preparing = {
-  readonly handlers: ServedHandlers;
-  readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
-};
-
-function servedEndpointOf(endpoint: Endpoint, { handlers, nodes }: Preparing): ServedEndpoint {
+function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedEndpoint {
   const declared = {
     declared: endpoint,
     method: endpoint.method,
@@ -90,10 +85,7 @@ function servedEndpointOf(endpoint: Endpoint, { handlers, nodes }: Preparing): S
     attachments: attachmentsOf(endpoint).map((attached) => ({
       ...attached,
       handler: guardHandlerOf(handlers, attached.guard),
-      nodes: nodes.get(attached.guard) ?? {},
     })),
-    nodes: nodes.get(endpoint) ?? {},
-    readsBody: schemaOf(endpoint, 'input.body') !== undefined,
     deprecatedAt: deprecatedAtOf(handlers, endpoint),
   };
 }
