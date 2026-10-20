@@ -1,60 +1,15 @@
 import type {
-  Application,
-  Contract,
-  Definitions,
-  Dependencies,
   Endpoint,
-  ExportedElements,
-  Group,
   Guard,
   QualifiedAttachment,
   Rejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,
 } from '../declarations/index.ts';
-import type { Declarations } from '../written/index.ts';
-
-import type { Fields, KnownFields } from './declared-fields.ts';
+import type { Fields } from './declared-fields.ts';
 
 /** The parts of a Guard's `demands` the Guard demands rule leaves to this one. */
 type Demanded = Pick<NonNullable<Guard['demands']>, 'headers' | 'query'>;
-
-const contractFields = {
-  declared: { kind: true, name: true, definitions: true, groups: true, dependencies: true },
-  required: { kind: true, name: true },
-  strings: { kind: true, name: true },
-  objects: {},
-} satisfies Fields<Contract>;
-
-const applicationFields = {
-  declared: { kind: true, name: true, dependencies: true },
-  required: { kind: true, name: true, dependencies: true },
-  strings: { kind: true, name: true },
-  objects: {},
-} satisfies Fields<Application>;
-
-/** The fields of a Definitions Package. */
-export const definitionsFields = {
-  declared: {
-    kind: true,
-    name: true,
-    guards: true,
-    schemas: true,
-    rejections: true,
-    standardRejections: true,
-  },
-  required: { kind: true, name: true },
-  strings: { kind: true, name: true },
-  objects: { schemas: true, standardRejections: true },
-} satisfies Fields<Definitions>;
-
-/** The fields of a Group. */
-export const groupFields = {
-  declared: { kind: true, name: true, description: true, endpoints: true },
-  required: { kind: true, name: true, description: true, endpoints: true },
-  strings: { kind: true, name: true, description: true },
-  objects: {},
-} satisfies Fields<Group>;
 
 /** The fields of an Endpoint. */
 export const endpointFields = {
@@ -151,46 +106,6 @@ export const attachmentFields = {
   objects: {},
 } satisfies Fields<QualifiedAttachment>;
 
-/** The fields of a Dependency, as `defineDependencies` builds it. */
-export const dependenciesFields = {
-  declared: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  required: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  strings: { kind: true, provider: true, against: true },
-  objects: {
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-} satisfies Fields<Dependencies>;
-
-/** The Elements a Dependency keeps as its Provider exported them. */
-export const exportedFields = {
-  declared: { endpoints: true, events: true },
-  required: { endpoints: true, events: true },
-  strings: {},
-  objects: { endpoints: true, events: true },
-} satisfies Fields<ExportedElements>;
-
 /** The three Standard Rejections a Definitions Package may declare. */
 export const standardRejectionsFields = {
   declared: { invalidInput: true, notFound: true, notImplemented: true },
@@ -206,10 +121,3 @@ export const standardRejectionFields = {
   strings: { code: true, message: true },
   objects: {},
 } satisfies Fields<StandardRejectionDeclaration>;
-
-/** The fields of each kind of root. */
-export const rootFields: Readonly<Record<Declarations['root']['kind'], KnownFields>> = {
-  contract: contractFields,
-  application: applicationFields,
-  definitions: definitionsFields,
-};

@@ -1,4 +1,9 @@
-import { type Attachment, type Endpoint, isStandardRejection } from '../declarations/index.ts';
+import {
+  type Attachment,
+  type Endpoint,
+  isStandardRejection,
+  lifecycleOf,
+} from '../declarations/index.ts';
 import {
   answerableRejectionsOf,
   attachedGuardsOf,
@@ -20,7 +25,7 @@ export function endpointSnapshotsOf(
 ): Readonly<Record<string, EndpointSnapshot>> {
   const entries = endpoints.map(({ endpoint, group }) => {
     const identity = identityOf(endpoint.method, endpoint.path);
-    const lifecycle = endpoint.lifecycle ?? 'active';
+    const lifecycle = lifecycleOf(endpoint);
     const deprecation = deprecationOf({ identity, lifecycle }, stamping);
     const snapshot = { ...endpointOf(endpoint, group.name, sources), lifecycle, ...deprecation };
     return [identity, snapshot] as const;

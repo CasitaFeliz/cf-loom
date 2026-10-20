@@ -1,13 +1,16 @@
 import type {
   Application,
+  Command,
   Contract,
   Definitions,
   Dependencies,
   Endpoint,
+  Event,
   Group,
   Guard,
   Rejection,
   StandardRejectionDeclaration,
+  Subscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 
@@ -63,3 +66,12 @@ export type LocatedStandardRejection = {
   readonly declaration: StandardRejectionDeclaration<number>;
   readonly listedIn: LocatedDefinitions;
 };
+
+/** An Event's Message Version and where it sits in its root, by identity: `['events', 'OrderCreated@2']`. */
+export type LocatedEvent = { readonly at: Path; readonly event: Event };
+
+/** A Command's Message Version and where it sits in its root, by identity: `['commands', 'ChargeCard@1']`. */
+export type LocatedCommand = { readonly at: Path; readonly command: Command };
+
+/** A Subscription and where it sits in its root, by name: `['subscriptions', 'notify-on-settled']`. */
+export type LocatedSubscription = { readonly at: Path; readonly subscription: Subscription };

@@ -6,6 +6,8 @@ import {
   defineContract,
   defineDependencies,
   defineEndpoint,
+  defineEvent,
+  defineSubscription,
 } from '../index.ts';
 import { type RootPackage, validateContract } from '../internal/index.ts';
 
@@ -49,12 +51,13 @@ const getReceipt = defineEndpoint({
   success: { status: 200, body: z.object({ amount: z.int() }) },
 });
 
-const paymentSettledV1 = {
-  kind: 'event',
+const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
-} as const;
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
 
 const payments = {
   name: 'payments-service',
@@ -72,6 +75,8 @@ const payments = {
 /** A selection the types refuse, as a cast lets an author write it. */
 type AnySelection = { readonly endpoints?: readonly (typeof getPayment)[] };
 
+const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+
 function failed(at: readonly (string | number)[], rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
@@ -82,7 +87,11 @@ describe('validateContract: a Service’s Dependencies', () => {
       endpoints: [getPayment, refundPayment],
       events: [paymentSettledV1],
     });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+    const contract = defineContract({
+      name: 'orders-service',
+      subscriptions: [notifyOnSettled],
+      dependencies: [paymentsDeps],
+    });
 
     expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
   });
@@ -125,7 +134,13 @@ describe('validateContract: a Service’s Dependencies', () => {
   });
 
   test('a Dependency on a Private Event fails, even one the Provider exported', () => {
-    const privateEvent = { ...paymentSettledV1, visibility: 'private' };
+    const privateEvent = defineEvent({
+      name: 'PaymentSettled',
+      version: 1,
+      visibility: 'private',
+      description: 'A payment was settled',
+      body: z.object({ paymentId: z.uuid() }),
+    });
     const provider = {
       ...payments,
       events: { paymentSettledV1: privateEvent },
@@ -159,7 +174,13 @@ describe('validateContract: a Service’s Dependencies', () => {
   });
 
   test('a Dependency on an Event the Provider does not export fails', () => {
-    const paymentRefundedV1 = { ...paymentSettledV1, name: 'PaymentRefunded' };
+    const paymentRefundedV1 = defineEvent({
+      name: 'PaymentRefunded',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment was refunded',
+      body: z.object({ paymentId: z.uuid() }),
+    });
     const selection = { events: [paymentRefundedV1] } as unknown as AnySelection;
     const paymentsDeps = defineDependencies(payments, selection);
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
@@ -169,6 +190,40 @@ describe('validateContract: a Service’s Dependencies', () => {
         ['dependencies', 'payments-service', 'events', 'paymentRefundedV1'],
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: paymentRefundedV1 is not one of them',
+      ),
+    );
+  });
+
+  test('an Event declared apart with the Provider’s name and version is not one it exports', () => {
+    const lookalike = defineEvent({
+      name: 'PaymentSettled',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment was settled',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const selection = { events: [lookalike] } as unknown as AnySelection;
+    const paymentsDeps = defineDependencies(payments, selection);
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateInPackage(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'events', 'paymentSettledV1'],
+        'dependency-selection',
+        'A Dependency selects Elements its Provider exports: paymentSettledV1 is not one of them',
+      ),
+    );
+  });
+
+  test('a Dependency’s Event that no Subscription uses fails', () => {
+    const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+
+    expect(validateInPackage(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'events', 'paymentSettledV1'],
+        'unused-dependency-event',
+        'A Dependency lists only Events a Subscription uses: paymentSettledV1',
       ),
     );
   });
@@ -208,7 +263,11 @@ describe('validateContract: a Dependency whose exported Elements are not there',
     const provider = { ...payments, events: undefined } as unknown as ContractPackage;
     const selection = { events: [paymentSettledV1] } as unknown as AnySelection;
     const paymentsDeps = defineDependencies(provider, selection);
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDeps] });
+    const contract = defineContract({
+      name: 'orders-service',
+      subscriptions: [notifyOnSettled],
+      dependencies: [paymentsDeps],
+    });
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
@@ -242,7 +301,7 @@ describe('validateContract: an Application’s Dependencies', () => {
     );
   });
 
-  test('an Application depending on an Event fails', () => {
+  test('an Application’s Event fails once, as an Application’s Dependency, not also as unused', () => {
     const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
     const dependencies = [paymentsDeps] as unknown as readonly [typeof publicDeps];
     const application = defineApplication({ name: 'web-admin', dependencies });

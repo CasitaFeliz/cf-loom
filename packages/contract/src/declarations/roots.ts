@@ -1,15 +1,21 @@
+import type { Command } from './command.ts';
 import type { Definitions } from './definitions.ts';
 import type { Dependencies } from './dependencies.ts';
 import type { Endpoint } from './endpoint.ts';
+import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
+import type { Subscription } from './subscription.ts';
 
 /** What a Service's root lists: exactly what its Snapshot describes; an absent list is empty. */
 type ContractDeclaration = {
   readonly name: string;
   readonly definitions?: readonly Definitions[];
   readonly groups?: readonly Group[];
+  readonly events?: readonly Event[];
+  readonly commands?: readonly Command[];
+  readonly subscriptions?: readonly Subscription[];
   readonly dependencies?: readonly Dependencies[];
 };
 

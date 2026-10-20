@@ -1,5 +1,5 @@
 import { byCodePoint } from '../walker/index.ts';
-import { identityOf, type LocatedDependencies } from '../written/index.ts';
+import { identityOf, type LocatedDependencies, messageIdentityOf } from '../written/index.ts';
 import type { DependencySnapshot } from './types.ts';
 
 /**
@@ -14,8 +14,8 @@ export function dependencySnapshotsOf(
       id: identityOf(method, path),
       name,
     }));
-    const events = Object.values(dependencies.events).map(
-      ({ name, version }) => `${name}@${version}`,
+    const events = Object.values(dependencies.events).map(({ name, version }) =>
+      messageIdentityOf(name, version),
     );
     const dependency: DependencySnapshot = {
       against: dependencies.against,

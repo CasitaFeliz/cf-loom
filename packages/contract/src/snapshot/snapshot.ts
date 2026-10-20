@@ -5,6 +5,7 @@ import type { SnapshotContext, SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
 import { guardSnapshotsOf } from './guards.ts';
+import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
 import type { DefinitionsSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
 
 /**
@@ -47,11 +48,11 @@ function serviceSnapshotOf(
     standardRejections,
     defs: schemas.defs,
     endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
-    events: {},
-    commands: {},
+    events: eventSnapshotsOf(declarations.events, sources),
+    commands: commandSnapshotsOf(declarations.commands, sources),
     guards: guardSnapshotsOf(declarations.guards, sources),
     codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
-    subscriptions: {},
+    subscriptions: subscriptionSnapshotsOf(declarations.subscriptions),
     dependencies: dependencySnapshotsOf(declarations.dependencies),
   };
 }

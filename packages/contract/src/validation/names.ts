@@ -1,5 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { isEndpoint } from '../declarations/index.ts';
+import { isEndpoint, isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   endpointAt,
@@ -65,7 +65,7 @@ function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure
 }
 
 function uniqueEndpointNames({ endpoints }: Declarations): readonly DeclarationFailure[] {
-  const active = endpoints.filter((located) => located.endpoint.lifecycle !== 'retired');
+  const active = endpoints.filter((located) => isLive(located.endpoint));
   return repeated(active, (located) => textOf(located.endpoint.name)).map(({ at, endpoint }) =>
     failure(
       [...at, 'name'],
@@ -145,7 +145,10 @@ function identityOfEndpoint({ endpoint }: LocatedEndpoint): string {
 }
 
 /** Every item after the first with the same key, in order, so each repeat is reported once. */
-function repeated<Item>(items: readonly Item[], keyOf: (item: Item) => string): readonly Item[] {
+export function repeated<Item>(
+  items: readonly Item[],
+  keyOf: (item: Item) => string,
+): readonly Item[] {
   const seen = new Set<string>();
   const repeats: Item[] = [];
   for (const item of items) {

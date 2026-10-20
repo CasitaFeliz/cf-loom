@@ -1,19 +1,15 @@
 import type { ExportedSnapshot } from '../snapshot/index.ts';
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
+import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
 type ExportedVisibility = Exclude<Visibility, 'private'>;
 
-/** An Event as a Contract Package exports it: enough to key it and to subscribe to it. */
-type ProvidedEvent = {
-  readonly kind: 'event';
-  readonly name: string;
-  readonly version: number;
-  readonly visibility: ExportedVisibility;
-};
+/** An Event as a Contract Package exports it: the declaration itself, which Subscriptions reference. */
+type ProvidedEvent = Event & { readonly visibility: ExportedVisibility };
 
 /**
  * The `contract` a Contract Package exports: its Public and Internal Elements, its version, and the
@@ -47,7 +43,8 @@ type SelectedIn<Chosen, Part extends keyof Selection<ContractPackage>> = Chosen 
   ? Element
   : never;
 
-type EventName<Event extends ProvidedEvent> = `${Uncapitalize<Event['name']>}V${Event['version']}`;
+type EventName<Provided extends ProvidedEvent> =
+  `${Uncapitalize<Provided['name']>}V${Provided['version']}`;
 
 type EndpointsByName<Endpoints> = {
   readonly [Provided in Endpoints as Provided extends Endpoint

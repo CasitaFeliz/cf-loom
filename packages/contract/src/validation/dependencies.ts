@@ -18,10 +18,11 @@ type Selected = { readonly at: Path; readonly name: string; readonly element: un
 
 /**
  * A Service reaches the Elements its Provider exports, and never a Private one; an Application,
- * outside the network, Public Endpoints only.
+ * outside the network, Public Endpoints only. A Dependency lists only Events a Subscription uses.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, dependencies } = declarations;
+  const { root, dependencies, subscriptions } = declarations;
+  const subscribed = new Set(subscriptions.map(({ subscription }) => subscription.event));
   return dependencies.flatMap((located) => {
     const exported = exportedOf(located);
     return [
@@ -29,7 +30,7 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
         selectedEndpointFailures(selected, exported, root.kind),
       ),
       ...selectedOf(located, 'events').flatMap((selected) =>
-        selectedEventFailures(selected, exported, root.kind),
+        eventFailures(selected, { exported, rootKind: root.kind, subscribed }),
       ),
     ];
   });
@@ -52,7 +53,7 @@ function selectedOf(
  */
 type Exported = {
   readonly endpoints: ReadonlySet<unknown> | undefined;
-  readonly events: readonly unknown[] | undefined;
+  readonly events: ReadonlySet<unknown> | undefined;
 };
 
 function exportedOf({ dependencies }: LocatedDependencies): Exported {
@@ -61,7 +62,7 @@ function exportedOf({ dependencies }: LocatedDependencies): Exported {
     endpoints: isPlainObject(exported.endpoints)
       ? new Set(Object.values(exported.endpoints))
       : undefined,
-    events: isPlainObject(exported.events) ? Object.values(exported.events) : undefined,
+    events: isPlainObject(exported.events) ? new Set(Object.values(exported.events)) : undefined,
   };
 }
 
@@ -86,11 +87,22 @@ function selectedEndpointFailures(
   return [failure(at, 'application-dependency', message)];
 }
 
-/**
- * An Event is one the Provider exports when it has the same name and version: a Contract
- * Package's Events are plain objects until `defineEvent` brands them (milestone 2), and a
- * declaration copies plain objects, so identity cannot tell them apart.
- */
+/** What a Dependency's selected Event is judged against: its Provider's exports, its root and the Events subscribed to. */
+type EventContext = {
+  readonly exported: Exported;
+  readonly rootKind: Root['kind'];
+  readonly subscribed: ReadonlySet<unknown>;
+};
+
+/** An Event that fails selection is not also reported as unused: one cause, once. */
+function eventFailures(selected: Selected, context: EventContext): readonly DeclarationFailure[] {
+  const failures = selectedEventFailures(selected, context.exported, context.rootKind);
+  if (failures.length > 0) {
+    return failures;
+  }
+  return unusedEventFailures(selected, context.subscribed);
+}
+
 function selectedEventFailures(
   { at, name, element }: Selected,
   exported: Exported,
@@ -107,10 +119,20 @@ function selectedEventFailures(
   if (element.visibility === 'private') {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
-  const isExported = (exported.events ?? [element]).some(
-    (event) => isEvent(event) && event.name === element.name && event.version === element.version,
-  );
-  return isExported
-    ? []
-    : [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
+  if (exported.events !== undefined && !exported.events.has(element)) {
+    return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
+  }
+  return [];
+}
+
+/** A Dependency lists an Event only for a Subscription, since it blocks that Event's retirement. */
+function unusedEventFailures(
+  { at, name, element }: Selected,
+  subscribed: ReadonlySet<unknown>,
+): readonly DeclarationFailure[] {
+  if (subscribed.has(element)) {
+    return [];
+  }
+  const message = `A Dependency lists only Events a Subscription uses: ${name}`;
+  return [failure(at, 'unused-dependency-event', message)];
 }

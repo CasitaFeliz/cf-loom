@@ -3,13 +3,16 @@ import { z } from 'zod';
 import {
   type ContractPackage,
   defineApplication,
+  defineCommand,
   defineContract,
   defineDefinitions,
   defineDependencies,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineSubscription,
   notFound,
   openEnum,
 } from './index.ts';
@@ -131,12 +134,13 @@ const payments = {
   version: '5.1.0',
   endpoints: { getPayment },
   events: {
-    paymentSettledV1: {
-      kind: 'event',
+    paymentSettledV1: defineEvent({
       name: 'PaymentSettled',
       version: 1,
       visibility: 'internal',
-    },
+      description: 'A payment was settled',
+      body: z.object({ paymentId: z.uuid() }),
+    }),
   },
   standardRejections: {
     invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
@@ -160,16 +164,49 @@ const orders = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
+const orderCreatedV2 = defineEvent({
+  name: 'OrderCreated',
+  version: 2,
+  visibility: 'internal',
+  description: 'An order was placed, with its total',
+  body: z.object({ orderId: z.uuid(), total: money }),
+});
+
+const chargeCardV1 = defineCommand({
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the card an order is paid with',
+  body: z.object({ orderId: z.uuid() }),
+});
+
+const orderCreatedV1 = defineEvent({
+  name: 'OrderCreated',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was placed',
+  lifecycle: 'deprecated',
+  body: z.object({ orderId: z.uuid(), total: z.number() }),
+});
+
+const notifyOnSettled = defineSubscription({
+  name: 'notify-on-settled',
+  event: paymentsDeps.events.paymentSettledV1,
+});
+
 describe('the README’s declaration examples', () => {
-  test('a Service root lists its Definitions Packages, Groups and Dependencies', () => {
+  test('a Service root lists its Definitions Packages, Groups, Messages, Subscriptions and Dependencies', () => {
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions],
       groups: [ordersGroup],
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnSettled],
       dependencies: [paymentsDeps],
     });
 
     expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
+    expect(contract.subscriptions[0].event).toBe(payments.events.paymentSettledV1);
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {
@@ -186,6 +223,24 @@ describe('the README’s declaration examples', () => {
     });
 
     expect(application.dependencies[1].endpoints.getPayment).toBe(getPayment);
+  });
+});
+
+describe('the README’s Event and Command examples', () => {
+  test('an Event takes a Visibility and a Command none', () => {
+    expect(orderCreatedV2).toMatchObject({ kind: 'event', visibility: 'internal' });
+    expect(chargeCardV1).not.toHaveProperty('visibility');
+  });
+
+  test('a Deprecated Event version sits beside the Active one', () => {
+    expect(orderCreatedV1.lifecycle).toBe('deprecated');
+    expect(orderCreatedV2).not.toHaveProperty('lifecycle');
+  });
+});
+
+describe('the README’s Subscription example', () => {
+  test('a Subscription receives a Dependency’s Event', () => {
+    expect(notifyOnSettled.event).toBe(paymentsDeps.events.paymentSettledV1);
   });
 });
 

@@ -90,9 +90,9 @@ describe('validateContract: undeclared fields', () => {
   });
 
   test('an undeclared field on a Contract fails', () => {
-    const contract = defineContract(withField({ name: 'orders-service' }, 'events'));
+    const contract = defineContract(withField({ name: 'orders-service' }, 'endpoints'));
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(undeclared(['events']));
+    expect(validateInPackage(contract, noOrigin)).toEqual(undeclared(['endpoints']));
   });
 
   test('an undeclared field on an Application fails', () => {

@@ -213,6 +213,9 @@ describe('validateContract', () => {
         },
       ],
       dependencies: [],
+      events: [],
+      commands: [],
+      subscriptions: [],
     });
   });
 

@@ -168,7 +168,7 @@ Standard Rejections:
 
 - A Message change takes the stronger of the Input and Success classes (see [Fields](#fields)).
 - An existing Message Version never takes a Breaking Change other than its retirement or the narrowing of its Visibility: any other, a Breaking change to its body for one, fails the check, and no Breaking Change Approval allows it. The change is made as a new Message Version, which is Additive.
-- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or `generate` fails.
+- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or `generate` fails. `generate` judges the declared Message Versions: a version that is not a whole number from 1, a name and version declared twice, and a name declared as both an Event and a Command; `check` judges gaps and a name's kind against the Baseline, whose tombstones keep the Retired versions a declaration no longer lists.
 
 ### Retirement
 
@@ -183,7 +183,7 @@ Adding or removing a Dependency is Neutral: no Consumer relies on what a Service
 
 ### Subscriptions
 
-Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails the check (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event and name never change, because the Releases running side by side share its durable consumer: changing either fails the check. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
+Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event and name never change, because the Releases running side by side share its durable consumer: changing either fails the check. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
 
 ## Breaking Change Approval
 

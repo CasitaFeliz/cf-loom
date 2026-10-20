@@ -13,6 +13,7 @@ import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
+import { messageFailures } from './messages.ts';
 import { nameFailures } from './name-grammars.ts';
 import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
@@ -27,6 +28,7 @@ import {
   schemaSlotsOf,
 } from './schemas.ts';
 import { structureFailures } from './structure.ts';
+import { subscriptionFailures } from './subscriptions.ts';
 import { conflictFailures, textPartFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
@@ -117,6 +119,8 @@ function declarationFailures(declarations: Declarations): readonly DeclarationFa
     ...declarations.endpoints.flatMap(attachmentFailures),
     ...rejectionFailures(declarations),
     ...dependencyFailures(declarations),
+    ...messageFailures(declarations),
+    ...subscriptionFailures(declarations),
   ];
 }
 

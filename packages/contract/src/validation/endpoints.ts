@@ -1,5 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { lifecycles, methods, successStatuses, visibilities } from '../declarations/index.ts';
+import { methods, successStatuses, visibilities } from '../declarations/index.ts';
 import {
   isMissing,
   isWithoutValue,
@@ -7,41 +7,30 @@ import {
   slotAt,
   textOf,
 } from '../written/index.ts';
-import { type DeclarationFailure, failure, type Rule } from './failures.ts';
+import { type ClosedValue, closedValueFailures, lifecycle, oneOf } from './closed-values.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
 
-/** A closed value a declaration takes, as the types state it, and the rule that judges it. */
-type ClosedValue = {
-  readonly field: keyof Endpoint;
-  readonly rule: Rule;
-  readonly allowed: readonly unknown[];
-  readonly noun: string;
-};
+/** A closed value of an Endpoint, by the field it sits in. */
+type EndpointClosedValue = ClosedValue & { readonly field: keyof Endpoint };
 
-const closedValues: readonly ClosedValue[] = [
+const closedValues: readonly EndpointClosedValue[] = [
   { field: 'method', rule: 'method', allowed: methods, noun: 'A method' },
   { field: 'visibility', rule: 'visibility', allowed: visibilities, noun: 'A Visibility' },
-  { field: 'lifecycle', rule: 'lifecycle', allowed: lifecycles, noun: 'A lifecycle' },
+  { field: 'lifecycle', ...lifecycle },
 ];
 
 /** The rules of an Endpoint alone: its closed values, its Success's status and where a body belongs. */
 export function endpointFailures(located: LocatedEndpoint): readonly DeclarationFailure[] {
   return [
-    ...closedValues.flatMap((closed) => closedValueFailures(located, closed)),
+    ...closedValues.flatMap((closed) =>
+      closedValueFailures(
+        { at: [...located.at, closed.field], value: located.endpoint[closed.field] },
+        closed,
+      ),
+    ),
     ...successFailures(located),
     ...inputBodyFailures(located),
   ];
-}
-
-/** A string present is one of the allowed; an absent one or a non-string is the field rules' finding. */
-function closedValueFailures(
-  { at, endpoint }: LocatedEndpoint,
-  { field, rule, allowed, noun }: ClosedValue,
-): readonly DeclarationFailure[] {
-  const value = endpoint[field];
-  if (typeof value !== 'string' || allowed.includes(value)) {
-    return [];
-  }
-  return [failure([...at, field], rule, `${noun} is ${oneOf(allowed)}: ${textOf(value)}`)];
 }
 
 /** A Success declares an allowed status; HEAD and 204 answer no body, every other status one. */
@@ -77,11 +66,4 @@ function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly Declarat
   }
   const message = 'A GET or HEAD Endpoint takes no body';
   return [failure(slotAt(at, 'input.body'), 'input-body', message)];
-}
-
-/** Several allowed values in one sentence: `200, 201 or 204`. */
-function oneOf(allowed: readonly unknown[]): string {
-  const names = allowed.map(String);
-  const last = names.at(-1);
-  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${last}`;
 }

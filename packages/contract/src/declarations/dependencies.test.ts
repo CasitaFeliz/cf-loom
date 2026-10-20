@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type ContractPackage, defineDependencies, defineEndpoint } from '../index.ts';
+import { type ContractPackage, defineDependencies, defineEndpoint, defineEvent } from '../index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',
@@ -22,12 +22,13 @@ const refundPayment = defineEndpoint({
   success: { status: 204 },
 });
 
-const paymentSettledV1 = {
-  kind: 'event',
+const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
-} as const;
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
 
 const payments = {
   name: 'payments-service',
@@ -85,6 +86,7 @@ describe('defineDependencies', () => {
 
     expect(paymentsDeps.endpoints).toEqual({ getPayment });
     expect(paymentsDeps.events).toEqual({ paymentSettledV1 });
+    expect(paymentsDeps.events.paymentSettledV1).toBe(paymentSettledV1);
     expectTypeOf(paymentsDeps.endpoints).toEqualTypeOf<{
       readonly getPayment: typeof getPayment;
     }>();

@@ -10,15 +10,19 @@ import type { Path } from '../walker/index.ts';
 import { identityOf } from './identity.ts';
 import type {
   LocatedCode,
+  LocatedCommand,
   LocatedDefinitions,
   LocatedDependencies,
   LocatedEndpoint,
+  LocatedEvent,
   LocatedGroup,
   LocatedGuard,
   LocatedRejection,
   LocatedStandardRejection,
+  LocatedSubscription,
   Root,
 } from './located.ts';
+import { messagingOf } from './messaging.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
 
@@ -41,6 +45,9 @@ export type Declarations = {
   readonly codes: readonly LocatedCode[];
   readonly standardRejections: readonly LocatedStandardRejection[];
   readonly dependencies: readonly LocatedDependencies[];
+  readonly events: readonly LocatedEvent[];
+  readonly commands: readonly LocatedCommand[];
+  readonly subscriptions: readonly LocatedSubscription[];
 };
 
 /** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
@@ -64,6 +71,7 @@ export function declarationsOf(root: Root): Declarations {
     codes: codesOf(sources, { guards, rejections }),
     standardRejections: allPackages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
+    ...messagingOf(root),
   };
 }
 
