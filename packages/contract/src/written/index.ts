@@ -44,12 +44,12 @@ export {
   successParts,
   writtenAt,
 } from './parts.ts';
+export { reachedGuardsOf, reachOf } from './reach.ts';
 export {
   attachedGuardOf,
   attachedGuardsOf,
   attachmentsOf,
   contextProvidersOf,
-  reachedGuardsOf,
 } from './references.ts';
 export type { ResolvedStandard } from './standard-rejections.ts';
 export { resolvedStandards, standardRejectionsOf } from './standard-rejections.ts';

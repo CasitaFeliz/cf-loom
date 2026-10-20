@@ -127,6 +127,33 @@ describe('validateContract: the order of an Endpoint’s Guards', () => {
     );
   });
 
+  test('a Guard only a Guard’s guards reaches is judged with the rest: its demands fail beside guard-order', () => {
+    const demands = { body: z.object({ signature: z.string() }) } as unknown as Demands;
+    const g1 = defineGuard({ name: 'g1', description: 'A signed body', demands });
+    const g0 = defineGuard({ name: 'g0', description: 'Builds on g1', guards: [g1] });
+    const guards: readonly Attachment[] = [g0];
+
+    const validated = validateGuards(guards);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: expect.arrayContaining([
+        {
+          kind: 'declaration',
+          at: [...guardsAt, 0],
+          rule: 'guard-order',
+          message: 'g0 requires g1 earlier in guards',
+        },
+        {
+          kind: 'declaration',
+          at: ['guards', 'g1', 'demands', 'body'],
+          rule: 'guard-demands',
+          message: 'A Guard demands only headers and query',
+        },
+      ]),
+    });
+  });
+
   test('a Guard listed twice fails', () => {
     const guards: readonly Attachment[] = [userToken, userToken];
 

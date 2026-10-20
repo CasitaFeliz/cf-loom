@@ -264,6 +264,27 @@ describe('validateContract: unique names and identities', () => {
     );
   });
 
+  test('a Guard named like an attached one, reached only through another Guard’s guards, fails as a duplicate', () => {
+    const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });
+    const anotherApiKey = defineGuard({ name: 'apiKey', description: 'Another key' });
+    const session = defineGuard({
+      name: 'session',
+      description: 'Builds on another key',
+      guards: [anotherApiKey],
+    });
+    const endpoint = defineEndpoint({ ...listing, guards: [apiKey, session] });
+
+    const validated = validateGroups([aGroup('orders', [endpoint])]);
+
+    expect(validated).toEqual(
+      failed(
+        ['guards', 'apiKey', 'name'],
+        'duplicate-guard-name',
+        'A Guard name is unique across the Contract and its Definitions Packages: apiKey',
+      ),
+    );
+  });
+
   test('the same Guard attached by two Endpoints is one Guard', () => {
     const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });
     const first = defineEndpoint({ ...listing, guards: [apiKey] });

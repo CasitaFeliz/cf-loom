@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
   defineContract,
+  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -13,8 +14,10 @@ import {
   exportedSnapshotOf,
   type GuardSnapshot,
   type ObjectNode,
+  type ResolvedDefinitions,
   type SchemaNode,
   type ServiceSnapshot,
+  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -170,6 +173,14 @@ describe('exportedSnapshotOf', () => {
       expect(Object.keys(cut.guards)).toEqual(kept);
     },
   );
+
+  test('a name an Endpoint attaches that the Snapshot holds no Guard for is not kept', () => {
+    const endpoints = { 'GET /orders': attaching('gZ') };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+
+    expect(cut.guards).toEqual({});
+  });
 
   test.each([
     {
@@ -368,6 +379,17 @@ describe('exportedSnapshotOf', () => {
       codes: { [orderLocked]: snapshot.codes[orderLocked] },
     });
   });
+
+  test('the cut of a declared Contract whose Endpoints are all exported keeps every Guard its Snapshot writes', () => {
+    const snapshot = sharedGuardsSnapshot();
+
+    const cut = exportedSnapshotOf(snapshot);
+
+    expect({ cut: Object.keys(cut.guards), written: Object.keys(snapshot.guards) }).toEqual({
+      cut: ['userToken', 'permission'],
+      written: ['userToken', 'permission'],
+    });
+  });
 });
 
 /** A Service with a Public Endpoint behind a Guard and a Private one with a code of its own. */
@@ -417,6 +439,61 @@ function declaredSnapshot(): ServiceSnapshot {
   const snapshot = snapshotOf(validated, {
     generator: 'test',
     packages: [],
+    committed: undefined,
+    now: 0,
+  });
+  if (snapshot.kind !== 'service') {
+    throw new Error('The fixture is no Service');
+  }
+  return snapshot;
+}
+
+/**
+ * A Service whose one Public Endpoint attaches a listed Definitions Package's Guard and the Guard it
+ * builds on, the package's other Guard attached by none.
+ */
+function sharedGuardsSnapshot(): ServiceSnapshot {
+  const userToken = defineGuard({ name: 'userToken', description: 'A signed-in user' });
+  const permission = defineGuard({
+    name: 'permission',
+    description: 'The user holds a permission',
+    guards: [userToken],
+  });
+  const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
+  const definitions = defineDefinitions({
+    name: 'definitions',
+    guards: [userToken, permission, unusedGuard],
+  });
+  const getOrder = defineEndpoint({
+    name: 'getOrder',
+    method: 'GET',
+    path: '/orders',
+    visibility: 'public',
+    description: 'One order',
+    guards: [userToken, permission],
+    success: { status: 200, body: z.object({ id: z.string() }) },
+  });
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
+  const root = defineContract({
+    name: 'orders-service',
+    definitions: [definitions],
+    groups: [group],
+  });
+  const packages: readonly ResolvedDefinitions[] = [
+    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+  ];
+  const originOf = schemaOriginsOf(packages);
+  const validated = validateContract(root, {
+    packageName: 'orders-service',
+    originOf,
+    exportsOf: () => [],
+  });
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const snapshot = snapshotOf(validated, {
+    generator: 'test',
+    packages,
     committed: undefined,
     now: 0,
   });

@@ -38,6 +38,12 @@ const permission = defineGuard({
   guards: [userToken],
   rejections: [forbidden],
 });
+const admin = defineGuard({
+  name: 'admin',
+  description: 'The user administers',
+  guards: [permission],
+});
+const owner = defineGuard({ name: 'owner', description: 'The user owns', guards: [admin] });
 
 function failuresOf(root: unknown) {
   const validated = validateInPackage(root, noOrigin);
@@ -57,25 +63,31 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
     expect(validated.kind).toBe('valid');
   });
 
-  test('a Guard a listed Guard names, left out of the list, fails', () => {
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [permission],
-      rejections: [unauthenticated, forbidden],
-    });
+  test.each([
+    { depth: 1, listed: [permission], unlisted: ['userToken'] },
+    { depth: 2, listed: [admin], unlisted: ['userToken', 'permission'] },
+    { depth: 3, listed: [owner], unlisted: ['userToken', 'permission', 'admin'] },
+  ])(
+    'a Guard a listed Guard reaches at depth $depth, left out of the list, fails naming it',
+    ({ listed, unlisted }) => {
+      const definitions = defineDefinitions({
+        name: 'definitions',
+        guards: listed,
+        rejections: [unauthenticated, forbidden],
+      });
 
-    const failures = failuresOf(definitions);
+      const failures = failuresOf(definitions);
 
-    expect(failures).toEqual([
-      {
-        kind: 'declaration',
-        at: ['guards'],
-        rule: 'definitions-unlisted',
-        message:
-          'A Definitions Package lists every Guard it exports or its Guards reach: userToken',
-      },
-    ]);
-  });
+      expect(failures).toEqual(
+        unlisted.map((name) => ({
+          kind: 'declaration',
+          at: ['guards'],
+          rule: 'definitions-unlisted',
+          message: `A Definitions Package lists every Guard it exports or its Guards reach: ${name}`,
+        })),
+      );
+    },
+  );
 
   test('a Rejection a listed Guard answers, left out of the list, fails', () => {
     const definitions = defineDefinitions({

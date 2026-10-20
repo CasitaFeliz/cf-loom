@@ -216,6 +216,26 @@ describe('validateContract', () => {
     });
   });
 
+  test('a valid Definitions Package carries each Guard after the Guards it lists, whatever order it lists them in', () => {
+    const userToken = defineGuard({ name: 'userToken', description: 'A signed-in user' });
+    const permission = defineGuard({
+      name: 'permission',
+      description: 'The user holds a permission',
+      guards: [userToken],
+    });
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      guards: [permission, userToken],
+    });
+
+    const validated = validateInPackage(definitions, noOrigin);
+
+    expect(validated.kind === 'valid' && validated.declarations.guards).toMatchObject([
+      { guard: userToken },
+      { guard: permission },
+    ]);
+  });
+
   test('a valid Definitions Package reaches every Guard and code it declares', () => {
     const definitions = defineDefinitions({
       name: 'definitions',
