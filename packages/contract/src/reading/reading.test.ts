@@ -169,6 +169,15 @@ describe('readingOf', () => {
     expect(reading).toEqual({ kind: 'input', input: { params: { noteId: 'n-1' } } });
   });
 
+  test('a body is not asked for when the Endpoint declares none', async () => {
+    const text = { ...admitted, params: { noteId: 'n-1' } };
+    const counted = countedBody();
+
+    await readingOf(getNote, { textOf: () => text, body: counted.body });
+
+    expect(counted.asked()).toBe(0);
+  });
+
   test('a malformed body answers alone at the whole of input.body, with its message, though a param fails too', async () => {
     const text = { ...admitted, params: { noteId: 'n' } };
     const malformed = { kind: 'malformed', message: 'The body is not JSON' } as const;

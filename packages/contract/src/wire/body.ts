@@ -2,15 +2,15 @@ import { isJsonContentType } from './content-type.ts';
 import type { InputIssue } from './invalid-input.ts';
 
 /**
- * A body a Caller received: its parsed JSON, why it is no JSON, or the error its stream failed
- * with; each failure says it in a fixed text that carries nothing received.
+ * A body as read whole: its parsed JSON, why it is no JSON, or the error its stream failed with;
+ * each failure says it in a fixed text that carries nothing received.
  */
 export type ReceivedBody =
   | { readonly kind: 'value'; readonly value: unknown }
   | { readonly kind: 'malformed'; readonly message: string }
   | { readonly kind: 'unreadable'; readonly message: string; readonly error: unknown };
 
-/** A body as `serve` reads it: as a Caller receives one, or too large to read. */
+/** A body as `serve` reads it: read whole as any reader reads one, or too large to read. */
 export type Body = ReceivedBody | { readonly kind: 'too-large' };
 
 /** What a body travels in, a request or a response: its headers and its stream. */
