@@ -693,6 +693,62 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(text.match(/^export const \w+Def\b/gm)).toEqual(['export const treeReaderDef']);
   });
 
+  test('a recursive def an own Message reaches imports what it calls, though no Reader calls it itself', () => {
+    const project = aProject(aMessagingService());
+    edit(project, 'src/contract/messages.ts', (text) =>
+      text
+        .replace("status: openEnum(['pending', 'paid'])", 'status: z.string()')
+        .replace('    label: z.string(),', "    label: openEnum(['leaf', 'branch']),"),
+    );
+
+    cfLoom(project, 'generate');
+
+    const text = read(project, 'src/readers.generated.ts');
+    expect(text).toContain("label: loom.openEnumReader(['branch', 'leaf'])");
+    expect(text).toContain("import * as loom from '@cf-loom/contract';");
+  });
+
+  test('Commands are paired in code point order of their names in code, whatever the root’s order', () => {
+    const project = aProject(
+      aMessagingService({ commands: '[shipOrderV10, shipV1, shipOrderV1]' }),
+    );
+    const ship = (name: string, version: number, lifecycle = 'active') =>
+      lines([
+        `export const ${name.charAt(0).toLowerCase()}${name.slice(1)}V${version} = defineCommand({`,
+        `  name: '${name}',`,
+        `  version: ${version},`,
+        `  description: '${name}',`,
+        `  lifecycle: '${lifecycle}',`,
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]);
+    edit(project, 'src/contract/messages.ts', (text) =>
+      [text, ship('Ship', 1), ship('ShipOrder', 1, 'deprecated'), ship('ShipOrder', 10)].join('\n'),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace(
+        '  refundCardV1,\n',
+        '  refundCardV1,\n  shipOrderV1,\n  shipOrderV10,\n  shipV1,\n',
+      ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const map = read(project, 'src/handlers.generated.ts');
+    const readers = read(project, 'src/readers.generated.ts');
+    expect(map.match(/^ {4}\w+: \w+CommandHandler,$/gm)).toEqual([
+      '    shipOrderV1: shipOrderV1CommandHandler,',
+      '    shipOrderV10: shipOrderV10CommandHandler,',
+      '    shipV1: shipV1CommandHandler,',
+    ]);
+    expect(readers.match(/^export const \w+ = withReader\(contract\.commands\[\d\]/gm)).toEqual([
+      'export const shipOrderV1 = withReader(contract.commands[2]',
+      'export const shipOrderV10 = withReader(contract.commands[0]',
+      'export const shipV1 = withReader(contract.commands[1]',
+    ]);
+  });
+
   test('a Retired Command’s Message Version is still paired, so its Handler keeps compiling', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
@@ -1146,7 +1202,6 @@ describe('cf-loom generate: what it refuses', () => {
       ['tree-reader-def'],
       'subscriptions.tree-reader-def is treeReaderDef in code, as defs.tree is',
     ],
-    [['contract'], 'subscriptions.contract is contract in code, as the import contract is'],
   ])(
     'Subscriptions %j, one paired under a name readers.generated.ts already takes, exit 3 naming both',
     (names, line) => {
@@ -1160,6 +1215,29 @@ describe('cf-loom generate: what it refuses', () => {
       const ran = cfLoom(project, 'generate');
 
       expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}: rename the Subscription\n` });
+    },
+  );
+
+  test.each([
+    ['contract', 'contract'],
+    ['z', 'z'],
+    ['loom', 'loom'],
+    ['with-reader', 'withReader'],
+  ])(
+    'a Subscription named %s, paired under a name readers.generated.ts imports, exits 3 naming both',
+    (name, code) => {
+      const subscription = `defineSubscription({ name: '${name}', event: orderCreatedV2 })`;
+      const project = aProject(
+        aMessagingService({ subscriptions: [notifyOnSettled, subscription] }),
+      );
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `subscriptions.${name} is ${code} in code, as the import ${code} is: rename the Subscription\n`,
+      });
     },
   );
 

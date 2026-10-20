@@ -16,18 +16,15 @@ import {
   relativeSpecifierOf,
 } from '../source-text/index.ts';
 import {
+  byCommandName,
   collidingSubscriptionLineOf,
+  type MessageVersion,
   type NamedInCode,
   pairingNameOf,
   readerNameOf,
 } from './code-names.ts';
 import type { MessageHandled } from './handled.ts';
-import {
-  type MessageVersion,
-  type Readable,
-  type ReaderSchemas,
-  readerSchemasOf,
-} from './reader-schemas.ts';
+import { type Readable, type ReaderSchemas, readerSchemasOf } from './reader-schemas.ts';
 
 /** The file of the Reader schemas of the Service's own Messages and of its pairings. */
 export const readersFile = 'src/readers.generated.ts';
@@ -66,19 +63,28 @@ export function pairingAtOf(handled: MessageHandled): ExportedAt {
 export function readersTextOf(snapshot: ServiceSnapshot, lists: RootLists): ReadersText {
   const schemas = readerSchemasOf(snapshot);
   const subscriptions = Object.keys(snapshot.subscriptions);
-  const taken = takenNamesOf(schemas);
+  const commands = schemas.readables
+    .filter(isCommandReadable)
+    .sort((left, right) => byCommandName(left.message, right.message));
+  const taken = takenNamesOf(schemas, commands);
   const unnamed =
     defNamesLineOf(schemas.defUses) ?? collidingSubscriptionLineOf(taken, subscriptions);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
   const pairings = [
-    ...commandPairingLinesOf(schemas.commands, lists),
+    ...commandPairingLinesOf(commands, lists),
     ...subscriptionPairingLinesOf(subscriptions, lists),
   ];
   const imports = importsOf(schemas.needs, pairings);
   const body = bodyOf([schemas.defs, schemas.readers, pairings]);
   return { kind: 'text', text: moduleTextOf({ first: [headerOf('generate')], imports, body }) };
+}
+
+function isCommandReadable(
+  readable: Readable,
+): readable is Readable & { readonly kind: 'commands' } {
+  return readable.kind === 'commands';
 }
 
 /** `withReader`, which pairs a declaration with its Reader, and the package it is imported from. */
@@ -92,7 +98,10 @@ const importedNames: readonly string[] = [
 ];
 
 /** Every name the file declares or imports but the Subscriptions' pairings, with what it names. */
-function takenNamesOf({ readables, commands, defUses }: ReaderSchemas): readonly NamedInCode[] {
+function takenNamesOf(
+  { readables, defUses }: ReaderSchemas,
+  commands: readonly Readable[],
+): readonly NamedInCode[] {
   const imports = importedNames.map((code) => ({ code, names: `the import ${code}` }));
   const defs = defUses.map(({ id, mode }) => ({
     code: defIdentifierOf(id, mode),

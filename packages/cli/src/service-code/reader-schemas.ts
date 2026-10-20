@@ -9,10 +9,7 @@ import {
   reachedDefUsesOf,
   zodExpressionOf,
 } from '../schema-code/index.ts';
-import { byCommandName, readerNameOf } from './code-names.ts';
-
-/** A Message Version by its name and version. */
-export type MessageVersion = { readonly name: string; readonly version: number };
+import { type MessageVersion, readerNameOf } from './code-names.ts';
 
 /** An own Message Version a Reader is written for, by its kind's key in the Snapshot and identity. */
 export type Readable = {
@@ -22,14 +19,9 @@ export type Readable = {
   readonly body: SchemaNode;
 };
 
-/**
- * The Reader schemas of a Service's own Message Versions: what they are written for, the Commands
- * among them by name in code, their lines and those of the recursive defs they reach, and what
- * all of them import.
- */
+/** The Reader schemas of a Service's own Message Versions, with the defs they reach and what they import. */
 export type ReaderSchemas = {
   readonly readables: readonly Readable[];
-  readonly commands: readonly Readable[];
   readonly defUses: readonly DefUse[];
   readonly defs: readonly string[];
   readonly readers: readonly string[];
@@ -40,14 +32,11 @@ export type ReaderSchemas = {
 export function readerSchemasOf(snapshot: ServiceSnapshot): ReaderSchemas {
   const needs = noNeeds();
   const readables = readablesOf(snapshot);
-  const commands = readables
-    .filter(isCommandReadable)
-    .sort((left, right) => byCommandName(left.message, right.message));
   const readers = readerLinesOf(readables, needs);
   const defUses = reachedDefUsesOf(snapshot.defs, [...needs.defs.values()]);
   const defs = defsCodeOf(snapshot.defs, defUses);
   addModulesOf(needs, defs.needs);
-  return { readables, commands, defUses, defs: defs.body, readers, needs };
+  return { readables, defUses, defs: defs.body, readers, needs };
 }
 
 /** A Reader schema per own Message Version, recording what each needs imported. */
@@ -78,10 +67,4 @@ function readablesOf(snapshot: ServiceSnapshot): readonly Readable[] {
 
 function readableOf(kind: Readable['kind'], identity: string, body: SchemaNode): Readable {
   return { kind, identity, message: nameAndVersionOf(identity), body };
-}
-
-function isCommandReadable(
-  readable: Readable,
-): readable is Readable & { readonly kind: 'commands' } {
-  return readable.kind === 'commands';
 }

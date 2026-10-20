@@ -2,6 +2,9 @@ import { byCodePoint, codeNameOf } from '@cf-loom/contract/internal';
 import { camelCaseOf } from '../source-text/index.ts';
 import type { Handled, MessageHandled } from './handled.ts';
 
+/** A Message Version by its name and version. */
+export type MessageVersion = { readonly name: string; readonly version: number };
+
 /**
  * The name a Command's Message Version or a Subscription is paired under, which its stub imports:
  * `chargeCardV1`, `notifyOnSettled`.
@@ -16,15 +19,12 @@ export function pairingNameOf(handled: MessageHandled): string {
 }
 
 /** Orders Commands' Message Versions by name in code, as the Handler map and the readers list them. */
-export function byCommandName(
-  left: { readonly name: string; readonly version: number },
-  right: { readonly name: string; readonly version: number },
-): number {
+export function byCommandName(left: MessageVersion, right: MessageVersion): number {
   return byCodePoint(codeNameOf(left), codeNameOf(right));
 }
 
 /** The name of an own Message Version's Reader schema: `orderCreatedV2Reader`. */
-export function readerNameOf(message: { readonly name: string; readonly version: number }): string {
+export function readerNameOf(message: MessageVersion): string {
   return `${codeNameOf(message)}Reader`;
 }
 
