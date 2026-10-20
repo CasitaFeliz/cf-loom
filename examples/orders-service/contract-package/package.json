@@ -1,0 +1,26 @@
+{
+  "name": "@org/contract-orders-service",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "snapshot.json"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "@casitafeliz/loom-contract": "^0.0.0",
+    "zod": "^4.6.7"
+  },
+  "cfLoom": {
+    "format": 1,
+    "snapshotHash": "a0aff6d6edfe4611e915524e0ba032dee246910c33fbf53ea437a7768773a015",
+    "kind": "service",
+    "dependencies": {}
+  }
+}

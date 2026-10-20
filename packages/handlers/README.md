@@ -69,7 +69,7 @@ A Handler returned by `handle()` is a function, and its `element` is the Endpoin
 - A Message Handler takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`. In a direct call its meta (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README) defaults `headers` to `{}`.
 
 ```ts
-import getOrderHandler from '../src/endpoints/orders/get-order.handler';
+import getOrderHandler from '../src/endpoints/orders/get-order.handler.ts';
 
 const outcome = await getOrderHandler(
   { params: { orderId: ORDER_ID } },

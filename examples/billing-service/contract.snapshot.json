@@ -1,0 +1,332 @@
+{
+  "codes": {
+    "INVALID_INPUT": {
+      "body": {
+        "fields": {
+          "issues": {
+            "required": true,
+            "schema": {
+              "items": {
+                "fields": {
+                  "code": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "invalid_format",
+                        "invalid_type",
+                        "invalid_value",
+                        "malformed",
+                        "not_multiple",
+                        "required",
+                        "too_big",
+                        "too_small",
+                        "unrecognized_key"
+                      ]
+                    }
+                  },
+                  "in": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "body",
+                        "headers",
+                        "params",
+                        "query"
+                      ]
+                    }
+                  },
+                  "message": {
+                    "required": true,
+                    "schema": {
+                      "type": "string"
+                    }
+                  },
+                  "path": {
+                    "required": true,
+                    "schema": {
+                      "items": {
+                        "options": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "type": "union"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "mode": "open",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "message": "Invalid input",
+      "origin": "standard",
+      "removed": false,
+      "status": 400
+    },
+    "NOT_FOUND": {
+      "body": null,
+      "message": "Not found",
+      "origin": "standard",
+      "removed": false,
+      "status": 404
+    },
+    "NOT_IMPLEMENTED": {
+      "body": null,
+      "message": "Not implemented",
+      "origin": "standard",
+      "removed": false,
+      "status": 501
+    },
+    "ORDER_LOCKED": {
+      "body": {
+        "fields": {
+          "lockedAt": {
+            "required": true,
+            "schema": {
+              "format": "datetime",
+              "type": "string"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "message": "The order is locked and cannot be billed",
+      "origin": "local",
+      "removed": false,
+      "status": 409
+    },
+    "ORDER_NOT_BILLABLE": {
+      "body": {
+        "fields": {
+          "orderStatus": {
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "message": "Only a paid order can be billed",
+      "origin": "local",
+      "removed": false,
+      "status": 409
+    }
+  },
+  "commands": {},
+  "definitions": {},
+  "defs": {},
+  "dependencies": {
+    "orders-service": {
+      "against": "0.0.0",
+      "endpoints": [
+        {
+          "id": "GET /orders/{}",
+          "name": "getOrder"
+        }
+      ],
+      "events": []
+    }
+  },
+  "endpoints": {
+    "POST /invoices": {
+      "description": "Bills a paid order for its total",
+      "group": "invoices",
+      "guards": [],
+      "input": {
+        "body": {
+          "fields": {
+            "orderId": {
+              "required": true,
+              "schema": {
+                "format": "uuid",
+                "type": "string"
+              }
+            }
+          },
+          "mode": "open",
+          "type": "object"
+        },
+        "headers": null,
+        "params": null,
+        "query": null
+      },
+      "lifecycle": "active",
+      "name": "createInvoice",
+      "params": [],
+      "rejections": [
+        "INVALID_INPUT",
+        "NOT_FOUND",
+        "NOT_IMPLEMENTED",
+        "ORDER_LOCKED",
+        "ORDER_NOT_BILLABLE"
+      ],
+      "success": {
+        "body": {
+          "fields": {
+            "id": {
+              "required": true,
+              "schema": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "orderId": {
+              "required": true,
+              "schema": {
+                "format": "uuid",
+                "type": "string"
+              }
+            },
+            "total": {
+              "required": true,
+              "schema": {
+                "fields": {
+                  "amount": {
+                    "required": true,
+                    "schema": {
+                      "int": true,
+                      "min": 0,
+                      "type": "number"
+                    }
+                  },
+                  "currency": {
+                    "required": true,
+                    "schema": {
+                      "max": 3,
+                      "min": 3,
+                      "type": "string"
+                    }
+                  }
+                },
+                "mode": "open",
+                "type": "object"
+              }
+            }
+          },
+          "mode": "open",
+          "type": "object"
+        },
+        "headers": null,
+        "status": 201
+      },
+      "visibility": "internal"
+    }
+  },
+  "events": {},
+  "format": 1,
+  "generator": "@casitafeliz/loom-cli@0.0.0",
+  "guards": {},
+  "kind": "service",
+  "name": "billing-service",
+  "standardRejections": {
+    "invalidInput": {
+      "body": {
+        "fields": {
+          "issues": {
+            "required": true,
+            "schema": {
+              "items": {
+                "fields": {
+                  "code": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "invalid_format",
+                        "invalid_type",
+                        "invalid_value",
+                        "malformed",
+                        "not_multiple",
+                        "required",
+                        "too_big",
+                        "too_small",
+                        "unrecognized_key"
+                      ]
+                    }
+                  },
+                  "in": {
+                    "required": true,
+                    "schema": {
+                      "open": false,
+                      "type": "enum",
+                      "values": [
+                        "body",
+                        "headers",
+                        "params",
+                        "query"
+                      ]
+                    }
+                  },
+                  "message": {
+                    "required": true,
+                    "schema": {
+                      "type": "string"
+                    }
+                  },
+                  "path": {
+                    "required": true,
+                    "schema": {
+                      "items": {
+                        "options": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          }
+                        ],
+                        "type": "union"
+                      },
+                      "type": "array"
+                    }
+                  }
+                },
+                "mode": "open",
+                "type": "object"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "code": "INVALID_INPUT",
+      "message": "Invalid input",
+      "origin": "standard",
+      "status": 400
+    },
+    "notFound": {
+      "code": "NOT_FOUND",
+      "message": "Not found",
+      "origin": "standard",
+      "status": 404
+    },
+    "notImplemented": {
+      "code": "NOT_IMPLEMENTED",
+      "message": "Not implemented",
+      "origin": "standard",
+      "status": 501
+    }
+  },
+  "subscriptions": {}
+}

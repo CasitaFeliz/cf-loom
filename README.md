@@ -23,6 +23,8 @@ How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages)
 
 ## A first Service
 
+Two fictional Services in `examples/` follow these steps over HTTP, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, and [`billing-service`](examples/billing-service), a Service with one Endpoint that depends on orders-service through its generated Contract Package, calls it with `client` and fakes it in its tests with `fakeProvider`.
+
 ### Layout
 
 ```
@@ -38,6 +40,8 @@ src/
 │   │   └── api-key.guard.ts
 │   ├── rejections/
 │   │   └── order-locked.rejection.ts
+│   ├── schemas/                           zod schemas the declarations share
+│   │   └── order.schema.ts
 │   ├── events/
 │   │   ├── order-created.v1.event.ts
 │   │   └── order-created.v2.event.ts

@@ -1,0 +1,7 @@
+/** The Callers this fictional Service knows, by their API key; a real one reads them from a secret store. */
+const callerIdByKey: ReadonlyMap<string, string> = new Map([['billing-key', 'billing-service']]);
+
+/** The Caller an API key belongs to, if any. */
+export function callerIdOf(key: string): string | undefined {
+  return callerIdByKey.get(key);
+}

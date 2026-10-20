@@ -23,6 +23,12 @@
       "path": "./packages/cli"
     },
     {
+      "path": "./examples/orders-service"
+    },
+    {
+      "path": "./examples/billing-service"
+    },
+    {
       "path": "./tsconfig.tooling.json"
     }
   ]

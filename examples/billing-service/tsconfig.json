@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "${configDir}",
+    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/example.tsbuildinfo",
+    "types": ["node"]
+  },
+  "extends": "../../tsconfig.base.json",
+  "include": ["src", "test", "cf-loom.config.ts", "vitest.config.ts"],
+  "references": [
+    {
+      "path": "../../packages/contract/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/handlers/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/server/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/client/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/testing/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/cli/tsconfig.build.json"
+    },
+    {
+      "path": "../orders-service/tsconfig.contract-package.json"
+    }
+  ]
+}
