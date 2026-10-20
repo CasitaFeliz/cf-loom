@@ -16,15 +16,10 @@ import {
   notFound,
   openEnum,
 } from '../index.ts';
-import {
-  type OriginOf,
-  validateContract,
-  type WalkedLocation,
-  walkSchemas,
-} from '../internal/index.ts';
+import { type RootPackage, validateContract, walkSchemas } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: OriginOf) {
+function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
   const packageName = typeof name === 'string' ? name : '';
   return validateContract(root, { originOf, packageName, exportsOf: () => [] });
@@ -35,7 +30,7 @@ function noOrigin() {
 }
 
 /** A walked location's node, so a test compares with the walker itself. */
-function walkedNodeOf({ walked }: WalkedLocation) {
+function walkedNodeOf({ walked }: ReturnType<typeof walkSchemas>['located'][number]) {
   return walked.kind === 'walked' ? walked.value : undefined;
 }
 

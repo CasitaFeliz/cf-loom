@@ -12,7 +12,6 @@ import {
   answerableByCodeOf,
   answerableRejectionsOf,
   contextProvidersOf,
-  inOf,
   resolutionOf,
   schemaOf,
   standardRejectionDefaults,
@@ -137,14 +136,6 @@ describe('schemaOf', () => {
     ];
 
     expect(schemas).toEqual([getOrder.success.body, undefined, apiKey.demands.headers, undefined]);
-  });
-});
-
-describe('inOf', () => {
-  test('the part of the request an issue sits in', () => {
-    const ins = [inOf('input.params'), inOf('input.body'), inOf('demands.query')];
-
-    expect(ins).toEqual(['params', 'body', 'query']);
   });
 });
 

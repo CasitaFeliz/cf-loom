@@ -1,48 +1,81 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { defineRejection, invalidInput, notFound } from '../index.ts';
 import {
   bodyOf,
   committedValues,
   deprecatedAtOfHeader,
-  deprecationHeaderOf,
-  envelopeOf,
-  faultEnvelopeOf,
-  faultStatusOf,
+  faultResponseOf,
   headerTextsOf,
   headerValuesOf,
   invalidInputBodyOf,
-  invalidInputBodyReader,
   invalidInputResponseOf,
-  isHeaderText,
-  isJsonContentType,
   isQueryText,
   isReservedCode,
   isSegmentText,
   jsonContentType,
   malformedBodyIssueOf,
   notJsonBodyIssue,
+  parseValue,
+  type ReservedCode,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionBodyReaderOf,
-  rejectionEnvelopeOf,
-  reservedCodes,
+  rejectionResponseOf,
   reservedFaults,
   type SchemaNode,
   segmentOf,
+  type TextPartNodes,
   textOfValue,
-  valueOfText,
+  textPartsOf,
+  withDeprecation,
 } from '../internal/index.ts';
 
 const number: SchemaNode = { type: 'number' };
 const boolean: SchemaNode = { type: 'boolean' };
 const string: SchemaNode = { type: 'string' };
 
-describe('valueOfText', () => {
+/** What a request's query carries under one field once its node reads the texts sent for it. */
+function queryValueOf(node: SchemaNode, texts: readonly string[]): unknown {
+  const nodes: TextPartNodes = {
+    'input.query': {
+      type: 'object',
+      mode: 'open',
+      fields: { v: { required: true, schema: node } },
+    },
+  };
+  const source = {
+    params: {},
+    query: new URLSearchParams(texts.map((text): [string, string] => ['v', text])),
+    headers: new Headers(),
+  };
+
+  const { query = {} } = textPartsOf(nodes, source);
+
+  return Object.values(query)[0];
+}
+
+/** What `bodyOf` makes of a request with an empty JSON object, sent with this content type. */
+async function bodyKindOf(contentType: string | null): Promise<string> {
+  const request = new Request('http://test/', {
+    method: 'POST',
+    headers: contentType === null ? {} : { 'content-type': contentType },
+    body: new TextEncoder().encode('{}'),
+  });
+
+  return (await bodyOf(request, undefined)).kind;
+}
+
+/** Whether a header value can travel: `texts` when it can, `issues` when it cannot. */
+function headerKindOf(text: string): 'texts' | 'issues' {
+  return headerTextsOf('success.headers', { 'x-v': text }).kind;
+}
+
+describe('textPartsOf, a text as its node reads it', () => {
   test('a number matching the pattern is converted, any other text is kept for the schema to refuse', () => {
     const texts = ['0', '-12', '3.25', '01', '1.', 'abc', '1e3', '+1'];
 
-    const values = texts.map((text) => valueOfText(number, [text]));
+    const values = texts.map((text) => queryValueOf(number, [text]));
 
     expect(values).toEqual([0, -12, 3.25, '01', '1.', 'abc', '1e3', '+1']);
   });
@@ -50,7 +83,7 @@ describe('valueOfText', () => {
   test('a boolean is exactly true or false', () => {
     const texts = ['true', 'false', 'TRUE', 'FALSE', '1', '0'];
 
-    const values = texts.map((text) => valueOfText(boolean, [text]));
+    const values = texts.map((text) => queryValueOf(boolean, [text]));
 
     expect(values).toEqual([true, false, 'TRUE', 'FALSE', '1', '0']);
   });
@@ -60,17 +93,17 @@ describe('valueOfText', () => {
     const choices: SchemaNode = { type: 'enum', values: ['web', 'phone'], open: false };
 
     const values = [
-      valueOfText(literal, ['5']),
-      valueOfText(literal, ['6']),
-      valueOfText(choices, ['phone']),
-      valueOfText(choices, ['fax']),
+      queryValueOf(literal, ['5']),
+      queryValueOf(literal, ['6']),
+      queryValueOf(choices, ['phone']),
+      queryValueOf(choices, ['fax']),
     ];
 
     expect(values).toEqual([5, '6', 'phone', 'fax']);
   });
 
   test('a string is kept unchanged', () => {
-    const value = valueOfText(string, [' 42 ']);
+    const value = queryValueOf(string, [' 42 ']);
 
     expect(value).toBe(' 42 ');
   });
@@ -78,19 +111,19 @@ describe('valueOfText', () => {
   test('a list converts each occurrence by its items, one occurrence a one-item list', () => {
     const list: SchemaNode = { type: 'array', items: number };
 
-    const values = [valueOfText(list, ['1', '2']), valueOfText(list, ['7'])];
+    const values = [queryValueOf(list, ['1', '2']), queryValueOf(list, ['7'])];
 
     expect(values).toEqual([[1, 2], [7]]);
   });
 
   test('a single node given several texts keeps the list, for its schema to refuse', () => {
-    const value = valueOfText(number, ['1', '2']);
+    const value = queryValueOf(number, ['1', '2']);
 
     expect(value).toEqual(['1', '2']);
   });
 });
 
-describe('textOfValue, isHeaderText and headerTextsOf', () => {
+describe('textOfValue and headerTextsOf', () => {
   test('a value travels as the text JavaScript writes it', () => {
     expect([textOfValue(3), textOfValue(-1.5), textOfValue(true), textOfValue('v1')]).toEqual([
       '3',
@@ -112,7 +145,7 @@ describe('textOfValue, isHeaderText and headerTextsOf', () => {
       '12300000000000000000000000',
     ]);
     expect(texts.every((text) => /^-?(0|[1-9]\d*)(\.\d+)?$/.test(text))).toBe(true);
-    expect(texts.map((text) => valueOfText(number, [text]))).toEqual(numbers.map((n) => n + 0));
+    expect(texts.map((text) => queryValueOf(number, [text]))).toEqual(numbers.map((n) => n + 0));
   });
 
   test('a number that is not finite cannot travel, a bug', () => {
@@ -137,14 +170,14 @@ describe('textOfValue, isHeaderText and headerTextsOf', () => {
       '😀',
     ];
 
-    expect(accepted.map(isHeaderText)).toEqual(Array(accepted.length).fill(true));
-    expect(refused.map(isHeaderText)).toEqual(Array(refused.length).fill(false));
+    expect(accepted.map(headerKindOf)).toEqual(Array(accepted.length).fill('texts'));
+    expect(refused.map(headerKindOf)).toEqual(Array(refused.length).fill('issues'));
   });
 
   test('a header value has no leading or trailing whitespace', () => {
     const refused = [' a', 'a ', '\ta', 'a\t', '   '];
 
-    expect(refused.map(isHeaderText)).toEqual(Array(refused.length).fill(false));
+    expect(refused.map(headerKindOf)).toEqual(Array(refused.length).fill('issues'));
   });
 
   test('a Success’s headers travel as text, an undefined one left out', () => {
@@ -204,33 +237,43 @@ describe('textOfValue, isHeaderText and headerTextsOf', () => {
   });
 });
 
-describe('the Envelopes', () => {
-  test('a Rejection without a body travels with no body key', () => {
-    const envelope = rejectionEnvelopeOf({ code: 'NOT_FOUND', message: 'Not found' });
+describe('the Envelopes as they travel', () => {
+  test('a Rejection without a body travels with no body key', async () => {
+    const response = rejectionResponseOf({ code: 'NOT_FOUND', status: 404, message: 'Not found' });
+
+    const envelope = await response.json();
 
     expect(envelope).toStrictEqual({ rejection: { code: 'NOT_FOUND', message: 'Not found' } });
   });
 
-  test('a Rejection with a body carries it', () => {
+  test('a Rejection with a body carries it', async () => {
     const body = { lockedAt: '2026-10-18T10:00:00Z' };
+    const response = rejectionResponseOf({
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body,
+    });
 
-    const envelope = rejectionEnvelopeOf({ code: 'ORDER_LOCKED', message: 'Locked', body });
+    const envelope = await response.json();
 
     expect(envelope).toStrictEqual({
       rejection: { code: 'ORDER_LOCKED', message: 'Locked', body },
     });
   });
 
-  test('a reserved Fault carries its code, a Handler’s Fault none', () => {
-    const reserved = faultEnvelopeOf({
+  test('a reserved Fault carries its code, a Handler’s Fault none', async () => {
+    const reserved = faultResponseOf({
       code: 'RETIRED',
       committed: 'no',
       retryable: false,
       message: 'The Endpoint is retired',
     });
-    const returned = faultEnvelopeOf({ committed: 'yes', retryable: true, message: 'Lost' });
+    const returned = faultResponseOf({ committed: 'yes', retryable: true, message: 'Lost' });
 
-    expect([reserved, returned]).toStrictEqual([
+    const envelopes = [await reserved.json(), await returned.json()];
+
+    expect(envelopes).toStrictEqual([
       {
         fault: {
           code: 'RETIRED',
@@ -241,55 +284,6 @@ describe('the Envelopes', () => {
       },
       { fault: { committed: 'yes', retryable: true, message: 'Lost' } },
     ]);
-  });
-});
-
-describe('envelopeOf', () => {
-  test('a Rejection Envelope is read with its code, message and body, extra keys ignored', () => {
-    const received = { rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 }, x: 1 } };
-
-    const envelope = envelopeOf(received);
-
-    expect(envelope).toStrictEqual({
-      rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 } },
-    });
-  });
-
-  test('a Rejection Envelope without a body is read with no body key', () => {
-    const envelope = envelopeOf({ rejection: { code: 'GONE', message: 'Gone' } });
-
-    expect(envelope).toStrictEqual({ rejection: { code: 'GONE', message: 'Gone' } });
-  });
-
-  test('a Fault Envelope is read with its reserved code, and a code that is not reserved is dropped', () => {
-    const reserved = envelopeOf({
-      fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' },
-    });
-    const unreserved = envelopeOf({
-      fault: { code: 'DB_DOWN', committed: 'unknown', retryable: true, message: 'Down', at: 1 },
-    });
-
-    expect([reserved, unreserved]).toStrictEqual([
-      { fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' } },
-      { fault: { committed: 'unknown', retryable: true, message: 'Down' } },
-    ]);
-  });
-
-  test('anything else is no Envelope', () => {
-    const received = [
-      null,
-      'text',
-      [],
-      {},
-      { rejection: { code: 1, message: 'm' } },
-      { rejection: { code: 'C' } },
-      { fault: { committed: 'maybe', retryable: true, message: 'm' } },
-      { fault: { committed: 'no', retryable: 'yes', message: 'm' } },
-      { fault: { committed: 'no', retryable: true } },
-      { error: 'boom' },
-    ];
-
-    expect(received.map(envelopeOf)).toEqual(received.map(() => undefined));
   });
 });
 
@@ -316,15 +310,22 @@ describe('the reserved codes and statuses', () => {
   });
 
   test('every reserved code a declaration may not take has its row', () => {
-    expect(Object.keys(reservedFaults)).toEqual([...reservedCodes]);
+    expectTypeOf<keyof typeof reservedFaults>().toEqualTypeOf<ReservedCode>();
   });
 
   test('a Fault travels with its reserved code’s status, else 503 when retryable and 500 otherwise', () => {
-    const statuses = [
-      faultStatusOf({ code: 'BODY_TOO_LARGE', retryable: false }),
-      faultStatusOf({ retryable: true }),
-      faultStatusOf({ retryable: false }),
+    const responses = [
+      faultResponseOf({
+        code: 'BODY_TOO_LARGE',
+        committed: 'no',
+        retryable: false,
+        message: 'Too large',
+      }),
+      faultResponseOf({ committed: 'unknown', retryable: true, message: 'Down' }),
+      faultResponseOf({ committed: 'unknown', retryable: false, message: 'Broke' }),
     ];
+
+    const statuses = responses.map((response) => response.status);
 
     expect(statuses).toEqual([413, 503, 500]);
   });
@@ -339,7 +340,7 @@ describe('the content type', () => {
     expect(jsonContentType).toBe('application/json; charset=utf-8');
   });
 
-  test('a request names JSON by its media type, whatever its parameters or case', () => {
+  test('a request names JSON by its media type, whatever its parameters or case', async () => {
     const accepted = [
       'application/json',
       'application/json; charset=utf-8',
@@ -347,8 +348,17 @@ describe('the content type', () => {
     ];
     const refused = ['text/plain', 'application/jsonx', 'application/problem+json', '', null];
 
-    expect(accepted.map(isJsonContentType)).toEqual([true, true, true]);
-    expect(refused.map(isJsonContentType)).toEqual([false, false, false, false, false]);
+    const acceptedBodies = await Promise.all(accepted.map(bodyKindOf));
+    const refusedBodies = await Promise.all(refused.map(bodyKindOf));
+
+    expect(acceptedBodies).toEqual(['value', 'value', 'value']);
+    expect(refusedBodies).toEqual([
+      'malformed',
+      'malformed',
+      'malformed',
+      'malformed',
+      'malformed',
+    ]);
   });
 });
 
@@ -422,7 +432,9 @@ describe('bodyOf, reading a Response', () => {
 
 describe('the Deprecation header', () => {
   test('a deprecatedAt stamp is sent as @ and its unix seconds', () => {
-    expect(deprecationHeaderOf('2026-10-17T09:30:00Z')).toBe('@1792229400');
+    const response = withDeprecation(new Response(null), '2026-10-17T09:30:00Z');
+
+    expect(response.headers.get('deprecation')).toBe('@1792229400');
   });
 
   test('a received Deprecation header is read back as the stamp, and anything else as none', () => {
@@ -451,6 +463,34 @@ describe('the invalid-input body', () => {
         { in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
       ],
     });
+  });
+
+  test('each part of the request an Issue sits in is named by its in', () => {
+    const parts = [
+      'input.params',
+      'input.query',
+      'input.headers',
+      'input.body',
+      'demands.query',
+      'demands.headers',
+    ] as const;
+    const issues = parts.map((part) => ({
+      part,
+      path: [],
+      code: 'required' as const,
+      message: 'Required',
+    }));
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues.map((issue) => issue.in)).toEqual([
+      'params',
+      'query',
+      'headers',
+      'body',
+      'query',
+      'headers',
+    ]);
   });
 });
 
@@ -481,7 +521,7 @@ describe('the invalid-input Rejection', () => {
 });
 
 describe('rejectionBodyReaderOf', () => {
-  test('a Rejection’s body is read by its declared schema, invalid input’s by cf-loom’s reader', () => {
+  test('a Rejection’s body is read by its declared schema, and none without one', () => {
     const locked = z.object({ lockedAt: z.iso.datetime() });
     const orderLocked = defineRejection({
       code: 'ORDER_LOCKED',
@@ -491,14 +531,14 @@ describe('rejectionBodyReaderOf', () => {
     });
     const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });
 
-    const readers = [orderLocked, gone, invalidInput, notFound].map(rejectionBodyReaderOf);
+    const readers = [orderLocked, gone, notFound].map(rejectionBodyReaderOf);
 
-    expect(readers).toEqual([locked, undefined, invalidInputBodyReader, undefined]);
+    expect(readers).toEqual([locked, undefined, undefined]);
   });
 });
 
 describe('the invalid-input body as a Caller reads it', () => {
-  test('an issue code or part a later cf-loom adds is read as its Unknown case', () => {
+  test('invalid input’s body is read by cf-loom’s reader, an issue code or part a later cf-loom adds as its Unknown case', () => {
     const received = {
       issues: [
         { in: 'params', path: ['id'], code: 'too_small', message: 'Too small', extra: 1 },
@@ -506,18 +546,23 @@ describe('the invalid-input body as a Caller reads it', () => {
       ],
     };
 
-    const read = invalidInputBodyReader.safeParse(received);
+    const reader = rejectionBodyReaderOf(invalidInput);
 
-    expect(read.data).toEqual({
-      issues: [
-        { in: 'params', path: ['id'], code: 'too_small', message: 'Too small' },
-        {
-          in: { unknown: 'cookies' },
-          path: [],
-          code: { unknown: 'too_late' },
-          message: 'Too late',
-        },
-      ],
+    const read = reader === undefined ? undefined : parseValue(reader, received);
+
+    expect(read).toEqual({
+      kind: 'value',
+      value: {
+        issues: [
+          { in: 'params', path: ['id'], code: 'too_small', message: 'Too small' },
+          {
+            in: { unknown: 'cookies' },
+            path: [],
+            code: { unknown: 'too_late' },
+            message: 'Too late',
+          },
+        ],
+      },
     });
   });
 });
@@ -528,8 +573,8 @@ describe('a number literal in exponent form', () => {
     const small: SchemaNode = { type: 'literal', value: 1.5e-7 };
 
     const values = [
-      valueOfText(large, [textOfValue(1e21)]),
-      valueOfText(small, [textOfValue(1.5e-7)]),
+      queryValueOf(large, [textOfValue(1e21)]),
+      queryValueOf(small, [textOfValue(1.5e-7)]),
     ];
 
     expect(values).toEqual([1e21, 1.5e-7]);
@@ -650,6 +695,74 @@ describe('receivedEnvelopeOf', () => {
       { kind: 'none' },
       { kind: 'none' },
     ]);
+  });
+
+  test('a Rejection Envelope is read with its code, message and body, extra keys ignored', async () => {
+    const received = { rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 }, x: 1 } };
+
+    const read = await receivedEnvelopeOf(Response.json(received));
+
+    expect(read).toStrictEqual({
+      kind: 'envelope',
+      envelope: { rejection: { code: 'LOCKED', message: 'Locked', body: { at: 1 } } },
+    });
+  });
+
+  test('a Rejection Envelope without a body is read with no body key', async () => {
+    const received = { rejection: { code: 'GONE', message: 'Gone' } };
+
+    const read = await receivedEnvelopeOf(Response.json(received));
+
+    expect(read).toStrictEqual({
+      kind: 'envelope',
+      envelope: { rejection: { code: 'GONE', message: 'Gone' } },
+    });
+  });
+
+  test('a Fault Envelope is read with its reserved code, and a code that is not reserved is dropped', async () => {
+    const reserved = Response.json({
+      fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' },
+    });
+    const unreserved = Response.json({
+      fault: { code: 'DB_DOWN', committed: 'unknown', retryable: true, message: 'Down', at: 1 },
+    });
+
+    const read = [await receivedEnvelopeOf(reserved), await receivedEnvelopeOf(unreserved)];
+
+    expect(read).toStrictEqual([
+      {
+        kind: 'envelope',
+        envelope: {
+          fault: { code: 'RETIRED', committed: 'no', retryable: false, message: 'Retired' },
+        },
+      },
+      {
+        kind: 'envelope',
+        envelope: { fault: { committed: 'unknown', retryable: true, message: 'Down' } },
+      },
+    ]);
+  });
+
+  test('anything else is no Envelope', async () => {
+    const received = [
+      null,
+      'text',
+      [],
+      {},
+      { rejection: { code: 1, message: 'm' } },
+      { rejection: { code: 'C' } },
+      { fault: { committed: 'maybe', retryable: true, message: 'm' } },
+      { fault: { committed: 'no', retryable: 'yes', message: 'm' } },
+      { fault: { committed: 'no', retryable: true } },
+      { error: 'boom' },
+    ];
+
+    const read = [];
+    for (const body of received) {
+      read.push(await receivedEnvelopeOf(Response.json(body)));
+    }
+
+    expect(read).toEqual(received.map(() => ({ kind: 'none' })));
   });
 
   test('a body that already failed is unreadable when JSON, none otherwise, never a throw', async () => {

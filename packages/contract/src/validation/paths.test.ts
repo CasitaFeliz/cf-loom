@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '../index.ts';
-import { type OriginOf, validateContract } from '../internal/index.ts';
+import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: OriginOf) {
+function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
   const packageName = typeof name === 'string' ? name : '';
   return validateContract(root, { originOf, packageName, exportsOf: () => [] });

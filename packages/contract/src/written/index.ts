@@ -26,19 +26,10 @@ export type {
   LocatedStandardRejection,
   Root,
 } from './located.ts';
-export type {
-  InputIn,
-  InputPart,
-  Issue,
-  IssuePart,
-  ObjectPart,
-  Part,
-  TextIn,
-} from './parts.ts';
+export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,
   endpointParts,
-  fieldsOf,
   guardParts,
   inOf,
   inputParts,
