@@ -3,12 +3,11 @@ import { listOf } from './written.ts';
 
 /**
  * Every Guard the given ones reach, each once, the Guards one lists before it: themselves and, at
- * any depth, the ones `listedBy` says each lists; one `listedBy` knows nothing of reaches nothing
- * and is left out itself.
+ * any depth, the ones `listedBy` says each lists.
  */
 export function reachOf<Key>(
   guards: readonly Key[],
-  listedBy: (guard: Key) => readonly Key[] | undefined,
+  listedBy: (guard: Key) => readonly Key[],
 ): readonly Key[] {
   const seen = new Set<Key>();
   const reached: Key[] = [];
@@ -16,12 +15,8 @@ export function reachOf<Key>(
     if (seen.has(guard)) {
       return;
     }
-    const listed = listedBy(guard);
-    if (listed === undefined) {
-      return;
-    }
     seen.add(guard);
-    listed.forEach(visit);
+    listedBy(guard).forEach(visit);
     reached.push(guard);
   };
   guards.forEach(visit);

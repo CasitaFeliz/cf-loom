@@ -174,7 +174,7 @@ describe('exportedSnapshotOf', () => {
     },
   );
 
-  test('a name an Endpoint attaches that the Snapshot holds no Guard for reaches nothing and is not kept', () => {
+  test('a name an Endpoint attaches that the Snapshot holds no Guard for is not kept', () => {
     const endpoints = { 'GET /orders': attaching('gZ') };
 
     const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));

@@ -64,12 +64,12 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
   });
 
   test.each([
-    { depth: 1, listed: [permission] },
-    { depth: 2, listed: [admin] },
-    { depth: 3, listed: [owner] },
+    { depth: 1, listed: [permission], unlisted: ['userToken'] },
+    { depth: 2, listed: [admin], unlisted: ['userToken', 'permission'] },
+    { depth: 3, listed: [owner], unlisted: ['userToken', 'permission', 'admin'] },
   ])(
     'a Guard a listed Guard reaches at depth $depth, left out of the list, fails naming it',
-    ({ listed }) => {
+    ({ listed, unlisted }) => {
       const definitions = defineDefinitions({
         name: 'definitions',
         guards: listed,
@@ -78,13 +78,14 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
 
       const failures = failuresOf(definitions);
 
-      expect(failures).toContainEqual({
-        kind: 'declaration',
-        at: ['guards'],
-        rule: 'definitions-unlisted',
-        message:
-          'A Definitions Package lists every Guard it exports or its Guards reach: userToken',
-      });
+      expect(failures).toEqual(
+        unlisted.map((name) => ({
+          kind: 'declaration',
+          at: ['guards'],
+          rule: 'definitions-unlisted',
+          message: `A Definitions Package lists every Guard it exports or its Guards reach: ${name}`,
+        })),
+      );
     },
   );
 
