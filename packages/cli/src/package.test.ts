@@ -866,6 +866,32 @@ describe('cf-loom package: the built package', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
+  test('the exported Snapshot’s defs are exactly the defs defs.ts declares', async () => {
+    const files = withDeclarations(
+      [
+        "export const leaf = z.object({ get up() { return z.array(leaf); } }).meta({ id: 'leaf' });",
+        "export const branch = z.object({ get leaves() { return z.array(leaf); }, get self() { return branch.optional(); } }).meta({ id: 'branch' });",
+        "export const unused = z.object({ get self() { return unused.optional(); } }).meta({ id: 'unused' });",
+        "export const session = defineGuard({ name: 'session', description: 'A session', demands: { headers: z.object({ authorization: z.string() }) }, context: z.object({ branch }) });",
+      ],
+      '',
+    );
+    const project = aProject({
+      ...files,
+      'src/contract/index.ts': (files['src/contract/index.ts'] ?? '')
+        .replace('defineRejection }', 'defineRejection, defineGuard }')
+        .replace("  description: 'Ping',", "  description: 'Ping',\n  guards: [session],"),
+    });
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    expect(Object.keys(built.contract.exportedSnapshot.defs).sort()).toEqual(['branch', 'leaf']);
+  });
+
   test('defs reached through an array and through a tuple’s rest are both written', () => {
     const files = withDeclarations(
       [

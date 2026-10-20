@@ -13,7 +13,11 @@ import {
   openEnumReader,
   type StandardRejections,
 } from '@casitafeliz/loom-contract';
-import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
+import {
+  exportedSnapshotOf,
+  snapshotOf,
+  validateContract,
+} from '@casitafeliz/loom-contract/internal';
 import { admit, fault, handle, reject, success } from '@casitafeliz/loom-handlers';
 import { serve } from '@casitafeliz/loom-server';
 import { nodeHttp } from '@casitafeliz/loom-server/node-http';
@@ -138,8 +142,7 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, guards, codes } = snapshot;
-  const exportedSnapshot = { format, defs, endpoints: snapshot.endpoints, guards, codes };
+  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }

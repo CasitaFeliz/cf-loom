@@ -10,7 +10,11 @@ import {
   openEnum,
   openEnumReader,
 } from '@casitafeliz/loom-contract';
-import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
+import {
+  exportedSnapshotOf,
+  snapshotOf,
+  validateContract,
+} from '@casitafeliz/loom-contract/internal';
 import { fault, handle, reject, success } from '@casitafeliz/loom-handlers';
 import { serve } from '@casitafeliz/loom-server';
 import { describe, expect, test } from 'vitest';
@@ -78,8 +82,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, endpoints: entries, guards, codes } = snapshot;
-  const exportedSnapshot = { format, defs, endpoints: entries, guards, codes };
+  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
     invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },

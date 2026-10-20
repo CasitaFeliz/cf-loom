@@ -40,6 +40,18 @@ export function nodesReachedFrom(
   return located.flatMap(reachedFrom);
 }
 
+/**
+ * The def names the nodes reference through `ref`s, directly or through the defs those name, each
+ * once; a name with no def is included, so a caller can tell it apart.
+ */
+export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonly string[] {
+  const located = nodes.map((node): LocatedNode => ({ at: [], node }));
+  const refs = nodesReachedFrom(located, defs)
+    .map(({ node }) => node)
+    .filter(isRef);
+  return [...new Set(refs.map(({ name }) => name))];
+}
+
 function isRef(node: SchemaNode): node is RefNode {
   return node.type === 'ref';
 }

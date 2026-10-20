@@ -7,7 +7,11 @@ import {
   defineGuard,
   type Endpoint,
 } from '@casitafeliz/loom-contract';
-import { snapshotOf, validateContract } from '@casitafeliz/loom-contract/internal';
+import {
+  exportedSnapshotOf,
+  snapshotOf,
+  validateContract,
+} from '@casitafeliz/loom-contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { FakeProviderError, fakeProvider } from './index.ts';
@@ -55,11 +59,27 @@ const getSummary = defineEndpoint({
   success: { status: 200, body: z.object({ total: z.int() }) },
 });
 
+/** An Endpoint whose literal path would beat `getPayment`'s param, of the Visibility and lifecycle given. */
+function latestPayment(fields: {
+  readonly visibility: 'private' | 'internal';
+  readonly lifecycle: 'active' | 'retired';
+}) {
+  return defineEndpoint({
+    name: 'getLatestPayment',
+    method: 'GET',
+    path: '/payments/latest',
+    description: 'The latest payment',
+    ...fields,
+    success: { status: 200, body: z.object({ id: z.string() }) },
+  });
+}
+
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
 function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
   endpoints: Endpoints,
+  declared: readonly Endpoint[] = Object.values(endpoints),
 ) {
-  const listed = Object.values(endpoints) as unknown as [Endpoint];
+  const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
   const root = defineContract({ name: 'payments-service', groups: [group] });
   const rootPackage = {
@@ -76,8 +96,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, endpoints: entries, guards, codes } = snapshot;
-  const exportedSnapshot = { format, defs, endpoints: entries, guards, codes };
+  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -235,6 +254,26 @@ describe('fakeProvider: requests', () => {
     await expect(answering).rejects.toThrow('does not list GET /payments/summary');
     expect(taken.getPayment).toBe(0);
   });
+
+  test.each([
+    ['Private', latestPayment({ visibility: 'private', lifecycle: 'active' })],
+    ['Retired', latestPayment({ visibility: 'internal', lifecycle: 'retired' })],
+  ])(
+    'a %s Endpoint whose literal would beat a listed param never takes a request: the param does',
+    async (_, latest) => {
+      const declared = [getPayment, capturePayment, getSummary, latest];
+      const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
+      const deps = defineDependencies(provider, { endpoints: [getPayment] });
+      const fake = fakeProvider(deps);
+      fake
+        .on('getPayment')
+        .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
+
+      const response = await fake.fetch(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } });
+
+      expect(await response.json()).toEqual({ id: 'latest' });
+    },
+  );
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () => fakeProvider(paymentsDeps, { baseUrl: 'https://gateway.test/api?x=1' });

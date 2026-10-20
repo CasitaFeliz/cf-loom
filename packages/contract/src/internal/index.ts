@@ -29,8 +29,9 @@ export {
   canonicalSnapshotOf,
   canonicalTextOf,
   exportedEntryOf,
+  exportedSnapshotOf,
   hashedTextOf,
-  isExportedEndpoint,
+  isDeclaredRejection,
   isLive,
   ownRejectionsOf,
   schemaOriginsOf,
@@ -68,10 +69,10 @@ export type {
 } from '../walker/index.ts';
 export {
   byCodePoint,
-  childrenOf,
   hashPartsOf,
   isHashFormat,
   isJsonValue,
+  reachedDefsOf,
   walkSchemas,
 } from '../walker/index.ts';
 export type {

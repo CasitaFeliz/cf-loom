@@ -4,6 +4,7 @@ import { defineContract, defineEndpoint, defineGroup, defineGuard } from '../ind
 import {
   type EndpointSnapshot,
   exportedEntryOf,
+  exportedSnapshotOf,
   snapshotOf,
   textPartNodesOf,
   validateContract,
@@ -38,7 +39,7 @@ const listOrders = defineEndpoint({
   success: { status: 200, body: z.array(z.string()) },
 });
 
-function exportedSnapshotOf() {
+function declaredSnapshotOf() {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineContract({ name: 'orders-service', groups: [group] });
   const rootPackage = {
@@ -55,11 +56,13 @@ function exportedSnapshotOf() {
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const { format, defs, endpoints, guards, codes } = snapshot;
-  return { format, defs, endpoints, guards, codes };
+  return snapshot;
 }
 
-const providing = { provider: 'orders-service', exportedSnapshot: exportedSnapshotOf() };
+const providing = {
+  provider: 'orders-service',
+  exportedSnapshot: exportedSnapshotOf(declaredSnapshotOf()),
+};
 
 function entryOf(): EndpointSnapshot {
   return exportedEntryOf(providing, getOrder);

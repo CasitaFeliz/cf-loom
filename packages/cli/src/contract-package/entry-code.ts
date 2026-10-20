@@ -10,10 +10,10 @@ import {
   relativeSpecifierOf,
   stringLiteralOf,
 } from '../source-text/index.ts';
+import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
 import { bindingOf, siblingOf } from './names.ts';
 import { packagePaths } from './paths.ts';
-import type { ExportedEndpoint } from './reached.ts';
 
 /** What a Service's entry exports: its name and version, its Endpoints, its defs' types. */
 export type ServiceEntry = {
