@@ -104,6 +104,6 @@ async function bodyStepOf<Answer>(
       return { kind: 'read', given: { body: body.value } };
     case 'malformed':
     case 'unreadable':
-      return { kind: 'invalid', issues: [malformedBodyIssueOf(body.message)] };
+      return { kind: 'invalid', issues: [malformedBodyIssueOf('input.body', body.message)] };
   }
 }

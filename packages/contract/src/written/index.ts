@@ -67,6 +67,7 @@ export {
   isPlainObject,
   isWithoutValue,
   listOf,
+  ownOf,
   partOf,
   textOf,
 } from './written.ts';

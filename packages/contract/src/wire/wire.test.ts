@@ -15,6 +15,7 @@ import {
   isReservedCode,
   isSegmentText,
   jsonContentType,
+  malformedBodyIssueOf,
   parseValue,
   type ReservedCode,
   receivedBodyOf,
@@ -809,5 +810,19 @@ describe('receivedEnvelopeOf', () => {
     const read = [await receivedEnvelopeOf(json), await receivedEnvelopeOf(html)];
 
     expect(read).toMatchObject([{ kind: 'unreadable' }, { kind: 'none' }]);
+  });
+});
+
+describe('malformedBodyIssueOf', () => {
+  test('a body no JSON reads is one malformed Issue at the whole of the part given', () => {
+    const issues = [
+      malformedBodyIssueOf('input.body', 'The body is not JSON'),
+      malformedBodyIssueOf('body', 'The body is not JSON'),
+    ];
+
+    expect(issues).toEqual([
+      { part: 'input.body', path: [], code: 'malformed', message: 'The body is not JSON' },
+      { part: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
+    ]);
   });
 });

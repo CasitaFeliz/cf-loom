@@ -20,6 +20,14 @@ export function isPlainObject(value: unknown): value is WrittenObject {
   return prototype === Object.prototype || prototype === null;
 }
 
+/** A value a map holds itself under a name; nothing it only inherits, nor anything of a list or a non-object. */
+export function ownOf(map: unknown, name: string): unknown {
+  if (typeof map !== 'object' || map === null || Array.isArray(map)) {
+    return undefined;
+  }
+  return Object.hasOwn(map, name) ? Reflect.get(map, name) : undefined;
+}
+
 /** A part a declaration may leave out is empty; what a cast put there that is no object is too. */
 export function partOf<Key extends string>(part: unknown): Partial<Readonly<Record<Key, unknown>>> {
   return isPlainObject(part) ? (part as Partial<Readonly<Record<Key, unknown>>>) : {};
