@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { type InputPart, type Issue, partFieldOf } from '../validation/index.ts';
+import { type InputPart, type Issue, partFieldOf } from '../written/index.ts';
 import { parseValue } from './parse-value.ts';
 
 /** A party's declared parts parsed: each value under its field, or every Issue at its part. */

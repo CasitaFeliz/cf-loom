@@ -1,36 +1,20 @@
 import {
   addedStandardRejectionNames,
-  type Contract,
   isRejectionStatus,
   isStandardRejection,
-  type StandardRejectionName,
-  type StandardRejections,
-  standardRejectionDefaults,
-  standardRejectionNames,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { type Declarations, declarationsOf } from './declarations.ts';
+import {
+  type Declarations,
+  isWithoutValue,
+  type LocatedEndpoint,
+  type LocatedGuard,
+  type LocatedRejection,
+  type LocatedStandardRejection,
+  listOf,
+  type ResolvedStandard,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type {
-  LocatedEndpoint,
-  LocatedGuard,
-  LocatedRejection,
-  LocatedStandardRejection,
-} from './located.ts';
-import { isWithoutValue, listOf, textOf } from './written.ts';
-
-/**
- * A Standard Rejection as the root resolves it: the Definitions Package's declaration, else
- * cf-loom's, with the declaration it came from when it did.
- */
-export type ResolvedStandard = {
-  readonly name: StandardRejectionName;
-  readonly at: Path;
-  readonly code: string;
-  readonly status: number;
-  readonly message: string;
-  readonly declared: LocatedStandardRejection | undefined;
-};
 
 const redefinedStandard =
   'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
@@ -87,46 +71,6 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
       `A Guard lists declared Rejections only: ${textOf(name)}`,
     ),
   );
-}
-
-/**
- * Each Standard Rejection as the root resolves it, in the order cf-loom names them; one cf-loom
- * resolves sits where the declaring Definitions Package would have declared it.
- */
-export function resolvedStandards({
-  allPackages,
-  standardRejections,
-}: Pick<Declarations, 'allPackages' | 'standardRejections'>): readonly ResolvedStandard[] {
-  const declaring = allPackages.find(({ definitions }) =>
-    Object.values(definitions.standardRejections ?? {}).some(
-      (declaration) => declaration !== undefined,
-    ),
-  );
-  return standardRejectionNames.map((name) => {
-    const declared = standardRejections.find((located) => located.name === name);
-    const defaults = standardRejectionDefaults[name];
-    return {
-      name,
-      at: declared?.at ?? [...(declaring?.at ?? []), 'standardRejections', name],
-      code: textOf(declared?.declaration.code ?? defaults.code),
-      status: declared?.declaration.status ?? defaults.status,
-      message: textOf(declared?.declaration.message ?? defaults.message),
-      declared,
-    };
-  });
-}
-
-/**
- * The code, status and message of each Standard Rejection a valid root resolves, as `serve`
- * answers them; a valid root's statuses are the ones the type allows.
- */
-export function standardRejectionsOf(root: Contract): StandardRejections {
-  const resolved = resolvedStandards(declarationsOf(root));
-  const entries = resolved.map(({ name, code, status, message }) => [
-    name,
-    { code, status, message },
-  ]);
-  return Object.fromEntries(entries) as StandardRejections;
 }
 
 /** Each Standard Rejection resolves to a code of its own; the ones after the first sharing a code fail. */

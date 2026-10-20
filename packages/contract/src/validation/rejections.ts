@@ -1,9 +1,17 @@
 import { isRejectionStatus, isReservedCode } from '../declarations/index.ts';
 import type { Path, SchemaNode } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
+import {
+  type Declarations,
+  isMissing,
+  isWithoutValue,
+  type LocatedCode,
+  type LocatedRejection,
+  type ResolvedStandard,
+  resolvedStandards,
+  slotAt,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { LocatedCode, LocatedRejection } from './located.ts';
-import { slotAt } from './parts.ts';
 import type { Nodes } from './schemas.ts';
 import { shapeKey } from './shapes.ts';
 import {
@@ -11,12 +19,9 @@ import {
   guardStandardFailures,
   listedStandardFailures,
   onceFailures,
-  type ResolvedStandard,
   redefinitionFailures,
-  resolvedStandards,
   standardStatusFailures,
 } from './standard-codes.ts';
-import { isMissing, isWithoutValue, textOf } from './written.ts';
 
 /** The rules on Rejections and codes that read declarations alone. */
 export function rejectionFailures(declarations: Declarations): readonly DeclarationFailure[] {

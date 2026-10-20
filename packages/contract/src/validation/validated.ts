@@ -1,16 +1,17 @@
 import type { Definitions } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
-import type {
-  LocatedDefinitions,
-  LocatedDependencies,
-  LocatedEndpoint,
-  LocatedGuard,
-  LocatedRejection,
-  Root,
-} from './located.ts';
-import { type ResolvedStandard, resolvedStandards } from './standard-codes.ts';
-import { listOf } from './written.ts';
+import {
+  type Declarations,
+  type LocatedDefinitions,
+  type LocatedDependencies,
+  type LocatedEndpoint,
+  type LocatedGuard,
+  type LocatedRejection,
+  listOf,
+  type ResolvedStandard,
+  type Root,
+  resolvedStandards,
+} from '../written/index.ts';
 
 /**
  * A Guard of a valid root, whether the root reaches it, and the listed Definitions Package that

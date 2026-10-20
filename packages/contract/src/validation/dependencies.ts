@@ -1,9 +1,15 @@
 import { isEndpoint, isEvent } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
+import {
+  type Declarations,
+  entriesOf,
+  isPlainObject,
+  type LocatedDependencies,
+  partOf,
+  type Root,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { LocatedDependencies, Root } from './located.ts';
-import { entriesOf, isPlainObject, partOf, textOf } from './written.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';
 

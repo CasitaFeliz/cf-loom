@@ -5,7 +5,7 @@ import {
   identityOf,
   type LocatedEndpoint,
   paramNamesOf,
-} from '../validation/index.ts';
+} from '../written/index.ts';
 import { codeOfStandard, sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
 import { deprecationOf, type Stamping } from './deprecation.ts';

@@ -1,9 +1,8 @@
 import type { Contract, Endpoint, Guard } from '../declarations/index.ts';
 import { isEndpoint, isGuard } from '../declarations/index.ts';
 import { type ObjectNode, walkSchemas } from '../walker/index.ts';
-import { declarationsOf } from './declarations.ts';
+import { declarationsOf, type ObjectPart } from '../written/index.ts';
 import type { Failure } from './failures.ts';
-import type { ObjectPart } from './parts.ts';
 import { paramsFailures } from './paths.ts';
 import {
   failuresAt,

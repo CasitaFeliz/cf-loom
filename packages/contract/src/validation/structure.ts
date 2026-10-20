@@ -8,10 +8,9 @@ import {
   isStandardRejection,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Declarations } from './declarations.ts';
+import { type Declarations, isPlainObject, listOf, textOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { type Readable, readableOf } from './fields.ts';
-import { isPlainObject, listOf, textOf } from './written.ts';
 
 /**
  * A field that holds a list of declarations: where it sits, what it holds, and what belongs in it;

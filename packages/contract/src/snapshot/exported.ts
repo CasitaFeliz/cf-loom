@@ -1,5 +1,6 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { identityOf, type TextPartNodes } from '../validation/index.ts';
+import type { TextPartNodes } from '../validation/index.ts';
+import { identityOf } from '../written/index.ts';
 import type { EndpointSnapshot, ExportedSnapshot } from './types.ts';
 
 /** A Provider as a Dependency carries it: its name and the Snapshot its Contract Package exports. */

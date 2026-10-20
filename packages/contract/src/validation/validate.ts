@@ -6,17 +6,15 @@ import {
   openIntersectionsOf,
   walkSchemas,
 } from '../walker/index.ts';
-import { type Declarations, declarationsOf } from './declarations.ts';
+import { type Declarations, declarationsOf, isReadShapePart, type Root } from '../written/index.ts';
 import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
-import type { Root } from './located.ts';
 import { nameFailures } from './name-grammars.ts';
 import { groupFailures, packageNameFailures, uniquenessFailures } from './names.ts';
-import { isReadShapePart } from './parts.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import {

@@ -1,5 +1,6 @@
 import type { Definitions } from '../declarations/index.ts';
-import type { ResolvedStandard, ValidatedSchemas } from '../validation/index.ts';
+import type { ValidatedSchemas } from '../validation/index.ts';
+import type { ResolvedStandard } from '../written/index.ts';
 
 /**
  * A Definitions Package a Contract lists, as installed where its Snapshot is built: the package

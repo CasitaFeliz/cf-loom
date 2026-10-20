@@ -3,8 +3,9 @@ import {
   type StandardRejectionName,
   standardRejectionNames,
 } from '../declarations/index.ts';
-import type { ResolvedStandard, ValidatedCode } from '../validation/index.ts';
+import type { ValidatedCode } from '../validation/index.ts';
 import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
+import type { ResolvedStandard } from '../written/index.ts';
 import type { ResolvedDefinitions, SnapshotSources } from './context.ts';
 import { listedOriginOf, standardOriginOf } from './origins.ts';
 import type {

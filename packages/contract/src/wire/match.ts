@@ -1,4 +1,4 @@
-import type { PathSegment } from '../validation/index.ts';
+import type { PathSegment } from '../written/index.ts';
 import type { TextSource } from './text-parts.ts';
 import { isSegmentText, segmentTextOf } from './url-text.ts';
 
