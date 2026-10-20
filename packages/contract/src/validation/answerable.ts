@@ -49,6 +49,17 @@ export function resolutionOf(
   return { code, status, message };
 }
 
+/** Every Rejection an Endpoint answers, by the code it resolves to, so a received code finds it. */
+export function answerableByCodeOf(
+  endpoint: Endpoint,
+  standards: StandardRejections,
+): ReadonlyMap<string, AnswerableRejection> {
+  const answerable = answerableRejectionsOf(endpoint);
+  return new Map(
+    answerable.map((rejection) => [resolutionOf(rejection, standards).code, rejection]),
+  );
+}
+
 function distinct(rejections: readonly unknown[]): readonly AnswerableRejection[] {
   return [...new Set(rejections.filter(isAnswerable))];
 }

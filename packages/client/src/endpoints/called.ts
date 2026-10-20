@@ -1,11 +1,9 @@
 import type { Dependencies, Endpoint, StandardRejections } from '@casitafeliz/loom-contract';
 import {
   type AnswerableRejection,
-  answerableRejectionsOf,
-  type EndpointSnapshot,
-  identityOf,
+  answerableByCodeOf,
+  exportedEntryOf,
   type ObjectNode,
-  resolutionOf,
 } from '@casitafeliz/loom-contract/internal';
 
 /** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
@@ -37,28 +35,15 @@ export type CalledEndpoint = {
 
 /** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */
 export function calledEndpointOf(endpoint: Endpoint, providing: Providing): CalledEndpoint {
-  const entry = snapshotEntryOf(endpoint, providing);
+  const entry = exportedEntryOf(providing, endpoint);
   const standards = providing.standardRejections;
-  const rejections = answerableRejectionsOf(endpoint).map(
-    (rejection) => [resolutionOf(rejection, standards).code, rejection] as const,
-  );
   return {
     provider: providing.provider,
     name: endpoint.name,
     endpoint,
     inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),
     successHeaders: entry.success.headers ?? undefined,
-    rejectionsByCode: new Map(rejections),
+    rejectionsByCode: answerableByCodeOf(endpoint, standards),
     standards,
   };
-}
-
-/** An Endpoint's entry in its Provider's exported Snapshot, which every exported Endpoint has. */
-function snapshotEntryOf(endpoint: Endpoint, providing: Providing): EndpointSnapshot {
-  const identity = identityOf(endpoint.method, endpoint.path);
-  const entry = providing.exportedSnapshot.endpoints[identity];
-  if (entry === undefined) {
-    throw new Error(`The exported Snapshot of ${providing.provider} has no ${identity}`);
-  }
-  return entry;
 }

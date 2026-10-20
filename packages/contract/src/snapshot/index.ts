@@ -1,5 +1,7 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
 export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
+export type { Providing } from './exported.ts';
+export { exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './readings.ts';
 export { isExportedEndpoint, isLive, ownRejectionsOf } from './readings.ts';

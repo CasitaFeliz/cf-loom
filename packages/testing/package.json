@@ -25,6 +25,7 @@
     "@casitafeliz/loom-contract": "workspace:^",
     "@casitafeliz/loom-handlers": "workspace:^",
     "@casitafeliz/loom-messaging": "workspace:^",
+    "@casitafeliz/loom-server": "workspace:^",
     "zod": "catalog:"
   },
   "peerDependencies": {

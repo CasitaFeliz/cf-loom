@@ -5,8 +5,8 @@ export const schemaModes = ['declared', 'reader'] as const;
 
 /**
  * How a generated schema reads a value: `declared`, as the author wrote it, which writers and
- * the Service reading its Input use; or `reader`, every object open and every Open Enum and Open
- * Union with its Unknown case, which whoever reads a Success, a Rejection body or a Message uses.
+ * the Service reading its Input use; or `reader`, every object open and every Open Enum with its
+ * Unknown case, which whoever reads a Success, a Rejection body or a Message uses.
  */
 export type SchemaMode = (typeof schemaModes)[number];
 

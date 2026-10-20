@@ -4,7 +4,7 @@ import {
   headerTextsOf,
   type InputIssue,
   internalError,
-  invalidInputBodyOf,
+  invalidInputResponseOf,
   isInputPart,
   rejectionResponseOf,
   reservedResponseOf,
@@ -87,8 +87,7 @@ export function answeredOfInvalidInput(
     const servedFault = { ...faultedBy, kind: 'runtime-bug' as const, issues: runtimeIssues };
     return { kind: 'fault', response: runtimeBugResponse(), servedFault };
   }
-  const body = invalidInputBodyOf(issues.filter(isInputIssue));
-  const response = rejectionResponseOf({ ...standards.invalidInput, body });
+  const response = invalidInputResponseOf(issues.filter(isInputIssue), standards);
   return { kind: 'rejection', response };
 }
 

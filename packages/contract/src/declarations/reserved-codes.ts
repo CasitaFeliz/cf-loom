@@ -8,3 +8,8 @@ export const reservedCodes = [
 
 /** A code cf-loom answers outside the Contract, as a Fault. */
 export type ReservedCode = (typeof reservedCodes)[number];
+
+/** Whether a value is a code cf-loom answers outside the Contract. */
+export function isReservedCode(code: unknown): code is ReservedCode {
+  return reservedCodes.some((reserved) => reserved === code);
+}

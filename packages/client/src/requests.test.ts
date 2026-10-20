@@ -192,6 +192,14 @@ describe('what a call sends', () => {
     expect(withFragment).toThrow(/query or a fragment/);
   });
 
+  test('a baseUrl with a username or a password is a bug, thrown when the client is created', () => {
+    const withUsername = () => client(ordersDeps, { baseUrl: 'http://ann@orders.test/' });
+    const withPassword = () => client(ordersDeps, { baseUrl: 'http://:secret@orders.test/' });
+
+    expect(withUsername).toThrow(/a username or a password/);
+    expect(withPassword).toThrow(/a username or a password/);
+  });
+
   test('a baseUrl ending in an empty query or fragment is refused too', () => {
     const emptyQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?' });
     const emptyFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#' });

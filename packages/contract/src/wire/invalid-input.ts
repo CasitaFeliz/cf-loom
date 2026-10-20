@@ -1,6 +1,21 @@
 import { z } from 'zod';
-import { inputIns, issueCodes } from '../declarations/index.ts';
-import { type InputIn, type InputPart, type Issue, inOf } from '../validation/index.ts';
+import type * as core from 'zod/v4/core';
+import {
+  inputIns,
+  isStandardRejection,
+  issueCodes,
+  type StandardRejections,
+} from '../declarations/index.ts';
+import { openEnumReader } from '../open/index.ts';
+import {
+  type AnswerableRejection,
+  type InputIn,
+  type InputPart,
+  type Issue,
+  inOf,
+  schemaOf,
+} from '../validation/index.ts';
+import { rejectionResponseOf } from './responses.ts';
 
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
 export type InputIssue = Issue & { readonly part: InputPart };
@@ -22,9 +37,12 @@ export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputB
   };
 }
 
-/** An Open Enum's reader: a value it does not know arrives as its Unknown case, `{ unknown }`. */
-function openEnumReaderOf<const Values extends readonly [string, ...string[]]>(values: Values) {
-  return z.union([z.enum(values), z.string().transform((unknown) => ({ unknown }))]);
+/** The response of the invalid-input Rejection: the Provider's code, status and message, cf-loom's body. */
+export function invalidInputResponseOf(
+  issues: readonly InputIssue[],
+  standards: StandardRejections,
+): Response {
+  return rejectionResponseOf({ ...standards.invalidInput, body: invalidInputBodyOf(issues) });
 }
 
 /**
@@ -34,9 +52,9 @@ function openEnumReaderOf<const Values extends readonly [string, ...string[]]>(v
 export const invalidInputBodyReader = z.object({
   issues: z.array(
     z.object({
-      in: openEnumReaderOf(inputIns),
+      in: openEnumReader(inputIns),
       path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReaderOf(issueCodes),
+      code: openEnumReader(issueCodes),
       message: z.string(),
     }),
   ),
@@ -44,3 +62,11 @@ export const invalidInputBodyReader = z.object({
 
 /** The invalid-input body as a Caller receives it, a part or code it does not know as `{ unknown }`. */
 export type ReceivedInvalidInputBody = z.output<typeof invalidInputBodyReader>;
+
+/** The schema a Rejection's body is read with: cf-loom's reader for invalid input, else its declared one. */
+export function rejectionBodyReaderOf(rejection: AnswerableRejection): core.$ZodType | undefined {
+  if (!isStandardRejection(rejection)) {
+    return schemaOf(rejection, 'body');
+  }
+  return rejection.name === 'invalidInput' ? invalidInputBodyReader : undefined;
+}

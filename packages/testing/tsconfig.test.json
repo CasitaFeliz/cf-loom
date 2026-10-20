@@ -19,6 +19,9 @@
     },
     {
       "path": "../messaging/tsconfig.build.json"
+    },
+    {
+      "path": "../server/tsconfig.build.json"
     }
   ]
 }

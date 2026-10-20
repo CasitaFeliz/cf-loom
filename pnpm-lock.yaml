@@ -286,6 +286,9 @@ importers:
       '@casitafeliz/loom-messaging':
         specifier: workspace:^
         version: link:../messaging
+      '@casitafeliz/loom-server':
+        specifier: workspace:^
+        version: link:../server
       zod:
         specifier: 'catalog:'
         version: 4.6.7

@@ -97,7 +97,7 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
 /**
  * An enum; values that are not all strings are literals. An Open Enum's reader reads a declared
  * value as itself and any other string as its Unknown case, `{ unknown: 'refunded' }`, so
- * TypeScript tells them apart.
+ * TypeScript tells them apart, and writes that case back as its string.
  */
 function enumOf(node: EnumNode, writing: Writing): string {
   const values = node.values.map(literalOf).join(', ');
@@ -105,11 +105,9 @@ function enumOf(node: EnumNode, writing: Writing): string {
   if (!node.open) {
     return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
   }
-  if (writing.mode === 'reader') {
-    return `z.union([z.enum([${values}]), z.string().transform((unknown) => ({ unknown }))])`;
-  }
   writing.needs.modules.add('loom');
-  return `loom.openEnum([${values}])`;
+  const call = writing.mode === 'reader' ? 'openEnumReader' : 'openEnum';
+  return `loom.${call}([${values}])`;
 }
 
 /** An object as zod declares it; a strict one is the record it was walked from. */

@@ -13,6 +13,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal/index.d.ts",
+      "default": "./dist/internal/index.js"
     }
   },
   "files": [

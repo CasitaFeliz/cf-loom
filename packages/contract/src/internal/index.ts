@@ -4,6 +4,7 @@ export {
   isEndpoint,
   isGuard,
   isRejection,
+  isReservedCode,
   isStamp,
   isStandardRejection,
   reservedCodes,
@@ -11,7 +12,7 @@ export {
   standardRejectionNames,
 } from '../declarations/index.ts';
 export type { Parsed, ParsedParts, SchemaIssue } from '../issues/index.ts';
-export { parsedPartsOf, parseValue } from '../issues/index.ts';
+export { demandIssuesOf, encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
 export { isOpen } from '../open/index.ts';
 export type {
   ApplicationSnapshot,
@@ -39,12 +40,14 @@ export type {
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
+  exportedEntryOf,
   hashedTextOf,
   isExportedEndpoint,
   isLive,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,
+  textPartNodesOf,
 } from '../snapshot/index.ts';
 export type {
   AnswerableRejection,
@@ -78,6 +81,7 @@ export type {
   WalkedTextParts,
 } from '../validation/index.ts';
 export {
+  answerableByCodeOf,
   answerableRejectionsOf,
   attachedGuardsOf,
   attachmentsOf,
@@ -87,7 +91,6 @@ export {
   failureLineOf,
   fieldsOf,
   follows,
-  identityOf,
   inOf,
   inputParts,
   isInputPart,
@@ -101,6 +104,7 @@ export {
   schemaOf,
   standardRejectionsOf,
   successParts,
+  upperSnakeCase,
   validateContract,
   walkedTextPartsOf,
 } from '../validation/index.ts';
@@ -130,6 +134,7 @@ export {
   childrenOf,
   hashPartsOf,
   isHashFormat,
+  isJsonValue,
   walkSchemas,
 } from '../walker/index.ts';
 export type {
@@ -168,6 +173,7 @@ export {
   internalError,
   invalidInputBodyOf,
   invalidInputBodyReader,
+  invalidInputResponseOf,
   isHeaderText,
   isJsonContentType,
   isQueryText,
@@ -179,6 +185,7 @@ export {
   notJsonBodyIssue,
   receivedBodyOf,
   receivedEnvelopeOf,
+  rejectionBodyReaderOf,
   rejectionEnvelopeOf,
   rejectionResponseOf,
   reservedFaults,

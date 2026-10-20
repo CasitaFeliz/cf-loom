@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { walkSchemas } from '@casitafeliz/loom-contract/internal';
+import { encodedValueOf, walkSchemas } from '@casitafeliz/loom-contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
@@ -374,6 +374,43 @@ describe('cf-loom package: the schemas it writes', () => {
     const parsed = read({ ...sample, status: 'refunded' });
 
     expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
+  });
+
+  test('the Success reader writes an Unknown case back as its text, and refuses one holding a declared value', () => {
+    const status = echo.success.body.shape['status'];
+    if (status === undefined) {
+      throw new Error('The fixture has no status');
+    }
+
+    const written = [
+      encodedValueOf(status, { unknown: 'refunded' }),
+      encodedValueOf(status, { unknown: 'paid' }),
+    ];
+
+    expect(written).toMatchObject([
+      { kind: 'value', value: 'refunded' },
+      { kind: 'issues', issues: [{ path: [], code: 'invalid_value' }] },
+    ]);
+  });
+
+  test('a recursive def’s reader writes its Unknown cases back as their text', () => {
+    const forest = echo.success.body.shape['forest'];
+    if (forest === undefined) {
+      throw new Error('The fixture has no forest');
+    }
+    const read = { ...sample.forest, status: { unknown: 'new' } };
+
+    const written = encodedValueOf(forest, read);
+
+    expect(written).toEqual({ kind: 'value', value: { ...sample.forest, status: 'new' } });
+  });
+
+  test('every Open Enum reader of the package and of generate is written as loom.openEnumReader', () => {
+    const generated = readFileSync(join(folder, 'project', 'src', 'readers.generated.ts'), 'utf8');
+    const written = [...filesUnder(join(folder, 'contract-shapes-service', 'src')), generated];
+
+    expect(written.filter((text) => text.includes('.transform('))).toEqual([]);
+    expect(written.filter((text) => text.includes('loom.openEnumReader(['))).not.toEqual([]);
   });
 
   test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {

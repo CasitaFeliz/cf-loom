@@ -1,4 +1,4 @@
-import { type ReservedCode, reservedCodes } from '../declarations/index.ts';
+import { isReservedCode, type ReservedCode } from '../declarations/index.ts';
 import { type BodyMessage, receivedBodyOf } from './body.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
@@ -103,7 +103,7 @@ export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope
   const fault = fieldOf(received, 'fault');
   if (isFaultShape(fault)) {
     const { committed, retryable, message } = fault;
-    const code = reservedCodeOf(fault.code);
+    const code = isReservedCode(fault.code) ? fault.code : undefined;
     return faultEnvelopeOf(
       code === undefined
         ? { committed, retryable, message }
@@ -135,10 +135,6 @@ function isFaultShape(value: unknown): value is FaultFields {
     typeof fieldOf(value, 'retryable') === 'boolean' &&
     typeof fieldOf(value, 'message') === 'string'
   );
-}
-
-function reservedCodeOf(code: unknown): ReservedCode | undefined {
-  return reservedCodes.find((reserved) => reserved === code);
 }
 
 /** A field of a received JSON object; none for anything that is no object, a list included. */

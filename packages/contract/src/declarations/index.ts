@@ -40,7 +40,7 @@ export {
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
-export { reservedCodes } from './reserved-codes.ts';
+export { isReservedCode, reservedCodes } from './reserved-codes.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
