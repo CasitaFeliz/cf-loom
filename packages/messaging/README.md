@@ -1,31 +1,44 @@
 # @cf-loom/messaging
 
-`messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close`; the errors `PublishError` and `InvalidMessageError`; and the `Broker` type an adapter implements (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream and `@cf-loom/messaging/memory` an in-memory one for tests and local development (see [Adapters](#adapters)). What the broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Pruning](#pruning); how a Message travels is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`, which connects a Contract's messaging through a broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `PublishError` and `InvalidMessageError`; and its types, the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream and `@cf-loom/messaging/memory` an in-memory one for tests and local development (see [Adapters](#adapters)). What the broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Pruning](#pruning); how a Message travels is in [Over the broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
 ## Connecting
 
-The EventPublisher and CommandSender are created once, in their own module, and imported where needed:
+`messaging(contract, broker)` connects through the broker and resolves to one connection's `Messaging`, `{ publisher, sender, consume, close }`; a broker that fails to connect rejects it. The Service keeps it in its own module, written by hand, never generated, as a Consumer keeps its client:
 
 ```ts
 // src/messaging.ts
-import { messaging } from '@cf-loom/messaging';
+import { type Broker, type Messaging, messaging } from '@cf-loom/messaging';
 import { contract } from './contract/index.ts';
 
-export const { publisher, sender, consume, connect, close } = messaging(contract);
+let started: Messaging<typeof contract> | undefined;
+
+export async function startMessaging(broker: Broker): Promise<Messaging<typeof contract>> {
+  started = await messaging(contract, broker);
+  return started;
+}
+
+export function ordersMessaging(): Messaging<typeof contract> {
+  if (started === undefined) {
+    throw new Error('startMessaging() was not called');
+  }
+  return started;
+}
 ```
 
-`messaging` takes no broker: `connect(broker)` binds one, so `src/main.ts` connects the JetStream adapter and a test connects the in-memory one (see [In memory](#in-memory)). Creating `messaging` opens no connection. Publishing, sending or consuming before `connect` throws, and so does connecting while connected or consuming twice on one connection; a `connect` whose broker fails leaves it not connected, and `close()` returns to not connected, or does nothing when not connected, so a test connects in its setup and closes in its teardown. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [Applying the plan](#applying-the-plan)), fails there rather than inside a request, and calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection: while it waits, publishing and sending still work, so a Handler running can finish, and a Message delivered meanwhile is left pending, its Handler never run. Broker options come from the Service; cf-loom has no defaults for them.
+`src/main.ts` starts it with the JetStream adapter (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README), a test with the in-memory one (see [In memory](#in-memory)), and Handlers reach it through `ordersMessaging()`. Each `messaging()` is its own connection: connecting again is calling it again. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [Applying the plan](#applying-the-plan)), fails there rather than inside a request. `consume(handlers)` hands the broker its consumers once per `Messaging`: consuming twice throws, and a `consume` the broker rejects may be called again. The Service calls `close()` at shutdown, which stops consuming, waits for the Handlers running and closes the connection: while it waits, publishing and sending still work, so a Handler running can finish, a Message delivered meanwhile is left pending, its Handler never run, and consuming throws. Calling `close()` again returns the same promise; once it is closed, publishing, sending and consuming throw `messaging is closed`. Broker options come from the Service; cf-loom has no defaults for them.
 
-`messaging(contract, { onServiceFault })` receives what Message Handlers end or fail with, a `ConsumedFault` naming the Subscription, or the Command's Message Version by its identity (`notify-on-settled`, `ChargeCard@1`), with the Message's `subject`, `messageId` and `factId`: `invalid-body`, a Message ended for failing its schema, with its `issues`; `returned`, a Fault with `retryable: false`; and `thrown`, anything thrown, with its `cause`. Without an `onServiceFault`, they go to the console, one line per issue, `<subscription|Name@n> <subject> <messageId>: body.<path> <code>: <message>`, or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+`messaging(contract, broker, { onServiceFault })` receives what Message Handlers end or fail with, a `ConsumedFault` whose `element` names the Subscription, or the Command's Message Version by its identity (`notify-on-settled`, `ChargeCard@1`), with the Message's `subject`, `messageId` and `factId`: `invalid-body`, a Message ended for failing its schema, with its `issues`; `returned`, a Fault with `retryable: false`, as `fault`; and `thrown`, anything thrown, as `cause`. Without an `onServiceFault`, they go to the console, one line per issue, `<element> <subject> <messageId> <factId>: body.<path> <code>: <message>`, or one line, `<element> <subject> <messageId> <factId>: ` and the Fault's message or `the Handler threw`, with its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
 ## Publishing and sending
 
 ```ts
 // in any Handler
-import { publisher, sender } from '../../messaging.ts';
+import { ordersMessaging } from '../../messaging.ts';
 
+const { publisher, sender } = ordersMessaging();
 await publisher.publish('OrderCreated', {
   v1: { orderId, total: total.amount },   // Deprecated, still published
   v2: { orderId, total },
@@ -33,7 +46,7 @@ await publisher.publish('OrderCreated', {
 await sender.send('ChargeCard', { orderId });
 ```
 
-`publish` takes an Event's name and one body for each of its Active and Deprecated versions: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it throws `InvalidMessageError`, its `issues` at `body`, and nothing is sent. `publish` sends the versions in version order.
+`publish` takes an Event's name and one body for each of its Active and Deprecated versions: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it throws `InvalidMessageError`, whose `invalid` lists each such version by its identity with its `issues` at `body`, and nothing is sent. `publish` sends the versions in version order.
 
 All the Messages of one call share a Fact id, which every Message Handler receives to recognize a fact it already handled. The Fact id is random unless the calling code passes one, a non-empty string:
 
@@ -72,13 +85,13 @@ An adapter is a `Broker` (see [Types](#types)): `connect` receives the Service's
 
 ```ts
 import { memory } from '@cf-loom/messaging/memory';
-import { connect, consume, close } from '../src/messaging.ts';
+import { startMessaging } from '../src/messaging.ts';
 import handlers from '../src/handlers.generated.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 
 const broker = memory();
-await connect(broker);
-await consume(handlers);
+const running = await startMessaging(broker);
+await running.consume(handlers);
 
 await createOrderHandler({ body: newOrder }, { apiKey: { callerId: 'c-1' } });
 await broker.settled();   // OrderCreated v1 and v2 published, ChargeCard v1 sent and handled
@@ -87,7 +100,7 @@ broker.messages;          // each with its subject, body, Fact id, broker messag
 await broker.deliver(paymentsDeps.events.paymentSettledV1, body, { factId: 'pay-1' });
 // → 'acked' | 'pending' | 'ended'
 
-await close();
+await running.close();
 ```
 
 - **Delivery.** What the Service publishes or sends is delivered to its consumed Subscriptions and CommandHandlers, acknowledged or ended as `consume` does. A Message nothing consumes, because no Subscription takes the Event or its Handler is a stub, is only recorded.
@@ -96,7 +109,7 @@ await close();
 - **`deliver(element, body, meta)`** delivers one Message now, whatever was delivered before, so a test can deliver the same fact twice to check that a Handler is safe to run again. Its body is written as a Subscriber reads it, like `fakeEvent`'s (see [Faking Providers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/testing/README.md#faking-providers) in the testing README), its broker message id defaults to `<Name>.v<version>:<factId>`, and `meta.headers` are the transport headers the Handler receives. Delivering to an Element nothing consumes throws.
 - **Redelivery.** The adapter never redelivers on its own: a Message whose Handler threw or returned a retryable Fault is listed in `broker.pending`, and a test retries it with `deliver`.
 - **Duplicates.** A repeated broker message id from `publish` or `send` is dropped, for the adapter's whole lifetime.
-- **Not a broker emulator.** It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`; tests against a real broker remain the organization's. One `memory()` serves one `messaging`: connecting it to a second throws.
+- **Not a broker emulator.** It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`; tests against a real broker remain the organization's. One `memory()` serves one connection: a second `messaging()` through it rejects.
 
 ## The broker plan
 
@@ -141,7 +154,7 @@ await broker.apply(plan, {
 });
 ```
 
-Without `prune`, `apply` only creates streams and durable consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs: applying without `prune` is safe before the new Release deploys and while the old one runs. A Release fails fast when the plan was not applied: `connect` checks that the Service's stream covers every subject it publishes or sends, `consume` that the durable consumer of every Subscription and Command Version it serves exists, one with a stubbed Handler included, and each fails with an error naming what is missing.
+Without `prune`, `apply` only creates streams and durable consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs: applying without `prune` is safe before the new Release deploys and while the old one runs. A Release fails fast when the plan was not applied: `messaging()` checks that the Service's stream covers every subject it publishes or sends, `consume` that the durable consumer of every Subscription and Command Version it serves exists, one with a stubbed Handler included, and each fails with an error naming what is missing.
 
 ## Pruning
 
@@ -149,14 +162,14 @@ Pruning deletes the durable consumers of removed Subscriptions and Retired Comma
 
 ## Types
 
-- `Messaging`, `{ publisher, sender, consume, connect, close }`: what `messaging()` returns.
+- `Messaging`, `{ publisher, sender, consume, close }`: one connection's messaging, what `messaging()` resolves to.
 - `MessagingOptions`, `{ onServiceFault? }`: what is operational about messaging and no part of the Contract.
 - `EventPublisher` and `CommandSender`: `publish` and `send`, typed by the Contract's Events and Commands.
 - `MessageOptions`, `{ factId?, headers? }`: what a `publish` or `send` call may add.
 - `ConsumedFault`: what `onServiceFault` receives, `invalid-body`, `returned` or `thrown`.
 - `PublishError`, with `factId` and `sent`: what `publish` throws when a version could not be sent.
-- `InvalidMessageError`, with `issues`: what `publish` and `send` throw given a body that breaks its schema.
-- `Broker`, `{ connect }`: what `connect` takes, an adapter's or the organization's own; `BrokerService`, `{ name }`, what it tells the broker.
+- `InvalidMessageError`, with `invalid`, each version's `identity` and `issues`: what `publish` and `send` throw given a body that breaks its schema.
+- `Broker`, `{ connect }`: what `messaging()` connects through, an adapter's or the organization's own; `BrokerService`, `{ name }`, what it tells the broker.
 - `BrokerConnection`, `{ publish, consume, close }`: one connection to a broker.
 - `OutgoingMessage`, `{ subject, messageId, factId, headers, body }`: a Message as it leaves, its body the UTF-8 JSON bytes.
 - `BrokerConsumer`, `{ durable, stream, subject, element, reader, receive }`: the durable consumer of a Subscription or Command Version whose Handler is pulled, with the Element it consumes and the Reader its Handler reads with.
