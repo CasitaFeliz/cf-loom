@@ -64,6 +64,8 @@ contract-package/                          the Contract Package cf-loom package 
 
 File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
+A Definitions Package is laid out the same way under `src/definitions/`: its root `index.ts` exports `definitions` and every declaration Services import, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services list.
+
 The examples in the package READMEs follow this layout and leave out imports of `zod`, `@cf-loom/contract` and sibling files.
 
 ### Declare

@@ -56,7 +56,7 @@ A Dependency of an Application on an Endpoint that is not Public, or on any Even
 
 ## Definitions Packages
 
-A Definitions Package lives in its own repository:
+A Definitions Package is a package of its own, which may be a repository of its own (recommended) or one package of a monorepo:
 
 ```ts
 // definitions/src/definitions/index.ts, published as @org/definitions
