@@ -1,7 +1,7 @@
 import { reachedDefsOf, type SchemaNode } from '../walker/index.ts';
+import { isLive } from './lifecycle.ts';
 import { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 import { reachedGuardNamesOf } from './reached-guards.ts';
-import { isLive } from './readings.ts';
 import type {
   CodeSnapshot,
   EndpointSnapshot,
@@ -15,16 +15,15 @@ import type {
  * Retired, and the Guards, codes and recursive defs they reach, keyed and ordered as in the Snapshot.
  */
 export function exportedSnapshotOf(snapshot: ServiceSnapshot): ExportedSnapshot {
-  const exported = Object.entries(snapshot.endpoints).filter(([, entry]) =>
-    isExportedEndpoint(entry),
+  const endpoints = Object.fromEntries(
+    Object.entries(snapshot.endpoints).filter(([, endpoint]) => isExportedEndpoint(endpoint)),
   );
-  const endpoints = keptOf(snapshot.endpoints, new Set(exported.map(([id]) => id)));
-  const entries = Object.values(endpoints);
-  const attached = entries.flatMap(({ guards }) => guards.map(({ guard }) => guard));
+  const exportedEndpoints = Object.values(endpoints);
+  const attached = exportedEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
   const guards = keptOf(snapshot.guards, reachedGuardNamesOf(attached, snapshot.guards));
-  const codes = keptOf(snapshot.codes, reachedCodesOf(entries, guards, snapshot));
+  const codes = keptOf(snapshot.codes, reachedCodesOf(exportedEndpoints, guards, snapshot));
   const nodes = [
-    ...entries.flatMap(endpointNodesOf),
+    ...exportedEndpoints.flatMap(endpointNodesOf),
     ...Object.values(guards).flatMap(guardNodesOf),
     ...Object.values(codes).flatMap(codeNodesOf),
   ];

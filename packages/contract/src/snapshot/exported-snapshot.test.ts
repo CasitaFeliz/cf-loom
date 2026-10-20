@@ -147,18 +147,19 @@ describe('exportedSnapshotOf', () => {
   });
 
   test.each([
-    [1, ['g0', 'g1']],
-    [2, ['g0', 'g1', 'g2']],
-    [3, ['g0', 'g1', 'g2', 'g3']],
+    { reach: 'at depth 1', listed: { g0: ['g1'], g1: [] }, kept: ['g0', 'g1'] },
+    { reach: 'at depth 2', listed: { g0: ['g1'], g1: ['g2'], g2: [] }, kept: ['g0', 'g1', 'g2'] },
+    {
+      reach: 'at depth 3',
+      listed: { g0: ['g1'], g1: ['g2'], g2: ['g3'], g3: [] },
+      kept: ['g0', 'g1', 'g2', 'g3'],
+    },
+    { reach: 'round a cycle', listed: { g0: ['g1'], g1: ['g0'] }, kept: ['g0', 'g1'] },
   ])(
-    'a Guard reached through a reached Guard’s guards at depth %i is kept, even unattached',
-    (depth, kept) => {
-      const chain = Array.from({ length: depth + 1 }, (_, index) => `g${index}`);
+    'a Guard reached through a reached Guard’s guards $reach is kept, even unattached',
+    ({ listed, kept }) => {
       const guards = Object.fromEntries(
-        chain.map((name, index) => [
-          name,
-          aGuardEntry({ guards: chain.slice(index + 1, index + 2) }),
-        ]),
+        Object.entries(listed).map(([name, names]) => [name, aGuardEntry({ guards: names })]),
       );
       const endpoints = { 'GET /orders': attaching('g0') };
 
@@ -215,6 +216,22 @@ describe('exportedSnapshotOf', () => {
 
   test.each([
     [
+      'input.params',
+      {
+        endpoint: {
+          input: { params: anObjectWith(aRef('tree')), query: null, headers: null, body: null },
+        },
+      },
+    ],
+    [
+      'input.headers',
+      {
+        endpoint: {
+          input: { params: null, query: null, headers: anObjectWith(aRef('tree')), body: null },
+        },
+      },
+    ],
+    [
       'input.body',
       { endpoint: { input: { params: null, query: null, headers: null, body: aRef('tree') } } },
     ],
@@ -234,7 +251,11 @@ describe('exportedSnapshotOf', () => {
     ['a Guard’s context', { guard: { context: aRef('tree') } }],
     ['a Guard’s qualifier', { guard: { qualifier: aRef('tree') } }],
     [
-      'a Guard’s demands',
+      'a Guard’s demands headers',
+      { guard: { demands: { headers: anObjectWith(aRef('tree')), query: null } } },
+    ],
+    [
+      'a Guard’s demands query',
       { guard: { demands: { headers: null, query: anObjectWith(aRef('tree')) } } },
     ],
     ['a code’s body', { code: { body: aRef('tree') } }],
