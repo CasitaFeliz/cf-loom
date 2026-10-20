@@ -1,20 +1,13 @@
-import type { SchemaNode, ServiceSnapshot } from '@cf-loom/contract/internal';
-import { byCodePoint, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
+import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { type ExportedAt, rootPlaces } from '../loading/index.ts';
 import {
-  addModulesOf,
-  type DefUse,
   defIdentifierOf,
   defNamesLineOf,
-  defsCodeOf,
   type ImportLine,
   importedBindings,
   type Needs,
-  noNeeds,
-  reachedDefUsesOf,
   schemaImportsOf,
   sortedImportLinesOf,
-  zodExpressionOf,
 } from '../schema-code/index.ts';
 import {
   headerOf,
@@ -23,19 +16,21 @@ import {
   relativeSpecifierOf,
 } from '../source-text/index.ts';
 import {
-  byCommandName,
   collidingSubscriptionLineOf,
   type NamedInCode,
   pairingNameOf,
   readerNameOf,
 } from './code-names.ts';
 import type { MessageHandled } from './handled.ts';
+import {
+  type MessageVersion,
+  type Readable,
+  type ReaderSchemas,
+  readerSchemasOf,
+} from './reader-schemas.ts';
 
 /** The file of the Reader schemas of the Service's own Messages and of its pairings. */
 export const readersFile = 'src/readers.generated.ts';
-
-/** A Message Version by its name and version. */
-type MessageVersion = { readonly name: string; readonly version: number };
 
 /** The Event a Subscription receives: the Service's own, by name and version, or a Dependency's. */
 type ReceivedEvent =
@@ -64,77 +59,26 @@ export function pairingAtOf(handled: MessageHandled): ExportedAt {
   return { kind: 'file', path: readersFile, name: pairingNameOf(handled) };
 }
 
-/** An own Message Version a Reader is written for, by its kind's key in the Snapshot and identity. */
-type Readable = {
-  readonly kind: 'events' | 'commands';
-  readonly identity: string;
-  readonly message: MessageVersion;
-  readonly body: SchemaNode;
-};
-
 /**
  * The Reader schemas of the Service's own Events and Commands, and each Command's Message Version
  * and Subscription paired with the Reader its Handler reads, reached through the root.
  */
 export function readersTextOf(snapshot: ServiceSnapshot, lists: RootLists): ReadersText {
-  const needs = noNeeds();
-  const readables = readablesOf(snapshot);
-  const commands = readables
-    .filter(isCommandReadable)
-    .sort((left, right) => byCommandName(left.message, right.message));
-  const readers = readerLinesOf(readables, needs);
-  const defUses = reachedDefUsesOf(snapshot.defs, [...needs.defs.values()]);
+  const schemas = readerSchemasOf(snapshot);
   const subscriptions = Object.keys(snapshot.subscriptions);
-  const taken = takenNamesOf({ readables, commands, defUses });
-  const unnamed = defNamesLineOf(defUses) ?? collidingSubscriptionLineOf(taken, subscriptions);
+  const taken = takenNamesOf(schemas);
+  const unnamed =
+    defNamesLineOf(schemas.defUses) ?? collidingSubscriptionLineOf(taken, subscriptions);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
-  const defs = defsCodeOf(snapshot.defs, defUses);
-  addModulesOf(needs, defs.needs);
   const pairings = [
-    ...commandPairingLinesOf(commands, lists),
+    ...commandPairingLinesOf(schemas.commands, lists),
     ...subscriptionPairingLinesOf(subscriptions, lists),
   ];
-  const imports = importsOf(needs, pairings);
-  const body = bodyOf([defs.body, readers, pairings]);
+  const imports = importsOf(schemas.needs, pairings);
+  const body = bodyOf([schemas.defs, schemas.readers, pairings]);
   return { kind: 'text', text: moduleTextOf({ first: [headerOf('generate')], imports, body }) };
-}
-
-/** A Reader schema per own Message Version, recording what each needs imported. */
-function readerLinesOf(readables: readonly Readable[], needs: Needs): readonly string[] {
-  return readables.map(({ message, body }) => {
-    const reader = zodExpressionOf(body, { mode: 'reader', needs });
-    return `export const ${readerNameOf(message)} = ${reader};`;
-  });
-}
-
-/**
- * Every own Message Version a Reader is written for, in code point order of its Reader: each
- * Event that is not Retired, since no Subscription reads a Retired one, and each Command's, whose
- * Handler compiles as long as it is declared.
- */
-function readablesOf(snapshot: ServiceSnapshot): readonly Readable[] {
-  const events = Object.entries(snapshot.events).filter(([, event]) => isLive(event));
-  const readables = [
-    ...events.map(([identity, { body }]) => readableOf('events', identity, body)),
-    ...Object.entries(snapshot.commands).map(([identity, { body }]) =>
-      readableOf('commands', identity, body),
-    ),
-  ];
-  return readables.sort((left, right) =>
-    byCodePoint(readerNameOf(left.message), readerNameOf(right.message)),
-  );
-}
-
-function readableOf(kind: Readable['kind'], identity: string, body: SchemaNode): Readable {
-  return { kind, identity, message: nameAndVersionOf(identity), body };
-}
-
-function isCommandReadable(
-  readable: Readable,
-): readable is Readable & { readonly kind: 'commands' } {
-  return readable.kind === 'commands';
 }
 
 /** `withReader`, which pairs a declaration with its Reader, and the package it is imported from. */
@@ -147,15 +91,8 @@ const importedNames: readonly string[] = [
   ...Object.values(importedBindings),
 ];
 
-/** What the file declares beside its pairings of Subscriptions: its Readers, Commands and defs. */
-type Declared = {
-  readonly readables: readonly Readable[];
-  readonly commands: readonly Readable[];
-  readonly defUses: readonly DefUse[];
-};
-
 /** Every name the file declares or imports but the Subscriptions' pairings, with what it names. */
-function takenNamesOf({ readables, commands, defUses }: Declared): readonly NamedInCode[] {
+function takenNamesOf({ readables, commands, defUses }: ReaderSchemas): readonly NamedInCode[] {
   const imports = importedNames.map((code) => ({ code, names: `the import ${code}` }));
   const defs = defUses.map(({ id, mode }) => ({
     code: defIdentifierOf(id, mode),
