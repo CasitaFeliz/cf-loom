@@ -51,13 +51,19 @@ function hasFieldsOf(value: { readonly kind: BuiltKind }): boolean {
     case 'rejection':
       return 'rejection' in value;
     case 'fault':
-      return hasFaultFields(value);
+      return isFault(value);
   }
 }
 
-function hasFaultFields(value: object): boolean {
+/** Whether a value is a Fault: its kind with a valid `committed`, `retryable` and `message`. */
+export function isFault(value: unknown): value is Fault {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
   const committed: readonly unknown[] = committedValues;
   return (
+    'kind' in value &&
+    value.kind === 'fault' &&
     'committed' in value &&
     committed.includes(value.committed) &&
     'retryable' in value &&

@@ -89,6 +89,7 @@ function checkedValueOf(check: Checked<unknown>): unknown {
   return check.kind === 'value' ? check.value : undefined;
 }
 
-function issueAt(part: IssuePart, at: Path, issue: SchemaIssue): Issue {
+/** A schema's Issue placed at `at` inside its part. */
+export function issueAt(part: IssuePart, at: Path, issue: SchemaIssue): Issue {
   return { part, ...issue, path: [...at, ...issue.path] };
 }

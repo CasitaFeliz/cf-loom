@@ -1,4 +1,5 @@
 import type {
+  Command,
   ContextOf,
   Contract,
   DemandsOf,
@@ -7,6 +8,7 @@ import type {
   InputOf,
   QualifierOf,
   RequiredContextOf,
+  Subscription,
 } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { Admission, Outcome, ResolvedAdmission, ResolvedOutcome } from '../outcomes/index.ts';
@@ -39,14 +41,15 @@ export type EndpointHandler<Target extends Endpoint> = {
 
 /**
  * The Handler map `handlers.generated.ts` exports, as `serve` and `consume` take it: each Handler
- * by its name, known by the Endpoint or Guard it was written for, since its call signature is the
- * Service's own; and each Deprecated Endpoint's `deprecatedAt`, from the Snapshot.
+ * by its name, known by the Endpoint, Guard, Command or Subscription it was written for, since its
+ * call signature is the Service's own; and each Deprecated Endpoint's `deprecatedAt`, from the
+ * Snapshot.
  */
 export type HandlerMap = {
   readonly endpoints: Readonly<Record<string, { readonly element: Endpoint }>>;
   readonly guards: Readonly<Record<string, { readonly element: Guard }>>;
-  readonly commands: Readonly<Record<string, never>>;
-  readonly subscriptions: Readonly<Record<string, never>>;
+  readonly commands: Readonly<Record<string, { readonly element: Command }>>;
+  readonly subscriptions: Readonly<Record<string, { readonly element: Subscription }>>;
   readonly deprecatedAt: Readonly<Record<string, string>>;
 };
 

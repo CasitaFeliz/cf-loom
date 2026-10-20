@@ -1,17 +1,17 @@
-import type { Endpoint, Guard } from '@cf-loom/contract';
-import { type Fault, thrownFault } from '../outcomes/index.ts';
+import { type HandledElement, isMessageElement } from './elements.ts';
+import { elementNameOf } from './errors.ts';
 
-/** What an implementation returned: what it built, or the Fault for a value that is no Outcome. */
+/** What an implementation returned: what it built, or a `TypeError` naming a value it may not return. */
 export type Returned<Built> =
   | { readonly kind: 'built'; readonly built: Built }
-  | { readonly kind: 'thrown'; readonly fault: Fault };
+  | { readonly kind: 'not-built'; readonly cause: TypeError };
 
 /**
- * Runs an implementation and awaits what it built; a value that is not what its Endpoint or Guard
- * answers is the Fault `Internal error`, with a `TypeError` naming what came back as `cause`.
+ * Runs an implementation and awaits what it built; a value that is not what its Element answers is
+ * `not-built`, with a `TypeError` naming what came back.
  */
 export async function returnedOf<Built>(
-  answering: Endpoint | Guard,
+  element: HandledElement,
   implementation: () => unknown,
   isBuilt: (value: unknown) => value is Built,
 ): Promise<Returned<Built>> {
@@ -19,11 +19,16 @@ export async function returnedOf<Built>(
   if (isBuilt(built)) {
     return { kind: 'built', built };
   }
-  const message = `${answering.name}'s Handler returned no Outcome but ${describedOf(built)}`;
-  return { kind: 'thrown', fault: thrownFault(new TypeError(message)) };
+  const named = `${elementNameOf(element)}'s Handler returned no ${answeredOf(element)}`;
+  return { kind: 'not-built', cause: new TypeError(`${named} but ${describedOf(built)}`) };
 }
 
-/** What a Handler returned instead of an Outcome, by its type or kind, never its content. */
+/** What a Handler answers, by its Element: a Message Handler a Fault or nothing, any other an Outcome. */
+function answeredOf(element: HandledElement): string {
+  return isMessageElement(element) ? 'Fault' : 'Outcome';
+}
+
+/** What a Handler returned instead of what it answers, by its type or kind, never its content. */
 function describedOf(built: unknown): string {
   if (built === null) {
     return 'null';

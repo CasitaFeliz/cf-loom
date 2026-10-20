@@ -18,13 +18,14 @@ import {
   type ResolvedOutcome,
   thrownFault,
 } from '../outcomes/index.ts';
+import type { HandledElement } from './elements.ts';
 import { returnedOf } from './implementation.ts';
 
-/** An implementation as the runtime calls it, whatever Endpoint or Guard it was written for. */
+/** An implementation as the runtime calls it, whatever Element it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Endpoint or Guard, its implementation, and whether it is a stub. */
-export type Written<Answering extends Endpoint | Guard> = {
+/** What a Handler was written with: its Element, its implementation, and whether it is a stub. */
+export type Written<Answering extends HandledElement> = {
   readonly element: Answering;
   readonly implementation: Implementation;
   readonly stub: boolean;
@@ -96,8 +97,8 @@ async function endpointCallOf(
   }
   const { input, context } = checked.value;
   const returned = await returnedOf(endpoint, () => implementation(input, context), isOutcome);
-  if (returned.kind === 'thrown') {
-    return returned;
+  if (returned.kind === 'not-built') {
+    return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
   return answeredRunOf(checkedOutcome(endpoint, returned.built, standards));
 }
@@ -114,8 +115,8 @@ async function guardCallOf(
   const { demands, context, qualifier } = checked.value;
   const run = () => implementation(demands, context, qualifier);
   const returned = await returnedOf(guard, run, isAdmission);
-  if (returned.kind === 'thrown') {
-    return returned;
+  if (returned.kind === 'not-built') {
+    return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
   return answeredRunOf(checkedAdmission(guard, returned.built, standards));
 }
