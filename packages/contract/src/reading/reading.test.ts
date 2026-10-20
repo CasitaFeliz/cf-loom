@@ -160,11 +160,10 @@ describe('readingOf', () => {
     expect(counted.asked()).toBe(0);
   });
 
-  test('a body is not read for an Endpoint that declares none', async () => {
+  test('an Endpoint that declares no body reads as its Input without one', async () => {
     const text = { ...admitted, params: { noteId: 'n-1' } };
-    const source = { textOf: () => text, body: stoppingBody };
 
-    const reading = await readingOf(getNote, source);
+    const reading = await readingOf(getNote, sourceOf(text));
 
     expect(reading).toEqual({ kind: 'input', input: { params: { noteId: 'n-1' } } });
   });
