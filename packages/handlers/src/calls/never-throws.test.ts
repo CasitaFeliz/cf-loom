@@ -36,7 +36,7 @@ const getOrder = defineEndpoint({
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   context: z.object({ id: z.string() }),
 });
 

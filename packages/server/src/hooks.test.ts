@@ -12,8 +12,8 @@ import { type AnsweredRequest, type ServedFault, serve } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
-  context: z.object({ clientId: z.string() }),
+  description: 'A key per Caller',
+  context: z.object({ callerId: z.string() }),
 });
 
 const getOrder = defineEndpoint({
@@ -94,7 +94,7 @@ const handlers = {
     listOrders: handle(listOrders, () => success({ count: 1 })),
     importOrders: handle(importOrders, () => success()),
   },
-  guards: { apiKey: handle(apiKey, () => admit({ clientId: 'c-1' })) },
+  guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
   deprecatedAt,
 };
 
@@ -134,12 +134,12 @@ describe('serve: onServiceFault', () => {
 
   test('without it, the console names the Guard whose Handler failed', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const broken = handle(apiKey, () => admit({ clientId: 7 } as never));
+    const broken = handle(apiKey, () => admit({ callerId: 7 } as never));
 
     await serve(contract, { ...handlers, guards: { apiKey: broken } })(get('/orders/o-1'));
 
     expect(String(logged.mock.calls[0]?.[0])).toMatch(
-      /^getOrder apiKey: context\.clientId invalid_type: /,
+      /^getOrder apiKey: context\.callerId invalid_type: /,
     );
   });
 

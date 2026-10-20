@@ -16,9 +16,9 @@ import { nodeHttp, nodeListener } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
 });
 
 const createOrder = defineEndpoint({
@@ -79,14 +79,14 @@ const contract = defineContract({
 
 const handlers = {
   endpoints: {
-    createOrder: handle(createOrder, ({ body }, { apiKey: client }) =>
-      success({ headers: { 'x-order-count': 1 }, body: { ...body, by: client.clientId } }),
+    createOrder: handle(createOrder, ({ body }, { apiKey: caller }) =>
+      success({ headers: { 'x-order-count': 1 }, body: { ...body, by: caller.callerId } }),
     ),
     getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId })),
     headOrder: handle(headOrder, () => success({ headers: { 'x-exists': true } })),
     greet: handle(greet, ({ query }) => success({ headers: { 'x-greeted': query.name } })),
   },
-  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ clientId: headers['x-api-key'] })) },
+  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
   deprecatedAt: {},
 };
 

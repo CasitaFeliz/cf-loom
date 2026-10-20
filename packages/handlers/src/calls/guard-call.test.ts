@@ -22,9 +22,9 @@ const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Fo
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string().min(4) }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 
@@ -66,7 +66,7 @@ describe('a GuardHandler’s direct call', () => {
     const received: unknown[] = [];
     const apiKeyHandler = handle(apiKey, (demands, context) => {
       received.push(demands, context);
-      return admit({ clientId: 'c-1' });
+      return admit({ callerId: 'c-1' });
     });
 
     await apiKeyHandler({ headers: { 'x-api-key': 'key-1', other: 'x' } } as never, {});
@@ -87,7 +87,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('demands that break a schema throw InvalidInputError', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     const issues = await issuesOf(() => apiKeyHandler({ headers: { 'x-api-key': 'k' } }, {}));
 
@@ -129,11 +129,11 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('admit(context) resolves to the request admitted with the parsed Context', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1', extra: true }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1', extra: true }));
 
     const admission = await apiKeyHandler(apiKeyDemands, {});
 
-    expect(admission).toEqual({ kind: 'admitted', context: { clientId: 'c-1' } });
+    expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
   });
 
   test('admit() admits for a Guard without a context', async () => {
@@ -155,7 +155,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Context admitted by a Guard without a context schema throws InvalidOutcomeError', async () => {
-    const internalOnlyHandler = handle(internalOnly, () => admit({ clientId: 'c-1' }) as never);
+    const internalOnlyHandler = handle(internalOnly, () => admit({ callerId: 'c-1' }) as never);
 
     const issues = await issuesOf(() => internalOnlyHandler({}, {}));
 
@@ -232,7 +232,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Guard without a qualifier takes two arguments and one with a qualifier three', () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const permissionHandler = handle(permission, () => admit());
 
     const call = () => [
@@ -275,7 +275,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Qualifier given to a Guard that declares none throws InvalidInputError', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     const issues = await issuesOf(() =>
       Reflect.apply(apiKeyHandler, undefined, [apiKeyDemands, {}, ['orders:edit']]),
@@ -290,8 +290,8 @@ describe('a GuardHandler’s direct call', () => {
     const write = () => [
       // @ts-expect-error apiKey provides a Context
       handle(apiKey, () => admit()),
-      // @ts-expect-error clientId is a string
-      handle(apiKey, () => admit({ clientId: 7 })),
+      // @ts-expect-error callerId is a string
+      handle(apiKey, () => admit({ callerId: 7 })),
     ];
 
     expect(write).not.toThrow();

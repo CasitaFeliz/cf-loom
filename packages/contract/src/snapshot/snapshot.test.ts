@@ -67,9 +67,9 @@ const orderLocked = defineRejection({
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 
@@ -391,7 +391,7 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.guards).toEqual({
       apiKey: {
         origin: 'local',
-        description: 'An API key per client',
+        description: 'An API key per Caller',
         guards: [],
         qualifier: null,
         demands: {
@@ -405,7 +405,7 @@ describe('snapshotOf: a Service', () => {
         context: {
           type: 'object',
           mode: 'open',
-          fields: { clientId: { required: true, schema: { type: 'string' } } },
+          fields: { callerId: { required: true, schema: { type: 'string' } } },
         },
         rejections: ['UNAUTHENTICATED'],
       },

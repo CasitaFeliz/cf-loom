@@ -30,9 +30,9 @@ const orderLocked = defineRejection({
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'A key per client',
+  description: 'A key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
 });
 
 /** An Endpoint declared once, as the Provider writes it and as its Contract Package rebuilds it. */
@@ -192,12 +192,12 @@ const handlers = {
         });
       }
       const headers = { 'x-stage': 'shipped', 'x-count': 2 } as const;
-      return success({ headers, body: { id: params.orderId, by: key.clientId } });
+      return success({ headers, body: { id: params.orderId, by: key.callerId } });
     }),
     createOrder: handle(createOrder, ({ body }) => success(body)),
     cancelOrder: handle(cancelOrder, () => fault({ committed: 'no', retryable: true })),
   },
-  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ clientId: headers['x-api-key'] })) },
+  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
   deprecatedAt: { createOrder: '2026-10-17T09:30:00Z' },
 };
 
@@ -219,7 +219,7 @@ afterAll(() => {
 function ordersClient() {
   return client(ordersDeps, {
     baseUrl,
-    headers: { 'x-api-key': async () => 'client-7' },
+    headers: { 'x-api-key': async () => 'caller-7' },
     onDeprecation: (notice) => notices.push(notice),
   });
 }
@@ -230,7 +230,7 @@ describe('end to end against serve through node:http and the global fetch', () =
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', by: 'client-7' },
+      value: { id: 'o-1', by: 'caller-7' },
       headers: { 'x-stage': 'shipped', 'x-count': 2 },
     });
   });

@@ -157,11 +157,11 @@ The body of the invalid-input Rejection is cf-loom's, whatever the Definitions P
 // src/contract/guards/api-key.guard.ts
 export const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: {
     headers: z.object({ 'x-api-key': z.string() }),
   },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 ```

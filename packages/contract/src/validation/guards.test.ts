@@ -47,7 +47,7 @@ const permission = defineGuard({
 
 const quota = defineGuard({
   name: 'quota',
-  description: 'The client stays within a quota',
+  description: 'The Caller stays within a quota',
   qualifier: z.object({ perMinute: z.int(), burst: z.object({ size: z.int() }).optional() }),
 });
 

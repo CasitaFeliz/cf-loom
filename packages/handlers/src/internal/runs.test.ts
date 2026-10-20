@@ -19,14 +19,14 @@ const standards: StandardRejections = {
 
 const apiKey = defineGuard({
   name: 'apiKey',
-  description: 'An API key per client',
+  description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
-  context: z.object({ clientId: z.string() }),
+  context: z.object({ callerId: z.string() }),
 });
 
 const permission = defineGuard({
   name: 'permission',
-  description: 'The client holds a permission',
+  description: 'The Caller holds a permission',
   guards: [apiKey],
   qualifier: z.enum(['orders:read']),
 });
@@ -43,7 +43,7 @@ const getOrder = defineEndpoint({
   rejections: [notFound],
 });
 
-const getContext = { apiKey: { clientId: 'c-1' } };
+const getContext = { apiKey: { callerId: 'c-1' } };
 
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
@@ -97,7 +97,7 @@ describe('runGuard', () => {
   const permissionHandler = handle(permission, () => admit());
 
   test('demands, a Context and a Qualifier that break the Contract are invalid-input', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const call = { demands: {}, context: { apiKey: {} }, qualifier: 'orders:delete' };
 
     const runs = [
@@ -110,7 +110,7 @@ describe('runGuard', () => {
       {
         kind: 'invalid-input',
         issues: [
-          { part: 'context', path: ['apiKey', 'clientId'] },
+          { part: 'context', path: ['apiKey', 'callerId'] },
           { part: 'qualifier', code: 'invalid_value' },
         ],
       },
@@ -118,7 +118,7 @@ describe('runGuard', () => {
   });
 
   test('an admitted Context that breaks the Contract is invalid-outcome', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 7 }) as never);
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 7 }) as never);
     const call = { demands: { headers: { 'x-api-key': 'k' } }, context: {}, qualifier: undefined };
 
     const run = await runGuard(apiKeyHandler, call, standards);
@@ -244,7 +244,7 @@ describe('isStub', () => {
 describe('isWrittenFor', () => {
   test('a Handler is told written for its own Element, not another, and a plain function never', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
-    const apiKeyHandler = handle(apiKey, () => admit({ clientId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const lookalike = Object.assign(() => undefined, { element: getOrder });
 
     const written = [
