@@ -1,4 +1,4 @@
-import { isEvent } from '../declarations/index.ts';
+import { isEvent, isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   eventServiceOf,
@@ -34,11 +34,11 @@ function eventFailures(
     return [failure(eventAt, 'not-a-declaration', 'event is not an Event')];
   }
   const identity = messageIdentityOf(event.name, event.version);
-  if (root.kind !== 'contract' || eventServiceOf(root, event) === undefined) {
+  if (eventServiceOf(root, event) === undefined) {
     const message = `A Subscription's Event is the Service's own or one listed in a Dependency: ${identity}`;
     return [failure(eventAt, 'subscription-event', message)];
   }
-  if (event.lifecycle === 'retired') {
+  if (!isLive(event)) {
     const message = `A Subscription's Event is not Retired: ${identity}`;
     return [failure(eventAt, 'retired-event-subscribed', message)];
   }

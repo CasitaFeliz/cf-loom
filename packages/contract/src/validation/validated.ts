@@ -85,9 +85,6 @@ function validatedSubscriptionsOf({
   root,
   subscriptions,
 }: Declarations): readonly ValidatedSubscription[] {
-  if (root.kind !== 'contract') {
-    return [];
-  }
   return subscriptions.map((located) => {
     const service = eventServiceOf(root, located.subscription.event);
     if (service === undefined) {

@@ -1,3 +1,4 @@
+import { lifecycleOf } from '../declarations/index.ts';
 import type { ValidatedSubscription } from '../validation/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import { type LocatedCommand, type LocatedEvent, messageIdentityOf } from '../written/index.ts';
@@ -12,7 +13,7 @@ export function eventSnapshotsOf(
   const entries = events.map(({ event }) => {
     const snapshot: EventSnapshot = {
       visibility: event.visibility,
-      lifecycle: event.lifecycle ?? 'active',
+      lifecycle: lifecycleOf(event),
       description: event.description,
       body: bodyOf(event, sources),
     };
@@ -28,7 +29,7 @@ export function commandSnapshotsOf(
 ): Readonly<Record<string, CommandSnapshot>> {
   const entries = commands.map(({ command }) => {
     const snapshot: CommandSnapshot = {
-      lifecycle: command.lifecycle ?? 'active',
+      lifecycle: lifecycleOf(command),
       description: command.description,
       body: bodyOf(command, sources),
     };

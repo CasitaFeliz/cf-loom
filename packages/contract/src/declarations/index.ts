@@ -6,7 +6,13 @@ export { defineDefinitions } from './definitions.ts';
 export type { ContractPackage, Dependencies, ExportedElements } from './dependencies.ts';
 export { defineDependencies } from './dependencies.ts';
 export type { Lifecycle, Visibility } from './element.ts';
-export { eventVisibilities, lifecycles, visibilities } from './element.ts';
+export {
+  eventVisibilities,
+  isLive,
+  lifecycleOf,
+  lifecycles,
+  visibilities,
+} from './element.ts';
 export type { Endpoint } from './endpoint.ts';
 export { defineEndpoint } from './endpoint.ts';
 export type { Event } from './event.ts';

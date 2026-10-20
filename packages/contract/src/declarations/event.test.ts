@@ -97,6 +97,14 @@ describe('defineEvent', () => {
         description: 'An order was placed',
         body,
       }),
+      defineEvent({
+        name: 'OrderCreated',
+        // @ts-expect-error a version written in exponent form is still a fraction
+        version: 1e-7,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body,
+      }),
     ];
 
     expect(declare).not.toThrow();

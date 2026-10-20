@@ -30,11 +30,11 @@ function aCommand(overrides: Record<string, unknown> = {}): Command {
   return defineCommand(written as unknown as Parameters<typeof defineCommand>[0]);
 }
 
-function validateMessages(events: readonly unknown[], commands: readonly Command[] = []) {
+function validateMessages(events: readonly unknown[], commands: readonly unknown[] = []) {
   const contract = defineContract({
     name: 'orders-service',
     events: events as readonly Event[],
-    commands,
+    commands: commands as readonly Command[],
   });
   return validateContract(contract, {
     originOf: () => undefined,
@@ -222,5 +222,102 @@ describe('validateContract: Events and Commands', () => {
         'description is a required string',
       ),
     );
+  });
+
+  test('a version that is not a whole number fails, as a cast lets it through', () => {
+    const result = validateMessages([anEvent({ version: 1.5 })]);
+
+    expect(result).toEqual(
+      failed(
+        ['events', 'OrderCreated@1.5', 'version'],
+        'message-version',
+        'A Message version is a whole number from 1: 1.5',
+      ),
+    );
+  });
+
+  test('something listed under commands that is not a Command fails', () => {
+    const result = validateMessages([], [anEvent({ name: 'ChargeCard' })]);
+
+    expect(result).toEqual(
+      failed(['commands', 0], 'not-a-declaration', 'commands.0 is not a Command'),
+    );
+  });
+
+  test('a Command name that is not PascalCase fails', () => {
+    const result = validateMessages([], [aCommand({ name: 'charge_card' })]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'charge_card@1', 'name'],
+        'name-grammar',
+        'A Message name is PascalCase: charge_card',
+      ),
+    );
+  });
+
+  test('a Command without a description fails as a required field', () => {
+    const result = validateMessages([], [aCommand({ description: undefined })]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'description'],
+        'required-field',
+        'description is a required string',
+      ),
+    );
+  });
+
+  test('two Deprecated Command versions with one identity fail', () => {
+    const deprecated = { lifecycle: 'deprecated' };
+
+    const result = validateMessages([], [aCommand(deprecated), aCommand(deprecated)]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'version'],
+        'duplicate-message-identity',
+        'A Message Version is identified by its name and version, once: ChargeCard@1',
+      ),
+    );
+  });
+
+  test('two Active Command versions with one identity fail once, as a duplicate identity', () => {
+    const result = validateMessages([], [aCommand(), aCommand()]);
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'version'],
+        'duplicate-message-identity',
+        'A Message Version is identified by its name and version, once: ChargeCard@1',
+      ),
+    );
+  });
+
+  test('an Event and two Command versions with one name fail once, on the first Command', () => {
+    const result = validateMessages(
+      [anEvent({ name: 'ChargeCard' })],
+      [aCommand({ lifecycle: 'deprecated' }), aCommand({ version: 2 })],
+    );
+
+    expect(result).toEqual(
+      failed(
+        ['commands', 'ChargeCard@1', 'name'],
+        'message-kind',
+        'A Message name belongs to one kind: ChargeCard is an Event and a Command',
+      ),
+    );
+  });
+
+  test('an Event and a Command without a name or version fail only as fields, never as one kind', () => {
+    const result = validateMessages([defineEvent({} as never)], [defineCommand({} as never)]);
+
+    const rules =
+      result.kind === 'invalid'
+        ? result.failures.map((broken) => broken.kind === 'declaration' && broken.rule)
+        : [];
+    expect(rules).toContain('required-field');
+    expect(rules).not.toContain('message-kind');
+    expect(rules).not.toContain('duplicate-message-identity');
   });
 });

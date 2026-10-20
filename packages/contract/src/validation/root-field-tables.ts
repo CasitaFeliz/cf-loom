@@ -2,6 +2,7 @@ import type {
   Application,
   Command,
   Contract,
+  Definitions,
   Dependencies,
   Event,
   ExportedElements,
@@ -9,7 +10,6 @@ import type {
 } from '../declarations/index.ts';
 import type { Declarations } from '../written/index.ts';
 import type { Fields, KnownFields } from './declared-fields.ts';
-import { definitionsFields } from './field-tables.ts';
 
 const contractFields = {
   declared: {
@@ -79,6 +79,21 @@ export const subscriptionFields = {
   strings: { kind: true, name: true },
   objects: {},
 } satisfies Fields<Subscription>;
+
+/** The fields of a Definitions Package. */
+export const definitionsFields = {
+  declared: {
+    kind: true,
+    name: true,
+    guards: true,
+    schemas: true,
+    rejections: true,
+    standardRejections: true,
+  },
+  required: { kind: true, name: true },
+  strings: { kind: true, name: true },
+  objects: { schemas: true, standardRejections: true },
+} satisfies Fields<Definitions>;
 
 /** The fields of a Dependency, as `defineDependencies` builds it. */
 export const dependenciesFields = {

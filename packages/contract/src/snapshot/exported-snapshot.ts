@@ -1,5 +1,5 @@
+import { isLive } from '../declarations/index.ts';
 import { reachedDefsOf, type SchemaNode } from '../walker/index.ts';
-import { isLive } from './lifecycle.ts';
 import { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 import { reachedGuardNamesOf } from './reached-guards.ts';
 import type {

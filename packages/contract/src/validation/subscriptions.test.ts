@@ -201,4 +201,35 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result.kind).toBe('valid');
   });
+
+  test('a Subscription without an event fails as a required field', () => {
+    const withoutEvent = aSubscription('on-nothing', undefined);
+
+    const result = validateSubscriptions([notifyOnSettled, withoutEvent]);
+
+    expect(result).toEqual(
+      failed(
+        ['subscriptions', 'on-nothing', 'event'],
+        'required-field',
+        'event is a required field',
+      ),
+    );
+  });
+
+  test('an undeclared field on a Subscription fails', () => {
+    const declaration = { name: 'on-created', event: orderCreatedV1, filter: 'eu' };
+    const filtered = defineSubscription(
+      declaration as unknown as Parameters<typeof defineSubscription>[0],
+    );
+
+    const result = validateSubscriptions([notifyOnSettled, filtered]);
+
+    expect(result).toEqual(
+      failed(
+        ['subscriptions', 'on-created', 'filter'],
+        'undeclared-field',
+        'filter is not a declared field',
+      ),
+    );
+  });
 });

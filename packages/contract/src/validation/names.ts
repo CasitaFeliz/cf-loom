@@ -1,5 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { isEndpoint } from '../declarations/index.ts';
+import { isEndpoint, isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   endpointAt,
@@ -65,7 +65,7 @@ function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure
 }
 
 function uniqueEndpointNames({ endpoints }: Declarations): readonly DeclarationFailure[] {
-  const active = endpoints.filter((located) => located.endpoint.lifecycle !== 'retired');
+  const active = endpoints.filter((located) => isLive(located.endpoint));
   return repeated(active, (located) => textOf(located.endpoint.name)).map(({ at, endpoint }) =>
     failure(
       [...at, 'name'],

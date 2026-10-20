@@ -13,7 +13,6 @@ import type { KnownFields } from './declared-fields.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import {
   attachmentFields,
-  definitionsFields,
   demandsFields,
   endpointFields,
   groupFields,
@@ -26,6 +25,7 @@ import {
 } from './field-tables.ts';
 import {
   commandFields,
+  definitionsFields,
   dependenciesFields,
   eventFields,
   exportedFields,
@@ -84,12 +84,12 @@ function writtenOf(declarations: Declarations): readonly Written[] {
       written([...at, 'exported'], listed.exported, exportedFields),
     ]),
     ...allPackages.flatMap(standardRejectionsOf),
-    ...messagesWrittenOf(declarations),
+    ...messagingWrittenOf(declarations),
   ];
 }
 
 /** The Message Versions and Subscriptions a Contract lists. */
-function messagesWrittenOf({ events, commands, subscriptions }: Declarations): readonly Written[] {
+function messagingWrittenOf({ events, commands, subscriptions }: Declarations): readonly Written[] {
   return [
     ...events.map(({ at, event }) => written(at, event, eventFields)),
     ...commands.map(({ at, command }) => written(at, command, commandFields)),

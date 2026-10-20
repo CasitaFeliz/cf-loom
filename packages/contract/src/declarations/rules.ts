@@ -47,6 +47,7 @@ type IsNotWholeFromOne<Version extends number> = `${Version}` extends
   | '0'
   | `-${string}`
   | `${string}.${string}`
+  | `${string}e-${string}`
   ? true
   : false;
 

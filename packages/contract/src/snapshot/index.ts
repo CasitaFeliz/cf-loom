@@ -2,7 +2,6 @@ export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.
 export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
 export { exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedSnapshotOf } from './exported-snapshot.ts';
-export { isLive } from './lifecycle.ts';
 export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';

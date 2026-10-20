@@ -22,7 +22,7 @@ import type {
   LocatedSubscription,
   Root,
 } from './located.ts';
-import { messagesOf } from './messages.ts';
+import { messagingOf } from './messaging.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
 
@@ -71,7 +71,7 @@ export function declarationsOf(root: Root): Declarations {
     codes: codesOf(sources, { guards, rejections }),
     standardRejections: allPackages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
-    ...messagesOf(root),
+    ...messagingOf(root),
   };
 }
 

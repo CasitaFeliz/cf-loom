@@ -1,4 +1,4 @@
-import { eventVisibilities } from '../declarations/index.ts';
+import { eventVisibilities, lifecycleOf } from '../declarations/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -52,10 +52,22 @@ function versionFailures({ at, message }: LocatedMessage): readonly DeclarationF
   return [failure([...at, 'version'], 'message-version', text)];
 }
 
+/** Whether a Message Version is named by a string; any other name already fails as a field. */
+function isNamed({ message }: LocatedMessage): boolean {
+  return typeof message.name === 'string';
+}
+
+/** Whether a Message Version's identity names it; any other name or version already fails as a field. */
+function isIdentified(located: LocatedMessage): boolean {
+  return isNamed(located) && typeof located.message.version === 'number';
+}
+
+function identityOf({ message }: LocatedMessage): string {
+  return messageIdentityOf(message.name, message.version);
+}
+
 function identityFailures(messages: readonly LocatedMessage[]): readonly DeclarationFailure[] {
-  const identityOf = ({ message }: LocatedMessage) =>
-    messageIdentityOf(message.name, message.version);
-  return repeated(messages, identityOf).map((located) =>
+  return repeated(messages.filter(isIdentified), identityOf).map((located) =>
     failure(
       [...located.at, 'version'],
       'duplicate-message-identity',
@@ -69,28 +81,31 @@ function kindFailures(
   events: readonly LocatedMessage[],
   commands: readonly LocatedMessage[],
 ): readonly DeclarationFailure[] {
-  const eventNames = new Set(events.map(({ message }) => textOf(message.name)));
-  const nameOf = ({ message }: LocatedMessage) => textOf(message.name);
-  const shared = commands.filter((located) => eventNames.has(nameOf(located)));
+  const nameOf = ({ message }: LocatedMessage) => message.name;
+  const eventNames = new Set(events.filter(isNamed).map(nameOf));
+  const shared = commands.filter((located) => isNamed(located) && eventNames.has(nameOf(located)));
   const repeats = new Set(repeated(shared, nameOf));
   const firsts = shared.filter((located) => !repeats.has(located));
   return firsts.map(({ at, message }) =>
     failure(
       [...at, 'name'],
       'message-kind',
-      `A Message name belongs to one kind: ${textOf(message.name)} is an Event and a Command`,
+      `A Message name belongs to one kind: ${message.name} is an Event and a Command`,
     ),
   );
 }
 
-/** Every Active version of a Command after its first fails. */
+/** Every Active version of a Command after its first fails; a repeated identity is one version. */
 function activeCommandFailures(commands: readonly LocatedMessage[]): readonly DeclarationFailure[] {
-  const active = commands.filter(({ message }) => (message.lifecycle ?? 'active') === 'active');
-  return repeated(active, ({ message }) => textOf(message.name)).map(({ at, message }) =>
+  const identified = commands.filter(isIdentified);
+  const active = identified.filter(({ message }) => lifecycleOf(message) === 'active');
+  const repeatedIdentities = new Set(repeated(active, identityOf));
+  const versions = active.filter((located) => !repeatedIdentities.has(located));
+  return repeated(versions, ({ message }) => message.name).map(({ at, message }) =>
     failure(
       [...at, 'lifecycle'],
       'command-active-versions',
-      `A Command has at most one Active version: ${textOf(message.name)}`,
+      `A Command has at most one Active version: ${message.name}`,
     ),
   );
 }
