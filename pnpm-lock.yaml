@@ -226,6 +226,9 @@ importers:
       '@org/contract-orders-service':
         specifier: workspace:*
         version: link:../orders-service/contract-package
+      '@org/definitions':
+        specifier: workspace:*
+        version: link:../org-definitions
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -254,6 +257,9 @@ importers:
       '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@org/definitions':
+        specifier: workspace:*
+        version: link:../org-definitions
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -266,6 +272,21 @@ importers:
         version: 24.19.2
 
   examples/orders-service/contract-package: {}
+
+  examples/org-definitions:
+    devDependencies:
+      '@cf-loom/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      '@cf-loom/contract':
+        specifier: workspace:^
+        version: link:../../packages/contract
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/cli:
     devDependencies:

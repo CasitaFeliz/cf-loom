@@ -64,11 +64,11 @@ describe('billing-service calling orders-service over HTTP', () => {
     });
   });
 
-  test('an order orders-service does not know is answered NOT_FOUND', async () => {
+  test('an order orders-service does not know is answered RESOURCE_NOT_FOUND', async () => {
     const response = await billing(anInvoiceRequest(UNKNOWN_ORDER_ID));
 
     expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ rejection: { code: 'NOT_FOUND' } });
+    expect(await response.json()).toMatchObject({ rejection: { code: 'RESOURCE_NOT_FOUND' } });
   });
 
   test('a pending order is answered ORDER_NOT_BILLABLE with its status', async () => {
@@ -104,6 +104,22 @@ describe('a client of orders-service over HTTP', () => {
       known: true,
       code: 'ORDER_LOCKED',
       body: { lockedAt: '2026-01-15T09:30:00Z' },
+    });
+  });
+
+  test('it receives RESOURCE_NOT_FOUND for an order nobody placed, known, with orders-service’s message', async () => {
+    const ordersClient = client(ordersDeps, {
+      baseUrl: ordersUrl,
+      headers: { 'x-api-key': 'billing-key' },
+    });
+
+    const outcome = await ordersClient.getOrder({ params: { orderId: UNKNOWN_ORDER_ID } });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      known: true,
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'The resource does not exist',
     });
   });
 

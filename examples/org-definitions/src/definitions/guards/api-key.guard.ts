@@ -6,7 +6,7 @@ export const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
   demands: {
-    headers: z.object({ 'x-api-key': z.string() }),
+    headers: z.object({ 'x-api-key': z.string().optional() }),
   },
   context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],

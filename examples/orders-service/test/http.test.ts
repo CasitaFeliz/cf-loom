@@ -1,11 +1,12 @@
 import { admit, handle } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
+import { apiKey } from '@org/definitions';
 import { describe, expect, test } from 'vitest';
-import { apiKey } from '../src/contract/guards/api-key.guard.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
 
 const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
+const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const http = serve(contract, handlers, { onServiceFault: () => undefined });
 
@@ -39,17 +40,14 @@ describe('serve', () => {
     expect(response.status).toBe(200);
   });
 
-  test('a request without x-api-key is answered INVALID_INPUT', async () => {
+  test('a request without x-api-key is answered UNAUTHENTICATED by orders’ GuardHandler', async () => {
     const request = aRequest(`/orders/${PAID_ORDER_ID}`);
 
     const response = await http(request);
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      rejection: {
-        code: 'INVALID_INPUT',
-        body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'required' }] },
-      },
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'UNAUTHENTICATED', message: 'The API key is missing or unknown' },
     });
   });
 
@@ -60,7 +58,20 @@ describe('serve', () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
-      rejection: { code: 'UNAUTHENTICATED', message: 'The API key is unknown' },
+      rejection: { code: 'UNAUTHENTICATED', message: 'The API key is missing or unknown' },
+    });
+  });
+
+  test('an order nobody placed is answered RESOURCE_NOT_FOUND with @org/definitions’ message', async () => {
+    const request = aRequest(`/orders/${UNKNOWN_ORDER_ID}`, {
+      headers: { 'x-api-key': 'billing-key' },
+    });
+
+    const response = await http(request);
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'RESOURCE_NOT_FOUND', message: 'The resource does not exist' },
     });
   });
 
@@ -78,7 +89,7 @@ describe('serve', () => {
     expect(await response.json()).toMatchObject({ ...body, status: 'pending' });
   });
 
-  test('a body that is no JSON is answered INVALID_INPUT, malformed', async () => {
+  test('a body that is no JSON is answered BAD_REQUEST, malformed, with @org/definitions’ message', async () => {
     const request = aRequest('/orders', {
       method: 'POST',
       headers: { 'x-api-key': 'billing-key', 'content-type': 'application/json' },
@@ -89,7 +100,11 @@ describe('serve', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
-      rejection: { code: 'INVALID_INPUT', body: { issues: [{ in: 'body', code: 'malformed' }] } },
+      rejection: {
+        code: 'BAD_REQUEST',
+        message: 'The request is invalid',
+        body: { issues: [{ in: 'body', code: 'malformed' }] },
+      },
     });
   });
 

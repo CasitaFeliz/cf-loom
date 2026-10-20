@@ -66,13 +66,13 @@ function invoiceOf(order: Order): Invoice {
 function invoicingOfRejection(rejection: OrderRejection): Invoicing {
   if (!rejection.known) return { kind: 'unavailable', retryable: false };
   switch (rejection.code) {
-    case 'NOT_FOUND':
+    case 'RESOURCE_NOT_FOUND':
       return { kind: 'not-found' };
     case 'ORDER_LOCKED':
       return { kind: 'locked', lockedAt: rejection.body.lockedAt };
     case 'UNAUTHENTICATED':
-    case 'INVALID_INPUT':
-    case 'NOT_IMPLEMENTED':
+    case 'BAD_REQUEST':
+    case 'NOT_YET_IMPLEMENTED':
       return { kind: 'unavailable', retryable: false };
   }
 }

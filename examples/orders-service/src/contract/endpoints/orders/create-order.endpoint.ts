@@ -1,7 +1,7 @@
 import { defineEndpoint } from '@cf-loom/contract';
+import { apiKey, money } from '@org/definitions';
 import { z } from 'zod';
-import { apiKey } from '../../guards/api-key.guard.ts';
-import { money, order } from '../../schemas/order.schema.ts';
+import { order } from '../../schemas/order.schema.ts';
 
 export const createOrder = defineEndpoint({
   name: 'createOrder',

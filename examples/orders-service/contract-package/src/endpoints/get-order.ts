@@ -12,9 +12,9 @@ export const getOrderEndpoint = loom.defineEndpoint({
   description: 'One order by id',
   guards: [apiKeyGuard],
   input: {
-    headers: z.object({ 'x-api-key': z.string() }),
+    headers: z.object({ 'x-api-key': z.string().optional() }),
     params: z.object({ orderId: z.uuid() }),
   },
   success: { status: 200, body: z.object({ customerId: z.uuid(), id: z.uuid(), placedAt: z.iso.datetime(), status: loom.openEnumReader(['cancelled', 'paid', 'pending', 'shipped']), total: z.object({ amount: z.int().min(0).meta({"description":"In minor units, such as cents"}), currency: z.string().min(3).max(3).meta({"description":"An ISO 4217 code"}) }) }) },
-  rejections: [loom.notFound, orderLockedRejection],
+  rejections: [orderLockedRejection, loom.notFound],
 });

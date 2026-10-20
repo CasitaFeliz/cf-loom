@@ -4,7 +4,7 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 
 ## Tooling, not Contracts
 
-- This repository holds the tools, and in `examples/` fictional Services used as end-to-end tests. It contains no real Service's Contract.
+- This repository holds the tools, and in `examples/` fictional Services and the Definitions Package they share, used as end-to-end tests. It contains no real Service's Contract.
 - The tools know no organization: package scope, registry and Approvers are configuration of whoever uses them.
 - Every Contract Package is published to an internal registry; the tools are published to npmjs.com as `@cf-loom/<name>`, with restricted access.
 
@@ -14,7 +14,7 @@ All packages are released together with one version. `zod` and `@cf-loom/contrac
 
 ## Package layout
 
-Every package under `packages/` lays out its `src/` the same way; a Service, such as the examples in `examples/`, follows [Layout](README.md#layout) in README.md instead:
+Every package under `packages/` lays out its `src/` the same way; a Service or a Definitions Package, such as the examples in `examples/`, follows [Layout](README.md#layout) in README.md instead:
 
 - `src/` holds only entry files: the files the package's `exports` and `bin` point at in `dist/` (`index.ts` for `.`, `internal/index.ts` for `./internal`, one folder per subpath entry such as `node-http/index.ts`, and `bin.ts`), each named, never by a wildcard subpath, with its source file in `src/`, and beside each entry the tests that exercise it as a whole (`src/readme.test.ts`). An entry folder holds its `index.ts` and those tests only. **(check)**
 - An entry file holds named re-exports only, `export { … } from` and `export type { … } from`, or the empty `export {}` of a package not yet written (Biome's `noReExportAll` refuses `export *`), so an entry cannot grow logic; `bin.ts`, a CLI entry that calls the package's API, is the exception. **(check)**

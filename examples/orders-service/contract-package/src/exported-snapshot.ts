@@ -19,7 +19,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -49,10 +49,10 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
         "orderId"
       ],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_FOUND",
-        "NOT_IMPLEMENTED",
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED",
         "ORDER_LOCKED",
+        "RESOURCE_NOT_FOUND",
         "UNAUTHENTICATED"
       ],
       "success": {
@@ -116,6 +116,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -171,6 +172,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -181,7 +183,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -197,8 +199,8 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
       "name": "createOrder",
       "params": [],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_IMPLEMENTED",
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED",
         "UNAUTHENTICATED"
       ],
       "success": {
@@ -262,6 +264,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -293,7 +296,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
         "headers": {
           "fields": {
             "x-api-key": {
-              "required": true,
+              "required": false,
               "schema": {
                 "type": "string"
               }
@@ -306,7 +309,7 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
       },
       "description": "An API key per Caller",
       "guards": [],
-      "origin": "local",
+      "origin": "@org/definitions@0.0.0",
       "qualifier": null,
       "rejections": [
         "UNAUTHENTICATED"
@@ -335,8 +338,8 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
     },
     "UNAUTHENTICATED": {
       "body": null,
-      "message": "The API key is unknown",
-      "origin": "local",
+      "message": "The API key is missing or unknown",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 401
     }

@@ -2,7 +2,7 @@
 import * as loom from '@cf-loom/contract';
 
 export const standardRejections = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+  invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
+  notFound: { code: 'RESOURCE_NOT_FOUND', status: 404, message: 'The resource does not exist' },
+  notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Not implemented yet' },
 } as const satisfies loom.StandardRejections;

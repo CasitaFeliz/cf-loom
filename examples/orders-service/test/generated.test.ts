@@ -6,6 +6,7 @@ import { afterAll, describe, expect, test } from 'vitest';
 
 const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
+const snapshot = JSON.parse(readFileSync(join(serviceDir, 'contract.snapshot.json'), 'utf8'));
 const outDir = mkdtempSync(join(tmpdir(), 'orders-contract-package-'));
 
 afterAll(() => {
@@ -43,5 +44,42 @@ describe('the committed generated files', () => {
 
     expect(packaged).toEqual({ status: 0, stderr: '' });
     expect(filesOf(outDir)).toEqual(filesOf(join(serviceDir, 'contract-package')));
+  });
+});
+
+describe('the Snapshot', () => {
+  test('money in an order’s total carries its origin from @org/definitions', () => {
+    const totals = [
+      snapshot.endpoints['POST /orders'].input.body.fields.total.schema,
+      snapshot.endpoints['GET /orders/{}'].success.body.fields.total.schema,
+    ];
+
+    const origins = totals.map((total) => total.origin);
+
+    expect(origins).toEqual(['@org/definitions@0.0.0#money', '@org/definitions@0.0.0#money']);
+  });
+
+  test('the imported Guard and its Rejection carry the origin of @org/definitions', () => {
+    const origins = [snapshot.guards.apiKey.origin, snapshot.codes.UNAUTHENTICATED.origin];
+
+    expect(origins).toEqual(['@org/definitions@0.0.0', '@org/definitions@0.0.0']);
+  });
+});
+
+describe('the Contract Package', () => {
+  test('the Contract Package writes money in and imports nothing from @org/definitions', () => {
+    const files = filesOf(join(serviceDir, 'contract-package'));
+    const manifest = JSON.parse(files['package.json'] ?? '{}');
+
+    const importing = Object.keys(files).filter((path) =>
+      /(from|import)\s*\(?\s*['"]@org\/definitions['"]/.test(files[path] ?? ''),
+    );
+
+    expect(files['src/endpoints/create-order.ts']).toContain(
+      'total: z.object({ amount: z.int().min(0)',
+    );
+    expect(importing).toEqual([]);
+    expect(manifest.peerDependencies).not.toHaveProperty(['@org/definitions']);
+    expect(manifest).not.toHaveProperty('dependencies');
   });
 });

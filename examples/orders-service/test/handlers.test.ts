@@ -1,8 +1,8 @@
 import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
+import { unauthenticated } from '@org/definitions';
 import { describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import { orderLocked } from '../src/contract/rejections/order-locked.rejection.ts';
-import { unauthenticated } from '../src/contract/rejections/unauthenticated.rejection.ts';
 import healthHandler from '../src/endpoints/infrastructure/health.handler.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 import getOrderHandler from '../src/endpoints/orders/get-order.handler.ts';
@@ -32,12 +32,12 @@ describe('getOrder', () => {
     });
   });
 
-  test('an order nobody placed is answered NOT_FOUND', async () => {
+  test('an order nobody placed is answered RESOURCE_NOT_FOUND', async () => {
     const input = { params: { orderId: UNKNOWN_ORDER_ID } };
 
     const outcome = await getOrderHandler(input, context, { contract });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'NOT_FOUND', status: 404 });
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'RESOURCE_NOT_FOUND', status: 404 });
   });
 
   test('a locked order is answered ORDER_LOCKED with the instant it was locked', async () => {
@@ -85,6 +85,14 @@ describe('apiKey', () => {
 
   test('an unknown key is answered UNAUTHENTICATED', async () => {
     const demands = { headers: { 'x-api-key': 'stolen-key' } };
+
+    const admission = await apiKeyHandler(demands, {});
+
+    expect(isRejectionOf(admission, unauthenticated) && admission.status).toBe(401);
+  });
+
+  test('a missing key is answered UNAUTHENTICATED', async () => {
+    const demands = { headers: {} };
 
     const admission = await apiKeyHandler(demands, {});
 

@@ -1,4 +1,5 @@
 import { defineEndpoint, notFound } from '@cf-loom/contract';
+import { money } from '@org/definitions';
 import { z } from 'zod';
 import { orderLocked } from '../../rejections/order-locked.rejection.ts';
 import { orderNotBillable } from '../../rejections/order-not-billable.rejection.ts';
@@ -17,7 +18,7 @@ export const createInvoice = defineEndpoint({
     body: z.object({
       id: z.uuid(),
       orderId: z.uuid(),
-      total: z.object({ amount: z.int().nonnegative(), currency: z.string().length(3) }),
+      total: money,
     }),
   },
   rejections: [notFound, orderLocked, orderNotBillable],
