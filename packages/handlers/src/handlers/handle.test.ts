@@ -177,6 +177,40 @@ describe('handle', () => {
     expect(write).not.toThrow();
   });
 
+  test('an implementation that takes no parameters and returns nothing type-checks', () => {
+    const chargeCardHandler = handle(chargeCard, async () => {});
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => {});
+
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<CommandHandler<typeof chargeCard>>();
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<EventHandler<typeof notifyOnPaid>>();
+    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+  });
+
+  test('an Endpoint implementation that takes no parameters keeps its literal types', () => {
+    const echoSmall = defineEndpoint({
+      name: 'echoSmall',
+      method: 'GET',
+      path: '/small',
+      visibility: 'public',
+      description: 'Echoes a small literal',
+      success: { status: 204, headers: z.object({ 'x-small': z.literal(1.5e-7) }) },
+    });
+
+    const echoSmallHandler = handle(echoSmall, () => success({ headers: { 'x-small': 1.5e-7 } }));
+
+    expectTypeOf(echoSmallHandler).toEqualTypeOf<EndpointHandler<typeof echoSmall>>();
+    expect(echoSmallHandler.element).toBe(echoSmall);
+  });
+
+  test('a Handler written for an Endpoint or a Guard has its Handler type', () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
+
+    expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
+    expectTypeOf(apiKeyHandler).toEqualTypeOf<GuardHandler<typeof apiKey>>();
+    expect(apiKeyHandler.element).toBe(apiKey);
+  });
+
   test('an implementation returning any value but nothing or a Fault is a type error', () => {
     // @ts-expect-error a Message Handler returns nothing or a Fault, never a value
     const write = () => handle(chargeCard, async () => 42);

@@ -209,7 +209,7 @@ describe("a Message Handler's meta", () => {
 
 describe("what a Message Handler's direct call answers", () => {
   test('a Handler that returns nothing answers undefined', async () => {
-    const chargeCardHandler = handle(chargeCard, async (_body) => {});
+    const chargeCardHandler = handle(chargeCard, async () => {});
 
     const answer = await chargeCardHandler(body, meta);
 

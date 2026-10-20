@@ -44,38 +44,39 @@ import {
 /** What `handle()` writes a Handler for: an Endpoint, a Guard, or a Command or Subscription with its Reader. */
 type HandleTarget = Endpoint | Guard | WithReader;
 
-function handleImplementation<Target extends Endpoint>(
-  endpoint: Target,
-  implementation: EndpointImplementation<Target>,
-): EndpointHandler<Target>;
-function handleImplementation<Target extends Guard>(
-  guard: Target,
-  implementation: GuardImplementation<Target>,
-): GuardHandler<Target>;
-function handleImplementation<Target extends WithReader<Command>>(
-  command: Target,
-  implementation: CommandImplementation<Target>,
-): CommandHandler<Target>;
-function handleImplementation<Target extends WithReader<Subscription>>(
-  subscription: Target,
-  implementation: EventImplementation<Target>,
-): EventHandler<Target>;
-function handleImplementation(
-  target: HandleTarget,
-  implementation: (...given: never[]) => unknown,
-): AnyHandler {
-  return handlerOf(target, { implementation: implementation as Implementation, stub: false });
+/** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
+type ImplementationOf<Target extends HandleTarget> = Target extends Endpoint
+  ? EndpointImplementation<Target>
+  : Target extends Guard
+    ? GuardImplementation<Target>
+    : Target extends WithReader<Command>
+      ? CommandImplementation<Target>
+      : Target extends WithReader<Subscription>
+        ? EventImplementation<Target>
+        : never;
+
+/** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
+type HandlerOf<Target extends HandleTarget> = Target extends Endpoint
+  ? EndpointHandler<Target>
+  : Target extends Guard
+    ? GuardHandler<Target>
+    : Target extends WithReader<Command>
+      ? CommandHandler<Target>
+      : Target extends WithReader<Subscription>
+        ? EventHandler<Target>
+        : never;
+
+function handleImplementation<Target extends HandleTarget>(
+  target: Target,
+  implementation: ImplementationOf<Target>,
+): HandlerOf<Target> {
+  const how = { implementation: implementation as Implementation, stub: false };
+  return handlerOf(target, how) as HandlerOf<Target>;
 }
 
-function stubOf<Target extends Endpoint>(endpoint: Target): EndpointHandler<Target>;
-function stubOf<Target extends Guard>(guard: Target): GuardHandler<Target>;
-function stubOf<Target extends WithReader<Command>>(command: Target): CommandHandler<Target>;
-function stubOf<Target extends WithReader<Subscription>>(
-  subscription: Target,
-): EventHandler<Target>;
-function stubOf(target: HandleTarget): AnyHandler {
+function stubOf<Target extends HandleTarget>(target: Target): HandlerOf<Target> {
   const implementation = isWithReader(target) ? messageStubOf(target.element) : notImplementedStub;
-  return handlerOf(target, { implementation, stub: true });
+  return handlerOf(target, { implementation, stub: true }) as HandlerOf<Target>;
 }
 
 /**
