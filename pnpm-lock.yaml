@@ -226,6 +226,9 @@ importers:
       '@org/contract-orders-service':
         specifier: workspace:*
         version: link:../orders-service/contract-package
+      '@org/definitions':
+        specifier: workspace:*
+        version: link:../org-definitions
       zod:
         specifier: 'catalog:'
         version: 4.6.7

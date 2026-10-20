@@ -1,6 +1,6 @@
 {
   "codes": {
-    "INVALID_INPUT": {
+    "BAD_REQUEST": {
       "body": {
         "fields": {
           "issues": {
@@ -73,22 +73,15 @@
         "mode": "open",
         "type": "object"
       },
-      "message": "Invalid input",
-      "origin": "standard",
+      "message": "The request is invalid",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 400
     },
-    "NOT_FOUND": {
+    "NOT_YET_IMPLEMENTED": {
       "body": null,
-      "message": "Not found",
-      "origin": "standard",
-      "removed": false,
-      "status": 404
-    },
-    "NOT_IMPLEMENTED": {
-      "body": null,
-      "message": "Not implemented",
-      "origin": "standard",
+      "message": "Not implemented yet",
+      "origin": "@org/definitions@0.0.0",
       "removed": false,
       "status": 501
     },
@@ -128,10 +121,19 @@
       "origin": "local",
       "removed": false,
       "status": 409
+    },
+    "RESOURCE_NOT_FOUND": {
+      "body": null,
+      "message": "The resource does not exist",
+      "origin": "@org/definitions@0.0.0",
+      "removed": false,
+      "status": 404
     }
   },
   "commands": {},
-  "definitions": {},
+  "definitions": {
+    "@org/definitions": "0.0.0"
+  },
   "defs": {},
   "dependencies": {
     "orders-service": {
@@ -172,11 +174,11 @@
       "name": "createInvoice",
       "params": [],
       "rejections": [
-        "INVALID_INPUT",
-        "NOT_FOUND",
-        "NOT_IMPLEMENTED",
+        "BAD_REQUEST",
+        "NOT_YET_IMPLEMENTED",
         "ORDER_LOCKED",
-        "ORDER_NOT_BILLABLE"
+        "ORDER_NOT_BILLABLE",
+        "RESOURCE_NOT_FOUND"
       ],
       "success": {
         "body": {
@@ -202,6 +204,7 @@
                   "amount": {
                     "required": true,
                     "schema": {
+                      "description": "In minor units, such as cents",
                       "int": true,
                       "min": 0,
                       "type": "number"
@@ -210,6 +213,7 @@
                   "currency": {
                     "required": true,
                     "schema": {
+                      "description": "An ISO 4217 code",
                       "max": 3,
                       "min": 3,
                       "type": "string"
@@ -217,6 +221,7 @@
                   }
                 },
                 "mode": "open",
+                "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
@@ -310,21 +315,21 @@
         "mode": "open",
         "type": "object"
       },
-      "code": "INVALID_INPUT",
-      "message": "Invalid input",
-      "origin": "standard",
+      "code": "BAD_REQUEST",
+      "message": "The request is invalid",
+      "origin": "@org/definitions@0.0.0",
       "status": 400
     },
     "notFound": {
-      "code": "NOT_FOUND",
-      "message": "Not found",
-      "origin": "standard",
+      "code": "RESOURCE_NOT_FOUND",
+      "message": "The resource does not exist",
+      "origin": "@org/definitions@0.0.0",
       "status": 404
     },
     "notImplemented": {
-      "code": "NOT_IMPLEMENTED",
-      "message": "Not implemented",
-      "origin": "standard",
+      "code": "NOT_YET_IMPLEMENTED",
+      "message": "Not implemented yet",
+      "origin": "@org/definitions@0.0.0",
       "status": 501
     }
   },

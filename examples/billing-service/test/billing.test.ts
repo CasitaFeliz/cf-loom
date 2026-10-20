@@ -80,7 +80,7 @@ describe('invoiceFor', () => {
 
   test('an order orders-service does not know is not found', async () => {
     const { fake, client } = fakeOrders();
-    fake.on('getOrder').otherwise((r) => r.reject('NOT_FOUND'));
+    fake.on('getOrder').otherwise((r) => r.reject('RESOURCE_NOT_FOUND'));
 
     const invoicing = await invoiceFor(client, ORDER_ID);
 
@@ -146,7 +146,7 @@ describe('invoiceFor', () => {
     },
   );
 
-  test.each(['UNAUTHENTICATED', 'NOT_IMPLEMENTED', 'INVALID_INPUT'] as const)(
+  test.each(['UNAUTHENTICATED', 'NOT_YET_IMPLEMENTED', 'BAD_REQUEST'] as const)(
     '%s leaves orders-service unavailable, not retryable',
     async (code) => {
       const { fake, client } = fakeOrders();
@@ -154,10 +154,10 @@ describe('invoiceFor', () => {
         switch (code) {
           case 'UNAUTHENTICATED':
             return respond.reject('UNAUTHENTICATED');
-          case 'NOT_IMPLEMENTED':
-            return respond.reject('NOT_IMPLEMENTED');
-          case 'INVALID_INPUT':
-            return respond.reject('INVALID_INPUT', { issues: [] });
+          case 'NOT_YET_IMPLEMENTED':
+            return respond.reject('NOT_YET_IMPLEMENTED');
+          case 'BAD_REQUEST':
+            return respond.reject('BAD_REQUEST', { issues: [] });
         }
       });
 
@@ -171,6 +171,32 @@ describe('invoiceFor', () => {
     const { fake, client } = fakeOrders();
     const badTotal = { amount: 4200, currency: 'EURO' };
     fake.on('getOrder').otherwise((r) => r.success({ ...paidOrder, total: badTotal }));
+
+    const invoicing = invoiceFor(client, ORDER_ID);
+
+    await expect(invoicing).rejects.toBeInstanceOf(FakeProviderError);
+  });
+});
+
+describe('a client of the faked orders-service', () => {
+  test('an order id that is no UUID is answered BAD_REQUEST and never sent', async () => {
+    const { fake, client } = fakeOrders();
+
+    const outcome = await client.getOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      known: true,
+      code: 'BAD_REQUEST',
+      message: 'The request is invalid',
+    });
+    expect(fake.calls('getOrder')).toHaveLength(0);
+  });
+
+  test('cf-loom’s default NOT_FOUND is a type error and a mistake for the fake', async () => {
+    const { fake, client } = fakeOrders();
+    // @ts-expect-error orders-service answers RESOURCE_NOT_FOUND, never cf-loom's default code
+    fake.on('getOrder').otherwise((r) => r.reject('NOT_FOUND'));
 
     const invoicing = invoiceFor(client, ORDER_ID);
 

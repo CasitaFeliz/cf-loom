@@ -13,6 +13,7 @@
     "@cf-loom/handlers": "workspace:*",
     "@cf-loom/server": "workspace:*",
     "@org/contract-orders-service": "workspace:*",
+    "@org/definitions": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

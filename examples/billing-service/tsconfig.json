@@ -28,6 +28,9 @@
     },
     {
       "path": "../orders-service/tsconfig.contract-package.json"
+    },
+    {
+      "path": "../org-definitions/tsconfig.build.json"
     }
   ]
 }
