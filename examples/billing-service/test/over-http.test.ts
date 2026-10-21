@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { client } from '@cf-loom/client';
 import { serve } from '@cf-loom/server';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
@@ -48,7 +48,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   vi.unstubAllEnvs();
-  orders?.kill();
+  orders?.kill('SIGKILL');
 });
 
 function anInvoiceRequest(orderId: string): Request {
@@ -142,12 +142,15 @@ describe('a client of orders-service over HTTP', () => {
 });
 
 describe('orders-service’s main.ts', () => {
-  test('it stops serving and exits with status 0 when it is sent SIGTERM', async () => {
-    const own = spawnOrders();
-    await portOf(own.stdout);
-    const exited = once(own, 'exit');
+  test('it exits with status 0 when it is sent SIGTERM', async () => {
+    const ordersToStop = spawnOrders();
+    onTestFinished(() => {
+      ordersToStop.kill('SIGKILL');
+    });
+    await portOf(ordersToStop.stdout);
+    const exited = once(ordersToStop, 'exit');
 
-    own.kill('SIGTERM');
+    ordersToStop.kill('SIGTERM');
 
     const [status, signal] = await exited;
     expect({ status, signal }).toEqual({ status: 0, signal: null });
