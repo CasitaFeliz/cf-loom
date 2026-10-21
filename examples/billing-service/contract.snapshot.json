@@ -144,7 +144,9 @@
           "name": "getOrder"
         }
       ],
-      "events": []
+      "events": [
+        "OrderCreated@1"
+      ]
     }
   },
   "endpoints": {
@@ -333,5 +335,9 @@
       "status": 501
     }
   },
-  "subscriptions": {}
+  "subscriptions": {
+    "draft-invoice-on-created": {
+      "event": "orders-service:OrderCreated@1"
+    }
+  }
 }
