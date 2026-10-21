@@ -789,6 +789,42 @@ const mutualDefs: Defs = {
   second: anObject({ next: required(aRef('first')) }),
 };
 
+const treeContainers: readonly {
+  readonly container: string;
+  readonly node: SchemaNode;
+  readonly shape: ShapeDifference;
+}[] = [
+  {
+    container: 'a plain union',
+    node: { type: 'union', options: [aRef('tree'), aString] },
+    shape: { kind: 'union-changed' },
+  },
+  {
+    container: 'a record',
+    node: { type: 'record', key: aString, value: aRef('tree') },
+    shape: { kind: 'unproven', node: 'record' },
+  },
+  {
+    container: 'a tuple',
+    node: { type: 'tuple', items: [aRef('tree')] },
+    shape: { kind: 'unproven', node: 'tuple' },
+  },
+  {
+    container: 'an intersection',
+    node: { type: 'allOf', items: [aRef('tree'), aString] },
+    shape: { kind: 'unproven', node: 'allOf' },
+  },
+];
+
+const containedRows: readonly Row[] = treeContainers.map(({ container, node, shape }) => ({
+  change: `changing a def a ref reaches inside ${container}`,
+  from: node,
+  to: node,
+  fromDefs: { tree },
+  toDefs: { tree: treeWithName },
+  found: [found(shape, breaksEverywhere)],
+}));
+
 const refRows: readonly Row[] = [
   {
     change: 'changing a def a ref names',
@@ -812,44 +848,21 @@ const refRows: readonly Row[] = [
     },
     found: [found(unproven, breaksEverywhere)],
   },
-  {
-    change: 'changing a def a ref reaches inside a plain union',
-    from: { type: 'union', options: [aRef('tree'), aString] },
-    to: { type: 'union', options: [aRef('tree'), aString] },
-    fromDefs: { tree },
-    toDefs: { tree: treeWithName },
-    found: [found({ kind: 'union-changed' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a def a ref reaches inside a record',
-    from: { type: 'record', key: aString, value: aRef('tree') },
-    to: { type: 'record', key: aString, value: aRef('tree') },
-    fromDefs: { tree },
-    toDefs: { tree: treeWithName },
-    found: [found({ kind: 'unproven', node: 'record' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a def a ref reaches inside a tuple',
-    from: { type: 'tuple', items: [aRef('tree')] },
-    to: { type: 'tuple', items: [aRef('tree')] },
-    fromDefs: { tree },
-    toDefs: { tree: treeWithName },
-    found: [found({ kind: 'unproven', node: 'tuple' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a def a ref reaches inside an intersection',
-    from: { type: 'allOf', items: [aRef('tree'), aString] },
-    to: { type: 'allOf', items: [aRef('tree'), aString] },
-    fromDefs: { tree },
-    toDefs: { tree: treeWithName },
-    found: [found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere)],
-  },
+  ...containedRows,
   {
     change: 'pointing a ref at the other def of a mutual recursion, which reaches the same defs',
     from: aRef('first'),
     to: aRef('second'),
     fromDefs: mutualDefs,
     toDefs: mutualDefs,
+    found: [found(unproven, breaksEverywhere)],
+  },
+  {
+    change: 'making a def a ref names nullable',
+    from: aRef('tree'),
+    to: aRef('tree'),
+    fromDefs: { tree },
+    toDefs: { tree: { ...tree, nullable: true } },
     found: [found(unproven, breaksEverywhere)],
   },
   {
@@ -897,6 +910,26 @@ describe('compatibilityReportOf, refs', () => {
 
     expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
   });
+
+  test.each(
+    treeContainers.flatMap(({ container, node }) =>
+      places.map((place) => ({ container, node, place: place.name, where: place })),
+    ),
+  )(
+    'a def changed only in its description under $container is no Change in $place',
+    ({ node, where }) => {
+      const describedTree = { ...tree, description: 'A tree' };
+
+      const report = reportOf(where, {
+        from: node,
+        to: node,
+        fromDefs: { tree },
+        toDefs: { tree: describedTree },
+      });
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    },
+  );
 
   test.each(places)(
     'a variant that is a ref to an unchanged def is no Change in $name',

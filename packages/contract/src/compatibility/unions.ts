@@ -6,7 +6,7 @@ import {
   found,
   inside,
   type NodePair,
-  type PairOf,
+  type NodePairOf,
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
 
@@ -15,7 +15,7 @@ import { isUnchanged } from './refs.ts';
  * changed value is a variant removed and one added, and when the discriminator itself is renamed no
  * variant is matched and nothing inside them is compared.
  */
-export function taggedFindingsOf({ baseline, proposed }: PairOf<'tagged'>): readonly Finding[] {
+export function taggedFindingsOf({ baseline, proposed }: NodePairOf<'tagged'>): readonly Finding[] {
   if (baseline.discriminator !== proposed.discriminator) {
     const change = { from: baseline.discriminator, to: proposed.discriminator };
     return [found({ kind: 'discriminator-changed', ...change })];

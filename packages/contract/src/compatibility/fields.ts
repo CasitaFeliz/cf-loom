@@ -1,13 +1,13 @@
 import { type Field, isKeyedRecord, type ObjectNode, type Path } from '../walker/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
-import { type Finding, found, inside, type PairOf } from './findings.ts';
+import { type Finding, found, inside, type NodePairOf } from './findings.ts';
 
 /**
  * How two objects differ: a change of mode is a different type, so no field is compared then;
  * otherwise each field, in code point order, added, removed, made required or optional, and its
  * schema.
  */
-export function objectFindingsOf({ baseline, proposed }: PairOf<'object'>): readonly Finding[] {
+export function objectFindingsOf({ baseline, proposed }: NodePairOf<'object'>): readonly Finding[] {
   if (baseline.mode !== proposed.mode) {
     return [found({ kind: 'mode-changed', from: baseline.mode, to: proposed.mode })];
   }

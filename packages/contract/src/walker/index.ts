@@ -11,7 +11,6 @@ export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';
 export type {
-  ArrayNode,
   EnumNode,
   Field,
   JsonPrimitive,

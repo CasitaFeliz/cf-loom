@@ -17,7 +17,7 @@ export function refFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[
 
 /**
  * Whether two nodes have the same shape, apart from their own nullability, and every def their
- * `ref`s reach has the same shape on both sides. No def is entered, so no cycle can arise.
+ * `ref`s reach has the same shape on both sides. No def is compared by Position.
  */
 export function isUnchanged({ baseline, proposed }: NodePair, defs: BothDefs): boolean {
   const hasSameShape =

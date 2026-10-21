@@ -5,7 +5,7 @@ import type { ShapeDifference } from './report.ts';
 export type NodePair = { readonly baseline: SchemaNode; readonly proposed: SchemaNode };
 
 /** A pair of nodes of one type, which a check of that type narrows to. */
-export type PairOf<Type extends SchemaNode['type']> = {
+export type NodePairOf<Type extends SchemaNode['type']> = {
   readonly baseline: Extract<SchemaNode, { readonly type: Type }>;
   readonly proposed: Extract<SchemaNode, { readonly type: Type }>;
 };

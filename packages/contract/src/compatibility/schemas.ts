@@ -7,7 +7,7 @@ import {
   found,
   inside,
   type NodePair,
-  type PairOf,
+  type NodePairOf,
   typeChanged,
 } from './findings.ts';
 import { isUnchanged, refFindingsOf } from './refs.ts';
@@ -65,36 +65,36 @@ function typeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
     : [typeChanged(pair)];
 }
 
-function isPairOf<Type extends SchemaNode['type']>(
+function isNodePairOf<Type extends SchemaNode['type']>(
   pair: NodePair,
   type: Type,
-): pair is PairOf<Type> {
+): pair is NodePairOf<Type> {
   return pair.baseline.type === type && pair.proposed.type === type;
 }
 
 /**
  * Two nodes of one type. What no rule here compares, the constraints of a string or a number, a
  * record, a tuple and an intersection, is one change no rule proves compatible when their shapes
- * differ.
+ * differ, or a def their `ref`s reach.
  */
 function sameTypeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
-  if (isPairOf(pair, 'object')) {
+  if (isNodePairOf(pair, 'object')) {
     return objectFindingsOf(pair);
   }
-  if (isPairOf(pair, 'tagged')) {
+  if (isNodePairOf(pair, 'tagged')) {
     return taggedFindingsOf(pair);
   }
-  if (isPairOf(pair, 'array')) {
+  if (isNodePairOf(pair, 'array')) {
     return arrayFindingsOf(pair);
   }
-  if (isPairOf(pair, 'union')) {
+  if (isNodePairOf(pair, 'union')) {
     return unionFindingsOf(pair, defs);
   }
   return isUnchanged(pair, defs) ? [] : [found({ kind: 'unproven', node: pair.baseline.type })];
 }
 
 /** An array's items follow the field rules; its item counts are constraints no rule here compares. */
-function arrayFindingsOf({ baseline, proposed }: PairOf<'array'>): readonly Finding[] {
+function arrayFindingsOf({ baseline, proposed }: NodePairOf<'array'>): readonly Finding[] {
   const hasSameCounts = baseline.min === proposed.min && baseline.max === proposed.max;
   const counts = hasSameCounts ? [] : [found({ kind: 'unproven', node: 'array' })];
   return [...counts, inside(baseline.items, proposed.items, ['items'])];

@@ -2,8 +2,9 @@ import type { Visibility } from '../declarations/index.ts';
 import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 
 /**
- * Where a Change is: an Element by identity, with its Visibility, which decides the bump. When the
- * Visibility moved, it is the wider of the two; when the Element is on one side only, that side's.
+ * Where a Change is: an Element by identity, with its Visibility, which decides the bump, or a
+ * Definitions Package's shared schema by name. When the Visibility moved, it is the wider of the
+ * two; when the Element is on one side only, that side's.
  */
 export type ChangeSite =
   | { readonly kind: 'endpoint'; readonly identity: string; readonly visibility: Visibility }
