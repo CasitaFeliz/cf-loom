@@ -551,7 +551,7 @@ describe('walkSchemas: recursion', () => {
   });
 
   test('defs dropped with their group are not walked again by a later use', () => {
-    const count = 20;
+    const count = 4;
     const steps: z.ZodType[] = [];
     const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
     for (let index = 0; index <= count; index++) {
@@ -568,22 +568,24 @@ describe('walkSchemas: recursion', () => {
       steps.push(step.meta({ id: `step${index}` }));
     }
 
-    const started = performance.now();
+    let asked = 0;
     const walked = walkSchemas(
       [
         { at: ['body'], schema: steps[0]! },
         { at: ['success'], schema: steps[1]! },
       ],
-      () => undefined,
+      () => {
+        asked++;
+        return undefined;
+      },
     );
-    const elapsed = performance.now() - started;
 
     const failure = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
     expect(walked).toEqual({
       located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
       defs: {},
     });
-    expect(elapsed).toBeLessThan(1000);
+    expect(asked).toBe(13);
   });
 
   test('a cyclic schema used at two locations is one def', () => {
