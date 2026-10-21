@@ -46,14 +46,17 @@ function bumpOf({ site, class: changeClass }: Change): VersionBump {
 
 /**
  * Whether Consumers can see a site, since the version is a signal for them and for nobody else; a
- * shared schema is for the Services that import it, who may use all of it.
+ * Definitions Package's shared schema or Guard is for the Services that import it, who may use all
+ * of it.
  */
 function reachesConsumers(site: ChangeSite): boolean {
   switch (site.kind) {
     case 'endpoint':
     case 'event':
+    case 'code':
       return site.visibility !== 'private';
     case 'shared-schema':
+    case 'guard':
       return true;
     case 'command':
       return false;

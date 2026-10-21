@@ -162,7 +162,17 @@ function changesOf(
 }
 
 function identityOf(site: ChangeSite): string {
-  return site.kind === 'shared-schema' ? site.name : site.identity;
+  switch (site.kind) {
+    case 'code':
+      return site.code;
+    case 'guard':
+    case 'shared-schema':
+      return site.name;
+    case 'endpoint':
+    case 'event':
+    case 'command':
+      return site.identity;
+  }
 }
 
 type Element = {

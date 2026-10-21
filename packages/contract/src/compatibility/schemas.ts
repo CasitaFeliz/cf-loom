@@ -18,7 +18,10 @@ import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 /** Where a schema sits: the Position it is read in, and its path from the site. */
 export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
 
-/** Where a schema of an Endpoint's Input or Success sits: never a Message's or a shared schema's. */
+/**
+ * Where a schema read as Input or Success sits: an Endpoint's part, a Guard's demand or a
+ * Rejection's body; never a Message's or a shared schema's.
+ */
 export type EndpointPlace = { readonly position: EndpointPosition; readonly at: Path };
 
 /**

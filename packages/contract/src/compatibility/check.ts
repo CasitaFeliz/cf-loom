@@ -9,15 +9,23 @@ import {
 } from '../snapshot/index.ts';
 import { messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
+import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.ts';
 import { endpointDifferencesOf } from './endpoints.ts';
 import { bothDefsOf } from './findings.ts';
 import { type DependencyGraph, dependenciesOn } from './graph.ts';
+import { guardDifferencesOf } from './guards.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { publishedSnapshotOf } from './merge.ts';
 import { pairsOf } from './pairs.ts';
 import { presenceDifferenceOf } from './presence.ts';
 import { renameDifferenceOf } from './renames.ts';
-import type { Change, ChangeSite, CompatibilityReport, Difference } from './report.ts';
+import type {
+  Change,
+  ChangeSite,
+  CompatibilityReport,
+  Difference,
+  SiteDifferences,
+} from './report.ts';
 import { endpointPathsOf, shadowingDifferencesOf } from './shadowing.ts';
 import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
@@ -50,22 +58,29 @@ function changesOf(
       ...endpointChangesOf(baseline, proposed, graph),
       ...eventChangesOf(baseline, proposed, graph),
       ...commandChangesOf(baseline, proposed),
+      ...siteChangesOf(serviceCodeDifferencesOf(baseline, proposed)),
     ];
   }
   if (baseline.kind === 'definitions' && proposed.kind === 'definitions') {
-    return sharedSchemaChangesOf(baseline, proposed);
+    return definitionsChangesOf(baseline, proposed);
   }
   return [];
 }
 
-/** A Definitions Package has no Elements: its shared schemas are what its Changes are on. */
-function sharedSchemaChangesOf(
+/** A Definitions Package has no Elements: its shared schemas, Guards and codes are what its Changes are on. */
+function definitionsChangesOf(
   baseline: PublishedDefinitionsSnapshot,
   proposed: DefinitionsSnapshot,
 ): readonly Change[] {
-  return sharedSchemaDifferencesOf(baseline, proposed).flatMap(({ site, differences }) =>
-    changesAt(site, differences),
-  );
+  return siteChangesOf([
+    ...sharedSchemaDifferencesOf(baseline, proposed),
+    ...guardDifferencesOf(baseline, proposed),
+    ...definitionsCodeDifferencesOf(baseline, proposed),
+  ]);
+}
+
+function siteChangesOf(sites: readonly SiteDifferences[]): readonly Change[] {
+  return sites.flatMap(({ site, differences }) => changesAt(site, differences));
 }
 
 function endpointChangesOf(
