@@ -232,6 +232,70 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
+    test('the id of a refused cycle stays taken, so another schema with it is a duplicate', () => {
+      const taken: z.ZodType = z.union([z.lazy(() => taken), z.string()]).meta({ id: 'shared' });
+      const category = z
+        .object({
+          get children() {
+            return z.array(category);
+          },
+        })
+        .meta({ id: 'shared' });
+
+      const walked = walkSchemas(
+        [
+          { at: ['body'], schema: taken },
+          { at: ['success'], schema: category },
+        ],
+        () => undefined,
+      );
+
+      const duplicate = { at: ['success'], construct: 'two schemas with .meta({ id: "shared" })' };
+      expect(walked).toEqual({
+        located: [
+          refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }]),
+          refusedAt(['success'], [duplicate]),
+        ],
+        defs: {},
+      });
+    });
+
+    test('a def dropped with one failure keeps it when a later failure drops the group around it', () => {
+      const root: z.ZodType = z
+        .object({
+          get next(): z.ZodType {
+            return open;
+          },
+          placedAt: z.date(),
+        })
+        .meta({ id: 'root' });
+      const open: z.ZodType = z
+        .union([z.lazy(() => open), z.lazy(() => root), z.array(z.lazy(() => held))])
+        .meta({ id: 'open' });
+      const held: z.ZodType = z
+        .object({
+          get back(): z.ZodType {
+            return open;
+          },
+        })
+        .meta({ id: 'held' });
+
+      const walked = walkSchemas(
+        [
+          { at: ['body'], schema: root },
+          { at: ['success'], schema: held },
+        ],
+        () => undefined,
+      );
+
+      const cycle = { at: ['body', 'fields', 'next'], ...nodelessCycle };
+      const date = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
+      expect(walked).toEqual({
+        located: [refusedAt(['body'], [cycle, date]), refusedAt(['success'], [cycle])],
+        defs: {},
+      });
+    });
+
     describe('with unions and intersections on the cycle', () => {
       const refusedAtBody = {
         located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
@@ -400,6 +464,12 @@ describe('walkSchemas: recursion', () => {
       })
       .meta({ id: 'itself' });
     const tupled: z.ZodType = z.tuple([z.lazy(() => tupled)]).meta({ id: 'tupled' });
+    const recorded: z.ZodType = z
+      .record(
+        z.string(),
+        z.lazy(() => recorded),
+      )
+      .meta({ id: 'recorded' });
 
     test('a union whose recursive option is an array of itself is a def', () => {
       expect(walkBody(listing)).toEqual({
@@ -424,6 +494,19 @@ describe('walkSchemas: recursion', () => {
             type: 'object',
             mode: 'open',
             fields: { self: { required: true, schema: { type: 'ref', name: 'itself' } } },
+          },
+        },
+      });
+    });
+
+    test('a record of itself is still a def', () => {
+      expect(walkBody(recorded)).toEqual({
+        located: [walkedAt(['body'], { type: 'ref', name: 'recorded' })],
+        defs: {
+          recorded: {
+            type: 'record',
+            key: { type: 'string' },
+            value: { type: 'ref', name: 'recorded' },
           },
         },
       });
@@ -465,6 +548,42 @@ describe('walkSchemas: recursion', () => {
     const failuresOf = (location: typeof first) =>
       location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
     expect(failuresOf(first)[0]).toBe(failuresOf(second)[0]);
+  });
+
+  test('defs dropped with their group are not walked again by a later use', () => {
+    const count = 20;
+    const steps: z.ZodType[] = [];
+    const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
+    for (let index = 0; index <= count; index++) {
+      const own = index === 0 ? { placedAt: z.date() } : {};
+      const step = z.object({
+        ...own,
+        get a() {
+          return nextOf(index);
+        },
+        get b() {
+          return nextOf(index);
+        },
+      });
+      steps.push(step.meta({ id: `step${index}` }));
+    }
+
+    const started = performance.now();
+    const walked = walkSchemas(
+      [
+        { at: ['body'], schema: steps[0]! },
+        { at: ['success'], schema: steps[1]! },
+      ],
+      () => undefined,
+    );
+    const elapsed = performance.now() - started;
+
+    const failure = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
+    expect(walked).toEqual({
+      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+      defs: {},
+    });
+    expect(elapsed).toBeLessThan(1000);
   });
 
   test('a cyclic schema used at two locations is one def', () => {

@@ -472,6 +472,19 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
+    test('a tagged node whose variant is a ref to its own def decodes', () => {
+      const tree: SchemaNode = {
+        type: 'tagged',
+        discriminator: 'type',
+        variants: { '"branch"': aRef('tree') },
+      };
+      const published = aService({ defs: { tree } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
     test('an alias def of a recursive def decodes', () => {
       const published = aService({ defs: { alias: aRef('tree'), tree: treeDef } });
 

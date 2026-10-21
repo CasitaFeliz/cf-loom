@@ -154,7 +154,8 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
 
 /**
  * Records the one failure of a def and drops the defs still open below it, which hold `ref`s to
- * it, so every use of any of them reports that failure.
+ * it, so every use of any of them reports that failure. A dropped def leaves the open defs, so a
+ * later failure higher up does not record itself over the first.
  */
 function dropOpenGroup(state: State, ancestor: Ancestor, failure: Walked): Walked {
   state.reportedBySchema.set(ancestor.schema, failure);
