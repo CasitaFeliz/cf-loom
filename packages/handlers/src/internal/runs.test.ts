@@ -17,6 +17,7 @@ import {
   faultLineOf,
   faultLogOf,
   isStub,
+  logOf,
   mappedHandlerOf,
   readerOf,
   runEndpoint,
@@ -470,6 +471,19 @@ describe('faultLineOf', () => {
     const line = faultLineOf('getOrder', fault);
 
     expect(line).toBe('getOrder: Internal error');
+  });
+});
+
+describe('logOf', () => {
+  test('a line is logged alone, or then its cause when it has one', () => {
+    const error = new Error('gateway down');
+
+    const logs = [
+      logOf('getOrder: Internal error', error),
+      logOf('getOrder: Try again', undefined),
+    ];
+
+    expect(logs).toEqual([['getOrder: Internal error', error], ['getOrder: Try again']]);
   });
 });
 

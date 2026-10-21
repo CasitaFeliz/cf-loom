@@ -1,4 +1,4 @@
-import { elementNameOf, faultLineOf, issueLineOf } from '@cf-loom/handlers/internal';
+import { elementNameOf, faultLineOf, issueLineOf, logOf } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, ConsumedFault, Delivery } from '../broker/index.ts';
 
 /** What hears of a `ConsumedFault`: the Service's `onServiceFault`, or the console without one. */
@@ -22,20 +22,30 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
   }
 }
 
-/** The line for a delivery whose `receive` rejected, which only an `onServiceFault` that throws causes. */
-export function receiveFailureLineOf(
+/** What a fault says of where it came from: the Element handled and the Message. */
+export type About = Pick<ConsumedFault, 'element' | 'subject' | 'messageId' | 'factId'>;
+
+/** Where a delivery went: the Element its consumer handles, its subject and the Message's ids. */
+export function aboutOf(
   { element, subject }: Pick<BrokerConsumer, 'element' | 'subject'>,
   { messageId, factId }: Pick<Delivery, 'messageId' | 'factId'>,
+): About {
+  return { element: elementNameOf(element), subject, messageId, factId };
+}
+
+/** The line for a delivery whose `receive` rejected, which only an `onServiceFault` that throws causes. */
+export function receiveFailureLineOf(
+  consumer: Pick<BrokerConsumer, 'element' | 'subject'>,
+  delivery: Pick<Delivery, 'messageId' | 'factId'>,
 ): string {
-  const source = sourceOf({ element: elementNameOf(element), subject, messageId, factId });
+  const source = sourceOf(aboutOf(consumer, delivery));
   return faultLineOf(source, { message: 'onServiceFault threw' });
 }
 
-/** A fault on the console: each of its lines, after its cause when it has one. */
+/** A fault on the console: each of its lines, then its cause when it has one. */
 function logConsumedFault(fault: ConsumedFault): void {
-  const cause = causeOf(fault);
   for (const line of consumedFaultLinesOf(fault)) {
-    console.error(...(cause === undefined ? [line] : [line, cause]));
+    console.error(...logOf(line, causeOf(fault)));
   }
 }
 
@@ -51,11 +61,6 @@ function causeOf(fault: ConsumedFault): unknown {
 }
 
 /** What names a Message in a line: the Element handling it, its subject, broker message id and Fact id. */
-function sourceOf({
-  element,
-  subject,
-  messageId,
-  factId,
-}: Pick<ConsumedFault, 'element' | 'subject' | 'messageId' | 'factId'>): string {
+function sourceOf({ element, subject, messageId, factId }: About): string {
   return `${element} ${subject} ${messageId} ${factId}`;
 }

@@ -4,6 +4,7 @@ export {
   faultLineOf,
   faultLogOf,
   issueLineOf,
+  logOf,
   notRunFaultOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
