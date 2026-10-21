@@ -64,14 +64,17 @@ Before handing back, the agent runs `pnpm test` and `pnpm check`, pushes the bra
 
 ## 3. Review
 
-When CI fails, the implementer is resumed to make it pass; that is not a review round. Once CI passes, three Opus
-reviewers read the whole PR in parallel, one lens each, the three lenses of C27:
+Once `pnpm build`, `pnpm test` and `pnpm check` pass locally, three Opus reviewers read the whole PR in parallel, one
+lens each, the three lenses of C27:
 
 | Lens | Checks |
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 |
 | Fidelity | The code against the plan; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
 | Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
+
+CI runs meanwhile. When it fails, the implementer is resumed to make it pass; that is not a review round. CI must pass
+before the merge ([Definition of Done](#definition-of-done)).
 
 The main session merges the three reports, removes duplicates, checks each finding against the code and sorts them in
 C27's order. Once the round's fixes are pushed, it posts one comment on the PR for the round, listing every finding by
@@ -84,7 +87,7 @@ public API, a rule or what a document means is put to the user. The implementer 
 fix and the user's answers; it writes a failing test for each bug before fixing it, then runs `pnpm test` and `pnpm
 check` and pushes.
 
-Once CI passes again, the three lenses review the whole PR again. Round 1 is the first review and round 2 the review
+Once the fixes pass locally, the three lenses review the whole PR again. Round 1 is the first review and round 2 the review
 after its fixes. The loop ends when a round finds nothing to fix. When round 2 still finds something, the main session
 stops and brings the state to the user, who decides to merge as it stands, rework the plan, or split the issue.
 
@@ -117,8 +120,8 @@ An issue that changes only documents or configuration keeps the plan, the Defini
 Definition of Done and the merge, without the items that do not apply (a public API, a test list). The main session
 makes the change itself, since it holds the design context, and one Opus reviewer reads the PR for fidelity,
 consistency across the documents, and links. The main session fixes the findings, and the same reviewer reads the
-whole PR again each round, at most two rounds. The main session also makes CI pass, and the reviewer reads once it
-passes.
+whole PR again each round, at most two rounds. The reviewer reads once the change passes locally, and the main session
+makes CI pass before the merge.
 
 ## Changesets
 
