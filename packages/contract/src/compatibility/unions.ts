@@ -43,3 +43,11 @@ function variantFindingOf(variant: Counterpart<ObjectNode | RefNode>): Finding {
 export function unionFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
   return isUnchanged(pair, defs) ? [] : [found({ kind: 'union-changed' })];
 }
+
+/**
+ * How two intersections that are not of objects differ: as for plain unions, any change to their
+ * items, or to a def their `ref`s reach, is Breaking.
+ */
+export function allOfFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
+  return isUnchanged(pair, defs) ? [] : [found({ kind: 'unproven', node: 'allOf' })];
+}

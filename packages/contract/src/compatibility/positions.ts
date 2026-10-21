@@ -28,9 +28,10 @@ function strongestOf(classes: readonly ShapeClass[]): ShapeClass {
 }
 
 /**
- * The Fields and the Enums, literals and unions tables of COMPATIBILITY.md, whose Message column
- * is always the stronger of the other two.
+ * The Fields, Enums, literals and unions and Constraints tables of COMPATIBILITY.md, whose Message
+ * column is always the stronger of the other two.
  */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the classes of each kind of shape difference
 function inputAndSuccessClassesOf(shape: ShapeDifference): readonly [ShapeClass, ShapeClass] {
   switch (shape.kind) {
     case 'field-added':
@@ -42,12 +43,14 @@ function inputAndSuccessClassesOf(shape: ShapeDifference): readonly [ShapeClass,
     case 'nullability-added':
     case 'enum-widened':
     case 'variant-added':
+    case 'constraint-relaxed':
       return ['additive', 'breaking'];
     case 'field-made-required':
     case 'nullability-removed':
     case 'value-removed':
     case 'enum-narrowed':
     case 'variant-removed':
+    case 'constraint-tightened':
       return ['breaking', 'additive'];
     case 'enum-opened':
       return ['neutral', 'breaking'];
@@ -58,6 +61,9 @@ function inputAndSuccessClassesOf(shape: ShapeDifference): readonly [ShapeClass,
     case 'union-changed':
     case 'mode-changed':
     case 'type-changed':
+    case 'constraint-replaced':
+    case 'rest-added':
+    case 'rest-removed':
     case 'unproven':
       return ['breaking', 'breaking'];
   }

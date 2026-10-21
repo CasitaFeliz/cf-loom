@@ -8,6 +8,7 @@ export type {
   ChangeSite,
   ComparedReport,
   CompatibilityReport,
+  Constraint,
   Difference,
   GraphDependency,
   Position,

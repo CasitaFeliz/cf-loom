@@ -1,9 +1,11 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: the package's one ./internal entry, the re-exports other cf-loom packages import; split, it crosses files both ways
 export type {
   Change,
   ChangeClass,
   ChangeSite,
   ComparedReport,
   CompatibilityReport,
+  Constraint,
   DependencyGraph,
   Difference,
   GraphDependency,

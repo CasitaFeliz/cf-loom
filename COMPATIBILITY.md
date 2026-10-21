@@ -99,7 +99,7 @@ A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.m
 
 ### Constraints
 
-Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`.
+Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`. Each is compared on its own: `min` and `exclusiveMin` are one lower bound, and `max` and `exclusiveMax` one upper bound (see [Schemas](SNAPSHOT.md#schemas)); whether one `multipleOf` is a multiple of another is judged exactly, on its decimal digits. When one constraint tightens and another relaxes, together the Changes are Breaking in every Position.
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 - A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)); removing a key is Breaking in every Position (see [Fields](#fields)).
 - A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
 - An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
-- A recursive schema is compared by following its `ref`s (see [Recursion](SNAPSHOT.md#recursion)).
+- A recursive schema is compared by following its `ref`s into each Snapshot's `defs`, as if written inline (see [Recursion](SNAPSHOT.md#recursion)): a def's name is not part of its shape, and a pair of schemas met again on its own path compares no further. Under the plain-union rule, renaming a def or pointing a `ref` at another def is a change.
 - `z.json()` is an opaque JSON value: any change to or from it is Breaking.
 
 ### Success status and headers
