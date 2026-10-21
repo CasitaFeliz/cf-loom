@@ -6,7 +6,7 @@ import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 import { startMessaging } from './messaging.ts';
 
-/** In memory until the JetStream adapter replaces it (https://github.com/CasitaFeliz/cf-loom/issues/77). */
+// TODO(#77): start messaging with jetstream() once the adapter exists.
 const running = await startMessaging(memory());
 const http = serve(contract, handlers);
 const server = nodeHttp(http).listen(Number(process.env['PORT'] ?? 3000), () => {
