@@ -579,7 +579,7 @@ describe('pending and redeliver()', () => {
     ]);
   });
 
-  test('redeliver() delivers an entry a deliver replaced after the snapshot from the entry as it stands', async () => {
+  test('redeliver() delivers a Message a deliver replaced after the snapshot as it stands', async () => {
     const gate = aGate();
     const { broker, sender, received } = await running(() => ({
       charge: async (_body, meta) => {
@@ -608,7 +608,7 @@ describe('pending and redeliver()', () => {
     ]);
   });
 
-  test('redeliver() skips an entry a deliver acknowledged after the snapshot', async () => {
+  test('redeliver() skips a Message a deliver acknowledged after the snapshot', async () => {
     const gate = aGate();
     const failed = new Set<string>();
     const { broker, sender, received } = await running(() => ({

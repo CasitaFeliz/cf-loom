@@ -15,6 +15,16 @@ import type { DeliveryMeta } from './types.ts';
 /** One delivery to one consumer: the Delivery it receives. */
 export type Attempt = { readonly consumer: BrokerConsumer; readonly delivery: Delivery };
 
+/** The Delivery of a Message the first time a consumer receives it. */
+export function firstDeliveryOf({
+  messageId,
+  factId,
+  headers,
+  body,
+}: Omit<Delivery, 'deliveryCount'>): Delivery {
+  return { messageId, factId, deliveryCount: 1, headers, body };
+}
+
 /** What a test hands `deliver`: the Message Version, its body as a Subscriber reads it, and its meta. */
 type Injection = {
   readonly message: Event | Command;
@@ -56,7 +66,7 @@ function attemptsOf(
   const headers = transportHeadersOf(meta.headers ?? {});
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
-    return { consumer, delivery: { messageId, factId, deliveryCount: 1, headers, body: bytes } };
+    return { consumer, delivery: firstDeliveryOf({ messageId, factId, headers, body: bytes }) };
   });
 }
 

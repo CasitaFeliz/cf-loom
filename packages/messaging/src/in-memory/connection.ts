@@ -1,5 +1,5 @@
 import type { BrokerConnection, BrokerConsumer, OutgoingMessage } from '../broker/index.ts';
-import type { Attempt } from './attempts.ts';
+import { type Attempt, firstDeliveryOf } from './attempts.ts';
 import type { Deliveries } from './deliveries.ts';
 import { Recorded } from './recorded.ts';
 import type { RecordedMessage } from './types.ts';
@@ -19,8 +19,7 @@ export class MemoryConnection implements BrokerConnection {
     if (this.#recorded.add(message) === 'duplicate') {
       return;
     }
-    const { messageId, factId, headers, body } = message;
-    const delivery = { messageId, factId, deliveryCount: 1, headers, body };
+    const delivery = firstDeliveryOf(message);
     const attempts = this.#consumers
       .filter((consumer) => consumer.subject === message.subject)
       .map((consumer): Attempt => ({ consumer, delivery }));

@@ -3,7 +3,7 @@ import { consumedFaultLinesOf, receiveFailureLineOf } from '../consuming/index.t
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
 import { DeliveryLine } from './line.ts';
-import { type PendingEntry, PendingList } from './pending.ts';
+import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
 
 /** A delivery whose `receive` rejected is left for redelivery, as the Broker's `receive` says. */
@@ -42,8 +42,8 @@ export class Deliveries {
 
   /** Lines every Message pending now up again, each for the consumer it is pending for, and waits for them. */
   async redeliver(): Promise<void> {
-    const pending = this.#pending.entries();
-    await Promise.all(pending.map((entry) => this.#line.add(() => this.#again(entry))));
+    const pending = this.#pending.attempts();
+    await Promise.all(pending.map((attempt) => this.#line.add(() => this.#again(attempt))));
   }
 
   /** Waits until nothing is in flight, then rejects if anything failed since the last time. */
@@ -57,8 +57,8 @@ export class Deliveries {
   }
 
   /** A pending Message delivered as its next attempt, unless it left the list since `redeliver` was called. */
-  async #again({ consumer, delivery }: PendingEntry): Promise<void> {
-    const current = this.#pending.entryFor(consumer, delivery.messageId);
+  async #again({ consumer, delivery }: Attempt): Promise<void> {
+    const current = this.#pending.attemptFor(consumer, delivery.messageId);
     if (current === undefined) {
       return;
     }
