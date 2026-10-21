@@ -7,8 +7,9 @@ import {
   type ServiceSnapshot,
   type Snapshot,
 } from '../snapshot/index.ts';
-import { bothDefsOf, endpointBodyDifferencesOf, messageBodyDifferencesOf } from './bodies.ts';
+import { endpointBodyDifferencesOf, messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
+import { bothDefsOf } from './findings.ts';
 import { type DependencyGraph, dependenciesOn } from './graph.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { publishedSnapshotOf } from './merge.ts';

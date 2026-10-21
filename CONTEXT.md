@@ -207,7 +207,7 @@ A shape a Service writes for any reader, another Release of its own included, to
 _Avoid_: output, response, payload
 
 **Position**:
-Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, as it reads a Rejection's body) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it.
+Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it.
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:

@@ -1,8 +1,7 @@
 import type { DefinitionsSnapshot, PublishedDefinitionsSnapshot } from '../snapshot/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import { bothDefsOf } from './bodies.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
-import type { BothDefs } from './findings.ts';
+import { type BothDefs, bothDefsOf } from './findings.ts';
 import type { ChangeSite, Difference } from './report.ts';
 import { schemaDifferencesOf } from './schemas.ts';
 

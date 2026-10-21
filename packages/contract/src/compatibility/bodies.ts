@@ -1,5 +1,5 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
-import type { Defs, SchemaNode } from '../walker/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
@@ -9,14 +9,6 @@ type Bodies = {
   readonly baseline: SchemaNode | null;
   readonly proposed: SchemaNode | null;
 };
-
-/** The defs of the Baseline's Snapshot and of the proposed one, which their schemas' `ref`s name. */
-export function bothDefsOf(
-  baseline: { readonly defs: Defs },
-  proposed: { readonly defs: Defs },
-): BothDefs {
-  return { baseline: baseline.defs, proposed: proposed.defs };
-}
 
 /**
  * An Endpoint's body Differences: its Input body read as Input, then its Success body as Success.

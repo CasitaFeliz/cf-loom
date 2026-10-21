@@ -1,16 +1,16 @@
-import type { Position, ShapeDifference } from './report.ts';
+import type { ChangeClass, PositionOrEvery, ShapeDifference } from './report.ts';
 
 /** How COMPATIBILITY.md classes a shape difference. */
-export type ShapeClass = 'breaking' | 'additive' | 'neutral';
+export type ShapeClass = Exclude<ChangeClass, 'not-allowed'>;
 
 const strengthsInOrder = ['neutral', 'additive', 'breaking'] as const;
-const positions: readonly Position[] = ['input', 'success', 'message'];
 
 /**
- * The class COMPATIBILITY.md gives a shape difference in a Position; in `every`, the strongest of
- * the three, since a shared schema has no Position until an Element uses it.
+ * The class COMPATIBILITY.md gives a shape difference in a Position. A Message takes the stronger
+ * of the Input and Success classes, which is also the strongest of the three, so a shared schema,
+ * judged in `every` Position, takes the same.
  */
-export function shapeClassOf(shape: ShapeDifference, position: Position | 'every'): ShapeClass {
+export function shapeClassOf(shape: ShapeDifference, position: PositionOrEvery): ShapeClass {
   const [input, success] = inputAndSuccessClassesOf(shape);
   switch (position) {
     case 'input':
@@ -18,9 +18,8 @@ export function shapeClassOf(shape: ShapeDifference, position: Position | 'every
     case 'success':
       return success;
     case 'message':
-      return strongestOf([input, success]);
     case 'every':
-      return strongestOf(positions.map((each) => shapeClassOf(shape, each)));
+      return strongestOf([input, success]);
   }
 }
 

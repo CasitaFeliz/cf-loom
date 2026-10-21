@@ -12,8 +12,7 @@ import {
   shapeKeyBesidesNullability,
   typeChanged,
 } from './findings.ts';
-
-type BaseType = 'string' | 'number' | 'boolean';
+import type { BaseType } from './report.ts';
 
 /** Whether a schema is an enum or a literal, which is compared as an enum. */
 export function isEnumLike(node: SchemaNode): boolean {

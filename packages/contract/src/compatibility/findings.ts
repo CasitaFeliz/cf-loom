@@ -4,8 +4,22 @@ import type { ShapeDifference } from './report.ts';
 /** A schema of the Baseline and the proposed one at the same place. */
 export type NodePair = { readonly baseline: SchemaNode; readonly proposed: SchemaNode };
 
+/** A pair of nodes of one type, which a check of that type narrows to. */
+export type PairOf<Type extends SchemaNode['type']> = {
+  readonly baseline: Extract<SchemaNode, { readonly type: Type }>;
+  readonly proposed: Extract<SchemaNode, { readonly type: Type }>;
+};
+
 /** The defs the `ref`s of each side name. */
 export type BothDefs = { readonly baseline: Defs; readonly proposed: Defs };
+
+/** The defs of the Baseline's Snapshot and of the proposed one, which their schemas' `ref`s name. */
+export function bothDefsOf(
+  baseline: { readonly defs: Defs },
+  proposed: { readonly defs: Defs },
+): BothDefs {
+  return { baseline: baseline.defs, proposed: proposed.defs };
+}
 
 /**
  * What comparing two nodes finds, in order: a difference at a path inside them, or a pair of nodes
@@ -37,9 +51,4 @@ export function typeChanged({ baseline, proposed }: NodePair): Finding {
 export function shapeKeyBesidesNullability(node: SchemaNode): string {
   const shape = Object.entries(shapeOf(node)).filter(([key]) => key !== 'nullable');
   return canonicalJson(Object.fromEntries(shape));
-}
-
-/** Whether two nodes have the same shape, apart from their own nullability. */
-export function hasSameShape({ baseline, proposed }: NodePair): boolean {
-  return shapeKeyBesidesNullability(baseline) === shapeKeyBesidesNullability(proposed);
 }

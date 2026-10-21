@@ -736,6 +736,12 @@ const unprovenRows: readonly Row[] = [
     ],
   },
   {
+    change: 'changing an array’s minimum item count',
+    from: { type: 'array', items: aString, min: 1 },
+    to: { type: 'array', items: aString, min: 2 },
+    found: [found({ kind: 'unproven', node: 'array' }, breaksEverywhere)],
+  },
+  {
     change: 'changing a record’s value',
     from: { type: 'record', key: aString, value: aString },
     to: { type: 'record', key: aString, value: aNumber },
@@ -778,6 +784,11 @@ const treeWithName = anObject({
 });
 const unproven: ShapeDifference = { kind: 'unproven', node: 'ref' };
 
+const mutualDefs: Defs = {
+  first: anObject({ next: required(aRef('second')) }),
+  second: anObject({ next: required(aRef('first')) }),
+};
+
 const refRows: readonly Row[] = [
   {
     change: 'changing a def a ref names',
@@ -799,6 +810,46 @@ const refRows: readonly Row[] = [
       forest: anObject({ trees: required({ type: 'array', items: aRef('tree') }) }),
       tree: treeWithName,
     },
+    found: [found(unproven, breaksEverywhere)],
+  },
+  {
+    change: 'changing a def a ref reaches inside a plain union',
+    from: { type: 'union', options: [aRef('tree'), aString] },
+    to: { type: 'union', options: [aRef('tree'), aString] },
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found({ kind: 'union-changed' }, breaksEverywhere)],
+  },
+  {
+    change: 'changing a def a ref reaches inside a record',
+    from: { type: 'record', key: aString, value: aRef('tree') },
+    to: { type: 'record', key: aString, value: aRef('tree') },
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found({ kind: 'unproven', node: 'record' }, breaksEverywhere)],
+  },
+  {
+    change: 'changing a def a ref reaches inside a tuple',
+    from: { type: 'tuple', items: [aRef('tree')] },
+    to: { type: 'tuple', items: [aRef('tree')] },
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found({ kind: 'unproven', node: 'tuple' }, breaksEverywhere)],
+  },
+  {
+    change: 'changing a def a ref reaches inside an intersection',
+    from: { type: 'allOf', items: [aRef('tree'), aString] },
+    to: { type: 'allOf', items: [aRef('tree'), aString] },
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere)],
+  },
+  {
+    change: 'pointing a ref at the other def of a mutual recursion, which reaches the same defs',
+    from: aRef('first'),
+    to: aRef('second'),
+    fromDefs: mutualDefs,
+    toDefs: mutualDefs,
     found: [found(unproven, breaksEverywhere)],
   },
   {

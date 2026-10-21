@@ -1,5 +1,5 @@
 import type { Visibility } from '../declarations/index.ts';
-import type { JsonPrimitive, Path, SchemaNode } from '../walker/index.ts';
+import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from '../walker/index.ts';
 
 /**
  * Where a Change is: an Element by identity, with its Visibility, which decides the bump. When the
@@ -21,6 +21,12 @@ export type GraphDependency = { readonly name: string; readonly version: string 
  */
 export type Position = 'input' | 'success' | 'message';
 
+/** Where a schema is judged: in one Position, or in all three as `every`, for a shared schema. */
+export type PositionOrEvery = Position | 'every';
+
+/** A type whose values an enum can all share: a string, a number or a boolean. */
+export type BaseType = 'string' | 'number' | 'boolean';
+
 /** What differs in a schema's shape at one path; a Neutral annotation never does. */
 export type ShapeDifference =
   | { readonly kind: 'field-added'; readonly required: boolean }
@@ -41,17 +47,17 @@ export type ShapeDifference =
   | { readonly kind: 'enum-opened' }
   | { readonly kind: 'enum-closed' }
   /** An enum or literal widened to the base type every value shares, with no constraint. */
-  | { readonly kind: 'enum-widened'; readonly to: 'string' | 'number' | 'boolean' }
+  | { readonly kind: 'enum-widened'; readonly to: BaseType }
   /** An unconstrained base type narrowed to an enum or literal of its values. */
-  | { readonly kind: 'enum-narrowed'; readonly from: 'string' | 'number' | 'boolean' }
+  | { readonly kind: 'enum-narrowed'; readonly from: BaseType }
   | { readonly kind: 'variant-added' }
   | { readonly kind: 'variant-removed' }
   | { readonly kind: 'discriminator-changed'; readonly from: string; readonly to: string }
   | { readonly kind: 'union-changed' }
   | {
       readonly kind: 'mode-changed';
-      readonly from: 'open' | 'strict';
-      readonly to: 'open' | 'strict';
+      readonly from: ObjectNode['mode'];
+      readonly to: ObjectNode['mode'];
     }
   | {
       readonly kind: 'type-changed';
@@ -88,7 +94,7 @@ export type Difference =
   | {
       readonly kind: 'schema';
       readonly at: Path;
-      readonly position: Position | 'every';
+      readonly position: PositionOrEvery;
       readonly shape: ShapeDifference;
     }
   /** A shared schema gone from its Definitions Package. */

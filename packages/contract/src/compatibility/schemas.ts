@@ -1,21 +1,21 @@
-import type { ArrayNode, Path, SchemaNode } from '../walker/index.ts';
+import type { Path, SchemaNode } from '../walker/index.ts';
 import { enumFindingsOf, isEnumLike } from './enums.ts';
 import { objectFindingsOf } from './fields.ts';
 import {
   type BothDefs,
   type Finding,
   found,
-  hasSameShape,
   inside,
   type NodePair,
+  type PairOf,
   typeChanged,
 } from './findings.ts';
-import { refFindingsOf } from './refs.ts';
-import type { Difference, Position } from './report.ts';
+import { isUnchanged, refFindingsOf } from './refs.ts';
+import type { Difference, PositionOrEvery } from './report.ts';
 import { taggedFindingsOf, unionFindingsOf } from './unions.ts';
 
 /** Where a schema sits: the Position it is read in, and its path from the site. */
-export type SchemaPlace = { readonly position: Position | 'every'; readonly at: Path };
+export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
 
 /**
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
@@ -60,13 +60,10 @@ function typeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
   if (isEnumLike(pair.baseline) || isEnumLike(pair.proposed)) {
     return enumFindingsOf(pair);
   }
-  return pair.baseline.type === pair.proposed.type ? sameTypeFindingsOf(pair) : [typeChanged(pair)];
+  return pair.baseline.type === pair.proposed.type
+    ? sameTypeFindingsOf(pair, defs)
+    : [typeChanged(pair)];
 }
-
-type PairOf<Type extends SchemaNode['type']> = {
-  readonly baseline: Extract<SchemaNode, { readonly type: Type }>;
-  readonly proposed: Extract<SchemaNode, { readonly type: Type }>;
-};
 
 function isPairOf<Type extends SchemaNode['type']>(
   pair: NodePair,
@@ -80,24 +77,24 @@ function isPairOf<Type extends SchemaNode['type']>(
  * record, a tuple and an intersection, is one change no rule proves compatible when their shapes
  * differ.
  */
-function sameTypeFindingsOf(pair: NodePair): readonly Finding[] {
+function sameTypeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
   if (isPairOf(pair, 'object')) {
-    return objectFindingsOf(pair.baseline, pair.proposed);
+    return objectFindingsOf(pair);
   }
   if (isPairOf(pair, 'tagged')) {
-    return taggedFindingsOf(pair.baseline, pair.proposed);
+    return taggedFindingsOf(pair);
   }
   if (isPairOf(pair, 'array')) {
-    return arrayFindingsOf(pair.baseline, pair.proposed);
+    return arrayFindingsOf(pair);
   }
   if (isPairOf(pair, 'union')) {
-    return unionFindingsOf(pair);
+    return unionFindingsOf(pair, defs);
   }
-  return hasSameShape(pair) ? [] : [found({ kind: 'unproven', node: pair.baseline.type })];
+  return isUnchanged(pair, defs) ? [] : [found({ kind: 'unproven', node: pair.baseline.type })];
 }
 
 /** An array's items follow the field rules; its item counts are constraints no rule here compares. */
-function arrayFindingsOf(baseline: ArrayNode, proposed: ArrayNode): readonly Finding[] {
+function arrayFindingsOf({ baseline, proposed }: PairOf<'array'>): readonly Finding[] {
   const hasSameCounts = baseline.min === proposed.min && baseline.max === proposed.max;
   const counts = hasSameCounts ? [] : [found({ kind: 'unproven', node: 'array' })];
   return [...counts, inside(baseline.items, proposed.items, ['items'])];
