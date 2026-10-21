@@ -1,4 +1,4 @@
-import { attemptsOf, reachedBy } from './attempts.ts';
+import { injectedAttemptsOf } from './attempts.ts';
 import { MemoryConnection } from './connection.ts';
 import { Deliveries } from './deliveries.ts';
 import type { MemoryBroker } from './types.ts';
@@ -27,8 +27,8 @@ export function memory(): MemoryBroker {
     },
     deliver: async (message, body, meta = {}) => {
       connection.assertOpen();
-      const reached = reachedBy(connection.consumers(), message);
-      return await deliveries.lineUpTogether(attemptsOf(reached, { message, body, meta }));
+      const attempts = injectedAttemptsOf(connection.consumers(), { message, body, meta });
+      return await deliveries.lineUpAndWait(attempts);
     },
     redeliver: async () => {
       connection.assertOpen();

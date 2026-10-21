@@ -16,14 +16,25 @@ import type { DeliveryMeta } from './types.ts';
 export type Attempt = { readonly consumer: BrokerConsumer; readonly delivery: Delivery };
 
 /** What a test hands `deliver`: the Message Version, its body as a Subscriber reads it, and its meta. */
-export type Injection = {
+type Injection = {
   readonly message: Event | Command;
   readonly body: unknown;
   readonly meta: DeliveryMeta;
 };
 
-/** The consumers a Message Version reaches, in the order `consume` gave them: a Command's CommandHandler, or the Subscriptions to an Event. */
-export function reachedBy(
+/**
+ * The Delivery of an injected Message to each consumer it reaches, in the order `consume` gave
+ * them, checked all together so that a body one Reader refuses delivers nothing.
+ */
+export function injectedAttemptsOf(
+  consumers: readonly BrokerConsumer[],
+  injection: Injection,
+): readonly Attempt[] {
+  return attemptsOf(reachedBy(consumers, injection.message), injection);
+}
+
+/** The consumers a Message Version reaches: a Command's CommandHandler, or the Subscriptions to an Event. */
+function reachedBy(
   consumers: readonly BrokerConsumer[],
   message: Event | Command,
 ): readonly BrokerConsumer[] {
@@ -36,8 +47,7 @@ export function reachedBy(
   return reached;
 }
 
-/** The Delivery of an injected Message to each consumer it reaches, checked all together so that a body one Reader refuses delivers nothing. */
-export function attemptsOf(
+function attemptsOf(
   reached: readonly BrokerConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {

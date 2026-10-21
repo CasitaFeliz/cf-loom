@@ -32,7 +32,7 @@ export class Deliveries {
   }
 
   /** Lines deliveries up and waits for them: the most severe settlement, or the cut that dropped one. */
-  async lineUpTogether(attempts: readonly Attempt[]): Promise<Settlement['kind']> {
+  async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement['kind']> {
     const lined = attempts.map(({ consumer, delivery }) =>
       this.#line.add(() => this.#attempt(consumer, delivery)),
     );

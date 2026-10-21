@@ -2,7 +2,7 @@
 const limit = 1000;
 
 /** What a cut says, and what `settled()` rejects with when a chain of Messages is cut. */
-const cutMessage = 'a chain of Messages was cut after 1,000 deliveries';
+const cutMessage = `a chain of Messages was cut after ${limit.toLocaleString('en-US')} deliveries`;
 
 /** One delivery lined up: what it runs, and how its caller hears of a cut. */
 type LinedUp = {
