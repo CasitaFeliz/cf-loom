@@ -1,5 +1,5 @@
+import type { Issue } from '../written/index.ts';
 import { isJsonContentType } from './content-type.ts';
-import type { InputIssue } from './invalid-input.ts';
 
 /**
  * A body as read whole: its parsed JSON, why it is no JSON, or the error its stream failed with;
@@ -29,11 +29,14 @@ export const notJsonContentType = {
 } as const;
 
 /**
- * The Issue every reader answers for a body that cannot be read as JSON: at the whole of
- * `input.body`.
+ * The Issue every reader answers for a body that cannot be read as JSON: at the whole of its part,
+ * a request's `input.body` or a Message's `body`.
  */
-export function malformedBodyIssueOf(message: string): InputIssue {
-  return { part: 'input.body', path: [], code: 'malformed', message };
+export function malformedBodyIssueOf<Part extends 'input.body' | 'body'>(
+  part: Part,
+  message: string,
+): Issue & { readonly part: Part } {
+  return { part, path: [], code: 'malformed', message };
 }
 
 /** The bytes of a body as read, counting them against the limit, or why they were not. */
@@ -93,7 +96,7 @@ async function jsonOf(
     case 'unreadable':
       return { kind: 'unreadable', message: notJsonMessage, error: read.error };
     case 'bytes':
-      return parsedOf(read.bytes);
+      return jsonOfBytes(read.bytes);
   }
 }
 
@@ -132,7 +135,8 @@ function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return bytes;
 }
 
-function parsedOf(bytes: Uint8Array): ReceivedBody {
+/** A body's JSON from its bytes, read as fatal UTF-8, or why it is no JSON, in a fixed text. */
+export function jsonOfBytes(bytes: Uint8Array): Exclude<ReceivedBody, { kind: 'unreadable' }> {
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     return { kind: 'value', value: JSON.parse(text) };

@@ -13,7 +13,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
 | [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
-| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `connect`, `close` |
+| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`, connecting a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; `PublishError`, `InvalidMessageError`; and its types, the `Broker` an adapter implements among them |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter; `@nats-io/*` is an optional peer dependency |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
@@ -57,7 +57,7 @@ src/
 ├── subscriptions/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  regenerated, never edited
 ├── readers.generated.ts                   Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
-├── messaging.ts                           EventPublisher, CommandSender
+├── messaging.ts                           startMessaging and ordersMessaging(): the Service's Messaging, its EventPublisher and CommandSender
 └── main.ts                                starts HTTP and messaging
 contract-package/                          the Contract Package cf-loom package writes; built, not edited
 ```
@@ -78,11 +78,11 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Implement
 
-Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub imports from `readers.generated.ts` (`handle(chargeCardV1, …)`). The EventPublisher and CommandSender come from `messaging(contract)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
+Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub imports from `readers.generated.ts` (`handle(chargeCardV1, …)`). The EventPublisher and CommandSender come from the Service's own `src/messaging.ts`, which connects `messaging(contract, broker)` (see [Connecting](packages/messaging/README.md#connecting)), and another Service is called through its Contract Package with `client` (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)).
 
 ### Serve
 
-`src/main.ts` connects the broker adapter, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
+`src/main.ts` starts messaging with the broker adapter, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
 
 ### Test
 

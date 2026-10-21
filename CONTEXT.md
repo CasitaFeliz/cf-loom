@@ -109,7 +109,7 @@ _Avoid_: extensible enum, loose enum
 ### Messaging
 
 **Message**:
-A Command or an Event: what travels through the broker rather than over HTTP.
+A Command or an Event: what travels through the Broker rather than over HTTP.
 _Avoid_: payload (for the Message itself), envelope (for the Message itself)
 
 **Command**:
@@ -127,6 +127,10 @@ _Avoid_: schema version, major (that is the Contract Package's version)
 **Fact id**:
 The id shared by every Message one `publish` or `send` call sends for the same fact, so a Handler can recognize a fact it already handled.
 _Avoid_: correlation id, event id
+
+**Broker**:
+The message system a Service's messaging runs on, through an adapter: it holds each Service's stream and the durable consumers, and delivers Messages at least once.
+_Avoid_: bus, queue, message bus
 
 **Release**:
 One deployed version of a Service. During a rollout two Releases of the same Service run side by side and exchange its Messages.
@@ -165,7 +169,7 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` takes: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `deprecatedAt` of each Deprecated Endpoint.
+The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `deprecatedAt` of each Deprecated Endpoint.
 _Avoid_: registry, router
 
 **Issue**:

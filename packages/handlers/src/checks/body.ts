@@ -11,5 +11,13 @@ export function checkedBody(reader: core.$ZodType, body: unknown): Checked<unkno
   if (written.kind === 'issues') {
     return { kind: 'issues', issues: written.issues.map((issue) => issueAt('body', [], issue)) };
   }
-  return checkedPart('body', reader, { value: written.value });
+  return checkedMessageBody(reader, written.value);
+}
+
+/**
+ * A Message body checked with one schema alone: a writer's before it is sent, or a Reader's as it
+ * is received; its Issues sit at `body`.
+ */
+export function checkedMessageBody(schema: core.$ZodType, body: unknown): Checked<unknown> {
+  return checkedPart('body', schema, { value: body });
 }

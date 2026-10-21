@@ -77,7 +77,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 ## Runtime
 
 - The HTTP core speaks the web-standard Request and Response, so it also runs on Bun, Deno or inside another framework; an adapter connects it to a host, and cf-loom ships one for `node:http` (see [node-http](packages/server/README.md#node-http)).
-- Messaging runs behind a broker interface; an adapter connects it to a broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development (see [Adapters](packages/messaging/README.md#adapters)). A broker client is an optional peer dependency, installed only where its adapter is used.
+- Messaging runs behind a broker interface, the `Broker` type the messaging README documents (see [Adapters](packages/messaging/README.md#adapters)), so an organization may write its own adapter; an adapter connects it to a Broker, and cf-loom ships one for NATS JetStream and an in-memory one for tests and local development. A broker client is an optional peer dependency, installed only where its adapter is used.
 - Testing support stays within what follows from Contracts: a Service's own code is tested through the exported functions of `@cf-loom/handlers`, and `@cf-loom/testing` fakes only other Services, checked against their Snapshots. Test runners, end-to-end tools and real-broker tests belong to the organization (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code) and the [`@cf-loom/testing` README](packages/testing/README.md)).
 - A Contract can be merged and deployed before its Handlers are implemented, with stubs, and is published with that Release (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md); how a stub behaves is in [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers' README.
 - Without an `onServiceFault` (see [Serving](packages/server/README.md#serving) in the server README and [Connecting](packages/messaging/README.md#connecting) in the messaging README), `serve` and `messaging` write everything `onServiceFault` would receive to the console: an Issue as its part, path, code and message, never the received value, and a Fault as its message and `cause` (the line `serve` writes is in [Serving](packages/server/README.md#serving) in the server README).
@@ -103,9 +103,9 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 - Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [In memory](packages/messaging/README.md#in-memory) in the messaging README). A Command is handled by one CommandHandler, and every Handler must be safe to run again.
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
-- Where a Message travels is derived from the Contract (see [Over the broker](#over-the-broker)).
-- cf-loom derives the broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README). Visibility is enforced at the broker only if the organization applies the derived permissions.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's queue has been drained by the Release that deprecated it (see [Pruning](packages/messaging/README.md#pruning) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
+- Where a Message travels is derived from the Contract (see [Over the Broker](#over-the-broker)).
+- cf-loom derives the Broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README). Visibility is enforced at the Broker only if the organization applies the derived permissions.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's durable consumer has been drained by the Release that deprecated it (see [Pruning](packages/messaging/README.md#pruning) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 
@@ -115,7 +115,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 ## Wire protocol
 
-How an Endpoint's Input and Outcome travel over HTTP, between `serve` and the client, and how a Message travels through the broker.
+How an Endpoint's Input and Outcome travel over HTTP, between `serve` and the client, and how a Message travels through the Broker.
 
 ### Over HTTP
 
@@ -150,8 +150,8 @@ A response with the declared Success status is decoded as the Success; a respons
 - The `cause.code` values are Node's and undici's. Browsers and Deno report a refused connection or a DNS failure as a bare `TypeError`, which lands on the last row; Bun's errors are not verified.
 - An inferred Fault says one of five fixed messages, which carry nothing received: "No connection to the Provider", "The request was aborted", "The request timed out", "The connection failed" and "The Provider answered <status>".
 
-### Over the broker
+### Over the Broker
 
-Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and durable consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one broker.
+Where a Message travels follows from the Contract, so a Subscriber finds another Service's Events from its Contract Package alone: each Service owns one stream named after it, and each Message Version has the subject `<service>.<event|command>.<Name>.v<version>` (`orders-service.event.OrderCreated.v2`). An optional prefix, passed to the adapter at runtime and to `cf-loom broker-plan --prefix`, goes in front of every subject, stream and durable consumer name (`staging.orders-service.event.OrderCreated.v2`, `staging_orders-service`), so several environments can share one Broker.
 
 On the wire a Message's body is the UTF-8 JSON of the Message body alone; the Message Version is in the subject, two headers carry the ids, `Nats-Msg-Id`, the broker message id, and `Cf-Loom-Fact-Id`, and the transport headers travel as the broker headers they were given (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README).

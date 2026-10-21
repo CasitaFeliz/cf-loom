@@ -68,12 +68,21 @@ export function elementNameOf(element: HandledElement): string {
   return element.name;
 }
 
-/** One line per Issue, where it sits and what broke, never the received value. */
-function messageOf(element: HandledElement, issues: readonly Issue[]): string {
-  return issues.map((issue) => lineOf(element, issue)).join('\n');
+/** One Issue as a line of an error or a log, after what it came from: where it sits and what broke, never the received value. */
+export function issueLineOf(source: string, { part, path, code, message }: Issue): string {
+  return `${source}: ${[part, ...path].join('.')} ${code}: ${message}`;
 }
 
-function lineOf(element: HandledElement, { part, path, code, message }: Issue): string {
-  const where = [part, ...path].join('.');
-  return `${elementNameOf(element)}: ${where} ${code}: ${message}`;
+/** A Fault as the console logs it, after what it came from: its message, then its `cause` when it has one. */
+export function faultLogOf(
+  source: string,
+  fault: { readonly message: string; readonly cause?: unknown },
+): readonly unknown[] {
+  const line = `${source}: ${fault.message}`;
+  return fault.cause === undefined ? [line] : [line, fault.cause];
+}
+
+/** One line per Issue, naming the Element. */
+function messageOf(element: HandledElement, issues: readonly Issue[]): string {
+  return issues.map((issue) => issueLineOf(elementNameOf(element), issue)).join('\n');
 }

@@ -16,6 +16,7 @@ export {
   paramNamesOf,
   pathSegmentsOf,
   segmentsOf,
+  subjectVersionOf,
 } from './identity.ts';
 export type {
   LocatedCode,
@@ -66,6 +67,7 @@ export {
   isPlainObject,
   isWithoutValue,
   listOf,
+  ownOf,
   partOf,
   textOf,
 } from './written.ts';

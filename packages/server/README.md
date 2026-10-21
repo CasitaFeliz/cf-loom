@@ -11,19 +11,19 @@ import { nodeHttp } from '@cf-loom/server/node-http';
 import { jetstream } from '@cf-loom/messaging/jetstream';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
-import { connect, consume, close } from './messaging.ts';
+import { startMessaging } from './messaging.ts';
 
-await connect(jetstream({
+const running = await startMessaging(jetstream({
   servers: process.env.NATS_URL!,
   prefix: process.env.BROKER_PREFIX,   // optional, e.g. one per environment
 }));
 const http = serve(contract, handlers);      // (Request) => Promise<Response>
 const server = nodeHttp(http).listen(3000);
-await consume(handlers);
+await running.consume(handlers);
 
 process.on('SIGTERM', () => {
   server.close();
-  void close();
+  void running.close();
 });
 ```
 

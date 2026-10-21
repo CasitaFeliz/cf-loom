@@ -1,4 +1,5 @@
 import { isReservedCode, type ReservedCode } from '../declarations/index.ts';
+import { ownOf } from '../written/index.ts';
 import { type BodyMessage, receivedBodyOf } from './body.ts';
 
 /** Whether the change was committed, as values, so a Fault is told by them. */
@@ -85,11 +86,11 @@ export function faultEnvelopeOf(fault: TravelingFault): FaultEnvelope {
  * that is not reserved is dropped, since a new one only comes with a cf-loom major. None otherwise.
  */
 export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope | undefined {
-  const rejection = fieldOf(received, 'rejection');
+  const rejection = ownOf(received, 'rejection');
   if (isRejectionShape(rejection)) {
     return rejectionEnvelopeOf(rejection);
   }
-  const fault = fieldOf(received, 'fault');
+  const fault = ownOf(received, 'fault');
   if (isFaultShape(fault)) {
     const { committed, retryable, message } = fault;
     const code = isReservedCode(fault.code) ? fault.code : undefined;
@@ -111,27 +112,17 @@ type RejectionFields = {
 type FaultFields = Omit<TravelingFault, 'code'> & { readonly code?: unknown };
 
 function isRejectionShape(value: unknown): value is RejectionFields {
-  return (
-    typeof fieldOf(value, 'code') === 'string' && typeof fieldOf(value, 'message') === 'string'
-  );
+  return typeof ownOf(value, 'code') === 'string' && typeof ownOf(value, 'message') === 'string';
 }
 
 function isFaultShape(value: unknown): value is FaultFields {
-  const committed: unknown = fieldOf(value, 'committed');
+  const committed: unknown = ownOf(value, 'committed');
   const isCommitted = committedValues.some((known) => known === committed);
   return (
     isCommitted &&
-    typeof fieldOf(value, 'retryable') === 'boolean' &&
-    typeof fieldOf(value, 'message') === 'string'
+    typeof ownOf(value, 'retryable') === 'boolean' &&
+    typeof ownOf(value, 'message') === 'string'
   );
-}
-
-/** A field of a received JSON object; none for anything that is no object, a list included. */
-function fieldOf(value: unknown, field: string): unknown {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return undefined;
-  }
-  return Object.hasOwn(value, field) ? Reflect.get(value, field) : undefined;
 }
 
 /** What a Caller reads of a body that may be an Envelope: the Envelope, none, or a failed stream. */
