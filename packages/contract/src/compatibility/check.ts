@@ -115,9 +115,9 @@ function endpointChangesOf(
     defs: bothDefsOf(baseline, proposed),
     paths: endpointPathsOf(baseline, proposed),
   };
-  return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) => {
-    return endpointPairChangesOf(pair, context);
-  });
+  return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
+    endpointPairChangesOf(pair, context),
+  );
 }
 
 function endpointPairChangesOf(
@@ -157,9 +157,9 @@ function eventChangesOf(
     defs: bothDefsOf(baseline, proposed),
     history: messageHistoryOf(baseline, proposed, 'event'),
   };
-  return pairsOf(baseline.events, proposed.events).flatMap((pair) => {
-    return eventPairChangesOf(pair, context);
-  });
+  return pairsOf(baseline.events, proposed.events).flatMap((pair) =>
+    eventPairChangesOf(pair, context),
+  );
 }
 
 function eventPairChangesOf(pair: Pair<EventSnapshot>, context: EventContext): readonly Change[] {
@@ -179,22 +179,17 @@ function commandChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const dependents = () => [];
+  const noDependents: Dependents = () => [];
   const defs = bothDefsOf(baseline, proposed);
   const history = messageHistoryOf(baseline, proposed, 'command');
-  const changes: Change[] = [];
-  for (const pair of pairsOf(baseline.commands, proposed.commands)) {
-    const site: ChangeSite = { kind: 'command', identity: pair.identity };
-    changes.push(
-      ...changesAt(site, [
-        presenceDifferenceOf(pair),
-        ...historyDifferencesOf(pair, history),
-        lifecycleDifferenceOf(pair, dependents),
-        ...messageBodyDifferencesOf(pair, defs),
-      ]),
-    );
-  }
-  return changes;
+  return pairsOf(baseline.commands, proposed.commands).flatMap((pair) =>
+    changesAt({ kind: 'command', identity: pair.identity }, [
+      presenceDifferenceOf(pair),
+      ...historyDifferencesOf(pair, history),
+      lifecycleDifferenceOf(pair, noDependents),
+      ...messageBodyDifferencesOf(pair, defs),
+    ]),
+  );
 }
 
 /** The differences found at a site, in the order the rules ran, each classified as a Change. */

@@ -125,7 +125,7 @@ function selectedEventFailures(
   if (!isEvent(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
   }
-  if (element.visibility === 'private') {
+  if (!reaches('service', element.visibility)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
   if (exported.events !== undefined && !exported.events.has(element)) {

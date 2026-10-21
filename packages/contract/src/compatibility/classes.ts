@@ -48,15 +48,13 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'schema':
       return schemaClassOf(site, difference);
     case 'renamed':
-      return renamedClassOf(difference.visibility);
+      return renamedClassOf(site, difference.visibility);
   }
 }
 
 /** Renaming an Endpoint is Breaking unless it is Private, which no Consumer calls by name. */
-function renamedClassOf(visibility: Visibility): Classification {
-  return visibility === 'private'
-    ? { class: 'neutral' }
-    : { class: 'breaking', approval: 'needed' };
+function renamedClassOf(site: ChangeSite, visibility: Visibility): Classification {
+  return visibility === 'private' ? { class: 'neutral' } : breakingClassOf(site);
 }
 
 function schemaClassOf(
