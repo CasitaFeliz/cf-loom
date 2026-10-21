@@ -61,11 +61,14 @@ export type PublishedSnapshot =
   | PublishedApplicationSnapshot
   | PublishedDefinitionsSnapshot;
 
+/** What an Element declares that the published Snapshot relies on: its lifecycle, and its description, which only a declared Element holds. */
+export type DeclaredElement = { readonly lifecycle: Lifecycle; readonly description: string };
+
 /**
  * Whether a published Endpoint or Message Version is still declared, Retired or not, rather than a
  * tombstone: only a declared Element holds a description.
  */
-export function isDeclared<Element extends { readonly description: string }>(
+export function isDeclared<Element extends DeclaredElement>(
   element: Element | EndpointTombstone | MessageTombstone,
 ): element is Element {
   return 'description' in element;

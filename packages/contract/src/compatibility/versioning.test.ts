@@ -1,0 +1,301 @@
+import { describe, expect, expectTypeOf, test } from 'vitest';
+import {
+  type ApplicationSnapshot,
+  type Change,
+  type ChangeSite,
+  type ComparedReport,
+  compatibilityReportOf,
+  type PeerMove,
+  type PublishedApplicationSnapshot,
+  versionBumpOf,
+} from '../internal/index.ts';
+
+const publicEndpoint: ChangeSite = {
+  kind: 'endpoint',
+  identity: 'GET /orders/{}',
+  visibility: 'public',
+};
+const internalEvent: ChangeSite = {
+  kind: 'event',
+  identity: 'OrderPlaced@1',
+  visibility: 'internal',
+};
+const privateEndpoint: ChangeSite = {
+  kind: 'endpoint',
+  identity: 'POST /orders/purge',
+  visibility: 'private',
+};
+const privateEvent: ChangeSite = {
+  kind: 'event',
+  identity: 'OrderAudited@1',
+  visibility: 'private',
+};
+const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
+
+function aBreakingChange(site: ChangeSite): Change {
+  return {
+    site,
+    difference: { kind: 'retired', dependencies: [] },
+    class: 'breaking',
+    approval: 'not-needed',
+  };
+}
+
+function anAdditiveChange(site: ChangeSite): Change {
+  return { site, difference: { kind: 'added' }, class: 'additive' };
+}
+
+function aNeutralChange(site: ChangeSite): Change {
+  return { site, difference: { kind: 'tombstoned' }, class: 'neutral' };
+}
+
+function aNotAllowedChange(site: ChangeSite): Change {
+  return { site, difference: { kind: 'deleted' }, class: 'not-allowed' };
+}
+
+function aReport(changes: readonly Change[], hashChanged = true): ComparedReport {
+  return { kind: 'compared', changes, hashChanged };
+}
+
+function peersMoving(baseline: string, proposed: string): PeerMove {
+  return { baseline: { zod: baseline }, proposed: { zod: proposed } };
+}
+
+function anApplication(): ApplicationSnapshot {
+  return {
+    format: 1,
+    kind: 'application',
+    name: 'web-app',
+    generator: '@cf-loom/cli@2.1.0',
+    dependencies: {},
+  };
+}
+
+function ordersDependency(against: string): ApplicationSnapshot['dependencies'][string] {
+  return {
+    against,
+    endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
+    events: [],
+  };
+}
+
+const unmoved: PeerMove = peersMoving('^4.1.0', '^4.1.0');
+
+describe('versionBumpOf', () => {
+  test('a Breaking Change on a Public or Internal Element bumps major', () => {
+    const publicBreaking = aReport([aBreakingChange(publicEndpoint)]);
+    const internalBreaking = aReport([aBreakingChange(internalEvent)]);
+
+    const bumps = [publicBreaking, internalBreaking].map((report) =>
+      versionBumpOf(report, unmoved),
+    );
+
+    expect(bumps).toEqual(['major', 'major']);
+  });
+
+  test('an Additive Change on a Public or Internal Element bumps minor', () => {
+    const publicAdditive = aReport([anAdditiveChange(publicEndpoint)]);
+    const internalAdditive = aReport([anAdditiveChange(internalEvent)]);
+
+    const bumps = [publicAdditive, internalAdditive].map((report) =>
+      versionBumpOf(report, unmoved),
+    );
+
+    expect(bumps).toEqual(['minor', 'minor']);
+  });
+
+  test('a changed hash with Neutral Changes only, or none classified, bumps patch', () => {
+    const neutral = aReport([aNeutralChange(publicEndpoint)]);
+    const unclassified = aReport([]);
+
+    const bumps = [neutral, unclassified].map((report) => versionBumpOf(report, unmoved));
+
+    expect(bumps).toEqual(['patch', 'patch']);
+  });
+
+  test('Changes on Private Elements only bump patch, however Breaking', () => {
+    const report = aReport([
+      aBreakingChange(privateEndpoint),
+      anAdditiveChange(privateEvent),
+      aBreakingChange(privateEvent),
+    ]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a Command’s Breaking Change bumps patch: a Command is always Private', () => {
+    const report = aReport([aBreakingChange(command), anAdditiveChange(command)]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('narrowing Public to Private bumps major: the wider Visibility decides', () => {
+    const narrowed: Change = {
+      site: publicEndpoint,
+      difference: { kind: 'visibility-narrowed', from: 'public', to: 'private' },
+      class: 'breaking',
+      approval: 'needed',
+    };
+
+    const bump = versionBumpOf(aReport([narrowed]), unmoved);
+
+    expect(bump).toBe('major');
+  });
+
+  test('the highest Change decides among many', () => {
+    const report = aReport([
+      aNeutralChange(publicEndpoint),
+      anAdditiveChange(internalEvent),
+      aBreakingChange(privateEndpoint),
+    ]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('minor');
+  });
+
+  test('an Application’s changed Dependencies bump patch', () => {
+    const baseline: PublishedApplicationSnapshot = {
+      ...anApplication(),
+      version: '1.0.0',
+      dependencies: { 'orders-service': ordersDependency('3.4.0') },
+    };
+    const proposed: ApplicationSnapshot = {
+      ...anApplication(),
+      dependencies: { 'orders-service': ordersDependency('4.0.0') },
+    };
+    const report = compatibilityReportOf(baseline, proposed, []);
+
+    const bump = report.kind === 'compared' ? versionBumpOf(report, unmoved) : 'no-baseline';
+
+    expect(bump).toBe('patch');
+  });
+
+  test('an unchanged hash with unchanged peers is unchanged, so publish does nothing', () => {
+    const report = aReport([], false);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('unchanged');
+  });
+
+  test('a Not allowed Change does not bump past patch', () => {
+    const report = aReport([aNotAllowedChange(publicEndpoint)]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a changed peer range bumps even when the hash is unchanged', () => {
+    const report = aReport([], false);
+
+    const bump = versionBumpOf(report, peersMoving('^4.1.0', '^4.6.7'));
+
+    expect(bump).toBe('minor');
+  });
+});
+
+describe('versionBumpOf, the peer rule', () => {
+  test('a peer moving to a new major bumps major with an unchanged Snapshot', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^5.0.0'));
+
+    expect(bump).toBe('major');
+  });
+
+  test('any other change to a peer range bumps minor', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^4.6.7'));
+
+    expect(bump).toBe('minor');
+  });
+
+  test('^0.1.0 to ^0.2.0 is a new major, as a caret reads it', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.2.0'));
+
+    expect(bump).toBe('major');
+  });
+
+  test('^0.1.0 to ^0.1.5 is not a new major', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.1.5'));
+
+    expect(bump).toBe('minor');
+  });
+
+  test('^0.0.3 to ^0.0.4 is a new major', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^0.0.3', '^0.0.4'));
+
+    expect(bump).toBe('major');
+  });
+
+  test('a prerelease range keeps its line: ^1.0.0-rc.1 to ^1.2.0 bumps minor', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('^1.0.0-rc.1', '^1.2.0'));
+
+    expect(bump).toBe('minor');
+  });
+
+  test.each([
+    ['a range that is not a caret', '^4.1.0', '~4.1.0'],
+    ['a caret on a partial version', '^4.1', '^4.2.0'],
+    ['a comparator range', '>=4.1.0', '>=4.2.0'],
+  ])('%s counts as a new major, since no overlap can be proven', (_name, baseline, proposed) => {
+    const bump = versionBumpOf(aReport([], false), peersMoving(baseline, proposed));
+
+    expect(bump).toBe('major');
+  });
+
+  test('a peer added or dropped is a minor bump', () => {
+    const added: PeerMove = { baseline: {}, proposed: { zod: '^4.1.0' } };
+    const dropped: PeerMove = { baseline: { zod: '^4.1.0' }, proposed: {} };
+
+    const bumps = [added, dropped].map((peers) => versionBumpOf(aReport([], false), peers));
+
+    expect(bumps).toEqual(['minor', 'minor']);
+  });
+
+  test('a range that is not a caret and stays the same is no change', () => {
+    const bump = versionBumpOf(aReport([], false), peersMoving('>=4.1.0', '>=4.1.0'));
+
+    expect(bump).toBe('unchanged');
+  });
+
+  test('the highest peer decides when several move', () => {
+    const peers: PeerMove = {
+      baseline: { zod: '^4.1.0', '@cf-loom/contract': '^1.2.0' },
+      proposed: { zod: '^4.6.7', '@cf-loom/contract': '^2.0.0' },
+    };
+
+    const bump = versionBumpOf(aReport([], false), peers);
+
+    expect(bump).toBe('major');
+  });
+
+  test.each([
+    ['Breaking', aBreakingChange(publicEndpoint), 'major'],
+    ['Additive', anAdditiveChange(publicEndpoint), 'minor'],
+  ] as const)('the bump is the highest of a %s Change and a peer minor', (_class, change, bump) => {
+    const report = aReport([change]);
+
+    const bumped = versionBumpOf(report, peersMoving('^4.1.0', '^4.6.7'));
+
+    expect(bumped).toBe(bump);
+  });
+
+  test('a peer major outranks an Additive Change', () => {
+    const report = aReport([anAdditiveChange(publicEndpoint)]);
+
+    const bump = versionBumpOf(report, peersMoving('^4.1.0', '^5.0.0'));
+
+    expect(bump).toBe('major');
+  });
+});
+
+describe('versionBumpOf, its types', () => {
+  test('it takes no report without a Baseline', () => {
+    expectTypeOf(versionBumpOf).parameter(0).toEqualTypeOf<ComparedReport>();
+    expect(typeof versionBumpOf).toBe('function');
+  });
+});

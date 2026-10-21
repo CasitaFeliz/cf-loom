@@ -4,7 +4,10 @@ const semanticVersion =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 
 /** The numbers of a semantic version and its prerelease identifiers, as text; its build orders nothing. */
-type Parts = { readonly core: readonly string[]; readonly prerelease: readonly string[] };
+type Parts = {
+  readonly core: readonly [string, string, string];
+  readonly prerelease: readonly string[];
+};
 
 /** Whether a value is a semantic version, a prerelease or a build included, as `publish` writes `version`. */
 export function isSemanticVersion(value: unknown): value is string {
@@ -21,6 +24,18 @@ export function compareSemanticVersions(left: string, right: string): number {
   const rightParts = partsOf(right);
   const byCore = compareEach(leftParts.core, rightParts.core, compareNumbers);
   return byCore === 0 ? comparePrereleases(leftParts.prerelease, rightParts.prerelease) : byCore;
+}
+
+/**
+ * The part of a semantic version a caret range on it keeps fixed, as npm reads `^`: its major, else
+ * `0.minor`, else `0.0.patch`, so two carets admit one line of versions only when theirs agree.
+ */
+export function caretLineOf(version: string): string {
+  const [major, minor, patch] = partsOf(version).core;
+  if (major !== '0') {
+    return major;
+  }
+  return minor === '0' ? `0.0.${patch}` : `0.${minor}`;
 }
 
 function partsOf(version: string): Parts {

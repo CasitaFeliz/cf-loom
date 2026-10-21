@@ -1,3 +1,22 @@
+export type {
+  Change,
+  ChangeClass,
+  ChangeSite,
+  ComparedReport,
+  CompatibilityReport,
+  DependencyGraph,
+  Difference,
+  GraphDependency,
+  GraphPackage,
+  PeerMove,
+  PeerRanges,
+  VersionBump,
+} from '../compatibility/index.ts';
+export {
+  compatibilityReportOf,
+  publishedSnapshotOf,
+  versionBumpOf,
+} from '../compatibility/index.ts';
 export type { ProvidedEvent, ReservedCode } from '../declarations/index.ts';
 export {
   codeNameOf,
@@ -27,6 +46,7 @@ export type {
   CodeSnapshot,
   CommandSnapshot,
   DefinitionsSnapshot,
+  DependencySnapshot,
   EndpointSnapshot,
   EndpointTombstone,
   EventSnapshot,
