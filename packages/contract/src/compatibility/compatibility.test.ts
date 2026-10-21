@@ -211,7 +211,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Service against a Baseline of another kind',
     proposed: aProposed(),
-    baseline: { ...anApplication(), version: '1.0.0' },
+    baseline: { ...anApplication(), name: 'orders-service', version: '1.0.0' },
   },
   {
     name: 'a Service against a Baseline of another name',
@@ -221,7 +221,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'an Application against a Baseline of another kind',
     proposed: anApplication(),
-    baseline: aBaseline(),
+    baseline: aBaseline({ name: 'web-app' }),
   },
   {
     name: 'an Application against a Baseline of another name',
@@ -231,7 +231,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Definitions Package against a Baseline of another kind',
     proposed: aDefinitions(),
-    baseline: aBaseline(),
+    baseline: aBaseline({ name: '@org/definitions' }),
   },
   {
     name: 'a Definitions Package against a Baseline of another name',

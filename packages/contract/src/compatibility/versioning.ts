@@ -28,7 +28,7 @@ function higherOf<Bump extends (typeof bumpsInOrder)[number]>(left: Bump, right:
   return bumpsInOrder.indexOf(left) >= bumpsInOrder.indexOf(right) ? left : right;
 }
 
-/** A Not allowed Change never bumps: `publish` refuses it first. */
+/** A Not allowed Change never bumps past patch: `publish` refuses it first. */
 function bumpOf({ site, class: changeClass }: Change): VersionBump {
   if (!reachesConsumers(site)) {
     return 'patch';
