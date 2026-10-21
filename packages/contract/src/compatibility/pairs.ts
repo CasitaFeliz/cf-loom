@@ -25,7 +25,8 @@ export type Pair<Element> =
 
 /**
  * Every Element of the Baseline's map and the proposed one paired by identity, in code point
- * order; a tombstone the proposed map leaves out is carried silently, so it makes no pair.
+ * order; a tombstone the proposed map leaves out, or an Element Retired on both sides, is carried
+ * silently, since nothing reads it, so it makes no pair.
  */
 export function pairsOf<Element extends DeclaredElement>(
   baseline: ByKey<PublishedElement<Element> | EndpointTombstone | MessageTombstone>,
@@ -56,8 +57,18 @@ function pairOf<Element extends DeclaredElement>(
         ? { kind: 'dropped', identity, baseline: counterpart.baseline }
         : undefined;
     case 'kept':
-      return isDeclared(counterpart.baseline)
-        ? { kind: 'kept', identity, baseline: counterpart.baseline, proposed: counterpart.proposed }
-        : { kind: 'reused', identity, proposed: counterpart.proposed };
+      return keptOf(counterpart.baseline, counterpart.proposed, identity);
   }
+}
+
+function keptOf<Element extends DeclaredElement>(
+  baseline: PublishedElement<Element> | EndpointTombstone | MessageTombstone,
+  proposed: Element,
+  identity: string,
+): Pair<Element> | undefined {
+  if (!isDeclared(baseline)) {
+    return { kind: 'reused', identity, proposed };
+  }
+  const isRetiredOnBothSides = baseline.lifecycle === 'retired' && proposed.lifecycle === 'retired';
+  return isRetiredOnBothSides ? undefined : { kind: 'kept', identity, baseline, proposed };
 }

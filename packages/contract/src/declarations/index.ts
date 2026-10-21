@@ -16,6 +16,7 @@ export {
   isLive,
   lifecycleOf,
   lifecycles,
+  reaches,
   visibilities,
 } from './element.ts';
 export type { Endpoint } from './endpoint.ts';

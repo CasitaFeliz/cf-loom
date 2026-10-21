@@ -3,6 +3,7 @@ import {
   type CodeSnapshot,
   canonicalSnapshotOf,
   type DefinitionsSnapshot,
+  isSubscriptionTombstone,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
@@ -119,7 +120,9 @@ function subscriptionsMerged(
     baseline,
     proposed,
     (subscription): SubscriptionSnapshot | SubscriptionTombstone =>
-      'removedIn' in subscription ? subscription : { ...subscription, removedIn: version },
+      isSubscriptionTombstone(subscription)
+        ? subscription
+        : { ...subscription, removedIn: version },
   );
   return { ...tombstones, ...proposed };
 }

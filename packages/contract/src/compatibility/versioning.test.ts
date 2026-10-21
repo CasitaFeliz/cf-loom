@@ -38,6 +38,7 @@ const privateEvent: ChangeSite = {
   visibility: 'private',
 };
 const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
+const subscription: ChangeSite = { kind: 'subscription', name: 'notify-on-placed' };
 const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
 
 function aBreakingChange(site: ChangeSite): Change {
@@ -276,6 +277,31 @@ describe('versionBumpOf', () => {
     expect(bump).toBe('patch');
   });
 
+  test('a Change on a Subscription never bumps past patch: a Subscription is the Service’s own', () => {
+    const report = aReport([aBreakingChange(subscription), anAdditiveChange(subscription)]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a change only to a Public Endpoint Retired on both sides bumps patch', () => {
+    const retired = anEndpointOf('public', { lifecycle: 'retired' });
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      endpoints: { [orderById]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: { [orderById]: { ...retired, success: { ...retired.success, status: 201 } } },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(versionBumpOf(report, unmoved)).toBe('patch');
+  });
+
   test('a Breaking Change to a shared schema bumps a Definitions Package’s major', () => {
     const removed: Change = {
       site: sharedSchema,
@@ -365,7 +391,12 @@ describe('versionBumpOf', () => {
   test('narrowing Public to Private bumps major: the wider Visibility decides', () => {
     const narrowed: Change = {
       site: publicEndpoint,
-      difference: { kind: 'visibility-narrowed', from: 'public', to: 'private' },
+      difference: {
+        kind: 'visibility-narrowed',
+        from: 'public',
+        to: 'private',
+        dependencies: [],
+      },
       class: 'breaking',
       approval: 'needed',
     };

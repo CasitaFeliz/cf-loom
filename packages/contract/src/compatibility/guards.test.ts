@@ -117,6 +117,7 @@ function placeOf(site: ChangeSite): string {
       return site.code;
     case 'guard':
     case 'shared-schema':
+    case 'subscription':
       return site.name;
     case 'endpoint':
     case 'event':

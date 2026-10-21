@@ -1,4 +1,4 @@
-import type { Visibility } from '../declarations/index.ts';
+import { isLive, type Visibility } from '../declarations/index.ts';
 import {
   type CodeSnapshot,
   type DefinitionsSnapshot,
@@ -126,7 +126,8 @@ function standardCodesOf(baseline: PublishedDefinitionsSnapshot): ReadonlySet<st
 
 /**
  * The widest Visibility of the declared Endpoints of either Snapshot that list each code, so a
- * Change to a code reaches every Consumer that can see an Endpoint answering it.
+ * Change to a code reaches every Consumer that can see an Endpoint answering it; a Retired
+ * Endpoint answers only `RETIRED`, so it counts toward none.
  */
 function answeringVisibilitiesOf(
   baseline: PublishedServiceSnapshot,
@@ -135,7 +136,7 @@ function answeringVisibilitiesOf(
   const endpoints = [
     ...Object.values(baseline.endpoints).filter(isDeclared),
     ...Object.values(proposed.endpoints),
-  ];
+  ].filter(isLive);
   const visibilities = new Map<string, Visibility>();
   for (const { visibility, rejections } of endpoints) {
     for (const code of rejections) {

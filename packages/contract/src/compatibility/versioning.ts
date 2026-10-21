@@ -47,7 +47,7 @@ function bumpOf({ site, class: changeClass }: Change): VersionBump {
 /**
  * Whether Consumers can see a site, since the version is a signal for them and for nobody else; a
  * Definitions Package's shared schema or Guard is for the Services that import it, who may use all
- * of it.
+ * of it, and a Subscription is the Service's own.
  */
 function reachesConsumers(site: ChangeSite): boolean {
   switch (site.kind) {
@@ -59,6 +59,7 @@ function reachesConsumers(site: ChangeSite): boolean {
     case 'guard':
       return true;
     case 'command':
+    case 'subscription':
       return false;
   }
 }

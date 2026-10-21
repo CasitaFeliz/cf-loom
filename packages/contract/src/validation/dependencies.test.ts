@@ -301,6 +301,30 @@ describe('validateContract: an Application’s Dependencies', () => {
     );
   });
 
+  test('an Application depending on a Private Endpoint fails as a Private selection, not as an Application’s', () => {
+    const healthCheck = defineEndpoint({
+      name: 'healthCheck',
+      method: 'GET',
+      path: '/health',
+      visibility: 'private',
+      description: 'Whether the Service is up',
+      success: { status: 204 },
+    });
+    const provider = { ...payments, endpoints: { healthCheck } } as unknown as ContractPackage;
+    const selection = { endpoints: [healthCheck] } as unknown as AnySelection;
+    const paymentsDeps = defineDependencies(provider, selection);
+    const dependencies = [paymentsDeps] as unknown as readonly [typeof publicDeps];
+    const application = defineApplication({ name: 'web-admin', dependencies });
+
+    expect(validateInPackage(application, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'endpoints', 'healthCheck'],
+        'dependency-selection',
+        'A Dependency selects Elements its Provider exports: healthCheck is private',
+      ),
+    );
+  });
+
   test('an Application’s Event fails once, as an Application’s Dependency, not also as unused', () => {
     const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
     const dependencies = [paymentsDeps] as unknown as readonly [typeof publicDeps];
