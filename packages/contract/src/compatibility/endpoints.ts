@@ -1,6 +1,6 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
-import { byCodePoint } from '../walker/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
+import { counterpartsOf } from './counterparts.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
@@ -71,12 +71,21 @@ function answeredDifferencesOf(
   proposed: readonly string[],
 ): readonly Difference[] {
   const differences: Difference[] = [];
-  for (const code of [...new Set([...baseline, ...proposed])].sort(byCodePoint)) {
-    if (!baseline.includes(code)) {
-      differences.push({ kind: 'rejection-added', code });
-    } else if (!proposed.includes(code)) {
-      differences.push({ kind: 'rejection-removed', code });
+  for (const code of counterpartsOf(byCodeOf(baseline), byCodeOf(proposed))) {
+    switch (code.kind) {
+      case 'added':
+        differences.push({ kind: 'rejection-added', code: code.key });
+        break;
+      case 'removed':
+        differences.push({ kind: 'rejection-removed', code: code.key });
+        break;
+      case 'kept':
+        break;
     }
   }
   return differences;
+}
+
+function byCodeOf(codes: readonly string[]): Readonly<Record<string, string>> {
+  return Object.fromEntries(codes.map((code) => [code, code]));
 }

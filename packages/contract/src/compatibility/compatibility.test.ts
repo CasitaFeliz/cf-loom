@@ -29,6 +29,11 @@ const standardRejections: ServiceSnapshot['standardRejections'] = {
   notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
 };
 const emptyObject = { type: 'object', mode: 'strict', fields: {} } as const;
+const orderIdParam = {
+  type: 'object',
+  mode: 'strict',
+  fields: { orderId: { required: true, schema: { type: 'string' } } },
+} as const;
 const heading = {
   format: 1,
   kind: 'service',
@@ -51,7 +56,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
+    input: { params: orderIdParam, query: null, headers: null, body: null },
     success: { status: 200, headers: null, body: null },
     rejections: [],
     ...fields,

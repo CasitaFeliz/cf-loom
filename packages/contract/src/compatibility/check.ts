@@ -21,12 +21,7 @@ import type { Change, ChangeSite, CompatibilityReport, Difference } from './repo
 import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
-/**
- * The Compatibility Check of a declared Snapshot against its Baseline: every difference on its
- * Elements, what an Endpoint reads and answers and their bodies included, or on a Definitions
- * Package's shared schemas, classified, with the Dependencies the graph holds on what it renames
- * or retires.
- */
+/** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified, with the Dependencies it reaches. */
 export function compatibilityReportOf(
   baseline: PublishedSnapshot | undefined,
   proposed: Snapshot,

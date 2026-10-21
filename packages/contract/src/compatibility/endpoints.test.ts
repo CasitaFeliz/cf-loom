@@ -152,6 +152,7 @@ function fieldAdded(at: Path, isRequired: boolean, position: 'input' | 'success'
 }
 
 const typeChange = { kind: 'type-changed', from: 'string', to: 'number' } as const;
+const unprovenParam = { kind: 'unproven', node: 'param' } as const;
 
 describe('compatibilityReportOf, path params', () => {
   test.each(['public', 'internal', 'private'] as const)(
@@ -261,6 +262,30 @@ describe('compatibilityReportOf, path params', () => {
     ]);
   });
 
+  test('a path param with no schema in the Baseline is Breaking: nothing proves it compatible', () => {
+    const corrupted = anEndpoint({ input: anInput({ params: theParams(['id', aString]) }) });
+
+    const changes = changesOf(corrupted, anEndpoint());
+
+    expect(changes).toEqual([
+      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
+    ]);
+  });
+
+  test('a renamed path param with no schema in the proposed Snapshot gives a rename and a Breaking Change', () => {
+    const corrupted = anEndpoint({
+      params: ['id'],
+      input: anInput({ params: theParams(['orderId', aString]) }),
+    });
+
+    const changes = changesOf(anEndpoint(), corrupted);
+
+    expect(changes).toEqual([
+      additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
+      breaking(schemaChange(['input', 'params', 'fields', 'id'], unprovenParam)),
+    ]);
+  });
+
   test('adding a path param moves the Endpoint: an added Endpoint and a deletion', () => {
     const moved = aProposed(anEndpoint(), {
       endpoints: {
@@ -316,16 +341,22 @@ describe('compatibilityReportOf, query', () => {
     ]);
   });
 
-  test('a query declared where there was none compares as an open object with no fields', () => {
-    const none = anEndpoint();
+  test('a query declared with no fields where there was none gives no Change', () => {
+    const changes = changesOf(anEndpoint(), queryOf({}));
 
-    expect(changesOf(none, queryOf({}))).toEqual([]);
-    expect(changesOf(none, queryOf({ page: optional(aNumber) }))).toEqual([
-      additive(fieldAdded(pageAt, false)),
-    ]);
-    expect(changesOf(queryOf({ page: optional(aNumber) }), none)).toEqual([
-      additive(schemaChange(pageAt, { kind: 'field-removed' })),
-    ]);
+    expect(changes).toEqual([]);
+  });
+
+  test('a query declared with an optional field where there was none gives that field added', () => {
+    const changes = changesOf(anEndpoint(), queryOf({ page: optional(aNumber) }));
+
+    expect(changes).toEqual([additive(fieldAdded(pageAt, false))]);
+  });
+
+  test('a query dropped where there was one gives its fields removed', () => {
+    const changes = changesOf(queryOf({ page: optional(aNumber) }), anEndpoint());
+
+    expect(changes).toEqual([additive(schemaChange(pageAt, { kind: 'field-removed' }))]);
   });
 
   test('attaching a Guard that demands a required query param is Breaking', () => {
@@ -354,8 +385,14 @@ describe('compatibilityReportOf, Input headers', () => {
   const traceAt = ['input', 'headers', 'fields', 'x-trace'];
   const refusesText = { kind: 'header-refuses-text', at: traceAt } as const;
 
-  test('adding an optional header that accepts every text is Additive', () => {
-    const changes = changesOf(headersOf({}), headersOf({ 'x-trace': optional(aString) }));
+  const accepting: readonly (readonly [string, SchemaNode])[] = [
+    ['a string with no constraint', aString],
+    ['a nullable string', { type: 'string', nullable: true }],
+    ['a string with only a description', { type: 'string', description: 'A trace id' }],
+  ];
+
+  test.each(accepting)('adding an optional header of %s is Additive', (_name, schema) => {
+    const changes = changesOf(headersOf({}), headersOf({ 'x-trace': optional(schema) }));
 
     expect(changes).toEqual([additive(fieldAdded(traceAt, false))]);
   });
@@ -572,13 +609,16 @@ describe('compatibilityReportOf, bodies and Success', () => {
     ]);
   });
 
-  test('Success headers declared where there were none compare as an open object', () => {
-    const none = anEndpoint();
+  test('Success headers declared with no fields where there were none give no Change', () => {
+    const changes = changesOf(anEndpoint(), headersOf({}));
 
-    expect(changesOf(none, headersOf({}))).toEqual([]);
-    expect(changesOf(none, headersOf({ location: required(aString) }))).toEqual([
-      additive(fieldAdded(locationAt, true, 'success')),
-    ]);
+    expect(changes).toEqual([]);
+  });
+
+  test('Success headers declared with a required field where there were none give that field added', () => {
+    const changes = changesOf(anEndpoint(), headersOf({ location: required(aString) }));
+
+    expect(changes).toEqual([additive(fieldAdded(locationAt, true, 'success'))]);
   });
 });
 

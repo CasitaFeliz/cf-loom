@@ -1,17 +1,14 @@
-import type { Path, SchemaNode } from '../walker/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
-import type { BodyPosition, Difference } from './report.ts';
-import { schemaDifferencesOf } from './schemas.ts';
+import type { Difference } from './report.ts';
+import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
 
 /** A body of the Baseline and the proposed one, `null` where none is declared. */
 export type Bodies = {
   readonly baseline: SchemaNode | null;
   readonly proposed: SchemaNode | null;
 };
-
-/** Where an Endpoint's body is judged: the Position it is read in, and its path from the site. */
-export type BodyPlace = { readonly position: BodyPosition; readonly at: Path };
 
 /**
  * A body declared on one side only is added or removed; one on both sides is compared by its
@@ -20,7 +17,7 @@ export type BodyPlace = { readonly position: BodyPosition; readonly at: Path };
 export function bodyDifferencesOf(
   { baseline, proposed }: Bodies,
   defs: BothDefs,
-  place: BodyPlace,
+  place: EndpointPlace,
 ): readonly Difference[] {
   if (baseline === null && proposed === null) {
     return [];

@@ -119,7 +119,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 - Changing a Success's status, or whether it has a body (204 or not), is Breaking: Callers may depend on either.
 - Adding an Input body is Breaking, since a Caller that sends none is refused as malformed, even when every field of the body is optional; removing one is Additive, since the Service no longer reads it (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md).
-- A Success's headers are an open object compared under the Success column of the tables above; their schemas follow the text rule below.
+- A Success's headers are an open object compared under the Success column of the tables above; their schemas may only be the types that travel as text (see [Headers, path and query](#headers-path-and-query)).
 
 ### Headers, path and query
 
