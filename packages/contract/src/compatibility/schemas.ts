@@ -12,11 +12,14 @@ import {
   typeChanged,
 } from './findings.ts';
 import { type EnteredKey, followedOf } from './refs.ts';
-import type { Difference, PositionOrEvery } from './report.ts';
+import type { Difference, EndpointPosition, PositionOrEvery } from './report.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
 /** Where a schema sits: the Position it is read in, and its path from the site. */
 export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
+
+/** Where a schema of an Endpoint's Input or Success sits: never a Message's or a shared schema's. */
+export type EndpointPlace = { readonly position: EndpointPosition; readonly at: Path };
 
 /**
  * A place with the keys of the pairs already entered within its root schema, one list shared by

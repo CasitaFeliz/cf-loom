@@ -1,5 +1,6 @@
+import type { Visibility } from '../declarations/index.ts';
 import { shapeClassOf } from './positions.ts';
-import type { ChangeSite, Classification, Difference } from './report.ts';
+import type { ChangeSite, Classification, Difference, EndpointPosition } from './report.ts';
 
 /**
  * The class COMPATIBILITY.md gives a difference at a site, and whether it needs a Breaking Change
@@ -10,6 +11,9 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'added':
     case 'deprecated':
     case 'visibility-widened':
+    case 'param-renamed':
+    case 'rejection-added':
+    case 'rejection-removed':
       return { class: 'additive' };
     case 'reactivated':
     case 'tombstoned':
@@ -22,17 +26,43 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'retired':
     case 'visibility-narrowed':
     case 'removed':
+    case 'status-changed':
+    case 'body-added':
+    case 'header-refuses-text':
       return { class: 'breaking', approval: approvalOf(site) };
-    case 'schema': {
-      const shapeClass = shapeClassOf(difference.shape, difference.position);
-      return shapeClass === 'breaking'
-        ? { class: 'breaking', approval: approvalOf(site) }
-        : { class: shapeClass };
-    }
+    case 'body-removed':
+      return bodyRemovedClassOf(site, difference.position);
+    case 'schema':
+      return schemaClassOf(site, difference);
     case 'renamed':
-      return difference.visibility === 'private'
-        ? { class: 'neutral' }
-        : { class: 'breaking', approval: 'needed' };
+      return renamedClassOf(difference.visibility);
+  }
+}
+
+/** Renaming an Endpoint is Breaking unless it is Private, which no Consumer calls by name. */
+function renamedClassOf(visibility: Visibility): Classification {
+  return visibility === 'private'
+    ? { class: 'neutral' }
+    : { class: 'breaking', approval: 'needed' };
+}
+
+function schemaClassOf(
+  site: ChangeSite,
+  difference: Extract<Difference, { readonly kind: 'schema' }>,
+): Classification {
+  const shapeClass = shapeClassOf(difference.shape, difference.position);
+  return shapeClass === 'breaking'
+    ? { class: 'breaking', approval: approvalOf(site) }
+    : { class: shapeClass };
+}
+
+/** An Input body the Service stops reading accepts more; a Success body a Caller read is gone. */
+function bodyRemovedClassOf(site: ChangeSite, position: EndpointPosition): Classification {
+  switch (position) {
+    case 'input':
+      return { class: 'additive' };
+    case 'success':
+      return { class: 'breaking', approval: approvalOf(site) };
   }
 }
 

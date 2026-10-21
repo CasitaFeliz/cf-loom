@@ -7,8 +7,9 @@ import {
   type ServiceSnapshot,
   type Snapshot,
 } from '../snapshot/index.ts';
-import { endpointBodyDifferencesOf, messageBodyDifferencesOf } from './bodies.ts';
+import { messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
+import { endpointDifferencesOf } from './endpoints.ts';
 import { bothDefsOf } from './findings.ts';
 import { type DependencyGraph, dependenciesOn } from './graph.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
@@ -20,11 +21,7 @@ import type { Change, ChangeSite, CompatibilityReport, Difference } from './repo
 import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
-/**
- * The Compatibility Check of a declared Snapshot against its Baseline: every difference on its
- * Elements and their bodies, or on a Definitions Package's shared schemas, classified, with the
- * Dependencies the graph holds on what it renames or retires.
- */
+/** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified, with the Dependencies it reaches. */
 export function compatibilityReportOf(
   baseline: PublishedSnapshot | undefined,
   proposed: Snapshot,
@@ -91,7 +88,7 @@ function endpointChangesOf(
         lifecycleDifferenceOf(pair, dependents),
         visibilityDifferenceOf(pair),
         renameDifferenceOf(pair, dependents),
-        ...endpointBodyDifferencesOf(pair, defs),
+        ...endpointDifferencesOf(pair, defs),
       ]),
     );
   }
