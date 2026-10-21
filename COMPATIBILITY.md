@@ -185,7 +185,7 @@ Adding or removing a Dependency is Neutral: no Consumer relies on what a Service
 
 ### Subscriptions
 
-Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event and name never change, because the Releases running side by side share its durable consumer: changing either fails the check. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
+Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event never changes, because the Releases running side by side share its durable consumer: changing it fails the check. A new name is a new Subscription, and the old one is removed. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
 
 ## Breaking Change Approval
 
