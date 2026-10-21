@@ -6,7 +6,7 @@ import {
 } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import { type Matchable, matchedOf } from '../wire/index.ts';
-import { type PathSegment, readEndpointIdentity, segmentsOf } from '../written/index.ts';
+import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
@@ -109,14 +109,5 @@ function textAt(kept: PathSegment, added: PathSegment | undefined): string | und
 }
 
 function pathOf(identity: string): EndpointPath {
-  const read = readEndpointIdentity(identity);
-  if (read === undefined) {
-    throw new Error(`${identity} is no Endpoint’s identity: a bug.`);
-  }
-  const segments = segmentsOf(read.identityPath).map(segmentOf);
-  return { identity, method: read.method, segments };
-}
-
-function segmentOf(segment: string): PathSegment {
-  return segment === '{}' ? { kind: 'param', name: '' } : { kind: 'literal', text: segment };
+  return { identity, ...endpointSegmentsOf(identity) };
 }

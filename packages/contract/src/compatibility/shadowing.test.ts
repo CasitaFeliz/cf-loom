@@ -74,11 +74,21 @@ function publishedOf(endpoint: EndpointSnapshot): PublishedServiceSnapshot['endp
     : { ...endpoint, lifecycle: endpoint.lifecycle };
 }
 
-function aBaseline(endpoints: Endpoints): PublishedServiceSnapshot {
+function aBaseline(
+  endpoints: Endpoints,
+  tombstones: readonly string[] = [],
+): PublishedServiceSnapshot {
   const published = Object.entries(endpoints).map(
     ([identity, fields]) => [identity, publishedOf(anEndpoint(identity, fields))] as const,
   );
-  return { ...heading, version: '3.4.0', endpoints: Object.fromEntries(published) };
+  const retired = tombstones.map(
+    (identity) => [identity, { lifecycle: 'retired', retiredIn: '2.0.0', name: identity }] as const,
+  );
+  return {
+    ...heading,
+    version: '3.4.0',
+    endpoints: Object.fromEntries([...published, ...retired]),
+  };
 }
 
 function aProposed(endpoints: Endpoints): ServiceSnapshot {
@@ -88,8 +98,12 @@ function aProposed(endpoints: Endpoints): ServiceSnapshot {
   return { ...heading, endpoints: Object.fromEntries(declared) };
 }
 
-function reportOf(baseline: Endpoints, proposed: Endpoints): ComparedReport {
-  const report = compatibilityReportOf(aBaseline(baseline), aProposed(proposed), []);
+function reportOf(
+  baseline: Endpoints,
+  proposed: Endpoints,
+  tombstones: readonly string[] = [],
+): ComparedReport {
+  const report = compatibilityReportOf(aBaseline(baseline, tombstones), aProposed(proposed), []);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }
@@ -100,8 +114,12 @@ function isShadowing(change: Change): boolean {
   return change.difference.kind === 'shadowed';
 }
 
-function shadowedOf(baseline: Endpoints, proposed: Endpoints): readonly Change[] {
-  return reportOf(baseline, proposed).changes.filter(isShadowing);
+function shadowedOf(
+  baseline: Endpoints,
+  proposed: Endpoints,
+  tombstones: readonly string[] = [],
+): readonly Change[] {
+  return reportOf(baseline, proposed, tombstones).changes.filter(isShadowing);
 }
 
 function shadowing(identity: string, by: string, visibility: Visibility = 'public'): Change {
@@ -218,7 +236,7 @@ describe('compatibilityReportOf, shadowing, which Endpoint wins the URL', () => 
     expect(changes).toEqual([shadowing(orderById, latestOrder)]);
   });
 
-  test('an existing Endpoint that loses part of an overlap is shadowed even where another existing one wins the rest', () => {
+  test('both existing Endpoints that lose part of an overlap are shadowed', () => {
     const baseline = { 'GET /{}/{}': {}, 'GET /{}/y': {} };
     const proposed = { ...baseline, 'GET /x/{}': {} };
 
@@ -228,6 +246,15 @@ describe('compatibilityReportOf, shadowing, which Endpoint wins the URL', () => 
       shadowing('GET /{}/y', 'GET /x/{}'),
       shadowing('GET /{}/{}', 'GET /x/{}'),
     ]);
+  });
+
+  test('a text where both paths have a param is one no other Endpoint’s literal matches', () => {
+    const baseline = { 'GET /{}/{}': {}, 'GET /latest/{}': {} };
+    const proposed = { ...baseline, 'GET /{}/a': {} };
+
+    const changes = shadowedOf(baseline, proposed);
+
+    expect(changes).toEqual([shadowing('GET /{}/{}', 'GET /{}/a')]);
   });
 
   test('of several added Endpoints, only the one that wins the URL is named', () => {
@@ -290,6 +317,15 @@ describe('compatibilityReportOf, shadowing, Retired Endpoints', () => {
     const changes = shadowedOf(baseline, proposed);
 
     expect(changes).toEqual([]);
+  });
+
+  test('an Endpoint declared again at a tombstone’s identity takes URLs like any added one', () => {
+    const baseline = { [orderById]: {} };
+    const proposed = { [orderById]: {}, [latestOrder]: {} };
+
+    const changes = shadowedOf(baseline, proposed, [latestOrder]);
+
+    expect(changes).toEqual([shadowing(orderById, latestOrder)]);
   });
 
   test('deleting a Retired Endpoint gives no shadowing, only its Neutral tombstone', () => {

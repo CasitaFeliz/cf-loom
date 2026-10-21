@@ -71,6 +71,25 @@ export function nameAndVersionOf(identity: string): {
 }
 
 /**
+ * The method and the path segments an Endpoint's identity spells, a `{}` as a param; the identity
+ * holds no param names, so each param's name is empty.
+ */
+export function endpointSegmentsOf(identity: string): {
+  readonly method: string;
+  readonly segments: readonly PathSegment[];
+} {
+  const read = readEndpointIdentity(identity);
+  if (read === undefined) {
+    throw new Error(`${identity} is no Endpoint’s identity: a bug.`);
+  }
+  const segments = segmentsOf(read.identityPath).map(
+    (segment): PathSegment =>
+      segment === '{}' ? { kind: 'param', name: '' } : { kind: 'literal', text: segment },
+  );
+  return { method: read.method, segments };
+}
+
+/**
  * The method and the path an Endpoint declares, from its identity and its param names in order:
  * the reverse of `identityOf`, since the Snapshot stores the names apart from the identity.
  */
@@ -78,15 +97,12 @@ export function methodAndPathOf(
   identity: string,
   params: readonly string[],
 ): { readonly method: string; readonly path: string } {
-  const read = readEndpointIdentity(identity);
-  if (read === undefined) {
-    throw new Error(`${identity} is no Endpoint’s identity: a bug.`);
-  }
+  const { method, segments } = endpointSegmentsOf(identity);
   const unused = [...params].reverse();
-  const segments = segmentsOf(read.identityPath).map((segment) =>
-    segment === '{}' ? `:${unused.pop() ?? ''}` : segment,
+  const texts = segments.map((segment) =>
+    segment.kind === 'param' ? `:${unused.pop() ?? ''}` : segment.text,
   );
-  return { method: read.method, path: `/${segments.join('/')}` };
+  return { method, path: `/${texts.join('/')}` };
 }
 
 /** What a canonical Endpoint identity's path holds: `/`, or segments that are `{}` or literal text. */
