@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
@@ -132,5 +133,18 @@ describe('a client of orders-service over HTTP', () => {
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
     expect(outcome).toMatchObject({ kind: 'rejection', known: true, code: 'UNAUTHENTICATED' });
+  });
+});
+
+describe('orders-service’s main.ts', () => {
+  test('it stops serving and exits with status 0 when it is sent SIGTERM', async () => {
+    const started = orders;
+    if (started === undefined) throw new Error('orders-service did not start');
+    const exited = once(started, 'exit');
+
+    started.kill('SIGTERM');
+
+    const [status, signal] = await exited;
+    expect({ status, signal }).toEqual({ status: 0, signal: null });
   });
 });

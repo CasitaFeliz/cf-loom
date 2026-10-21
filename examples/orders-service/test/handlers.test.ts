@@ -1,18 +1,28 @@
 import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
+import { memory } from '@cf-loom/messaging/memory';
 import { unauthenticated } from '@org/definitions';
-import { describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import { orderLocked } from '../src/contract/rejections/order-locked.rejection.ts';
 import healthHandler from '../src/endpoints/infrastructure/health.handler.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 import getOrderHandler from '../src/endpoints/orders/get-order.handler.ts';
 import apiKeyHandler from '../src/guards/api-key.handler.ts';
+import { ordersMessaging, startMessaging } from '../src/messaging.ts';
 
 const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const LOCKED_ORDER_ID = '5e8b2c7a-1d4f-4a9e-b3c6-7f8e9d0a1b2c';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const context = { apiKey: { callerId: 'billing-service' } };
+
+beforeAll(async () => {
+  await startMessaging(memory());
+});
+
+afterAll(async () => {
+  await ordersMessaging().close();
+});
 
 describe('getOrder', () => {
   test('a seeded order is answered with its status and total', async () => {
