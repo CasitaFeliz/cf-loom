@@ -167,6 +167,7 @@ function identityOf(site: ChangeSite): string {
       return site.code;
     case 'guard':
     case 'shared-schema':
+    case 'subscription':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -458,6 +459,87 @@ describe('compatibilityReportOf, lifecycle', () => {
   );
 });
 
+describe('compatibilityReportOf, Elements Retired on both sides', () => {
+  const retiredEndpoint = aRetired(anEndpoint());
+  const stillRetired = { lifecycle: 'retired' } as const;
+  const requiredField = { required: true, schema: { type: 'string' } } as const;
+  const changedBody = { type: 'object', mode: 'strict', fields: { id: requiredField } } as const;
+  const rows = [
+    {
+      name: 'an Endpoint’s body',
+      baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
+      proposed: {
+        endpoints: {
+          'GET /orders/{}': anEndpoint({
+            ...stillRetired,
+            success: { status: 200, headers: null, body: changedBody },
+          }),
+        },
+      },
+    },
+    {
+      name: 'an Endpoint’s name',
+      baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
+      proposed: {
+        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, name: 'fetchOrder' }) },
+      },
+    },
+    {
+      name: 'an Endpoint’s Visibility',
+      baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
+      proposed: {
+        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, visibility: 'internal' }) },
+      },
+    },
+    {
+      name: 'an Event’s body',
+      baseline: { events: { 'OrderPlaced@1': aRetired(anEvent()) } },
+      proposed: {
+        events: { 'OrderPlaced@1': anEvent({ ...stillRetired, body: changedBody }) },
+      },
+    },
+    {
+      name: 'an Event’s Visibility',
+      baseline: { events: { 'OrderPlaced@1': aRetired(anEvent()) } },
+      proposed: {
+        events: { 'OrderPlaced@1': anEvent({ ...stillRetired, visibility: 'private' }) },
+      },
+    },
+    {
+      name: 'a Command’s body',
+      baseline: { commands: { 'ChargeCard@1': aRetired(aCommand()) } },
+      proposed: {
+        commands: { 'ChargeCard@1': aCommand({ ...stillRetired, body: changedBody }) },
+      },
+    },
+  ];
+
+  test.each(rows)(
+    'an Element Retired on both sides gives no Change when $name changes, only a changed hash',
+    ({ baseline, proposed }) => {
+      const report = compatibilityReportOf(aBaseline(baseline), aProposed(proposed), []);
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    },
+  );
+
+  test('an Element retired in this change is still compared', () => {
+    const baseline = aBaseline(endpoint.live('deprecated'));
+    const proposed = aProposed({
+      endpoints: {
+        'GET /orders/{}': anEndpoint({
+          lifecycle: 'retired',
+          success: { status: 201, headers: null, body: null },
+        }),
+      },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired', 'status-changed']);
+  });
+});
+
 describe('compatibilityReportOf, Dependencies', () => {
   test('retiring an Element lists every Dependency the graph holds on it, by package and version', () => {
     const graph: DependencyGraph = [
@@ -567,7 +649,12 @@ describe('compatibilityReportOf, Visibility', () => {
     expect(changes).toEqual([
       {
         site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
-        difference: { kind: 'visibility-narrowed', from: 'public', to: 'internal' },
+        difference: {
+          kind: 'visibility-narrowed',
+          from: 'public',
+          to: 'internal',
+          dependencies: [],
+        },
         class: 'breaking',
         approval: 'needed',
       },
@@ -585,7 +672,12 @@ describe('compatibilityReportOf, Visibility', () => {
     expect(changes).toEqual([
       {
         site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
-        difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
+        difference: {
+          kind: 'visibility-narrowed',
+          from: 'internal',
+          to: 'private',
+          dependencies: [],
+        },
         class: 'breaking',
         approval: 'not-needed',
       },

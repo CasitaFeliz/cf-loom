@@ -73,3 +73,10 @@ export function isDeclared<Element extends DeclaredElement>(
 ): element is Element {
   return 'description' in element;
 }
+
+/** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */
+export function isSubscriptionTombstone(
+  subscription: SubscriptionSnapshot | SubscriptionTombstone,
+): subscription is SubscriptionTombstone {
+  return 'removedIn' in subscription;
+}

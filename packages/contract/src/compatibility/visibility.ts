@@ -1,11 +1,15 @@
 import type { Visibility } from '../declarations/index.ts';
+import type { LosingReach } from './graph.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 type Visible = { readonly visibility: Visibility };
 
-/** Whether an Element's Visibility widened or narrowed from the Baseline's. */
-export function visibilityDifferenceOf(pair: Pair<Visible>): Difference | undefined {
+/** Whether an Element's Visibility widened or narrowed from the Baseline's, a narrowing with the Dependencies that lose reach. */
+export function visibilityDifferenceOf(
+  pair: Pair<Visible>,
+  losingReach: LosingReach,
+): Difference | undefined {
   if (pair.kind !== 'kept') {
     return undefined;
   }
@@ -16,7 +20,7 @@ export function visibilityDifferenceOf(pair: Pair<Visible>): Difference | undefi
   }
   return widthOf(to) > widthOf(from)
     ? { kind: 'visibility-widened', from, to }
-    : { kind: 'visibility-narrowed', from, to };
+    : { kind: 'visibility-narrowed', from, to, dependencies: losingReach(pair.identity, to) };
 }
 
 /**

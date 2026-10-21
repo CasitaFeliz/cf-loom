@@ -139,6 +139,7 @@ function placeOf(site: ChangeSite): string {
       return site.code;
     case 'guard':
     case 'shared-schema':
+    case 'subscription':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -354,7 +355,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
     expect(changes).toEqual([breaking(codeSite(orderLocked, 'private'), statusChanged(409, 422))]);
   });
 
-  test('a Retired Endpoint that still lists a code counts toward its Visibility', () => {
+  test('a Retired Endpoint that still lists a code does not count toward its Visibility: it answers only RETIRED', () => {
     const retired = anEndpoint({ lifecycle: 'retired', rejections: [orderLocked] });
     const baseline = aBaseline({
       endpoints: { [identity]: { ...retired, retiredIn: '3.0.0' } },
@@ -362,6 +363,22 @@ describe('compatibilityReportOf, a Service’s codes', () => {
     });
     const proposed = aProposed({
       endpoints: { [identity]: retired },
+      codes: { [orderLocked]: lockedStatus(422) },
+    });
+
+    const changes = codeChangesOf(baseline, proposed);
+
+    expect(changes).toEqual([breaking(codeSite(orderLocked, 'private'), statusChanged(409, 422))]);
+  });
+
+  test('an Endpoint retired in this change counts with its Baseline Visibility', () => {
+    const deprecated = anEndpoint({ lifecycle: 'deprecated', rejections: [orderLocked] });
+    const baseline = aBaseline({
+      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      codes: { [orderLocked]: lockedStatus(409) },
+    });
+    const proposed = aProposed({
+      endpoints: { [identity]: { ...deprecated, lifecycle: 'retired' } },
       codes: { [orderLocked]: lockedStatus(422) },
     });
 

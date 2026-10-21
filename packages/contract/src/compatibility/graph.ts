@@ -1,3 +1,4 @@
+import { reaches, type Visibility } from '../declarations/index.ts';
 import { compareSemanticVersions, type DependencySnapshot } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import type { GraphDependency } from './report.ts';
@@ -22,6 +23,9 @@ type Dependable = { readonly kind: 'endpoint' | 'event'; readonly identity: stri
 /** The Dependencies the graph holds on one Element of a Service, by the Element's identity. */
 export type Dependents = (identity: string) => readonly GraphDependency[];
 
+/** The Dependencies on one Element of a Service that narrowing it to a Visibility leaves without reach. */
+export type LosingReach = (identity: string, to: Visibility) => readonly GraphDependency[];
+
 /**
  * Every Dependency on an Element of a Service, sorted by package name, then version; a Dependency
  * on another Service's Element of the same identity is none.
@@ -41,6 +45,19 @@ export function dependenciesOn(
         byCodePoint(left.name, right.name) || compareSemanticVersions(left.version, right.version)
       );
     });
+}
+
+/**
+ * Every Dependency on an Element of a Service whose package may not target it at its narrowed
+ * Visibility, sorted as `dependenciesOn` sorts them.
+ */
+export function dependenciesLosingReach(
+  graph: DependencyGraph,
+  service: string,
+  narrowed: Dependable & { readonly to: Visibility },
+): readonly GraphDependency[] {
+  const withoutReach = graph.filter(({ kind }) => !reaches(kind, narrowed.to));
+  return dependenciesOn(withoutReach, service, narrowed);
 }
 
 function dependsOn(dependency: DependencySnapshot | undefined, element: Dependable): boolean {

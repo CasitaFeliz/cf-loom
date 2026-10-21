@@ -185,12 +185,17 @@ function aRef(name: string): SchemaNode {
   return { type: 'ref', name };
 }
 
+/** What a Breaking difference in a place is classed: an Approval, or not allowed for a Message Version. */
+type Breaking =
+  | { readonly class: 'breaking'; readonly approval: 'needed' }
+  | { readonly class: 'not-allowed' };
+
 type Place = {
   readonly name: string;
   readonly position: Position | 'every';
   readonly site: ChangeSite;
   readonly root: Path;
-  readonly approval: 'needed' | 'not-needed';
+  readonly breaking: Breaking;
   readonly column: 0 | 1 | 2 | 3;
   readonly baseline: (node: SchemaNode, defs: Defs) => PublishedSnapshot;
   readonly proposed: (node: SchemaNode, defs: Defs) => Snapshot;
@@ -201,7 +206,7 @@ const input: Place = {
   position: 'input',
   site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
   root: ['input', 'body'],
-  approval: 'needed',
+  breaking: { class: 'breaking', approval: 'needed' },
   column: 0,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(node, null)) } }),
@@ -213,7 +218,7 @@ const success: Place = {
   position: 'success',
   site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
   root: ['success', 'body'],
-  approval: 'needed',
+  breaking: { class: 'breaking', approval: 'needed' },
   column: 1,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(null, node)) } }),
@@ -225,7 +230,7 @@ const message: Place = {
   position: 'message',
   site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
   root: ['body'],
-  approval: 'not-needed',
+  breaking: { class: 'not-allowed' },
   column: 2,
   baseline: (node, defs) => aBaseline({ defs, events: { 'OrderPlaced@1': aLive(anEvent(node)) } }),
   proposed: (node, defs) => aProposed({ defs, events: { 'OrderPlaced@1': anEvent(node) } }),
@@ -235,7 +240,7 @@ const shared: Place = {
   position: 'every',
   site: { kind: 'shared-schema', name: 'money' },
   root: [],
-  approval: 'needed',
+  breaking: { class: 'breaking', approval: 'needed' },
   column: 3,
   baseline: (node, defs) => aBaselineDefinitions({ defs, schemas: { money: node } }),
   proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
@@ -278,7 +283,7 @@ function changeAt(place: Place, difference: Found): Change {
   } as const;
   const changeClass = difference.classes[place.column];
   return changeClass === 'breaking'
-    ? { site: place.site, difference: shapeChange, class: 'breaking', approval: place.approval }
+    ? { site: place.site, difference: shapeChange, ...place.breaking }
     : { site: place.site, difference: shapeChange, class: changeClass };
 }
 
@@ -296,12 +301,19 @@ function reportOf(place: Place, row: Pick<Row, 'from' | 'to' | 'fromDefs' | 'toD
   return comparedOf(baseline, proposed);
 }
 
+function outcomeOf(place: Place, difference: Found): string {
+  const changeClass = difference.classes[place.column];
+  return changeClass === 'breaking' && place.breaking.class === 'not-allowed'
+    ? 'not allowed'
+    : changeClass;
+}
+
 function casesOf(rows: readonly Row[]) {
   return rows.flatMap((row) =>
     (row.places ?? places).map((place) => ({
       change: row.change,
       place: place.name,
-      outcome: row.found.map((difference) => difference.classes[place.column]).join(' and '),
+      outcome: row.found.map((difference) => outcomeOf(place, difference)).join(' and '),
       row,
       where: place,
     })),
@@ -999,7 +1011,9 @@ describe('compatibilityReportOf, constraints', () => {
 
       const report = reportOf(place, { from, to });
 
-      expect(report.changes.map(({ class: changeClass }) => changeClass)).toContain('breaking');
+      expect(report.changes.map(({ class: changeClass }) => changeClass)).toContain(
+        place.breaking.class,
+      );
     },
   );
 
@@ -1827,8 +1841,7 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
             kind: 'field-added',
             required: true,
           }),
-          class: 'breaking',
-          approval: 'not-needed',
+          class: 'not-allowed',
         },
       ],
     });

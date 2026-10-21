@@ -3,8 +3,9 @@ import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from '../walker/inde
 
 /**
  * Where a Change is: an Element by identity with its Visibility, which decides the bump; a
- * Rejection code; or a Definitions Package's shared schema or Guard by name. When the Visibility
- * moved, it is the wider of the two; when the Element is on one side only, that side's.
+ * Rejection code; a Subscription by name; or a Definitions Package's shared schema or Guard by
+ * name. When the Visibility moved, it is the wider of the two; when the Element is on one side
+ * only, that side's.
  */
 export type ChangeSite =
   | { readonly kind: 'endpoint'; readonly identity: string; readonly visibility: Visibility }
@@ -16,12 +17,14 @@ export type ChangeSite =
    * and decides the bump.
    */
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
+  /** A Subscription by name: no Element, and no Consumer relies on what a Service itself consumes. */
+  | { readonly kind: 'subscription'; readonly name: string }
   /** A Definitions Package's shared schema by name: it has no Position until an Element uses it. */
   | { readonly kind: 'shared-schema'; readonly name: string }
   /** A Definitions Package's Guard by name: no Endpoint attaches it until a Service does. */
   | { readonly kind: 'guard'; readonly name: string };
 
-/** A Dependency the dependency graph holds on an Element: the Contract Package that declares it, at a version. */
+/** A Dependency the dependency graph holds on an Element: the Contract Package that declares it, at the highest version of the major it blocks. */
 export type GraphDependency = { readonly name: string; readonly version: string };
 
 /**
@@ -108,12 +111,20 @@ export type Difference =
   | { readonly kind: 'added' }
   | { readonly kind: 'deprecated' }
   | { readonly kind: 'reactivated' }
+  /** An Element Retired, with every Dependency the graph holds on it: while one remains, it is Not allowed. */
   | { readonly kind: 'retired'; readonly dependencies: readonly GraphDependency[] }
   | { readonly kind: 'retired-before-deprecated' }
   | { readonly kind: 'retired-brought-back'; readonly lifecycle: 'active' | 'deprecated' }
   | { readonly kind: 'tombstoned' }
   | { readonly kind: 'deleted' }
+  /** An identity declared where the Baseline holds a tombstone: a Retired Element's, or a removed Subscription's name. */
   | { readonly kind: 'identity-reused' }
+  /** A Message Version added whose previous version, by identity, neither the Baseline nor the proposed Snapshot holds. */
+  | { readonly kind: 'version-gap'; readonly missing: string }
+  /** A Message Version added under a name the Baseline holds as the other kind, a tombstone included: a name keeps one kind. */
+  | { readonly kind: 'name-kind-changed'; readonly from: 'event' | 'command' }
+  /** A Subscription's Event changed, as the Snapshot spells it: the Releases side by side share its durable consumer. */
+  | { readonly kind: 'event-changed'; readonly from: string; readonly to: string }
   | {
       readonly kind: 'renamed';
       readonly from: string;
@@ -127,7 +138,13 @@ export type Difference =
    */
   | { readonly kind: 'shadowed'; readonly by: string }
   | { readonly kind: 'visibility-widened'; readonly from: Visibility; readonly to: Visibility }
-  | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
+  /** A Visibility narrowed, with the Dependencies that lose reach: while one remains, it is Not allowed. */
+  | {
+      readonly kind: 'visibility-narrowed';
+      readonly from: Visibility;
+      readonly to: Visibility;
+      readonly dependencies: readonly GraphDependency[];
+    }
   /**
    * A difference inside a schema, at its path from the site, read in one Position, or in `every`
    * for a shared schema, which takes the strongest class of the three.

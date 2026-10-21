@@ -41,6 +41,7 @@ The version also protects Consumers' installs. The Contract Package's peers are 
 | Retire an Element | Breaking (see [Retirement](#retirement)) |
 | Bring a Retired Element back to Deprecated or Active | Not allowed: the check fails; Retired is terminal |
 | Delete the declaration of an Element Retired in the Baseline | Neutral: the Snapshot carries it forward as a tombstone |
+| Change an Element Retired in the Baseline that is still declared Retired | Neutral: a Retired Element no longer works, so nothing reads what it declares, a shared schema it uses included |
 | Delete an Element not Retired in the Baseline | Not allowed: the check fails |
 | Reuse the identity of a Retired Element (an Endpoint's method and path; a Message's name and version) | Not allowed: the check fails. A new Message Version of a Retired one is not a reuse |
 | Move an Endpoint's path or method | A new Endpoint plus the retirement of the old one |
@@ -49,7 +50,7 @@ The version also protects Consumers' installs. The Contract Package's peers are 
 | Turn a Command into an Event, or the reverse | A new Message, under a new name, plus the retirement of the old one: a name belongs to one kind across the whole Contract and its history |
 | Add an Endpoint that takes a URL routing sent to an existing Endpoint of the same method (`/orders/latest` next to `/orders/:id`) | Breaking on the existing one, whose Input loses that value; the Change names the Endpoint that takes it (routing precedence is in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md). Which values a param's schema accepts is not read: `/orders/latest` takes from `/orders/:id` even when `id` is a uuid. A Retired Endpoint that is still declared shadows too, but is never shadowed, since it has no Input to lose; deleting it is Neutral. Routes outside the Contract are not seen (see [Endpoints](ARCHITECTURE.md#endpoints) in ARCHITECTURE.md) |
 | Widen Visibility (Private → Internal → Public) | Additive |
-| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking. No Deprecation needed, since the Element stays Active, but no Dependency may lose reach, and an Endpoint also needs a Breaking Change Approval |
+| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking. No Deprecation needed, since the Element stays Active, but no Dependency may lose reach (which Elements a Service or an Application may depend on is in [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md), and an Endpoint also needs a Breaking Change Approval |
 
 ### Fields
 
@@ -169,7 +170,7 @@ Standard Rejections:
 
 - A Message change takes the stronger of the Input and Success classes (see [Fields](#fields)).
 - An existing Message Version never takes a Breaking Change other than its retirement or the narrowing of its Visibility: any other, a Breaking change to its body for one, fails the check, and no Breaking Change Approval allows it. The change is made as a new Message Version, which is Additive.
-- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or `generate` fails. `generate` judges the declared Message Versions: a version that is not a whole number from 1, a name and version declared twice, and a name declared as both an Event and a Command; `check` judges gaps and a name's kind against the Baseline, whose tombstones keep the Retired versions a declaration no longer lists.
+- A Message Version is its own Element, identified by name and version. Versions are numbered 1, 2, 3… without gaps. A Command has at most one Active version: adding a new one deprecates the previous one in the same change, or `generate` fails. `generate` judges the declared Message Versions: a version that is not a whole number from 1, a name and version declared twice, and a name declared as both an Event and a Command; `check` judges gaps and a name's kind against the Baseline, whose tombstones keep the Retired versions a declaration no longer lists: a Message Version added fails the check when neither the Baseline nor the declared Snapshot holds the version before it of the same kind, or when the Baseline holds its name as the other kind; with no Baseline, nothing is compared.
 
 ### Retirement
 
@@ -184,7 +185,7 @@ Adding or removing a Dependency is Neutral: no Consumer relies on what a Service
 
 ### Subscriptions
 
-Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event and name never change, because the Releases running side by side share its durable consumer: changing either fails the check. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
+Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused, a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event never changes, because the Releases running side by side share its durable consumer: changing it fails the check. A new name is a new Subscription, and the old one is removed. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
 
 ## Breaking Change Approval
 

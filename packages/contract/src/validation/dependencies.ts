@@ -1,4 +1,4 @@
-import { isEndpoint, isEvent } from '../declarations/index.ts';
+import { isEndpoint, isEvent, reaches, type Visibility } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
@@ -74,17 +74,26 @@ function selectedEndpointFailures(
   if (!isEndpoint(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Endpoint`)];
   }
-  if (element.visibility === 'private') {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
+  const packageKind = rootKind === 'application' ? 'application' : 'service';
+  if (!reaches(packageKind, element.visibility)) {
+    return [unreachableEndpointFailure({ at, name }, element.visibility)];
   }
   if (exported.endpoints !== undefined && !exported.endpoints.has(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
   }
-  if (rootKind !== 'application' || element.visibility === 'public') {
-    return [];
+  return [];
+}
+
+/** A Private Endpoint is nobody's to select; an Internal one is a Service's only, never an Application's. */
+function unreachableEndpointFailure(
+  { at, name }: Pick<Selected, 'at' | 'name'>,
+  visibility: Visibility,
+): DeclarationFailure {
+  if (visibility === 'private') {
+    return failure(at, 'dependency-selection', `${selection}: ${name} is private`);
   }
-  const message = `An Application depends on Public Endpoints only: ${name} is ${textOf(element.visibility)}`;
-  return [failure(at, 'application-dependency', message)];
+  const message = `An Application depends on Public Endpoints only: ${name} is ${textOf(visibility)}`;
+  return failure(at, 'application-dependency', message);
 }
 
 /** What a Dependency's selected Event is judged against: its Provider's exports, its root and the Events subscribed to. */
@@ -116,7 +125,7 @@ function selectedEventFailures(
   if (!isEvent(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
   }
-  if (element.visibility === 'private') {
+  if (!reaches('service', element.visibility)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
   }
   if (exported.events !== undefined && !exported.events.has(element)) {

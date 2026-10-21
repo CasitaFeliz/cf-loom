@@ -25,3 +25,16 @@ export function lifecycleOf(element: { readonly lifecycle?: Lifecycle | undefine
 export function isLive(element: { readonly lifecycle?: string | undefined }): boolean {
   return element.lifecycle !== 'retired';
 }
+
+/**
+ * Whether a Dependency of a Service or of an Application may target an Element of a Visibility: a
+ * Service's any but Private, an Application's Public only, since it runs outside the internal network.
+ */
+export function reaches(packageKind: 'service' | 'application', visibility: Visibility): boolean {
+  switch (packageKind) {
+    case 'service':
+      return visibility !== 'private';
+    case 'application':
+      return visibility === 'public';
+  }
+}
