@@ -115,9 +115,10 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 - A recursive schema is compared by following its `ref`s into each Snapshot's `defs`, as if written inline (see [Recursion](SNAPSHOT.md#recursion)): a def's name is not part of its shape, and a pair of schemas met again within the same schema compares no further. Under the plain-union rule, renaming a def or pointing a `ref` at another def is a change.
 - `z.json()` is an opaque JSON value: any change to or from it is Breaking.
 
-### Success status and headers
+### Bodies, Success status and headers
 
 - Changing a Success's status, or whether it has a body (204 or not), is Breaking: Callers may depend on either.
+- Adding an Input body is Breaking, since a Caller that sends none is refused as malformed, even when every field of the body is optional; removing one is Additive, since the Service no longer reads it (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md).
 - A Success's headers are an open object compared under the Success column of the tables above; their schemas follow the text rule below.
 
 ### Headers, path and query

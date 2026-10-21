@@ -93,7 +93,7 @@ function narrowedFrom(pair: NodePair): BaseType | undefined {
  * A constrained one is left out because proving that each value meets it is not attempted, so
  * widening to it or narrowing from it is a type change.
  */
-function unconstrainedTypeOf(node: SchemaNode): BaseType | undefined {
+export function unconstrainedTypeOf(node: SchemaNode): BaseType | undefined {
   const isUnconstrained = shapeKeyBesidesNullability(node) === canonicalJson({ type: node.type });
   return isBaseType(node.type) && isUnconstrained ? node.type : undefined;
 }

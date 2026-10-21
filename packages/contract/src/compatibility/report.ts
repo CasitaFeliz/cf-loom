@@ -22,6 +22,9 @@ export type GraphDependency = { readonly name: string; readonly version: string 
  */
 export type Position = 'input' | 'success' | 'message';
 
+/** Where an Endpoint's body is read: as Input by the Service, or as Success by a Caller. */
+export type BodyPosition = Exclude<Position, 'message'>;
+
 /** Where a schema is judged: in one Position, or in all three as `every`, for a shared schema. */
 export type PositionOrEvery = Position | 'every';
 
@@ -123,7 +126,24 @@ export type Difference =
       readonly shape: ShapeDifference;
     }
   /** A shared schema gone from its Definitions Package. */
-  | { readonly kind: 'removed' };
+  | { readonly kind: 'removed' }
+  /** A Success's status changed: Callers may depend on it. */
+  | { readonly kind: 'status-changed'; readonly from: number; readonly to: number }
+  /** An Endpoint body declared where the Baseline declared none. */
+  | { readonly kind: 'body-added'; readonly at: Path; readonly position: BodyPosition }
+  /** An Endpoint body the Baseline declared and the proposed Snapshot no longer does. */
+  | { readonly kind: 'body-removed'; readonly at: Path; readonly position: BodyPosition }
+  /** A path param renamed at its position: the URL is the same, and params are matched by position. */
+  | { readonly kind: 'param-renamed'; readonly from: string; readonly to: string }
+  /**
+   * An optional Input header added whose schema refuses some text: a proxy, a gateway or a browser
+   * may already send one under its name.
+   */
+  | { readonly kind: 'header-refuses-text'; readonly at: Path }
+  /** A code an Endpoint answers that it did not. */
+  | { readonly kind: 'rejection-added'; readonly code: string }
+  /** A code an Endpoint no longer answers. */
+  | { readonly kind: 'rejection-removed'; readonly code: string };
 
 /** A difference's class; only a Breaking Change says whether it needs a Breaking Change Approval. */
 export type Classification =

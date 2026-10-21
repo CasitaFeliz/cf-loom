@@ -1,33 +1,37 @@
-import type { EndpointSnapshot } from '../snapshot/index.ts';
-import type { SchemaNode } from '../walker/index.ts';
+import type { Path, SchemaNode } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
-import type { Difference } from './report.ts';
-import { type SchemaPlace, schemaDifferencesOf } from './schemas.ts';
+import type { BodyPosition, Difference } from './report.ts';
+import { schemaDifferencesOf } from './schemas.ts';
 
-type Bodies = {
+/** A body of the Baseline and the proposed one, `null` where none is declared. */
+export type Bodies = {
   readonly baseline: SchemaNode | null;
   readonly proposed: SchemaNode | null;
 };
 
+/** Where an Endpoint's body is judged: the Position it is read in, and its path from the site. */
+export type BodyPlace = { readonly position: BodyPosition; readonly at: Path };
+
 /**
- * An Endpoint's body Differences: its Input body read as Input, then its Success body as Success.
- * A body that one side lacks is left to the Endpoint rules.
+ * A body declared on one side only is added or removed; one on both sides is compared by its
+ * schema in its Position. An undeclared body is never read, so a Caller sends or reads none.
  */
-export function endpointBodyDifferencesOf(
-  pair: Pair<EndpointSnapshot>,
+export function bodyDifferencesOf(
+  { baseline, proposed }: Bodies,
   defs: BothDefs,
+  place: BodyPlace,
 ): readonly Difference[] {
-  if (pair.kind !== 'kept') {
+  if (baseline === null && proposed === null) {
     return [];
   }
-  const { baseline, proposed } = pair;
-  const input: Bodies = { baseline: baseline.input.body, proposed: proposed.input.body };
-  const success: Bodies = { baseline: baseline.success.body, proposed: proposed.success.body };
-  return [
-    ...bodyDifferencesOf(input, defs, { position: 'input', at: ['input', 'body'] }),
-    ...bodyDifferencesOf(success, defs, { position: 'success', at: ['success', 'body'] }),
-  ];
+  if (baseline === null) {
+    return [{ kind: 'body-added', at: place.at, position: place.position }];
+  }
+  if (proposed === null) {
+    return [{ kind: 'body-removed', at: place.at, position: place.position }];
+  }
+  return schemaDifferencesOf({ baseline, proposed }, defs, place);
 }
 
 /** A Message Version's body Differences, read as Message. */
@@ -38,17 +42,6 @@ export function messageBodyDifferencesOf(
   if (pair.kind !== 'kept') {
     return [];
   }
-  const bodies: Bodies = { baseline: pair.baseline.body, proposed: pair.proposed.body };
-  return bodyDifferencesOf(bodies, defs, { position: 'message', at: ['body'] });
-}
-
-function bodyDifferencesOf(
-  { baseline, proposed }: Bodies,
-  defs: BothDefs,
-  place: SchemaPlace,
-): readonly Difference[] {
-  if (baseline === null || proposed === null) {
-    return [];
-  }
-  return schemaDifferencesOf({ baseline, proposed }, defs, place);
+  const bodies = { baseline: pair.baseline.body, proposed: pair.proposed.body };
+  return schemaDifferencesOf(bodies, defs, { position: 'message', at: ['body'] });
 }
