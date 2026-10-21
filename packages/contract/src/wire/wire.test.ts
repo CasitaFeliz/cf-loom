@@ -14,7 +14,9 @@ import {
   isQueryText,
   isReservedCode,
   isSegmentText,
+  jsonBytesOf,
   jsonContentType,
+  jsonOfBytes,
   malformedBodyIssueOf,
   parseValue,
   type ReservedCode,
@@ -824,5 +826,17 @@ describe('malformedBodyIssueOf', () => {
       { part: 'input.body', path: [], code: 'malformed', message: 'The body is not JSON' },
       { part: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
     ]);
+  });
+});
+
+describe('a body as UTF-8 JSON bytes', () => {
+  test('a body written as bytes reads back as the same value, and bytes that are no UTF-8 JSON as malformed', () => {
+    const body = { orderId: 'o-1', note: 'café' };
+
+    const bytes = jsonBytesOf(body);
+
+    expect(new TextDecoder().decode(bytes)).toBe('{"orderId":"o-1","note":"café"}');
+    expect(jsonOfBytes(bytes)).toEqual({ kind: 'value', value: body });
+    expect(jsonOfBytes(new Uint8Array([0xff, 0xfe]))).toMatchObject({ kind: 'malformed' });
   });
 });

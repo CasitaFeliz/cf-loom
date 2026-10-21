@@ -1,5 +1,10 @@
 import type { Command, Event } from '@cf-loom/contract';
-import { brokerMessageIdOf, isReservedHeader, messageIdentityOf } from '@cf-loom/contract/internal';
+import {
+  brokerMessageIdOf,
+  isReservedHeader,
+  jsonBytesOf,
+  messageIdentityOf,
+} from '@cf-loom/contract/internal';
 import { checkedMessageBody } from '@cf-loom/handlers/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
 import type { PublishedVersion, SentVersion } from '../subjects/index.ts';
@@ -54,11 +59,6 @@ function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
     throw new InvalidMessageError(invalid);
   }
   return parsed;
-}
-
-/** A body's UTF-8 JSON bytes, as it travels. */
-export function jsonBytesOf(value: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(value));
 }
 
 /** The Fact id given, which travels in a header and the broker message id, or a random one. */

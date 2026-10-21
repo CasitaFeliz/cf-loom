@@ -3,12 +3,13 @@ import {
   brokerMessageIdOf,
   isCommand,
   isSubscription,
+  jsonBytesOf,
   messageIdentityOf,
 } from '@cf-loom/contract/internal';
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import { factIdOf, jsonBytesOf, transportHeadersOf } from '../sending/index.ts';
+import { factIdOf, transportHeadersOf } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */

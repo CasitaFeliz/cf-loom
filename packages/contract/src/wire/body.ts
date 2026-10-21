@@ -135,6 +135,11 @@ function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return bytes;
 }
 
+/** A body's UTF-8 JSON bytes, as a Message travels. */
+export function jsonBytesOf(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value));
+}
+
 /** A body's JSON from its bytes, read as fatal UTF-8, or why it is no JSON, in a fixed text. */
 export function jsonOfBytes(bytes: Uint8Array): Exclude<ReceivedBody, { kind: 'unreadable' }> {
   try {

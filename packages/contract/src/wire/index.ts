@@ -2,6 +2,7 @@ export type { ReceivedBody } from './body.ts';
 export {
   bodyOf,
   discardBodyOf,
+  jsonBytesOf,
   jsonOfBytes,
   malformedBodyIssueOf,
   notJsonContentType,
