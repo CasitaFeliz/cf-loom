@@ -10,6 +10,8 @@ export type {
   CompatibilityReport,
   Difference,
   GraphDependency,
+  Position,
+  ShapeDifference,
 } from './report.ts';
 export type { VersionBump } from './versioning.ts';
 export { versionBumpOf } from './versioning.ts';

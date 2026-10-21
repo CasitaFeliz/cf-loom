@@ -31,6 +31,7 @@ const privateEvent: ChangeSite = {
   visibility: 'private',
 };
 const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
+const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
 
 function aBreakingChange(site: ChangeSite): Change {
   return {
@@ -129,6 +130,43 @@ describe('versionBumpOf', () => {
     const report = aReport([aBreakingChange(command), anAdditiveChange(command)]);
 
     const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a Breaking Change to a shared schema bumps a Definitions Package’s major', () => {
+    const removed: Change = {
+      site: sharedSchema,
+      difference: { kind: 'removed' },
+      class: 'breaking',
+      approval: 'needed',
+    };
+
+    const bump = versionBumpOf(aReport([removed]), unmoved);
+
+    expect(bump).toBe('major');
+  });
+
+  test('an Additive Change to a shared schema bumps its minor', () => {
+    const bump = versionBumpOf(aReport([anAdditiveChange(sharedSchema)]), unmoved);
+
+    expect(bump).toBe('minor');
+  });
+
+  test('a Breaking body Change on a Private Endpoint bumps patch', () => {
+    const bodyChange: Change = {
+      site: privateEndpoint,
+      difference: {
+        kind: 'schema',
+        position: 'input',
+        at: ['input', 'body', 'fields', 'amount'],
+        shape: { kind: 'field-added', required: true },
+      },
+      class: 'breaking',
+      approval: 'needed',
+    };
+
+    const bump = versionBumpOf(aReport([bodyChange]), unmoved);
 
     expect(bump).toBe('patch');
   });

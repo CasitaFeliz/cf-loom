@@ -10,6 +10,8 @@ export type {
   GraphPackage,
   PeerMove,
   PeerRanges,
+  Position,
+  ShapeDifference,
   VersionBump,
 } from '../compatibility/index.ts';
 export {
