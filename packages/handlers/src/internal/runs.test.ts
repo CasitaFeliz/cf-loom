@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { admit, fault, handle, reject, success, withReader } from '../index.ts';
 import {
   checkedMessageBody,
+  faultLineOf,
   faultLogOf,
   isStub,
   mappedHandlerOf,
@@ -21,6 +22,7 @@ import {
   runEndpoint,
   runGuard,
   runMessage,
+  writtenMessageBody,
 } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -434,6 +436,40 @@ describe('checkedMessageBody', () => {
         ],
       },
     ]);
+  });
+});
+
+describe('writtenMessageBody', () => {
+  const statuses = ['pending', 'paid'] as const;
+  const reader = z.object({ orderId: z.uuid(), status: openEnumReader(statuses) });
+
+  test('a body as a Subscriber reads it is written back through its Reader, its Issues at body', () => {
+    const read = { orderId: ORDER_ID, status: { unknown: 'refunded' }, extra: 'dropped' };
+
+    const checks = [
+      writtenMessageBody(reader, read),
+      writtenMessageBody(reader, { orderId: 'nope', status: 'paid' }),
+    ];
+
+    expect(checks).toEqual([
+      { kind: 'value', value: { orderId: ORDER_ID, status: 'refunded' } },
+      {
+        kind: 'issues',
+        issues: [
+          { part: 'body', path: ['orderId'], code: 'invalid_format', message: expect.any(String) },
+        ],
+      },
+    ]);
+  });
+});
+
+describe('faultLineOf', () => {
+  test('a Fault is a line of its source and message, its cause left out', () => {
+    const fault = { message: 'Internal error', cause: new Error('gateway down') };
+
+    const line = faultLineOf('getOrder', fault);
+
+    expect(line).toBe('getOrder: Internal error');
   });
 });
 

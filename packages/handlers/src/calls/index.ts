@@ -3,6 +3,7 @@ export { isMessageElement } from './elements.ts';
 export {
   answerOf,
   elementNameOf,
+  faultLineOf,
   faultLogOf,
   InvalidInputError,
   InvalidOutcomeError,

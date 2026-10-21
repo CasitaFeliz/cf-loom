@@ -1,0 +1,156 @@
+import {
+  type ContractPackage,
+  defineCommand,
+  defineContract,
+  defineDependencies,
+  defineEvent,
+  defineSubscription,
+} from '@cf-loom/contract';
+import { handle, withReader } from '@cf-loom/handlers';
+import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { type Broker, type Messaging, messaging } from '../index.ts';
+import { memory } from './index.ts';
+
+const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
+
+const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
+
+const money = z.object({ amount: z.number(), currency: z.string() });
+
+const orderCreatedV1 = defineEvent({
+  name: 'OrderCreated',
+  version: 1,
+  visibility: 'internal',
+  lifecycle: 'deprecated',
+  description: 'An order was created',
+  body: z.object({ orderId: z.uuid(), total: z.number() }),
+});
+
+const orderCreatedV2 = defineEvent({
+  name: 'OrderCreated',
+  version: 2,
+  visibility: 'internal',
+  description: 'An order was created, with its currency',
+  body: z.object({ orderId: z.uuid(), total: money }),
+});
+
+const chargeCardV1 = defineCommand({
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the order’s card',
+  body: z.object({ orderId: z.uuid() }),
+});
+
+const paymentSettledV1 = defineEvent({
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
+});
+
+const payments = {
+  name: 'payments-service',
+  version: '5.1.0',
+  endpoints: {},
+  events: { paymentSettledV1 },
+  standardRejections: {
+    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
+    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+  },
+  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
+} as const satisfies ContractPackage;
+
+const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+
+const chargeOnCreated = defineSubscription({ name: 'charge-on-created', event: orderCreatedV2 });
+
+const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+
+const contract = defineContract({
+  name: 'orders-service',
+  events: [orderCreatedV1, orderCreatedV2],
+  commands: [chargeCardV1],
+  subscriptions: [chargeOnCreated, notifyOnSettled],
+  dependencies: [paymentsDeps],
+});
+
+/** The Service's own `src/messaging.ts`, as the README's Connecting writes it. */
+let started: Messaging<typeof contract> | undefined;
+
+async function startMessaging(broker: Broker): Promise<Messaging<typeof contract>> {
+  started = await messaging(contract, broker);
+  return started;
+}
+
+function ordersMessaging(): Messaging<typeof contract> {
+  if (started === undefined) {
+    throw new Error('startMessaging() was not called');
+  }
+  return started;
+}
+
+const charged: string[] = [];
+
+const notified: string[] = [];
+
+const handlers = {
+  commands: {
+    chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), ({ orderId }) => {
+      charged.push(orderId);
+    }),
+  },
+  subscriptions: {
+    'charge-on-created': handle(
+      withReader(chargeOnCreated, orderCreatedV2.body),
+      async ({ orderId }) => {
+        await ordersMessaging().sender.send('ChargeCard', { orderId });
+      },
+    ),
+    'notify-on-settled': handle(
+      withReader(notifyOnSettled, paymentSettledV1.body),
+      ({ paymentId }) => {
+        notified.push(paymentId);
+      },
+    ),
+  },
+};
+
+/** An Endpoint Handler of the Service, which publishes the Event of the order it created. */
+async function createOrderHandler(request: { readonly body: { readonly total: number } }) {
+  const total = { amount: request.body.total, currency: 'EUR' };
+  const { publisher } = ordersMessaging();
+  await publisher.publish('OrderCreated', {
+    v1: { orderId: ORDER_ID, total: total.amount },
+    v2: { orderId: ORDER_ID, total },
+  });
+}
+
+describe('the In memory section of the messaging README', () => {
+  test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages lists them, and deliver resolves acked', async () => {
+    const broker = memory();
+    const running = await startMessaging(broker);
+    await running.consume(handlers);
+
+    await createOrderHandler({ body: { total: 12 } });
+    await broker.settled();
+    const messages = broker.messages.map(({ subject }) => subject);
+    const settlement = await broker.deliver(
+      paymentsDeps.events.paymentSettledV1,
+      { paymentId: PAYMENT_ID },
+      { factId: 'pay-1' },
+    );
+    await running.close();
+
+    expect(messages).toEqual([
+      'orders-service.event.OrderCreated.v1',
+      'orders-service.event.OrderCreated.v2',
+      'orders-service.command.ChargeCard.v1',
+    ]);
+    expect(charged).toEqual([ORDER_ID]);
+    expect(settlement).toBe('acked');
+    expect(notified).toEqual([PAYMENT_ID]);
+  });
+});

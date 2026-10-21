@@ -32,7 +32,7 @@ export function outgoingOf(
       messageId: brokerMessageIdOf(version.message, factId),
       factId,
       headers,
-      body: new TextEncoder().encode(JSON.stringify(value)),
+      body: jsonBytesOf(value),
     },
   }));
 }
@@ -56,8 +56,13 @@ function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
   return parsed;
 }
 
+/** A body's UTF-8 JSON bytes, as it travels. */
+export function jsonBytesOf(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value));
+}
+
 /** The Fact id given, which travels in a header and the broker message id, or a random one. */
-function factIdOf(given: string | undefined): string {
+export function factIdOf(given: string | undefined): string {
   if (given === undefined) {
     return globalThis.crypto.randomUUID();
   }
@@ -68,7 +73,7 @@ function factIdOf(given: string | undefined): string {
 }
 
 /** The transport headers as given, none of them taking a name cf-loom sets itself. */
-function transportHeadersOf(
+export function transportHeadersOf(
   headers: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const reserved = Object.keys(headers).find(isReservedHeader);
