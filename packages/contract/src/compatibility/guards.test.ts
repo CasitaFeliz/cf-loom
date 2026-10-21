@@ -396,11 +396,11 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     expect(changes).toEqual([]);
   });
 
-  test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes', () => {
+  test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes by code in code point order', () => {
     const proposed = aDefinitions({
       schemas: { money: anOpenObject() },
       guards: { authenticated: aGuard() },
-      codes: { [orderLocked]: aCode() },
+      codes: { [orderLocked]: aCode(), [orderGone]: aCode() },
     });
 
     const changes = changesOf(aBaselineDefinitions(), proposed);
@@ -408,6 +408,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     expect(changes.map(({ site }) => [site.kind, placeOf(site)])).toEqual([
       ['shared-schema', 'money'],
       ['guard', 'authenticated'],
+      ['code', orderGone],
       ['code', orderLocked],
     ]);
   });

@@ -12,7 +12,8 @@ export type ChangeSite =
   | { readonly kind: 'command'; readonly identity: string }
   /**
    * A Rejection code, which is no Element: its Visibility is the widest of the Endpoints that answer
-   * it before or after the change, or Public in a Definitions Package, and decides the bump.
+   * it before or after the change, or Private when none does, or Public in a Definitions Package,
+   * and decides the bump.
    */
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
   /** A Definitions Package's shared schema by name: it has no Position until an Element uses it. */

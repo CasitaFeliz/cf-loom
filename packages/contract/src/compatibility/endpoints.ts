@@ -1,6 +1,6 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
-import { answeredDifferencesOf } from './codes.ts';
+import { answeredDifferencesOf, statusDifferencesOf } from './codes.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
@@ -54,12 +54,8 @@ function successDifferencesOf(
 ): readonly Difference[] {
   const headers = { baseline: baseline.headers, proposed: proposed.headers };
   const body = { baseline: baseline.body, proposed: proposed.body };
-  const status: Difference[] =
-    baseline.status === proposed.status
-      ? []
-      : [{ kind: 'status-changed', from: baseline.status, to: proposed.status }];
   return [
-    ...status,
+    ...statusDifferencesOf(baseline.status, proposed.status),
     ...textPartDifferencesOf(headers, defs, { position: 'success', at: ['success', 'headers'] }),
     ...bodyDifferencesOf(body, defs, { position: 'success', at: ['success', 'body'] }),
   ];

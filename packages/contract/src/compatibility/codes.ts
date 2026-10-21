@@ -26,7 +26,7 @@ export function serviceCodeDifferencesOf(
   return counterpartsOf(baseline.codes, proposed.codes).map(
     (code): SiteDifferences => ({
       site: { kind: 'code', code: code.key, visibility: visibilities.get(code.key) ?? 'private' },
-      differences: code.kind === 'kept' ? keptDifferencesOf(code, defs) : [],
+      differences: comparedDifferencesOf(code, defs),
     }),
   );
 }
@@ -44,7 +44,7 @@ export function definitionsCodeDifferencesOf(
   return counterpartsOf(baseline.codes, proposed.codes).map(
     (code): SiteDifferences => ({
       site: { kind: 'code', code: code.key, visibility: 'public' },
-      differences: declaredDifferencesOf(code, standard, defs),
+      differences: [...presenceDifferencesOf(code, standard), ...comparedDifferencesOf(code, defs)],
     }),
   );
 }
@@ -74,42 +74,49 @@ function byCodeOf(codes: readonly string[]): Readonly<Record<string, string>> {
   return Object.fromEntries(codes.map((code) => [code, code]));
 }
 
-/**
- * A code on both sides by its status, then its body read as Success; a removed code the Baseline
- * remembers is compared with what it last had.
- */
-function keptDifferencesOf(
-  code: Extract<Counterpart<CodeSnapshot>, { readonly kind: 'kept' }>,
-  defs: BothDefs,
-): readonly Difference[] {
-  const { baseline, proposed } = code;
-  const status: Difference[] =
-    baseline.status === proposed.status
-      ? []
-      : [{ kind: 'status-changed', from: baseline.status, to: proposed.status }];
-  const bodies = { baseline: baseline.body, proposed: proposed.body };
-  return [...status, ...bodyDifferencesOf(bodies, defs, { position: 'success', at: ['body'] })];
+/** A status changed, which Callers may depend on: a Success's or a code's. */
+export function statusDifferencesOf(baseline: number, proposed: number): readonly Difference[] {
+  return baseline === proposed ? [] : [{ kind: 'status-changed', from: baseline, to: proposed }];
 }
 
 /**
- * What a Definitions Package declares of a code: added when new or declared again after its
- * removal, removed when dropped, except the code a Standard Rejection resolved to, which Services
- * never name.
+ * A code on both sides by its status, then its body read as Success, a removed code the Baseline
+ * remembers with what it last had; a code on one side only has nothing to compare.
  */
-function declaredDifferencesOf(
+function comparedDifferencesOf(
+  code: Counterpart<CodeSnapshot>,
+  defs: BothDefs,
+): readonly Difference[] {
+  switch (code.kind) {
+    case 'kept': {
+      const { baseline, proposed } = code;
+      const bodies = { baseline: baseline.body, proposed: proposed.body };
+      return [
+        ...statusDifferencesOf(baseline.status, proposed.status),
+        ...bodyDifferencesOf(bodies, defs, { position: 'success', at: ['body'] }),
+      ];
+    }
+    case 'added':
+    case 'removed':
+      return [];
+  }
+}
+
+/**
+ * Whether a Definitions Package declares a code now or no longer, but for the code a Standard
+ * Rejection resolved to, which Services never name.
+ */
+function presenceDifferencesOf(
   code: Counterpart<CodeSnapshot>,
   standard: ReadonlySet<string>,
-  defs: BothDefs,
 ): readonly Difference[] {
   switch (code.kind) {
     case 'added':
       return [{ kind: 'added' }];
     case 'removed':
       return code.baseline.removed || standard.has(code.key) ? [] : [{ kind: 'removed' }];
-    case 'kept': {
-      const compared = keptDifferencesOf(code, defs);
-      return code.baseline.removed ? [{ kind: 'added' }, ...compared] : compared;
-    }
+    case 'kept':
+      return code.baseline.removed ? [{ kind: 'added' }] : [];
   }
 }
 
@@ -132,8 +139,7 @@ function answeringVisibilitiesOf(
   const visibilities = new Map<string, Visibility>();
   for (const { visibility, rejections } of endpoints) {
     for (const code of rejections) {
-      const known = visibilities.get(code);
-      visibilities.set(code, known === undefined ? visibility : widerOf(known, visibility));
+      visibilities.set(code, widerOf(visibilities.get(code) ?? 'private', visibility));
     }
   }
   return visibilities;
