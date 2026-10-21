@@ -5,15 +5,34 @@ export { exportedSnapshotOf } from './exported-snapshot.ts';
 export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
+export type {
+  EndpointTombstone,
+  MessageTombstone,
+  PublishedApplicationSnapshot,
+  PublishedCommand,
+  PublishedDefinitionsSnapshot,
+  PublishedElement,
+  PublishedEndpoint,
+  PublishedEvent,
+  PublishedServiceSnapshot,
+  PublishedSnapshot,
+  SubscriptionTombstone,
+} from './published.ts';
+export { isDeclared } from './published.ts';
 export { snapshotOf } from './snapshot.ts';
 export type {
   ApplicationSnapshot,
   AttachmentSnapshot,
   CodeSnapshot,
+  CommandSnapshot,
+  DefinitionsSnapshot,
   EndpointSnapshot,
   EventSnapshot,
   ExportedSnapshot,
   GuardSnapshot,
   ServiceSnapshot,
   Snapshot,
+  SnapshotFormat,
+  SubscriptionSnapshot,
 } from './types.ts';
+export { snapshotFormats } from './types.ts';

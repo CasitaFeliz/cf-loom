@@ -7,7 +7,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 - `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot into the package it writes, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`, so the dependency graph and whether anything changed are read from the registry's package metadata; only the Baseline's `snapshot.json` is downloaded.
 - A Service's Contract Package also exports `contract.exportedSnapshot`, the Snapshot cut to what the package exports, keyed as here, with `format` and no other heading (see [The Contract Package](ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). The client and `@cf-loom/testing` read Snapshot nodes from it at runtime, so they too read every format the CLI ever wrote, as the Compatibility Check does.
 - `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
-- The declared Snapshot leaves out `version` and the history only the Baseline knows: tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
+- The declared Snapshot leaves out `version` and the history only the Baseline knows: the version each Retired Element was Retired in, tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
 ## Canonical form
@@ -38,7 +38,8 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 }
 ```
 
-- `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file.
+- `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file. From the first released format on, anything this specification adds or changes is a new format.
+- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, or a Guard an Endpoint attaches or a Guard lists. It does not judge again the rules `generate` enforced when the file was written.
 - `kind` is `service`, `application` or `definitions`. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `guards`, `schemas` (its shared schemas by name), `codes`, `standardRejections` and `defs`.
 - `definitions` lists every Definitions Package the Contract uses, at the exact version resolved.
 
@@ -161,8 +162,8 @@ Every code that ever existed in the Contract stays here, with the status and bod
 ## Lifecycle and tombstones
 
 - `lifecycle` is `active`, `deprecated` or `retired`.
-- A Retired Element that is still declared keeps its full entry.
-- Once its declaration is deleted, `publish` carries it forward from the Baseline as a tombstone: `{ "lifecycle": "retired", "retiredIn": "3.0.0" }`, plus `name` for an Endpoint. Its identity is never reused.
+- A Retired Element that is still declared keeps everything it records; in the published Snapshot it also carries `retiredIn`, the version that first published it Retired.
+- Once its declaration is deleted, `publish` carries it forward from the Baseline as a tombstone: `{ "lifecycle": "retired", "retiredIn": "3.0.0" }`, its `retiredIn` the Baseline's, plus `name` for an Endpoint. Its identity is never reused.
 
 ## Schemas
 

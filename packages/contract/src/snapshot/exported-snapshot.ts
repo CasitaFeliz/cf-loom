@@ -1,8 +1,15 @@
 import { isLive } from '../declarations/index.ts';
 import { reachedDefsOf, type SchemaNode } from '../walker/index.ts';
 import { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
+import {
+  type EndpointTombstone,
+  isDeclared,
+  type MessageTombstone,
+  type PublishedServiceSnapshot,
+} from './published.ts';
 import { reachedGuardNamesOf } from './reached-guards.ts';
 import type {
+  ByKey,
   CodeSnapshot,
   EndpointSnapshot,
   ExportedSnapshot,
@@ -11,11 +18,13 @@ import type {
 } from './types.ts';
 
 /**
- * The Snapshot a Service's Contract Package exports: its Public and Internal Endpoints and its
- * Internal Events that are not Retired, and the Guards, codes and recursive defs they reach, keyed
- * and ordered as in the Snapshot.
+ * The Snapshot a Service's Contract Package exports, from its declared or published Snapshot: its
+ * Public and Internal Endpoints and its Internal Events that are not Retired, and the Guards, codes
+ * and recursive defs they reach, keyed and ordered as in the Snapshot.
  */
-export function exportedSnapshotOf(snapshot: ServiceSnapshot): ExportedSnapshot {
+export function exportedSnapshotOf(
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
+): ExportedSnapshot {
   const endpoints = exportedOf(snapshot.endpoints);
   const events = exportedOf(snapshot.events);
   const exportedEndpoints = Object.values(endpoints);
@@ -32,16 +41,25 @@ export function exportedSnapshotOf(snapshot: ServiceSnapshot): ExportedSnapshot 
   return { format: snapshot.format, defs, endpoints, events, guards, codes };
 }
 
-/** The Elements of a Snapshot map a Contract Package exports, in the map's order. */
-function exportedOf<Element extends Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>>(
-  elements: Readonly<Record<string, Element>>,
-): Readonly<Record<string, Element>> {
-  return Object.fromEntries(Object.entries(elements).filter(([, element]) => isExported(element)));
+/** What a Contract Package needs of an Element to export it. */
+type Exportable = Pick<EndpointSnapshot, 'visibility' | 'lifecycle'> & {
+  readonly description: string;
+};
+
+/** The Elements of a Snapshot map a Contract Package exports, in the map's order; a tombstone is none. */
+function exportedOf<Declared extends Exportable>(
+  elements: ByKey<Declared | EndpointTombstone | MessageTombstone>,
+): ByKey<Declared> {
+  const keyed = Object.entries(elements).filter(isKeyedExported<Declared>);
+  return Object.fromEntries(keyed);
 }
 
-/** Whether a Contract Package exports an Element: Public or Internal, and not Retired. */
-function isExported(element: Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>): boolean {
-  return element.visibility !== 'private' && isLive(element);
+/** Whether a Contract Package exports an Element: declared, Public or Internal, and not Retired. */
+function isKeyedExported<Declared extends Exportable>(
+  keyed: [string, Declared | EndpointTombstone | MessageTombstone],
+): keyed is [string, Declared] {
+  const element = keyed[1];
+  return isDeclared<Declared>(element) && element.visibility !== 'private' && isLive(element);
 }
 
 /**
@@ -51,7 +69,7 @@ function isExported(element: Pick<EndpointSnapshot, 'visibility' | 'lifecycle'>)
 function reachedCodesOf(
   endpoints: readonly EndpointSnapshot[],
   guards: ExportedSnapshot['guards'],
-  snapshot: ServiceSnapshot,
+  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
 ): ReadonlySet<string> {
   const guardCodes = Object.values(guards).flatMap(({ rejections }) => rejections);
   const listed = endpoints.flatMap((endpoint) => ownRejectionsOf(endpoint, snapshot));

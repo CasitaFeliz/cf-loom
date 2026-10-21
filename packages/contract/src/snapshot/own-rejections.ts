@@ -13,7 +13,7 @@ export type ListedRejection =
  */
 export function ownRejectionsOf(
   endpoint: EndpointSnapshot,
-  snapshot: ServiceSnapshot,
+  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
 ): readonly ListedRejection[] {
   const { standardRejections } = snapshot;
   const added = new Set(addedStandardRejectionNames.map((name) => standardRejections[name].code));

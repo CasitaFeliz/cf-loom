@@ -1,8 +1,11 @@
 import type { Lifecycle, StandardRejectionName, Visibility } from '../declarations/index.ts';
 import type { ObjectNode, Origin, SchemaNode } from '../walker/index.ts';
 
+/** The versions of SNAPSHOT.md a Snapshot may follow, as values, so a reader knows every format it ever wrote. */
+export const snapshotFormats = [1] as const;
+
 /** The version of SNAPSHOT.md a Snapshot follows, so a reader knows every format it ever wrote. */
-export type SnapshotFormat = 1;
+export type SnapshotFormat = (typeof snapshotFormats)[number];
 
 /** A Guard as an Endpoint attaches it: by name, with its Qualifier as written, or `null`. */
 export type AttachmentSnapshot = { readonly guard: string; readonly qualifier: unknown };
@@ -83,7 +86,7 @@ export type EventSnapshot = {
 export type CommandSnapshot = Omit<EventSnapshot, 'visibility'>;
 
 /** A Subscription by its name, with the Event it receives. */
-export type SubscriptionSnapshot = { readonly event: string; readonly removedIn?: string };
+export type SubscriptionSnapshot = { readonly event: string };
 
 /** What a Contract uses of one Provider: the version it relied on and the Elements it selects. */
 export type DependencySnapshot = {
@@ -101,7 +104,7 @@ type Heading<Kind extends string> = {
 };
 
 /** A map of a Snapshot, keyed by identity or name. */
-type ByKey<Value> = Readonly<Record<string, Value>>;
+export type ByKey<Value> = Readonly<Record<string, Value>>;
 
 /** The declared Snapshot of a Service's Contract. */
 export type ServiceSnapshot = Heading<'service'> & {

@@ -15,6 +15,9 @@ export {
   nameAndVersionOf,
   paramNamesOf,
   pathSegmentsOf,
+  readEndpointIdentity,
+  readEventReference,
+  readMessageIdentity,
   segmentsOf,
   subjectVersionOf,
 } from './identity.ts';

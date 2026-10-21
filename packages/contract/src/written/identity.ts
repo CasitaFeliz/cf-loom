@@ -1,3 +1,4 @@
+import { isMessageVersion, methods } from '../declarations/index.ts';
 import { textOf } from './written.ts';
 
 /** The segments between the slashes of a path, a leading or trailing slash dropped. */
@@ -80,4 +81,50 @@ export function methodAndPathOf(
     segment === '{}' ? `:${unused.pop() ?? ''}` : segment,
   );
   return { method: identity.slice(0, separator), path: `/${segments.join('/')}` };
+}
+
+/** What a canonical Endpoint identity's path holds: `/`, or segments that are `{}` or literal text. */
+const identityPath = /^(?:\/|(?:\/(?:\{\}|[^/\s{}:]+))+)$/;
+
+/**
+ * The method and the path of a text that is an Endpoint's identity, `GET /orders/{}`: the form
+ * `identityOf` writes, or `undefined` for any other text. What a literal segment may spell is left
+ * to `generate`.
+ */
+export function readEndpointIdentity(
+  identity: string,
+): { readonly method: string; readonly path: string } | undefined {
+  const separator = identity.indexOf(' ');
+  const method = identity.slice(0, separator);
+  const path = identity.slice(separator + 1);
+  const isReadable = methods.some((known) => known === method) && identityPath.test(path);
+  return isReadable ? { method, path } : undefined;
+}
+
+/**
+ * The name and version of a text that is a Message Version's identity, `OrderCreated@2`: the form
+ * `messageIdentityOf` writes, or `undefined` for any other text.
+ */
+export function readMessageIdentity(
+  identity: string,
+): { readonly name: string; readonly version: number } | undefined {
+  const separator = identity.lastIndexOf('@');
+  const versionText = identity.slice(separator + 1);
+  const version = Number(versionText);
+  const isReadable = separator > 0 && isMessageVersion(version) && String(version) === versionText;
+  return isReadable ? { name: identity.slice(0, separator), version } : undefined;
+}
+
+/**
+ * The Service, name and version of a text that is a Subscription's Event, such as
+ * `payments-service:PaymentSettled@1`, or `undefined` for any other text.
+ */
+export function readEventReference(
+  text: string,
+): { readonly service: string; readonly name: string; readonly version: number } | undefined {
+  const separator = text.indexOf(':');
+  const message = readMessageIdentity(text.slice(separator + 1));
+  return separator > 0 && message !== undefined
+    ? { service: text.slice(0, separator), ...message }
+    : undefined;
 }

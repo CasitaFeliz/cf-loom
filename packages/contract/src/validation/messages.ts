@@ -1,4 +1,4 @@
-import { eventVisibilities, lifecycleOf } from '../declarations/index.ts';
+import { eventVisibilities, isMessageVersion, lifecycleOf } from '../declarations/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -45,7 +45,7 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
   const { version } = message;
-  if (isWithoutValue(version) || (Number.isInteger(version) && version >= 1)) {
+  if (isWithoutValue(version) || isMessageVersion(version)) {
     return [];
   }
   const text = `A Message version is a whole number from 1: ${textOf(version)}`;
