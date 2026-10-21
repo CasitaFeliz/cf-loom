@@ -29,6 +29,7 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'status-changed':
     case 'body-added':
     case 'header-refuses-text':
+    case 'shadowed':
       return { class: 'breaking', approval: approvalOf(site) };
     case 'body-removed':
       return bodyRemovedClassOf(site, difference.position);

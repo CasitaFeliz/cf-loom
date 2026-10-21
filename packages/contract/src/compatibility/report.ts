@@ -113,6 +113,11 @@ export type Difference =
       readonly visibility: Visibility;
       readonly dependencies: readonly GraphDependency[];
     }
+  /**
+   * URLs this Endpoint won by routing precedence in the Baseline that an Endpoint the Baseline does
+   * not declare wins now, named by its identity: this Endpoint's Input loses them.
+   */
+  | { readonly kind: 'shadowed'; readonly by: string }
   | { readonly kind: 'visibility-widened'; readonly from: Visibility; readonly to: Visibility }
   | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
   /**

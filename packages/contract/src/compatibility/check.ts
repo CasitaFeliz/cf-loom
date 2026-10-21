@@ -18,6 +18,7 @@ import { pairsOf } from './pairs.ts';
 import { presenceDifferenceOf } from './presence.ts';
 import { renameDifferenceOf } from './renames.ts';
 import type { Change, ChangeSite, CompatibilityReport, Difference } from './report.ts';
+import { endpointPathsOf, shadowingDifferencesOf } from './shadowing.ts';
 import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
@@ -75,6 +76,7 @@ function endpointChangesOf(
   const dependents = (identity: string) =>
     dependenciesOn(graph, baseline.name, { kind: 'endpoint', identity });
   const defs = bothDefsOf(baseline, proposed);
+  const paths = endpointPathsOf(baseline, proposed);
   const changes: Change[] = [];
   for (const pair of pairsOf(baseline.endpoints, proposed.endpoints)) {
     const site: ChangeSite = {
@@ -88,6 +90,7 @@ function endpointChangesOf(
         lifecycleDifferenceOf(pair, dependents),
         visibilityDifferenceOf(pair),
         renameDifferenceOf(pair, dependents),
+        ...shadowingDifferencesOf(pair, paths),
         ...endpointDifferencesOf(pair, defs),
       ]),
     );
