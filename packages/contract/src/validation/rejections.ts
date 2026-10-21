@@ -1,5 +1,5 @@
 import { isRejectionStatus, isReservedCode } from '../declarations/index.ts';
-import type { Path, SchemaNode } from '../walker/index.ts';
+import { type Path, type SchemaNode, shapeKey } from '../walker/index.ts';
 import {
   type Declarations,
   isMissing,
@@ -13,7 +13,6 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import type { Nodes } from './schemas.ts';
-import { shapeKey } from './shapes.ts';
 import {
   distinctCodeFailures,
   guardStandardFailures,

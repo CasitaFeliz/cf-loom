@@ -192,6 +192,36 @@ describe('validateContract: one status and one body per code', () => {
     expect(validateEndpoints(endpoints).kind).toBe('valid');
   });
 
+  test('two declarations of one code whose union bodies differ only in their options’ descriptions agree', () => {
+    const declared = (body: z.ZodType) =>
+      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
+    const endpoints = [
+      defineEndpoint({
+        ...listing,
+        rejections: [declared(z.union([z.string().describe('a'), z.number().describe('z')]))],
+      }),
+      defineEndpoint({ ...creating, rejections: [declared(z.union([z.string(), z.number()]))] }),
+    ] as const;
+
+    expect(validateEndpoints(endpoints).kind).toBe('valid');
+  });
+
+  test('two declarations of one code whose intersection bodies differ only in their items’ descriptions agree', () => {
+    const declared = (body: z.ZodType) =>
+      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
+    const described = z.intersection(
+      z.string().min(1).describe('a'),
+      z.string().max(10).describe('z'),
+    );
+    const bare = z.intersection(z.string().min(1), z.string().max(10));
+    const endpoints = [
+      defineEndpoint({ ...listing, rejections: [declared(described)] }),
+      defineEndpoint({ ...creating, rejections: [declared(bare)] }),
+    ] as const;
+
+    expect(validateEndpoints(endpoints).kind).toBe('valid');
+  });
+
   test('a Standard Rejection’s resolved code joins the one-status rule', () => {
     const definitions = defineDefinitions({
       name: 'definitions',

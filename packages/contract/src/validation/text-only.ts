@@ -5,6 +5,7 @@ import {
   type ObjectNode,
   type Path,
   type SchemaNode,
+  shapeKey,
 } from '../walker/index.ts';
 import {
   attachedGuardsOf,
@@ -19,7 +20,6 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
-import { shapeKey } from './shapes.ts';
 
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };

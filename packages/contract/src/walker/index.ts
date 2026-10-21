@@ -27,6 +27,7 @@ export type {
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
 export { openIntersectionsOf } from './open-intersections.ts';
+export { shapeKey, shapeOf } from './shapes.ts';
 export type { StringFormat } from './string-formats.ts';
 export { isStringFormat } from './string-formats.ts';
 export type { Defs, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
