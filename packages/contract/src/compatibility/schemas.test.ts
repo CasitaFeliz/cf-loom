@@ -5,7 +5,6 @@ import {
   type ChangeSite,
   type CommandSnapshot,
   type ComparedReport,
-  type Constraint,
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Defs,
@@ -718,6 +717,8 @@ describe('compatibilityReportOf, unions', () => {
   );
 });
 
+type Constraint = Extract<ShapeDifference, { kind: 'constraint-tightened' }>['constraint'];
+
 function tightened(constraint: Constraint): ShapeDifference {
   return { kind: 'constraint-tightened', constraint };
 }
@@ -923,6 +924,36 @@ const numberRows: readonly Row[] = [
     found(tightened('multipleOf'), acceptsLess),
   ),
   aRow(
+    'moving a multipleOf from 3 to 0.3, a divisor with a decimal fraction',
+    aNumberWith({ multipleOf: 3 }),
+    aNumberWith({ multipleOf: 0.3 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0.3 to 3, a multiple with no decimal fraction',
+    aNumberWith({ multipleOf: 0.3 }),
+    aNumberWith({ multipleOf: 3 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0.25 to 0.5',
+    aNumberWith({ multipleOf: 0.25 }),
+    aNumberWith({ multipleOf: 0.5 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0 to 2, which admits more than 0 alone',
+    aNumberWith({ multipleOf: 0 }),
+    aNumberWith({ multipleOf: 2 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf from 2 to 0',
+    aNumberWith({ multipleOf: 2 }),
+    aNumberWith({ multipleOf: 0 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
     'swapping a multipleOf of 1 for int, which mean the same',
     aNumberWith({ multipleOf: 1 }),
     aNumberWith({ int: true }),
@@ -931,8 +962,34 @@ const numberRows: readonly Row[] = [
   ),
 ];
 
+const unchangedConstraints: readonly { readonly constraint: string; readonly node: SchemaNode }[] =
+  [
+    { constraint: 'min', node: aNumberWith({ min: 5 }) },
+    { constraint: 'exclusiveMin', node: aNumberWith({ exclusiveMin: 5 }) },
+    { constraint: 'max', node: aNumberWith({ max: 5 }) },
+    { constraint: 'exclusiveMax', node: aNumberWith({ exclusiveMax: 5 }) },
+    { constraint: 'multipleOf', node: aNumberWith({ multipleOf: 5 }) },
+    { constraint: 'int', node: aNumberWith({ int: true }) },
+    { constraint: 'min length', node: aStringWith({ min: 5 }) },
+    {
+      constraint: 'format',
+      node: aStringWith({ format: 'datetime', formatOptions: { offset: true } }),
+    },
+    { constraint: 'regex', node: aStringWith({ regex: startsWithA }) },
+  ];
+
 describe('compatibilityReportOf, constraints', () => {
   test.each(casesOf([...stringRows, ...numberRows]))('$change is $outcome in $place', expectRow);
+
+  test.each(
+    unchangedConstraints.flatMap((unchanged) =>
+      places.map((place) => ({ ...unchanged, place: place.name, where: place })),
+    ),
+  )('an unchanged $constraint is no Change in $place', ({ node, where }) => {
+    const report = reportOf(where, { from: node, to: node });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
 
   test.each(places)(
     'tightening one constraint and relaxing another leaves a Breaking Change in $name',
@@ -1327,15 +1384,12 @@ const refRows: readonly Row[] = [
     ],
   },
   {
-    change: 'changing a def used at two fields, at both fields',
+    change: 'changing a def used at two fields, once, at the first path in walk order',
     from: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     to: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     fromDefs: { tree },
     toDefs: { tree: treeWithName },
-    found: [
-      found(nameAdded, acceptsLess, ['fields', 'first', 'fields', 'name']),
-      found(nameAdded, acceptsLess, ['fields', 'second', 'fields', 'name']),
-    ],
+    found: [found(nameAdded, acceptsLess, ['fields', 'first', 'fields', 'name'])],
   },
   {
     change: 'changing a def that is a discriminated union’s variant',
@@ -1367,10 +1421,14 @@ function aNodeDef(extra: Readonly<Record<string, Field>>): ObjectNode {
   return anObject(fields);
 }
 
-function denseDefs(size: number): Defs {
+function denseDefs(size: number, lastFields: Readonly<Record<string, Field>> = {}): Defs {
   const names = Array.from({ length: size }, (_, index) => `def${index}`);
   const fields = Object.fromEntries(names.map((name) => [name, required(aRef(name))]));
-  return Object.fromEntries(names.map((name) => [name, anObject(fields)]));
+  const defs = names.map((name, index) => {
+    const own = index === size - 1 ? { ...fields, ...lastFields } : fields;
+    return [name, anObject(own)];
+  });
+  return Object.fromEntries(defs);
 }
 
 const sprawl = anObject(
@@ -1434,6 +1492,18 @@ describe('compatibilityReportOf, refs', () => {
     });
 
     expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
+
+  test('a dense set of mutually recursive defs with one change gives that one Change', () => {
+    const report = reportOf(input, {
+      from: aRef('def0'),
+      to: aRef('def0'),
+      fromDefs: denseDefs(12),
+      toDefs: denseDefs(12, { name: required(aString) }),
+    });
+
+    const path = ['fields', 'def1', 'fields', 'def10', 'fields', 'def11', 'fields', 'name'];
+    expect(report.changes).toEqual([changeAt(input, found(nameAdded, acceptsLess, path))]);
   });
 
   test.each(places)(
@@ -1553,6 +1623,53 @@ describe('compatibilityReportOf, refs', () => {
       });
 
       expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    },
+  );
+
+  test.each(places)('an alias cycle of two defs that stays is no Change in $name', (place) => {
+    const cycle: Defs = { a: aRef('b'), b: aRef('a') };
+
+    const report = reportOf(place, {
+      from: aRef('a'),
+      to: aRef('a'),
+      fromDefs: cycle,
+      toDefs: cycle,
+    });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
+
+  test.each(places)('two alias cycles through different defs are unproven in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('a'),
+      to: aRef('a'),
+      fromDefs: { a: aRef('b'), b: aRef('a') },
+      toDefs: { a: aRef('c'), c: aRef('a') },
+    });
+
+    expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+  });
+
+  test.each(places)(
+    'an alias def that refs back to itself is unproven once it turns nullable in $name',
+    (place) => {
+      const report = reportOf(place, {
+        from: aRef('loop'),
+        to: aRef('loop'),
+        fromDefs: { loop: aRef('loop') },
+        toDefs: { loop: aNullable(aRef('loop')) },
+      });
+
+      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+    },
+  );
+
+  test.each(places)(
+    'two different refs whose defs are both missing are unproven in $name',
+    (place) => {
+      const report = reportOf(place, { from: aRef('ghost'), to: aRef('phantom') });
+
+      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
     },
   );
 

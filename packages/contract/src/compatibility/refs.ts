@@ -1,4 +1,5 @@
 import {
+  canonicalJson,
   type Defs,
   type RefNode,
   reachedDefsOf,
@@ -8,50 +9,56 @@ import {
 import { type BothDefs, type NodePair, shapeKeyBesidesNullability } from './findings.ts';
 
 /**
- * A pair of schemas entered where a `ref` was followed: each side by the name of the def it
- * reaches, or by the node itself when it is written inline.
+ * The key of a pair of schemas compared where a `ref` was followed: each side by the name of the
+ * def it reaches, or by the node itself when that side is written inline.
  */
-export type RefPair = {
+export type EnteredKey = {
   readonly baseline: string | SchemaNode;
   readonly proposed: string | SchemaNode;
 };
 
 /**
  * A pair with every `ref` followed into its Snapshot's defs, through alias defs, nullable when the
- * `ref` or a def on the way is. It is entered, or settled when only its nullability is left to
- * compare: it was met again on its own path, or its `ref`s are unchanged. It is unresolved when a
- * `ref` reaches no schema and the two sides differ.
+ * `ref` or a def on the way is. It is `entered` the first time it is met within a root schema,
+ * `unresolved` when a `ref` reaches no schema and the two sides differ, and `settled` when only
+ * its nullability is left to compare, in either of two ways:
+ * - it was already entered within the same root schema, so any difference in it was found there;
+ * - both sides are the same `ref` that reaches no schema, down the same alias chain.
  */
 export type Followed =
   | { readonly kind: 'inline'; readonly pair: NodePair }
-  | { readonly kind: 'entered'; readonly pair: NodePair; readonly entered: RefPair }
+  | { readonly kind: 'entered'; readonly pair: NodePair; readonly entered: EnteredKey }
   | { readonly kind: 'settled'; readonly pair: NodePair }
   | { readonly kind: 'unresolved' };
 
-type Resolved = { readonly node: SchemaNode; readonly key: string | SchemaNode };
+/** One side of a pair with its `ref`s followed: the schema it stands for, or the alias chain that led nowhere. */
+type Side =
+  | { readonly kind: 'resolved'; readonly node: SchemaNode; readonly key: string | SchemaNode }
+  | { readonly kind: 'unresolved'; readonly chain: readonly string[] };
 
 /**
  * Follows the `ref`s of a pair into both Snapshots' defs, so a def is compared as if written
- * inline. A pair met again among the ones `entered` on the path compares no further, since any
+ * inline. A pair already `entered` within the root schema compares no further, since any
  * difference in it was found where it was first met.
  */
-export function followedOf(pair: NodePair, defs: BothDefs, entered: readonly RefPair[]): Followed {
+export function followedOf(
+  pair: NodePair,
+  defs: BothDefs,
+  entered: readonly EnteredKey[],
+): Followed {
   if (pair.baseline.type !== 'ref' && pair.proposed.type !== 'ref') {
     return { kind: 'inline', pair };
   }
-  const baseline = resolvedOf(pair.baseline, defs.baseline);
-  const proposed = resolvedOf(pair.proposed, defs.proposed);
-  if (baseline === undefined || proposed === undefined) {
-    const isIdentical =
-      baseline === proposed && shapeKey(pair.baseline) === shapeKey(pair.proposed);
-    return isIdentical ? { kind: 'settled', pair } : { kind: 'unresolved' };
+  const baseline = sideOf(pair.baseline, defs.baseline);
+  const proposed = sideOf(pair.proposed, defs.proposed);
+  if (baseline.kind === 'unresolved' || proposed.kind === 'unresolved') {
+    return hasSameChain(baseline, proposed) ? { kind: 'settled', pair } : { kind: 'unresolved' };
   }
-  const resolved = { baseline: baseline.node, proposed: proposed.node };
   const key = { baseline: baseline.key, proposed: proposed.key };
-  if (hasEntered(entered, key) || areUnchangedRefs(pair, defs)) {
-    return { kind: 'settled', pair: resolved };
-  }
-  return { kind: 'entered', pair: resolved, entered: key };
+  const resolved = { baseline: baseline.node, proposed: proposed.node };
+  return hasEntered(entered, key)
+    ? { kind: 'settled', pair: resolved }
+    : { kind: 'entered', pair: resolved, entered: key };
 }
 
 /**
@@ -74,30 +81,36 @@ function hasSameDef(name: string, defs: BothDefs): boolean {
   );
 }
 
-function resolvedOf(node: SchemaNode, defs: Defs): Resolved | undefined {
-  return node.type === 'ref' ? followRef(node, defs, []) : { node, key: node };
+function sideOf(node: SchemaNode, defs: Defs): Side {
+  return node.type === 'ref' ? followRef(node, defs, []) : { kind: 'resolved', node, key: node };
 }
 
-/** A `ref` followed through alias defs to the schema it stands for, or none when a def is missing or an alias comes back. */
-function followRef(ref: RefNode, defs: Defs, followed: readonly string[]): Resolved | undefined {
+/** A `ref` followed through alias defs to the schema it stands for, or until a def is missing or an alias comes back. */
+function followRef(ref: RefNode, defs: Defs, followed: readonly RefNode[]): Side {
+  const chain = [...followed, ref];
   const def = defs[ref.name];
-  if (def === undefined || followed.includes(ref.name)) {
-    return undefined;
+  if (def === undefined || followed.some((earlier) => earlier.name === ref.name)) {
+    return { kind: 'unresolved', chain: chain.map(shapeKey) };
   }
-  const reached =
+  const reached: Side =
     def.type === 'ref'
-      ? followRef(def, defs, [...followed, ref.name])
-      : { node: def, key: ref.name };
-  if (reached === undefined || ref.nullable !== true) {
+      ? followRef(def, defs, chain)
+      : { kind: 'resolved', node: def, key: ref.name };
+  if (reached.kind === 'unresolved' || ref.nullable !== true) {
     return reached;
   }
   return { ...reached, node: { ...reached.node, nullable: true } };
 }
 
-function hasEntered(entered: readonly RefPair[], key: RefPair): boolean {
-  return entered.some((pair) => pair.baseline === key.baseline && pair.proposed === key.proposed);
+/** Whether both sides lead nowhere down alias chains of the same shape, nullability included. */
+function hasSameChain(baseline: Side, proposed: Side): boolean {
+  return (
+    baseline.kind === 'unresolved' &&
+    proposed.kind === 'unresolved' &&
+    canonicalJson(baseline.chain) === canonicalJson(proposed.chain)
+  );
 }
 
-function areUnchangedRefs(pair: NodePair, defs: BothDefs): boolean {
-  return pair.baseline.type === 'ref' && pair.proposed.type === 'ref' && isUnchanged(pair, defs);
+function hasEntered(entered: readonly EnteredKey[], key: EnteredKey): boolean {
+  return entered.some((pair) => pair.baseline === key.baseline && pair.proposed === key.proposed);
 }

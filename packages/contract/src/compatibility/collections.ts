@@ -1,7 +1,7 @@
 import type { TupleNode } from '../walker/index.ts';
 import { boundFindingsOf } from './constraints.ts';
 import { type BothDefs, type Finding, found, inside, type NodePairOf } from './findings.ts';
-import { isUnchanged } from './refs.ts';
+import { plainUnionFindingsOf } from './unions.ts';
 
 /** An array's item counts under the constraint rules, then its items under the field rules. */
 export function arrayFindingsOf({ baseline, proposed }: NodePairOf<'array'>): readonly Finding[] {
@@ -26,9 +26,10 @@ export function recordFindingsOf({ baseline, proposed }: NodePairOf<'record'>): 
 export function tupleFindingsOf(pair: NodePairOf<'tuple'>, defs: BothDefs): readonly Finding[] {
   const baseline = withoutRest(pair.baseline);
   const proposed = withoutRest(pair.proposed);
-  const items = isUnchanged({ baseline, proposed }, defs)
-    ? []
-    : [found({ kind: 'unproven', node: 'tuple' })];
+  const items = plainUnionFindingsOf({ baseline, proposed }, defs, {
+    kind: 'unproven',
+    node: 'tuple',
+  });
   return [...items, ...restFindingsOf(pair)];
 }
 

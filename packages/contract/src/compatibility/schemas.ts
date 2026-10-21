@@ -11,19 +11,23 @@ import {
   type NodePairOf,
   typeChanged,
 } from './findings.ts';
-import { followedOf, type RefPair } from './refs.ts';
+import { type EnteredKey, followedOf } from './refs.ts';
 import type { Difference, PositionOrEvery } from './report.ts';
-import { allOfFindingsOf, taggedFindingsOf, unionFindingsOf } from './unions.ts';
+import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
 /** Where a schema sits: the Position it is read in, and its path from the site. */
 export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
 
-/** A place with the pairs entered on the way to it, so a cycle through `ref`s comes to an end. */
-type EnteredPlace = SchemaPlace & { readonly entered: readonly RefPair[] };
+/**
+ * A place with the keys of the pairs already entered within its root schema, one list shared by
+ * every place in it, so a pair is compared once however many paths reach it.
+ */
+type EnteredPlace = SchemaPlace & { readonly entered: EnteredKey[] };
 
 /**
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
- * its path, following `ref`s into both Snapshots' defs until a pair is met again on its own path.
+ * its path, following `ref`s into both Snapshots' defs. A pair of schemas met again within this
+ * schema compares no further, so a def used at several paths reports its differences at the first.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
@@ -46,10 +50,9 @@ function differencesWithin(
       return differencesOf(nullabilityFindingsOf(followed.pair), defs, place);
     case 'inline':
       return differencesOf(findingsOf(followed.pair, defs), defs, place);
-    case 'entered': {
-      const entered = [...place.entered, followed.entered];
-      return differencesOf(findingsOf(followed.pair, defs), defs, { ...place, entered });
-    }
+    case 'entered':
+      place.entered.push(followed.entered);
+      return differencesOf(findingsOf(followed.pair, defs), defs, place);
   }
 }
 
@@ -133,7 +136,10 @@ function sameTypeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] 
     return tupleFindingsOf(pair, defs);
   }
   if (isNodePairOf(pair, 'union')) {
-    return unionFindingsOf(pair, defs);
+    return plainUnionFindingsOf(pair, defs, { kind: 'union-changed' });
   }
-  return isNodePairOf(pair, 'allOf') ? allOfFindingsOf(pair, defs) : [];
+  if (isNodePairOf(pair, 'allOf')) {
+    return plainUnionFindingsOf(pair, defs, { kind: 'unproven', node: 'allOf' });
+  }
+  return [];
 }

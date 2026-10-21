@@ -1,7 +1,7 @@
 import { canonicalJson, type NumberNode, type StringNode } from '../walker/index.ts';
 import { isMultipleOf } from './decimals.ts';
 import { type Finding, found, type NodePairOf } from './findings.ts';
-import type { Constraint } from './report.ts';
+import type { Constraint, ShapeDifference } from './report.ts';
 
 /** The bounds of a number's value, a string's length or an array's item count. */
 type Bounds = Pick<NumberNode, 'min' | 'max' | 'exclusiveMin' | 'exclusiveMax'>;
@@ -13,7 +13,7 @@ type Side = 'lower' | 'upper';
 /** How a constraint present on both sides moved. */
 type Movement = 'same' | 'tightened' | 'relaxed' | 'replaced';
 
-type Replaceable = 'format' | 'regex' | 'multipleOf';
+type Replaceable = Extract<ShapeDifference, { kind: 'constraint-replaced' }>['constraint'];
 
 type Values<Value> = { readonly baseline: Value | undefined; readonly proposed: Value | undefined };
 
@@ -147,8 +147,7 @@ function isTighter(bound: Bound | undefined, than: Bound | undefined, side: Side
   if (than === undefined) {
     return true;
   }
-  if (bound.value === than.value) {
-    return !bound.inclusive && than.inclusive;
-  }
-  return side === 'lower' ? bound.value > than.value : bound.value < than.value;
+  const isStricterValue = side === 'lower' ? bound.value > than.value : bound.value < than.value;
+  const isStricterKind = bound.value === than.value && !bound.inclusive && than.inclusive;
+  return isStricterValue || isStricterKind;
 }

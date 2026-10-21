@@ -1,4 +1,4 @@
-import type { JsonPrimitive, SchemaNode } from '../walker/index.ts';
+import { decimalDigitsOf, type JsonPrimitive, type SchemaNode } from '../walker/index.ts';
 
 /** A number as text: no sign but `-`, no leading zero, no exponent, no trailing dot. */
 const numberText = /^-?(0|[1-9]\d*)(\.\d+)?$/;
@@ -15,22 +15,13 @@ export function textOfValue(value: TextValue): string {
 }
 
 /**
- * A finite number in plain decimal: JavaScript's shortest round-trip digits, with an exponent
- * form's decimal point moved by hand, never `toFixed`, which rounds.
+ * A finite number in plain decimal: JavaScript's shortest round-trip digits, with the decimal point
+ * moved by hand, never `toFixed`, which rounds.
  */
 function decimalOf(value: number): string {
-  if (!Number.isFinite(value)) {
-    throw new Error(`${value} is no finite number, and no Contract value can be one`);
-  }
-  const [mantissa = '', exponent] = String(Math.abs(value)).split('e');
-  if (exponent === undefined) {
-    return String(value);
-  }
-  const point = mantissa.indexOf('.');
-  const digits = mantissa.replace('.', '');
-  const shifted = (point === -1 ? mantissa.length : point) + Number(exponent);
-  const sign = value < 0 ? '-' : '';
-  return `${sign}${digitsWithPoint(digits, shifted)}`;
+  const { isNegative, digits, exponent } = decimalDigitsOf(value);
+  const sign = isNegative ? '-' : '';
+  return `${sign}${digitsWithPoint(digits, digits.length + exponent)}`;
 }
 
 /** Digits with the decimal point after `point` of them, padded with zeros on either side. */
