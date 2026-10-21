@@ -19,14 +19,16 @@ export type {
   SubscriptionTombstone,
 } from './published.ts';
 export { isDeclared } from './published.ts';
-export { compareSemanticVersions, isSemanticVersion } from './semantic-version.ts';
+export { caretLineOf, compareSemanticVersions, isSemanticVersion } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';
 export type {
   ApplicationSnapshot,
   AttachmentSnapshot,
+  ByKey,
   CodeSnapshot,
   CommandSnapshot,
   DefinitionsSnapshot,
+  DependencySnapshot,
   EndpointSnapshot,
   EventSnapshot,
   ExportedSnapshot,
