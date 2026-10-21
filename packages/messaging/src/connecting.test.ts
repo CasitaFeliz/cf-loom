@@ -16,6 +16,7 @@ import {
   type Messaging,
   messaging,
   type OutgoingMessage,
+  PublishError,
   type Settlement,
 } from './index.ts';
 
@@ -413,6 +414,33 @@ describe('messaging() and close', () => {
 
     await expect(closings[0]).rejects.toBe(error);
     await expect(closings[1]).rejects.toBe(error);
+  });
+
+  test('a publish in flight that the broker rejects while closing still lets close resolve, closing the connection once', async () => {
+    const gate = aGate();
+    const rejected = gate.opened.then(() => Promise.reject(new Error('broker down')));
+    const { broker, log } = aLoggingBroker({ publish: rejected });
+    const { publisher, close } = await messaging(contract, broker);
+    const publishing = publisher.publish('OrderCreated', { v1: body });
+
+    const closing = close();
+    gate.open();
+    await closing;
+
+    await expect(publishing).rejects.toBeInstanceOf(PublishError);
+    expect(log.filter((call) => call === 'close')).toHaveLength(1);
+  });
+
+  test('a publish called right after close with nothing in flight throws messaging is closed and publishes nothing', async () => {
+    const { broker, log } = aLoggingBroker({});
+    const { publisher, close } = await messaging(contract, broker);
+    const closing = close();
+
+    const publishing = publisher.publish('OrderCreated', { v1: body });
+    await closing;
+
+    await expect(publishing).rejects.toThrow('messaging is closed');
+    expect(log).not.toContain('publish');
   });
 
   test('consuming while closing throws, and the broker consumes nothing', async () => {
