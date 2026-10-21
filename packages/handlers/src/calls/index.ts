@@ -3,10 +3,12 @@ export { isMessageElement } from './elements.ts';
 export {
   answerOf,
   elementNameOf,
+  faultLineOf,
   faultLogOf,
   InvalidInputError,
   InvalidOutcomeError,
   issueLineOf,
+  logOf,
   messageAnswerOf,
 } from './errors.ts';
 export type { MessageMeta, MessageRun, MessageWritten } from './message-run.ts';

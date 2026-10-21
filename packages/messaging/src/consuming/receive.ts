@@ -1,9 +1,9 @@
 import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
-import { elementNameOf, type MessageRun, runMessage } from '@cf-loom/handlers/internal';
+import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
-import type { Report } from './faults.ts';
+import { type About, aboutOf, type Report } from './faults.ts';
 
 /** A pulled Subscription or Command Version, and the Handler the map holds for it. */
 export type Pulled = {
@@ -18,7 +18,7 @@ export async function settlementOf(
   report: Report,
 ): Promise<Settlement> {
   const run = await runOf(pulled, delivery);
-  const settlement = settlementOfRun(run, aboutOf(pulled, delivery));
+  const settlement = settlementOfRun(run, aboutOf(pulled.consumed, delivery));
   const fault = faultOf(settlement);
   if (fault !== undefined) {
     report(fault);
@@ -46,14 +46,6 @@ async function runOf({ handler }: Pulled, delivery: Delivery): Promise<MessageRu
   const { messageId, factId, deliveryCount, headers } = delivery;
   const meta = { messageId, factId, deliveryCount, headers };
   return await runMessage(handler, { body: json.value, meta });
-}
-
-/** What a fault says of where it came from: the Element handled and the Message. */
-type About = Pick<ConsumedFault, 'element' | 'subject' | 'messageId' | 'factId'>;
-
-function aboutOf({ consumed }: Pulled, { messageId, factId }: Delivery): About {
-  const element = elementNameOf(consumed.element);
-  return { element, subject: consumed.subject, messageId, factId };
 }
 
 /** A run as the broker settles it: a body that breaks its Reader ends, a throw stays pending. */

@@ -7,11 +7,20 @@ import { type Checked, checkedPart, issueAt } from './checked.ts';
  * travels, then read with that schema as `consume` reads a received one; its Issues sit at `body`.
  */
 export function checkedBody(reader: core.$ZodType, body: unknown): Checked<unknown> {
+  const written = writtenMessageBody(reader, body);
+  if (written.kind === 'issues') {
+    return written;
+  }
+  return checkedMessageBody(reader, written.value);
+}
+
+/** A Message body given as a Subscriber reads it, written back through its Reader schema as it travels; its Issues sit at `body`. */
+export function writtenMessageBody(reader: core.$ZodType, body: unknown): Checked<unknown> {
   const written = encodedValueOf(reader, body);
   if (written.kind === 'issues') {
     return { kind: 'issues', issues: written.issues.map((issue) => issueAt('body', [], issue)) };
   }
-  return checkedMessageBody(reader, written.value);
+  return written;
 }
 
 /**

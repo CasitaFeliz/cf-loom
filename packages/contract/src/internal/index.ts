@@ -112,6 +112,7 @@ export {
   isReservedHeader,
   isSegmentText,
   isTextValue,
+  jsonBytesOf,
   jsonContentType,
   jsonOfBytes,
   malformedBodyIssueOf,
