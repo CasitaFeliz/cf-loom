@@ -52,6 +52,30 @@ export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonl
   return [...new Set(refs.map(({ name }) => name))];
 }
 
+/**
+ * The defs a def's `ref`s lead through when they come back to the def itself, its own name first,
+ * which no node stands behind; `undefined` when they reach another node or a name with no def.
+ */
+export function aliasCycleOf(
+  name: string,
+  def: SchemaNode,
+  defs: Defs,
+): readonly string[] | undefined {
+  const chain = [name];
+  let node: SchemaNode | undefined = def;
+  while (node?.type === 'ref') {
+    if (node.name === name) {
+      return chain;
+    }
+    if (chain.includes(node.name)) {
+      return undefined;
+    }
+    chain.push(node.name);
+    node = Object.hasOwn(defs, node.name) ? defs[node.name] : undefined;
+  }
+  return undefined;
+}
+
 function isRef(node: SchemaNode): node is RefNode {
   return node.type === 'ref';
 }
