@@ -272,6 +272,33 @@ describe('compatibilityReportOf, path params', () => {
     ]);
   });
 
+  test('a path param named where the Baseline declares no params is Breaking', () => {
+    const corrupted = anEndpoint({ input: anInput({ params: null }) });
+
+    const changes = changesOf(corrupted, anEndpoint());
+
+    expect(changes).toEqual([
+      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
+    ]);
+  });
+
+  test('a path param named constructor that one side holds no schema for is Breaking', () => {
+    const named = anEndpoint({
+      params: ['constructor'],
+      input: anInput({ params: theParams(['constructor', aString]) }),
+    });
+    const corrupted = anEndpoint({
+      params: ['constructor'],
+      input: anInput({ params: theParams(['id', aString]) }),
+    });
+
+    const changes = changesOf(corrupted, named);
+
+    expect(changes).toEqual([
+      breaking(schemaChange(['input', 'params', 'fields', 'constructor'], unprovenParam)),
+    ]);
+  });
+
   test('a renamed path param with no schema in the proposed Snapshot gives a rename and a Breaking Change', () => {
     const corrupted = anEndpoint({
       params: ['id'],

@@ -1,6 +1,6 @@
 import type { Visibility } from '../declarations/index.ts';
 import { shapeClassOf } from './positions.ts';
-import type { BodyPosition, ChangeSite, Classification, Difference } from './report.ts';
+import type { ChangeSite, Classification, Difference, EndpointPosition } from './report.ts';
 
 /**
  * The class COMPATIBILITY.md gives a difference at a site, and whether it needs a Breaking Change
@@ -57,7 +57,7 @@ function schemaClassOf(
 }
 
 /** An Input body the Service stops reading accepts more; a Success body a Caller read is gone. */
-function bodyRemovedClassOf(site: ChangeSite, position: BodyPosition): Classification {
+function bodyRemovedClassOf(site: ChangeSite, position: EndpointPosition): Classification {
   switch (position) {
     case 'input':
       return { class: 'additive' };

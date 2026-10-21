@@ -22,8 +22,8 @@ export type GraphDependency = { readonly name: string; readonly version: string 
  */
 export type Position = 'input' | 'success' | 'message';
 
-/** Where an Endpoint's body is read: as Input by the Service, or as Success by a Caller. */
-export type BodyPosition = Exclude<Position, 'message'>;
+/** Where an Endpoint's part is read: as Input by the Service, or as Success by a Caller. */
+export type EndpointPosition = Exclude<Position, 'message'>;
 
 /** Where a schema is judged: in one Position, or in all three as `every`, for a shared schema. */
 export type PositionOrEvery = Position | 'every';
@@ -130,9 +130,9 @@ export type Difference =
   /** A Success's status changed: Callers may depend on it. */
   | { readonly kind: 'status-changed'; readonly from: number; readonly to: number }
   /** An Endpoint body declared where the Baseline declared none. */
-  | { readonly kind: 'body-added'; readonly at: Path; readonly position: BodyPosition }
+  | { readonly kind: 'body-added'; readonly at: Path; readonly position: EndpointPosition }
   /** An Endpoint body the Baseline declared and the proposed Snapshot no longer does. */
-  | { readonly kind: 'body-removed'; readonly at: Path; readonly position: BodyPosition }
+  | { readonly kind: 'body-removed'; readonly at: Path; readonly position: EndpointPosition }
   /** A path param renamed at its position: the URL is the same, and params are matched by position. */
   | { readonly kind: 'param-renamed'; readonly from: string; readonly to: string }
   /**
