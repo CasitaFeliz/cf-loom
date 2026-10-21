@@ -8,7 +8,7 @@ type Bounds = Pick<NumberNode, 'min' | 'max' | 'exclusiveMin' | 'exclusiveMax'>;
 
 type Bound = { readonly value: number; readonly inclusive: boolean };
 
-type Side = 'lower' | 'upper';
+type BoundSide = 'lower' | 'upper';
 
 /** How a constraint present on both sides moved. */
 type Movement = 'same' | 'tightened' | 'relaxed' | 'replaced';
@@ -48,8 +48,8 @@ export function numberFindingsOf({ baseline, proposed }: NodePairOf<'number'>): 
  */
 export function boundFindingsOf(baseline: Bounds, proposed: Bounds): readonly Finding[] {
   return [
-    ...sideFindingsOf('lower', boundOf(baseline, 'lower'), boundOf(proposed, 'lower')),
-    ...sideFindingsOf('upper', boundOf(baseline, 'upper'), boundOf(proposed, 'upper')),
+    ...boundSideFindingsOf('lower', boundOf(baseline, 'lower'), boundOf(proposed, 'lower')),
+    ...boundSideFindingsOf('upper', boundOf(baseline, 'upper'), boundOf(proposed, 'upper')),
   ];
 }
 
@@ -118,36 +118,41 @@ function multipleOfMovement(baseline: number, proposed: number): Movement {
   return isMultipleOf(baseline, proposed) ? 'relaxed' : 'replaced';
 }
 
-function boundOf(node: Bounds, side: Side): Bound | undefined {
+function boundOf(node: Bounds, boundSide: BoundSide): Bound | undefined {
   const [inclusive, exclusive] =
-    side === 'lower' ? [node.min, node.exclusiveMin] : [node.max, node.exclusiveMax];
+    boundSide === 'lower' ? [node.min, node.exclusiveMin] : [node.max, node.exclusiveMax];
   if (inclusive !== undefined) {
     return { value: inclusive, inclusive: true };
   }
   return exclusive === undefined ? undefined : { value: exclusive, inclusive: false };
 }
 
-function sideFindingsOf(
-  side: Side,
+function boundSideFindingsOf(
+  boundSide: BoundSide,
   baseline: Bound | undefined,
   proposed: Bound | undefined,
 ): readonly Finding[] {
-  const constraint = side === 'lower' ? 'lower-bound' : 'upper-bound';
-  if (isTighter(proposed, baseline, side)) {
+  const constraint = boundSide === 'lower' ? 'lower-bound' : 'upper-bound';
+  if (isTighter(proposed, baseline, boundSide)) {
     return [tightened(constraint)];
   }
-  return isTighter(baseline, proposed, side) ? [relaxed(constraint)] : [];
+  return isTighter(baseline, proposed, boundSide) ? [relaxed(constraint)] : [];
 }
 
 /** Whether a bound admits fewer values than another; no bound at all admits the most. */
-function isTighter(bound: Bound | undefined, than: Bound | undefined, side: Side): boolean {
+function isTighter(
+  bound: Bound | undefined,
+  than: Bound | undefined,
+  boundSide: BoundSide,
+): boolean {
   if (bound === undefined) {
     return false;
   }
   if (than === undefined) {
     return true;
   }
-  const isStricterValue = side === 'lower' ? bound.value > than.value : bound.value < than.value;
+  const isStricterValue =
+    boundSide === 'lower' ? bound.value > than.value : bound.value < than.value;
   const isStricterKind = bound.value === than.value && !bound.inclusive && than.inclusive;
   return isStricterValue || isStricterKind;
 }

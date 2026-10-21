@@ -1392,6 +1392,16 @@ const refRows: readonly Row[] = [
     found: [found(nameAdded, acceptsLess, ['fields', 'first', 'fields', 'name'])],
   },
   {
+    change: 'replacing two uses of a def with separate, identical inline copies, at both fields',
+    from: anObject({ a: required(aRef('leaf')), b: required(aRef('leaf')) }),
+    to: anObject({ a: required(aLeafWithName()), b: required(aLeafWithName()) }),
+    fromDefs: { leaf },
+    found: [
+      found(nameAdded, acceptsLess, ['fields', 'a', 'fields', 'name']),
+      found(nameAdded, acceptsLess, ['fields', 'b', 'fields', 'name']),
+    ],
+  },
+  {
     change: 'changing a def that is a discriminated union’s variant',
     from: aTagged('kind', { card: {} }),
     to: { ...aTagged('kind', {}), variants: { '"card"': aRefVariant('card') } },
@@ -1407,6 +1417,10 @@ const refRows: readonly Row[] = [
     found: [found(nameAdded, acceptsLess, ['variants', '"node"', 'fields', 'label'])],
   },
 ];
+
+function aLeafWithName(): ObjectNode {
+  return anObject({ id: required(aString), name: required(aString) });
+}
 
 function aRefVariant(name: string): { readonly type: 'ref'; readonly name: string } {
   return { type: 'ref', name };
