@@ -375,7 +375,7 @@ describe('deliver()', () => {
     ['a stub’s Subscription', paymentSettledV1, 'PaymentSettled@1'],
     ['a Retired Command', refundV1, 'Refund@1'],
   ])(
-    'deliver to an Element nothing consumes throws, naming it: %s',
+    'deliver to an Element nothing consumes rejects, naming it: %s',
     async (_element, element, named) => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const broker = memory();
@@ -395,7 +395,7 @@ describe('deliver()', () => {
     },
   );
 
-  test('deliver before consume throws, naming the Element', async () => {
+  test('deliver before consume rejects, naming the Element', async () => {
     const broker = memory();
     await messaging(contract, broker);
 
