@@ -65,7 +65,7 @@ describe('orders-service over the memory adapter', () => {
     expect(charges).toEqual([{ orderId, total }]);
   });
 
-  test('OrderCreated delivered again for the same order charges it once', async () => {
+  test('OrderCreated delivered again sends ChargeCard under the same Fact id, so the order is charged once', async () => {
     const orderId = await placeOrder();
     const body = { orderId, customerId: CUSTOMER_ID, total };
 
@@ -73,6 +73,7 @@ describe('orders-service over the memory adapter', () => {
     await broker.settled();
 
     expect(settlement).toBe('acked');
+    expect(messagesOn('orders-service.command.ChargeCard.v1')).toHaveLength(1);
     expect(chargesOf(orderId)).toEqual([{ orderId, total }]);
   });
 
