@@ -6,22 +6,21 @@ type Consumption = 'none' | 'taken';
 /** Where one messaging is in its life: open, closing while what is in flight settles, or closed. */
 type State =
   | { readonly kind: 'open'; readonly consumption: Consumption }
-  | { readonly kind: 'closing'; readonly closed: Promise<void> }
+  | { readonly kind: 'closing'; readonly closed: Promise<void>; readonly idle: () => void }
   | { readonly kind: 'closed'; readonly closed: Promise<void> };
 
 const leftPending: Settlement = { kind: 'pending', fault: undefined };
 
 /**
  * The life of one messaging over its broker connection: publishing while open or closing, since a
- * Handler running may still publish; consuming once; and closing once everything in flight, the
- * Handlers running, a `publish`, a `send` or a `consume`, has settled. The core, not the adapter,
- * keeps what is in flight.
+ * Handler running may still publish; consuming once; and closed the moment nothing is in flight,
+ * the Handlers running, a `publish`, a `send` or a `consume`. The core, not the adapter, keeps what
+ * is in flight.
  */
 export class MessagingLife {
   readonly #connection: BrokerConnection;
   #state: State = { kind: 'open', consumption: 'none' };
   readonly #inFlight = new Set<Promise<unknown>>();
-  #idle: (() => void) | undefined;
 
   constructor(connection: BrokerConnection) {
     this.#connection = connection;
@@ -73,8 +72,10 @@ export class MessagingLife {
     const state = this.#state;
     switch (state.kind) {
       case 'open': {
-        const closed = this.#closed();
-        this.#state = { kind: 'closing', closed };
+        const idle = Promise.withResolvers<void>();
+        const closed = idle.promise.then(() => this.#connection.close());
+        this.#state = { kind: 'closing', closed, idle: idle.resolve };
+        this.#endedIfIdle();
         return closed;
       }
       case 'closing':
@@ -112,39 +113,18 @@ export class MessagingLife {
 
   #forget(call: Promise<unknown>): void {
     this.#inFlight.delete(call);
-    if (this.#inFlight.size === 0) {
-      this.#idle?.();
-    }
+    this.#endedIfIdle();
   }
 
-  /** Settles once nothing is in flight, however many calls start while it waits. */
-  #settled(): Promise<void> {
-    if (this.#inFlight.size === 0) {
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      this.#idle = resolve;
-    });
-  }
-
-  /**
-   * Waits until nothing is in flight, a call started in the microtask after one settles included,
-   * then closes; it awaits at least once, so `close()` has set the state to closing first.
-   */
-  async #closed(): Promise<void> {
-    do {
-      await this.#settled();
-    } while (this.#inFlight.size > 0);
-    this.#ended();
-    await this.#connection.close();
-  }
-
-  /** Closing ends closed, keeping the promise every `close()` returns, so nothing new starts. */
-  #ended(): void {
+  /** Closing ends closed the moment nothing is in flight, so a call is either waited for or throws. */
+  #endedIfIdle(): void {
     const state = this.#state;
     switch (state.kind) {
       case 'closing':
-        this.#state = { kind: 'closed', closed: state.closed };
+        if (this.#inFlight.size === 0) {
+          this.#state = { kind: 'closed', closed: state.closed };
+          state.idle();
+        }
         return;
       case 'open':
       case 'closed':

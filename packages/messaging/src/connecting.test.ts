@@ -120,6 +120,7 @@ function aLoggingBroker(held: {
   readonly consume?: Promise<void>;
 }) {
   const log: string[] = [];
+  const consumers: BrokerConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
       publish: async () => {
@@ -127,7 +128,8 @@ function aLoggingBroker(held: {
         await held.publish;
         log.push('published');
       },
-      consume: async () => {
+      consume: async (given) => {
+        consumers.push(...given);
         log.push('consume');
         await held.consume;
         log.push('consumed');
@@ -139,7 +141,7 @@ function aLoggingBroker(held: {
       },
     }),
   };
-  return { broker, log };
+  return { broker, log, consumers };
 }
 
 /** A messaging consuming, whose `notify-on-created` Handler is the one given. */
@@ -275,20 +277,65 @@ describe('messaging() and close', () => {
     expect(log).toEqual(['publish', 'published', 'close', 'closed']);
   });
 
-  test('close waits for a publish chained right after another one it waited for', async () => {
+  test.each([
+    ['right after it', async (publish: () => Promise<void>) => publish()],
+    [
+      'after one more await',
+      async (publish: () => Promise<void>) => {
+        await Promise.resolve();
+        await publish();
+      },
+    ],
+  ])(
+    'a publish chained %s, once close waited for the one in flight, throws messaging is closed',
+    async (_name, chain) => {
+      const gate = aGate();
+      const { broker, log } = aLoggingBroker({ publish: gate.opened });
+      const { publisher, close } = await messaging(contract, broker);
+      const publish = () => publisher.publish('OrderCreated', { v1: body });
+      const chained = (async () => {
+        await publish();
+        await chain(publish);
+      })();
+
+      const closing = close();
+      gate.open();
+      await closing;
+
+      await expect(chained).rejects.toThrow('messaging is closed');
+      expect(log).toEqual(['publish', 'published', 'close', 'closed']);
+    },
+  );
+
+  test('a Handler running during close that publishes twice is waited for, both publishes included', async () => {
     const gate = aGate();
-    const { broker, log } = aLoggingBroker({ publish: gate.opened });
-    const { publisher, close } = await messaging(contract, broker);
-    const chained = (async () => {
-      await publisher.publish('OrderCreated', { v1: body });
-      await publisher.publish('OrderCreated', { v1: body });
-    })();
+    const { broker, log, consumers } = aLoggingBroker({ publish: gate.opened });
+    let publish = (): Promise<void> => Promise.resolve();
+    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+      await publish();
+      await publish();
+    });
+    const { publisher, consume, close } = await messaging(contract, broker);
+    publish = () => publisher.publish('OrderCreated', { v1: body });
+    await consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+    const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
+    const delivered = consumer?.receive(aDelivery(body));
 
     const closing = close();
     gate.open();
-    await Promise.all([chained, closing]);
+    await closing;
 
-    expect(log).toEqual(['publish', 'published', 'publish', 'published', 'close', 'closed']);
+    await expect(delivered).resolves.toEqual({ kind: 'acked' });
+    expect(log).toEqual([
+      'consume',
+      'consumed',
+      'publish',
+      'published',
+      'publish',
+      'published',
+      'close',
+      'closed',
+    ]);
   });
 
   test('close waits for a consume in flight before it closes the connection', async () => {
@@ -349,16 +396,38 @@ describe('messaging() and close', () => {
     },
   );
 
+  test('a broker close that rejects rejects every close() call with its error', async () => {
+    const error = new Error('the broker hung up');
+    const broker: Broker = {
+      connect: async () => ({
+        publish: async () => undefined,
+        consume: async () => undefined,
+        close: async () => {
+          throw error;
+        },
+      }),
+    };
+    const { close } = await messaging(contract, broker);
+
+    const closings = [close(), close()];
+
+    await expect(closings[0]).rejects.toBe(error);
+    await expect(closings[1]).rejects.toBe(error);
+  });
+
   test('consuming while closing throws, and the broker consumes nothing', async () => {
-    const { broker, recorded } = aBroker();
-    const { consume, close } = await messaging(contract, broker);
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ publish: gate.opened });
+    const { consume, close, publisher } = await messaging(contract, broker);
+    const publishing = publisher.publish('OrderCreated', { v1: body });
     const closing = close();
 
     const consuming = consume(handlers);
-    await closing;
+    gate.open();
+    await Promise.all([publishing, closing]);
 
     await expect(consuming).rejects.toThrow('messaging is closing');
-    expect(recorded.consumes).toBe(0);
+    expect(log).not.toContain('consume');
   });
 
   test('a consume the broker rejects can be retried', async () => {
