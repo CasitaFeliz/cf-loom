@@ -142,6 +142,8 @@ const endpointTombstone = {
 } as const;
 const messageTombstone = { lifecycle: 'retired', retiredIn: '3.1.0' } as const;
 
+const stringNode: SchemaNode = { type: 'string' };
+
 function aRef(name: string): RefNode {
   return { type: 'ref', name };
 }
@@ -456,6 +458,18 @@ describe('decodeSnapshot', () => {
         'GET /orders/{}',
         'POST /orders',
       ]);
+    });
+
+    test('a union whose option is an array of itself decodes', () => {
+      const listing: SchemaNode = {
+        type: 'union',
+        options: [{ type: 'array', items: aRef('listing') }, stringNode],
+      };
+      const published = aService({ defs: { listing } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
     test('an alias def of a recursive def decodes', () => {
@@ -1119,22 +1133,45 @@ describe('decodeSnapshot', () => {
       expect(listed).toEqual(malformedAt(['guards', 'admin', 'guards', 0]));
     });
 
-    describe('an alias def whose refs lead back to it', () => {
+    describe('a def that leads back to itself with no node between', () => {
+      const reason = 'leads back to itself through refs, unions and allOfs alone';
+
       test.each([
         ['a ref', aRef('node')],
         ['a nullable ref', { ...aRef('node'), nullable: true }],
-      ])('a def that is %s to itself is malformed at the def', (_, def) => {
+        ['a union with a ref to itself', { type: 'union', options: [aRef('node'), stringNode] }],
+        [
+          'a union with a nullable ref to itself',
+          { type: 'union', options: [{ ...aRef('node'), nullable: true }, stringNode] },
+        ],
+        ['an allOf with itself', { type: 'allOf', items: [anObjectOf(stringNode), aRef('node')] }],
+        [
+          'a nullable union of itself',
+          { type: 'union', options: [aRef('node'), stringNode], nullable: true },
+        ],
+        [
+          'a union with itself in a nested union',
+          { type: 'union', options: [{ type: 'union', options: [aRef('node'), stringNode] }] },
+        ],
+      ])('a def that is %s is malformed at the def', (_, def) => {
         const result = serviceWith({ defs: { node: def } });
 
-        expect(result).toEqual(
-          malformedAt(['defs', 'node'], 'is an alias def whose refs lead back to it'),
-        );
+        expect(result).toEqual(malformedAt(['defs', 'node'], reason));
       });
 
       test('two defs that are refs to each other are malformed at the first', () => {
         const result = serviceWith({ defs: { a: aRef('b'), b: aRef('a') } });
 
-        expect(result).toEqual(malformedAt(['defs', 'a']));
+        expect(result).toEqual(malformedAt(['defs', 'a'], reason));
+      });
+
+      test('two unions that are options of each other are malformed at the first', () => {
+        const first = { type: 'union', options: [aRef('second'), stringNode] };
+        const second = { type: 'union', options: [aRef('first'), { type: 'number' }] };
+
+        const result = serviceWith({ defs: { first, second } });
+
+        expect(result).toEqual(malformedAt(['defs', 'first'], reason));
       });
 
       test('a def that only reaches the cycle is skipped, and the first def on it is malformed', () => {

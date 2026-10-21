@@ -20,6 +20,7 @@ function refusedAt(
 }
 
 const unnamedCycle = { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' };
+const dateRefused = { construct: 'z.date()', instead: 'z.iso.datetime()' };
 
 const categoryDef = {
   type: 'object',
@@ -110,8 +111,10 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  describe('a cycle through z.lazy() alone', () => {
-    const lazyCycle = { construct: 'a cycle through z.lazy() alone, which zod cannot parse' };
+  describe('a cycle through z.lazy(), unions and intersections alone', () => {
+    const nodelessCycle = {
+      construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+    };
     const nullable: z.ZodType = z.lazy(() => nullable.nullable()).meta({ id: 'nullable' });
     const described: z.ZodType = z
       .lazy(() => described)
@@ -123,7 +126,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(node);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -135,7 +138,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(schema);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -151,7 +154,7 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(schema);
 
         expect(walked).toEqual({
-          located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+          located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
           defs: {},
         });
       });
@@ -165,7 +168,7 @@ describe('walkSchemas: recursion', () => {
           () => undefined,
         );
 
-        const failure = { at: ['body'], ...lazyCycle };
+        const failure = { at: ['body'], ...nodelessCycle };
         expect(walked).toEqual({
           located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
           defs: {},
@@ -180,7 +183,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(entry);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -196,7 +199,7 @@ describe('walkSchemas: recursion', () => {
         () => undefined,
       );
 
-      const failure = { at: ['body'], ...lazyCycle };
+      const failure = { at: ['body'], ...nodelessCycle };
       expect(walked).toEqual({
         located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
         defs: {},
@@ -228,6 +231,240 @@ describe('walkSchemas: recursion', () => {
         defs: {},
       });
     });
+
+    describe('with unions and intersections on the cycle', () => {
+      const refusedAtBody = {
+        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+        defs: {},
+      };
+      const anObject = z.object({ a: z.string() });
+      const selfFirst: z.ZodType = z
+        .union([z.lazy(() => selfFirst), z.string()])
+        .meta({ id: 'selfFirst' });
+      const selfLast: z.ZodType = z
+        .union([z.string(), z.lazy(() => selfLast)])
+        .meta({ id: 'selfLast' });
+      const nullableOption: z.ZodType = z
+        .union([z.lazy(() => nullableOption).nullable(), z.string()])
+        .meta({ id: 'nullableOption' });
+      const describedOption: z.ZodType = z
+        .union([z.lazy(() => describedOption).describe('Itself'), z.string()])
+        .meta({ id: 'describedOption' });
+      const nullableUnion: z.ZodType = z
+        .union([z.lazy(() => nullableUnion), z.string()])
+        .nullable()
+        .meta({ id: 'nullableUnion' });
+      const intersected: z.ZodType = z
+        .intersection(
+          anObject,
+          z.lazy(() => intersected),
+        )
+        .meta({ id: 'intersected' });
+      const nullableIntersected: z.ZodType = z
+        .intersection(anObject, z.lazy(() => nullableIntersected).nullable())
+        .meta({ id: 'nullableIntersected' });
+      const orSelf: z.ZodType = z
+        .string()
+        .or(z.lazy(() => orSelf))
+        .meta({ id: 'orSelf' });
+      const andSelf: z.ZodType = anObject.and(z.lazy(() => andSelf)).meta({ id: 'andSelf' });
+      const nestedUnion: z.ZodType = z
+        .union([z.union([z.lazy(() => nestedUnion), z.number()]), z.string()])
+        .meta({ id: 'nestedUnion' });
+      const intersectedOption: z.ZodType = z
+        .union([
+          z.intersection(
+            anObject,
+            z.lazy(() => intersectedOption),
+          ),
+          z.string(),
+        ])
+        .meta({ id: 'intersectedOption' });
+      const innerId: z.ZodType = z.union([
+        z.lazy(() => innerId).meta({ id: 'innerId' }),
+        z.string(),
+      ]);
+
+      test.each([
+        ['first', selfFirst],
+        ['last', selfLast],
+      ])('a union with itself as its %s option fails where the walk enters it', (_, schema) => {
+        expect(walkBody(schema)).toEqual(refusedAtBody);
+      });
+
+      test.each([
+        ['a nullable self option', nullableOption],
+        ['a described self option', describedOption],
+        ['a nullable union of itself', nullableUnion],
+      ])('%s fails the same', (_, schema) => {
+        expect(walkBody(schema)).toEqual(refusedAtBody);
+      });
+
+      test.each([
+        ['an intersection with itself', intersected],
+        ['an intersection with a nullable self', nullableIntersected],
+        ['.or() with itself', orSelf],
+        ['.and() with itself', andSelf],
+      ])('%s fails the same', (_, schema) => {
+        expect(walkBody(schema)).toEqual(refusedAtBody);
+      });
+
+      test.each([
+        ['a nested union', nestedUnion],
+        ['an intersection that is a union option', intersectedOption],
+      ])('the self option inside %s fails the same', (_, schema) => {
+        expect(walkBody(schema)).toEqual(refusedAtBody);
+      });
+
+      describe('two unions that are options of each other', () => {
+        const unionA: z.ZodType = z
+          .union([z.lazy(() => unionB), z.string()])
+          .meta({ id: 'unionA' });
+        const unionB: z.ZodType = z
+          .union([z.lazy(() => unionA), z.number()])
+          .meta({ id: 'unionB' });
+        const refsA: z.ZodType = z.union([z.lazy(() => refsB)]).meta({ id: 'refsA' });
+        const refsB: z.ZodType = z.union([z.lazy(() => refsA)]).meta({ id: 'refsB' });
+
+        test.each([
+          ['first', unionA],
+          ['second', unionB],
+        ])('entered at the %s fail where the walk enters them and write no def', (_, schema) => {
+          expect(walkBody(schema)).toEqual(refusedAtBody);
+        });
+
+        test.each([
+          ['first', refsA],
+          ['second', refsB],
+        ])('made of refs only, entered at the %s, they fail the same', (_, schema) => {
+          expect(walkBody(schema)).toEqual(refusedAtBody);
+        });
+      });
+
+      test('an id only on the lazy of the cycle fails where that lazy sits', () => {
+        const walked = walkBody(innerId);
+
+        expect(walked).toEqual({
+          located: [refusedAt(['body'], [{ at: ['body', 'options', 0], ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      describe('a def of the group that is off the unparsable cycle', () => {
+        const listed: z.ZodType = z
+          .union([z.lazy(() => numbered), z.array(z.lazy(() => holder))])
+          .meta({ id: 'listed' });
+        const numbered: z.ZodType = z
+          .union([z.lazy(() => listed), z.number()])
+          .meta({ id: 'numbered' });
+        const holder: z.ZodType = z
+          .object({
+            get field(): z.ZodType {
+              return listed;
+            },
+          })
+          .meta({ id: 'holder' });
+
+        test('used at a second location is the same failure there, with no def', () => {
+          const walked = walkSchemas(
+            [
+              { at: ['body'], schema: numbered },
+              { at: ['success'], schema: holder },
+            ],
+            () => undefined,
+          );
+
+          const failure = { at: ['body'], ...nodelessCycle };
+          expect(walked).toEqual({
+            located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+            defs: {},
+          });
+          const [first, second] = walked.located;
+          const failuresOf = (location: typeof first) =>
+            location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
+          expect(failuresOf(first)[0]).toBe(failuresOf(second)[0]);
+        });
+      });
+    });
+  });
+
+  describe('a cycle with a node on it other than a union or an intersection', () => {
+    const listing: z.ZodType = z
+      .union([z.string(), z.array(z.lazy(() => listing))])
+      .meta({ id: 'listing' });
+    const itself: z.ZodType = z
+      .object({
+        get self(): z.ZodType {
+          return itself;
+        },
+      })
+      .meta({ id: 'itself' });
+    const tupled: z.ZodType = z.tuple([z.lazy(() => tupled)]).meta({ id: 'tupled' });
+
+    test('a union whose recursive option is an array of itself is a def', () => {
+      expect(walkBody(listing)).toEqual({
+        located: [walkedAt(['body'], { type: 'ref', name: 'listing' })],
+        defs: {
+          listing: {
+            type: 'union',
+            options: [
+              { type: 'array', items: { type: 'ref', name: 'listing' } },
+              { type: 'string' },
+            ],
+          },
+        },
+      });
+    });
+
+    test('recursion through a required field alone is still a def', () => {
+      expect(walkBody(itself)).toEqual({
+        located: [walkedAt(['body'], { type: 'ref', name: 'itself' })],
+        defs: {
+          itself: {
+            type: 'object',
+            mode: 'open',
+            fields: { self: { required: true, schema: { type: 'ref', name: 'itself' } } },
+          },
+        },
+      });
+    });
+
+    test('a tuple of itself is still a def', () => {
+      expect(walkBody(tupled)).toEqual({
+        located: [walkedAt(['body'], { type: 'ref', name: 'tupled' })],
+        defs: { tupled: { type: 'tuple', items: [{ type: 'ref', name: 'tupled' }] } },
+      });
+    });
+  });
+
+  test('a def whose own walk fails drops the defs open below it, so every use is the one failure', () => {
+    const outer: z.ZodType = z
+      .object({
+        get inner(): z.ZodType {
+          return inner;
+        },
+        placedAt: z.date(),
+      })
+      .meta({ id: 'outer' });
+    const inner: z.ZodType = z.array(z.lazy(() => outer)).meta({ id: 'inner' });
+
+    const walked = walkSchemas(
+      [
+        { at: ['body'], schema: outer },
+        { at: ['success'], schema: inner },
+      ],
+      () => undefined,
+    );
+
+    const failure = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
+    expect(walked).toEqual({
+      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+      defs: {},
+    });
+    const [first, second] = walked.located;
+    const failuresOf = (location: typeof first) =>
+      location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
+    expect(failuresOf(first)[0]).toBe(failuresOf(second)[0]);
   });
 
   test('a cyclic schema used at two locations is one def', () => {

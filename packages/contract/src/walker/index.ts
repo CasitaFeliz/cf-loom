@@ -5,7 +5,7 @@ export {
   isJsonValue,
 } from './canonical-json.ts';
 export type { LocatedNode } from './children.ts';
-export { aliasCycleOf, nodesWithin, reachedDefsOf } from './children.ts';
+export { leadsBackWithNoNode, nodesWithin, reachedDefsOf } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export { formatOptionKeysOf } from './format-options.ts';

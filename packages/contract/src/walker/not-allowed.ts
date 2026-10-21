@@ -89,7 +89,9 @@ export const refused = {
   },
   protoField: { construct: 'a field named __proto__ (zod drops it when parsing)' },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
-  lazyCycle: { construct: 'a cycle through z.lazy() alone, which zod cannot parse' },
+  nodelessCycle: {
+    construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+  },
   bigint: { construct: 'z.bigint()' },
   symbol: { construct: 'z.symbol()' },
   void: { construct: 'z.void()' },
