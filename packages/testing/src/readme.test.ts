@@ -4,15 +4,18 @@ import {
   defineContract,
   defineDependencies,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
+  defineSubscription,
   type Endpoint,
   notFound,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { handle, withReader } from '@cf-loom/handlers';
 import { expect, test } from 'vitest';
 import { z } from 'zod';
-import { fakeProvider } from './index.ts';
+import { fakeEvent, fakeProvider } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -33,6 +36,14 @@ const getPayment = defineEndpoint({
   },
   success: { status: 200, body: z.object({ id: z.string(), amount: z.int().positive() }) },
   rejections: [notFound],
+});
+
+const paymentSettledV1 = defineEvent({
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.string() }),
 });
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
@@ -63,11 +74,13 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   } as const;
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const events = { paymentSettledV1 };
+  return { name, version: '1.0.0', endpoints, events, standardRejections, exportedSnapshot };
 }
 
 const paymentsDeps = defineDependencies(contractPackageOf({ getPayment }), {
   endpoints: [getPayment],
+  events: [paymentSettledV1],
 });
 
 const PAYMENT_ID = 'pay-1';
@@ -122,4 +135,29 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   ]);
   const input = { params: { paymentId: PAYMENT_ID }, headers: { 'x-api-key': 'k' } };
   expect(calls).toEqual(Array.from({ length: 7 }, () => ({ kind: 'valid', input })));
+});
+
+test('the README’s fakeEvent example runs: a faked PaymentSettled reaches notifyOnSettledHandler', async () => {
+  const notifyOnSettled = defineSubscription({
+    name: 'notify-on-settled',
+    event: paymentsDeps.events.paymentSettledV1,
+  });
+  const received: unknown[] = [];
+  const notifyOnSettledHandler = handle(
+    withReader(notifyOnSettled, paymentsDeps.events.paymentSettledV1.body),
+    (body) => {
+      received.push(body);
+      return undefined;
+    },
+  );
+
+  const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
+  const answer = await notifyOnSettledHandler(settled, {
+    messageId: 'PaymentSettled.v1:pay-1',
+    factId: 'pay-1',
+    deliveryCount: 1,
+  });
+
+  expect(answer).toBeUndefined();
+  expect(received).toEqual([{ paymentId: PAYMENT_ID }]);
 });

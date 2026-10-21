@@ -2,13 +2,14 @@ import type { Issue } from '@cf-loom/contract/internal';
 
 /**
  * A mistake in a test, never an Outcome: thrown out of a fake's `fetch` under its own name, which
- * the client passes through unchanged, so the code under test cannot take it for a Fault.
+ * the client passes through unchanged, so the code under test cannot take it for a Fault, or out
+ * of `fakeEvent`.
  */
 export class FakeProviderError extends Error {
   override readonly name = 'FakeProviderError';
 }
 
-/** What a fake of one Provider says went wrong with one of its Endpoints. */
+/** What a fake says went wrong with one Provider's Endpoint, or with a faked Event, `provider` then being its Message Version. */
 export type Mistake = {
   readonly provider: string;
   readonly endpoint?: string;

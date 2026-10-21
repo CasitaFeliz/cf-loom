@@ -1,4 +1,4 @@
-export type { ReservedCode } from '../declarations/index.ts';
+export type { ProvidedEvent, ReservedCode } from '../declarations/index.ts';
 export {
   codeNameOf,
   isCommand,
