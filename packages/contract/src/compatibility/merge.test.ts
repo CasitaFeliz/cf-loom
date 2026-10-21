@@ -12,8 +12,10 @@ import {
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
+  type PublishedSnapshot,
   publishedSnapshotOf,
   type ServiceSnapshot,
+  type Snapshot,
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
@@ -138,6 +140,45 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     ...fields,
   };
 }
+
+type Mismatch = {
+  readonly name: string;
+  readonly proposed: Snapshot;
+  readonly baseline: PublishedSnapshot;
+};
+
+const mismatches: readonly Mismatch[] = [
+  {
+    name: 'a Service against a Baseline of another kind',
+    proposed: aProposed(),
+    baseline: { ...anApplication(), version: '1.0.0' },
+  },
+  {
+    name: 'a Service against a Baseline of another name',
+    proposed: aProposed(),
+    baseline: aBaseline({ name: 'billing-service' }),
+  },
+  {
+    name: 'an Application against a Baseline of another kind',
+    proposed: anApplication(),
+    baseline: aBaseline(),
+  },
+  {
+    name: 'an Application against a Baseline of another name',
+    proposed: anApplication(),
+    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0' },
+  },
+  {
+    name: 'a Definitions Package against a Baseline of another kind',
+    proposed: aDefinitions(),
+    baseline: aBaseline(),
+  },
+  {
+    name: 'a Definitions Package against a Baseline of another name',
+    proposed: aDefinitions(),
+    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0' },
+  },
+];
 
 describe('publishedSnapshotOf', () => {
   test('the published Snapshot carries the version given', () => {
@@ -286,6 +327,25 @@ describe('publishedSnapshotOf', () => {
     );
   });
 
+  test.each(['active', 'retired'] as const)(
+    'an Endpoint brought back to %s carries no deprecatedAt from the Baseline',
+    (lifecycle) => {
+      const baseline = aBaseline({
+        endpoints: {
+          'GET /orders/{}': aLive(
+            anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' }),
+            'deprecated',
+          ),
+        },
+      });
+      const proposed = aProposed({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } });
+
+      const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+
+      expect(published.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
+    },
+  );
+
   test('a code no Endpoint answers any more stays, removed, with the status, body and message it last had', () => {
     const locked = aCode({
       status: 423,
@@ -369,11 +429,8 @@ describe('publishedSnapshotOf', () => {
     expect(published).toEqual({ ...proposed, version: '1.0.1' });
   });
 
-  test.each([
-    ['a Baseline of another kind', { ...anApplication(), version: '1.0.0' }],
-    ['a Baseline of another name', aBaseline({ name: 'billing-service' })],
-  ])('%s is a bug, so the merge throws', (_name, baseline) => {
-    expect(() => publishedSnapshotOf(baseline, aProposed(), '3.5.0')).toThrow('is no Baseline of');
+  test.each(mismatches)('$name is a bug, so the merge throws', ({ proposed, baseline }) => {
+    expect(() => publishedSnapshotOf(baseline, proposed, '3.5.0')).toThrow('is no Baseline of');
   });
 
   test('what the merge writes decodes back to itself', () => {

@@ -6,6 +6,7 @@ export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {
+  DeclaredElement,
   EndpointTombstone,
   MessageTombstone,
   PublishedApplicationSnapshot,

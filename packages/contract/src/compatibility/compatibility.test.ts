@@ -201,6 +201,45 @@ const eachLive = elements.flatMap((element) =>
   liveLifecycles.map((lifecycle) => ({ ...element, lifecycle })),
 );
 
+type Mismatch = {
+  readonly name: string;
+  readonly proposed: Snapshot;
+  readonly baseline: PublishedSnapshot;
+};
+
+const mismatches: readonly Mismatch[] = [
+  {
+    name: 'a Service against a Baseline of another kind',
+    proposed: aProposed(),
+    baseline: { ...anApplication(), version: '1.0.0' },
+  },
+  {
+    name: 'a Service against a Baseline of another name',
+    proposed: aProposed(),
+    baseline: aBaseline({ name: 'billing-service' }),
+  },
+  {
+    name: 'an Application against a Baseline of another kind',
+    proposed: anApplication(),
+    baseline: aBaseline(),
+  },
+  {
+    name: 'an Application against a Baseline of another name',
+    proposed: anApplication(),
+    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0' },
+  },
+  {
+    name: 'a Definitions Package against a Baseline of another kind',
+    proposed: aDefinitions(),
+    baseline: aBaseline(),
+  },
+  {
+    name: 'a Definitions Package against a Baseline of another name',
+    proposed: aDefinitions(),
+    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0' },
+  },
+];
+
 describe('compatibilityReportOf, presence', () => {
   test('with no Baseline nothing is compared, so a first publish may start at any Message Version', () => {
     const proposed = aProposed({ events: { 'OrderPlaced@3': anEvent() } });
@@ -710,6 +749,27 @@ describe('compatibilityReportOf, the report', () => {
     expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
   });
 
+  test.each(['3.4.0', '10.0.0-rc.1'])(
+    'the hash of an unchanged Snapshot does not depend on the Baseline’s version, %s',
+    (version) => {
+      const baseline = aBaseline({
+        version,
+        endpoints: { 'GET /orders/{}': aRetired(anEndpoint(), '2.0.0') },
+        events: { 'OrderPlaced@1': { lifecycle: 'retired', retiredIn: '2.1.0' } },
+        subscriptions: {
+          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        },
+      });
+      const proposed = aProposed({
+        endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+      });
+
+      const report = compatibilityReportOf(baseline, proposed, []);
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    },
+  );
+
   test('a new generator alone leaves the hash unchanged', () => {
     const baseline = aBaseline(endpoint.live('active'));
     const proposed = { ...aProposed(endpoint.proposed('active')), generator: '@cf-loom/cli@9.9.9' };
@@ -719,10 +779,7 @@ describe('compatibilityReportOf, the report', () => {
     expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
   });
 
-  test.each([
-    ['a Baseline of another kind', { ...anApplication(), version: '1.0.0' }],
-    ['a Baseline of another name', aBaseline({ name: 'billing-service' })],
-  ])('%s is a bug, so the check throws', (_name, baseline) => {
-    expect(() => compatibilityReportOf(baseline, aProposed(), [])).toThrow('is no Baseline of');
+  test.each(mismatches)('$name is a bug, so the check throws', ({ proposed, baseline }) => {
+    expect(() => compatibilityReportOf(baseline, proposed, [])).toThrow('is no Baseline of');
   });
 });

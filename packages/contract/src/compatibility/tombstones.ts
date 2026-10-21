@@ -1,15 +1,13 @@
 import type { Lifecycle } from '../declarations/index.ts';
 import {
   type ByKey,
+  type DeclaredElement,
   type EndpointSnapshot,
   isDeclared,
   type MessageTombstone,
   type PublishedElement,
   type PublishedEndpoint,
 } from '../snapshot/index.ts';
-
-/** A Message Version that can be Retired, as a published Snapshot holds it. */
-type Message = { readonly lifecycle: Lifecycle; readonly description: string };
 
 /** What the Baseline records of an Element, declared or tombstoned: the version it was Retired in, if it was. */
 type Recorded = { readonly lifecycle: Lifecycle; readonly retiredIn?: string };
@@ -50,7 +48,7 @@ export function endpointsMerged(
 }
 
 /** The Message Versions of one kind a Snapshot publishes at a version, as its Endpoints are. */
-export function messagesMerged<Declared extends Message>(
+export function messagesMerged<Declared extends DeclaredElement>(
   baseline: ByKey<PublishedElement<Declared> | MessageTombstone> | undefined,
   proposed: ByKey<Declared>,
   version: string,
@@ -101,7 +99,7 @@ function endpointTombstoneOf(endpoint: PublishedEndpoint): PublishedEndpoint | u
   return lifecycle === 'retired' ? { lifecycle, retiredIn: endpoint.retiredIn, name } : undefined;
 }
 
-function messageTombstoneOf<Declared extends Message>(
+function messageTombstoneOf<Declared extends DeclaredElement>(
   message: PublishedElement<Declared> | MessageTombstone,
 ): MessageTombstone | undefined {
   if (!isDeclared(message)) {

@@ -1,6 +1,6 @@
 import { compareSemanticVersions, type DependencySnapshot } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-import type { ChangeSite, GraphDependency } from './report.ts';
+import type { GraphDependency } from './report.ts';
 
 /**
  * One Contract Package of the dependency graph: the highest published version of one of its majors
@@ -16,8 +16,8 @@ export type GraphPackage = {
 /** Every Contract Package version whose Dependencies the Compatibility Check reads before an Element is Retired, renamed or narrowed. */
 export type DependencyGraph = readonly GraphPackage[];
 
-/** An Element of a Service by kind and identity. */
-type Located = Pick<ChangeSite, 'kind' | 'identity'>;
+/** An Element a Contract can depend on: an Endpoint or an Event, by identity. */
+type Dependable = { readonly kind: 'endpoint' | 'event'; readonly identity: string };
 
 /** The Dependencies the graph holds on one Element of a Service, by the Element's identity. */
 export type Dependents = (identity: string) => readonly GraphDependency[];
@@ -29,12 +29,12 @@ export type Dependents = (identity: string) => readonly GraphDependency[];
 export function dependenciesOn(
   graph: DependencyGraph,
   service: string,
-  element: Located,
+  element: Dependable,
 ): readonly GraphDependency[] {
-  const dependents = graph.filter(({ dependencies }) => {
+  const dependingPackages = graph.filter(({ dependencies }) => {
     return Object.hasOwn(dependencies, service) && dependsOn(dependencies[service], element);
   });
-  return dependents
+  return dependingPackages
     .map(({ name, version }) => ({ name, version }))
     .sort((left, right) => {
       return (
@@ -43,7 +43,7 @@ export function dependenciesOn(
     });
 }
 
-function dependsOn(dependency: DependencySnapshot | undefined, element: Located): boolean {
+function dependsOn(dependency: DependencySnapshot | undefined, element: Dependable): boolean {
   if (dependency === undefined) {
     return false;
   }
@@ -52,7 +52,5 @@ function dependsOn(dependency: DependencySnapshot | undefined, element: Located)
       return dependency.endpoints.some(({ id }) => id === element.identity);
     case 'event':
       return dependency.events.includes(element.identity);
-    case 'command':
-      return false;
   }
 }

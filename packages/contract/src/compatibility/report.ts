@@ -1,8 +1,5 @@
 import type { Visibility } from '../declarations/index.ts';
 
-/** How the Compatibility Check judges a difference: its class, or Not allowed, which fails the check. */
-export type ChangeClass = 'breaking' | 'additive' | 'neutral' | 'not-allowed';
-
 /**
  * Where a Change is: an Element by identity, with its Visibility, which decides the bump. When the
  * Visibility moved, it is the wider of the two; when the Element is on one side only, that side's.
@@ -40,6 +37,9 @@ export type Difference =
 export type Classification =
   | { readonly class: 'additive' | 'neutral' | 'not-allowed' }
   | { readonly class: 'breaking'; readonly approval: 'needed' | 'not-needed' };
+
+/** How the Compatibility Check judges a difference: its class, or Not allowed, which fails the check. */
+export type ChangeClass = Classification['class'];
 
 /** One difference the Compatibility Check found, with its class. */
 export type Change = {

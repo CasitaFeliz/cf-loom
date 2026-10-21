@@ -2,6 +2,7 @@ import {
   type ByKey,
   type CodeSnapshot,
   canonicalSnapshotOf,
+  type DefinitionsSnapshot,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
@@ -14,9 +15,9 @@ import {
 import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts';
 
 /**
- * The published Snapshot `publish` writes at a version: the declared Snapshot with the history only
- * the Baseline knows merged in, its tombstones, `retiredIn`, `deprecatedAt`, removed codes and
- * removed Subscriptions, in canonical order.
+ * The published Snapshot `publish` writes at a version: the declared Snapshot with the Baseline's
+ * history merged in (`retiredIn`, tombstones, removed codes and removed Subscriptions) and its
+ * `deprecatedAt` kept, in canonical order.
  */
 export function publishedSnapshotOf(
   baseline: PublishedServiceSnapshot | undefined,
@@ -46,23 +47,33 @@ export function publishedSnapshotOf(
   return canonicalSnapshotOf(mergedOf(baseline, proposed, version));
 }
 
+/** A Baseline of another kind or name is a bug of the caller, which checks it first, so it throws. */
 function mergedOf(
   baseline: PublishedSnapshot | undefined,
   proposed: Snapshot,
   version: string,
 ): PublishedSnapshot {
+  if (baseline !== undefined && !isBaselineOf(baseline, proposed)) {
+    throw new Error(
+      `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
+    );
+  }
   switch (proposed.kind) {
     case 'service':
-      return serviceMerged(baselineOf(baseline, proposed, 'service'), proposed, version);
+      return serviceMerged(baseline?.kind === 'service' ? baseline : undefined, proposed, version);
     case 'application':
       return { ...proposed, version };
     case 'definitions':
-      return {
-        ...proposed,
+      return definitionsMerged(
+        baseline?.kind === 'definitions' ? baseline : undefined,
+        proposed,
         version,
-        codes: codesMerged(baselineOf(baseline, proposed, 'definitions')?.codes, proposed.codes),
-      };
+      );
   }
+}
+
+function isBaselineOf(baseline: PublishedSnapshot, proposed: Snapshot): boolean {
+  return baseline.kind === proposed.kind && baseline.name === proposed.name;
 }
 
 function serviceMerged(
@@ -79,6 +90,14 @@ function serviceMerged(
     codes: codesMerged(baseline?.codes, proposed.codes),
     subscriptions: subscriptionsMerged(baseline?.subscriptions, proposed.subscriptions, version),
   };
+}
+
+function definitionsMerged(
+  baseline: PublishedDefinitionsSnapshot | undefined,
+  proposed: DefinitionsSnapshot,
+  version: string,
+): PublishedDefinitionsSnapshot {
+  return { ...proposed, version, codes: codesMerged(baseline?.codes, proposed.codes) };
 }
 
 /** A code no Endpoint answers any more stays, marked removed, with what it last had. */
@@ -103,28 +122,4 @@ function subscriptionsMerged(
       'removedIn' in subscription ? subscription : { ...subscription, removedIn: version },
   );
   return { ...tombstones, ...proposed };
-}
-
-/** A Baseline of another kind or name is no Baseline of the proposed Snapshot: the caller checked first. */
-function baselineOf<Kind extends PublishedSnapshot['kind']>(
-  baseline: PublishedSnapshot | undefined,
-  proposed: Snapshot & { readonly kind: Kind },
-  kind: Kind,
-): Extract<PublishedSnapshot, { kind: Kind }> | undefined {
-  if (baseline === undefined) {
-    return undefined;
-  }
-  if (!isOfKind(baseline, kind) || baseline.name !== proposed.name) {
-    throw new Error(
-      `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
-    );
-  }
-  return baseline;
-}
-
-function isOfKind<Kind extends PublishedSnapshot['kind']>(
-  snapshot: PublishedSnapshot,
-  kind: Kind,
-): snapshot is Extract<PublishedSnapshot, { kind: Kind }> {
-  return snapshot.kind === kind;
 }

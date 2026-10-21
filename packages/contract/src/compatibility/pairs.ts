@@ -1,15 +1,12 @@
-import type { Lifecycle } from '../declarations/index.ts';
 import {
   type ByKey,
+  type DeclaredElement,
   type EndpointTombstone,
   isDeclared,
   type MessageTombstone,
   type PublishedElement,
 } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-
-/** What the Compatibility Check needs of an Element to pair it: that it is declared, and its lifecycle. */
-type Pairable = { readonly lifecycle: Lifecycle; readonly description: string };
 
 /**
  * An Element by identity as the Baseline and the proposed Snapshot hold it: added, kept, dropped
@@ -30,7 +27,7 @@ export type Pair<Element> =
  * Every Element of the Baseline's map and the proposed one paired by identity, in code point
  * order; a tombstone the proposed map leaves out is carried silently, so it makes no pair.
  */
-export function pairsOf<Element extends Pairable>(
+export function pairsOf<Element extends DeclaredElement>(
   baseline: ByKey<PublishedElement<Element> | EndpointTombstone | MessageTombstone>,
   proposed: ByKey<Element>,
 ): readonly Pair<Element>[] {
@@ -45,7 +42,7 @@ export function pairsOf<Element extends Pairable>(
   return pairs;
 }
 
-function pairOf<Element extends Pairable>(
+function pairOf<Element extends DeclaredElement>(
   identity: string,
   before: PublishedElement<Element> | EndpointTombstone | MessageTombstone | undefined,
   after: Element | undefined,
