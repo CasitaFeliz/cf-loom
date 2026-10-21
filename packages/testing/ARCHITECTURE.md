@@ -10,7 +10,7 @@ The entry `src/index.ts` (`.`) re-exports from `events/`, `faking/`, `mistakes/`
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `mistakes/` | `FakeProviderError`, and a mistake's message: it names the Provider, the Endpoint when the request reached one or a faked Event's Message Version, and what went wrong, then each Issue on its own line | none |
+| `mistakes/` | `FakeProviderError`, and a mistake's message: it names the Provider and the Endpoint when the request reached one, or, from `fakeEvent`, the Message Version, and what went wrong, then each Issue on its own line | none |
 | `provided/` | each Endpoint the Contract Package exports, matched as `serve` matches it, and each listed one prepared once: its packaged declaration, the nodes its text parts are read by, its `deprecatedAt` and its Rejections by code; a request's path under the base URL's, matched to a listed Endpoint or the test's mistake; who a mistake with a listed Endpoint names | `mistakes` |
 | `scripting/` | `Script`, `Step`, `StepBuilder` and the one builder every step receives; the closed union of what a step scripts, held in a `ScriptedAnswer` no test can build; each Endpoint's steps and the turns its requests take them in | none |
 | `answering/` | a scripted answer as the Provider sends it: a Success or a Rejection body written back through its readers, a Fault, a reserved code or a bare status as a `Response`, a network failure thrown as `fetch` throws it | `provided`, `scripting`, `mistakes` |

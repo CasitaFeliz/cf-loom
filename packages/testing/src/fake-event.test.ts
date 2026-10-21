@@ -65,6 +65,16 @@ function aNotifier() {
   return { handler, received };
 }
 
+const secret = 'secret-id-12345';
+
+/** A body that breaks two constraints, the first holding a value no message may show. */
+const brokenBody = { paymentId: secret, amount: -1, status: 'settled' } as const;
+
+/** What a mistake's message says, one line at a time. */
+function messageLinesOf(error: unknown): string[] {
+  return String((error as Error).message).split('\n');
+}
+
 /** What a call throws, or undefined when it returns. */
 function thrownBy(run: () => unknown): unknown {
   try {
@@ -141,21 +151,26 @@ describe('fakeEvent', () => {
     expect(faking).toThrow(/body at status: invalid_value: A declared value, not an Unknown case/);
   });
 
-  test('a body that breaks a constraint throws FakeProviderError naming the Message Version, each Issue at body on its own line, never the value', () => {
-    const secret = 'secret-id-12345';
-
-    const error = thrownBy(() =>
-      fakeEvent(settledEvent, { paymentId: secret, amount: -1, status: 'settled' }),
-    );
+  test('a body that breaks a constraint throws FakeProviderError naming the Message Version', () => {
+    const error = thrownBy(() => fakeEvent(settledEvent, brokenBody));
 
     expect(error).toBeInstanceOf(FakeProviderError);
-    const message = String((error as Error).message);
-    expect(message.split('\n')).toEqual([
-      'PaymentSettled@1: the faked body breaks its Reader',
+    expect(messageLinesOf(error)[0]).toBe('PaymentSettled@1: the faked body breaks its Reader');
+  });
+
+  test('each Issue of a body that breaks its constraints sits at body on its own line', () => {
+    const error = thrownBy(() => fakeEvent(settledEvent, brokenBody));
+
+    expect(messageLinesOf(error).slice(1)).toEqual([
       expect.stringMatching(/^ {2}body at paymentId: invalid_format: /),
       expect.stringMatching(/^ {2}body at amount: too_small: /),
     ]);
-    expect(message).not.toContain(secret);
+  });
+
+  test('the message of a body that breaks a constraint never holds the value', () => {
+    const error = thrownBy(() => fakeEvent(settledEvent, brokenBody));
+
+    expect(messageLinesOf(error).join('\n')).not.toContain(secret);
   });
 
   test('a missing field is a mistake with the required code', () => {
