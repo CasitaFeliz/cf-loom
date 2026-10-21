@@ -12,7 +12,7 @@
     "includes": [
       "**",
       "!examples/*/contract.snapshot.json",
-      "!examples/*/src/readers.generated.ts",
+      "!examples/*/src/*.generated.ts",
       "!examples/*/contract-package"
     ]
   },
@@ -115,11 +115,7 @@
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
-      "includes": [
-        "**/*.config.ts",
-        "examples/**/*.handler.ts",
-        "examples/*/src/handlers.generated.ts"
-      ],
+      "includes": ["**/*.config.ts", "examples/**/*.handler.ts"],
       "linter": {
         "rules": {
           "style": {
