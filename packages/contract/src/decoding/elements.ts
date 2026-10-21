@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { visibilities } from '../declarations/index.ts';
+import { lifecycles, visibilities } from '../declarations/index.ts';
 import type { PublishedCommand, PublishedEndpoint, PublishedEvent } from '../snapshot/index.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText, stampText } from './texts.ts';
@@ -15,7 +15,7 @@ function published<Fields extends z.core.$ZodShape, Tombstone extends z.core.$Zo
   tombstone: Tombstone,
 ) {
   return z.union([
-    z.strictObject({ ...fields, lifecycle: z.enum(['active', 'deprecated']) }),
+    z.strictObject({ ...fields, lifecycle: z.enum(lifecycles).exclude(['retired']) }),
     z.strictObject({ ...fields, ...retired }),
     tombstone,
   ]);

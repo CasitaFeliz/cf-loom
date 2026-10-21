@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { SchemaNode } from '../walker/index.ts';
+import { byKey } from './maps.ts';
 import { stringFormatText } from './texts.ts';
 
 const annotations = {
@@ -22,14 +23,14 @@ const field = z.strictObject({ required: z.boolean(), schema: child });
 /** Format 1's object node, which an Endpoint's Input and a Guard's demands are made of. */
 export const objectNode = node('object', {
   mode: z.enum(['open', 'strict']),
-  fields: z.record(z.string(), field),
+  fields: byKey(field),
 });
 const refNode = node('ref', { name: z.string() });
 
 const nodes = [
   node('string', {
     format: stringFormatText.exactOptional(),
-    formatOptions: z.record(z.string(), z.unknown()).exactOptional(),
+    formatOptions: byKey(z.unknown()).exactOptional(),
     regex: z.strictObject({ source: z.string(), flags: z.string() }).exactOptional(),
     min: bound,
     max: bound,
@@ -52,7 +53,7 @@ const nodes = [
   node('union', { options: z.array(child) }),
   node('tagged', {
     discriminator: z.string(),
-    variants: z.record(z.string(), z.discriminatedUnion('type', [objectNode, refNode])),
+    variants: byKey(z.discriminatedUnion('type', [objectNode, refNode])),
   }),
   node('allOf', { items: z.array(child) }),
   node('json', {}),

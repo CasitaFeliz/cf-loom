@@ -26,9 +26,9 @@ function aPublishedService(
     generator: '@cf-loom/cli@2.1.0',
     definitions: {},
     standardRejections: {
-      invalidInput: { origin: 'cf-loom', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-      notFound: { origin: 'cf-loom', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { origin: 'cf-loom', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+      invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
+      notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
+      notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
     },
     defs: {},
     endpoints: {},

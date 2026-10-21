@@ -8,8 +8,11 @@ import {
 } from '../snapshot/index.ts';
 import type { Path } from '../walker/index.ts';
 import { ownOf } from '../written/index.ts';
-import { type Problem, referenceProblemOf } from './references.ts';
+import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
+
+/** One place where a Snapshot breaks what its format promises, and what it breaks. */
+export type Problem = { readonly at: Path; readonly reason: string };
 
 /** A `snapshot.json` as decoded: the published Snapshot, or why it cannot be trusted. */
 export type DecodedSnapshot =
@@ -34,7 +37,9 @@ export function decodeSnapshot(text: string): DecodedSnapshot {
     return parsed;
   }
   const format = formatOf(parsed.json);
-  return format.kind === 'known' ? decodedBy(structures[format.format], parsed.json) : format;
+  return format.kind === 'known'
+    ? decodedWithinStack(structures[format.format], parsed.json)
+    : format;
 }
 
 type Parsed =
@@ -63,12 +68,27 @@ function formatOf(json: unknown): Format {
   return known === undefined ? { kind: 'newer-format', format } : { kind: 'known', format: known };
 }
 
+/** A Snapshot nested deeper than the stack reads is malformed: the decoder never throws for a file. */
+function decodedWithinStack(
+  structure: z.ZodType<PublishedSnapshot>,
+  json: unknown,
+): DecodedSnapshot {
+  try {
+    return decodedBy(structure, json);
+  } catch (e) {
+    if (e instanceof RangeError) {
+      return { kind: 'malformed', at: [], reason: 'nests too deeply to decode' };
+    }
+    throw e;
+  }
+}
+
 function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): DecodedSnapshot {
   const structured = structure.safeParse(json);
   if (!structured.success) {
     return { kind: 'malformed', ...problemOf(structured.error.issues) };
   }
-  const problem = referenceProblemOf(structured.data);
+  const problem = heldProblemOf(structured.data);
   if (problem !== undefined) {
     return { kind: 'malformed', ...problem };
   }

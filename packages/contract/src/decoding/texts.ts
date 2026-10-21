@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isStamp } from '../declarations/index.ts';
+import { isSemanticVersion } from '../snapshot/index.ts';
 import { isStringFormat, type StringFormat } from '../walker/index.ts';
-import { isSemanticVersion } from './semantic-version.ts';
 
 /** A version `publish` writes: a semantic version, a prerelease included. */
 export const semanticVersionText = z.custom<string>(isSemanticVersion, 'is not a semantic version');

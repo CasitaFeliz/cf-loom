@@ -19,6 +19,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
+  type ObjectNode,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
@@ -32,14 +33,14 @@ import {
 
 const standardRejections: PublishedServiceSnapshot['standardRejections'] = {
   invalidInput: {
-    origin: 'cf-loom',
+    origin: 'standard',
     code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
     body: { type: 'object', mode: 'strict', fields: {} },
   },
-  notFound: { origin: 'cf-loom', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'cf-loom', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
+  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
 };
 
 function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
@@ -145,6 +146,10 @@ function aRef(name: string): RefNode {
   return { type: 'ref', name };
 }
 
+function anObjectOf(schema: SchemaNode): ObjectNode {
+  return { type: 'object', mode: 'open', fields: { name: { required: true, schema } } };
+}
+
 /** A Snapshot's text as the registry holds it, whatever is wrong with it. */
 function decodedFrom(snapshot: object): DecodedSnapshot {
   return decodeSnapshot(JSON.stringify(snapshot));
@@ -166,8 +171,13 @@ function roundTrip(snapshot: PublishedSnapshot): DecodedSnapshot {
   return decodeSnapshot(canonicalTextOf(snapshot));
 }
 
-function malformedAt(at: readonly (string | number)[]) {
-  return { kind: 'malformed', at, reason: expect.any(String) };
+function malformedAt(at: readonly (string | number)[], reason: unknown = expect.any(String)) {
+  return { kind: 'malformed', at, reason };
+}
+
+/** A map written with `__proto__` as a key of its own, as JSON text can. */
+function protoKeyed(value: unknown): object {
+  return JSON.parse(`{"__proto__": ${JSON.stringify(value)}}`);
 }
 
 /** The Element a malformed result lies in; which key inside it is named is up to the structure. */
@@ -490,6 +500,124 @@ describe('decodeSnapshot', () => {
       },
     );
 
+    test('a Snapshot nested too deeply to decode is malformed at the root, never a throw', () => {
+      const nested =
+        '{"type":"array","items":'.repeat(5000) + '{"type":"string"}' + '}'.repeat(5000);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      const result = decodeSnapshot(text);
+
+      expect(result).toEqual(malformedAt([], 'nests too deeply to decode'));
+    });
+
+    test.each([
+      { where: 'the Snapshot', snapshot: { ...aService(), ...protoKeyed(1) }, at: ['__proto__'] },
+      {
+        where: 'defs',
+        snapshot: { ...aService(), defs: protoKeyed({ type: 'string' }) },
+        at: ['defs', '__proto__'],
+      },
+      {
+        where: 'endpoints',
+        snapshot: { ...aService(), endpoints: protoKeyed(anEndpoint) },
+        at: ['endpoints', '__proto__'],
+      },
+      {
+        where: 'events',
+        snapshot: { ...aService(), events: protoKeyed(anEvent) },
+        at: ['events', '__proto__'],
+      },
+      {
+        where: 'commands',
+        snapshot: { ...aService(), commands: protoKeyed(aCommand) },
+        at: ['commands', '__proto__'],
+      },
+      {
+        where: 'guards',
+        snapshot: { ...aService(), guards: protoKeyed(aGuard) },
+        at: ['guards', '__proto__'],
+      },
+      {
+        where: 'codes',
+        snapshot: { ...aService(), codes: protoKeyed(aCode) },
+        at: ['codes', '__proto__'],
+      },
+      {
+        where: 'subscriptions',
+        snapshot: { ...aService(), subscriptions: protoKeyed({ event: 'orders-service:A@1' }) },
+        at: ['subscriptions', '__proto__'],
+      },
+      {
+        where: 'definitions',
+        snapshot: { ...aService(), definitions: protoKeyed('1.0.0') },
+        at: ['definitions', '__proto__'],
+      },
+      {
+        where: 'an Application’s dependencies',
+        snapshot: {
+          ...anApplication(),
+          dependencies: protoKeyed({ against: '1.0.0', endpoints: [], events: [] }),
+        },
+        at: ['dependencies', '__proto__'],
+      },
+      {
+        where: 'a Definitions Package’s schemas',
+        snapshot: { ...aDefinitions(), schemas: protoKeyed({ type: 'string' }) },
+        at: ['schemas', '__proto__'],
+      },
+      {
+        where: 'an object node’s fields',
+        snapshot: {
+          ...aService(),
+          defs: {
+            tree: {
+              type: 'object',
+              mode: 'open',
+              fields: protoKeyed({ required: true, schema: { type: 'string' } }),
+            },
+          },
+        },
+        at: ['defs', 'tree', 'fields', '__proto__'],
+      },
+      {
+        where: 'a string node’s formatOptions',
+        snapshot: {
+          ...aService(),
+          defs: { tree: { type: 'string', formatOptions: protoKeyed(true) } },
+        },
+        at: ['defs', 'tree', 'formatOptions', '__proto__'],
+      },
+      {
+        where: 'a tagged node’s variants',
+        snapshot: {
+          ...aService(),
+          defs: {
+            tree: {
+              type: 'tagged',
+              discriminator: 'kind',
+              variants: protoKeyed({ type: 'ref', name: 'tree' }),
+            },
+          },
+        },
+        at: ['defs', 'tree', 'variants', '__proto__'],
+      },
+    ])('a __proto__ key in $where is malformed at that key, never dropped', ({ snapshot, at }) => {
+      const result = decodedFrom(snapshot);
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test('keys named like an Object’s own properties are kept as the keys they are', () => {
+      const text: SchemaNode = { type: 'string' };
+      const published = aService({
+        defs: { constructor: text, toString: text, hasOwnProperty: text },
+      });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
     test('a Snapshot without version is malformed at version: package writes none, only publish does', () => {
       const { version: _version, ...declared } = aService();
 
@@ -547,6 +675,69 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      [
+        'a nullable that is not true',
+        { type: 'string', nullable: false },
+        ['defs', 'tree', 'nullable'],
+      ],
+      [
+        'a regex with a key of its own',
+        { type: 'string', regex: { source: 'a', flags: '', extra: 1 } },
+        ['defs', 'tree', 'regex', 'extra'],
+      ],
+      [
+        'a field with a key of its own',
+        {
+          type: 'object',
+          mode: 'open',
+          fields: { name: { required: true, schema: { type: 'string' }, extra: 1 } },
+        },
+        ['defs', 'tree', 'fields', 'name', 'extra'],
+      ],
+      [
+        'a variant that is neither an object nor a ref',
+        { type: 'tagged', discriminator: 'kind', variants: { a: { type: 'string' } } },
+        ['defs', 'tree', 'variants', 'a', 'type'],
+      ],
+    ])('a node with %s is malformed where it sits', (_, node, at) => {
+      const result = serviceWith({ defs: { tree: node } });
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
+      [
+        'a removedIn that is no semantic version',
+        { subscriptions: { 'legacy-sync': { event: 'orders-service:A@1', removedIn: 'gone' } } },
+        ['subscriptions', 'legacy-sync', 'removedIn'],
+      ],
+      [
+        'a Dependency’s Endpoint with a key of its own',
+        {
+          dependencies: {
+            'payments-service': {
+              against: '5.1.0',
+              endpoints: [{ id: 'GET /payments/{}', name: 'getPayment', extra: 1 }],
+              events: [],
+            },
+          },
+        },
+        ['dependencies', 'payments-service', 'endpoints', 0, 'extra'],
+      ],
+      [
+        'a Guard’s demands with a key of its own',
+        {
+          guards: { apiKey: { ...aGuard, demands: { headers: null, query: null, extra: 1 } } },
+        },
+        ['guards', 'apiKey', 'demands', 'extra'],
+      ],
+    ])('%s is malformed where it sits', (_, fields, at) => {
+      const result = serviceWith(fields);
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
       ['lifecycle', { ...anEndpoint, lifecycle: 'sunset' }],
       ['visibility', { ...anEndpoint, visibility: 'global' }],
     ])(
@@ -557,6 +748,36 @@ describe('decodeSnapshot', () => {
         expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
       },
     );
+
+    test('an Event with a visibility the format does not define is malformed in the Event', () => {
+      const event = { ...anEvent, visibility: 'global' };
+
+      const result = serviceWith({ events: { 'OrderPlaced@1': event } });
+
+      expect(elementOf(result)).toEqual(['events', 'OrderPlaced@1']);
+    });
+
+    test.each([
+      ['a node type', { defs: { tree: { type: 'bogus' } } }, ['defs', 'tree', 'type']],
+      ['a kind', { kind: 'library' }, ['kind']],
+    ])('%s the format does not define says it is no value its format defines', (_, fields, at) => {
+      const result = serviceWith(fields);
+
+      expect(result).toEqual(malformedAt(at, 'is not a value its format defines'));
+    });
+
+    test('an Element that fits none of the forms an Element takes is reported at the Element, with one reason', () => {
+      const endpoint = { ...anEndpoint, lifecycle: 'retired' };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(result).toEqual(
+        malformedAt(
+          ['endpoints', 'GET /orders/{}'],
+          'matches none of the forms its format defines',
+        ),
+      );
+    });
 
     test('an Application’s Snapshot holding endpoints is malformed', () => {
       const result = decodedFrom({ ...anApplication(), endpoints: {} });
@@ -617,6 +838,8 @@ describe('decodeSnapshot', () => {
       ['an empty segment', 'GET /orders//{}'],
       ['a trailing slash', 'GET /orders/'],
       ['a param written by its name', 'GET /orders/:orderId'],
+      ['a param written inside a literal segment', 'GET /orders/a{}'],
+      ['a param written before text', 'GET /orders/{}a'],
     ])('an Endpoint identity with %s is malformed at its key', (_, identity) => {
       const result = serviceWith({ endpoints: { [identity]: anEndpoint } });
 
@@ -630,6 +853,7 @@ describe('decodeSnapshot', () => {
       'OrderPlaced@0',
       'OrderPlaced@1.5',
       'OrderPlaced@v1',
+      'OrderPlaced@01',
     ])(
       'a Message identity that is not a name and a version from 1 is malformed at its key: %s',
       (identity) => {
@@ -712,12 +936,79 @@ describe('decodeSnapshot', () => {
         aDefinitions({ schemas: { money: aRef('missing') } }),
         ['schemas', 'money'],
       ],
+      [
+        'a Guard’s qualifier',
+        aService({ guards: { apiKey: { ...aGuard, qualifier: aRef('missing') } } }),
+        ['guards', 'apiKey', 'qualifier'],
+      ],
+      [
+        'a Guard’s demanded headers',
+        aService({
+          guards: {
+            apiKey: {
+              ...aGuard,
+              demands: { headers: anObjectOf(aRef('missing')), query: null },
+            },
+          },
+        }),
+        ['guards', 'apiKey', 'demands', 'headers', 'fields', 'name'],
+      ],
+      [
+        'an Endpoint’s success headers',
+        aService({
+          endpoints: {
+            'GET /orders/{}': {
+              ...anEndpoint,
+              success: { status: 200, headers: anObjectOf(aRef('missing')), body: null },
+            },
+          },
+        }),
+        ['endpoints', 'GET /orders/{}', 'success', 'headers', 'fields', 'name'],
+      ],
+      [
+        'a Standard Rejection’s body',
+        aService({
+          standardRejections: {
+            ...standardRejections,
+            notFound: { ...standardRejections.notFound, body: aRef('missing') },
+          },
+        }),
+        ['standardRejections', 'notFound', 'body'],
+      ],
+      [
+        'a Command’s body',
+        aService({ commands: { 'ChargeCard@1': { ...aCommand, body: aRef('missing') } } }),
+        ['commands', 'ChargeCard@1', 'body'],
+      ],
     ])(
       'a ref in %s to a def the Snapshot does not hold is malformed at the ref',
       (_, snapshot, at) => {
         const result = roundTrip(snapshot);
 
         expect(result).toEqual(malformedAt(at));
+      },
+    );
+
+    test.each(['toString', 'constructor', 'hasOwnProperty'])(
+      'a name that only an Object inherits is no name the Snapshot holds: %s',
+      (name) => {
+        const attaching = {
+          ...anEndpoint,
+          rejections: [name],
+          guards: [{ guard: name, qualifier: null }],
+        };
+
+        const ref = serviceWith({ defs: { tree: aRef(name) } });
+        const code = serviceWith({ endpoints: { 'GET /orders/{}': { ...attaching, guards: [] } } });
+        const guard = serviceWith({
+          endpoints: { 'GET /orders/{}': { ...attaching, rejections: [] } },
+        });
+
+        expect([ref, code, guard]).toEqual([
+          malformedAt(['defs', 'tree']),
+          malformedAt(['endpoints', 'GET /orders/{}', 'rejections', 0]),
+          malformedAt(['endpoints', 'GET /orders/{}', 'guards', 0, 'guard']),
+        ]);
       },
     );
 
@@ -836,12 +1127,12 @@ const formatOneFixture = `{
     "INVALID_INPUT": {
       "body": { "fields": {}, "mode": "strict", "type": "object" },
       "message": "Invalid",
-      "origin": "cf-loom",
+      "origin": "standard",
       "removed": false,
       "status": 400
     },
-    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "cf-loom", "removed": false, "status": 404 },
-    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "cf-loom", "removed": false, "status": 501 }
+    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "removed": false, "status": 404 },
+    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
   "definitions": { "@org/definitions": "4.2.0" },
@@ -902,11 +1193,11 @@ const formatOneFixture = `{
       "body": { "fields": {}, "mode": "strict", "type": "object" },
       "code": "INVALID_INPUT",
       "message": "Invalid",
-      "origin": "cf-loom",
+      "origin": "standard",
       "status": 400
     },
-    "notFound": { "code": "NOT_FOUND", "message": "Not found", "origin": "cf-loom", "status": 404 },
-    "notImplemented": { "code": "NOT_IMPLEMENTED", "message": "No", "origin": "cf-loom", "status": 501 }
+    "notFound": { "code": "NOT_FOUND", "message": "Not found", "origin": "standard", "status": 404 },
+    "notImplemented": { "code": "NOT_IMPLEMENTED", "message": "No", "origin": "standard", "status": 501 }
   },
   "subscriptions": {
     "legacy-sync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },

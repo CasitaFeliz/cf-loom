@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PublishedSnapshot } from '../snapshot/index.ts';
 import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.ts';
+import { byKey } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText } from './texts.ts';
 
@@ -43,8 +44,7 @@ const subscription = z.strictObject({
   removedIn: semanticVersionText.exactOptional(),
 });
 
-const dependencies = z.record(
-  text,
+const dependencies = byKey(
   z.strictObject({
     against: text,
     endpoints: z.array(z.strictObject({ id: text, name: text })),
@@ -57,10 +57,6 @@ const standardRejections = z.strictObject({
   notFound: standardRejection,
   notImplemented: standardRejection,
 });
-
-function byKey<Value extends z.core.$ZodType>(value: Value) {
-  return z.record(text, value);
-}
 
 const service = z.strictObject({
   ...heading,

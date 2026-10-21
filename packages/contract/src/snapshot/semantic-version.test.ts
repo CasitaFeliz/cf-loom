@@ -62,6 +62,24 @@ describe('compareSemanticVersions', () => {
     expect(ordered).toEqual(ascending);
   });
 
+  test('numbers beyond what a double holds still order exactly', () => {
+    const below = '9007199254740992.0.0';
+    const above = '9007199254740993.0.0';
+
+    const order = compareSemanticVersions(below, above);
+
+    expect(order).toBeLessThan(0);
+  });
+
+  test('prerelease numbers beyond what a double holds still order exactly', () => {
+    const below = '1.0.0-9007199254740992';
+    const above = '1.0.0-9007199254740993';
+
+    const order = compareSemanticVersions(above, below);
+
+    expect(order).toBeGreaterThan(0);
+  });
+
   test('build metadata does not order versions', () => {
     const order = compareSemanticVersions('1.0.0+a', '1.0.0+b');
 

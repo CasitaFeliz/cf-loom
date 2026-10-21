@@ -1,10 +1,8 @@
 import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
 import type { Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
+import type { Problem } from './decode.ts';
 import { usesOf } from './uses.ts';
-
-/** One place where a Snapshot breaks what its format promises, and what it breaks. */
-export type Problem = { readonly at: Path; readonly reason: string };
 
 /** A text a Snapshot holds, and where. */
 type Located = { readonly at: Path; readonly text: string };
@@ -13,7 +11,7 @@ type Located = { readonly at: Path; readonly text: string };
  * The first identity a Snapshot holds that is none, or name it uses and does not hold: a `ref`'s
  * def, a code an Endpoint or Guard lists, or a Guard; `undefined` when there is none.
  */
-export function referenceProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
+export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [...identityProblemsOf(snapshot), ...unheldProblemsOf(snapshot)][0];
 }
 
