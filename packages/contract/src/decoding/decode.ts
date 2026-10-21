@@ -68,7 +68,7 @@ function formatOf(json: unknown): Format {
   return known === undefined ? { kind: 'newer-format', format } : { kind: 'known', format: known };
 }
 
-/** A Snapshot nested deeper than the stack reads is malformed: the decoder never throws for a file. */
+/** A Snapshot the stack or a string cannot hold is malformed: the decoder never throws for a file. */
 function decodedWithinStack(
   structure: z.ZodType<PublishedSnapshot>,
   json: unknown,
@@ -77,7 +77,7 @@ function decodedWithinStack(
     return decodedBy(structure, json);
   } catch (e) {
     if (e instanceof RangeError) {
-      return { kind: 'malformed', at: [], reason: 'nests too deeply to decode' };
+      return { kind: 'malformed', at: [], reason: 'is too large or nests too deeply to decode' };
     }
     throw e;
   }

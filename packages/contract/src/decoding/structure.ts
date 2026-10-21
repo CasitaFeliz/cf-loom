@@ -31,13 +31,7 @@ const code = z.strictObject({
   removed: z.boolean(),
 });
 
-const standardRejection = z.strictObject({
-  origin: text,
-  code: text,
-  status: z.number(),
-  message: text,
-  body: schemaNode.exactOptional(),
-});
+const standardRejection = { origin: text, code: text, status: z.number(), message: text };
 
 const subscription = z.strictObject({
   event: text,
@@ -53,9 +47,9 @@ const dependencies = byKey(
 );
 
 const standardRejections = z.strictObject({
-  invalidInput: standardRejection,
-  notFound: standardRejection,
-  notImplemented: standardRejection,
+  invalidInput: z.strictObject({ ...standardRejection, body: schemaNode.exactOptional() }),
+  notFound: z.strictObject(standardRejection),
+  notImplemented: z.strictObject(standardRejection),
 });
 
 const service = z.strictObject({

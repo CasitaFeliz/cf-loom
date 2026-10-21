@@ -8,7 +8,7 @@ import { usesOf } from './uses.ts';
 type Located = { readonly at: Path; readonly text: string };
 
 /**
- * The first identity a Snapshot holds that is none, or name it uses and does not hold: a `ref`'s
+ * The first identity a Snapshot holds that is none, or a name it uses and does not hold: a `ref`'s
  * def, a code an Endpoint or Guard lists, or a Guard; `undefined` when there is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {

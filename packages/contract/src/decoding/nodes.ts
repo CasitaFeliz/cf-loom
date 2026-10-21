@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SchemaNode } from '../walker/index.ts';
+import { formatOptionKeysOf, type SchemaNode } from '../walker/index.ts';
 import { byKey } from './maps.ts';
 import { stringFormatText } from './texts.ts';
 
@@ -27,14 +27,28 @@ export const objectNode = node('object', {
 });
 const refNode = node('ref', { name: z.string() });
 
+/** A string node, whose options are those its string format takes. */
+const stringNode = node('string', {
+  format: stringFormatText.exactOptional(),
+  formatOptions: byKey(z.unknown()).exactOptional(),
+  regex: z.strictObject({ source: z.string(), flags: z.string() }).exactOptional(),
+  min: bound,
+  max: bound,
+}).superRefine(({ format, formatOptions }, ctx) => {
+  const taken = formatOptionKeysOf(format);
+  for (const option of Object.keys(formatOptions ?? {})) {
+    if (!taken.includes(option)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'is no option of the string format',
+        path: ['formatOptions', option],
+      });
+    }
+  }
+});
+
 const nodes = [
-  node('string', {
-    format: stringFormatText.exactOptional(),
-    formatOptions: byKey(z.unknown()).exactOptional(),
-    regex: z.strictObject({ source: z.string(), flags: z.string() }).exactOptional(),
-    min: bound,
-    max: bound,
-  }),
+  stringNode,
   node('number', {
     int: z.literal(true).exactOptional(),
     min: bound,

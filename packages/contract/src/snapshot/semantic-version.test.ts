@@ -62,6 +62,15 @@ describe('compareSemanticVersions', () => {
     expect(ordered).toEqual(ascending);
   });
 
+  test.each([
+    ['1.0.0-123', '1.0.0-1a'],
+    ['1.0.0-111', '1.0.0-a1'],
+  ])('a numeric identifier comes before one with a letter in it: %s before %s', (lower, higher) => {
+    const order = compareSemanticVersions(lower, higher);
+
+    expect([Math.sign(order), Math.sign(compareSemanticVersions(higher, lower))]).toEqual([-1, 1]);
+  });
+
   test('numbers beyond what a double holds still order exactly', () => {
     const below = '9007199254740992.0.0';
     const above = '9007199254740993.0.0';

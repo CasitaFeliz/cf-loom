@@ -500,14 +500,27 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    test('a Snapshot nested too deeply to decode is malformed at the root, never a throw', () => {
+    test('a Snapshot too large or nested too deeply to decode is malformed at the root, never a throw', () => {
       const nested =
         '{"type":"array","items":'.repeat(5000) + '{"type":"string"}' + '}'.repeat(5000);
       const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
 
       const result = decodeSnapshot(text);
 
-      expect(result).toEqual(malformedAt([], 'nests too deeply to decode'));
+      expect(result).toEqual(malformedAt([], 'is too large or nests too deeply to decode'));
+    });
+
+    test('a shallow Snapshot whose canonical text outgrows a string is malformed at the root, never a throw', () => {
+      const elements = Array(1_500_000).fill('1').join(',');
+      const example = `${'['.repeat(250)}${elements}${']'.repeat(250)}`;
+      const text = JSON.stringify(aService()).replace(
+        '"defs":{}',
+        `"defs":{"a":{"type":"json","examples":[${example}]}}`,
+      );
+
+      const result = decodeSnapshot(text);
+
+      expect(result).toEqual(malformedAt([], 'is too large or nests too deeply to decode'));
     });
 
     test.each([
@@ -607,6 +620,24 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(malformedAt(at));
     });
 
+    test('a __proto__ key says no map of a Snapshot holds one', () => {
+      const result = serviceWith({ defs: protoKeyed({ type: 'string' }) });
+
+      expect(result).toEqual(
+        malformedAt(['defs', '__proto__'], 'is a key no map of a Snapshot holds'),
+      );
+    });
+
+    test.each([
+      ['null', null],
+      ['a list', []],
+      ['a number', 3],
+    ])('a map given as %s is malformed at the map', (_, map) => {
+      const result = serviceWith({ definitions: map });
+
+      expect(result).toEqual(malformedAt(['definitions']));
+    });
+
     test('keys named like an Object’s own properties are kept as the keys they are', () => {
       const text: SchemaNode = { type: 'string' };
       const published = aService({
@@ -703,6 +734,51 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ defs: { tree: node } });
 
       expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
+      [
+        'an option no string format takes',
+        { type: 'string', format: 'datetime', formatOptions: { offset: true, extra: true } },
+        'extra',
+      ],
+      [
+        'an option of another string format',
+        { type: 'string', format: 'uuid', formatOptions: { precision: 3 } },
+        'precision',
+      ],
+      [
+        'an option of a string format that takes none',
+        { type: 'string', format: 'hex', formatOptions: { version: 4 } },
+        'version',
+      ],
+      [
+        'an option with no string format',
+        { type: 'string', formatOptions: { offset: true } },
+        'offset',
+      ],
+      [
+        'an option generate refuses',
+        { type: 'string', format: 'url', formatOptions: { normalize: true } },
+        'normalize',
+      ],
+    ])('a string node with %s is malformed at that option', (_, node, option) => {
+      const result = serviceWith({ defs: { tree: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'tree', 'formatOptions', option]));
+    });
+
+    test.each([
+      { name: 'notFound', rejection: standardRejections.notFound },
+      { name: 'notImplemented', rejection: standardRejections.notImplemented },
+    ])('a body on the $name Standard Rejection is malformed at the body', ({ name, rejection }) => {
+      const withBody = { ...rejection, body: { type: 'string' } };
+
+      const result = serviceWith({
+        standardRejections: { ...standardRejections, [name]: withBody },
+      });
+
+      expect(result).toEqual(malformedAt(['standardRejections', name, 'body']));
     });
 
     test.each([
@@ -970,10 +1046,10 @@ describe('decodeSnapshot', () => {
         aService({
           standardRejections: {
             ...standardRejections,
-            notFound: { ...standardRejections.notFound, body: aRef('missing') },
+            invalidInput: { ...standardRejections.invalidInput, body: aRef('missing') },
           },
         }),
-        ['standardRejections', 'notFound', 'body'],
+        ['standardRejections', 'invalidInput', 'body'],
       ],
       [
         'a Command’s body',
