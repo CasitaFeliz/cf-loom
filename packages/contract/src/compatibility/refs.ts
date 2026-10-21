@@ -33,8 +33,7 @@ type Side = { readonly node: SchemaNode; readonly key: string | SchemaNode };
 /**
  * Follows the `ref`s of a pair into both Snapshots' defs, so a def is compared as if written
  * inline. A pair already `entered` within the root schema compares no further, since any
- * difference in it was found where it was first met. A `ref` that reaches no schema is a bug:
- * a Snapshot holds every def its `ref`s name, and no alias def leads back to itself.
+ * difference in it was found where it was first met.
  */
 export function followedOf(
   pair: NodePair,
