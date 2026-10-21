@@ -1,8 +1,11 @@
-import { canonicalJson, type Field, neutralAnnotations, type SchemaNode } from '../walker/index.ts';
+import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
+import { type Field, neutralAnnotations, type SchemaNode } from './nodes.ts';
 
 /**
  * A node's shape alone: what two declarations of one header, query param or code must agree on.
- * `description`, `examples` and `origin` are Neutral, so they are left out at every depth.
+ * `description`, `examples` and `origin` are Neutral, so they are left out at every depth, and
+ * the options of a union and the items of an `allOf` are in the order of their shapes, which a
+ * Neutral annotation cannot change.
  */
 export function shapeOf(node: SchemaNode): SchemaNode {
   const own = withoutNeutral(node);
@@ -18,9 +21,9 @@ export function shapeOf(node: SchemaNode): SchemaNode {
         ? { ...own, items: own.items.map(shapeOf) }
         : { ...own, items: own.items.map(shapeOf), rest: shapeOf(own.rest) };
     case 'union':
-      return { ...own, options: own.options.map(shapeOf) };
+      return { ...own, options: inShapeOrder(own.options) };
     case 'allOf':
-      return { ...own, items: own.items.map(shapeOf) };
+      return { ...own, items: inShapeOrder(own.items) };
     case 'tagged':
       return { ...own, variants: variantShapes(own.variants) };
     case 'string':
@@ -44,6 +47,10 @@ function withoutNeutral(node: SchemaNode): SchemaNode {
 /** The canonical JSON of a node's shape, so two shapes compare as text. */
 export function shapeKey(node: SchemaNode): string {
   return canonicalJson(shapeOf(node));
+}
+
+function inShapeOrder(nodes: readonly SchemaNode[]): readonly SchemaNode[] {
+  return nodes.map(shapeOf).sort(byCanonicalJson);
 }
 
 function fieldShapes(fields: Readonly<Record<string, Field>>): Readonly<Record<string, Field>> {
