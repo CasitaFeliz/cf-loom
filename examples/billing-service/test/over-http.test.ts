@@ -1,10 +1,11 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, type ChildProcessByStdio, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import type { Readable } from 'node:stream';
 import { client } from '@cf-loom/client';
 import { serve } from '@cf-loom/server';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
@@ -27,13 +28,18 @@ async function portOf(stdout: Readable): Promise<string> {
   throw new Error('orders-service exited before it listened');
 }
 
-beforeAll(async () => {
-  const started = spawn(process.execPath, ['src/main.ts'], {
+/** A new orders-service process on a free port, printing the port it listens on. */
+function spawnOrders(): ChildProcessByStdio<null, Readable, null> {
+  return spawn(process.execPath, ['src/main.ts'], {
     cwd: ordersDir,
     // biome-ignore lint/style/useNamingConvention: the environment variable orders-service reads
     env: { ...process.env, PORT: '0' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
+}
+
+beforeAll(async () => {
+  const started = spawnOrders();
   orders = started;
   ordersUrl = `http://127.0.0.1:${await portOf(started.stdout)}`;
   vi.stubEnv('ORDERS_SERVICE_URL', ordersUrl);
@@ -42,7 +48,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   vi.unstubAllEnvs();
-  orders?.kill();
+  orders?.kill('SIGKILL');
 });
 
 function anInvoiceRequest(orderId: string): Request {
@@ -132,5 +138,21 @@ describe('a client of orders-service over HTTP', () => {
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
     expect(outcome).toMatchObject({ kind: 'rejection', known: true, code: 'UNAUTHENTICATED' });
+  });
+});
+
+describe('orders-service’s main.ts', () => {
+  test('it exits with status 0 when it is sent SIGTERM', async () => {
+    const ordersToStop = spawnOrders();
+    onTestFinished(() => {
+      ordersToStop.kill('SIGKILL');
+    });
+    await portOf(ordersToStop.stdout);
+    const exited = once(ordersToStop, 'exit');
+
+    ordersToStop.kill('SIGTERM');
+
+    const [status, signal] = await exited;
+    expect({ status, signal }).toEqual({ status: 0, signal: null });
   });
 });

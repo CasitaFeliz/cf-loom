@@ -9,7 +9,12 @@
     }
   },
   "files": {
-    "includes": ["**", "!examples/*/contract.snapshot.json", "!examples/*/contract-package"]
+    "includes": [
+      "**",
+      "!examples/*/contract.snapshot.json",
+      "!examples/*/src/*.generated.ts",
+      "!examples/*/contract-package"
+    ]
   },
   "formatter": {
     "indentStyle": "space",
@@ -110,11 +115,7 @@
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
-      "includes": [
-        "**/*.config.ts",
-        "examples/**/*.handler.ts",
-        "examples/*/src/handlers.generated.ts"
-      ],
+      "includes": ["**/*.config.ts", "examples/**/*.handler.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -134,7 +135,7 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "**/*.generated.ts"],
+      "includes": ["**/*.test.ts"],
       "linter": {
         "rules": {
           "complexity": {

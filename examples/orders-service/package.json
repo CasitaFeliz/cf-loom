@@ -10,6 +10,7 @@
   "dependencies": {
     "@cf-loom/contract": "workspace:*",
     "@cf-loom/handlers": "workspace:*",
+    "@cf-loom/messaging": "workspace:*",
     "@cf-loom/server": "workspace:*",
     "@org/definitions": "workspace:*",
     "zod": "catalog:"

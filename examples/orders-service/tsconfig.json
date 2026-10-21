@@ -15,6 +15,9 @@
       "path": "../../packages/handlers/tsconfig.build.json"
     },
     {
+      "path": "../../packages/messaging/tsconfig.build.json"
+    },
+    {
       "path": "../../packages/server/tsconfig.build.json"
     },
     {

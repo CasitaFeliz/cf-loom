@@ -278,7 +278,61 @@ export const exportedSnapshot: loom.ExportedSnapshot = {
       "visibility": "public"
     }
   },
-  "events": {},
+  "events": {
+    "OrderCreated@1": {
+      "body": {
+        "fields": {
+          "customerId": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "orderId": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "total": {
+            "required": true,
+            "schema": {
+              "fields": {
+                "amount": {
+                  "required": true,
+                  "schema": {
+                    "description": "In minor units, such as cents",
+                    "int": true,
+                    "min": 0,
+                    "type": "number"
+                  }
+                },
+                "currency": {
+                  "required": true,
+                  "schema": {
+                    "description": "An ISO 4217 code",
+                    "max": 3,
+                    "min": 3,
+                    "type": "string"
+                  }
+                }
+              },
+              "mode": "open",
+              "origin": "@org/definitions@0.0.0#money",
+              "type": "object"
+            }
+          }
+        },
+        "mode": "open",
+        "type": "object"
+      },
+      "description": "An order was placed, pending, for its total",
+      "lifecycle": "active",
+      "visibility": "internal"
+    }
+  },
   "guards": {
     "apiKey": {
       "context": {

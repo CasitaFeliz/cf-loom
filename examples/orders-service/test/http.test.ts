@@ -1,14 +1,24 @@
 import { admit, handle } from '@cf-loom/handlers';
+import { memory } from '@cf-loom/messaging/memory';
 import { serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
-import { describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
+import { ordersMessaging, startMessaging } from '../src/messaging.ts';
 
 const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const http = serve(contract, handlers, { onServiceFault: () => undefined });
+
+beforeAll(async () => {
+  await startMessaging(memory());
+});
+
+afterAll(async () => {
+  await ordersMessaging().close();
+});
 
 function aRequest(path: string, init: RequestInit = {}): Request {
   return new Request(`http://orders.test${path}`, init);

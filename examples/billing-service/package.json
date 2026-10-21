@@ -11,6 +11,7 @@
     "@cf-loom/client": "workspace:*",
     "@cf-loom/contract": "workspace:*",
     "@cf-loom/handlers": "workspace:*",
+    "@cf-loom/messaging": "workspace:*",
     "@cf-loom/server": "workspace:*",
     "@org/contract-orders-service": "workspace:*",
     "@org/definitions": "workspace:*",
@@ -18,7 +19,6 @@
   },
   "devDependencies": {
     "@cf-loom/cli": "workspace:*",
-    "@cf-loom/messaging": "workspace:*",
     "@cf-loom/testing": "workspace:*",
     "@types/node": "catalog:"
   }

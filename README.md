@@ -23,7 +23,7 @@ How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages)
 
 ## A first Service
 
-Two fictional Services in `examples/` follow these steps over HTTP, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, and [`billing-service`](examples/billing-service), a Service with one Endpoint that depends on orders-service through its generated Contract Package, calls it with `client` and fakes it in its tests with `fakeProvider`.
+Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider` and `fakeEvent`. orders runs its Messages through the in-memory adapter, in its tests and in `main.ts`; billing's Subscription runs in its tests.
 
 ### Layout
 
