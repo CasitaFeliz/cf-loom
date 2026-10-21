@@ -155,6 +155,22 @@ describe('walkSchemas: recursion', () => {
           defs: {},
         });
       });
+
+      test('used at two locations, the other id of the cycle is the same failure at both', () => {
+        const walked = walkSchemas(
+          [
+            { at: ['body'], schema: first },
+            { at: ['success'], schema: second },
+          ],
+          () => undefined,
+        );
+
+        const failure = { at: ['body'], ...lazyCycle };
+        expect(walked).toEqual({
+          located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+          defs: {},
+        });
+      });
     });
 
     test('a cycle entered at a lazy with no id fails the same', () => {
