@@ -11,6 +11,7 @@ import {
   defineRejection,
   defineSubscription,
   type Endpoint,
+  type Event,
   type InputOf,
   notFound,
   openEnum,
@@ -266,6 +267,15 @@ describe('fakeEvent: types', () => {
   test('a Private Event is a type error', () => {
     // @ts-expect-error a Private Event is always the Service’s own
     const faking = () => fakeEvent(paymentAuditedV1, { paymentId: PAYMENT_ID, status: 'settled' });
+
+    expect(faking).toBeTypeOf('function');
+  });
+
+  test('an Event typed as any Event, its Visibility unknown, is a type error', () => {
+    const widened: Event = paymentSettledV1;
+
+    // @ts-expect-error only an Event known to be exported can be a Provider's
+    const faking = () => fakeEvent(widened, { paymentId: PAYMENT_ID, status: 'settled' });
 
     expect(faking).toBeTypeOf('function');
   });

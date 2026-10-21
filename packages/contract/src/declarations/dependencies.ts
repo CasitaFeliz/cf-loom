@@ -9,7 +9,7 @@ import type { StandardRejections } from './standard-rejections.ts';
 type ExportedVisibility = Exclude<Visibility, 'private'>;
 
 /** An Event as a Contract Package exports it: the declaration itself, which Subscriptions reference. */
-type ProvidedEvent = Event & { readonly visibility: ExportedVisibility };
+export type ProvidedEvent = Event & { readonly visibility: ExportedVisibility };
 
 /**
  * The `contract` a Contract Package exports: its Public and Internal Elements, its version, and the
