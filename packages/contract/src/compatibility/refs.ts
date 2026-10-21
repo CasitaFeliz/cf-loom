@@ -1,5 +1,4 @@
 import {
-  canonicalJson,
   type Defs,
   type RefNode,
   reachedDefsOf,
@@ -19,22 +18,17 @@ export type EnteredKey = {
 
 /**
  * A pair with every `ref` followed into its Snapshot's defs, through alias defs, nullable when the
- * `ref` or a def on the way is. It is `entered` the first time it is met within a root schema,
- * `unresolved` when a `ref` reaches no schema and the two sides differ, and `settled` when only
- * its nullability is left to compare, in either of two ways:
- * - it was already entered within the same root schema, so any difference in it was found there;
- * - both sides are the same `ref` that reaches no schema, down the same alias chain.
+ * `ref` or a def on the way is. It is `entered` the first time it is met within a root schema, and
+ * `settled` when it was already entered within the same root schema, so any difference in it was
+ * found there and only its nullability is left to compare.
  */
 export type Followed =
   | { readonly kind: 'inline'; readonly pair: NodePair }
   | { readonly kind: 'entered'; readonly pair: NodePair; readonly entered: EnteredKey }
-  | { readonly kind: 'settled'; readonly pair: NodePair }
-  | { readonly kind: 'unresolved' };
+  | { readonly kind: 'settled'; readonly pair: NodePair };
 
-/** One side of a pair with its `ref`s followed: the schema it stands for, or the alias chain that led nowhere. */
-type Side =
-  | { readonly kind: 'resolved'; readonly node: SchemaNode; readonly key: string | SchemaNode }
-  | { readonly kind: 'unresolved'; readonly chain: readonly string[] };
+/** One side of a pair with its `ref`s followed: the schema it stands for, and the key to enter it by. */
+type Side = { readonly node: SchemaNode; readonly key: string | SchemaNode };
 
 /**
  * Follows the `ref`s of a pair into both Snapshots' defs, so a def is compared as if written
@@ -51,9 +45,6 @@ export function followedOf(
   }
   const baseline = sideOf(pair.baseline, defs.baseline);
   const proposed = sideOf(pair.proposed, defs.proposed);
-  if (baseline.kind === 'unresolved' || proposed.kind === 'unresolved') {
-    return hasSameChain(baseline, proposed) ? { kind: 'settled', pair } : { kind: 'unresolved' };
-  }
   const key = { baseline: baseline.key, proposed: proposed.key };
   const resolved = { baseline: baseline.node, proposed: proposed.node };
   return hasEntered(entered, key)
@@ -82,33 +73,23 @@ function hasSameDef(name: string, defs: BothDefs): boolean {
 }
 
 function sideOf(node: SchemaNode, defs: Defs): Side {
-  return node.type === 'ref' ? followRef(node, defs, []) : { kind: 'resolved', node, key: node };
+  return node.type === 'ref' ? followRef(node, defs, []) : { node, key: node };
 }
 
-/** A `ref` followed through alias defs to the schema it stands for, or until a def is missing or an alias comes back. */
+/**
+ * A `ref` followed through alias defs to the schema it stands for. A missing def, or an alias
+ * that comes back to one already followed, is a bug, thrown so the walk never loops.
+ */
 function followRef(ref: RefNode, defs: Defs, followed: readonly RefNode[]): Side {
-  const chain = [...followed, ref];
   const def = defs[ref.name];
   if (def === undefined || followed.some((earlier) => earlier.name === ref.name)) {
-    return { kind: 'unresolved', chain: chain.map(shapeKey) };
+    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
   }
   const reached: Side =
-    def.type === 'ref'
-      ? followRef(def, defs, chain)
-      : { kind: 'resolved', node: def, key: ref.name };
-  if (reached.kind === 'unresolved' || ref.nullable !== true) {
-    return reached;
-  }
-  return { ...reached, node: { ...reached.node, nullable: true } };
-}
-
-/** Whether both sides lead nowhere down alias chains of the same shape, nullability included. */
-function hasSameChain(baseline: Side, proposed: Side): boolean {
-  return (
-    baseline.kind === 'unresolved' &&
-    proposed.kind === 'unresolved' &&
-    canonicalJson(baseline.chain) === canonicalJson(proposed.chain)
-  );
+    def.type === 'ref' ? followRef(def, defs, [...followed, ref]) : { node: def, key: ref.name };
+  return ref.nullable === true
+    ? { ...reached, node: { ...reached.node, nullable: true } }
+    : reached;
 }
 
 function hasEntered(entered: readonly EnteredKey[], key: EnteredKey): boolean {

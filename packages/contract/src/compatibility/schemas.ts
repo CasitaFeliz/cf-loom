@@ -50,8 +50,6 @@ function differencesWithin(
 ): readonly Difference[] {
   const followed = followedOf(pair, defs, place.entered);
   switch (followed.kind) {
-    case 'unresolved':
-      return differencesOf([found({ kind: 'unproven', node: 'ref' })], defs, place);
     case 'settled':
       return differencesOf(nullabilityFindingsOf(followed.pair), defs, place);
     case 'inline':
