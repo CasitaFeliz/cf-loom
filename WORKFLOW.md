@@ -87,9 +87,9 @@ public API, a rule or what a document means is put to the user. The implementer 
 fix and the user's answers; it writes a failing test for each bug before fixing it, then runs `pnpm test` and `pnpm
 check` and pushes.
 
-Once the fixes pass locally, the three lenses review the whole PR again. Round 1 is the first review and round 2 the review
-after its fixes. The loop ends when a round finds nothing to fix. When round 2 still finds something, the main session
-stops and brings the state to the user, who decides to merge as it stands, rework the plan, or split the issue.
+Once the fixes pass locally, the three lenses review the whole PR again. Round 1 is the first review and round 2 the
+review after its fixes. The loop ends when a round finds nothing to fix. When round 2 still finds something, the main
+session stops and brings the state to the user, who decides to merge as it stands, rework the plan, or split the issue.
 
 ## Definition of Done
 
