@@ -72,9 +72,14 @@ function isRegexFormat(format: string): format is RegexFormat {
 /** A format check of a format SNAPSHOT.md knows. */
 type KnownFormatDef = FormatDef & { readonly format: StringFormat };
 
+/** Whether a value names a string format SNAPSHOT.md knows. */
+export function isStringFormat(value: unknown): value is StringFormat {
+  return typeof value === 'string' && knownFormats.has(value);
+}
+
 /** Whether a format check names a format SNAPSHOT.md knows. */
 function isKnownFormat(def: FormatDef): def is KnownFormatDef {
-  return knownFormats.has(def.format);
+  return isStringFormat(def.format);
 }
 
 /** The string checks zod writes as formats, which the Not allowed list names. */

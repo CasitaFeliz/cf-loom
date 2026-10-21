@@ -29,6 +29,15 @@ const optionKeysByFormat: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
+ * The options a Snapshot may carry for a string format: those its constructor reads, `normalize`
+ * aside, which `generate` refuses.
+ */
+export function formatOptionKeysOf(format: string | undefined): readonly string[] {
+  const keys = format === undefined ? undefined : optionKeysByFormat.get(format);
+  return (keys ?? []).filter((key) => key !== 'normalize');
+}
+
+/**
  * The options a format declares that differ from zod's default, read against the format the
  * author's own zod builds for them; nothing when that zod refuses them.
  */

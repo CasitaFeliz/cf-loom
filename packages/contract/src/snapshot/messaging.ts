@@ -1,7 +1,12 @@
 import { lifecycleOf } from '../declarations/index.ts';
 import type { ValidatedSubscription } from '../validation/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import { type LocatedCommand, type LocatedEvent, messageIdentityOf } from '../written/index.ts';
+import {
+  eventReferenceOf,
+  type LocatedCommand,
+  type LocatedEvent,
+  messageIdentityOf,
+} from '../written/index.ts';
 import type { SnapshotSources } from './context.ts';
 import type { CommandSnapshot, EventSnapshot, SubscriptionSnapshot } from './types.ts';
 
@@ -45,7 +50,7 @@ export function subscriptionSnapshotsOf(
   const entries = subscriptions.map(({ subscription, service }) => {
     const { name, version } = subscription.event;
     const snapshot: SubscriptionSnapshot = {
-      event: `${service}:${messageIdentityOf(name, version)}`,
+      event: eventReferenceOf(service, name, version),
     };
     return [subscription.name, snapshot] as const;
   });

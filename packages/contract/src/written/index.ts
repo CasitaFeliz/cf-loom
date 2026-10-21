@@ -9,12 +9,16 @@ export type { Declarations } from './declarations.ts';
 export { declarationsOf, endpointAt, endpointsOf, listedDefinitionsOf } from './declarations.ts';
 export type { PathSegment } from './identity.ts';
 export {
+  eventReferenceOf,
   identityOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,
   paramNamesOf,
   pathSegmentsOf,
+  readEndpointIdentity,
+  readEventReference,
+  readMessageIdentity,
   segmentsOf,
   subjectVersionOf,
 } from './identity.ts';

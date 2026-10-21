@@ -16,6 +16,7 @@ import {
   exportedSnapshotOf,
   type GuardSnapshot,
   type ObjectNode,
+  type PublishedServiceSnapshot,
   type ResolvedDefinitions,
   type SchemaNode,
   type ServiceSnapshot,
@@ -410,6 +411,30 @@ describe('exportedSnapshotOf', () => {
     expect(Object.keys(cut.guards)).toEqual(['alpha', 'zeta']);
     expect(Object.keys(cut.codes)).toEqual(['A_CODE', 'Z_CODE']);
     expect(Object.keys(cut.defs)).toEqual(['a', 'z']);
+  });
+
+  test('a published Snapshot’s tombstones and still-declared Retired Elements are left out of the exported Snapshot', () => {
+    const published: PublishedServiceSnapshot = {
+      ...aServiceSnapshot(),
+      version: '3.4.0',
+      commands: {},
+      subscriptions: {},
+      endpoints: {
+        'GET /orders': { ...anEndpointEntry(), lifecycle: 'active' },
+        'GET /legacy': { ...anEndpointEntry(), lifecycle: 'retired', retiredIn: '3.0.0' },
+        'DELETE /orders': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'purgeOrders' },
+      },
+      events: {
+        'OrderPlaced@1': { ...anEventEntry(), lifecycle: 'active' },
+        'OrderCancelled@1': { ...anEventEntry(), lifecycle: 'retired', retiredIn: '3.0.0' },
+        'OrderPurged@1': { lifecycle: 'retired', retiredIn: '3.1.0' },
+      },
+    };
+
+    const cut = exportedSnapshotOf(published);
+
+    expect(Object.keys(cut.endpoints)).toEqual(['GET /orders']);
+    expect(Object.keys(cut.events)).toEqual(['OrderPlaced@1']);
   });
 
   test('the cut of a declared Contract keeps each exported Endpoint’s entry as the Snapshot writes it', () => {

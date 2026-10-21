@@ -15,6 +15,8 @@ export {
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
+export type { DecodedSnapshot } from '../decoding/index.ts';
+export { decodeSnapshot } from '../decoding/index.ts';
 export type { Parsed, SchemaIssue } from '../issues/index.ts';
 export { encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
@@ -23,23 +25,40 @@ export type {
   ApplicationSnapshot,
   AttachmentSnapshot,
   CodeSnapshot,
+  CommandSnapshot,
+  DefinitionsSnapshot,
   EndpointSnapshot,
+  EndpointTombstone,
   EventSnapshot,
   ExportedSnapshot,
   GuardSnapshot,
   ListedRejection,
+  MessageTombstone,
+  PublishedApplicationSnapshot,
+  PublishedCommand,
+  PublishedDefinitionsSnapshot,
+  PublishedElement,
+  PublishedEndpoint,
+  PublishedEvent,
+  PublishedServiceSnapshot,
+  PublishedSnapshot,
   ResolvedDefinitions,
   ServiceSnapshot,
   Snapshot,
   SnapshotContext,
+  SubscriptionSnapshot,
+  SubscriptionTombstone,
 } from '../snapshot/index.ts';
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
+  compareSemanticVersions,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,
+  isDeclared,
   isDeclaredRejection,
+  isSemanticVersion,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,
@@ -67,6 +86,7 @@ export type {
   HashFormat,
   NumberNode,
   ObjectNode,
+  Path,
   RefNode,
   SchemaNode,
   StringFormat,

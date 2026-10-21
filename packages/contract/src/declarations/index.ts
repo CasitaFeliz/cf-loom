@@ -39,6 +39,7 @@ export type {
   RequiredContextOf,
   SuccessOf,
 } from './inference.ts';
+export { isMessageVersion } from './message-version.ts';
 export {
   isApplication,
   isCommand,
