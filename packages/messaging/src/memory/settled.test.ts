@@ -205,6 +205,21 @@ describe('settled()', () => {
     );
   });
 
+  test('with several failures since the last settled(), the cause is the first failure’s', async () => {
+    const { broker, publisher, sender } = await running(() => ({
+      notify: () => {
+        throw new Error('gateway down');
+      },
+      charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }),
+    }));
+    await publisher.publish('OrderCreated', { v1: created });
+    await sender.send('ChargeCard', created);
+
+    const rejection = await rejectionOf(broker.settled());
+
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notify-on-created' });
+  });
+
   test('a failure is reported once: the next settled() resolves', async () => {
     const { broker, sender } = await running(() => ({
       charge: () => fault({ committed: 'no', retryable: false }),
@@ -258,6 +273,18 @@ describe('settled()', () => {
 });
 
 describe('settled(): a chain of Messages that keeps producing', () => {
+  test('runs that each settle before the next, adding up past 1,000 deliveries, are not cut', async () => {
+    const { broker } = await running();
+    const settlements: string[] = [];
+
+    for (let delivered = 0; delivered < 1001; delivered += 1) {
+      settlements.push(await broker.deliver(chargeCardV1, created));
+    }
+
+    expect(settlements.filter((settlement) => settlement === 'acked')).toHaveLength(1001);
+    await expect(broker.settled()).resolves.toBeUndefined();
+  });
+
   /** Two Handlers that trigger each other forever: the Subscription sends, the CommandHandler publishes. */
   function chaining(connection: Running, count: { deliveries: number }) {
     return {

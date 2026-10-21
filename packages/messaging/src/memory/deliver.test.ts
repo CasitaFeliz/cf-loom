@@ -566,6 +566,48 @@ describe('pending and redeliver()', () => {
     expect(broker.pending).toMatchObject([{ deliveryCount: 3 }]);
   });
 
+  test('a pending Message delivered again keeps its place in the list', async () => {
+    const { broker } = await running(() => ({ charge: throwing }));
+    await broker.deliver(chargeCardV1, charge, { factId: 'a' });
+    await broker.deliver(chargeCardV1, charge, { factId: 'b' });
+
+    await broker.deliver(chargeCardV1, charge, { factId: 'a' });
+
+    expect(broker.pending.map(({ factId, deliveryCount }) => [factId, deliveryCount])).toEqual([
+      ['a', 1],
+      ['b', 1],
+    ]);
+  });
+
+  test('redeliver() delivers an entry a deliver replaced after the snapshot from the entry as it stands', async () => {
+    const gate = aGate();
+    const { broker, sender, received } = await running(() => ({
+      charge: async (_body, meta) => {
+        if (meta.factId !== 'hold') {
+          throw boom;
+        }
+        await gate.opened;
+        return undefined;
+      },
+    }));
+    await broker.deliver(chargeCardV1, charge, { factId: 'a' });
+    await broker.redeliver();
+    await sender.send('ChargeCard', charge, { factId: 'hold' });
+
+    const replacing = broker.deliver(chargeCardV1, charge, { factId: 'a' });
+    const redelivering = broker.redeliver();
+    gate.open();
+    await Promise.all([replacing, redelivering]);
+
+    expect(received.map(({ meta }) => [meta.factId, meta.deliveryCount])).toEqual([
+      ['a', 1],
+      ['a', 2],
+      ['hold', 1],
+      ['a', 1],
+      ['a', 2],
+    ]);
+  });
+
   test('redeliver() skips an entry a deliver acknowledged after the snapshot', async () => {
     const gate = aGate();
     const failed = new Set<string>();
