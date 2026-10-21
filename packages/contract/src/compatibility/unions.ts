@@ -9,6 +9,7 @@ import {
   type NodePairOf,
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
+import type { ShapeDifference } from './report.ts';
 
 /**
  * How two discriminated unions differ. Variants are matched by discriminator value alone, so a
@@ -36,10 +37,14 @@ function variantFindingOf(variant: Counterpart<ObjectNode | RefNode>): Finding {
 }
 
 /**
- * How two plain unions differ: any change to their options, or to a def their `ref`s reach, is
- * Breaking, since none can be proven compatible. Their options compare in shape order, which a
- * Neutral annotation cannot change.
+ * The plain-union rule: any change to two nodes' options or items, or to a def their `ref`s reach,
+ * is the one `difference`, Breaking in every Position, since none can be proven compatible. Their
+ * options compare in shape order, which a Neutral annotation cannot change.
  */
-export function unionFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
-  return isUnchanged(pair, defs) ? [] : [found({ kind: 'union-changed' })];
+export function plainUnionFindingsOf(
+  pair: NodePair,
+  defs: BothDefs,
+  difference: ShapeDifference,
+): readonly Finding[] {
+  return isUnchanged(pair, defs) ? [] : [found(difference)];
 }

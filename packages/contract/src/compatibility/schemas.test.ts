@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import {
   type Change,
   type ChangeSite,
@@ -10,6 +11,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
+  type NumberNode,
   type ObjectNode,
   type Path,
   type Position,
@@ -20,7 +22,9 @@ import {
   type ServiceSnapshot,
   type ShapeDifference,
   type Snapshot,
+  type StringNode,
   type TaggedNode,
+  walkSchemas,
 } from '../internal/index.ts';
 
 type Class = 'breaking' | 'additive' | 'neutral';
@@ -713,62 +717,542 @@ describe('compatibilityReportOf, unions', () => {
   );
 });
 
-const unprovenRows: readonly Row[] = [
+type Constraint = Extract<ShapeDifference, { kind: 'constraint-tightened' }>['constraint'];
+
+function tightened(constraint: Constraint): ShapeDifference {
+  return { kind: 'constraint-tightened', constraint };
+}
+
+function relaxed(constraint: Constraint): ShapeDifference {
+  return { kind: 'constraint-relaxed', constraint };
+}
+
+function replaced(constraint: 'format' | 'regex' | 'multipleOf'): ShapeDifference {
+  return { kind: 'constraint-replaced', constraint };
+}
+
+function aStringWith(constraints: Omit<StringNode, 'type'>): StringNode {
+  return { type: 'string', ...constraints };
+}
+
+function aNumberWith(constraints: Omit<NumberNode, 'type'>): NumberNode {
+  return { type: 'number', ...constraints };
+}
+
+function aRow(
+  change: string,
+  ...nodesAndDifferences: [from: SchemaNode, to: SchemaNode, ...differences: Found[]]
+): Row {
+  const [from, to, ...differences] = nodesAndDifferences;
+  return { change, from, to, found: differences };
+}
+
+function shapesOf(report: ComparedReport): readonly (ShapeDifference | string)[] {
+  return report.changes.map(({ difference }) =>
+    difference.kind === 'schema' ? difference.shape : difference.kind,
+  );
+}
+
+const startsWithA = { source: '^a', flags: '' };
+
+const stringRows: readonly Row[] = [
+  aRow(
+    'adding a min length',
+    aString,
+    aStringWith({ min: 1 }),
+    found(tightened('lower-bound'), acceptsLess),
+  ),
+  aRow(
+    'raising a min length',
+    aStringWith({ min: 1 }),
+    aStringWith({ min: 2 }),
+    found(tightened('lower-bound'), acceptsLess),
+  ),
+  aRow(
+    'lowering a min length',
+    aStringWith({ min: 2 }),
+    aStringWith({ min: 1 }),
+    found(relaxed('lower-bound'), guaranteesLess),
+  ),
+  aRow(
+    'removing a max length',
+    aStringWith({ max: 5 }),
+    aString,
+    found(relaxed('upper-bound'), guaranteesLess),
+  ),
+  aRow(
+    'making an exact length a range',
+    aStringWith({ min: 3, max: 3 }),
+    aStringWith({ min: 3, max: 5 }),
+    found(relaxed('upper-bound'), guaranteesLess),
+  ),
+  aRow(
+    'adding a format',
+    aString,
+    aStringWith({ format: 'email' }),
+    found(tightened('format'), acceptsLess),
+  ),
+  aRow(
+    'removing a format',
+    aStringWith({ format: 'email' }),
+    aString,
+    found(relaxed('format'), guaranteesLess),
+  ),
+  aRow(
+    'replacing a format',
+    aStringWith({ format: 'email' }),
+    aStringWith({ format: 'url' }),
+    found(replaced('format'), breaksEverywhere),
+  ),
+  aRow(
+    'changing a format’s options',
+    aStringWith({ format: 'datetime', formatOptions: { offset: true } }),
+    aStringWith({ format: 'datetime', formatOptions: { precision: 3 } }),
+    found(replaced('format'), breaksEverywhere),
+  ),
+  aRow(
+    'adding a regex',
+    aString,
+    aStringWith({ regex: startsWithA }),
+    found(tightened('regex'), acceptsLess),
+  ),
+  aRow(
+    'removing a regex',
+    aStringWith({ regex: startsWithA }),
+    aString,
+    found(relaxed('regex'), guaranteesLess),
+  ),
+  aRow(
+    'changing a regex’s flags only',
+    aStringWith({ regex: startsWithA }),
+    aStringWith({ regex: { source: '^a', flags: 'i' } }),
+    found(replaced('regex'), breaksEverywhere),
+  ),
+];
+
+const numberRows: readonly Row[] = [
+  aRow(
+    'making a min an exclusiveMin of the same value',
+    aNumberWith({ min: 5 }),
+    aNumberWith({ exclusiveMin: 5 }),
+    found(tightened('lower-bound'), acceptsLess),
+  ),
+  aRow(
+    'making an exclusiveMin a min of the same value',
+    aNumberWith({ exclusiveMin: 5 }),
+    aNumberWith({ min: 5 }),
+    found(relaxed('lower-bound'), guaranteesLess),
+  ),
+  aRow(
+    'moving a min down to an exclusiveMin below it',
+    aNumberWith({ min: 5 }),
+    aNumberWith({ exclusiveMin: 4 }),
+    found(relaxed('lower-bound'), guaranteesLess),
+  ),
+  aRow(
+    'lowering a max',
+    aNumberWith({ max: 10 }),
+    aNumberWith({ max: 5 }),
+    found(tightened('upper-bound'), acceptsLess),
+  ),
+  aRow(
+    'raising a max',
+    aNumberWith({ max: 5 }),
+    aNumberWith({ max: 10 }),
+    found(relaxed('upper-bound'), guaranteesLess),
+  ),
+  aRow(
+    'making a max an exclusiveMax of the same value',
+    aNumberWith({ max: 10 }),
+    aNumberWith({ exclusiveMax: 10 }),
+    found(tightened('upper-bound'), acceptsLess),
+  ),
+  aRow('adding int', aNumber, aNumberWith({ int: true }), found(tightened('int'), acceptsLess)),
+  aRow('removing int', aNumberWith({ int: true }), aNumber, found(relaxed('int'), guaranteesLess)),
+  aRow(
+    'adding a multipleOf',
+    aNumber,
+    aNumberWith({ multipleOf: 2 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'removing a multipleOf',
+    aNumberWith({ multipleOf: 2 }),
+    aNumber,
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf to a multiple of it',
+    aNumberWith({ multipleOf: 2 }),
+    aNumberWith({ multipleOf: 4 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf to a divisor of it',
+    aNumberWith({ multipleOf: 4 }),
+    aNumberWith({ multipleOf: 2 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf to a number that is neither a multiple nor a divisor',
+    aNumberWith({ multipleOf: 2 }),
+    aNumberWith({ multipleOf: 3 }),
+    found(replaced('multipleOf'), breaksEverywhere),
+  ),
+  aRow(
+    'moving a multipleOf from cents to five cents',
+    aNumberWith({ multipleOf: 0.01 }),
+    aNumberWith({ multipleOf: 0.05 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from five cents to cents',
+    aNumberWith({ multipleOf: 0.05 }),
+    aNumberWith({ multipleOf: 0.01 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf to a multiple of it written in exponent form',
+    aNumberWith({ multipleOf: 1e-7 }),
+    aNumberWith({ multipleOf: 2e-7 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf to a multiple that floating point cannot divide exactly',
+    aNumberWith({ multipleOf: 0.1 }),
+    aNumberWith({ multipleOf: 0.3 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from 3 to 0.3, a divisor with a decimal fraction',
+    aNumberWith({ multipleOf: 3 }),
+    aNumberWith({ multipleOf: 0.3 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0.3 to 3, a multiple with no decimal fraction',
+    aNumberWith({ multipleOf: 0.3 }),
+    aNumberWith({ multipleOf: 3 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0.25 to 0.5',
+    aNumberWith({ multipleOf: 0.25 }),
+    aNumberWith({ multipleOf: 0.5 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'moving a multipleOf from 0 to 2, which admits more than 0 alone',
+    aNumberWith({ multipleOf: 0 }),
+    aNumberWith({ multipleOf: 2 }),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+  aRow(
+    'moving a multipleOf from 2 to 0',
+    aNumberWith({ multipleOf: 2 }),
+    aNumberWith({ multipleOf: 0 }),
+    found(tightened('multipleOf'), acceptsLess),
+  ),
+  aRow(
+    'swapping a multipleOf of 1 for int, which mean the same',
+    aNumberWith({ multipleOf: 1 }),
+    aNumberWith({ int: true }),
+    found(tightened('int'), acceptsLess),
+    found(relaxed('multipleOf'), guaranteesLess),
+  ),
+];
+
+const unchangedConstraints: readonly { readonly constraint: string; readonly node: SchemaNode }[] =
+  [
+    { constraint: 'min', node: aNumberWith({ min: 5 }) },
+    { constraint: 'exclusiveMin', node: aNumberWith({ exclusiveMin: 5 }) },
+    { constraint: 'max', node: aNumberWith({ max: 5 }) },
+    { constraint: 'exclusiveMax', node: aNumberWith({ exclusiveMax: 5 }) },
+    { constraint: 'multipleOf', node: aNumberWith({ multipleOf: 5 }) },
+    { constraint: 'int', node: aNumberWith({ int: true }) },
+    { constraint: 'min length', node: aStringWith({ min: 5 }) },
+    {
+      constraint: 'format',
+      node: aStringWith({ format: 'datetime', formatOptions: { offset: true } }),
+    },
+    { constraint: 'regex', node: aStringWith({ regex: startsWithA }) },
+  ];
+
+describe('compatibilityReportOf, constraints', () => {
+  test.each(casesOf([...stringRows, ...numberRows]))('$change is $outcome in $place', expectRow);
+
+  test.each(
+    unchangedConstraints.flatMap((unchanged) =>
+      places.map((place) => ({ ...unchanged, place: place.name, where: place })),
+    ),
+  )('an unchanged $constraint is no Change in $place', ({ node, where }) => {
+    const report = reportOf(where, { from: node, to: node });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
+
+  test.each(places)(
+    'tightening one constraint and relaxing another leaves a Breaking Change in $name',
+    (place) => {
+      const from = aStringWith({ min: 1, max: 5 });
+      const to = aStringWith({ min: 2, max: 9 });
+
+      const report = reportOf(place, { from, to });
+
+      expect(report.changes.map(({ class: changeClass }) => changeClass)).toContain('breaking');
+    },
+  );
+
+  test('a string’s constraints come in order: format, regex, lower bound, upper bound', () => {
+    const to = aStringWith({ format: 'email', regex: startsWithA, min: 1, max: 5 });
+
+    const report = reportOf(input, { from: aString, to });
+
+    expect(shapesOf(report)).toEqual([
+      tightened('format'),
+      tightened('regex'),
+      tightened('lower-bound'),
+      tightened('upper-bound'),
+    ]);
+  });
+
+  test('a number’s constraints come in order: int, lower bound, upper bound, multipleOf', () => {
+    const to = aNumberWith({ int: true, min: 0, max: 9, multipleOf: 3 });
+
+    const report = reportOf(input, { from: aNumber, to });
+
+    expect(shapesOf(report)).toEqual([
+      tightened('int'),
+      tightened('lower-bound'),
+      tightened('upper-bound'),
+      tightened('multipleOf'),
+    ]);
+  });
+
+  test('a nullability change comes before the constraints', () => {
+    const to: SchemaNode = { ...aStringWith({ min: 1 }), nullable: true };
+
+    const report = reportOf(input, { from: aString, to });
+
+    expect(shapesOf(report)).toEqual([{ kind: 'nullability-added' }, tightened('lower-bound')]);
+  });
+
+  test.each(places)(
+    'a constraint changed deep in a body is found at its path in $name',
+    (place) => {
+      const from = anObject({ name: required(aStringWith({ min: 1 })) });
+      const to = anObject({ name: required(aStringWith({ min: 2 })) });
+
+      const report = reportOf(place, { from, to });
+
+      expect(report.changes).toEqual([
+        changeAt(place, found(tightened('lower-bound'), acceptsLess, ['fields', 'name'])),
+      ]);
+    },
+  );
+});
+
+type Counts = { readonly min?: number; readonly max?: number };
+
+function anArray(items: SchemaNode, counts: Counts = {}): SchemaNode {
+  return { type: 'array', items, ...counts };
+}
+
+function aRecord(key: SchemaNode, value: SchemaNode): SchemaNode {
+  return { type: 'record', key, value };
+}
+
+function aTuple(items: readonly SchemaNode[], rest?: SchemaNode): SchemaNode {
+  return rest === undefined ? { type: 'tuple', items } : { type: 'tuple', items, rest };
+}
+
+function aNullable(node: SchemaNode): SchemaNode {
+  return { ...node, nullable: true };
+}
+
+const tree = anObject({ children: required(anArray(aRef('tree'))) });
+const treeWithName = anObject({
+  children: required(anArray(aRef('tree'))),
+  name: required(aString),
+});
+const tupleChanged: ShapeDifference = { kind: 'unproven', node: 'tuple' };
+const nameAdded: ShapeDifference = { kind: 'field-added', required: true };
+
+const collectionRows: readonly Row[] = [
+  aRow(
+    'adding a min item count',
+    anArray(aString),
+    anArray(aString, { min: 1 }),
+    found(tightened('lower-bound'), acceptsLess),
+  ),
+  aRow(
+    'removing a max item count',
+    anArray(aString, { max: 3 }),
+    anArray(aString),
+    found(relaxed('upper-bound'), guaranteesLess),
+  ),
+  aRow(
+    'changing an array’s item counts and its items, counts first',
+    anArray(aString, { max: 3 }),
+    anArray(aNumber, { max: 4 }),
+    found(relaxed('upper-bound'), guaranteesLess),
+    found({ kind: 'type-changed', from: 'string', to: 'number' }, breaksEverywhere, ['items']),
+  ),
+  aRow(
+    'adding a required field in a record’s value',
+    aRecord(aString, anObject()),
+    aRecord(aString, anObject({ note: required(aString) })),
+    found(nameAdded, acceptsLess, ['value', 'fields', 'note']),
+  ),
+  aRow(
+    'making a record’s value nullable',
+    aRecord(aString, aString),
+    aRecord(aString, aNullable(aString)),
+    found({ kind: 'nullability-added' }, guaranteesLess, ['value']),
+  ),
+  aRow(
+    'changing a record’s value type',
+    aRecord(aString, aString),
+    aRecord(aString, aNumber),
+    found({ kind: 'type-changed', from: 'string', to: 'number' }, breaksEverywhere, ['value']),
+  ),
+  aRow(
+    'adding a regex to a record’s key',
+    aRecord(aString, aString),
+    aRecord(aStringWith({ regex: startsWithA }), aString),
+    found(tightened('regex'), acceptsLess, ['key']),
+  ),
+  aRow(
+    'removing a regex from a record’s key',
+    aRecord(aStringWith({ regex: startsWithA }), aString),
+    aRecord(aString, aString),
+    found(relaxed('regex'), guaranteesLess, ['key']),
+  ),
+  aRow(
+    'adding rest to a tuple',
+    aTuple([aString]),
+    aTuple([aString], aNumber),
+    found({ kind: 'rest-added' }, breaksEverywhere, ['rest']),
+  ),
+  aRow(
+    'removing rest from a tuple',
+    aTuple([aString], aNumber),
+    aTuple([aString]),
+    found({ kind: 'rest-removed' }, breaksEverywhere, ['rest']),
+  ),
+  aRow(
+    'making a tuple’s rest nullable',
+    aTuple([aString], aNumber),
+    aTuple([aString], aNullable(aNumber)),
+    found({ kind: 'nullability-added' }, guaranteesLess, ['rest']),
+  ),
+  aRow(
+    'tightening a constraint on a tuple’s rest',
+    aTuple([], aString),
+    aTuple([], aStringWith({ min: 1 })),
+    found(tightened('lower-bound'), acceptsLess, ['rest']),
+  ),
+  aRow(
+    'changing a tuple’s items',
+    aTuple([aString]),
+    aTuple([aString, aNumber]),
+    found(tupleChanged, breaksEverywhere),
+  ),
+  aRow(
+    'making a tuple’s item nullable',
+    aTuple([aString]),
+    aTuple([aNullable(aString)]),
+    found(tupleChanged, breaksEverywhere),
+  ),
+  aRow(
+    'changing a tuple’s items and its rest, items first',
+    aTuple([aString], aString),
+    aTuple([aNumber], aStringWith({ min: 1 })),
+    found(tupleChanged, breaksEverywhere),
+    found(tightened('lower-bound'), acceptsLess, ['rest']),
+  ),
   {
-    change: 'adding a constraint to a string',
-    from: aString,
-    to: { type: 'string', min: 1 },
-    found: [found({ kind: 'unproven', node: 'string' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a number’s constraint',
-    from: { type: 'number', min: 0 },
-    to: { type: 'number', min: 1 },
-    found: [found({ kind: 'unproven', node: 'number' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing an array’s item counts, apart from its items',
-    from: { type: 'array', items: aString, max: 3 },
-    to: { type: 'array', items: aNumber, max: 4 },
-    found: [
-      found({ kind: 'unproven', node: 'array' }, breaksEverywhere),
-      found({ kind: 'type-changed', from: 'string', to: 'number' }, breaksEverywhere, ['items']),
-    ],
-  },
-  {
-    change: 'changing an array’s minimum item count',
-    from: { type: 'array', items: aString, min: 1 },
-    to: { type: 'array', items: aString, min: 2 },
-    found: [found({ kind: 'unproven', node: 'array' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a record’s value',
-    from: { type: 'record', key: aString, value: aString },
-    to: { type: 'record', key: aString, value: aNumber },
-    found: [found({ kind: 'unproven', node: 'record' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing a tuple’s items',
-    from: { type: 'tuple', items: [aString] },
-    to: { type: 'tuple', items: [aString, aNumber] },
-    found: [found({ kind: 'unproven', node: 'tuple' }, breaksEverywhere)],
-  },
-  {
-    change: 'changing an intersection’s items',
-    from: { type: 'allOf', items: [aString, { type: 'string', min: 1 }] },
-    to: { type: 'allOf', items: [aString, { type: 'string', min: 2 }] },
-    found: [found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere)],
-  },
-  {
-    change: 'turning an opaque JSON value into a string',
-    from: { type: 'json' },
-    to: aString,
-    found: [found({ kind: 'type-changed', from: 'json', to: 'string' }, breaksEverywhere)],
+    change: 'changing a def a tuple’s rest names',
+    from: aTuple([], aRef('tree')),
+    to: aTuple([], aRef('tree')),
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found(nameAdded, acceptsLess, ['rest', 'fields', 'name'])],
   },
 ];
 
-describe('compatibilityReportOf, what no rule here compares yet', () => {
-  test.each(casesOf(unprovenRows))('$change is $outcome in $place', expectRow);
+describe('compatibilityReportOf, arrays, records and tuples', () => {
+  test.each(casesOf(collectionRows))('$change is $outcome in $place', expectRow);
+});
+
+function walkedOf(schema: z.ZodType): SchemaNode {
+  const { located } = walkSchemas([{ at: [], schema }], () => undefined);
+  const [first] = located;
+  if (first?.walked.kind !== 'walked') {
+    throw new Error('the schema must be allowed in a Contract');
+  }
+  return first.walked.value;
+}
+
+const intersectionOfObjects = z.intersection(
+  z.object({ id: z.string() }),
+  z.object({ total: z.number() }),
+);
+
+const intersectionRows: readonly Row[] = [
+  aRow(
+    'changing an intersection’s items',
+    { type: 'allOf', items: [aString, aStringWith({ min: 1 })] },
+    { type: 'allOf', items: [aString, aStringWith({ min: 2 })] },
+    found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere),
+  ),
+  aRow(
+    'adding a field to one side of an intersection of objects',
+    walkedOf(intersectionOfObjects),
+    walkedOf(
+      z.intersection(
+        z.object({ id: z.string() }),
+        z.object({ total: z.number(), note: z.string() }),
+      ),
+    ),
+    found(nameAdded, acceptsLess, ['fields', 'note']),
+  ),
+  aRow(
+    'turning a string into JSON',
+    aString,
+    { type: 'json' },
+    found({ kind: 'type-changed', from: 'string', to: 'json' }, breaksEverywhere),
+  ),
+  aRow(
+    'turning JSON into a string',
+    { type: 'json' },
+    aString,
+    found({ kind: 'type-changed', from: 'json', to: 'string' }, breaksEverywhere),
+  ),
+  aRow(
+    'making JSON nullable, which it already admits',
+    { type: 'json' },
+    aNullable({ type: 'json' }),
+    found({ kind: 'nullability-added' }, guaranteesLess),
+  ),
+];
+
+describe('compatibilityReportOf, intersections and opaque JSON', () => {
+  test.each(casesOf(intersectionRows))('$change is $outcome in $place', expectRow);
+
+  test.each(places)(
+    'an intersection of objects and the object it amounts to are no Change in $name',
+    (place) => {
+      const merged = z.object({ id: z.string(), total: z.number() });
+
+      const report = reportOf(place, {
+        from: walkedOf(intersectionOfObjects),
+        to: walkedOf(merged),
+      });
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    },
+  );
 
   test.each(places)('an opaque JSON value left as it is is no Change in $name', (place) => {
     const report = reportOf(place, { from: { type: 'json' }, to: { type: 'json' } });
@@ -777,11 +1261,8 @@ describe('compatibilityReportOf, what no rule here compares yet', () => {
   });
 });
 
-const tree = anObject({ children: required({ type: 'array', items: aRef('tree') }) });
-const treeWithName = anObject({
-  children: required({ type: 'array', items: aRef('tree') }),
-  name: required(aString),
-});
+const branch = anObject({ children: required(anArray(aRef('branch'))) });
+const leaf = anObject({ id: required(aString) });
 const unproven: ShapeDifference = { kind: 'unproven', node: 'ref' };
 
 const mutualDefs: Defs = {
@@ -792,111 +1273,469 @@ const mutualDefs: Defs = {
 const treeContainers: readonly {
   readonly container: string;
   readonly node: SchemaNode;
-  readonly shape: ShapeDifference;
+  readonly changed: Found;
 }[] = [
   {
     container: 'a plain union',
     node: { type: 'union', options: [aRef('tree'), aString] },
-    shape: { kind: 'union-changed' },
+    changed: found({ kind: 'union-changed' }, breaksEverywhere),
   },
   {
     container: 'a record',
-    node: { type: 'record', key: aString, value: aRef('tree') },
-    shape: { kind: 'unproven', node: 'record' },
+    node: aRecord(aString, aRef('tree')),
+    changed: found(nameAdded, acceptsLess, ['value', 'fields', 'name']),
   },
   {
     container: 'a tuple',
-    node: { type: 'tuple', items: [aRef('tree')] },
-    shape: { kind: 'unproven', node: 'tuple' },
+    node: aTuple([aRef('tree')]),
+    changed: found(tupleChanged, breaksEverywhere),
   },
   {
     container: 'an intersection',
     node: { type: 'allOf', items: [aRef('tree'), aString] },
-    shape: { kind: 'unproven', node: 'allOf' },
+    changed: found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere),
   },
 ];
 
-const containedRows: readonly Row[] = treeContainers.map(({ container, node, shape }) => ({
+const containedRows: readonly Row[] = treeContainers.map(({ container, node, changed }) => ({
   change: `changing a def a ref reaches inside ${container}`,
   from: node,
   to: node,
   fromDefs: { tree },
   toDefs: { tree: treeWithName },
-  found: [found(shape, breaksEverywhere)],
+  found: [changed],
 }));
+
+const treeNameAdded = found(nameAdded, acceptsLess, ['fields', 'name']);
+const childItems = ['fields', 'child', 'fields', 'children', 'items'];
+const inlineChild = anObject({
+  child: required(anObject({ children: required(anArray(aString)) })),
+});
 
 const refRows: readonly Row[] = [
   {
-    change: 'changing a def a ref names',
+    change: 'adding a field to a def a ref names',
     from: aRef('tree'),
     to: aRef('tree'),
-    fromDefs: { tree: tree },
+    fromDefs: { tree },
     toDefs: { tree: treeWithName },
-    found: [found(unproven, breaksEverywhere)],
+    found: [treeNameAdded],
   },
   {
     change: 'changing a def a ref reaches through another def',
     from: aRef('forest'),
     to: aRef('forest'),
-    fromDefs: {
-      forest: anObject({ trees: required({ type: 'array', items: aRef('tree') }) }),
-      tree: tree,
-    },
-    toDefs: {
-      forest: anObject({ trees: required({ type: 'array', items: aRef('tree') }) }),
-      tree: treeWithName,
-    },
-    found: [found(unproven, breaksEverywhere)],
+    fromDefs: { forest: anObject({ trees: required(anArray(aRef('tree'))) }), tree },
+    toDefs: { forest: anObject({ trees: required(anArray(aRef('tree'))) }), tree: treeWithName },
+    found: [found(nameAdded, acceptsLess, ['fields', 'trees', 'items', 'fields', 'name'])],
   },
   ...containedRows,
   {
-    change: 'pointing a ref at the other def of a mutual recursion, which reaches the same defs',
-    from: aRef('first'),
-    to: aRef('second'),
-    fromDefs: mutualDefs,
-    toDefs: mutualDefs,
-    found: [found(unproven, breaksEverywhere)],
+    change: 'making a def a ref names nullable',
+    from: aRef('leaf'),
+    to: aRef('leaf'),
+    fromDefs: { leaf },
+    toDefs: { leaf: aNullable(leaf) },
+    found: [found({ kind: 'nullability-added' }, guaranteesLess)],
   },
   {
-    change: 'making a def a ref names nullable',
+    change: 'making a recursive def nullable, which makes every ref to it nullable',
     from: aRef('tree'),
     to: aRef('tree'),
     fromDefs: { tree },
-    toDefs: { tree: { ...tree, nullable: true } },
-    found: [found(unproven, breaksEverywhere)],
+    toDefs: { tree: aNullable(tree) },
+    found: [
+      found({ kind: 'nullability-added' }, guaranteesLess),
+      found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items']),
+    ],
   },
   {
-    change: 'pointing a ref at another def',
+    change: 'making a ref nullable where its def is not',
     from: aRef('tree'),
-    to: aRef('branch'),
-    fromDefs: { tree: tree },
-    toDefs: { branch: tree },
-    found: [found(unproven, breaksEverywhere)],
+    to: aNullable(aRef('tree')),
+    fromDefs: { tree },
+    toDefs: { tree },
+    found: [found({ kind: 'nullability-added' }, guaranteesLess)],
   },
   {
-    change: 'replacing an inline schema with a ref',
-    from: anObject({
-      child: required(anObject({ children: required({ type: 'array', items: aString }) })),
-    }),
+    change: 'making a ref nullable where the cycle closes',
+    from: aRef('tree'),
+    to: aRef('tree'),
+    fromDefs: { tree },
+    toDefs: { tree: anObject({ children: required(anArray(aNullable(aRef('tree')))) }) },
+    found: [found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items'])],
+  },
+  {
+    change: 'replacing an inline schema with a ref, whose def is compared with it',
+    from: inlineChild,
     to: anObject({ child: required(aRef('tree')) }),
-    toDefs: { tree: tree },
-    found: [found(unproven, breaksEverywhere, ['fields', 'child'])],
+    toDefs: { tree },
+    found: [
+      found({ kind: 'type-changed', from: 'string', to: 'object' }, breaksEverywhere, childItems),
+    ],
   },
   {
-    change: 'changing a ref that is a discriminated union’s variant',
+    change: 'replacing a ref with an inline schema, whose def is compared with it',
+    from: anObject({ child: required(aRef('tree')) }),
+    to: inlineChild,
+    fromDefs: { tree },
+    found: [
+      found({ kind: 'type-changed', from: 'object', to: 'string' }, breaksEverywhere, childItems),
+    ],
+  },
+  {
+    change: 'changing a def used at two fields, once, at the first path in walk order',
+    from: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
+    to: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
+    fromDefs: { tree },
+    toDefs: { tree: treeWithName },
+    found: [found(nameAdded, acceptsLess, ['fields', 'first', 'fields', 'name'])],
+  },
+  {
+    change: 'replacing two uses of a def with separate, identical inline copies, at both fields',
+    from: anObject({ a: required(aRef('leaf')), b: required(aRef('leaf')) }),
+    to: anObject({ a: required(aLeafWithName()), b: required(aLeafWithName()) }),
+    fromDefs: { leaf },
+    found: [
+      found(nameAdded, acceptsLess, ['fields', 'a', 'fields', 'name']),
+      found(nameAdded, acceptsLess, ['fields', 'b', 'fields', 'name']),
+    ],
+  },
+  {
+    change: 'changing a def that is a discriminated union’s variant',
     from: aTagged('kind', { card: {} }),
     to: { ...aTagged('kind', {}), variants: { '"card"': aRefVariant('card') } },
-    toDefs: { card: anObject({ kind: required(aLiteral('card')) }) },
-    found: [found(unproven, breaksEverywhere, ['variants', '"card"'])],
+    toDefs: { card: anObject({ kind: required(aLiteral('card')), last4: required(aString) }) },
+    found: [found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])],
+  },
+  {
+    change: 'changing a def a discriminated union reaches again through its own variant',
+    from: aNodeTagged(),
+    to: aNodeTagged(),
+    fromDefs: { node: aNodeDef({}) },
+    toDefs: { node: aNodeDef({ label: required(aString) }) },
+    found: [found(nameAdded, acceptsLess, ['variants', '"node"', 'fields', 'label'])],
   },
 ];
+
+function aLeafWithName(): ObjectNode {
+  return anObject({ id: required(aString), name: required(aString) });
+}
 
 function aRefVariant(name: string): { readonly type: 'ref'; readonly name: string } {
   return { type: 'ref', name };
 }
 
+function aNodeTagged(): SchemaNode {
+  return { type: 'tagged', discriminator: 'kind', variants: { '"node"': aRefVariant('node') } };
+}
+
+function aNodeDef(extra: Readonly<Record<string, Field>>): ObjectNode {
+  const fields = { kind: required(aLiteral('node')), child: optional(aNodeTagged()), ...extra };
+  return anObject(fields);
+}
+
+function denseDefs(size: number, lastFields: Readonly<Record<string, Field>> = {}): Defs {
+  const names = Array.from({ length: size }, (_, index) => `def${index}`);
+  const fields = Object.fromEntries(names.map((name) => [name, required(aRef(name))]));
+  const defs = names.map((name, index) => {
+    const own = index === size - 1 ? { ...fields, ...lastFields } : fields;
+    return [name, anObject(own)];
+  });
+  return Object.fromEntries(defs);
+}
+
+const sprawl = anObject(
+  Object.fromEntries(
+    Array.from({ length: 20 }, (_, index) => [`child${index}`, required(aRef('sprawl'))]),
+  ),
+);
+
 describe('compatibilityReportOf, refs', () => {
   test.each(casesOf(refRows))('$change is $outcome in $place', expectRow);
+
+  test.each(places)(
+    'a change in a recursive def is found once, where the ref is first followed, in $name',
+    (place) => {
+      const report = reportOf(place, {
+        from: aRef('tree'),
+        to: aRef('tree'),
+        fromDefs: { tree },
+        toDefs: { tree: treeWithName },
+      });
+
+      expect(report.changes).toEqual([changeAt(place, treeNameAdded)]);
+    },
+  );
+
+  test('a cycle whose refs fall at different depths on each side ends and finds no Change', () => {
+    const shallow: Defs = { shallow: anObject({ x: required(aRef('shallow')) }) };
+    const deep: Defs = {
+      deep: anObject({ x: required(anObject({ x: required(aRef('deep')) })) }),
+    };
+
+    const report = reportOf(input, {
+      from: aRef('shallow'),
+      to: anObject({ x: required(aRef('deep')) }),
+      fromDefs: shallow,
+      toDefs: deep,
+    });
+
+    expect(report.changes).toEqual([]);
+  });
+
+  test('a def with twenty refs to itself is compared in one visit of each', () => {
+    const report = reportOf(input, {
+      from: aRef('sprawl'),
+      to: aRef('sprawl'),
+      fromDefs: { sprawl },
+      toDefs: { sprawl: anObject({ ...sprawl.fields, name: required(aString) }) },
+    });
+
+    expect(report.changes).toEqual([changeAt(input, treeNameAdded)]);
+  });
+
+  test('a dense set of mutually recursive defs, unchanged, is compared fast', () => {
+    const defs = denseDefs(12);
+
+    const report = reportOf(input, {
+      from: aRef('def0'),
+      to: aRef('def0'),
+      fromDefs: defs,
+      toDefs: defs,
+    });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
+
+  test('a dense set of mutually recursive defs with one change gives that one Change', () => {
+    const report = reportOf(input, {
+      from: aRef('def0'),
+      to: aRef('def0'),
+      fromDefs: denseDefs(12),
+      toDefs: denseDefs(12, { name: required(aString) }),
+    });
+
+    const path = ['fields', 'def1', 'fields', 'def10', 'fields', 'def11', 'fields', 'name'];
+    expect(report.changes).toEqual([changeAt(input, found(nameAdded, acceptsLess, path))]);
+  });
+
+  test.each(places)(
+    'pointing a ref at another def of the same shape is no Change in $name',
+    (place) => {
+      const defs: Defs = { tree, branch };
+
+      const report = reportOf(place, {
+        from: aRef('tree'),
+        to: aRef('branch'),
+        fromDefs: defs,
+        toDefs: defs,
+      });
+
+      expect(report.changes).toEqual([]);
+    },
+  );
+
+  test.each(places)('renaming a recursive def’s id is no Change in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('tree'),
+      to: aRef('branch'),
+      fromDefs: { tree },
+      toDefs: { branch },
+    });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+  });
+
+  test.each(places)(
+    'pointing a ref at the other def of a mutual recursion of the same shape is no Change in $name',
+    (place) => {
+      const report = reportOf(place, {
+        from: aRef('first'),
+        to: aRef('second'),
+        fromDefs: mutualDefs,
+        toDefs: mutualDefs,
+      });
+
+      expect(report.changes).toEqual([]);
+    },
+  );
+
+  test.each(places)('nullability moved from a ref to its def is no Change in $name', (place) => {
+    const report = reportOf(place, {
+      from: aNullable(aRef('leaf')),
+      to: aRef('leaf'),
+      fromDefs: { leaf },
+      toDefs: { leaf: aNullable(leaf) },
+    });
+
+    expect(report.changes).toEqual([]);
+  });
+
+  test.each(places)('an alias def on one side only is no Change in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('tree'),
+      to: aRef('alias'),
+      fromDefs: { tree },
+      toDefs: { alias: aRef('tree'), tree },
+    });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+  });
+
+  test.each(places)(
+    'renaming a def under a plain union is Breaking in every Position, as in $name',
+    (place) => {
+      const union = (name: string): SchemaNode => ({
+        type: 'union',
+        options: [aRef(name), aString],
+      });
+
+      const report = reportOf(place, {
+        from: union('leaf'),
+        to: union('person'),
+        fromDefs: { leaf },
+        toDefs: { person: leaf },
+      });
+
+      expect(report.changes).toEqual([
+        changeAt(place, found({ kind: 'union-changed' }, breaksEverywhere)),
+      ]);
+    },
+  );
+
+  test.each(places)('a ref whose def is missing on one side is unproven in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('leaf'),
+      to: aRef('ghost'),
+      fromDefs: { leaf },
+      toDefs: { leaf },
+    });
+
+    expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+  });
+
+  test.each(places)(
+    'the same ref whose def is missing on both sides is no Change in $name',
+    (place) => {
+      const report = reportOf(place, { from: aRef('ghost'), to: aRef('ghost') });
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    },
+  );
+
+  test.each(places)(
+    'an alias def that refs back to itself is no Change while it stays in $name',
+    (place) => {
+      const loop: Defs = { loop: aRef('loop') };
+
+      const report = reportOf(place, {
+        from: aRef('loop'),
+        to: aRef('loop'),
+        fromDefs: loop,
+        toDefs: loop,
+      });
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    },
+  );
+
+  test.each(places)('an alias cycle of two defs that stays is no Change in $name', (place) => {
+    const cycle: Defs = { a: aRef('b'), b: aRef('a') };
+
+    const report = reportOf(place, {
+      from: aRef('a'),
+      to: aRef('a'),
+      fromDefs: cycle,
+      toDefs: cycle,
+    });
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+  });
+
+  test.each(places)('two alias cycles through different defs are unproven in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('a'),
+      to: aRef('a'),
+      fromDefs: { a: aRef('b'), b: aRef('a') },
+      toDefs: { a: aRef('c'), c: aRef('a') },
+    });
+
+    expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+  });
+
+  test.each(places)(
+    'an alias def that refs back to itself is unproven once it turns nullable in $name',
+    (place) => {
+      const report = reportOf(place, {
+        from: aRef('loop'),
+        to: aRef('loop'),
+        fromDefs: { loop: aRef('loop') },
+        toDefs: { loop: aNullable(aRef('loop')) },
+      });
+
+      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+    },
+  );
+
+  test.each(places)(
+    'two different refs whose defs are both missing are unproven in $name',
+    (place) => {
+      const report = reportOf(place, { from: aRef('ghost'), to: aRef('phantom') });
+
+      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+    },
+  );
+
+  test.each(places)(
+    'an alias def that refs back to itself is unproven once one side changes in $name',
+    (place) => {
+      const report = reportOf(place, {
+        from: aRef('loop'),
+        to: aRef('loop'),
+        fromDefs: { loop: aRef('loop') },
+        toDefs: { loop: leaf },
+      });
+
+      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
+    },
+  );
+
+  test.each(places)(
+    'a variant that is a ref follows the field rules inside its def in $name',
+    (place) => {
+      const card = anObject({ kind: required(aLiteral('card')) });
+      const variants = { '"card"': aRefVariant('card') };
+      const tagged: SchemaNode = { type: 'tagged', discriminator: 'kind', variants };
+
+      const report = reportOf(place, {
+        from: tagged,
+        to: tagged,
+        fromDefs: { card },
+        toDefs: { card: anObject({ ...card.fields, last4: required(aString) }) },
+      });
+
+      expect(report.changes).toEqual([
+        changeAt(place, found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])),
+      ]);
+    },
+  );
+
+  test.each(places)(
+    'a variant that turns from inline to a ref of the same shape is no Change in $name',
+    (place) => {
+      const card = anObject({ kind: required(aLiteral('card')) });
+      const refVariants = { '"card"': aRefVariant('card') };
+
+      const report = reportOf(place, {
+        from: { type: 'tagged', discriminator: 'kind', variants: { '"card"': card } },
+        to: { type: 'tagged', discriminator: 'kind', variants: refVariants },
+        toDefs: { card },
+      });
+
+      expect(report.changes).toEqual([]);
+    },
+  );
 
   test.each(places)('a ref whose def is unchanged is no Change in $name', (place) => {
     const describedTree = { ...tree, description: 'A tree' };
