@@ -5,8 +5,11 @@ import {
   type ChangeSite,
   type ComparedReport,
   compatibilityReportOf,
+  type EndpointSnapshot,
   type PeerMove,
   type PublishedApplicationSnapshot,
+  type PublishedServiceSnapshot,
+  type ServiceSnapshot,
   versionBumpOf,
 } from '../internal/index.ts';
 
@@ -81,6 +84,75 @@ function ordersDependency(against: string): ApplicationSnapshot['dependencies'][
 }
 
 const unmoved: PeerMove = peersMoving('^4.1.0', '^4.1.0');
+
+const orderById = 'GET /orders/{}';
+const latestOrder = 'GET /orders/latest';
+const serviceHeading = {
+  format: 1,
+  kind: 'service',
+  name: 'orders-service',
+  generator: '@cf-loom/cli@2.1.0',
+  definitions: {},
+  standardRejections: {
+    invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
+    notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
+    notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  },
+  defs: {},
+  guards: {},
+  codes: {},
+  events: {},
+  commands: {},
+  subscriptions: {},
+  dependencies: {},
+} as const;
+
+const idParams: EndpointSnapshot['input']['params'] = {
+  type: 'object',
+  mode: 'strict',
+  fields: { id: { required: true, schema: { type: 'string' } } },
+};
+
+function anEndpointOf(
+  visibility: EndpointSnapshot['visibility'],
+  fields: Partial<EndpointSnapshot> = {},
+): EndpointSnapshot {
+  return {
+    name: 'latestOrder',
+    group: 'orders',
+    visibility,
+    lifecycle: 'active',
+    description: 'An Endpoint',
+    params: [],
+    guards: [],
+    input: { params: null, query: null, headers: null, body: null },
+    success: { status: 200, headers: null, body: null },
+    rejections: [],
+    ...fields,
+  };
+}
+
+function reportOfShadowing(visibility: EndpointSnapshot['visibility']): ComparedReport {
+  const getOrder = anEndpointOf(visibility, {
+    name: 'getOrder',
+    params: ['id'],
+    input: { params: idParams, query: null, headers: null, body: null },
+  });
+  const baseline: PublishedServiceSnapshot = {
+    ...serviceHeading,
+    version: '3.4.0',
+    endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
+  };
+  const proposed: ServiceSnapshot = {
+    ...serviceHeading,
+    endpoints: { [orderById]: getOrder, [latestOrder]: anEndpointOf(visibility) },
+  };
+  const report = compatibilityReportOf(baseline, proposed, []);
+  if (report.kind !== 'compared') {
+    throw new Error('the Baseline was given, so the report must have compared');
+  }
+  return report;
+}
 
 describe('versionBumpOf', () => {
   test('a Breaking Change on a Public or Internal Element bumps major', () => {
@@ -169,6 +241,22 @@ describe('versionBumpOf', () => {
     const bump = versionBumpOf(aReport([bodyChange]), unmoved);
 
     expect(bump).toBe('patch');
+  });
+
+  test('shadowing between Private Endpoints bumps patch', () => {
+    const report = reportOfShadowing('private');
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a shadowed Public Endpoint bumps major', () => {
+    const report = reportOfShadowing('public');
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('major');
   });
 
   test('narrowing Public to Private bumps major: the wider Visibility decides', () => {

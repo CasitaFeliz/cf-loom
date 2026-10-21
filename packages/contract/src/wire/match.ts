@@ -24,18 +24,31 @@ export function matchOf<Matched extends Matchable>(
   if (!texts.every(isSegmentText)) {
     return { kind: 'none' };
   }
-  let best: Matched | undefined;
-  for (const candidate of declared) {
-    if (candidate.method === request.method && isMatchedBy(candidate.segments, texts)) {
-      best = best === undefined || beats(candidate.segments, best.segments) ? candidate : best;
-    }
-  }
+  const best = matchedOf(declared, request.method, texts);
   if (best === undefined) {
     return { kind: 'none' };
   }
   const params = paramsOf(best.segments, texts);
   const source = { params, query: url.searchParams, headers: request.headers };
   return { kind: 'matched', matched: best, source };
+}
+
+/**
+ * The declared Endpoint a method and a path's decoded segments match exactly: among several, the
+ * one with a literal at the first segment where they differ, by routing precedence.
+ */
+export function matchedOf<Matched extends Matchable>(
+  declared: readonly Matched[],
+  method: string,
+  texts: readonly string[],
+): Matched | undefined {
+  let best: Matched | undefined;
+  for (const candidate of declared) {
+    if (candidate.method === method && isMatchedBy(candidate.segments, texts)) {
+      best = best === undefined || beats(candidate.segments, best.segments) ? candidate : best;
+    }
+  }
+  return best;
 }
 
 /** The decoded segments of a request path; the root has none. */

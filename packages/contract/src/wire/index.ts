@@ -22,7 +22,7 @@ export {
   rejectionBodyReaderOf,
 } from './invalid-input.ts';
 export type { Matchable } from './match.ts';
-export { matchOf } from './match.ts';
+export { matchedOf, matchOf } from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,
