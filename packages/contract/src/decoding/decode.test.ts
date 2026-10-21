@@ -458,6 +458,14 @@ describe('decodeSnapshot', () => {
       ]);
     });
 
+    test('an alias def of a recursive def decodes', () => {
+      const published = aService({ defs: { alias: aRef('tree'), tree: treeDef } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
     test('the format-1 fixture decodes and keeps every value it holds', () => {
       const result = decodeSnapshot(formatOneFixture);
 
@@ -1109,6 +1117,43 @@ describe('decodeSnapshot', () => {
 
       expect(attached).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'guards', 0, 'guard']));
       expect(listed).toEqual(malformedAt(['guards', 'admin', 'guards', 0]));
+    });
+
+    describe('an alias def whose refs lead back to it', () => {
+      test.each([
+        ['a ref', aRef('node')],
+        ['a nullable ref', { ...aRef('node'), nullable: true }],
+      ])('a def that is %s to itself is malformed at the def', (_, def) => {
+        const result = serviceWith({ defs: { node: def } });
+
+        expect(result).toEqual(
+          malformedAt(['defs', 'node'], 'is an alias def whose refs lead back to it'),
+        );
+      });
+
+      test('two defs that are refs to each other are malformed at the first', () => {
+        const result = serviceWith({ defs: { a: aRef('b'), b: aRef('a') } });
+
+        expect(result).toEqual(malformedAt(['defs', 'a']));
+      });
+
+      test('a def that only reaches the cycle is skipped, and the first def on it is malformed', () => {
+        const result = serviceWith({ defs: { c: aRef('a'), a: aRef('b'), b: aRef('a') } });
+
+        expect(result).toEqual(malformedAt(['defs', 'a']));
+      });
+
+      test('a Definitions Package’s def that is a ref to itself is malformed at the def', () => {
+        const result = decodedFrom({ ...aDefinitions(), defs: { node: aRef('node') } });
+
+        expect(result).toEqual(malformedAt(['defs', 'node']));
+      });
+
+      test('a def naming a def the Snapshot does not hold is reported before the cycle', () => {
+        const result = serviceWith({ defs: { a: aRef('a'), b: aRef('missing') } });
+
+        expect(result).toEqual(malformedAt(['defs', 'b']));
+      });
     });
 
     test('only the first problem is reported, with its path', () => {

@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import { aliasCycleOf } from './children.ts';
 import type { SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedDuplicateId } from './not-allowed.ts';
 import { type LocatedSchema, type Walked, walked } from './walked.ts';
@@ -143,10 +144,40 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
     return notAllowed(ancestor.at, refusedDuplicateId(ancestor.id));
   }
   state.schemaById.set(ancestor.id, ancestor.schema);
+  const aliasCycle = aliasCycleWritten(state, ancestor.id, node.value);
+  if (aliasCycle !== undefined) {
+    return refuseAliasCycle(state, ancestor, aliasCycle);
+  }
   state.nameBySchema.set(ancestor.schema, ancestor.id);
   state.defById.set(ancestor.id, node.value);
   state.openDefs.push({ schema: ancestor.schema, index: ancestor.index, low: ancestor.low });
   return walked({ type: 'ref', name: ancestor.id });
+}
+
+/** The ids of the alias defs, the one being written first, whose `ref`s come back to it. */
+function aliasCycleWritten(
+  state: State,
+  id: string,
+  node: SchemaNode,
+): readonly string[] | undefined {
+  if (node.type !== 'ref') {
+    return undefined;
+  }
+  return aliasCycleOf(id, node, Object.fromEntries(state.defById));
+}
+
+/** Drops the defs of a cycle of lazies alone, so every use of one reports the one failure. */
+function refuseAliasCycle(state: State, ancestor: Ancestor, ids: readonly string[]): Walked {
+  const failure = notAllowed(ancestor.at, refused.lazyCycle);
+  for (const id of ids) {
+    const schema = state.schemaById.get(id);
+    if (schema !== undefined) {
+      state.defById.delete(id);
+      state.nameBySchema.delete(schema);
+      state.reportedBySchema.set(schema, failure);
+    }
+  }
+  return failure;
 }
 
 function hasId(ancestor: Ancestor): boolean {

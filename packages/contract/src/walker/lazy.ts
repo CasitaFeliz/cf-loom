@@ -10,11 +10,15 @@ export function innerOfOneLazy(schema: core.$ZodLazy): core.$ZodType {
 
 /**
  * The schema a `z.lazy()` stands for, through any number of them, for looking up a shape only:
- * it skips the ids and annotations of the lazies on the way.
+ * it skips the ids and annotations of the lazies on the way, and stops at a lazy the chain meets
+ * again, which stands for no schema.
  */
 export function innerOfLazy(schema: core.$ZodType): core.$ZodType {
-  if (schema._zod.def.type !== 'lazy') {
-    return schema;
+  const met = new Set<core.$ZodType>();
+  let current = schema;
+  while (current._zod.def.type === 'lazy' && !met.has(current)) {
+    met.add(current);
+    current = innerOfOneLazy(current as core.$ZodLazy);
   }
-  return innerOfLazy(innerOfOneLazy(schema as core.$ZodLazy));
+  return current;
 }

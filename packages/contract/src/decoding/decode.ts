@@ -28,8 +28,8 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<PublishedSnapshot>>>
 
 /**
  * A `snapshot.json` from the registry, decoded by the format it names into the published Snapshot
- * in canonical order; anything its format does not define, or a name it uses and does not hold, is
- * refused rather than read as far as it goes.
+ * in canonical order; anything its format does not define, a name it uses and does not hold, or an
+ * alias def that leads back to itself, is refused rather than read as far as it goes.
  */
 export function decodeSnapshot(text: string): DecodedSnapshot {
   const parsed = parsedJsonOf(text);

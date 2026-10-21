@@ -110,6 +110,126 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  describe('a cycle through z.lazy() alone', () => {
+    const lazyCycle = { construct: 'a cycle through z.lazy() alone, which zod cannot parse' };
+    const nullable: z.ZodType = z.lazy(() => nullable.nullable()).meta({ id: 'nullable' });
+    const described: z.ZodType = z
+      .lazy(() => described)
+      .meta({ id: 'described', description: 'Itself' });
+
+    test('a z.lazy() of itself with an id fails where the walk enters it and writes no def', () => {
+      const node: z.ZodType = z.lazy(() => node).meta({ id: 'node' });
+
+      const walked = walkBody(node);
+
+      expect(walked).toEqual({
+        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        defs: {},
+      });
+    });
+
+    test.each([
+      ['nullable', nullable],
+      ['described', described],
+    ])('a %s z.lazy() of itself with an id fails the same', (_name, schema) => {
+      const walked = walkBody(schema);
+
+      expect(walked).toEqual({
+        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        defs: {},
+      });
+    });
+
+    describe('two ids that are only lazies of each other', () => {
+      const first: z.ZodType = z.lazy(() => second).meta({ id: 'first' });
+      const second: z.ZodType = z.lazy(() => first).meta({ id: 'second' });
+
+      test.each([
+        ['first', first],
+        ['second', second],
+      ])('entered at the %s fail where the walk enters them and write no def', (_name, schema) => {
+        const walked = walkBody(schema);
+
+        expect(walked).toEqual({
+          located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+          defs: {},
+        });
+      });
+
+      test('used at two locations, the other id of the cycle is the same failure at both', () => {
+        const walked = walkSchemas(
+          [
+            { at: ['body'], schema: first },
+            { at: ['success'], schema: second },
+          ],
+          () => undefined,
+        );
+
+        const failure = { at: ['body'], ...lazyCycle };
+        expect(walked).toEqual({
+          located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+          defs: {},
+        });
+      });
+    });
+
+    test('a cycle entered at a lazy with no id fails the same', () => {
+      const entry: z.ZodType = z.lazy(() => named);
+      const named: z.ZodType = z.lazy(() => entry).meta({ id: 'named' });
+
+      const walked = walkBody(entry);
+
+      expect(walked).toEqual({
+        located: [refusedAt(['body'], [{ at: ['body'], ...lazyCycle }])],
+        defs: {},
+      });
+    });
+
+    test('a cycle used at two locations is the same failure at both', () => {
+      const node: z.ZodType = z.lazy(() => node).meta({ id: 'node' });
+
+      const walked = walkSchemas(
+        [
+          { at: ['body'], schema: node },
+          { at: ['success'], schema: z.array(node) },
+        ],
+        () => undefined,
+      );
+
+      const failure = { at: ['body'], ...lazyCycle };
+      expect(walked).toEqual({
+        located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+        defs: {},
+      });
+      const [first, second] = walked.located;
+      const failuresOf = (location: typeof first) =>
+        location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
+      expect(failuresOf(first)[0]).toBe(failuresOf(second)[0]);
+    });
+
+    test('a z.lazy() of itself as a discriminated union variant fails and does not throw', () => {
+      const variant: z.ZodType = z.lazy(() => variant);
+      const union = z.discriminatedUnion('kind', [variant as unknown as z.ZodObject]);
+
+      const walked = walkBody(union);
+
+      expect(walked).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              {
+                at: ['body', 'variants', 0],
+                construct: 'a discriminated union variant that is not an object',
+              },
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+  });
+
   test('a cyclic schema used at two locations is one def', () => {
     const category = z
       .object({
