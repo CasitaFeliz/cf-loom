@@ -2,14 +2,8 @@ import type { DefinitionsSnapshot, PublishedDefinitionsSnapshot } from '../snaps
 import type { SchemaNode } from '../walker/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
-import type { ChangeSite, Difference } from './report.ts';
+import type { Difference, SiteDifferences } from './report.ts';
 import { schemaDifferencesOf } from './schemas.ts';
-
-/** A shared schema by name, with what differs in it. */
-export type SharedSchemaDifferences = {
-  readonly site: ChangeSite;
-  readonly differences: readonly Difference[];
-};
 
 /**
  * A Definitions Package's shared schemas paired by name, in code point order: added, removed, or
@@ -18,7 +12,7 @@ export type SharedSchemaDifferences = {
 export function sharedSchemaDifferencesOf(
   baseline: PublishedDefinitionsSnapshot,
   proposed: DefinitionsSnapshot,
-): readonly SharedSchemaDifferences[] {
+): readonly SiteDifferences[] {
   const defs = bothDefsOf(baseline, proposed);
   return counterpartsOf(baseline.schemas, proposed.schemas).map((schema) => ({
     site: { kind: 'shared-schema', name: schema.key },

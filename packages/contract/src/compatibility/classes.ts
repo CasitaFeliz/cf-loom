@@ -4,7 +4,7 @@ import type { ChangeSite, Classification, Difference, EndpointPosition } from '.
 
 /**
  * The class COMPATIBILITY.md gives a difference at a site, and whether it needs a Breaking Change
- * Approval: an Endpoint's and a shared schema's does, a Message's is gated by its conditions instead.
+ * Approval: every site's does but a Message's, which is gated by its conditions instead.
  */
 export function classificationOf(site: ChangeSite, difference: Difference): Classification {
   switch (difference.kind) {
@@ -70,7 +70,9 @@ function bodyRemovedClassOf(site: ChangeSite, position: EndpointPosition): Class
 function approvalOf(site: ChangeSite): 'needed' | 'not-needed' {
   switch (site.kind) {
     case 'endpoint':
+    case 'code':
     case 'shared-schema':
+    case 'guard':
       return 'needed';
     case 'event':
     case 'command':

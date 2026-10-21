@@ -31,10 +31,13 @@ export function siteVisibilityOf(pair: Pair<Visible>): Visibility {
     case 'dropped':
       return pair.baseline.visibility;
     case 'kept':
-      return widthOf(pair.proposed.visibility) > widthOf(pair.baseline.visibility)
-        ? pair.proposed.visibility
-        : pair.baseline.visibility;
+      return widerOf(pair.baseline.visibility, pair.proposed.visibility);
   }
+}
+
+/** The wider of two Visibilities, the one that reaches further. */
+export function widerOf(left: Visibility, right: Visibility): Visibility {
+  return widthOf(right) > widthOf(left) ? right : left;
 }
 
 function widthOf(visibility: Visibility): number {

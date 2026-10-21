@@ -3,11 +3,15 @@ import {
   type ApplicationSnapshot,
   type Change,
   type ChangeSite,
+  type CodeSnapshot,
   type ComparedReport,
   compatibilityReportOf,
+  type DefinitionsSnapshot,
   type EndpointSnapshot,
+  type GuardSnapshot,
   type PeerMove,
   type PublishedApplicationSnapshot,
+  type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
   versionBumpOf,
@@ -154,6 +158,72 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
   return report;
 }
 
+const orderLocked = 'ORDER_LOCKED';
+
+function aCode(status: number): CodeSnapshot {
+  return { origin: 'local', status, message: 'The order is locked', body: null, removed: false };
+}
+
+function aGuard(): GuardSnapshot {
+  return {
+    origin: 'local',
+    description: 'Authenticates the Caller',
+    guards: [],
+    qualifier: null,
+    demands: { headers: null, query: null },
+    context: null,
+    rejections: [],
+  };
+}
+
+function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): ComparedReport {
+  const endpoint = anEndpointOf(visibility, { rejections: [orderLocked] });
+  const baseline: PublishedServiceSnapshot = {
+    ...serviceHeading,
+    version: '3.4.0',
+    endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
+    codes: { [orderLocked]: aCode(409) },
+  };
+  const proposed: ServiceSnapshot = {
+    ...serviceHeading,
+    endpoints: { [latestOrder]: endpoint },
+    codes: { [orderLocked]: aCode(422) },
+  };
+  return comparedReportOf(baseline, proposed);
+}
+
+function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSnapshot {
+  return {
+    format: 1,
+    kind: 'definitions',
+    name: '@org/definitions',
+    generator: '@cf-loom/cli@2.1.0',
+    standardRejections: serviceHeading.standardRejections,
+    defs: {},
+    schemas: {},
+    guards: {},
+    codes: {},
+    ...fields,
+  };
+}
+
+function aBaselineDefinitions(
+  fields: Partial<PublishedDefinitionsSnapshot> = {},
+): PublishedDefinitionsSnapshot {
+  return { ...aDefinitions(), version: '4.2.0', ...fields };
+}
+
+function comparedReportOf(
+  baseline: PublishedServiceSnapshot | PublishedDefinitionsSnapshot,
+  proposed: ServiceSnapshot | DefinitionsSnapshot,
+): ComparedReport {
+  const report = compatibilityReportOf(baseline, proposed, []);
+  if (report.kind !== 'compared') {
+    throw new Error('the Baseline was given, so the report must have compared');
+  }
+  return report;
+}
+
 describe('versionBumpOf', () => {
   test('a Breaking Change on a Public or Internal Element bumps major', () => {
     const publicBreaking = aReport([aBreakingChange(publicEndpoint)]);
@@ -223,6 +293,39 @@ describe('versionBumpOf', () => {
     const bump = versionBumpOf(aReport([anAdditiveChange(sharedSchema)]), unmoved);
 
     expect(bump).toBe('minor');
+  });
+
+  test('a Breaking Change on a code only Private Endpoints answer bumps patch', () => {
+    const report = reportOfCodeStatusChange('private');
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a Breaking Change on a code a Public or Internal Endpoint answers bumps major', () => {
+    const publicReport = reportOfCodeStatusChange('public');
+    const internalReport = reportOfCodeStatusChange('internal');
+
+    const bumps = [publicReport, internalReport].map((report) => versionBumpOf(report, unmoved));
+
+    expect(bumps).toEqual(['major', 'major']);
+  });
+
+  test('a Breaking Change on a Definitions Package’s Guard bumps major', () => {
+    const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
+
+    const report = comparedReportOf(baseline, aDefinitions());
+
+    expect(versionBumpOf(report, unmoved)).toBe('major');
+  });
+
+  test('an Additive Change on a Definitions Package’s code bumps minor', () => {
+    const proposed = aDefinitions({ codes: { [orderLocked]: aCode(409) } });
+
+    const report = comparedReportOf(aBaselineDefinitions(), proposed);
+
+    expect(versionBumpOf(report, unmoved)).toBe('minor');
   });
 
   test('a Breaking body Change on a Private Endpoint bumps patch', () => {

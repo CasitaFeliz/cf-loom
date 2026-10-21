@@ -215,7 +215,7 @@ The comparison of a Contract or a Definitions Package against its Baseline that 
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing a Definitions Package's shared schema, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
+A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing a Definitions Package's shared schema, Guard or Rejection, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:

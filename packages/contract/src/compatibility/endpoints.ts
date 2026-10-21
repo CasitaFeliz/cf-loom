@@ -1,6 +1,6 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
-import { counterpartsOf } from './counterparts.ts';
+import { answeredDifferencesOf, statusDifferencesOf } from './codes.ts';
 import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
@@ -54,38 +54,9 @@ function successDifferencesOf(
 ): readonly Difference[] {
   const headers = { baseline: baseline.headers, proposed: proposed.headers };
   const body = { baseline: baseline.body, proposed: proposed.body };
-  const status: Difference[] =
-    baseline.status === proposed.status
-      ? []
-      : [{ kind: 'status-changed', from: baseline.status, to: proposed.status }];
   return [
-    ...status,
+    ...statusDifferencesOf(baseline.status, proposed.status),
     ...textPartDifferencesOf(headers, defs, { position: 'success', at: ['success', 'headers'] }),
     ...bodyDifferencesOf(body, defs, { position: 'success', at: ['success', 'body'] }),
   ];
-}
-
-/** The codes an Endpoint answers, added and removed: codes are open for Callers, so each is Additive. */
-function answeredDifferencesOf(
-  baseline: readonly string[],
-  proposed: readonly string[],
-): readonly Difference[] {
-  const differences: Difference[] = [];
-  for (const code of counterpartsOf(byCodeOf(baseline), byCodeOf(proposed))) {
-    switch (code.kind) {
-      case 'added':
-        differences.push({ kind: 'rejection-added', code: code.key });
-        break;
-      case 'removed':
-        differences.push({ kind: 'rejection-removed', code: code.key });
-        break;
-      case 'kept':
-        break;
-    }
-  }
-  return differences;
-}
-
-function byCodeOf(codes: readonly string[]): Readonly<Record<string, string>> {
-  return Object.fromEntries(codes.map((code) => [code, code]));
 }
