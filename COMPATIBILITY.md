@@ -8,10 +8,10 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 - The Snapshot covers all three Visibilities and resolves every imported Guard and schema from its Definitions Package, so adopting a new Definitions Package version shows up as a change on the Elements that use it.
 - Each difference is a Breaking, Additive or Neutral Change. When the tooling cannot prove a change compatible, it is Breaking. There is no warning level.
 - The types of `@cf-loom/contract` refuse what TypeScript can state exactly, and `generate` repeats every rule the types refuse, since a cast, or a list or path typed wider than a literal, skips them; `generate` fails on every other rule that needs no Baseline, reporting them all at once; `check` adds only the rules that compare with the Baseline or the dependency graph. A declaration never throws.
-- Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The one exception is renaming an Endpoint (see [Elements](#elements)).
+- Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The exceptions are renaming an Endpoint (see [Elements](#elements)), and removing a Definitions Package's shared schema, since Services import it by name.
 - Additive guarantees that what is already deployed keeps working against the new version, not that a Consumer built on the new version works against an older Release. The Input and Success rules rely on this, so a Contract Package version is published when a Release implementing it is deployed; a Release whose Handlers are stubs counts (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README). How the publish is wired into the deploy is the organization's.
 - With no Baseline, `check` has nothing to compare, so only what `generate` enforces applies (such as [Not allowed in a Contract](#not-allowed-in-a-contract)); the package's first version that is not a prerelease is 1.0.0.
-- A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no position until an Element uses it, so each is judged in all three positions and takes the strongest class; a Guard's demands are judged as Input, its Context, its `guards` and its `qualifier` are Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements, and its `generate` fails until its Endpoints list every Guard an adopted Guard now names and attach each such Guard with a Qualifier its `qualifier` accepts.
+- A Definitions Package is checked against its own Baseline with the same rules. A shared schema has no Position until an Element uses it, so each is judged in all three Positions and takes the strongest class; adding a shared schema is Additive, and removing one is Breaking; a Guard's demands are judged as Input, its Context, its `guards` and its `qualifier` are Neutral, and its Rejections follow the Rejection rules. A Service is affected only when it adopts the new version; its own Compatibility Check then judges the change on its Elements, and its `generate` fails until its Endpoints list every Guard an adopted Guard now names and attach each such Guard with a Qualifier its `qualifier` accepts.
 
 ### The Baseline
 
@@ -25,7 +25,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 | Additive | minor |
 | Neutral, or changes on Private Elements only | patch |
 
-Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch; the peer rule below still applies.
+Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch; the peer rule below still applies. A Definitions Package has no Elements: its version follows the table, every Change to it counted as on a Public Element, since the Services that import it may use all of it.
 
 The version also protects Consumers' installs. The Contract Package's peers are `zod` and `@cf-loom/contract`, and their ranges are compared with the Baseline's, read from the registry's package metadata: a peer moving to a new major publishes a major even when the Snapshot did not change, so a Consumer still on the old major never installs it by accident, and that major needs no Breaking Change Approval, since it is packaging, not a Breaking Change. A new major is read as a caret range reads it: `^4.1.0` to `^5.0.0` is one, and so is `^0.1.0` to `^0.2.0`, while `^0.1.0` to `^0.1.5` is not; a range that is not a caret on a semantic version counts as one, since no overlap can be proven. Any other change to a peer range with an unchanged Snapshot, a peer added or dropped included, publishes a minor. A Dependency declared against a newer version of its Provider, or a newer Definitions Package version that changes no shape, changes the Snapshot (see [Canonical form](SNAPSHOT.md#canonical-form) in SNAPSHOT.md) and bumps patch. When both the Snapshot and a peer range changed, the bump is the highest of the Snapshot's class and the peer rule. When neither the Snapshot's hash nor the peer ranges changed, `publish` does nothing unless `--force` is given.
 
@@ -53,7 +53,7 @@ The version also protects Consumers' installs. The Contract Package's peers are 
 
 ### Fields
 
-Every shape is read in one of three positions:
+Every shape is read in one of three Positions:
 
 - **Input**: the Caller writes, the Service reads. Breaking is whatever makes the Service accept less.
 - **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
@@ -76,7 +76,7 @@ Readers of a Read shape (a Success, a Rejection body or a Message body) ignore f
 
 ### Enums, literals and unions
 
-An Open Enum gives its readers a type with an Unknown case, so they must handle values they do not know. Its writers' type only admits the declared values. Openness only matters to readers that do not control the schema, Callers and Subscribers: in Input the Service is the reader and validates the declared values only, so openness has no effect there. Closed enum → Open Enum is Breaking for readers even though it changes no value: it is what lets values be added later as Additive Changes, which readers deployed with the closed enum would fail on.
+An Open Enum gives its readers a type with an Unknown case, so they must handle values they do not know. Its writers' type only admits the declared values. Openness only matters to readers that do not control the schema, Callers and Subscribers: in Input the Service is the reader and validates the declared values only, so openness has no effect there. Closed enum → Open Enum is Breaking for readers even though it changes no value: it is what lets values be added later as Additive Changes, which readers deployed with the closed enum would fail on. When one change both adds values and opens or closes an enum, the values added are judged by the Baseline's openness, which its deployed readers hold.
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -95,7 +95,7 @@ An Open Enum gives its readers a type with an Unknown case, so they must handle 
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md). Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
+A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is compared as a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
 
 ### Constraints
 
@@ -109,7 +109,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Records, arrays, tuples, intersections, recursion, opaque data
 
-- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)); removing a key is Breaking in every position (see [Fields](#fields)).
+- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)); removing a key is Breaking in every Position (see [Fields](#fields)).
 - A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
 - An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
 - A recursive schema is compared by following its `ref`s (see [Recursion](SNAPSHOT.md#recursion)).

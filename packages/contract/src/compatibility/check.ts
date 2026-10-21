@@ -1,11 +1,15 @@
 import {
+  type DefinitionsSnapshot,
   hashedTextOf,
+  type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
   type ServiceSnapshot,
   type Snapshot,
 } from '../snapshot/index.ts';
+import { endpointBodyDifferencesOf, messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
+import { bothDefsOf } from './findings.ts';
 import { type DependencyGraph, dependenciesOn } from './graph.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { publishedSnapshotOf } from './merge.ts';
@@ -13,11 +17,13 @@ import { pairsOf } from './pairs.ts';
 import { presenceDifferenceOf } from './presence.ts';
 import { renameDifferenceOf } from './renames.ts';
 import type { Change, ChangeSite, CompatibilityReport, Difference } from './report.ts';
+import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
 /**
  * The Compatibility Check of a declared Snapshot against its Baseline: every difference on its
- * Elements classified, with the Dependencies the graph holds on what it renames or retires.
+ * Elements and their bodies, or on a Definitions Package's shared schemas, classified, with the
+ * Dependencies the graph holds on what it renames or retires.
  */
 export function compatibilityReportOf(
   baseline: PublishedSnapshot | undefined,
@@ -30,25 +36,38 @@ export function compatibilityReportOf(
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
   return {
     kind: 'compared',
-    changes: elementChangesOf(baseline, proposed, graph),
+    changes: changesOf(baseline, proposed, graph),
     hashChanged: hashedTextOf(merged) !== hashedTextOf(baseline),
   };
 }
 
-/** A Definitions Package has no Elements, and an Application only Dependencies: neither has an Element Change. */
-function elementChangesOf(
+/** An Application holds only Dependencies, so it has no Change to judge. */
+function changesOf(
   baseline: PublishedSnapshot,
   proposed: Snapshot,
   graph: DependencyGraph,
 ): readonly Change[] {
-  if (baseline.kind !== 'service' || proposed.kind !== 'service') {
-    return [];
+  if (baseline.kind === 'service' && proposed.kind === 'service') {
+    return [
+      ...endpointChangesOf(baseline, proposed, graph),
+      ...eventChangesOf(baseline, proposed, graph),
+      ...commandChangesOf(baseline, proposed),
+    ];
   }
-  return [
-    ...endpointChangesOf(baseline, proposed, graph),
-    ...eventChangesOf(baseline, proposed, graph),
-    ...commandChangesOf(baseline, proposed),
-  ];
+  if (baseline.kind === 'definitions' && proposed.kind === 'definitions') {
+    return sharedSchemaChangesOf(baseline, proposed);
+  }
+  return [];
+}
+
+/** A Definitions Package has no Elements: its shared schemas are what its Changes are on. */
+function sharedSchemaChangesOf(
+  baseline: PublishedDefinitionsSnapshot,
+  proposed: DefinitionsSnapshot,
+): readonly Change[] {
+  return sharedSchemaDifferencesOf(baseline, proposed).flatMap(({ site, differences }) =>
+    changesAt(site, differences),
+  );
 }
 
 function endpointChangesOf(
@@ -58,6 +77,7 @@ function endpointChangesOf(
 ): readonly Change[] {
   const dependents = (identity: string) =>
     dependenciesOn(graph, baseline.name, { kind: 'endpoint', identity });
+  const defs = bothDefsOf(baseline, proposed);
   const changes: Change[] = [];
   for (const pair of pairsOf(baseline.endpoints, proposed.endpoints)) {
     const site: ChangeSite = {
@@ -71,6 +91,7 @@ function endpointChangesOf(
         lifecycleDifferenceOf(pair, dependents),
         visibilityDifferenceOf(pair),
         renameDifferenceOf(pair, dependents),
+        ...endpointBodyDifferencesOf(pair, defs),
       ]),
     );
   }
@@ -84,6 +105,7 @@ function eventChangesOf(
 ): readonly Change[] {
   const dependents = (identity: string) =>
     dependenciesOn(graph, baseline.name, { kind: 'event', identity });
+  const defs = bothDefsOf(baseline, proposed);
   const changes: Change[] = [];
   for (const pair of pairsOf(baseline.events, proposed.events)) {
     const site: ChangeSite = {
@@ -96,6 +118,7 @@ function eventChangesOf(
         presenceDifferenceOf(pair),
         lifecycleDifferenceOf(pair, dependents),
         visibilityDifferenceOf(pair),
+        ...messageBodyDifferencesOf(pair, defs),
       ]),
     );
   }
@@ -108,11 +131,16 @@ function commandChangesOf(
   proposed: ServiceSnapshot,
 ): readonly Change[] {
   const dependents = () => [];
+  const defs = bothDefsOf(baseline, proposed);
   const changes: Change[] = [];
   for (const pair of pairsOf(baseline.commands, proposed.commands)) {
     const site: ChangeSite = { kind: 'command', identity: pair.identity };
     changes.push(
-      ...changesAt(site, [presenceDifferenceOf(pair), lifecycleDifferenceOf(pair, dependents)]),
+      ...changesAt(site, [
+        presenceDifferenceOf(pair),
+        lifecycleDifferenceOf(pair, dependents),
+        ...messageBodyDifferencesOf(pair, defs),
+      ]),
     );
   }
   return changes;

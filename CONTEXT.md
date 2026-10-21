@@ -206,12 +206,16 @@ _Avoid_: loose schema, consumer schema
 A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection body or a Message body. Every object in it is open to its readers.
 _Avoid_: output, response, payload
 
+**Position**:
+Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it.
+_Avoid_: direction, side, context (that is a Guard's)
+
 **Compatibility Check**:
 The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the one exception is in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
+A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing a Definitions Package's shared schema, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:

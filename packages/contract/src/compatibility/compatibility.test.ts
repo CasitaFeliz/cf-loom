@@ -156,6 +156,10 @@ function changesOf(
   return report.changes;
 }
 
+function identityOf(site: ChangeSite): string {
+  return site.kind === 'shared-schema' ? site.name : site.identity;
+}
+
 type Element = {
   readonly name: string;
   readonly site: ChangeSite;
@@ -348,7 +352,7 @@ describe('compatibilityReportOf, presence', () => {
 
     expect(
       changes.map(({ site, difference, class: changeClass }) => [
-        site.identity,
+        identityOf(site),
         difference.kind,
         changeClass,
       ]),
@@ -706,7 +710,7 @@ describe('compatibilityReportOf, the report', () => {
 
     const changes = changesOf(aBaseline(), proposed);
 
-    expect(changes.map(({ site }) => site.identity)).toEqual([
+    expect(changes.map(({ site }) => identityOf(site))).toEqual([
       'GET /orders/{}',
       'POST /orders',
       'OrderCancelled@1',
