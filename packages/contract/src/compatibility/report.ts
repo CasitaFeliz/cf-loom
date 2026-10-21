@@ -101,10 +101,10 @@ export type ShapeDifference =
   | { readonly kind: 'rest-removed' }
   /**
    * A change no rule proves compatible, so Breaking in every Position: a tuple's items or an
-   * intersection that is not of objects, under the plain-union rule, a `ref` that resolves to no
-   * schema, or a path param that either Snapshot holds no schema for.
+   * intersection that is not of objects, under the plain-union rule, or a path param that either
+   * Snapshot holds no schema for.
    */
-  | { readonly kind: 'unproven'; readonly node: 'tuple' | 'allOf' | 'ref' | 'param' };
+  | { readonly kind: 'unproven'; readonly node: 'tuple' | 'allOf' | 'param' };
 
 /** What differs between the Baseline and the proposed Snapshot at one site. */
 export type Difference =

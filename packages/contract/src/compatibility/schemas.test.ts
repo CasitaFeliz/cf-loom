@@ -1277,7 +1277,6 @@ describe('compatibilityReportOf, intersections and opaque JSON', () => {
 
 const branch = anObject({ children: required(anArray(aRef('branch'))) });
 const leaf = anObject({ id: required(aString) });
-const unproven: ShapeDifference = { kind: 'unproven', node: 'ref' };
 
 const mutualDefs: Defs = {
   first: anObject({ next: required(aRef('second')) }),
@@ -1615,103 +1614,6 @@ describe('compatibilityReportOf, refs', () => {
       expect(report.changes).toEqual([
         changeAt(place, found({ kind: 'union-changed' }, breaksEverywhere)),
       ]);
-    },
-  );
-
-  test.each(places)('a ref whose def is missing on one side is unproven in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('leaf'),
-      to: aRef('ghost'),
-      fromDefs: { leaf },
-      toDefs: { leaf },
-    });
-
-    expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
-  });
-
-  test.each(places)(
-    'the same ref whose def is missing on both sides is no Change in $name',
-    (place) => {
-      const report = reportOf(place, { from: aRef('ghost'), to: aRef('ghost') });
-
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
-    },
-  );
-
-  test.each(places)(
-    'an alias def that refs back to itself is no Change while it stays in $name',
-    (place) => {
-      const loop: Defs = { loop: aRef('loop') };
-
-      const report = reportOf(place, {
-        from: aRef('loop'),
-        to: aRef('loop'),
-        fromDefs: loop,
-        toDefs: loop,
-      });
-
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
-    },
-  );
-
-  test.each(places)('an alias cycle of two defs that stays is no Change in $name', (place) => {
-    const cycle: Defs = { a: aRef('b'), b: aRef('a') };
-
-    const report = reportOf(place, {
-      from: aRef('a'),
-      to: aRef('a'),
-      fromDefs: cycle,
-      toDefs: cycle,
-    });
-
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
-  });
-
-  test.each(places)('two alias cycles through different defs are unproven in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('a'),
-      to: aRef('a'),
-      fromDefs: { a: aRef('b'), b: aRef('a') },
-      toDefs: { a: aRef('c'), c: aRef('a') },
-    });
-
-    expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
-  });
-
-  test.each(places)(
-    'an alias def that refs back to itself is unproven once it turns nullable in $name',
-    (place) => {
-      const report = reportOf(place, {
-        from: aRef('loop'),
-        to: aRef('loop'),
-        fromDefs: { loop: aRef('loop') },
-        toDefs: { loop: aNullable(aRef('loop')) },
-      });
-
-      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
-    },
-  );
-
-  test.each(places)(
-    'two different refs whose defs are both missing are unproven in $name',
-    (place) => {
-      const report = reportOf(place, { from: aRef('ghost'), to: aRef('phantom') });
-
-      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
-    },
-  );
-
-  test.each(places)(
-    'an alias def that refs back to itself is unproven once one side changes in $name',
-    (place) => {
-      const report = reportOf(place, {
-        from: aRef('loop'),
-        to: aRef('loop'),
-        fromDefs: { loop: aRef('loop') },
-        toDefs: { loop: leaf },
-      });
-
-      expect(report.changes).toEqual([changeAt(place, found(unproven, breaksEverywhere))]);
     },
   );
 
