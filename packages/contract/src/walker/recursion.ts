@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { aliasCycleOf } from './children.ts';
+import { leadsBackWithNoNode } from './children.ts';
 import type { SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedDuplicateId } from './not-allowed.ts';
 import { type LocatedSchema, type Walked, walked } from './walked.ts';
@@ -136,17 +136,15 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
     return node;
   }
   if (node.kind === 'not-allowed') {
-    state.reportedBySchema.set(ancestor.schema, node);
-    return node;
+    return dropOpenGroup(state, ancestor, node);
   }
   const owner = state.schemaById.get(ancestor.id);
   if (owner !== undefined && owner !== ancestor.schema) {
     return notAllowed(ancestor.at, refusedDuplicateId(ancestor.id));
   }
   state.schemaById.set(ancestor.id, ancestor.schema);
-  const aliasCycle = aliasCycleWritten(state, ancestor.id, node.value);
-  if (aliasCycle !== undefined) {
-    return refuseAliasCycle(state, ancestor, aliasCycle);
+  if (leadsBackWithNoNode(ancestor.id, node.value, state.defById)) {
+    return dropOpenGroup(state, ancestor, notAllowed(ancestor.at, refused.nodelessCycle));
   }
   state.nameBySchema.set(ancestor.schema, ancestor.id);
   state.defById.set(ancestor.id, node.value);
@@ -154,29 +152,24 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   return walked({ type: 'ref', name: ancestor.id });
 }
 
-/** The ids of the alias defs, the one being written first, whose `ref`s come back to it. */
-function aliasCycleWritten(
-  state: State,
-  id: string,
-  node: SchemaNode,
-): readonly string[] | undefined {
-  if (node.type !== 'ref') {
-    return undefined;
-  }
-  return aliasCycleOf(id, node, Object.fromEntries(state.defById));
-}
-
-/** Drops the defs of a cycle of lazies alone, so every use of one reports the one failure. */
-function refuseAliasCycle(state: State, ancestor: Ancestor, ids: readonly string[]): Walked {
-  const failure = notAllowed(ancestor.at, refused.lazyCycle);
-  for (const id of ids) {
-    const schema = state.schemaById.get(id);
-    if (schema !== undefined) {
-      state.defById.delete(id);
-      state.nameBySchema.delete(schema);
-      state.reportedBySchema.set(schema, failure);
+/**
+ * Records the one failure of a def and drops the defs still open below it, which hold `ref`s to
+ * it, so every use of any of them reports that failure. A dropped def leaves the open defs, so a
+ * later failure higher up does not record itself over the first.
+ */
+function dropOpenGroup(state: State, ancestor: Ancestor, failure: Walked): Walked {
+  state.reportedBySchema.set(ancestor.schema, failure);
+  const dropped = state.openDefs.filter((def) => def.index > ancestor.index);
+  for (const { schema } of dropped) {
+    const name = state.nameBySchema.get(schema);
+    if (name !== undefined) {
+      state.defById.delete(name);
     }
+    state.nameBySchema.delete(schema);
+    state.reportedBySchema.set(schema, failure);
   }
+  const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
+  state.openDefs.splice(0, state.openDefs.length, ...remaining);
   return failure;
 }
 

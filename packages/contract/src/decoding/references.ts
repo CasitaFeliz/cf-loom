@@ -1,5 +1,5 @@
 import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
-import { aliasCycleOf, type Path } from '../walker/index.ts';
+import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
 import type { Problem } from './decode.ts';
 import { usesOf } from './uses.ts';
@@ -9,14 +9,14 @@ type Located = { readonly at: Path; readonly text: string };
 
 /**
  * The first identity a Snapshot holds that is none, a name it uses and does not hold (a `ref`'s
- * def, a code an Endpoint or Guard lists, or a Guard), or a def whose alias chain leads back to
- * it; `undefined` when there is none.
+ * def, a code an Endpoint or Guard lists, or a Guard), or a def that leads back to itself with no
+ * node between; `undefined` when there is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
     ...identityProblemsOf(snapshot),
     ...unheldProblemsOf(snapshot),
-    ...aliasProblemsOf(snapshot),
+    ...nodelessCycleProblemsOf(snapshot),
   ][0];
 }
 
@@ -96,14 +96,18 @@ const unheld = {
   guard: 'names a Guard the Snapshot does not hold',
 } as const;
 
-function aliasProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
+function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
+  const defs = new Map(Object.entries(snapshot.defs));
   const problems: Problem[] = [];
-  for (const [name, def] of Object.entries(snapshot.defs)) {
-    if (aliasCycleOf(name, def, snapshot.defs) !== undefined) {
-      problems.push({ at: ['defs', name], reason: 'is an alias def whose refs lead back to it' });
+  for (const [name, def] of defs) {
+    if (leadsBackWithNoNode(name, def, defs)) {
+      problems.push({
+        at: ['defs', name],
+        reason: 'leads back to itself through refs, unions and allOfs alone',
+      });
     }
   }
   return problems;
