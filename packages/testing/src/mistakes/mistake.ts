@@ -8,7 +8,7 @@ export class FakeProviderError extends Error {
   override readonly name = 'FakeProviderError';
 }
 
-/** What a fake of one Provider says went wrong with one of its Endpoints. */
+/** What a fake says went wrong with one Provider's Endpoint, or with a faked Event, `provider` then being its Message Version. */
 export type Mistake = {
   readonly provider: string;
   readonly endpoint?: string;
