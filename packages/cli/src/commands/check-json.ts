@@ -1,9 +1,9 @@
-import { type Change, locationOf } from '@cf-loom/contract/internal';
-import { type Checked, reasonOf, siteOf, type Verdict } from './check-lines.ts';
+import type { Change } from '@cf-loom/contract/internal';
+import { type Checked, type Ending, partsOf, reasonOf } from './checked.ts';
 import type { Exit } from './exit.ts';
 
 /** The document `check --json` prints when it compared or found no Baseline, on one line. */
-export function checkedJsonOf(checked: Checked, status: Verdict['status']): string {
+export function checkedJsonOf(checked: Checked, status: Ending['status']): string {
   const { packageName, against, changes } = checked;
   return JSON.stringify({
     status,
@@ -14,19 +14,15 @@ export function checkedJsonOf(checked: Checked, status: Verdict['status']): stri
   });
 }
 
-/** The document `check --json` prints when it stopped: the lines it prints on stderr, as errors. */
-export function errorsJsonOf(stop: Exit): string {
-  return JSON.stringify({ status: stop.status, errors: stop.stderr });
+/** A stop as `check --json` ends: the document of its lines as errors on stdout, its lines kept on stderr. */
+export function errorsExitOf(stop: Exit): Exit {
+  const document = JSON.stringify({ status: stop.status, errors: stop.stderr });
+  return { ...stop, stdout: [document] };
 }
 
 function changeJsonOf(change: Change) {
-  const { difference } = change;
   return {
-    site: siteOf(change.site),
-    difference: difference.kind,
-    shape: difference.kind === 'schema' ? difference.shape.kind : null,
-    at: 'at' in difference ? locationOf(difference.at) : null,
-    position: 'position' in difference ? difference.position : null,
+    ...partsOf(change),
     class: change.class,
     approval: change.class === 'breaking' ? change.approval : null,
   };

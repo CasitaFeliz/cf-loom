@@ -125,7 +125,7 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "packages/*/test/**"],
+      "includes": ["**/*.test.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -135,7 +135,7 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "packages/*/test/**"],
+      "includes": ["**/*.test.ts"],
       "linter": {
         "rules": {
           "complexity": {

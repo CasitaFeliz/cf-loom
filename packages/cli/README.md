@@ -43,7 +43,7 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom check [--json]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, as for `package`, against the Baseline, and prints every Change with its class; it exits 2 when a Change needs a Breaking Change Approval, which your review process enforces (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md). `--json` prints one JSON line instead of the lines on stdout (see [check --json](#check---json)) |
 | `cf-loom publish [--force]` | Builds the Contract, writes the Snapshot, derives the version and publishes the Contract Package (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md); `--force` publishes even when nothing changed (see [Versioning](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#versioning) in COMPATIBILITY.md) |
 
-Exit status: 0, done; 1, the check failed (something Not allowed, or a root or Snapshot that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). 3 comes before 1, and 1 before 2.
+Exit status: 0, done; 1, the check failed (something Not allowed, or a root, or a Snapshot, generated file or Handler file that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). Of what a command finds, 3 comes before 1, and 1 before 2; but a command stops at its first failure, so `check` with a stale Snapshot ends with 1 before it reads the registry.
 
 ## What the commands print and write
 
@@ -57,13 +57,73 @@ Each command prints one line per thing it did or found, never a stack trace:
 | `package` | `Wrote <dir>` |
 | `check` | `Checked against <package>@<version>`, then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is Not allowed or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it`, or `<package> has no Baseline: it has only prereleases, the highest <version>` |
 
-A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, as COMPATIBILITY.md names them (`field-removed`, `retired`), the path and Position of a schema, and every other field of the Difference as `name=value`, a JSON value written as JSON. `<site>` is one of `endpoints.<identity>`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`, and `<class>` is one of `Breaking, needs a Breaking Change Approval`, `Breaking, needs no Approval`, `Additive`, `Neutral` or `Not allowed`:
+A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, from the tables below; the path and Position of a schema; and every other field of the Difference and of its shape, in the order of the tables, as `name=value`. A `value` is written as JSON, so `1` and `"1"` differ. Any other path segment or text that is not made of letters, digits and `_ @ / { } $ -` is written as JSON too (`"two words"`, `"two\nlines"`), so a key with a space or a line break never splits the line. `<site>` is one of `endpoints.<identity>`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`, and `<class>` is one of `Breaking, needs a Breaking Change Approval`, `Breaking, needs no Approval`, `Additive`, `Neutral` or `Not allowed`:
 
 ```
 endpoints.GET /orders/{} schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval
 endpoints.GET /orders/{} renamed from=getOrder to=fetchOrder visibility=public: Breaking, needs a Breaking Change Approval
 commands.ChargeCard@1 retired: Breaking, needs no Approval
 ```
+
+The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success`, `message` or `every` (a shared schema, judged in all three), and the kind of its shape:
+
+| Kind | Fields | COMPATIBILITY.md |
+| --- | --- | --- |
+| `added` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): add an Endpoint, Event or Command; [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): add a shared schema, Guard or Rejection to a Definitions Package |
+| `deprecated` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): mark an Element Deprecated |
+| `reactivated` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): bring a Deprecated Element back to Active |
+| `retired` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): retire an Element, and [Retirement](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#retirement) |
+| `retired-before-deprecated` |  | [Retirement](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#retirement): every Element must be Deprecated in the Baseline before it can be Retired |
+| `retired-brought-back` | `lifecycle` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): bring a Retired Element back to Deprecated or Active |
+| `tombstoned` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): delete the declaration of an Element Retired in the Baseline |
+| `deleted` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): delete an Element not Retired in the Baseline |
+| `identity-reused` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): reuse the identity of a Retired Element, and [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions): a removed Subscription's name is never reused |
+| `version-gap` | `missing` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added whose previous version neither the Baseline nor the declared Snapshot holds |
+| `name-kind-changed` | `from` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added under a name the Baseline holds as the other kind |
+| `event-changed` | `from`, `to` | [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions): a Subscription's Event never changes |
+| `renamed` | `from`, `to`, `visibility` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): rename an Endpoint |
+| `shadowed` | `by` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): add an Endpoint that takes a URL routing sent to an existing Endpoint |
+| `visibility-widened` | `from`, `to` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): widen Visibility |
+| `visibility-narrowed` | `from`, `to` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): narrow Visibility |
+| `schema` | the shape's | the shape kinds below, in the tables of [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields), [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions), [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints) and [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data) |
+| `removed` |  | [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): remove a shared schema, Guard or Rejection from a Definitions Package |
+| `status-changed` | `from`, `to` | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): change a Success's status; [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): change the HTTP status of a code |
+| `body-added` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): add an Input body, or a body where a Success had none |
+| `body-removed` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): remove an Input body, or the body of a Success |
+| `param-renamed` | `from`, `to` | [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query): rename a path param |
+| `header-refuses-text` |  | [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query): add an optional Input header whose schema refuses some text |
+| `rejection-added` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): add a Rejection to an Endpoint |
+| `rejection-removed` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): remove a Rejection from an Endpoint |
+
+The kinds of a shape, the `<shape>` of a `schema` Difference:
+
+| Kind | Fields | COMPATIBILITY.md |
+| --- | --- | --- |
+| `field-added` | `required` | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): add a required field, add an optional field |
+| `field-removed` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): remove a field |
+| `key-removed` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): remove a key from a record keyed by an enum or literal |
+| `field-made-required` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): optional → required |
+| `field-made-optional` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): required → optional |
+| `nullability-added` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): add nullability |
+| `nullability-removed` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): remove nullability |
+| `value-added` | `value`, `enum` (`open` or `closed`, the Baseline's) | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): closed enum or Open Enum, add a value; change a literal |
+| `value-removed` | `value` | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): closed enum or Open Enum, remove a value; change a literal |
+| `enum-opened` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): closed enum → Open Enum |
+| `enum-closed` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): Open Enum → closed enum |
+| `enum-widened` | `to` | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): widen (literal → enum containing it, enum → its base type) |
+| `enum-narrowed` | `from` | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): narrow (base type → enum, enum → literal) |
+| `variant-added` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): discriminated union, add a variant |
+| `variant-removed` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): discriminated union, remove a variant |
+| `discriminator-changed` | `from`, `to` | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): discriminated union, rename the discriminator |
+| `union-changed` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): plain union or tuple, any change; discriminated union turned into a plain union |
+| `mode-changed` | `from`, `to` (`open` or `strict`) | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): change a type |
+| `type-changed` | `from`, `to` | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): change a type |
+| `constraint-tightened` | `constraint` | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints): tighten, or add where there was none |
+| `constraint-relaxed` | `constraint` | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints): relax, or remove |
+| `constraint-replaced` | `constraint` | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints): replace a format, its options or a regex with a different one, or move `multipleOf` to a value that is neither a multiple nor a divisor |
+| `rest-added` |  | [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data): add a tuple's `rest` |
+| `rest-removed` |  | [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data): remove a tuple's `rest` |
+| `unproven` | `node` (`tuple`, `allOf` or `param`) | [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): a change the tooling cannot prove compatible is Breaking, as under the plain-union rule of [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data) |
 
 A failure is one line on stderr. These are every line `init`, `generate`, `verify`, `package` and `check` print, by exit status.
 
@@ -100,7 +160,13 @@ Exit 3, a tooling error:
 | `<package> is not installed: install it to list it`, `<package> has no version in its package.json`, `<package> cannot be loaded: …`, for a listed Definitions Package | `generate`, `verify`, `package`, `check` |
 | `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package`, `check` |
 | `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package`, `check` |
-| any line of reading the Baseline (see above) | `check` |
+| `npm cannot be run: <reason>: cf-loom reads the registry through npm, which must be on PATH`, `<npm call> failed (<code>: <summary>)`, `<npm call> failed: <first line npm printed on stderr, or exit status <n>>`, `<npm call> printed no JSON: <line>`, `<npm call> printed more than 16 MiB`, `<npm call> did not finish within 10 minutes`, `<npm call> was stopped by <signal>`, where `<npm call>` is `npm view <package>`, `npm view <package>@<version>`, `npm pack <package>@<version>`, `npm config get <key>` or `npm whoami` | `check` |
+| `<package> was unpublished: <summary>; its Baseline is gone, so nothing can be checked against it`, `<package> lists no version, or has no latest dist-tag, which npm view needs to list them`, `<package> lists <key>, which is no semantic version` | `check` |
+| `<package> is not in <registry>, and npm has no login there it accepts (<reason>): a package your login cannot read looks unpublished`, `npm did not say which registry serves <scope>`, `npm config get <key> failed: npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL` | `check` |
+| `npm view <spec> printed no metadata`, `<spec> has no cfLoom: it was not published by cf-loom publish`, `<spec> is the package of kind <kind>, not <kind>`, `<spec> has peerDependencies that are no map of ranges`, `<spec> has no tarball`, `<spec> has no sha512 integrity, so its tarball cannot be verified`, where `<spec>` is `<package>@<version>` | `check` |
+| `npm pack <spec> printed no tarball`, `<spec>'s tarball does not match the sha512 integrity npm view lists`, `<spec> has no snapshot.json`, `<spec> has more than one snapshot.json`, `<spec>'s snapshot.json is no UTF-8 text` | `check` |
+| `<spec>'s tarball cannot be read: <reason>`, where `<reason>` is `is larger than 64 MiB`, `is larger than 64 MiB unpacked`, `is no gzip`, `is no tar archive`, `has data after its end`, `has a tar entry npm does not write`, `has a pax header npm does not write`, `has a pax header with a byte beyond ASCII`, `has a path npm does not write`, `has a path that is not printable ASCII, or that holds a ":" or a "\"`, `has a folder named snapshot.json`, or the message of the error that made the file unreadable | `check` |
+| `<spec>'s snapshot.json is no JSON (<reason>)`, `<spec>'s snapshot.json is in format <n>, newer than this cf-loom reads: upgrade @cf-loom/cli`, `<spec>'s snapshot.json is malformed: <location> <reason>`, `<spec>'s snapshot.json is <name>@<version> (<kind>), not <spec>` | `check` |
 | `<file> cannot be loaded: …`, for a file under `src/contract/` the root does not import | `generate` |
 | `<folder> cannot be read: …`, for a folder under `src/contract/` or the Handlers' folders | `generate`, `verify` |
 | `<path> cannot be written: …` | `generate`, `package` |
@@ -115,6 +181,7 @@ Exit 3, a tooling error:
 | `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package` |
 | `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package` |
 | `subscriptions.<name> is <name in code> in code, as <other> is: rename the Subscription`, where `<other>` is another Subscription, a Command's Message Version, an own Event's or Command's Reader, a def or an import of `src/readers.generated.ts` | `generate`, `verify` |
+| `cf-loom failed: <what was thrown>`, for a throw, which is a bug of cf-loom: with `check --json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
 
 Exit 3, a usage error, each followed on the same line by the usage:
 
@@ -125,6 +192,7 @@ Exit 3, a usage error, each followed on the same line by the usage:
 | `Only package takes --out` | any command but `package`, an unknown one included |
 | `Only check takes --json` | any command but `check`, an unknown one included |
 | `--out takes a folder` | `package` |
+| `--json takes no value` | any command |
 | `Unknown kind: <kind>`, `init takes one kind` | `init` |
 | `generate takes no argument`, `verify takes no argument`, `package takes no argument`, `check takes no argument` | `generate`, `verify`, `package`, `check` |
 
@@ -132,7 +200,7 @@ Every file `generate` regenerates starts with `// Generated by cf-loom generate.
 
 ### check --json
 
-With `--json`, stdout holds exactly one line, this document, and stderr keeps its lines:
+With `--json`, stdout holds exactly one line, this document, and stderr keeps its lines. A usage error is the one exception: it stays one line on stderr, with nothing on stdout (see the usage errors above). `at` is the path as the line writes it:
 
 ```ts
 type CheckJson =
@@ -146,8 +214,8 @@ type CheckJson =
         site: string;                     // as in the line, e.g. "endpoints.GET /orders/{}"
         difference: string;               // the Difference kind
         shape: string | null;             // the ShapeDifference kind of a schema difference
-        at: string | null;
-        position: string | null;
+        at: string | null;                // the path of a schema Difference
+        position: string | null;          // the Position of a schema Difference
         class: 'breaking' | 'additive' | 'neutral' | 'not-allowed';
         approval: 'needed' | 'not-needed' | null;
       }[];

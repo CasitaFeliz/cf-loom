@@ -13,29 +13,25 @@ import { gzipSync } from 'node:zlib';
 import { canonicalTextOf } from '@cf-loom/contract/internal';
 import { describe, expect } from 'vitest';
 import {
-  aPackageTarball,
-  aPublishedSnapshot,
-  aTarball,
-  aVersion,
-  block,
-  inheritedPath,
-  integrityOf,
   jsonAnswer,
-  type Lab,
-  loginTo,
-  type Overwrite,
-  octal,
-  orders,
-  ordersPackage,
   packedPathOf,
   type Registry,
   type RegistryOptions,
-  type ServedVersion,
   tarballPathOf,
+} from '../../test/fake-registry.ts';
+import { inheritedPath, loginTo, token } from '../../test/npm-environment.ts';
+import { type Lab, test } from '../../test/npm-lab.ts';
+import { aPublishedSnapshot, orders, ordersPackage } from '../../test/published-snapshot.ts';
+import { aVersion, type ServedVersion } from '../../test/served-version.ts';
+import {
+  aPackageTarball,
+  aTarball,
+  block,
+  integrityOf,
+  type Overwrite,
+  octal,
   tarOf,
-  test,
-  token,
-} from '../../test/npm-lab.ts';
+} from '../../test/tarball.ts';
 import { baselineOf, type ReadBaseline } from './index.ts';
 
 const npmTimeout = 30_000;

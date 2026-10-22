@@ -1,11 +1,23 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { type Exit, type Output, runCommand, usageError } from './commands/index.ts';
+import {
+  type Called,
+  crashedExitOf,
+  type Exit,
+  type Output,
+  runCommand,
+  usageError,
+} from './commands/index.ts';
 
 const knownOptions = ['out', 'json'];
 
-/** Runs the command the arguments name; `--out <dir>` and `--json` are the options, any other a usage error. */
-async function exitOf(args: readonly string[]): Promise<Exit> {
+/** The command the arguments name, or the usage error they are. */
+type Parsed =
+  | { readonly kind: 'called'; readonly called: Called }
+  | { readonly kind: 'usage'; readonly exit: Exit };
+
+/** Reads the arguments; `--out <dir>` and `--json` are the options, any other a usage error. */
+function parsed(args: readonly string[]): Parsed {
   const { positionals, tokens, values } = parseArgs({
     args: [...args],
     allowPositionals: true,
@@ -17,15 +29,32 @@ async function exitOf(args: readonly string[]): Promise<Exit> {
     (token) => token.kind === 'option' && !knownOptions.includes(token.name),
   );
   if (unknown !== undefined && unknown.kind === 'option') {
-    return usageError(`Unknown option: ${unknown.rawName}`);
+    return { kind: 'usage', exit: usageError(`Unknown option: ${unknown.rawName}`) };
   }
   const { out, json } = values;
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
-    return usageError('--out takes a folder');
+    return { kind: 'usage', exit: usageError('--out takes a folder') };
   }
-  const output: Output = json === undefined ? 'lines' : 'json';
+  if (json !== undefined && json !== true) {
+    return { kind: 'usage', exit: usageError('--json takes no value') };
+  }
+  const output: Output = json === true ? 'json' : 'lines';
   const called = out === undefined ? { positionals, output } : { positionals, out, output };
-  return await runCommand(called, { cwd: process.cwd(), now: Date.now(), env: process.env });
+  return { kind: 'called', called };
+}
+
+/** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */
+async function exitOf(args: readonly string[]): Promise<Exit> {
+  const read = parsed(args);
+  if (read.kind === 'usage') {
+    return read.exit;
+  }
+  const { called } = read;
+  try {
+    return await runCommand(called, { cwd: process.cwd(), now: Date.now(), env: process.env });
+  } catch (e) {
+    return crashedExitOf(e, called.output);
+  }
 }
 
 const exit = await exitOf(process.argv.slice(2));

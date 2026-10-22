@@ -13,17 +13,11 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect } from 'vitest';
-import {
-  aVersion,
-  type Lab,
-  loginTo,
-  type NpmEnvironment,
-  ordersPackage,
-  type RegistryOptions,
-  type ServedVersion,
-  test,
-  token,
-} from '../test/npm-lab.ts';
+import type { RegistryOptions } from '../test/fake-registry.ts';
+import { loginTo, type NpmEnvironment, token } from '../test/npm-environment.ts';
+import { type Lab, test } from '../test/npm-lab.ts';
+import { ordersPackage } from '../test/published-snapshot.ts';
+import { aVersion, type ServedVersion } from '../test/served-version.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const bin = join(cliDir, 'src', 'bin.ts');
@@ -71,6 +65,16 @@ function read(project: string, path: string): string {
 
 function cfLoom(project: string, ...args: string[]) {
   const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, encoding: 'utf8' });
+  return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+/** Runs the CLI in a working directory that is removed before it starts, so reading it throws. */
+function cfLoomInRemovedFolder(...args: string[]) {
+  const folder = mkdtempSync(join(tmpdir(), 'cf-loom-removed-'));
+  projects.push(folder);
+  const removeThenRun = 'rmdir "$PWD" && exec "$0" "$@"';
+  const command = ['-c', removeThenRun, process.execPath, bin, ...args];
+  const ran = spawnSync('sh', command, { cwd: folder, encoding: 'utf8' });
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
@@ -1447,8 +1451,15 @@ const removedFieldOfEach = {
 };
 
 const changedInEveryWay = {
-  before: aMessagingRoot({ body: 'z.object({ ok: z.boolean(), total: z.number() })' }),
-  after: aMessagingRoot({ status: 201, eventVersions: [1, 2], commandLifecycle: 'retired' }),
+  before: aMessagingRoot({
+    body: "z.object({ ok: z.boolean(), total: z.number(), kind: z.enum(['a', 'b']), code: z.literal(1) })",
+  }),
+  after: aMessagingRoot({
+    body: "z.object({ ok: z.boolean(), kind: z.enum(['a', 'b', 'c']), code: z.literal('1') })",
+    status: 201,
+    eventVersions: [1, 2],
+    commandLifecycle: 'retired',
+  }),
 };
 
 describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
@@ -1654,12 +1665,60 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const { ran } = await checkedAgainst(lab, changed);
 
     const approval = 'Breaking, needs a Breaking Change Approval';
+    const schema = 'endpoints.GET /ping schema';
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
       `endpoints.GET /ping status-changed from=200 to=201: ${approval}`,
-      `endpoints.GET /ping schema field-removed at success.body.fields.total (success): ${approval}`,
+      `${schema} value-added at success.body.fields.code (success) value="1" enum=closed: ${approval}`,
+      `${schema} value-removed at success.body.fields.code (success) value=1: Additive`,
+      `${schema} value-added at success.body.fields.kind (success) value="c" enum=closed: ${approval}`,
+      `${schema} field-removed at success.body.fields.total (success): ${approval}`,
       'events.OrderCreated@2 added: Additive',
       'commands.ChargeCard@1 retired: Breaking, needs no Approval',
+      '',
+    ]);
+  });
+
+  test('a field key holding a line break is written as JSON, so the Change stays on one line', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: "z.object({ ok: z.boolean(), 'odd\\nkey': z.number() })" }),
+      after: aRoot(),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const approval = 'Breaking, needs a Breaking Change Approval';
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `endpoints.GET /ping schema field-removed at success.body.fields."odd\\nkey" (success): ${approval}`,
+      '',
+    ]);
+  });
+
+  test('a discriminator holding a line break is written as JSON, so the Change stays on one line', async ({
+    lab,
+  }) => {
+    const union = (discriminator: string) =>
+      [
+        `z.object({ shape: z.discriminatedUnion('${discriminator}', [`,
+        `z.object({ '${discriminator}': z.literal('a') }),`,
+        `z.object({ '${discriminator}': z.literal('b') }),`,
+        '])})',
+      ].join(' ');
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: union('odd\\nkind') }),
+      after: aRoot({ body: union('kind') }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const approval = 'Breaking, needs a Breaking Change Approval';
+    const change = 'endpoints.GET /ping schema discriminator-changed at success.body.fields.shape';
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `${change} (success) from="odd\\nkind" to=kind: ${approval}`,
       '',
     ]);
   });
@@ -1874,5 +1933,39 @@ describe('cf-loom', () => {
     const ran = cfLoom(project, 'check', 'now');
 
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
+  });
+
+  test('a usage error stays one line on stderr under --json, with nothing on stdout', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', 'now', '--json');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
+  });
+
+  test('--json takes no value', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', '--json=false');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+  });
+
+  test('a throw is a tooling error that says cf-loom failed, never a stack trace', () => {
+    const ran = cfLoomInRemovedFolder('generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(/^cf-loom failed: ENOENT[^\n]*\n$/);
+  });
+
+  test('check --json writes the document of a throw too, and stderr keeps its line', () => {
+    const ran = cfLoomInRemovedFolder('check', '--json');
+
+    const errors = ran.stderr.trimEnd().split('\n');
+    expect(ran.status).toBe(3);
+    expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: ENOENT/)]);
+    expect(ran.stdout.split('\n')).toHaveLength(2);
+    expect(JSON.parse(ran.stdout)).toEqual({ status: 3, errors });
   });
 });

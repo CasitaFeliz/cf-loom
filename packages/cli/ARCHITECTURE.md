@@ -4,7 +4,7 @@ How the package's `src/` is split into modules, as [Package layout](../../ARCHIT
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/internal/index.ts` (`./internal`) from `registry/`, the step `check`, `publish`, `broker-plan` and `route-plan` share; `src/bin.ts` parses the arguments, runs a command and prints what it ends with.
+The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/internal/index.ts` (`./internal`) from `registry/`, the step `check`, `publish`, `broker-plan` and `route-plan` share; `src/bin.ts` parses the arguments, runs a command and prints what it ends with, a throw (a bug of cf-loom) included, which ends as a tooling error.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |

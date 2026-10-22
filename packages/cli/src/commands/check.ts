@@ -5,10 +5,13 @@ import {
 } from '@cf-loom/contract/internal';
 import { builtOf, type Run } from '../project/index.ts';
 import { baselineOf } from '../registry/index.ts';
-import { checkedJsonOf, errorsJsonOf } from './check-json.ts';
-import { type Checked, linesOf, verdictOf } from './check-lines.ts';
+import { checkedJsonOf, errorsExitOf } from './check-json.ts';
+import { linesOf } from './check-lines.ts';
+import { type Checked, endingOf } from './checked.ts';
 import { committedStopOf, type Exit, failureExitOf, toolingError } from './exit.ts';
-import type { Output } from './run-command.ts';
+
+/** How a command prints: its lines, or, for `check`, one JSON document. */
+export type Output = 'lines' | 'json';
 
 /** Why `check` ended before it could compare. */
 type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
@@ -19,13 +22,28 @@ type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
  */
 export async function check(run: Run, output: Output): Promise<Exit> {
   const checked = await checkedOf(run);
-  if (checked.kind === 'stopped') {
-    const { exit } = checked;
-    return output === 'json' ? { ...exit, stdout: [errorsJsonOf(exit)] } : exit;
+  switch (output) {
+    case 'lines':
+      return linesExitOf(checked);
+    case 'json':
+      return jsonExitOf(checked);
   }
-  const { status, stderr } = verdictOf(checked.changes);
-  const stdout = output === 'json' ? [checkedJsonOf(checked, status)] : linesOf(checked, status);
-  return { status, stdout, stderr };
+}
+
+function linesExitOf(checked: Checked | Stopped): Exit {
+  if (checked.kind === 'stopped') {
+    return checked.exit;
+  }
+  const { status, stderr } = endingOf(checked.changes);
+  return { status, stdout: linesOf(checked, status), stderr };
+}
+
+function jsonExitOf(checked: Checked | Stopped): Exit {
+  if (checked.kind === 'stopped') {
+    return errorsExitOf(checked.exit);
+  }
+  const { status, stderr } = endingOf(checked.changes);
+  return { status, stdout: [checkedJsonOf(checked, status)], stderr };
 }
 
 async function checkedOf(run: Run): Promise<Checked | Stopped> {
@@ -64,6 +82,8 @@ function changesOf(report: CompatibilityReport): readonly Change[] {
     case 'compared':
       return report.changes;
     case 'no-baseline':
-      return [];
+      throw new Error(
+        'The Compatibility Check found no Baseline for a Baseline it was given: a bug.',
+      );
   }
 }

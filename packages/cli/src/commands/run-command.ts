@@ -1,6 +1,7 @@
-import { isRootKind } from '../loading/index.ts';
+import { isRootKind, oneLineOf } from '../loading/index.ts';
 import type { Run } from '../project/index.ts';
-import { check } from './check.ts';
+import { check, type Output } from './check.ts';
+import { errorsExitOf } from './check-json.ts';
 import { type Exit, toolingError } from './exit.ts';
 import { generate } from './generate.ts';
 import { init } from './init.ts';
@@ -9,9 +10,6 @@ import { verify } from './verify.ts';
 
 const usage =
   'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json]';
-
-/** How a command prints: its lines, or, for `check`, one JSON document. */
-export type Output = 'lines' | 'json';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
@@ -23,6 +21,17 @@ export type Called = {
 /** How the CLI is called wrongly: an unknown command, kind, option or argument, with the usage. */
 export function usageError(message: string): Exit {
   return toolingError(`${message}. ${usage}`);
+}
+
+/** A throw, which is a bug of cf-loom, as the tooling error that says so, in the output the command prints. */
+export function crashedExitOf(thrown: unknown, output: Output): Exit {
+  const exit = toolingError(`cf-loom failed: ${oneLineOf(thrown, import.meta.dirname)}`);
+  switch (output) {
+    case 'lines':
+      return exit;
+    case 'json':
+      return errorsExitOf(exit);
+  }
 }
 
 /** Runs the command the arguments name where and when the CLI runs. */
