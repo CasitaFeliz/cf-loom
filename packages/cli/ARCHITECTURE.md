@@ -8,7 +8,7 @@ The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/directories/i
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `contract-directory/` | the `ContractDirectory` type, which `./directories` exports | none |
+| `contract-directory/` | the `ContractDirectory` type and its `Listed`, and `fixed()`, which `./directories` exports | none |
 | `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, the Definitions Packages a root lists as the root file resolves them, the version of an installed package, the files under a folder through linked folders, and where each declaration is exported | none |
 | `config/` | `defineConfig`, `Config`, `ApprovalSource`, and loading `cf-loom.config.ts` | `contract-directory`, `loading` |
 | `project/` | a project as every command but `init` reads it: its package, configuration and root, the committed `contract.snapshot.json` as read, and the valid root with its canonical Snapshot; a failure is a closed value, the root's rules broken or a tooling error | `config`, `loading` |

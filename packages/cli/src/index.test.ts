@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { ContractDirectory } from './directories/index.ts';
+import { type ContractDirectory, fixed } from './directories/index.ts';
 import { type ApprovalSource, defineConfig } from './index.ts';
 
 /** A Contract directory as the README's example builds one, standing in for `github()`. */
 function github(_options: { readonly org: string }): ContractDirectory {
-  return { kind: 'contract-directory' };
+  return { list: async () => ({ kind: 'listed', names: [] }) };
 }
 
 const myApprovalSource: ApprovalSource = {
@@ -33,6 +33,17 @@ describe('defineConfig', () => {
     const defined = defineConfig(written);
 
     expect(defined).toBe(written);
+  });
+
+  test('a fixed directory is a configuration’s directory', async () => {
+    const defined = defineConfig({
+      scope: '@org',
+      directory: fixed(['@org/contract-orders-service']),
+    });
+
+    const listed = await defined.directory?.list();
+
+    expect(listed).toEqual({ kind: 'listed', names: ['@org/contract-orders-service'] });
   });
 
   test('a field the configuration does not declare is a type error', () => {

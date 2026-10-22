@@ -1,1 +1,2 @@
-export type { ContractDirectory } from '../contract-directory/index.ts';
+export type { ContractDirectory, Listed } from '../contract-directory/index.ts';
+export { fixed } from '../contract-directory/index.ts';
