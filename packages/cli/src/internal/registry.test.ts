@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import {
   chmodSync,
@@ -1169,7 +1169,8 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   });
 
   test('a tarball larger than 64 MiB fails', async ({ lab }) => {
-    const entries = [{ path: 'package/blob', content: Buffer.alloc(64 * mebibyte + 1024) }];
+    const halfCompressible = Buffer.from(randomBytes(32 * mebibyte + 512).toString('hex'));
+    const entries = [{ path: 'package/blob', content: halfCompressible }];
     const tarball = gzipSync(tarOf(entries), { level: 0 });
 
     const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
