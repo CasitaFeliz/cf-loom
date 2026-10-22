@@ -48,15 +48,22 @@ function classTextOf(change: Change): string {
   }
 }
 
-/** The lines `check` prints on stdout: the Baseline it used, every Change, and how it closes. */
-export function linesOf(checked: Checked, status: Ending['status']): readonly string[] {
-  const { packageName, against, changes } = checked;
+/** The lines a command opens with: the Baseline it compared with and every Change, or why there is no Baseline. */
+export function comparedLinesOf({ packageName, against, changes }: Checked): readonly string[] {
   if (against.kind === 'none') {
     return [`${packageName} has no Baseline: ${reasonOf(against.why)}`];
   }
-  const compared = `${packageName}@${against.version}`;
-  const closing = closingLinesOf(compared, changes, status);
-  return [`Checked against ${compared}`, ...changes.map(changeLineOf), ...closing];
+  return [`Checked against ${packageName}@${against.version}`, ...changes.map(changeLineOf)];
+}
+
+/** The lines `check` prints on stdout: the Baseline it used, every Change, and how it closes. */
+export function linesOf(checked: Checked, status: Ending['status']): readonly string[] {
+  const { packageName, against, changes } = checked;
+  const compared = comparedLinesOf(checked);
+  if (against.kind === 'none') {
+    return compared;
+  }
+  return [...compared, ...closingLinesOf(`${packageName}@${against.version}`, changes, status)];
 }
 
 function closingLinesOf(

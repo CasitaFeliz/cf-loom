@@ -101,7 +101,9 @@ export function snapshotModuleOf(snapshot: unknown): PackageFile {
 }
 
 /** The Standard Rejections resolved, as the Snapshot records them, for every Caller. */
-export function standardRejectionsModuleOf(snapshot: ServiceSnapshot): PackageFile {
+export function standardRejectionsModuleOf(
+  snapshot: Pick<ServiceSnapshot, 'standardRejections'>,
+): PackageFile {
   const lines = standardRejectionNames.map((name) => {
     const { code, status, message } = snapshot.standardRejections[name];
     const fields = `code: ${stringLiteralOf(code)}, status: ${status}, message: ${stringLiteralOf(message)}`;

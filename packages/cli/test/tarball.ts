@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 export const block = 512;
 
@@ -74,4 +74,19 @@ export function aPackageTarball(snapshotJson: Buffer | string, folder = 'package
 
 export function integrityOf(bytes: Buffer, algorithm: 'sha1' | 'sha512'): string {
   return `${algorithm}-${createHash(algorithm).update(bytes).digest('base64')}`;
+}
+
+/** The files of a gzipped tar as `npm pack` writes it, by path without the folder `package/`, with their texts. */
+export function entriesOf(tarball: Buffer): Readonly<Record<string, string>> {
+  const archive = gunzipSync(tarball);
+  const entries: Record<string, string> = {};
+  let offset = 0;
+  while (offset + block <= archive.length && archive[offset] !== 0) {
+    const path = archive.toString('utf8', offset, offset + 100).split('\0', 1)[0] ?? '';
+    const size = Number.parseInt(archive.toString('latin1', offset + 124, offset + 135), 8);
+    const start = offset + block;
+    entries[path.replace(/^package\//, '')] = archive.toString('utf8', start, start + size);
+    offset = start + Math.ceil(size / block) * block;
+  }
+  return entries;
 }

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: the ./internal entry, a list of re-exports that the Package layout forbids splitting into several files
 export type {
   Change,
   ChangeClass,
@@ -9,7 +10,6 @@ export type {
   PeerRanges,
   Position,
   ShapeDifference,
-  VersionBump,
 } from '../compatibility/index.ts';
 export {
   compatibilityReportOf,
@@ -67,8 +67,10 @@ export type {
   SnapshotContext,
   SubscriptionSnapshot,
   SubscriptionTombstone,
+  VersionBump,
 } from '../snapshot/index.ts';
 export {
+  bumpedVersionOf,
   canonicalSnapshotOf,
   canonicalTextOf,
   compareSemanticVersions,
@@ -79,6 +81,7 @@ export {
   isDeclaredRejection,
   isPrerelease,
   isSemanticVersion,
+  nextPrereleaseOf,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,

@@ -6,15 +6,16 @@ import {
   type PublishedSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
+import { type Failed, failed } from '../child-process/index.ts';
 import { isRootKind, publishedNameOf } from '../loading/index.ts';
-import { type Failed, failed, jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
 import { snapshotTextOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';
 import {
   type BaselineSource,
-  highestReleaseOf,
-  type Release,
-  releaseFrom,
+  baselineVersionOf,
+  metadataFrom,
+  type VersionMetadata,
   type Versions,
   versionsFrom,
 } from './versions.ts';
@@ -127,16 +128,16 @@ async function baselineAmong(
   { packageName, versions }: Published,
   declared: Declared,
 ): Promise<ReadBaseline> {
-  const version = highestReleaseOf(versions);
+  const version = baselineVersionOf(versions);
   if (version === undefined) {
     return { kind: 'no-baseline', packageName, why: { kind: 'only-prereleases', versions } };
   }
   const source = { spec: `${packageName}@${version}`, version, declared };
-  const release = await releaseOf(npm, source);
-  if (release.kind === 'failed') {
-    return release;
+  const metadata = await metadataOf(npm, source);
+  if (metadata.kind === 'failed') {
+    return metadata;
   }
-  const text = await snapshotTextOf(npm, { spec: source.spec, digests: release.digests });
+  const text = await snapshotTextOf(npm, { spec: source.spec, digests: metadata.digests });
   if (text.kind === 'failed') {
     return text;
   }
@@ -144,11 +145,14 @@ async function baselineAmong(
   if (snapshot.kind === 'failed') {
     return snapshot;
   }
-  const { peers } = release;
+  const { peers } = metadata;
   return { kind: 'baseline', packageName, snapshot: snapshot.snapshot, peers, versions };
 }
 
-async function releaseOf(npm: NpmPlace, source: BaselineSource): Promise<Release | Failed> {
+async function metadataOf(
+  npm: NpmPlace,
+  source: BaselineSource,
+): Promise<VersionMetadata | Failed> {
   const { spec } = source;
   const fields = ['version', 'cfLoom', 'peerDependencies', 'dist'];
   const run = await jsonFromNpm(npm, {
@@ -157,7 +161,7 @@ async function releaseOf(npm: NpmPlace, source: BaselineSource): Promise<Release
   });
   switch (run.kind) {
     case 'json':
-      return releaseFrom(source, run.value);
+      return metadataFrom(source, run.value);
     case 'refused':
       return failed(run.message);
     case 'failed':

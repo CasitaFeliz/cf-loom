@@ -1,9 +1,8 @@
-import { join } from 'node:path';
-import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
-import { installedVersionOf } from '../loading/index.ts';
-import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
+import { contractPackageFilesOf } from '../contract-package/index.ts';
+import { builtOf, type Run } from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
 import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
+import { builtPeersOf } from './peers.ts';
 
 /** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`. */
 export const defaultPackageFolder = 'contract-package';
@@ -31,7 +30,7 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
   if (stop !== undefined) {
     return stop;
   }
-  const peers = peersOf(built);
+  const peers = builtPeersOf(built);
   if (peers.kind === 'failed') {
     return toolingError(peers.message);
   }
@@ -48,23 +47,4 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
     case 'failed':
       return toolingError(written.message);
   }
-}
-
-/** The versions of the two peers as the root file imports them, which the package is built with. */
-function peersOf(
-  built: BuiltProject,
-):
-  | { readonly kind: 'found'; readonly peers: Peers }
-  | { readonly kind: 'failed'; readonly message: string } {
-  const rootPath = join(built.project.directory, built.project.rootFile);
-  const contract = installedVersionOf('@cf-loom/contract', rootPath);
-  const zod = installedVersionOf('zod', rootPath);
-  const builtWith = 'a Contract Package is built with it';
-  if (contract.kind === 'failed') {
-    return { kind: 'failed', message: `${contract.message}: ${builtWith}` };
-  }
-  if (zod.kind === 'failed') {
-    return { kind: 'failed', message: `${zod.message}: ${builtWith}` };
-  }
-  return { kind: 'found', peers: { contract: contract.version, zod: zod.version } };
 }

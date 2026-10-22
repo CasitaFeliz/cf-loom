@@ -1755,7 +1755,7 @@ describe('cf-loom package: what it refuses', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: 'zod is not installed: a Contract Package is built with it\n',
+      stderr: "zod is not installed: the package's peer range is taken from it\n",
     });
   });
 
@@ -1777,7 +1777,7 @@ describe('cf-loom package: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr:
-        '@cf-loom/contract has no version in its package.json: a Contract Package is built with it\n',
+        "@cf-loom/contract has no version in its package.json: the package's peer range is taken from it\n",
     });
   });
 

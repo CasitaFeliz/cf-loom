@@ -36,7 +36,7 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 
 ## The Contract Package
 
-`cf-loom package` generates the Contract Package's code from the committed declared Snapshot, and `cf-loom publish` generates it the same way, from the Snapshot with its `version` and history filled in (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), and publishes it; no source file is bundled. It writes the zod schemas, the entry point and the package.json for the Public and Internal Elements that are not Retired, with the Guards, Rejections and recursive schemas they reach, as `contract.exportedSnapshot` below says, plus the Snapshot itself. What is published is exactly what the Snapshot describes, and no Private code can leak into it:
+`cf-loom package` generates the Contract Package's code from the committed declared Snapshot, and `cf-loom publish` generates it the same way, from the Snapshot with its `version` and history filled in (see [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), builds it with the project's own `tsc` in a temporary folder inside the project, and publishes it with the organization's npm, with no lifecycle script; no source file is bundled. It writes the zod schemas, the entry point and the package.json for the Public and Internal Elements that are not Retired, with the Guards, Rejections and recursive schemas they reach, as `contract.exportedSnapshot` below says, plus the Snapshot itself. What is published is exactly what the Snapshot describes, and no Private code can leak into it:
 
 ```ts
 // generated entry point of @org/contract-payments-service

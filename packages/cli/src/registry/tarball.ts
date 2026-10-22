@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { ownOf } from '@cf-loom/contract/internal';
-import { type Failed, failed, jsonFromNpm, type NpmPlace } from './npm.ts';
+import { type Failed, failed } from '../child-process/index.ts';
+import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import { fileNamed } from './tar-entries.ts';
 
 const maxTarballBytes = 64 * 1024 * 1024;

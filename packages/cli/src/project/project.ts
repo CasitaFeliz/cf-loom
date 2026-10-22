@@ -13,6 +13,8 @@ import { type Tooling, tooling } from './failures.ts';
 export type Project = {
   readonly directory: string;
   readonly packageName: PackageName;
+  /** The project's package.json as read, which a Definitions Package is published from. */
+  readonly manifest: Readonly<Record<string, unknown>>;
   /** The npm scope of the configuration, which the Contract Package is published under. */
   readonly scope: string;
   readonly root: unknown;
@@ -49,10 +51,19 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   if (resolved.kind === 'failed') {
     return tooling(resolved.message);
   }
-  const { packageName } = projectPackage;
+  const { packageName, manifest } = projectPackage;
   const { root, file: rootFile, exports: rootExports } = loaded;
   const { packages } = resolved;
   const { scope } = config.config;
-  const project = { directory, packageName, scope, root, rootExports, rootFile, packages };
+  const project = {
+    directory,
+    packageName,
+    manifest,
+    scope,
+    root,
+    rootExports,
+    rootFile,
+    packages,
+  };
   return { kind: 'read', project };
 }

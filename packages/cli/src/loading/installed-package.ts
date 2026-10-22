@@ -18,6 +18,15 @@ export type InstalledVersion =
   | { readonly kind: 'installed'; readonly version: string }
   | { readonly kind: 'failed'; readonly message: string };
 
+/** Where a package is installed as the root file imports it, with its package.json, or why it is not. */
+export type InstalledManifest =
+  | {
+      readonly kind: 'installed';
+      readonly directory: string;
+      readonly manifest: Readonly<Record<string, unknown>>;
+    }
+  | { readonly kind: 'failed'; readonly message: string };
+
 /** Where a package is looked up: from the root file, as the root imports it, in its project. */
 export type LookedUp = { readonly rootPath: string; readonly directory: string };
 
@@ -56,6 +65,18 @@ export function installedVersionOf(packageName: string, rootPath: string): Insta
     return { kind: 'failed', message: missingMessageOf(packageName, found) };
   }
   return { kind: 'installed', version: found.version };
+}
+
+/**
+ * The folder and package.json of a package as the root file imports it, such as the TypeScript a
+ * Contract Package is built with; nothing of it is loaded.
+ */
+export function installedManifestOf(packageName: string, rootPath: string): InstalledManifest {
+  const found = foundOf(packageName, rootPath);
+  if (found.kind !== 'found') {
+    return { kind: 'failed', message: missingMessageOf(packageName, found) };
+  }
+  return { kind: 'installed', directory: dirname(found.manifestPath), manifest: found.manifest };
 }
 
 /** A package's package.json as found from the root file, with its version. */

@@ -1,7 +1,7 @@
 import {
-  type ApplicationSnapshot,
   type ExportedSnapshot,
   exportedSnapshotOf,
+  type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 import { type DefUse, defNamesLineOf, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
@@ -20,7 +20,7 @@ import {
   exportedSnapshotModuleOf,
 } from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
-import { manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
+import { type ContractSnapshot, manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts';
 import { collidingCodesOf } from './names.ts';
 import { packagePaths } from './paths.ts';
@@ -33,13 +33,14 @@ export type ContractPackageFiles =
 
 /** A Snapshot in canonical order, every map in code point order, with its canonical text. */
 export type CanonicalSnapshot = {
-  readonly snapshot: ServiceSnapshot | ApplicationSnapshot;
+  readonly snapshot: ContractSnapshot;
   readonly text: string;
 };
 
 /**
  * The Contract Package of a Service or an Application, generated from its canonical Snapshot
- * alone, so what is published is exactly what the Snapshot describes, in the Snapshot's order.
+ * alone, declared or published, so what is published is exactly what the Snapshot describes, in
+ * the Snapshot's order.
  */
 export function contractPackageFilesOf(
   { snapshot, text }: CanonicalSnapshot,
@@ -66,7 +67,10 @@ export function contractPackageFilesOf(
  * Endpoint and Event, the Guards and codes they reach, and the recursive defs those reach; or why
  * their names cannot be written.
  */
-function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractPackageFiles {
+function serviceSourcesOf(
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
+  version: string,
+): ContractPackageFiles {
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
   const events = exportedEventsOf(exported);
@@ -93,7 +97,7 @@ function serviceSourcesOf(snapshot: ServiceSnapshot, version: string): ContractP
 function schemaFilesOf(
   { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
   exported: ExportedSnapshot,
-  snapshot: ServiceSnapshot,
+  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
 ): readonly SchemaFile[] {
   return [
     ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),

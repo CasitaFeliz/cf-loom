@@ -1,4 +1,5 @@
-import { type Failed, failed, jsonFromNpm, lineOf, type NpmPlace, textFromNpm } from './npm.ts';
+import { type Failed, failed, lineOf } from '../child-process/index.ts';
+import { jsonFromNpm, type NpmPlace, textFromNpm } from './npm.ts';
 
 const registrySetting = 'npm_config_registry';
 const credentialsInUrl =

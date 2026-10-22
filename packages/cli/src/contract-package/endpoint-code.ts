@@ -21,7 +21,7 @@ import { partsLinesOf } from './schema-lines.ts';
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
-  snapshot: ServiceSnapshot,
+  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
 ): SchemaFile {
   const { endpoint } = exported;
   const needs = loomNeeds();
