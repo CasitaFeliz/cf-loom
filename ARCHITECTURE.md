@@ -5,7 +5,7 @@ How cf-loom's pieces fit. Terms are defined in [CONTEXT.md](CONTEXT.md); the rul
 ## Tooling, not Contracts
 
 - This repository holds the tools, and in `examples/` fictional Services and the Definitions Package they share, used as end-to-end tests. It contains no real Service's Contract.
-- The tools know no organization: package scope and Approvers are configuration of whoever uses them, and the registry and its login are their own npm configuration, which the CLI uses through npm.
+- The tools know no organization: package scope is configuration of whoever uses them, Approvers and how an Approval is enforced are their own review process, and the registry and its login are their own npm configuration, which the CLI uses through npm.
 - Every Contract Package is published to the organization's npm registry; the tools are published to npmjs.com as `@cf-loom/<name>`, with restricted access.
 
 ## Packages
@@ -23,6 +23,7 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 - No grab-bag folders (`utils`, `common`, `shared`, `helpers`; see C14 in [CODING_STANDARDS.md](CODING_STANDARDS.md)); a piece several modules need lives in the lowest module that owns its concept. **(check)**
 - Modules are one level deep: a module that grows splits into sibling modules, not sub-folders. **(check)**
 - Tests sit next to the file they test and import as [C23](CODING_STANDARDS.md#tests) says.
+- Test support that several test files of a package share, such as a fake registry, sits in the package's `test/` folder, outside `src/`, so it is never built or published.
 
 `scripts/check-layout.ts`, run by `pnpm check` and CI, enforces the rules marked (check); the direction of dependencies stays a review rule.
 

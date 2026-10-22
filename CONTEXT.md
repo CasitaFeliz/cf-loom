@@ -223,15 +223,11 @@ A difference that changes nothing a Consumer or another Release relies on or not
 _Avoid_: patch change, cosmetic change
 
 **Breaking Change Approval** (an Approval, for short):
-An explicit approval, tied to the exact commit, that lets a Breaking Change merge.
+An explicit approval by an Approver, given under the organization's own review process, that lets a Breaking Change merge.
 _Avoid_: authorization, sign-off, label
 
-**Approval source**:
-An optional source, configured by the organization, that tells the tooling who approved which commit, so it can verify a Breaking Change Approval itself.
-_Avoid_: approval provider, gate
-
 **Approver**:
-Whoever may give a Breaking Change Approval for a Contract or a Definitions Package: a person or a team.
+Whoever the organization's review process lets give a Breaking Change Approval for a Contract or a Definitions Package: a person or a team.
 _Avoid_: authorizer, reviewer, tech lead
 
 ### Lifecycle

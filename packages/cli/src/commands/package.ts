@@ -1,15 +1,9 @@
 import { join } from 'node:path';
 import { contractPackageFilesOf, type Peers } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
-import {
-  type BuiltProject,
-  builtOf,
-  isCommittedCurrent,
-  type Run,
-  snapshotFile,
-} from '../project/index.ts';
+import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
-import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
+import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 
 /** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`. */
 export const defaultPackageFolder = 'contract-package';
@@ -33,7 +27,7 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
       'A Definitions Package has no Contract Package: it is published from its own source',
     );
   }
-  const stop = stopOf(built);
+  const stop = committedStopOf(built);
   if (stop !== undefined) {
     return stop;
   }
@@ -54,18 +48,6 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
     case 'failed':
       return toolingError(written.message);
   }
-}
-
-/** A committed Snapshot that is no JSON, or is not what `generate` would write. */
-function stopOf(built: BuiltProject): Exit | undefined {
-  const noJson = noJsonExitOf(built.committed);
-  if (noJson !== undefined) {
-    return noJson;
-  }
-  if (isCommittedCurrent(built)) {
-    return undefined;
-  }
-  return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
 }
 
 /** The versions of the two peers as the root file imports them, which the package is built with. */

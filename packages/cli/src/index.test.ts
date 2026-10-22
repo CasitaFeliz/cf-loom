@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { type ApprovalSource, defineConfig } from './index.ts';
-
-const myApprovalSource: ApprovalSource = {
-  approvalsOf: async () => [{ approver: '@org/platform-team' }],
-};
+import { defineConfig } from './index.ts';
 
 describe('defineConfig', () => {
   test('defineConfig returns the configuration it is given', () => {
@@ -15,12 +11,7 @@ describe('defineConfig', () => {
   });
 
   test('the README’s configuration declares every documented field', () => {
-    const written = {
-      scope: '@org',
-      approvals: myApprovalSource,
-      approvers: ['@org/platform-team'],
-      allowSelfApproval: false,
-    } as const;
+    const written = { scope: '@org' } as const;
 
     const defined = defineConfig(written);
 
@@ -45,5 +36,29 @@ describe('defineConfig', () => {
     });
 
     expect(defined.scope).toBe('@org');
+  });
+
+  test('approvals, approvers and allowSelfApproval are not fields of the configuration', () => {
+    const approvals = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: the organization's review process enforces Approvals
+      approvals: null,
+    });
+    const approvers = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: the organization's review process decides who may approve
+      approvers: ['@org/platform-team'],
+    });
+    const allowSelfApproval = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: the organization's review process decides who may approve
+      allowSelfApproval: false,
+    });
+
+    expect([approvals.scope, approvers.scope, allowSelfApproval.scope]).toEqual([
+      '@org',
+      '@org',
+      '@org',
+    ]);
   });
 });
