@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
 import type { RegistryOptions } from '../test/fake-registry.ts';
 import { loginTo, type NpmEnvironment, token } from '../test/npm-environment.ts';
@@ -75,6 +76,20 @@ function cfLoomInRemovedFolder(...args: string[]) {
   const removeThenRun = 'rmdir "$PWD" && exec "$0" "$@"';
   const command = ['-c', removeThenRun, process.execPath, bin, ...args];
   const ran = spawnSync('sh', command, { cwd: folder, encoding: 'utf8' });
+  return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+/** Runs the CLI with a clock that throws `message`, so the command ends as a throw of cf-loom does. */
+function cfLoomThrowing(message: string, ...args: string[]) {
+  const project = aProject({
+    'throwing-clock.mjs': `Date.now = () => { throw new Error(${JSON.stringify(message)}); };\n`,
+  });
+  const preload = pathToFileURL(join(project, 'throwing-clock.mjs')).href;
+  const env = Object.fromEntries([
+    ...Object.entries(process.env),
+    ['NODE_OPTIONS', `--import ${preload}`],
+  ]);
+  const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, env, encoding: 'utf8' });
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
@@ -834,6 +849,24 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
+  test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
+    'a root file that throws a text holding %s reports it as one line, with the line break written escaped',
+    (visible) => {
+      const project = aProject({
+        'cf-loom.config.ts': config,
+        'src/contract/index.ts': `throw 'first${visible}second';\n`,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `src/contract/index.ts cannot be loaded: first${visible}second\n`,
+      });
+    },
+  );
+
   test('a thrown value with no text is still one line', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
@@ -1443,6 +1476,15 @@ async function aChangedProject(lab: Lab, { before, after }: { before: Files; aft
   return { project, served };
 }
 
+/** A project whose Baseline holds a copy of an entry of `section` under `key`, which the project lacks. */
+async function aBaselineWithExtraKey(lab: Lab, section: string, key: string) {
+  const project = await aGeneratedProject(lab, aMessagingRoot());
+  const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+  const [declared] = Object.values(snapshot[section]);
+  const more = { [section]: { ...snapshot[section], [key]: declared } };
+  return { project, served: servedAs(ordersPackage, publishedAs(project, '1.0.0', more)) };
+}
+
 const removedSuccessField = {
   before: aRoot({ body: 'z.object({ ok: z.boolean(), total: z.number() })' }),
   after: aRoot(),
@@ -1808,6 +1850,48 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     },
   );
 
+  test.for([
+    ['events', 'Order\nX@1', 'events.Order\\nX@1'],
+    ['commands', 'Cmd\rX@1', 'commands.Cmd\\rX@1'],
+    ['endpoints', 'GET /a\u0085b', 'endpoints.GET /a\\u0085b'],
+  ] as const)(
+    'a Baseline whose %s hold an identity with a line break is printed escaped, so the Change stays on one line',
+    async ([section, key, site], { lab }) => {
+      const changed = await aBaselineWithExtraKey(lab, section, key);
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `${site} deleted: Not allowed`,
+        '',
+      ]);
+      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+      expect(ran.status).toBe(1);
+    },
+  );
+
+  test.for([
+    ['U+2028', '\u2028', '\\u2028'],
+    ['U+2029', '\u2029', '\\u2029'],
+    ['U+0085', '\u0085', '\\u0085'],
+  ] as const)(
+    '--json writes a site holding %s escaped, so the document stays one line',
+    async ([, character, visible], { lab }) => {
+      const changed = await aBaselineWithExtraKey(lab, 'events', `Order${character}X@1`);
+
+      const { ran } = await checkedAgainst(lab, changed, '--json');
+
+      const [document, ...rest] = ran.stdout.split('\n');
+      expect(rest).toEqual(['']);
+      expect(document).toContain(`"site":"events.Order${visible}X@1"`);
+      expect(JSON.parse(document ?? '').changes).toEqual([
+        expect.objectContaining({ site: `events.Order${character}X@1` }),
+      ]);
+      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+    },
+  );
+
   test('a Change that needs a Breaking Change Approval exits 2, saying how many', async ({
     lab,
   }) => {
@@ -2055,6 +2139,44 @@ describe('cf-loom', () => {
     expect(ran.stdout).toBe('');
     expect(ran.stderr).toMatch(/^cf-loom failed: \S+:\d+: ENOENT[^\n]*\n$/);
   });
+
+  test.for([
+    ['\\r', '\r'],
+    ['\\u0085', '\u0085'],
+    ['\\u2028', '\u2028'],
+    ['\\u2029', '\u2029'],
+  ] as const)(
+    'a throw whose message holds %s ends as one line, with the line break written escaped',
+    ([visible, character]) => {
+      const ran = cfLoomThrowing(`boom${character}tail`, 'generate');
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout).toBe('');
+      expect(ran.stderr.split('\n')).toHaveLength(2);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^cf-loom failed: \\S+:\\d+: boom\\${visible}tail\\n$`),
+      );
+    },
+  );
+
+  test.for([
+    ['\\r', '\r'],
+    ['\\u2028', '\u2028'],
+  ] as const)(
+    'check --json writes the document of a throw whose message holds %s on one line too',
+    ([visible, character]) => {
+      const ran = cfLoomThrowing(`boom${character}tail`, 'check', '--json');
+
+      const [document, ...rest] = ran.stdout.split('\n');
+      expect(rest).toEqual(['']);
+      expect(ran.stdout).not.toContain(character);
+      expect(JSON.parse(document ?? '')).toMatchObject({ status: 3 });
+      expect(ran.stderr.split('\n')).toHaveLength(2);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^cf-loom failed: \\S+:\\d+: boom\\${visible}tail\\n$`),
+      );
+    },
+  );
 
   test('check --json writes the document of a throw too, and stderr keeps its line', () => {
     const ran = cfLoomInRemovedFolder('check', '--json');

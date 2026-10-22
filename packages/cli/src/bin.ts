@@ -5,6 +5,7 @@ import {
   crashedExitOf,
   type Exit,
   type Output,
+  printedLineOf,
   runCommand,
   usageError,
 } from './commands/index.ts';
@@ -59,11 +60,14 @@ async function exitOf(args: readonly string[]): Promise<Exit> {
   }
 }
 
+/** Writes each line to a stream, through the one guard that keeps a line break out of a line. */
+function print(stream: NodeJS.WriteStream, lines: readonly string[]): void {
+  for (const line of lines) {
+    stream.write(`${printedLineOf(line)}\n`);
+  }
+}
+
 const exit = await exitOf(process.argv.slice(2));
-for (const line of exit.stdout) {
-  process.stdout.write(`${line}\n`);
-}
-for (const line of exit.stderr) {
-  process.stderr.write(`${line}\n`);
-}
+print(process.stdout, exit.stdout);
+print(process.stderr, exit.stderr);
 process.exitCode = exit.status;

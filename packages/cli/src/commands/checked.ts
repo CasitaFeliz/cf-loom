@@ -33,9 +33,6 @@ export type ChangeParts = {
 /** What a path segment or a text may be on a Change line without quotes. */
 const plainToken = /^[\w@/{}$-]+$/;
 
-/** The characters besides the ones JSON escapes that some readers end a line at: NEL, LS and PS. */
-const lineEndings = /[\u0085\u2028\u2029]/g;
-
 /** How `check` ends for these Changes: Not allowed fails, then a needed Approval, else done. */
 export function endingOf(changes: readonly Change[]): Ending {
   const notAllowed = changes.filter((change) => change.class === 'not-allowed');
@@ -94,16 +91,9 @@ export function partsOf(change: Change): ChangeParts {
   };
 }
 
-/** A text as it stands on a Change line: itself when plain, else as JSON, so it never splits the line. */
+/** A text as it stands on a Change line: itself when plain, else as JSON, so it reads as one token. */
 export function tokenOf(text: string): string {
-  return plainToken.test(text) ? text : jsonTextOf(text);
-}
-
-/** A value as JSON that no reader splits into lines: the line endings JSON leaves as they are, written as escapes. */
-export function jsonTextOf(value: unknown): string {
-  const escaped = (character: string) =>
-    `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
-  return JSON.stringify(value).replace(lineEndings, escaped);
+  return plainToken.test(text) ? text : JSON.stringify(text);
 }
 
 function locationTextOf(at: Path): string {
