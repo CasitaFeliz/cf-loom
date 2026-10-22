@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { compareSemanticVersions, isSemanticVersion } from '../internal/index.ts';
+import { compareSemanticVersions, isPrerelease, isSemanticVersion } from '../internal/index.ts';
 
 describe('isSemanticVersion', () => {
   test.each(['0.0.0', '3.4.0', '10.20.30', '1.0.0-rc.1', '1.0.0-0.alpha-1', '1.0.0+build.5'])(
@@ -33,6 +33,24 @@ describe('isSemanticVersion', () => {
       false,
       false,
     ]);
+  });
+});
+
+describe('isPrerelease', () => {
+  test('a version with a prerelease is one, and one without is not', () => {
+    const versions = ['1.0.0-rc.1', '0.0.0-0', '2.1.0-alpha+build.5', '1.0.0', '3.4.5+build'];
+
+    const flags = versions.map(isPrerelease);
+
+    expect(flags).toEqual([true, true, true, false, false]);
+  });
+
+  test('a hyphen in the build does not make a prerelease', () => {
+    const versions = ['1.0.0+build-1', '1.0.0+rc-1.2'];
+
+    const flags = versions.map(isPrerelease);
+
+    expect(flags).toEqual([false, false]);
   });
 });
 

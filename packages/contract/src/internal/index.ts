@@ -77,6 +77,7 @@ export {
   hashedTextOf,
   isDeclared,
   isDeclaredRejection,
+  isPrerelease,
   isSemanticVersion,
   ownRejectionsOf,
   schemaOriginsOf,

@@ -17,7 +17,6 @@ describe('defineConfig', () => {
   test('the README’s configuration declares every documented field', () => {
     const written = {
       scope: '@org',
-      registry: 'https://registry.npmjs.org',
       approvals: myApprovalSource,
       approvers: ['@org/platform-team'],
       allowSelfApproval: false,
@@ -33,6 +32,16 @@ describe('defineConfig', () => {
       scope: '@org',
       // @ts-expect-error: `registries` is not a field of the configuration
       registries: ['https://npm.internal.example'],
+    });
+
+    expect(defined.scope).toBe('@org');
+  });
+
+  test('registry is not a field of the configuration', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: the registry is the organization's npm configuration
+      registry: 'https://registry.npmjs.org',
     });
 
     expect(defined.scope).toBe('@org');

@@ -12,7 +12,6 @@ import { defineConfig } from '@cf-loom/cli';
 
 export const config = defineConfig({
   scope: '@org',                     // publishes @org/contract-orders-service
-  registry: 'https://registry.npmjs.org',
   // optional: only when cf-loom should verify Approvals itself
   approvals: myApprovalSource,
   approvers: ['@org/platform-team'],
@@ -20,7 +19,9 @@ export const config = defineConfig({
 });
 ```
 
-`scope` is always required; `registry` is required by `check`, `publish`, `broker-plan` and `route-plan`; `generate`, `verify` and `package` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
+`scope` is always required. `check`, `publish`, `broker-plan` and `route-plan` read the registry through npm (see below); `generate`, `verify` and `package` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
+
+cf-loom reads and publishes through the `npm` on your `PATH`, run in the project's directory with its environment, so the registry and the login are your npm configuration, exactly as for installing: `@org:registry=` or `registry=` and an auth token in an `.npmrc` (the project's, yours, or one `NPM_CONFIG_USERCONFIG` names) or in `npm_config_*` variables. cf-loom has no registry or login setting of its own. The Baseline is the highest version `npm view` lists that is not a prerelease; its `cfLoom` and peer ranges come from `npm view`, and only its tarball is downloaded, with `npm pack`, which checks its integrity, to read `snapshot.json`. A package npm cannot find counts as never published only when `npm whoami` reports a user on the registry your scope uses; a login that cannot read the package also looks unpublished, so the printed line names the registry and the user. Any npm error, a package whose versions were all unpublished, a highest version without `cfLoom` or of another kind, a tarball without a sha512 integrity, or a `snapshot.json` that cannot be decoded fails with exit 3.
 
 A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package `<scope>/<name>`. A Contract Package `cf-loom package` writes is `0.0.0`, in its package.json and in `contract.version`, so a Dependency declared on it records `against: '0.0.0'`; only `publish` derives a version.
 

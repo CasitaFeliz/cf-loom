@@ -15,6 +15,23 @@ export type Peers = { readonly contract: string; readonly zod: string };
 export type Packaging = { readonly scope: string; readonly version: string; readonly peers: Peers };
 
 /**
+ * The npm name a project publishes as: `<scope>/contract-<name>` for a Service or an Application,
+ * `<scope>/<name>` for a Definitions Package.
+ */
+export function publishedNameOf(
+  scope: string,
+  { kind, name }: Pick<Snapshot, 'kind' | 'name'>,
+): string {
+  switch (kind) {
+    case 'service':
+    case 'application':
+      return `${scope}/contract-${name}`;
+    case 'definitions':
+      return `${scope}/${name}`;
+  }
+}
+
+/**
  * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and
  * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom` metadata:
  * the hash and kind the check reads without downloading the package, and its Dependencies.
@@ -24,7 +41,7 @@ export function manifestOf(
   { scope, version, peers }: Packaging,
 ): PackageFile {
   const manifest = {
-    name: `${scope}/contract-${snapshot.name}`,
+    name: publishedNameOf(scope, snapshot),
     version,
     type: 'module',
     exports: {

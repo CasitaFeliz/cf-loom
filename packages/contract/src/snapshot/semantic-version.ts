@@ -15,6 +15,15 @@ export function isSemanticVersion(value: unknown): value is string {
 }
 
 /**
+ * Whether a semantic version is a prerelease, which never counts as the highest published
+ * version; a hyphen in its build does not make one. It must be a semantic version, which
+ * `isSemanticVersion` tells.
+ */
+export function isPrerelease(version: string): boolean {
+  return partsOf(version).prerelease.length > 0;
+}
+
+/**
  * How two semantic versions order, as semver.org orders them: negative when the first is lower,
  * zero when neither is, positive when it is higher. Both must be semantic versions, which
  * `isSemanticVersion` tells.
