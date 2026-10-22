@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import {
@@ -5,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -12,7 +14,7 @@ import {
 import { createServer } from 'node:http';
 import { type AddressInfo, connect } from 'node:net';
 import { tmpdir } from 'node:os';
-import { delimiter, join, sep } from 'node:path';
+import { delimiter, dirname, join, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { canonicalTextOf, type PublishedSnapshot } from '@cf-loom/contract/internal';
 import { test as baseTest, describe, expect } from 'vitest';
@@ -85,9 +87,17 @@ type TarEntry = {
   readonly type?: string;
   readonly prefix?: string;
   readonly linkname?: string;
+  readonly ustar?: string;
   readonly corruptChecksum?: boolean;
   readonly sizeField?: Buffer;
+  readonly sizeAs?: (size: number) => string;
+  readonly checksumAs?: (checksum: number) => string;
+  readonly overwrite?: Overwrite;
 };
+
+type Overwrite = { readonly at: number; readonly bytes: Buffer };
+
+const octal = (number: number, digits: number) => number.toString(8).padStart(digits, '0');
 
 function headerOf(entry: TarEntry, size: number): Buffer {
   const header = Buffer.alloc(block);
@@ -97,18 +107,22 @@ function headerOf(entry: TarEntry, size: number): Buffer {
   header.write('0000000\0', 116, 'latin1');
   header.write(`${size.toString(8).padStart(11, '0')}\0`, 124, 'latin1');
   entry.sizeField?.copy(header, 124);
+  if (entry.sizeAs !== undefined) {
+    header.write(entry.sizeAs(size), 124, 12, 'latin1');
+  }
   header.write('00000000000\0', 136, 'latin1');
   header.write('        ', 148, 'latin1');
   header.write(entry.type ?? '0', 156, 'latin1');
   header.write(entry.linkname ?? '', 157, 100, 'utf8');
-  header.write('ustar\0', 257, 'latin1');
-  header.write('00', 263, 'latin1');
+  header.write(entry.ustar ?? 'ustar\x0000', 257, 'latin1');
   header.write(entry.prefix ?? '', 345, 155, 'utf8');
+  entry.overwrite?.bytes.copy(header, entry.overwrite.at);
   let checksum = entry.corruptChecksum ? 1 : 0;
   for (const byte of header) {
     checksum += byte;
   }
-  header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148, 'latin1');
+  const checksumField = entry.checksumAs?.(checksum) ?? `${octal(checksum, 6)}\0 `;
+  header.write(checksumField, 148, 8, 'latin1');
   return header;
 }
 
@@ -119,6 +133,14 @@ function tarOf(entries: readonly TarEntry[]): Buffer {
     return [headerOf(entry, content.length), content, padding];
   });
   return Buffer.concat([...blocks, Buffer.alloc(2 * block)]);
+}
+
+function base256At(offset: number): Overwrite {
+  return { at: offset, bytes: Buffer.from([0x81]) };
+}
+
+function textAt(offset: number, text: string): Overwrite {
+  return { at: offset, bytes: Buffer.from(text) };
 }
 
 function aTarball(entries: readonly TarEntry[]): Buffer {
@@ -147,6 +169,18 @@ function paxRecord(key: string, value: string): string {
       : withOneDigitMore + 1;
   return `${length}${rest}`;
 }
+
+const entryNotWritten = 'has a tar entry npm does not write';
+const paxNotWritten = 'has a pax header npm does not write';
+const pathNotWritten = 'has a path npm does not write';
+const folderNamedSnapshot = 'has a folder named snapshot.json';
+const credentialsInUrl =
+  'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
+
+/** npm strips a path's first folder, so it can be as long as a test needs and still name snapshot.json. */
+const longFirstFolder = 'p'.repeat(1_048_548);
+const paxOfOneMebibyte = paxRecord('path', `${longFirstFolder}/snapshot.json`);
+const paxOfOneMebibytePlusOne = paxRecord('path', `${longFirstFolder}p/snapshot.json`);
 
 function integrityOf(bytes: Buffer, algorithm: 'sha1' | 'sha512'): string {
   return `${algorithm}-${createHash(algorithm).update(bytes).digest('base64')}`;
@@ -503,6 +537,27 @@ function aPackLockingNpm(lab: Lab, folder: string): string {
   return aStubNpm(lab, body);
 }
 
+/** The tarball a real packer writes for a folder, with the files given by their paths. */
+function aFolderPackedBy(
+  lab: Lab,
+  packer: 'npm' | 'pnpm',
+  files: Readonly<Record<string, string>>,
+) {
+  const { directory, env } = lab.aPlace({});
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    writeFileSync(join(directory, path), content);
+  }
+  const destination = lab.aFolder();
+  execFileSync(packer, ['pack', '--pack-destination', destination], {
+    cwd: directory,
+    env,
+    stdio: 'pipe',
+  });
+  const [tarball] = readdirSync(destination);
+  return readFileSync(join(destination, tarball ?? ''));
+}
+
 function tarballsRequested(registry: Registry): readonly string[] {
   return registry.requests.map((request) => request.path).filter((p) => p.startsWith('/tarballs/'));
 }
@@ -703,9 +758,24 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
 
     const read = await baselineOf(npm, orders, '@org');
 
-    expect(failureIn(read)).toMatch(/^npm config get registry failed: .*protected/);
-    expect(failureIn(read)).not.toContain('pw');
+    expect(failureIn(read)).toBe(`npm config get registry failed: ${credentialsInUrl}`);
   });
+
+  test.for([
+    ['a scope registry', '@org:registry'],
+    ['the default registry', 'registry'],
+  ] as const)(
+    'a package npm cannot find fails with where to put the credentials when %s holds them in its URL',
+    async ([, key], { lab }) => {
+      const registry = await lab.aRegistry();
+      const userConfig = `${key}=http://alice:pw@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`;
+      const npm = lab.aPlace({ userConfig });
+
+      const read = await baselineOf(npm, orders, '@org');
+
+      expect(failureIn(read)).toBe(`npm config get ${key} failed: ${credentialsInUrl}`);
+    },
+  );
 
   test('a registry URL’s user is left out of what is printed', async ({ lab }) => {
     const registry = await lab.aRegistry();
@@ -1036,7 +1106,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
         { path: 'PaxHeader/x', type: 'x', content: paxRecord('size', '0') },
         { path: 'package/padding', content: hiddenEntry },
       ]),
-      'has a pax size that differs from its header',
+      paxNotWritten,
     ],
     [
       'has a malformed pax header',
@@ -1118,21 +1188,44 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       'has more than one snapshot.json',
     ],
     [
-      'two, one of them a contiguous file',
+      'two, one in another letter case',
       [
         { path: 'package/snapshot.json', content: 'decoy' },
-        { path: 'package/snapshot.json', type: '7', content: 'real' },
+        { path: 'package/Snapshot.JSON', content: 'real' },
       ],
       'has more than one snapshot.json',
     ],
     [
-      'two, one named by an old extended header',
+      'two, both in other letter cases',
       [
-        { path: 'package/snapshot.json', content: 'decoy' },
-        { path: 'PaxHeader/x', type: 'X', content: paxRecord('path', 'package/snapshot.json') },
-        { path: 'package/placeholder', content: 'real' },
+        { path: 'package/SNAPSHOT.json', content: 'decoy' },
+        { path: 'package/Snapshot.json', content: 'real' },
       ],
       'has more than one snapshot.json',
+    ],
+    [
+      'two, one named by a long s',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/\u017fnapshot.json', content: 'real' },
+      ],
+      'has more than one snapshot.json',
+    ],
+    [
+      'only one, under a folder named at the end of a prefix of more than 130 characters',
+      [
+        {
+          path: 'snapshot.json',
+          prefix: `p/${'./'.repeat(64)}sub`,
+          content: '{}',
+        },
+      ],
+      'has no snapshot.json',
+    ],
+    [
+      'only one, in another letter case',
+      [{ path: 'package/Snapshot.json', content: '{}' }],
+      'has no snapshot.json',
     ],
     [
       'two, one behind a dot segment',
@@ -1159,41 +1252,335 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   });
 
   test.for([
-    ['a GNU long-name', 'L'],
-    ['an old GNU long-name', 'N'],
-  ] as const)('a tarball with %s entry fails', async ([, type], { lab }) => {
-    const tarball = aTarball([
-      { path: '././@LongLink', type, content: 'package/dist/a-long-name.js\0' },
-      { path: 'package/dist/a-long-name.js', content: 'export {};' },
-      {
-        path: 'package/snapshot.json',
-        content: canonicalTextOf(aPublishedSnapshot(orders, '1.0.0')),
-      },
-    ]);
+    [
+      'two pax headers in a row, the second the one that names the path',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', 'package/snapshot.json') },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('mtime', '1') },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'two pax headers in a row, the first with a size',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('size', '0') },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('mtime', '1') },
+        { path: 'package/padding', content: hiddenEntry },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with no entry after it',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', 'package/snapshot.json') },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header of a mebibyte and one byte',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxOfOneMebibytePlusOne },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header over a mebibyte with a key npm does not write',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecord('comment', 'y'.repeat(mebibyte + 10)) + paxRecord('path', 'package/a'),
+        },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a key npm does not write',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('uid', '0') },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a link path',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('linkpath', 'package/a') },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a path twice',
+      [
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecord('path', 'package/a') + paxRecord('path', 'package/snapshot.json'),
+        },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a modification time that is no number',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('mtime', 'yesterday') },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a size that is no number',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('size', 'x') },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a pax header with a line break in its path',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', 'pa\nckage/snapshot.json') },
+        { path: 'package/decoy', content: 'decoy' },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a global pax header',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/g', type: 'g', content: paxRecord('size', '0') },
+        { path: 'package/padding', content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a link path on a file',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/padding', linkname: 'x', content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a folder with a body',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/dist', type: '5', content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a ustar version that is not 00',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/snapshot.json', prefix: 'zzz', ustar: 'ustar\x00xx', content: 'real' },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a GNU magic',
+      [{ path: 'package/snapshot.json', ustar: 'ustar  \x00', content: '{}' }],
+      entryNotWritten,
+    ],
+    [
+      'a header with no ustar magic',
+      [{ path: 'package/snapshot.json', ustar: '', content: '{}' }],
+      entryNotWritten,
+    ],
+    [
+      'an empty path',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: '', content: hiddenEntry },
+      ],
+      pathNotWritten,
+    ],
+    [
+      'a file whose path ends with a slash, and a body',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/dist/', content: hiddenEntry },
+      ],
+      pathNotWritten,
+    ],
+    [
+      'a file named snapshot.json with a slash after it',
+      [{ path: 'package/snapshot.json/', content: '{}' }],
+      pathNotWritten,
+    ],
+    [
+      'a path with a backslash',
+      [{ path: 'package\\snapshot.json', content: '{}' }],
+      pathNotWritten,
+    ],
+    [
+      'a path with a .. segment',
+      [{ path: 'package/dist/../snapshot.json', content: '{}' }],
+      pathNotWritten,
+    ],
+    [
+      'a pax path with a .. segment',
+      [
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', '../snapshot.json') },
+        { path: 'package/placeholder', content: '{}' },
+      ],
+      pathNotWritten,
+    ],
+    [
+      'a mode that is a base-256 number',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/padding', overwrite: base256At(100), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a modification time that is a base-256 number',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/padding', overwrite: base256At(136), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a device number that is a base-256 number',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/padding', overwrite: base256At(329), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a change time that is a base-256 number',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/padding', overwrite: base256At(488), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a name with text after its NUL',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: '', overwrite: textAt(0, 'package/padding\0\nx'), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a prefix with text after its NUL',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'padding', overwrite: textAt(345, 'package\0\nx'), content: hiddenEntry },
+      ],
+      entryNotWritten,
+    ],
+    [
+      'a checksum of eight digits, which npm’s tar reads with the type after it',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        {
+          path: 'package/padding',
+          checksumAs: (checksum: number) => octal(checksum, 8),
+          content: hiddenEntry,
+        },
+      ],
+      'is no tar archive',
+    ],
+    [
+      'a pax path of digits only, which npm’s tar reads as a number',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', '123') },
+        { path: 'package/padding', content: hiddenEntry },
+      ],
+      paxNotWritten,
+    ],
+    [
+      'a path of more than 1024 segments after the first, which npm’s tar leaves out',
+      [
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecord('path', `package/${'./'.repeat(1024)}snapshot.json`),
+        },
+        { path: 'package/placeholder', content: '{}' },
+      ],
+      pathNotWritten,
+    ],
+    [
+      'a folder named snapshot.json',
+      [{ path: 'package/snapshot.json', type: '5' }],
+      folderNamedSnapshot,
+    ],
+    [
+      'a folder named snapshot.json, in another letter case, after the file',
+      [
+        { path: 'package/snapshot.json', content: '{}' },
+        { path: 'package/SNAPSHOT.json/', type: '5' },
+      ],
+      folderNamedSnapshot,
+    ],
+    [
+      'a file under a folder named snapshot.json',
+      [
+        { path: 'package/snapshot.json', content: '{}' },
+        { path: 'package/snapshot.json/index.js', content: 'export {};' },
+      ],
+      folderNamedSnapshot,
+    ],
+  ] as const)('a tarball with %s fails', async ([, entries, said], { lab }) => {
+    const tarball = aTarball(entries);
 
     const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
 
-    expect(failureIn(read)).toBe(
-      `${ordersPackage}@1.0.0's tarball cannot be read: has a GNU long-name entry`,
-    );
-  });
-
-  test('a tarball with a link named snapshot.json fails', async ({ lab }) => {
-    const tarball = aTarball([
-      { path: 'package/snapshot.json', type: '2', linkname: '/etc/passwd' },
-    ]);
-
-    const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
-
-    expect(failureIn(read)).toBe(
-      `${ordersPackage}@1.0.0's tarball cannot be read: has a link named snapshot.json`,
-    );
+    expect(failureIn(read)).toBe(`${ordersPackage}@1.0.0's tarball cannot be read: ${said}`);
   });
 
   test.for([
+    ['a hard link', '1'],
+    ['a symbolic link', '2'],
+    ['a character device', '3'],
+    ['a block device', '4'],
+    ['a named pipe', '6'],
+    ['a contiguous file', '7'],
+    ['an old extended header', 'X'],
+    ['a GNU long-name', 'L'],
+    ['a GNU long link name', 'K'],
+    ['an old GNU long-name', 'N'],
+    ['a GNU sparse file', 'S'],
+  ] as const)('a tarball with %s entry fails', async ([, type], { lab }) => {
+    const tarball = aTarball([
+      { path: 'package/snapshot.json', content: 'decoy' },
+      { path: 'package/other', type, content: 'package/snapshot.json\0' },
+      { path: 'package/snapshot.json', content: 'real' },
+    ]);
+
+    const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
+
+    expect(failureIn(read)).toBe(
+      `${ordersPackage}@1.0.0's tarball cannot be read: ${entryNotWritten}`,
+    );
+  });
+  test.for([
     ['its first folder is called anything', 'folder'],
     ['it sits behind a ustar prefix', 'prefix'],
-    ['a pax path names it and a pax size agrees with the header', 'pax'],
+    ['a pax header gives its path, a modification time and a size that agrees', 'pax'],
+    ['a pax header of exactly a mebibyte names it', 'big-pax'],
+    ['a folder entry comes before it', 'folder-entry'],
+    ['its type flag is a NUL', 'nul-type'],
+    ['a long ustar prefix needs the bytes where an access time would be', 'long-prefix'],
+    ['an access time sits after a short ustar prefix', 'access-time'],
+    ['its path has 1024 segments after the first', 'deep'],
   ] as const)('snapshot.json is found when %s', async ([, placing], { lab }) => {
     const json = canonicalTextOf(aPublishedSnapshot(orders, '1.0.0'));
     const placed = {
@@ -1205,9 +1592,36 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
           type: 'x',
           content:
             paxRecord('path', 'package/snapshot.json') +
+            paxRecord('mtime', '499162500') +
             paxRecord('size', String(Buffer.byteLength(json))),
         },
         { path: 'placeholder', content: json },
+      ],
+      deep: [
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecord('path', `package/${'./'.repeat(1023)}snapshot.json`),
+        },
+        { path: 'placeholder', content: json },
+      ],
+      'big-pax': [
+        { path: 'PaxHeader/x', type: 'x', content: paxOfOneMebibyte },
+        { path: 'placeholder', content: json },
+      ],
+      'nul-type': [{ path: 'package/snapshot.json', type: '\0', content: json }],
+      'long-prefix': [{ path: 'snapshot.json', prefix: 'p'.repeat(150), content: json }],
+      'access-time': [
+        {
+          path: 'snapshot.json',
+          prefix: 'package',
+          overwrite: textAt(476, '00000000000\0'),
+          content: json,
+        },
+      ],
+      'folder-entry': [
+        { path: 'package/dist/', type: '5' },
+        { path: 'package/snapshot.json', content: json },
       ],
     };
     const tarball = aTarball(placed[placing]);
@@ -1216,6 +1630,54 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
 
     expect(baselineIn(read).snapshot).toEqual(aPublishedSnapshot(orders, '1.0.0'));
   });
+
+  test.for([
+    [
+      'a checksum written with seven digits and a NUL',
+      { checksumAs: (sum: number) => `${octal(sum, 7)}\0` },
+    ],
+    [
+      'a checksum written with six digits, a space and a NUL',
+      { checksumAs: (sum: number) => `${octal(sum, 6)} \0` },
+    ],
+    [
+      'a size written with ten digits, a space and a NUL',
+      { sizeAs: (size: number) => `${octal(size, 10)} \0` },
+    ],
+    [
+      'a size written with eleven digits and a space',
+      { sizeAs: (size: number) => `${octal(size, 11)} ` },
+    ],
+  ] as const)('a header with %s is read', async ([, form], { lab }) => {
+    const json = canonicalTextOf(aPublishedSnapshot(orders, '1.0.0'));
+    const tarball = aTarball([{ path: 'package/snapshot.json', content: json, ...form }]);
+
+    const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
+
+    expect(baselineIn(read).snapshot).toEqual(aPublishedSnapshot(orders, '1.0.0'));
+  });
+
+  test.for([
+    ['npm', 'npm', { [`dist/${'f'.repeat(130)}.js`]: 'export {};' }],
+    ['pnpm', 'pnpm', {}],
+  ] as const)(
+    'a tarball packed by %s is read, whatever the lengths and characters of its paths',
+    async ([, packer, extra], { lab }) => {
+      const snapshot = aPublishedSnapshot(orders, '1.0.0');
+      const tarball = aFolderPackedBy(lab, packer, {
+        'package.json': JSON.stringify({ name: ordersPackage, version: '1.0.0' }),
+        'snapshot.json': canonicalTextOf(snapshot),
+        'dist/index.js': 'export {};',
+        [`dist/${'d'.repeat(60)}/${'g'.repeat(50)}.js`]: 'export {};',
+        'dist/ünïcödé-ファイル.js': 'export {};',
+        ...extra,
+      });
+
+      const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
+
+      expect(baselineIn(read).snapshot).toEqual(snapshot);
+    },
+  );
 
   test('a snapshot.json that is no UTF-8 fails', async ({ lab }) => {
     const snapshotJson = Buffer.from([0x7b, 0xff, 0xfe, 0x7d]);

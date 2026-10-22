@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed, jsonFromNpm, type NpmPlace } from './npm.ts';
-import { entriesNamed } from './tar-entries.ts';
+import { fileNamed } from './tar-entries.ts';
 
 const maxTarballBytes = 64 * 1024 * 1024;
 const snapshotFile = 'snapshot.json';
@@ -23,7 +23,7 @@ type Unreadable = { readonly kind: 'unreadable'; readonly reason: string };
 /**
  * Downloads a package's tarball with `npm pack`, requires its bytes to hash to one of the sha512
  * digests `npm view` listed, and reads its single `snapshot.json` as strict UTF-8; the folder it
- * packs into is removed whatever happens.
+ * packs into is removed on a best-effort basis.
  */
 export async function snapshotTextOf(
   place: NpmPlace,
@@ -37,7 +37,7 @@ export async function snapshotTextOf(
   try {
     return await textPacked(place, tarball, made.value);
   } finally {
-    await removed(made.value);
+    await removeFolderBestEffort(made.value);
   }
 }
 
@@ -50,7 +50,7 @@ async function attempt<Value>(step: () => Promise<Value>): Promise<Done<Value> |
 }
 
 /** Removing the folder is best effort: a leftover in the system's temporary folder fails no read. */
-async function removed(folder: string): Promise<void> {
+async function removeFolderBestEffort(folder: string): Promise<void> {
   await rm(folder, { recursive: true, force: true }).catch(() => undefined);
 }
 
@@ -120,18 +120,17 @@ function textIn(spec: string, tarball: Buffer): SnapshotText | Failed {
   if (archive.kind === 'failed') {
     return unreadable(spec, archive.reason);
   }
-  const found = entriesNamed(archive.bytes, snapshotFile);
-  if (found.kind === 'broken') {
-    return unreadable(spec, found.reason);
+  const found = fileNamed(archive.bytes, snapshotFile);
+  switch (found.kind) {
+    case 'broken':
+      return unreadable(spec, found.reason);
+    case 'missing':
+      return failed(`${spec} has no ${snapshotFile}`);
+    case 'repeated':
+      return failed(`${spec} has more than one ${snapshotFile}`);
+    case 'found':
+      return utf8Of(spec, found.contents);
   }
-  const [contents, ...more] = found.contents;
-  if (contents === undefined) {
-    return failed(`${spec} has no ${snapshotFile}`);
-  }
-  if (more.length > 0) {
-    return failed(`${spec} has more than one ${snapshotFile}`);
-  }
-  return utf8Of(spec, contents);
 }
 
 function gunzipped(

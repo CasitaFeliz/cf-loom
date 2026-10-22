@@ -1,211 +1,101 @@
-import { recordsOf } from './pax-records.ts';
+import { foldedCase, unpackedPathOf } from './entry-path.ts';
+import { type Pax, paxOf } from './pax-records.ts';
+import { type Broken, paxNotWritten } from './tar-broken.ts';
+import { type Header, headerAt } from './tar-header.ts';
 
-const blockSize = 512;
-
-/** The contents of every file with a name in an archive, or why the archive cannot be read. */
-export type Found = { readonly kind: 'found'; readonly contents: readonly Buffer[] } | Broken;
-
-type Broken = { readonly kind: 'broken'; readonly reason: string };
-
-type End = { readonly kind: 'end' };
-
-type EntryKind = 'file' | 'extended' | 'long-name' | 'link' | 'other';
-
-type Header = {
-  readonly kind: 'header';
-  readonly entryKind: EntryKind;
-  readonly path: string;
-  readonly size: number;
-  readonly data: Buffer;
-  readonly next: number;
-};
-
-type Named = { readonly kind: 'file' | 'link'; readonly path: string; readonly data: Buffer };
-
-/** What a pax header says of the entry that follows it. */
-type Pending = { readonly path?: string | undefined; readonly size?: string | undefined };
-
-type Step =
-  | { readonly kind: 'pax'; readonly pending: Pending; readonly next: number }
-  | { readonly kind: 'entry'; readonly entry: Named; readonly next: number }
-  | { readonly kind: 'skipped'; readonly next: number }
-  | End
+/** The one file with a name in an archive, none, more than one, or why the archive cannot be read. */
+export type Found =
+  | { readonly kind: 'found'; readonly contents: Buffer }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'repeated' }
   | Broken;
 
-const noArchive = { kind: 'broken', reason: 'is no tar archive' } as const;
-const afterEnd = { kind: 'broken', reason: 'has data after its end' } as const;
-const paxSize = { kind: 'broken', reason: 'has a pax size that differs from its header' } as const;
-const longName = { kind: 'broken', reason: 'has a GNU long-name entry' } as const;
+type Named = {
+  readonly holds: 'file' | 'folder';
+  readonly path: string;
+  readonly folded: string;
+  readonly data: Buffer;
+};
+
+type Step =
+  | { readonly kind: 'pax'; readonly pax: Pax }
+  | { readonly kind: 'entry'; readonly entry: Named }
+  | Broken;
 
 /**
- * The contents of every file whose path, as npm unpacks it, is `name`; an archive npm could read
- * differently than this does is refused rather than guessed at.
+ * The one file npm unpacks as `name`, read only from an archive of what `npm pack` writes (and
+ * `pnpm pack`, when every path fits a ustar header): files, empty folders and one pax header with a
+ * path, a modification time and a size before an entry. Anything else is refused, since npm's tar
+ * could unpack it to other files than this reads.
  */
-export function entriesNamed(archive: Buffer, name: string): Found {
+export function fileNamed(archive: Buffer, name: string): Found {
   const walked = entriesOf(archive);
   if (walked.kind === 'broken') {
     return walked;
   }
-  const named = walked.entries.filter(({ path }) => withoutFirstFolder(path) === name);
-  if (named.some((entry) => entry.kind === 'link')) {
-    return { kind: 'broken', reason: `has a link named ${name}` };
+  const wanted = foldedCase(name);
+  const isFolder = ({ holds, folded }: Named) =>
+    folded.startsWith(`${wanted}/`) || (holds === 'folder' && folded === wanted);
+  if (walked.entries.some(isFolder)) {
+    return { kind: 'broken', reason: `has a folder named ${name}` };
   }
-  return { kind: 'found', contents: named.map((entry) => entry.data) };
+  const named = walked.entries.filter(({ folded }) => folded === wanted);
+  const [only] = named;
+  if (named.length > 1) {
+    return { kind: 'repeated' };
+  }
+  return only?.path === name ? { kind: 'found', contents: only.data } : { kind: 'missing' };
 }
 
 function entriesOf(archive: Buffer): { kind: 'walked'; entries: readonly Named[] } | Broken {
   const entries: Named[] = [];
+  let pending: Pax | undefined;
   let offset = 0;
-  let pending: Pending = {};
   for (;;) {
-    const step = stepAt(archive, offset, pending);
+    const header = headerAt(archive, offset);
+    if (header.kind === 'broken') {
+      return header;
+    }
+    if (header.kind === 'end') {
+      return pending === undefined ? { kind: 'walked', entries } : paxNotWritten;
+    }
+    const step = stepOf(header, pending);
     switch (step.kind) {
-      case 'end':
-        return { kind: 'walked', entries };
       case 'broken':
         return step;
       case 'pax':
-        pending = step.pending;
+        pending = step.pax;
         break;
       case 'entry':
         entries.push(step.entry);
-        pending = {};
-        break;
-      case 'skipped':
-        pending = {};
+        pending = undefined;
         break;
     }
-    offset = step.next;
+    offset = header.next;
   }
 }
 
-function stepAt(archive: Buffer, offset: number, pending: Pending): Step {
-  const header = headerAt(archive, offset);
-  switch (header.kind) {
-    case 'end':
-    case 'broken':
-      return header;
-    case 'header':
-      return stepOf(header, pending);
+/** What a header does to the walk: a pax header names the next entry's path, a file or folder is kept. */
+function stepOf(header: Header, pending: Pax | undefined): Step {
+  if (header.holds !== 'pax') {
+    return entryStepOf(header, header.holds, pending);
   }
-}
-
-/** What an entry does to the walk: a pax header names the next entry's path, a file or link is kept. */
-function stepOf(header: Header, pending: Pending): Step {
-  switch (header.entryKind) {
-    case 'extended':
-      return paxStepOf(header);
-    case 'long-name':
-      return longName;
-    case 'file':
-    case 'link':
-    case 'other':
-      return entryStepOf(header, pending);
+  if (pending !== undefined) {
+    return paxNotWritten;
   }
+  const pax = paxOf(header.data);
+  return pax.kind === 'broken' ? pax : { kind: 'pax', pax };
 }
 
-function paxStepOf({ data, next }: Header): Step {
-  const records = recordsOf(data);
-  if (records === undefined) {
-    return noArchive;
+function entryStepOf(header: Header, holds: 'file' | 'folder', pending: Pax | undefined): Step {
+  const { path, size, data } = header;
+  if (pending?.size !== undefined && pending.size !== `${size}`) {
+    return paxNotWritten;
   }
-  return { kind: 'pax', pending: { path: records.get('path'), size: records.get('size') }, next };
-}
-
-function entryStepOf(header: Header, pending: Pending): Step {
-  const { entryKind, data, next } = header;
-  if (pending.size !== undefined && pending.size !== `${header.size}`) {
-    return paxSize;
+  const unpacked = unpackedPathOf(pending?.path ?? path, holds);
+  if (unpacked.kind === 'broken') {
+    return unpacked;
   }
-  if (entryKind !== 'file' && entryKind !== 'link') {
-    return { kind: 'skipped', next };
-  }
-  const path = pending.path ?? header.path;
-  return { kind: 'entry', entry: { kind: entryKind, path, data }, next };
-}
-
-/** A path as npm unpacks it: its first folder stripped, then empty and `.` segments dropped. */
-function withoutFirstFolder(path: string): string {
-  const segments = path.split('/').slice(1);
-  return segments.filter((segment) => segment !== '' && segment !== '.').join('/');
-}
-
-function headerAt(archive: Buffer, offset: number): Header | End | Broken {
-  const block = archive.subarray(offset, offset + blockSize);
-  if (block.every((byte) => byte === 0)) {
-    return endAt(archive, offset);
-  }
-  const size = octalOf(block.subarray(124, 136));
-  const isWhole =
-    block.length === blockSize && octalOf(block.subarray(148, 156)) === checksumOf(block);
-  const start = offset + blockSize;
-  if (size === undefined || !isWhole || start + size > archive.length) {
-    return noArchive;
-  }
-  return {
-    kind: 'header',
-    entryKind: entryKindOf(String.fromCharCode(block[156] ?? 0)),
-    path: pathOf(block),
-    size,
-    data: archive.subarray(start, start + size),
-    next: start + Math.ceil(size / blockSize) * blockSize,
-  };
-}
-
-/** The archive ends at its first zero block, and nothing but zeros may follow, as npm would read on. */
-function endAt(archive: Buffer, offset: number): End | Broken {
-  const hasData = archive.subarray(offset).some((byte) => byte !== 0);
-  return hasData ? afterEnd : { kind: 'end' };
-}
-
-function entryKindOf(typeflag: string): EntryKind {
-  switch (typeflag) {
-    case '0':
-    case '\0':
-    case '7':
-      return 'file';
-    case 'x':
-    case 'X':
-      return 'extended';
-    case 'L':
-    case 'K':
-    case 'N':
-      return 'long-name';
-    case '1':
-    case '2':
-      return 'link';
-    default:
-      return 'other';
-  }
-}
-
-/** The header's path: the ustar prefix and name, where the header says it is a ustar one. */
-function pathOf(block: Buffer): string {
-  const name = textOf(block.subarray(0, 100));
-  const isUstar = block.subarray(257, 263).toString('latin1') === 'ustar\0';
-  const prefix = isUstar ? textOf(block.subarray(345, 500)) : '';
-  return prefix === '' ? name : `${prefix}/${name}`;
-}
-
-function textOf(field: Buffer): string {
-  const end = field.indexOf(0);
-  return field.subarray(0, end === -1 ? field.length : end).toString('utf8');
-}
-
-/** An octal number as a header writes it, NUL or space padded; a base-256 size is not one. */
-function octalOf(field: Buffer): number | undefined {
-  const digits = field
-    .toString('latin1')
-    .replace(/[\0 ]+$/, '')
-    .trimStart();
-  return /^[0-7]+$/.test(digits) ? Number.parseInt(digits, 8) : undefined;
-}
-
-/** The sum of a header's bytes with the checksum field read as spaces. */
-function checksumOf(block: Buffer): number {
-  let sum = 0;
-  for (const [index, byte] of block.entries()) {
-    sum += index >= 148 && index < 156 ? 0x20 : byte;
-  }
-  return sum;
+  const folded = foldedCase(unpacked.path);
+  return { kind: 'entry', entry: { holds, path: unpacked.path, folded, data } };
 }

@@ -6,8 +6,7 @@ import {
   type PublishedSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
-import { publishedNameOf } from '../contract-package/index.ts';
-import { isRootKind } from '../loading/index.ts';
+import { isRootKind, publishedNameOf } from '../loading/index.ts';
 import { type Failed, failed, jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
 import { snapshotTextOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';

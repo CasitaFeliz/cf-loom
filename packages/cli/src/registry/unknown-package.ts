@@ -1,6 +1,8 @@
 import { type Failed, failed, jsonFromNpm, lineOf, type NpmPlace, textFromNpm } from './npm.ts';
 
 const registrySetting = 'npm_config_registry';
+const credentialsInUrl =
+  'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
 /** A package the registry npm reads for its scope does not know, found with the user npm logs in as there. */
 export type UnknownPackage = {
@@ -31,16 +33,14 @@ export async function unknownPackageOf(
   if (served.kind === 'failed') {
     return served;
   }
-  const { registry } = served;
-  const login = await loginOn(npm, registry);
+  const login = await loginOn(npm, served.registry);
+  const registry = lineOf(served.registry);
   if (login.kind === 'refused') {
     const refusal = `npm has no login there it accepts (${login.why})`;
     const looksUnpublished = 'a package your login cannot read looks unpublished';
-    return failed(
-      `${packageName} is not in ${lineOf(registry)}, and ${refusal}: ${looksUnpublished}`,
-    );
+    return failed(`${packageName} is not in ${registry}, and ${refusal}: ${looksUnpublished}`);
   }
-  return { kind: 'unknown-package', registry: lineOf(registry), username: login.username };
+  return { kind: 'unknown-package', registry, username: login.username };
 }
 
 /** The scope's own registry, or else the default one; each asked alone, since npm refuses one that holds credentials. */
@@ -59,12 +59,16 @@ async function registryAt(npm: NpmPlace, key: string): Promise<Registry | Unset 
   const call = { label: `npm config get ${key}`, args: ['config', 'get', key] };
   const run = await textFromNpm(npm, call);
   if (run.kind === 'failed') {
-    return run;
+    return isProtected(run.message) ? failed(`${call.label} failed: ${credentialsInUrl}`) : run;
   }
   const registry = run.text.trim();
   return registry === '' || registry === 'undefined'
     ? { kind: 'unset' }
     : { kind: 'registry', registry };
+}
+
+function isProtected(npmFailure: string): boolean {
+  return npmFailure.includes('is protected');
 }
 
 async function loginOn(npm: NpmPlace, registry: string): Promise<Login> {

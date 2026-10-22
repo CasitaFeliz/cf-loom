@@ -5,6 +5,7 @@ import {
   type ServiceSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
+import { publishedNameOf } from '../loading/index.ts';
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
@@ -13,25 +14,6 @@ export type Peers = { readonly contract: string; readonly zod: string };
 
 /** Who the package is published as, at which version, and what it is built with. */
 export type Packaging = { readonly scope: string; readonly version: string; readonly peers: Peers };
-
-/**
- * The npm name a project publishes as: `<scope>/contract-<name>` for a Service or an Application,
- * `<scope>/<name>` for a Definitions Package.
- */
-export function publishedNameOf(
-  scope: string,
-  { kind, name }: Pick<Snapshot, 'kind' | 'name'>,
-): string {
-  switch (kind) {
-    case 'service':
-    case 'application':
-      return `${scope}/contract-${name}`;
-    case 'definitions':
-      return `${scope}/${name}`;
-    default:
-      throw new Error(`no package is published for a Snapshot of kind ${String(kind)}`);
-  }
-}
 
 /**
  * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and

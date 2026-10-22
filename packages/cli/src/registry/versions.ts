@@ -100,6 +100,14 @@ function peersFrom(peerDependencies: unknown): PeerRanges | undefined {
   return peers;
 }
 
+function digestOf(hash: string): string | undefined {
+  return sha512.exec(hash)?.[1];
+}
+
+function isDigest(digest: string | undefined): digest is string {
+  return digest !== undefined;
+}
+
 function digestsOf(
   spec: string,
   dist: unknown,
@@ -109,7 +117,7 @@ function digestsOf(
   }
   const integrity = ownOf(dist, 'integrity');
   const hashes = typeof integrity === 'string' ? integrity.split(/\s+/) : [];
-  const digests = hashes.flatMap((hash) => sha512.exec(hash)?.slice(1) ?? []);
+  const digests = hashes.map(digestOf).filter(isDigest);
   if (digests.length === 0) {
     return failed(`${spec} has no sha512 integrity, so its tarball cannot be verified`);
   }

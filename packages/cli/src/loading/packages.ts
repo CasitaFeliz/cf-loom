@@ -4,8 +4,8 @@ import {
   listedDefinitionsOf,
   type ResolvedDefinitions,
 } from '@cf-loom/contract/internal';
-import { publishedNameOf } from '../contract-package/index.ts';
 import { installedPackageOf, type LookedUp } from './installed-package.ts';
+import { publishedNameOf } from './published-name.ts';
 
 /** A listed Definitions Package as installed, with what its module exports, by name. */
 export type InstalledDefinitions = ResolvedDefinitions & {
