@@ -11,7 +11,7 @@ const scopePattern = /^@[a-z0-9][a-z0-9._~-]*$/;
 
 /** What every command reads of the project's configuration, or why it is missing or wrong. */
 export type LoadedConfig =
-  | { readonly kind: 'loaded'; readonly config: Pick<Config, 'scope'> }
+  | { readonly kind: 'loaded'; readonly config: Config }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**

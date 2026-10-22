@@ -1,8 +1,17 @@
 import { failureLineOf } from '@cf-loom/contract/internal';
-import { type Committed, type ProjectFailure, snapshotFile } from '../project/index.ts';
+import {
+  type BuiltProject,
+  type Committed,
+  isCommittedCurrent,
+  type ProjectFailure,
+  snapshotFile,
+} from '../project/index.ts';
 
-/** The exit statuses of the CLI's README: done, the check failed, a tooling error. */
-export type ExitStatus = 0 | 1 | 3;
+/**
+ * The exit statuses of the CLI's README: done, the check failed, a Breaking Change Approval is
+ * needed, a tooling error.
+ */
+export type ExitStatus = 0 | 1 | 2 | 3;
 
 /** What a command ends with: its exit status and the lines it prints on each stream. */
 export type Exit = {
@@ -48,4 +57,19 @@ export function noJsonExitOf(committed: Committed): Exit | undefined {
   return toolingError(
     `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
   );
+}
+
+/**
+ * The stop of a command that works from the committed Snapshot when it is no JSON, or is not
+ * what `generate` would write, so the command acts on the file that was reviewed.
+ */
+export function committedStopOf(built: BuiltProject): Exit | undefined {
+  const noJson = noJsonExitOf(built.committed);
+  if (noJson !== undefined) {
+    return noJson;
+  }
+  if (isCommittedCurrent(built)) {
+    return undefined;
+  }
+  return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
 }

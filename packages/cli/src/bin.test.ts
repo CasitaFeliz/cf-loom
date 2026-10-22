@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -12,7 +12,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { pathToFileURL } from 'node:url';
+import { afterEach, describe, expect } from 'vitest';
+import type { RegistryOptions } from '../test/fake-registry.ts';
+import { loginTo, type NpmEnvironment, token } from '../test/npm-environment.ts';
+import { type Lab, test } from '../test/npm-lab.ts';
+import { ordersPackage } from '../test/published-snapshot.ts';
+import { aVersion, type ServedVersion } from '../test/served-version.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const bin = join(cliDir, 'src', 'bin.ts');
@@ -29,6 +35,11 @@ afterEach(() => {
 function aProject(files: Readonly<Record<string, string>> = {}, prefix = 'cf-loom-'): string {
   const project = mkdtempSync(join(tmpdir(), prefix));
   projects.push(project);
+  return installedIn(project, files);
+}
+
+/** Installs cf-loom and zod in a folder and writes the project's files into it. */
+function installedIn(project: string, files: Readonly<Record<string, string>>): string {
   link(join(cliDir, '..', 'contract'), join(project, 'node_modules/@cf-loom/contract'));
   link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
   link(realpathSync(join(cliDir, 'node_modules/zod')), join(project, 'node_modules/zod'));
@@ -58,11 +69,35 @@ function cfLoom(project: string, ...args: string[]) {
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
+/** Runs the CLI in a working directory that is removed before it starts, so reading it throws. */
+function cfLoomInRemovedFolder(...args: string[]) {
+  const folder = mkdtempSync(join(tmpdir(), 'cf-loom-removed-'));
+  projects.push(folder);
+  const removeThenRun = 'rmdir "$PWD" && exec "$0" "$@"';
+  const command = ['-c', removeThenRun, process.execPath, bin, ...args];
+  const ran = spawnSync('sh', command, { cwd: folder, encoding: 'utf8' });
+  return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+/** Runs the CLI with a clock that throws `message`, so the command ends as a throw of cf-loom does. */
+function cfLoomThrowing(message: string, ...args: string[]) {
+  const project = aProject({
+    'throwing-clock.mjs': `Date.now = () => { throw new Error(${JSON.stringify(message)}); };\n`,
+  });
+  const preload = pathToFileURL(join(project, 'throwing-clock.mjs')).href;
+  const env = Object.fromEntries([
+    ...Object.entries(process.env),
+    ['NODE_OPTIONS', `--import ${preload}`],
+  ]);
+  const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, env, encoding: 'utf8' });
+  return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
+}
+
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json]';
 
 const config = [
   "import { defineConfig } from '@cf-loom/cli';",
@@ -74,6 +109,7 @@ const config = [
 function aRoot({
   lifecycle = 'active',
   body = 'z.object({ ok: z.boolean() })',
+  status = 200,
 } = {}): Readonly<Record<string, string>> {
   return {
     'src/contract/ping.endpoint.ts': [
@@ -87,7 +123,7 @@ function aRoot({
       "  visibility: 'public',",
       "  description: 'Answers',",
       `  lifecycle: '${lifecycle}',`,
-      `  success: { status: 200, body: ${body} },`,
+      `  success: { status: ${status}, body: ${body} },`,
       '});',
       '',
     ].join('\n'),
@@ -813,6 +849,24 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
+  test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
+    'a root file that throws a text holding %s reports it as one line, with the line break written escaped',
+    (visible) => {
+      const project = aProject({
+        'cf-loom.config.ts': config,
+        'src/contract/index.ts': `throw 'first${visible}second';\n`,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `src/contract/index.ts cannot be loaded: first${visible}second\n`,
+      });
+    },
+  );
+
   test('a thrown value with no text is still one line', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
@@ -1263,6 +1317,756 @@ describe('cf-loom verify', () => {
   });
 });
 
+type Files = Readonly<Record<string, string>>;
+
+type Ran = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
+
+const checkTimeout = 60_000;
+const checkedAgainstOrders = `Checked against ${ordersPackage}@1.0.0`;
+const staleSnapshot = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
+const approvalNeededLine =
+  '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it';
+const notAllowedLine = 'The check failed: 1 Change(s) not allowed';
+
+/** Runs the CLI without blocking the test's event loop, so the lab's registry can answer npm. */
+function cfLoomWith(project: string, env: NpmEnvironment, ...args: string[]): Promise<Ran> {
+  return new Promise((resolve) => {
+    const options = { cwd: project, env, encoding: 'utf8' } as const;
+    execFile(process.execPath, [bin, ...args], options, (error, stdout, stderr) => {
+      const status = error === null ? 0 : error.code;
+      resolve({ status: typeof status === 'number' ? status : null, stdout, stderr });
+    });
+  });
+}
+
+type MessagingOptions = {
+  readonly body?: string;
+  readonly eventBody?: string;
+  readonly eventVersions?: readonly number[];
+  readonly commandLifecycle?: 'active' | 'deprecated' | 'retired';
+  readonly status?: number;
+};
+
+/** `aRoot` with an Event, in the versions given, and a Command, whose lifecycle is given. */
+function aMessagingRoot({
+  body,
+  status,
+  eventBody = 'z.object({ id: z.string() })',
+  eventVersions = [1],
+  commandLifecycle = 'deprecated',
+}: MessagingOptions = {}): Files {
+  const root = aRoot({
+    ...(body === undefined ? {} : { body }),
+    ...(status === undefined ? {} : { status }),
+  });
+  const events = eventVersions.map((version) =>
+    [
+      `export const orderCreatedV${version} = defineEvent({`,
+      `  name: 'OrderCreated', version: ${version}, visibility: 'internal',`,
+      `  description: 'Created', body: ${eventBody},`,
+      '});',
+    ].join('\n'),
+  );
+  const messages = [
+    "import { defineCommand, defineEvent } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    ...events,
+    'export const chargeCard = defineCommand({',
+    "  name: 'ChargeCard', version: 1, description: 'Charge',",
+    `  lifecycle: '${commandLifecycle}', body: z.object({ card: z.string() }),`,
+    '});',
+    '',
+  ].join('\n');
+  const listed = eventVersions.map((version) => `orderCreatedV${version}`).join(', ');
+  const index = (root['src/contract/index.ts'] ?? '')
+    .replace(
+      "import { ping } from './ping.endpoint.ts';",
+      `import { ping } from './ping.endpoint.ts';\nimport { chargeCard, ${listed} } from './messages.ts';`,
+    )
+    .replace(
+      'groups: [health] }',
+      `groups: [health], events: [${listed}], commands: [chargeCard] }`,
+    );
+  return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
+}
+
+/** The Definitions Package `@org/definitions`, whose root declares nothing. */
+const aDefinitionsRoot: Files = {
+  'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+  'src/definitions/index.ts': [
+    "import { defineDefinitions } from '@cf-loom/contract';",
+    "export const definitions = defineDefinitions({ name: 'definitions' });",
+    '',
+  ].join('\n'),
+};
+
+/** The Definitions Package `@org/definitions`, with a Rejection, a Guard and a shared schema. */
+const aDefinitionsRootOfEverySite: Files = {
+  'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+  'src/definitions/index.ts': [
+    "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+    "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
+    'export const money = z.object({ amount: z.number() });',
+    'export const definitions = defineDefinitions({',
+    "  name: 'definitions', guards: [apiKey], schemas: { money }, rejections: [gone],",
+    '});',
+    '',
+  ].join('\n'),
+};
+
+/** The Application `@org/web-admin`, whose root lists no Dependency. */
+const anApplicationRoot: Files = {
+  'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
+  'src/contract/index.ts': [
+    "import { defineApplication } from '@cf-loom/contract';",
+    "export const application = defineApplication({ name: 'web-admin', dependencies: [] });",
+    '',
+  ].join('\n'),
+};
+
+/** Runs `generate` in a project of the lab, as a developer does before committing. */
+async function generateIn(lab: Lab, project: string): Promise<void> {
+  const ran = await cfLoomWith(project, lab.anNpmEnvironment(), 'generate');
+  expect(ran).toMatchObject({ status: 0, stderr: '' });
+}
+
+/** A project of the lab with the files given and `generate` run on them. */
+async function aGeneratedProject(lab: Lab, files: Files): Promise<string> {
+  const project = installedIn(lab.aFolder(), { 'cf-loom.config.ts': config, ...files });
+  await generateIn(lab, project);
+  return project;
+}
+
+/** The Snapshot `generate` wrote, as a registry serves it once published as `version`. */
+function publishedAs(
+  project: string,
+  version: string,
+  more: Readonly<Record<string, unknown>> = {},
+): ServedVersion {
+  const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+  const published = { ...snapshot, ...more, version };
+  const declared = { kind: snapshot.kind, name: snapshot.name };
+  return aVersion(version, { declared, snapshotJson: `${JSON.stringify(published, null, 2)}\n` });
+}
+
+function servedAs(packageName: string, ...versions: readonly ServedVersion[]): RegistryOptions {
+  return { packages: { [packageName]: { versions } } };
+}
+
+/** A project and what the registry it is checked against serves. */
+type Checkable = { readonly project: string; readonly served: RegistryOptions };
+
+/** Runs `check` against a registry that serves what is given, with the login of the lab. */
+async function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
+  const { project, served } = changed;
+  const registry = await lab.aRegistry(served);
+  const env = lab.anNpmEnvironment({ userConfig: loginTo(registry) });
+  const ran = await cfLoomWith(project, env, 'check', ...args);
+  return { ran, registry };
+}
+
+/** A project whose root `before` was published as 1.0.0, then became `after` and was generated. */
+async function aChangedProject(lab: Lab, { before, after }: { before: Files; after: Files }) {
+  const project = await aGeneratedProject(lab, before);
+  const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+  write(project, after);
+  await generateIn(lab, project);
+  return { project, served };
+}
+
+/** A project whose Baseline holds a copy of an entry of `section` under `key`, which the project lacks. */
+async function aBaselineWithExtraKey(lab: Lab, section: string, key: string) {
+  const project = await aGeneratedProject(lab, aMessagingRoot());
+  const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+  const [declared] = Object.values(snapshot[section]);
+  const more = { [section]: { ...snapshot[section], [key]: declared } };
+  return { project, served: servedAs(ordersPackage, publishedAs(project, '1.0.0', more)) };
+}
+
+const removedSuccessField = {
+  before: aRoot({ body: 'z.object({ ok: z.boolean(), total: z.number() })' }),
+  after: aRoot(),
+};
+
+const retiredCommand = {
+  before: aMessagingRoot({ commandLifecycle: 'deprecated' }),
+  after: aMessagingRoot({ commandLifecycle: 'retired' }),
+};
+
+const removedEventField = {
+  before: aMessagingRoot({ eventBody: 'z.object({ id: z.string(), placedAt: z.number() })' }),
+  after: aMessagingRoot(),
+};
+
+const removedFieldOfEach = {
+  before: aMessagingRoot({
+    body: 'z.object({ ok: z.boolean(), total: z.number() })',
+    eventBody: 'z.object({ id: z.string(), placedAt: z.number() })',
+  }),
+  after: aMessagingRoot(),
+};
+
+const changedInEveryWay = {
+  before: aMessagingRoot({
+    body: "z.object({ ok: z.boolean(), total: z.number(), kind: z.enum(['a', 'b']), code: z.literal(1) })",
+  }),
+  after: aMessagingRoot({
+    body: "z.object({ ok: z.boolean(), kind: z.enum(['a', 'b', 'c']), code: z.literal('1') })",
+    status: 201,
+    eventVersions: [1, 2],
+    commandLifecycle: 'retired',
+  }),
+};
+
+describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
+  test('check fails when contract.snapshot.json is missing, before it reads the registry', async ({
+    lab,
+  }) => {
+    const project = installedIn(lab.aFolder(), { 'cf-loom.config.ts': config, ...aRoot() });
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshot}\n` });
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('check fails when contract.snapshot.json is out of date, before it reads the registry', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshot}\n` });
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('a root that breaks a rule fails check with generate’s lines', async ({ lab }) => {
+    const broken = {
+      'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    };
+    const project = installedIn(lab.aFolder(), {
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      ...broken,
+    });
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+    });
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('a contract.snapshot.json that is no JSON is a tooling error', async ({ lab }) => {
+    const committed = { 'contract.snapshot.json': '<<<<<<< HEAD\n' };
+    const project = installedIn(lab.aFolder(), {
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      ...committed,
+    });
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+    );
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('a Service is checked against the highest published version of its Contract Package, which check names', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, removedSuccessField.before);
+    const older = publishedAs(project, '1.0.0');
+    write(project, removedSuccessField.after);
+    await generateIn(lab, project);
+    const newer = publishedAs(project, '1.1.0');
+
+    const { ran } = await checkedAgainst(lab, {
+      project,
+      served: servedAs(ordersPackage, older, newer),
+    });
+
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n')[0]).toBe(`Checked against ${ordersPackage}@1.1.0`);
+    expect(ran.stdout).toContain(`No Change against ${ordersPackage}@1.1.0`);
+  });
+
+  test('a Definitions Package is checked against its own package, <scope>/<name>', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aDefinitionsRoot);
+    const served = servedAs('@org/definitions', publishedAs(project, '1.0.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: 'Checked against @org/definitions@1.0.0\nNo Change against @org/definitions@1.0.0\n',
+      stderr: '',
+    });
+  });
+
+  test('an Application is checked against its Contract Package and has no Change, even when its Dependencies changed', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, anApplicationRoot);
+    const dependency = {
+      'orders-service': {
+        against: '1.0.0',
+        endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
+        events: [],
+      },
+    };
+    const published = publishedAs(project, '1.0.0', { dependencies: dependency });
+    const served = servedAs('@org/contract-web-admin', published);
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    const checked = 'Checked against @org/contract-web-admin@1.0.0';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\nNo Change against @org/contract-web-admin@1.0.0\n`,
+      stderr: '',
+    });
+  });
+
+  test('a package npm cannot find has no Baseline: check names the registry and the npm user, and exits 0', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${why}\n`,
+      stderr: '',
+    });
+  });
+
+  test('a package with only prereleases has no Baseline: check names the highest prerelease, and exits 0', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(
+      ordersPackage,
+      publishedAs(project, '1.0.0-rc.2'),
+      publishedAs(project, '1.0.0-rc.1'),
+    );
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    const why = 'it has only prereleases, the highest 1.0.0-rc.2';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${why}\n`,
+      stderr: '',
+    });
+  });
+
+  test('a registry check cannot read is a tooling error with its one line', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const packument = `/${ordersPackage.replace('/', '%2f')}`;
+    const answers = { [packument]: { status: 500, body: 'a plain text body' } };
+
+    const { ran } = await checkedAgainst(lab, { project, served: { answers } });
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(
+      new RegExp(`^npm view ${ordersPackage} failed \\(E500: [^\\n]+\\)\\n$`),
+    );
+  });
+
+  test('check reads the registry with the login of the environment it runs in', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const registry = await lab.aRegistry(servedAs(ordersPackage, publishedAs(project, '1.0.0')));
+    const userConfig = `@org:registry=${registry.url}/\n//${registry.host}/:_authToken=${token}-mine\n`;
+    const env = lab.anNpmEnvironment({ userConfig });
+
+    const ran = await cfLoomWith(project, env, 'check');
+
+    expect(ran.status).toBe(0);
+    const logins = new Set(registry.requests.map((request) => request.authorization));
+    expect(logins).toEqual(new Set([`Bearer ${token}-mine`]));
+  });
+
+  test('a Snapshot with no Change against its Baseline says so and exits 0', async ({ lab }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\nNo Change against ${ordersPackage}@1.0.0\n`,
+      stderr: '',
+    });
+  });
+
+  test('every Change is printed on its own line in the report’s order, with its site, kinds, path, Position, fields and class', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, changedInEveryWay);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const approval = 'Breaking, needs a Breaking Change Approval';
+    const schema = 'endpoints.GET /ping schema';
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `endpoints.GET /ping status-changed from=200 to=201: ${approval}`,
+      `${schema} value-added at success.body.fields.code (success) value="1" enum=closed: ${approval}`,
+      `${schema} value-removed at success.body.fields.code (success) value=1: Additive`,
+      `${schema} value-added at success.body.fields.kind (success) value="c" enum=closed: ${approval}`,
+      `${schema} field-removed at success.body.fields.total (success): ${approval}`,
+      'events.OrderCreated@2 added: Additive',
+      'commands.ChargeCard@1 retired: Breaking, needs no Approval',
+      '',
+    ]);
+  });
+
+  test('a field key holding a line break is written as JSON, so the Change stays on one line', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: "z.object({ ok: z.boolean(), 'odd\\nkey': z.number() })" }),
+      after: aRoot(),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const approval = 'Breaking, needs a Breaking Change Approval';
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `endpoints.GET /ping schema field-removed at success.body.fields."odd\\nkey" (success): ${approval}`,
+      '',
+    ]);
+  });
+
+  test('a discriminator holding a line break is written as JSON, so the Change stays on one line', async ({
+    lab,
+  }) => {
+    const union = (discriminator: string) =>
+      [
+        `z.object({ shape: z.discriminatedUnion('${discriminator}', [`,
+        `z.object({ '${discriminator}': z.literal('a') }),`,
+        `z.object({ '${discriminator}': z.literal('b') }),`,
+        '])})',
+      ].join(' ');
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: union('odd\\nkind') }),
+      after: aRoot({ body: union('kind') }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const approval = 'Breaking, needs a Breaking Change Approval';
+    const change = 'endpoints.GET /ping schema discriminator-changed at success.body.fields.shape';
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `${change} (success) from="odd\\nkind" to=kind: ${approval}`,
+      '',
+    ]);
+  });
+
+  test.for([
+    ['U+2028', '\\u2028'],
+    ['U+2029', '\\u2029'],
+    ['U+0085', '\\u0085'],
+  ] as const)(
+    'a field key holding %s is written escaped, so no reader splits the line there',
+    async ([, sequence], { lab }) => {
+      const changed = await aChangedProject(lab, {
+        before: aRoot({ body: `z.object({ ok: z.boolean(), 'odd${sequence}key': z.number() })` }),
+        after: aRoot(),
+      });
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      const key = `"odd${sequence}key"`;
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `endpoints.GET /ping schema field-removed at success.body.fields.${key} (success): ${approval}`,
+        '',
+      ]);
+    },
+  );
+
+  test.for([
+    ['U+2028', '\\u2028'],
+    ['U+2029', '\\u2029'],
+    ['U+0085', '\\u0085'],
+  ] as const)(
+    'an enum value holding %s is written escaped, so no reader splits the line there',
+    async ([, sequence], { lab }) => {
+      const body = (values: string) => `z.object({ kind: z.enum([${values}]) })`;
+      const changed = await aChangedProject(lab, {
+        before: aRoot({ body: body("'a'") }),
+        after: aRoot({ body: body(`'a', 'b${sequence}c'`) }),
+      });
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      const change = 'endpoints.GET /ping schema value-added at success.body.fields.kind (success)';
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `${change} value="b${sequence}c" enum=closed: ${approval}`,
+        '',
+      ]);
+    },
+  );
+
+  test.for(['codes', 'guards', 'schemas'] as const)(
+    'a Baseline whose %s hold a name with a line break is written as JSON, so the Change stays on one line',
+    async (section, { lab }) => {
+      const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+      const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+      const [declared] = Object.values(snapshot[section]);
+      const more = { [section]: { ...snapshot[section], 'odd\nname': declared } };
+      const served = servedAs('@org/definitions', publishedAs(project, '1.0.0', more));
+
+      const { ran } = await checkedAgainst(lab, { project, served });
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      expect(ran.stdout.split('\n')).toEqual([
+        'Checked against @org/definitions@1.0.0',
+        `${section}."odd\\nname" removed: ${approval}`,
+        '',
+      ]);
+    },
+  );
+
+  test.for([
+    ['events', 'Order\nX@1', 'events.Order\\nX@1'],
+    ['commands', 'Cmd\rX@1', 'commands.Cmd\\rX@1'],
+    ['endpoints', 'GET /a\u0085b', 'endpoints.GET /a\\u0085b'],
+  ] as const)(
+    'a Baseline whose %s hold an identity with a line break is printed escaped, so the Change stays on one line',
+    async ([section, key, site], { lab }) => {
+      const changed = await aBaselineWithExtraKey(lab, section, key);
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `${site} deleted: Not allowed`,
+        '',
+      ]);
+      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+      expect(ran.status).toBe(1);
+    },
+  );
+
+  test.for([
+    ['U+2028', '\u2028', '\\u2028'],
+    ['U+2029', '\u2029', '\\u2029'],
+    ['U+0085', '\u0085', '\\u0085'],
+  ] as const)(
+    '--json writes a site holding %s escaped, so the document stays one line',
+    async ([, character, visible], { lab }) => {
+      const changed = await aBaselineWithExtraKey(lab, 'events', `Order${character}X@1`);
+
+      const { ran } = await checkedAgainst(lab, changed, '--json');
+
+      const [document, ...rest] = ran.stdout.split('\n');
+      expect(rest).toEqual(['']);
+      expect(document).toContain(`"site":"events.Order${visible}X@1"`);
+      expect(JSON.parse(document ?? '').changes).toEqual([
+        expect.objectContaining({ site: `events.Order${character}X@1` }),
+      ]);
+      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+    },
+  );
+
+  test('a Change that needs a Breaking Change Approval exits 2, saying how many', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 2,
+      stdout: [
+        checkedAgainstOrders,
+        'endpoints.GET /ping schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr: `${approvalNeededLine}\n`,
+    });
+  });
+
+  test('a Breaking Change that needs no Approval exits 0', async ({ lab }) => {
+    const changed = await aChangedProject(lab, retiredCommand);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'commands.ChargeCard@1 retired: Breaking, needs no Approval',
+        'No Change needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('a Not allowed Change exits 1 and says the check failed', async ({ lab }) => {
+    const changed = await aChangedProject(lab, removedEventField);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: [
+        checkedAgainstOrders,
+        'events.OrderCreated@1 schema field-removed at body.fields.placedAt (message): Not allowed',
+        '',
+      ].join('\n'),
+      stderr: `${notAllowedLine}\n`,
+    });
+  });
+
+  test('a Not allowed Change exits 1 even when another Change needs an Approval', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedFieldOfEach);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+    expect(ran.stdout).toContain(
+      'endpoints.GET /ping schema field-removed at success.body.fields.total (success)',
+    );
+  });
+
+  test.for([
+    ['retiring a Command', retiredCommand, 0, ''],
+    ['removing an Event field', removedEventField, 1, `${notAllowedLine}\n`],
+    ['removing a Success field', removedSuccessField, 2, `${approvalNeededLine}\n`],
+  ] as const)(
+    '--json writes exactly one line to stdout, the document, when %s',
+    async ([, roots, status, stderr], { lab }) => {
+      const changed = await aChangedProject(lab, roots);
+
+      const { ran } = await checkedAgainst(lab, changed, '--json');
+
+      expect(ran.status).toBe(status);
+      expect(ran.stdout.split('\n')).toHaveLength(2);
+      expect(ran.stderr).toBe(stderr);
+      const document = JSON.parse(ran.stdout);
+      expect(document).toMatchObject({
+        status,
+        package: ordersPackage,
+        baseline: '1.0.0',
+        reason: null,
+      });
+      expect(document.changes).toHaveLength(1);
+    },
+  );
+
+  test('--json writes the Baseline and every Change', async ({ lab }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout)).toEqual({
+      status: 2,
+      package: ordersPackage,
+      baseline: '1.0.0',
+      reason: null,
+      changes: [
+        {
+          site: 'endpoints.GET /ping',
+          difference: 'schema',
+          shape: 'field-removed',
+          at: 'success.body.fields.total',
+          position: 'success',
+          class: 'breaking',
+          approval: 'needed',
+        },
+      ],
+    });
+  });
+
+  test('--json writes a Change with no shape, path or Position as null', async ({ lab }) => {
+    const changed = await aChangedProject(lab, retiredCommand);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout).changes).toEqual([
+      {
+        site: 'commands.ChargeCard@1',
+        difference: 'retired',
+        shape: null,
+        at: null,
+        position: null,
+        class: 'breaking',
+        approval: 'not-needed',
+      },
+    ]);
+  });
+
+  test('--json without a Baseline gives the reason', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+    const reason = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
+    expect(ran.status).toBe(0);
+    expect(JSON.parse(ran.stdout)).toEqual({
+      status: 0,
+      package: ordersPackage,
+      baseline: null,
+      reason,
+      changes: [],
+    });
+  });
+
+  test.for([
+    [
+      'a root that breaks a rule',
+      1,
+      { 'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }) },
+    ],
+    ['a contract.snapshot.json that is no JSON', 3, { 'contract.snapshot.json': '<<<<<<< HEAD\n' }],
+  ] as const)(
+    '--json gives the errors of %s, and stderr still carries their lines',
+    async ([, status, broken], { lab }) => {
+      const project = installedIn(lab.aFolder(), {
+        'cf-loom.config.ts': config,
+        ...aRoot(),
+        ...broken,
+      });
+
+      const { ran } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+      const lines = ran.stderr.trimEnd().split('\n');
+      expect(ran.status).toBe(status);
+      expect(ran.stdout.split('\n')).toHaveLength(2);
+      expect(JSON.parse(ran.stdout)).toEqual({ status, errors: lines });
+      expect(lines.every((line) => line !== '')).toBe(true);
+    },
+  );
+});
+
 describe('cf-loom', () => {
   test('an unknown command is a usage error', () => {
     const project = aProject();
@@ -1282,5 +2086,105 @@ describe('cf-loom', () => {
     const ran = cfLoom(project, 'generate', '--force');
 
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `Unknown option: --force. ${usage}\n` });
+  });
+
+  test('only check takes --json', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'generate', '--json');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `Only check takes --json. ${usage}\n` });
+  });
+
+  test('check takes no argument', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', 'now');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
+  });
+
+  test('a usage error stays one line on stderr under --json, with nothing on stdout', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', 'now', '--json');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
+  });
+
+  test('--json takes no value', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', '--json=false');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+  });
+
+  test.for([
+    ['--json=false', '--json'],
+    ['--json=true', '--json'],
+    ['--json', '--json=false'],
+  ] as const)('--json takes no value, however often it is given: %s %s', ([first, second]) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', first, second);
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+  });
+
+  test('a throw is a tooling error that says cf-loom failed and where in cf-loom, never a stack trace', () => {
+    const ran = cfLoomInRemovedFolder('generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(/^cf-loom failed: \S+:\d+: ENOENT[^\n]*\n$/);
+  });
+
+  test.for([
+    ['\\r', '\r'],
+    ['\\u0085', '\u0085'],
+    ['\\u2028', '\u2028'],
+    ['\\u2029', '\u2029'],
+  ] as const)(
+    'a throw whose message holds %s ends as one line, with the line break written escaped',
+    ([visible, character]) => {
+      const ran = cfLoomThrowing(`boom${character}tail`, 'generate');
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout).toBe('');
+      expect(ran.stderr.split('\n')).toHaveLength(2);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^cf-loom failed: \\S+:\\d+: boom\\${visible}tail\\n$`),
+      );
+    },
+  );
+
+  test.for([
+    ['\\r', '\r'],
+    ['\\u2028', '\u2028'],
+  ] as const)(
+    'check --json writes the document of a throw whose message holds %s on one line too',
+    ([visible, character]) => {
+      const ran = cfLoomThrowing(`boom${character}tail`, 'check', '--json');
+
+      const [document, ...rest] = ran.stdout.split('\n');
+      expect(rest).toEqual(['']);
+      expect(ran.stdout).not.toContain(character);
+      expect(JSON.parse(document ?? '')).toMatchObject({ status: 3 });
+      expect(ran.stderr.split('\n')).toHaveLength(2);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^cf-loom failed: \\S+:\\d+: boom\\${visible}tail\\n$`),
+      );
+    },
+  );
+
+  test('check --json writes the document of a throw too, and stderr keeps its line', () => {
+    const ran = cfLoomInRemovedFolder('check', '--json');
+
+    const errors = ran.stderr.trimEnd().split('\n');
+    expect(ran.status).toBe(3);
+    expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: \S+:\d+: ENOENT/)]);
+    expect(ran.stdout.split('\n')).toHaveLength(2);
+    expect(JSON.parse(ran.stdout)).toEqual({ status: 3, errors });
   });
 });
