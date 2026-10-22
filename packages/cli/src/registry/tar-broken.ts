@@ -13,11 +13,29 @@ export const entryNotWritten: Broken = {
   reason: 'has a tar entry npm does not write',
 };
 
-/** A pax header that is not one pax header with a path, a modification time and a size. */
+/**
+ * A pax header that is not one pax header with a path, a modification time and a size, each record
+ * led by a length without leading zeros.
+ */
 export const paxNotWritten: Broken = {
   kind: 'broken',
   reason: 'has a pax header npm does not write',
 };
 
+/** A pax header with a byte of 0x80 or more, which npm's tar may drop or read as another text. */
+export const paxBeyondAscii: Broken = {
+  kind: 'broken',
+  reason: 'has a pax header with a byte beyond ASCII',
+};
+
 /** A path npm's tar leaves out or reads as another. */
 export const pathNotWritten: Broken = { kind: 'broken', reason: 'has a path npm does not write' };
+
+/**
+ * A path with a character other than printable ASCII (0x20 to 0x7E), or with a `:` or a `\`, which
+ * npm's tar may read as another path.
+ */
+export const pathNotPlainAscii: Broken = {
+  kind: 'broken',
+  reason: 'has a path that is not printable ASCII, or that holds a ":" or a "\\"',
+};

@@ -1,6 +1,8 @@
-import { type Broken, noArchive, paxNotWritten } from './tar-broken.ts';
+import { type Broken, noArchive, paxBeyondAscii, paxNotWritten } from './tar-broken.ts';
 
 const maxPaxBytes = 1024 * 1024;
+const firstByteBeyondAscii = 0x80;
+const lengthForm = /^[1-9][0-9]*$/;
 
 /**
  * The keys npm writes, each with the form of its value: no value has a line break, a path is not
@@ -19,14 +21,25 @@ export type Pax = {
   readonly size: string | undefined;
 };
 
-type PaxRecord = { readonly key: string; readonly value: string; readonly end: number };
+type PaxRecord = {
+  readonly kind: 'record';
+  readonly key: string;
+  readonly value: string;
+  readonly end: number;
+};
 
 type Records = { readonly kind: 'records'; readonly records: ReadonlyMap<string, string> };
 
-/** A pax header of at most a mebibyte holding each of `path`, `mtime` and `size` at most once. */
+/**
+ * A pax header of at most a mebibyte, every byte below 0x80, holding each of `path`, `mtime` and
+ * `size` at most once, each record led by a length that starts with a digit from 1 to 9.
+ */
 export function paxOf(data: Buffer): Pax | Broken {
   if (data.length > maxPaxBytes) {
     return paxNotWritten;
+  }
+  if (data.some((byte) => byte >= firstByteBeyondAscii)) {
+    return paxBeyondAscii;
   }
   const read = recordsOf(data);
   if (read.kind === 'broken') {
@@ -42,8 +55,8 @@ function recordsOf(data: Buffer): Records | Broken {
   let offset = 0;
   while (offset < data.length) {
     const record = recordAt(data, offset);
-    if (record === undefined) {
-      return noArchive;
+    if (record.kind === 'broken') {
+      return record;
     }
     if (!isWritten(record, records)) {
       return paxNotWritten;
@@ -58,21 +71,24 @@ function isWritten({ key, value }: PaxRecord, earlier: ReadonlyMap<string, strin
   return writtenValues.get(key)?.test(value) === true && !earlier.has(key);
 }
 
-function recordAt(data: Buffer, offset: number): PaxRecord | undefined {
+function recordAt(data: Buffer, offset: number): PaxRecord | Broken {
   const space = data.indexOf(0x20, offset);
   if (space === -1) {
-    return undefined;
+    return noArchive;
   }
   const digits = data.subarray(offset, space).toString('latin1');
+  if (!lengthForm.test(digits)) {
+    return /^\d+$/.test(digits) ? paxNotWritten : noArchive;
+  }
   const end = offset + Number(digits);
-  const isWhole = /^\d+$/.test(digits) && end > space + 1 && end <= data.length;
+  const isWhole = end > space + 1 && end <= data.length;
   if (!isWhole || data[end - 1] !== 0x0a) {
-    return undefined;
+    return noArchive;
   }
   const record = data.subarray(space + 1, end - 1).toString('utf8');
   const equals = record.indexOf('=');
   if (equals === -1) {
-    return undefined;
+    return noArchive;
   }
-  return { key: record.slice(0, equals), value: record.slice(equals + 1), end };
+  return { kind: 'record', key: record.slice(0, equals), value: record.slice(equals + 1), end };
 }

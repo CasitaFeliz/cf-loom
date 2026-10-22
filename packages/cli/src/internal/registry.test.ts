@@ -160,19 +160,28 @@ const hiddenEntry = tarOf([{ path: 'package/snapshot.json', content: 'real' }]).
   2 * block,
 );
 
-function paxRecord(key: string, value: string): string {
+function recordLength(restLength: number): number {
+  const withOneDigitMore = restLength + String(restLength).length;
+  return String(withOneDigitMore).length === String(restLength).length
+    ? withOneDigitMore
+    : withOneDigitMore + 1;
+}
+
+function paxRecord(key: string, value: string, leadingZeros = ''): string {
   const rest = ` ${key}=${value}\n`;
-  const withOneDigitMore = rest.length + String(rest.length).length;
-  const length =
-    String(withOneDigitMore).length === String(rest.length).length
-      ? withOneDigitMore
-      : withOneDigitMore + 1;
-  return `${length}${rest}`;
+  return `${leadingZeros}${recordLength(leadingZeros.length + rest.length)}${rest}`;
+}
+
+function paxRecordOfBytes(key: string, value: Buffer): Buffer {
+  const rest = Buffer.concat([Buffer.from(` ${key}=`), value, Buffer.from('\n')]);
+  return Buffer.concat([Buffer.from(String(recordLength(rest.length))), rest]);
 }
 
 const entryNotWritten = 'has a tar entry npm does not write';
 const paxNotWritten = 'has a pax header npm does not write';
 const pathNotWritten = 'has a path npm does not write';
+const pathNotPlainAscii = 'has a path that is not printable ASCII, or that holds a ":" or a "\\"';
+const paxBeyondAscii = 'has a pax header with a byte beyond ASCII';
 const folderNamedSnapshot = 'has a folder named snapshot.json';
 const credentialsInUrl =
   'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
@@ -181,6 +190,10 @@ const credentialsInUrl =
 const longFirstFolder = 'p'.repeat(1_048_548);
 const paxOfOneMebibyte = paxRecord('path', `${longFirstFolder}/snapshot.json`);
 const paxOfOneMebibytePlusOne = paxRecord('path', `${longFirstFolder}p/snapshot.json`);
+
+/** The first byte of the "é" is the last of the archive's first 16 KiB, behind this many bytes of filler. */
+const bytesBeforeSplitPax = 13_824;
+const splitPaxPath = paxRecordOfBytes('path', Buffer.from(`package/${'a'.repeat(494)}é.txt`));
 
 function integrityOf(bytes: Buffer, algorithm: 'sha1' | 'sha512'): string {
   return `${algorithm}-${createHash(algorithm).update(bytes).digest('base64')}`;
@@ -1204,14 +1217,6 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       'has more than one snapshot.json',
     ],
     [
-      'two, one named by a long s',
-      [
-        { path: 'package/snapshot.json', content: 'decoy' },
-        { path: 'package/\u017fnapshot.json', content: 'real' },
-      ],
-      'has more than one snapshot.json',
-    ],
-    [
       'only one, under a folder named at the end of a prefix of more than 130 characters',
       [
         {
@@ -1421,7 +1426,121 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     [
       'a path with a backslash',
       [{ path: 'package\\snapshot.json', content: '{}' }],
-      pathNotWritten,
+      pathNotPlainAscii,
+    ],
+    [
+      'a path with a drive letter, package/c:snapshot.json, which npm’s tar strips',
+      [
+        { path: 'package/package.json', content: '{}' },
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/c:snapshot.json', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    [
+      'a path with a drive letter and a slash, package/c:/snapshot.json, which npm’s tar strips',
+      [
+        { path: 'package/package.json', content: '{}' },
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/c:/snapshot.json', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    [
+      'a pax path with a drive letter',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('path', 'package/c:snapshot.json') },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    ['a colon in a file name', [{ path: 'package/dist/a:b.js', content: '{}' }], pathNotPlainAscii],
+    [
+      'a path with a multibyte character',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/é.txt', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    [
+      'a path named by a long s, which a filesystem that folds case reads as an s',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/\u017fnapshot.json', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    [
+      'a ustar prefix with a multibyte character',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'snapshot.json', prefix: 'package/é', content: 'real' },
+      ],
+      pathNotPlainAscii,
+    ],
+    [
+      'a path with a control character',
+      [{ path: 'package/dist/a\u0001.js', content: '{}' }],
+      pathNotPlainAscii,
+    ],
+    [
+      'a path with a DEL character',
+      [{ path: 'package/dist/a\u007f.js', content: '{}' }],
+      pathNotPlainAscii,
+    ],
+    [
+      'a pax path with a multibyte character',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecordOfBytes('path', Buffer.from('package/é.txt')),
+        },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      paxBeyondAscii,
+    ],
+    [
+      'a pax path with a multibyte character that a 16 KiB chunk of the archive splits',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/filler.txt', content: Buffer.alloc(bytesBeforeSplitPax, 0x61) },
+        { path: 'PaxHeader/x', type: 'x', content: splitPaxPath },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      paxBeyondAscii,
+    ],
+    [
+      'a pax path with a 0xff byte',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecordOfBytes(
+            'path',
+            Buffer.concat([Buffer.from('package/harmless'), Buffer.from([0xff])]),
+          ),
+        },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxBeyondAscii,
+    ],
+    [
+      'a pax record whose length has a leading zero, which npm’s tar drops',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        {
+          path: 'PaxHeader/x',
+          type: 'x',
+          content: paxRecord('path', 'package/harmless.txt', '0'),
+        },
+        { path: 'package/snapshot.json', content: 'real' },
+      ],
+      paxNotWritten,
     ],
     [
       'a path with a .. segment',
@@ -1661,7 +1780,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     ['npm', 'npm', { [`dist/${'f'.repeat(130)}.js`]: 'export {};' }],
     ['pnpm', 'pnpm', {}],
   ] as const)(
-    'a tarball packed by %s is read, whatever the lengths and characters of its paths',
+    'a tarball packed by %s is read, whatever the lengths of its ASCII paths',
     async ([, packer, extra], { lab }) => {
       const snapshot = aPublishedSnapshot(orders, '1.0.0');
       const tarball = aFolderPackedBy(lab, packer, {
@@ -1669,7 +1788,6 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
         'snapshot.json': canonicalTextOf(snapshot),
         'dist/index.js': 'export {};',
         [`dist/${'d'.repeat(60)}/${'g'.repeat(50)}.js`]: 'export {};',
-        'dist/ünïcödé-ファイル.js': 'export {};',
         ...extra,
       });
 
@@ -1678,6 +1796,20 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       expect(baselineIn(read).snapshot).toEqual(snapshot);
     },
   );
+
+  test('a tarball packed by npm with a file named in other than ASCII fails', async ({ lab }) => {
+    const tarball = aFolderPackedBy(lab, 'npm', {
+      'package.json': JSON.stringify({ name: ordersPackage, version: '1.0.0' }),
+      'snapshot.json': canonicalTextOf(aPublishedSnapshot(orders, '1.0.0')),
+      'dist/ünïcödé-ファイル.js': 'export {};',
+    });
+
+    const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { tarball })));
+
+    expect(failureIn(read)).toBe(
+      `${ordersPackage}@1.0.0's tarball cannot be read: ${paxBeyondAscii}`,
+    );
+  });
 
   test('a snapshot.json that is no UTF-8 fails', async ({ lab }) => {
     const snapshotJson = Buffer.from([0x7b, 0xff, 0xfe, 0x7d]);

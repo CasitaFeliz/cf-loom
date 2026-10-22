@@ -23,10 +23,11 @@ type Step =
   | Broken;
 
 /**
- * The one file npm unpacks as `name`, read only from an archive of what `npm pack` writes (and
- * `pnpm pack`, when every path fits a ustar header): files, empty folders and one pax header with a
- * path, a modification time and a size before an entry. Anything else is refused, since npm's tar
- * could unpack it to other files than this reads.
+ * The one file npm unpacks as `name`, read only from an archive as `npm pack` writes it (and
+ * `pnpm pack`, when every path fits a ustar header), for printable-ASCII paths without `:` or `\`:
+ * files, empty folders and one pax header of ASCII bytes with a path, a modification time and a size
+ * before an entry. Anything else is refused, since npm's tar could unpack it to other files than
+ * this reads.
  */
 export function fileNamed(archive: Buffer, name: string): Found {
   const walked = entriesOf(archive);
