@@ -1,5 +1,10 @@
-import { describe, expect, test } from 'vitest';
-import { type ContractDirectory, fixed } from './index.ts';
+import { describe, expect, expectTypeOf, test } from 'vitest';
+import { type ContractDirectory, fixed, type Listed } from './index.ts';
+
+/** The names of a listing, so a test compares the arrays two listings hold. */
+function namesOf(listed: Listed): readonly string[] {
+  return listed.kind === 'listed' ? listed.names : [];
+}
 
 describe('fixed', () => {
   test('a fixed directory lists the names it was given', async () => {
@@ -30,32 +35,35 @@ describe('fixed', () => {
 
     expect(listed).toEqual({ kind: 'listed', names: ['@org/contract-orders-service'] });
   });
+
+  test('two listings of a fixed directory do not share an array', async () => {
+    const directory = fixed(['@org/contract-orders-service']);
+
+    const first = namesOf(await directory.list());
+    const second = namesOf(await directory.list());
+
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+  });
 });
 
 describe('ContractDirectory', () => {
-  test('an organization writes a directory whose list resolves to names or to a failure', async () => {
-    const lists: ContractDirectory = {
-      list: async () => ({ kind: 'listed', names: ['@org/contract-orders-service'] }),
-    };
-    const fails: ContractDirectory = {
-      list: async () => ({ kind: 'failed', message: 'GitHub answered 502 while listing @org' }),
-    };
-
-    const listed = await lists.list();
-    const failed = await fails.list();
-
-    expect(listed).toEqual({ kind: 'listed', names: ['@org/contract-orders-service'] });
-    expect(failed).toEqual({ kind: 'failed', message: 'GitHub answered 502 while listing @org' });
+  test('a listing is the names of the whole scope or a failure with its message', () => {
+    expectTypeOf<Listed>().toEqualTypeOf<
+      | { readonly kind: 'listed'; readonly names: readonly string[] }
+      | { readonly kind: 'failed'; readonly message: string }
+    >();
   });
 
-  test('a listing that is neither listed nor failed, such as a partial one, is a type error', async () => {
-    const partial: ContractDirectory = {
-      // @ts-expect-error: a directory returns the whole list or fails, so it has no partial listing
-      list: async () => ({ kind: 'partial', names: ['@org/contract-orders-service'] }),
+  test('a directory an organization writes needs only list', () => {
+    expectTypeOf<{ readonly list: () => Promise<Listed> }>().toExtend<ContractDirectory>();
+  });
+
+  test('a directory whose list can resolve to a partial listing is not a Contract directory', () => {
+    type PartialDirectory = {
+      readonly list: () => Promise<{ readonly kind: 'partial'; readonly names: readonly string[] }>;
     };
 
-    const listed = await partial.list();
-
-    expect(listed.kind).toBe('partial');
+    expectTypeOf<PartialDirectory>().not.toExtend<ContractDirectory>();
   });
 });
