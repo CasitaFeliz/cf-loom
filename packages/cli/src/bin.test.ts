@@ -1,9 +1,11 @@
 import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -14,15 +16,23 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
-import type { RegistryOptions } from '../test/fake-registry.ts';
+import type { Registry, RegistryOptions } from '../test/fake-registry.ts';
 import { loginTo, type NpmEnvironment, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
+import { entriesOf } from '../test/tarball.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const bin = join(cliDir, 'src', 'bin.ts');
 const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
+const rootDir = join(cliDir, '..', '..');
+const zodDir = realpathSync(join(cliDir, 'node_modules/zod'));
+const zodVersion: string = JSON.parse(readFileSync(join(zodDir, 'package.json'), 'utf8')).version;
+const contractDir = join(cliDir, '..', 'contract');
+const contractVersion: string = JSON.parse(
+  readFileSync(join(contractDir, 'package.json'), 'utf8'),
+).version;
 const projects: string[] = [];
 
 afterEach(() => {
@@ -38,11 +48,15 @@ function aProject(files: Readonly<Record<string, string>> = {}, prefix = 'cf-loo
   return installedIn(project, files);
 }
 
-/** Installs cf-loom and zod in a folder and writes the project's files into it. */
+/** Installs cf-loom, zod and the root's TypeScript in a folder and writes the project's files into it. */
 function installedIn(project: string, files: Readonly<Record<string, string>>): string {
-  link(join(cliDir, '..', 'contract'), join(project, 'node_modules/@cf-loom/contract'));
+  link(contractDir, join(project, 'node_modules/@cf-loom/contract'));
   link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
-  link(realpathSync(join(cliDir, 'node_modules/zod')), join(project, 'node_modules/zod'));
+  link(zodDir, join(project, 'node_modules/zod'));
+  link(
+    realpathSync(join(rootDir, 'node_modules/typescript')),
+    join(project, 'node_modules/typescript'),
+  );
   const packageJson = JSON.stringify({ name: '@org/orders-service', type: 'module' });
   write(project, { 'package.json': packageJson, ...files });
   return project;
@@ -97,7 +111,7 @@ function cfLoomThrowing(message: string, ...args: string[]) {
 const isRoot = process.getuid?.() === 0;
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | publish [--force] [--prerelease]';
 
 const config = [
   "import { defineConfig } from '@cf-loom/cli';",
@@ -1439,6 +1453,9 @@ async function aGeneratedProject(lab: Lab, files: Files): Promise<string> {
   return project;
 }
 
+/** The peer ranges `publish` stamps on a package built with the zod and the contract the lab installs. */
+const installedPeers = { '@cf-loom/contract': `^${contractVersion}`, zod: `^${zodVersion}` };
+
 /** The Snapshot `generate` wrote, as a registry serves it once published as `version`. */
 function publishedAs(
   project: string,
@@ -1448,7 +1465,8 @@ function publishedAs(
   const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
   const published = { ...snapshot, ...more, version };
   const declared = { kind: snapshot.kind, name: snapshot.name };
-  return aVersion(version, { declared, snapshotJson: `${JSON.stringify(published, null, 2)}\n` });
+  const snapshotJson = `${JSON.stringify(published, null, 2)}\n`;
+  return aVersion(version, { declared, snapshotJson, peers: installedPeers });
 }
 
 function servedAs(packageName: string, ...versions: readonly ServedVersion[]): RegistryOptions {
@@ -1458,13 +1476,17 @@ function servedAs(packageName: string, ...versions: readonly ServedVersion[]): R
 /** A project and what the registry it is checked against serves. */
 type Checkable = { readonly project: string; readonly served: RegistryOptions };
 
-/** Runs `check` against a registry that serves what is given, with the login of the lab. */
-async function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
+/** Runs a command against a registry that serves what is given, with the login of the lab. */
+async function ranAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
   const { project, served } = changed;
   const registry = await lab.aRegistry(served);
   const env = lab.anNpmEnvironment({ userConfig: loginTo(registry) });
-  const ran = await cfLoomWith(project, env, 'check', ...args);
-  return { ran, registry };
+  const ran = await cfLoomWith(project, env, ...args);
+  return { ran, registry, env };
+}
+
+function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
+  return ranAgainst(lab, changed, 'check', ...args);
 }
 
 /** A project whose root `before` was published as 1.0.0, then became `after` and was generated. */
@@ -2067,6 +2089,549 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
   );
 });
 
+const publishTimeout = 120_000;
+const stagingFolder = 'node_modules/.cache/cf-loom';
+
+/** The root of `removedSuccessField` the other way round: a Success field added. */
+const addedSuccessField = {
+  before: removedSuccessField.after,
+  after: removedSuccessField.before,
+};
+
+/** A Service that declares no Endpoint, Event or Command. */
+const aRootWithoutEndpoints: Files = {
+  'src/contract/index.ts': [
+    "import { defineContract } from '@cf-loom/contract';",
+    "export const contract = defineContract({ name: 'orders-service', groups: [] });",
+    '',
+  ].join('\n'),
+};
+
+/** The Definitions Package `@org/definitions` as its author left it once built. */
+function aBuiltDefinitions(manifest: Readonly<Record<string, unknown>> = {}): Files {
+  return {
+    ...aDefinitionsRoot,
+    'package.json': JSON.stringify({
+      name: '@org/definitions',
+      version: '0.0.0',
+      type: 'module',
+      exports: './dist/index.js',
+      files: ['dist'],
+      ...manifest,
+    }),
+    'dist/index.js': 'export const money = 1;\n',
+    'dist/index.d.ts': 'export declare const money: number;\n',
+  };
+}
+
+/** Runs `publish` against a registry that serves what is given, with the login of the lab. */
+function publishedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
+  return ranAgainst(lab, changed, 'publish', ...args);
+}
+
+/** What npm put to the registry, without the bytes of the tarballs. */
+function putsOf(registry: Registry) {
+  return registry.published.map(({ name, version, distTags }) => ({ name, version, distTags }));
+}
+
+/** The files of the one version npm put to the registry, by path. */
+function publishedFilesOf(registry: Registry): Readonly<Record<string, string>> {
+  const [put] = registry.published;
+  return entriesOf(put!.tarball);
+}
+
+/** What `publish` left in the folder it stages packages in. */
+function leftInStaging(project: string): string[] {
+  const folder = join(project, stagingFolder);
+  return existsSync(folder) ? readdirSync(folder) : [];
+}
+
+/** The SHA-256 of a Snapshot's canonical text without its version and generator, as `cfLoom` records it. */
+function snapshotHashOf(snapshotJson: string): string {
+  const { generator: _generator, version: _version, ...hashed } = JSON.parse(snapshotJson);
+  const text = `${JSON.stringify(sortedKeys(hashed), null, 2)}\n`;
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function neverPublished(registry: Registry, packageName = ordersPackage): string {
+  const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
+  return `${packageName} has no Baseline: ${why}`;
+}
+
+describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
+  test('publish fails when contract.snapshot.json is out of date, before it reads the registry', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshot}\n` });
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('a root that breaks a rule fails publish with generate’s lines, and nothing is published', async ({
+    lab,
+  }) => {
+    const broken = {
+      'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    };
+    const files = { 'cf-loom.config.ts': config, ...aRoot(), ...broken };
+    const project = installedIn(lab.aFolder(), files);
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+    });
+    expect(registry.requests).toEqual([]);
+  });
+
+  test('a Service never published publishes 1.0.0 with the latest dist-tag, with the login of its environment, and check reads it back', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran, registry, env } = await publishedAgainst(lab, { project, served: {} });
+
+    const published = `Published ${ordersPackage}@1.0.0`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(registry)}\n${published}\n`,
+      stderr: '',
+    });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0', distTags }]);
+    const put = registry.requests.find((request) => request.method === 'PUT');
+    expect(put?.authorization).toBe(`Bearer ${token}`);
+    const checked = await cfLoomWith(project, env, 'check');
+    expect(checked).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\nNo Change against ${ordersPackage}@1.0.0\n`,
+      stderr: '',
+    });
+    expect(leftInStaging(project)).toEqual([]);
+  });
+
+  test('with --prerelease a package never published publishes 1.0.0-0, and the next publish 1.0.0-1, both tagged latest', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const first = await publishedAgainst(lab, { project, served: {} }, '--prerelease');
+
+    const second = await cfLoomWith(project, first.env, 'publish', '--prerelease');
+
+    expect(first.ran.status).toBe(0);
+    expect(first.ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0-0`);
+    const why = 'it has only prereleases, the highest 1.0.0-0';
+    expect(second).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${why}\nPublished ${ordersPackage}@1.0.0-1\n`,
+      stderr: '',
+    });
+    expect(putsOf(first.registry)).toEqual([
+      { name: ordersPackage, version: '1.0.0-0', distTags: { latest: '1.0.0-0' } },
+      { name: ordersPackage, version: '1.0.0-1', distTags: { latest: '1.0.0-1' } },
+    ]);
+  });
+
+  test('a package with only prereleases publishes 1.0.0, comparing nothing', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0-rc.1'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const why = 'it has only prereleases, the highest 1.0.0-rc.1';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${why}\nPublished ${ordersPackage}@1.0.0\n`,
+      stderr: '',
+    });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0', distTags }]);
+  });
+
+  test('an Additive Change on a Public Endpoint publishes a minor above the Baseline', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+
+    const { ran, registry } = await publishedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'endpoints.GET /ping schema field-added at success.body.fields.total (success) required=true: Additive',
+        `Published ${ordersPackage}@1.1.0`,
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    const distTags = { latest: '1.1.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0', distTags }]);
+  });
+
+  test('a Breaking Change that needs an Approval publishes a major and exits 0, printing its Change line', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const { ran, registry } = await publishedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'endpoints.GET /ping schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval',
+        `Published ${ordersPackage}@2.0.0`,
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    expect(putsOf(registry)).toHaveLength(1);
+  });
+
+  test('a peer moving to a new major publishes a major although the Snapshot did not change', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const baseline = publishedAs(project, '1.0.0');
+    const peerDependencies = { ...installedPeers, zod: '^3.0.0' };
+    const older = { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
+
+    const { ran } = await publishedAgainst(lab, {
+      project,
+      served: servedAs(ordersPackage, older),
+    });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\nPublished ${ordersPackage}@2.0.0\n`,
+      stderr: '',
+    });
+  });
+
+  test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check still compares with the Baseline', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+
+    const { ran, registry, env } = await publishedAgainst(lab, changed, '--prerelease');
+
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-0`);
+    const distTags = { next: '1.1.0-0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-0', distTags }]);
+    const checked = await cfLoomWith(changed.project, env, 'check');
+    expect(checked.stdout.split('\n')[0]).toBe(checkedAgainstOrders);
+  });
+
+  test('an unchanged Snapshot and unchanged peers publish nothing, say so and exit 0', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${ordersPackage}@1.0.0; --force publishes anyway`;
+    expect(ran).toEqual({ status: 0, stdout: `${checkedAgainstOrders}\n${nothing}\n`, stderr: '' });
+    expect(putsOf(registry)).toEqual([]);
+  });
+
+  test('--force publishes a patch when nothing changed', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served }, '--force');
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\nPublished ${ordersPackage}@1.0.1\n`,
+      stderr: '',
+    });
+    const distTags = { latest: '1.0.1' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.1', distTags }]);
+  });
+
+  test('a Not allowed Change exits 1 with every Change line, and nothing is put', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedEventField);
+
+    const { ran, registry } = await publishedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: [
+        checkedAgainstOrders,
+        'events.OrderCreated@1 schema field-removed at body.fields.placedAt (message): Not allowed',
+        '',
+      ].join('\n'),
+      stderr: `${notAllowedLine}\n`,
+    });
+    expect(putsOf(registry)).toEqual([]);
+  });
+
+  test('a registry publish cannot read the Baseline of is a tooling error, and nothing is put', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const packument = `/${ordersPackage.replace('/', '%2f')}`;
+    const answers = { [packument]: { status: 500, body: 'a plain text body' } };
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: { answers } });
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(
+      new RegExp(`^npm view ${ordersPackage} failed \\(E500: [^\\n]+\\)\\n$`),
+    );
+    expect(putsOf(registry)).toEqual([]);
+  });
+
+  test('the published snapshot.json carries the version and the Baseline’s history: a deleted Retired Endpoint stays as a tombstone that keeps its retiredIn', async ({
+    lab,
+  }) => {
+    const retired = await aGeneratedProject(lab, aRoot({ lifecycle: 'retired' }));
+    const ping = JSON.parse(read(retired, 'contract.snapshot.json')).endpoints['GET /ping'];
+    const endpoints = { 'GET /ping': { ...ping, retiredIn: '1.0.0' } };
+    const baseline = publishedAs(retired, '1.0.0', { endpoints });
+    const project = await aGeneratedProject(lab, aRootWithoutEndpoints);
+
+    const { registry } = await publishedAgainst(lab, {
+      project,
+      served: servedAs(ordersPackage, baseline),
+    });
+
+    const published = JSON.parse(publishedFilesOf(registry)['snapshot.json']!);
+    expect(published.version).toBe('1.0.1');
+    expect(published.endpoints).toEqual({
+      'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0' },
+    });
+  });
+
+  test('the published package.json carries the version, the peers as carets and cfLoom with the hash of the published Snapshot, and the built entry carries the version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    const files = publishedFilesOf(registry);
+    const cfLoomMetadata = {
+      format: 1,
+      snapshotHash: snapshotHashOf(files['snapshot.json']!),
+      kind: 'service',
+      dependencies: {},
+    };
+    expect(JSON.parse(files['package.json']!)).toEqual({
+      name: ordersPackage,
+      version: '1.0.0',
+      type: 'module',
+      exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
+      files: ['dist', 'snapshot.json'],
+      sideEffects: false,
+      peerDependencies: installedPeers,
+      cfLoom: cfLoomMetadata,
+    });
+    expect(registry.published[0]?.manifest).toMatchObject({ cfLoom: cfLoomMetadata });
+    expect(files['dist/index.js']).toMatch(/version: ['"]1\.0\.0['"]/);
+  });
+
+  test('the published tarball holds dist built by tsc with its declarations, and no src', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    const paths = Object.keys(publishedFilesOf(registry));
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'package.json',
+        'snapshot.json',
+        'dist/index.js',
+        'dist/index.d.ts',
+        'dist/endpoints/ping.js',
+        'dist/endpoints/ping.d.ts',
+      ]),
+    );
+    expect(paths.filter((path) => path.startsWith('src/') || path === 'tsconfig.json')).toEqual([]);
+  });
+
+  test('an Application publishes its Contract Package', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, anApplicationRoot);
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    const published = 'Published @org/contract-web-admin@1.0.0';
+    expect(ran.stdout.split('\n').at(-2)).toBe(published);
+    const files = publishedFilesOf(registry);
+    expect(JSON.parse(files['snapshot.json']!)).toMatchObject({
+      kind: 'application',
+      name: 'web-admin',
+      version: '1.0.0',
+    });
+    expect(Object.keys(files)).toContain('dist/index.js');
+  });
+
+  test('a Definitions Package publishes its own package.json and built files, with snapshot.json, cfLoom and the version written in, and snapshot.json added to files', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ description: 'Shared' }));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(registry, '@org/definitions')}\nPublished @org/definitions@1.0.0\n`,
+      stderr: '',
+    });
+    const files = publishedFilesOf(registry);
+    expect(Object.keys(files).sort()).toEqual([
+      'dist/index.d.ts',
+      'dist/index.js',
+      'package.json',
+      'snapshot.json',
+    ]);
+    expect(files['dist/index.js']).toBe('export const money = 1;\n');
+    expect(JSON.parse(files['snapshot.json']!)).toMatchObject({
+      kind: 'definitions',
+      version: '1.0.0',
+    });
+    expect(JSON.parse(files['package.json']!)).toEqual({
+      name: '@org/definitions',
+      version: '1.0.0',
+      type: 'module',
+      exports: './dist/index.js',
+      files: ['dist', 'snapshot.json'],
+      description: 'Shared',
+      peerDependencies: installedPeers,
+      cfLoom: {
+        format: 1,
+        snapshotHash: snapshotHashOf(files['snapshot.json']!),
+        kind: 'definitions',
+        dependencies: {},
+      },
+    });
+    expect(leftInStaging(project)).toEqual([]);
+  });
+
+  test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
+    lab,
+  }) => {
+    const peerDependencies = { '@cf-loom/contract': 'workspace:^', zod: 'catalog:' };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ peerDependencies }));
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(registry.published[0]?.manifest).toMatchObject({ peerDependencies: installedPeers });
+  });
+
+  test.for([
+    [
+      'names another scope than the configuration’s',
+      { name: '@other/definitions' },
+      'package.json names @other/definitions, but a Definitions Package of scope @org publishes as @org/definitions',
+    ],
+    [
+      'depends on a workspace: range',
+      { dependencies: { '@org/shared': 'workspace:*' } },
+      'package.json depends on @org/shared as workspace:*, which npm cannot install from the registry',
+    ],
+    [
+      'depends on a catalog: range',
+      { dependencies: { left: 'catalog:' } },
+      'package.json depends on left as catalog:, which npm cannot install from the registry',
+    ],
+  ] as const)(
+    'a Definitions Package whose package.json %s is a tooling error, and nothing is put',
+    async ([, manifest, line], { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions());
+      write(project, {
+        'package.json': JSON.stringify({
+          ...JSON.parse(read(project, 'package.json')),
+          ...manifest,
+        }),
+      });
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
+      expect(putsOf(registry)).toEqual([]);
+      expect(leftInStaging(project)).toEqual([]);
+    },
+  );
+
+  test('a Definitions Package’s own lifecycle scripts do not run', async ({ lab }) => {
+    const scripts = {
+      prepack: 'exit 1',
+      prepare: 'exit 1',
+      prepublishOnly: 'exit 1',
+      postpack: 'exit 1',
+      publish: 'exit 1',
+      postpublish: 'exit 1',
+    };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ scripts }));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran.status).toBe(0);
+    expect(putsOf(registry)).toHaveLength(1);
+  });
+
+  test('npm refusing the publish is a tooling error with the first line of its summary, and nothing is put or left behind', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ private: true }));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    const refused =
+      'npm publish @org/definitions@1.0.0 failed (EPRIVATE: This package has been marked as private)';
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
+    expect(putsOf(registry)).toEqual([]);
+    expect(leftInStaging(project)).toEqual([]);
+  });
+
+  test('a project without typescript is a tooling error, and nothing is put or left behind', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    rmSync(join(project, 'node_modules/typescript'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'typescript is not installed: publish builds the Contract Package with its tsc\n',
+    });
+    expect(putsOf(registry)).toEqual([]);
+    expect(leftInStaging(project)).toEqual([]);
+  });
+
+  test.for([
+    [['generate', '--force'], 'Only publish takes --force'],
+    [['generate', '--prerelease'], 'Only publish takes --prerelease'],
+    [['publish', '--force=true'], '--force takes no value'],
+    [['publish', '--prerelease=false'], '--prerelease takes no value'],
+    [['publish', 'now'], 'publish takes no argument'],
+  ] as const)('publish and its options are called wrongly: %s', ([args, message]) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, ...args);
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${message}. ${usage}\n` });
+  });
+});
+
 describe('cf-loom', () => {
   test('an unknown command is a usage error', () => {
     const project = aProject();
@@ -2083,9 +2648,13 @@ describe('cf-loom', () => {
   test('an unknown option is a usage error', () => {
     const project = aProject();
 
-    const ran = cfLoom(project, 'generate', '--force');
+    const ran = cfLoom(project, 'generate', '--verbose');
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `Unknown option: --force. ${usage}\n` });
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Unknown option: --verbose. ${usage}\n`,
+    });
   });
 
   test('only check takes --json', () => {

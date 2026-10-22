@@ -1,20 +1,12 @@
-import {
-  type Change,
-  type CompatibilityReport,
-  compatibilityReportOf,
-} from '@cf-loom/contract/internal';
-import { builtOf, type Run } from '../project/index.ts';
-import { baselineOf } from '../registry/index.ts';
+import type { Run } from '../project/index.ts';
 import { checkedJsonOf, errorsExitOf } from './check-json.ts';
 import { linesOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
-import { committedStopOf, type Exit, failureExitOf, toolingError } from './exit.ts';
+import { checkedFrom, committedBuiltOf, comparisonOf, type Stopped } from './comparison.ts';
+import type { Exit } from './exit.ts';
 
 /** How a command prints: its lines, or, for `check`, one JSON document. */
 export type Output = 'lines' | 'json';
-
-/** Why `check` ended before it could compare. */
-type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
 /**
  * Runs the Compatibility Check of the committed Snapshot against its Baseline and prints every
@@ -47,43 +39,10 @@ function jsonExitOf(checked: Checked | Stopped): Exit {
 }
 
 async function checkedOf(run: Run): Promise<Checked | Stopped> {
-  const built = await builtOf(run, 'committed');
-  if (built.kind !== 'built') {
-    return { kind: 'stopped', exit: failureExitOf(built) };
+  const built = await committedBuiltOf(run);
+  if (built.kind === 'stopped') {
+    return built;
   }
-  const stop = committedStopOf(built);
-  if (stop !== undefined) {
-    return { kind: 'stopped', exit: stop };
-  }
-  const { project, snapshot } = built;
-  const read = await baselineOf(
-    { directory: project.directory, env: run.env },
-    snapshot,
-    project.scope,
-  );
-  switch (read.kind) {
-    case 'failed':
-      return { kind: 'stopped', exit: toolingError(read.message) };
-    case 'no-baseline': {
-      const { packageName, why } = read;
-      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes: [] };
-    }
-    case 'baseline': {
-      const { packageName } = read;
-      const against = { kind: 'baseline', version: read.snapshot.version } as const;
-      const changes = changesOf(compatibilityReportOf(read.snapshot, snapshot));
-      return { kind: 'checked', packageName, against, changes };
-    }
-  }
-}
-
-function changesOf(report: CompatibilityReport): readonly Change[] {
-  switch (report.kind) {
-    case 'compared':
-      return report.changes;
-    case 'no-baseline':
-      throw new Error(
-        'The Compatibility Check found no Baseline for a Baseline it was given: a bug.',
-      );
-  }
+  const comparison = await comparisonOf(built, run);
+  return comparison.kind === 'stopped' ? comparison : checkedFrom(comparison);
 }

@@ -5,9 +5,13 @@ import { oneLineOf } from './imported.ts';
 /** A project's package as its package.json names it: the scope, when it has one, and the name. */
 export type PackageName = { readonly scope: string | undefined; readonly name: string };
 
-/** The project's package, or why its package.json cannot be used. */
+/** The project's package with its package.json as read, or why its package.json cannot be used. */
 export type ProjectPackage =
-  | { readonly kind: 'read'; readonly packageName: PackageName }
+  | {
+      readonly kind: 'read';
+      readonly packageName: PackageName;
+      readonly manifest: Readonly<Record<string, unknown>>;
+    }
   | { readonly kind: 'failed'; readonly message: string };
 
 /** A package name npm accepts: lower-case, scoped or not, never a scope alone. */
@@ -40,23 +44,21 @@ export function projectPackageOf(directory: string): ProjectPackage {
     );
   }
   const [scope, unscoped] = name.startsWith('@') ? name.split('/') : [undefined, name];
-  return { kind: 'read', packageName: { scope, name: unscoped ?? name } };
+  const packageName = { scope, name: unscoped ?? name };
+  return { kind: 'read', packageName, manifest: manifest.manifest };
 }
 
 function manifestOf(
   path: string,
   directory: string,
 ):
-  | {
-      readonly kind: 'parsed';
-      readonly manifest: { readonly name?: unknown; readonly type?: unknown };
-    }
+  | { readonly kind: 'parsed'; readonly manifest: Readonly<Record<string, unknown>> }
   | Extract<ProjectPackage, { readonly kind: 'failed' }> {
   try {
     const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'));
     return {
       kind: 'parsed',
-      manifest: typeof manifest === 'object' && manifest !== null ? manifest : {},
+      manifest: typeof manifest === 'object' && manifest !== null ? { ...manifest } : {},
     };
   } catch (e) {
     const problem = e instanceof SyntaxError ? 'is no JSON' : 'cannot be read';

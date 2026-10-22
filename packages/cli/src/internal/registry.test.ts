@@ -1434,16 +1434,17 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     },
   );
 
-  test('a failure message is one line, with ANSI and control characters removed', async ({
+  test('a failure message is the first line of npm’s summary, with ANSI and control characters removed', async ({
     lab,
   }) => {
     const packument = `/${ordersPackage.replace('/', '%2f')}`;
-    const error = '\u001b[31mred\u001b[0m\nsecond line\u0007 end';
+    const error = '\u001b[31mred\u001b[0m\u0007 end\nsecond line';
     const answers = { [packument]: jsonAnswer(403, { error }) };
 
     const { read } = await readOrders(lab, { answers });
 
-    expect(failureIn(read)).toContain('red second line end');
+    expect(failureIn(read)).toContain('red end)');
+    expect(failureIn(read)).not.toContain('second line');
     expect(failureIn(read)).not.toMatch(/\p{Cc}/u);
   });
 });

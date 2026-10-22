@@ -136,7 +136,9 @@ function errorOf(printed: unknown): { code: string; summary: string } | undefine
   const error = ownOf(printed, 'error');
   const code = ownOf(error, 'code');
   const summary = ownOf(error, 'summary');
-  return typeof code === 'string' && typeof summary === 'string' ? { code, summary } : undefined;
+  return typeof code === 'string' && typeof summary === 'string'
+    ? { code, summary: firstLineOf(summary) }
+    : undefined;
 }
 
 function jsonOf(call: NpmCall, stdout: string): { kind: 'json'; value: unknown } | Failed {

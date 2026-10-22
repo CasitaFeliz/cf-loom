@@ -1,6 +1,8 @@
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { type Published, publishedFrom } from './published-put.ts';
 import type { ServedVersion } from './served-version.ts';
 import { integrityOf } from './tarball.ts';
 
@@ -38,6 +40,7 @@ export type Registry = {
   readonly url: string;
   readonly host: string;
   readonly requests: readonly Recorded[];
+  readonly published: readonly Published[];
   readonly close: () => Promise<void>;
 };
 
@@ -78,9 +81,21 @@ function packumentOf(name: string, served: FakePackage, { url, isAbbreviated }: 
       return [version.version, { name, ...version.manifest, dist }];
     }),
   );
+  return { name, 'dist-tags': distTagsOf(served), versions };
+}
+
+/** What a package's `dist-tags` hold: those it was given, else `latest` on its last version. */
+function distTagsOf(served: FakePackage): Readonly<Record<string, string>> {
   const latest = served.versions.at(-1)?.version;
-  const distTags = served.distTags ?? (latest === undefined ? {} : { latest });
-  return { name, 'dist-tags': distTags, versions };
+  return served.distTags ?? (latest === undefined ? {} : { latest });
+}
+
+/** The package as it stands once a version is put to it, with the dist-tags the put asked for. */
+function withPublished(served: FakePackage | undefined, put: Published): FakePackage {
+  const { version, manifest, tarball } = put;
+  const published = { version, manifest, tarball, packed: undefined, dist: {} };
+  const distTags = { ...(served === undefined ? {} : distTagsOf(served)), ...put.distTags };
+  return { versions: [...(served?.versions ?? []), published], distTags };
 }
 
 function bytesAnswer(body: Buffer): Answer {
@@ -99,18 +114,41 @@ function tarballAnswerOf(path: string, packageName: string, served: FakePackage)
   return undefined;
 }
 
-type Asked = { readonly path: string; readonly accept: string | undefined };
+type Asked = {
+  readonly method: string;
+  readonly path: string;
+  readonly accept: string | undefined;
+  readonly body: string;
+};
 
-function answerOf({ path, accept }: Asked, options: RegistryOptions, url: string): Answer {
+/** What a registry holds as it runs: the options it was given, its packages and what was put. */
+type State = {
+  readonly options: RegistryOptions;
+  readonly packages: Record<string, FakePackage>;
+  readonly published: Published[];
+};
+
+function putAnswerOf(body: string, { packages, published }: State): Answer {
+  const put = publishedFrom(body);
+  packages[put.name] = withPublished(packages[put.name], put);
+  published.push(put);
+  return jsonAnswer(201, { ok: true });
+}
+
+function answerOf({ method, path, accept, body }: Asked, state: State, url: string): Answer {
+  const { options, packages } = state;
   const override = options.answers?.[path];
   if (override !== undefined) {
     return override;
+  }
+  if (method === 'PUT') {
+    return putAnswerOf(body, state);
   }
   if (path === '/-/whoami') {
     return options.whoami ?? jsonAnswer(200, { username: 'tester' });
   }
   const isAbbreviated = accept?.startsWith('application/vnd.npm.install-v1+json') === true;
-  for (const [name, served] of Object.entries(options.packages ?? {})) {
+  for (const [name, served] of Object.entries(packages)) {
     if (path === `/${name.replace('/', '%2f')}`) {
       return jsonAnswer(200, packumentOf(name, served, { url, isAbbreviated }));
     }
@@ -122,21 +160,31 @@ function answerOf({ path, accept }: Asked, options: RegistryOptions, url: string
   return jsonAnswer(404, { error: 'Not found' });
 }
 
-/** An npm registry on the loopback that serves what the options give and records what it is asked. */
+/**
+ * An npm registry on the loopback that serves what the options give, keeps what npm puts to it and
+ * records what it is asked.
+ */
 export async function aRegistry(options: RegistryOptions = {}): Promise<Registry> {
   const requests: Recorded[] = [];
+  const state: State = { options, packages: { ...options.packages }, published: [] };
   const server = createServer((request, response) => {
+    const method = request.method ?? '';
     const path = request.url ?? '';
-    const authorization = request.headers.authorization;
-    requests.push({ method: request.method ?? '', path, authorization });
-    const accept = request.headers.accept;
-    const answer = answerOf({ path, accept }, options, `http://${request.headers.host}`);
-    if (answer === 'hang') {
-      return;
-    }
-    response.statusCode = answer.status;
-    response.setHeader('content-type', answer.contentType ?? 'text/plain');
-    response.end(answer.body ?? '');
+    requests.push({ method, path, authorization: request.headers.authorization });
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      const { accept } = request.headers;
+      const body = Buffer.concat(chunks).toString('utf8');
+      const url = `http://${request.headers.host}`;
+      const answer = answerOf({ method, path, accept, body }, state, url);
+      if (answer === 'hang') {
+        return;
+      }
+      response.statusCode = answer.status;
+      response.setHeader('content-type', answer.contentType ?? 'text/plain');
+      response.end(answer.body ?? '');
+    });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const host = `127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -145,5 +193,5 @@ export async function aRegistry(options: RegistryOptions = {}): Promise<Registry
       server.close(() => resolve());
       server.closeAllConnections();
     });
-  return { url: `http://${host}`, host, requests, close };
+  return { url: `http://${host}`, host, requests, published: state.published, close };
 }

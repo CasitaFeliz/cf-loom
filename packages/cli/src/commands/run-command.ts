@@ -7,19 +7,22 @@ import { type Exit, toolingError } from './exit.ts';
 import { generate } from './generate.ts';
 import { init } from './init.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
+import { publish } from './publish.ts';
 import { verify } from './verify.ts';
 
 /** The package folder of the CLI, where its sources or its build sit, so a throw names the file in it. */
 const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
   readonly positionals: readonly string[];
   readonly out?: string;
   readonly output: Output;
+  readonly force: boolean;
+  readonly prerelease: boolean;
 };
 
 /** How the CLI is called wrongly: an unknown command, kind, option or argument, with the usage. */
@@ -39,13 +42,12 @@ export function crashedExitOf(thrown: unknown, output: Output): Exit {
 }
 
 /** Runs the command the arguments name where and when the CLI runs. */
-export async function runCommand({ positionals, out, output }: Called, run: Run): Promise<Exit> {
+export async function runCommand(called: Called, run: Run): Promise<Exit> {
+  const { positionals, out, output, force, prerelease } = called;
   const [command, ...rest] = positionals;
-  if (out !== undefined && command !== 'package') {
-    return usageError('Only package takes --out');
-  }
-  if (output === 'json' && command !== 'check') {
-    return usageError('Only check takes --json');
+  const misplaced = misplacedOptionIn(called, command);
+  if (misplaced !== undefined) {
+    return misplaced;
   }
   switch (command) {
     case 'init':
@@ -60,9 +62,33 @@ export async function runCommand({ positionals, out, output }: Called, run: Run)
         : await packageCommand(run, out ?? defaultPackageFolder);
     case 'check':
       return rest.length > 0 ? usageError('check takes no argument') : await check(run, output);
+    case 'publish':
+      return rest.length > 0
+        ? usageError('publish takes no argument')
+        : await publish(run, { force, prerelease });
     default:
       return usageError(`Unknown command: ${command ?? '(none)'}`);
   }
+}
+
+/** The usage error of an option given to a command that does not take it. */
+function misplacedOptionIn(
+  { out, output, force, prerelease }: Called,
+  command: string | undefined,
+): Exit | undefined {
+  if (out !== undefined && command !== 'package') {
+    return usageError('Only package takes --out');
+  }
+  if (output === 'json' && command !== 'check') {
+    return usageError('Only check takes --json');
+  }
+  if (force && command !== 'publish') {
+    return usageError('Only publish takes --force');
+  }
+  if (prerelease && command !== 'publish') {
+    return usageError('Only publish takes --prerelease');
+  }
+  return undefined;
 }
 
 function initOf(rest: readonly string[], run: Run): Exit {

@@ -163,7 +163,8 @@ function replaced(
   }
 }
 
-function writeAll(folder: string, files: readonly PackageFile[]): void {
+/** Writes each file under the folder, creating the folders between. */
+export function writeAll(folder: string, files: readonly PackageFile[]): void {
   for (const { path, text } of files) {
     mkdirSync(dirname(join(folder, path)), { recursive: true });
     writeFileSync(join(folder, path), text);

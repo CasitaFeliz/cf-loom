@@ -10,21 +10,27 @@ import {
   usageError,
 } from './commands/index.ts';
 
-const knownOptions = ['out', 'json'];
+const knownOptions = ['out', 'json', 'force', 'prerelease'];
+const flags = ['json', 'force', 'prerelease'];
 
 /** The command the arguments name, or the usage error they are. */
 type Parsed =
   | { readonly kind: 'called'; readonly called: Called }
   | { readonly kind: 'usage'; readonly exit: Exit };
 
-/** Reads the arguments; `--out <dir>` and `--json` are the options, any other a usage error. */
+/** Reads the arguments; `--out <dir>`, `--json`, `--force` and `--prerelease` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const { positionals, tokens, values } = parseArgs({
     args: [...args],
     allowPositionals: true,
     strict: false,
     tokens: true,
-    options: { out: { type: 'string' }, json: { type: 'boolean' } },
+    options: {
+      out: { type: 'string' },
+      json: { type: 'boolean' },
+      force: { type: 'boolean' },
+      prerelease: { type: 'boolean' },
+    },
   });
   const unknown = tokens.find(
     (token) => token.kind === 'option' && !knownOptions.includes(token.name),
@@ -32,18 +38,19 @@ function calledOf(args: readonly string[]): Parsed {
   if (unknown !== undefined && unknown.kind === 'option') {
     return { kind: 'usage', exit: usageError(`Unknown option: ${unknown.rawName}`) };
   }
-  const { out, json } = values;
+  const { out, json, force, prerelease } = values;
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return { kind: 'usage', exit: usageError('--out takes a folder') };
   }
-  const isValuedJson = (token: (typeof tokens)[number]) =>
-    token.kind === 'option' && token.name === 'json' && token.value !== undefined;
-  if (tokens.some(isValuedJson)) {
-    return { kind: 'usage', exit: usageError('--json takes no value') };
+  const valued = tokens.find(
+    (token) => token.kind === 'option' && flags.includes(token.name) && token.value !== undefined,
+  );
+  if (valued !== undefined && valued.kind === 'option') {
+    return { kind: 'usage', exit: usageError(`--${valued.name} takes no value`) };
   }
   const output: Output = json === true ? 'json' : 'lines';
-  const called = out === undefined ? { positionals, output } : { positionals, out, output };
-  return { kind: 'called', called };
+  const options = { positionals, output, force: force === true, prerelease: prerelease === true };
+  return { kind: 'called', called: out === undefined ? options : { ...options, out } };
 }
 
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */
