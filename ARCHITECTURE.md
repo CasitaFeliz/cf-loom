@@ -31,7 +31,7 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 - One Contract per package. Each Service and each Application keeps its Contract as plain source under `src/contract/` of its own package, whose root holds `cf-loom.config.ts`, and publishes it from there; that package may be a repository of its own (recommended) or one package of a monorepo. The Contract's files import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages it depends on, so it builds and publishes on its own. The CLI loads them and `cf-loom.config.ts` with Node's own type stripping and no loader, so they are erasable TypeScript whose relative imports name the `.ts` file (`./get-order.endpoint.ts`), in a package whose package.json has `"type": "module"`.
 - A Contract is published as exactly one Contract Package carrying its Public and Internal Elements and its Snapshot. Its Dependencies are data in the Snapshot, never imports: a Contract Package depends on no other Contract Package. Its code is generated from its Snapshot, with Definitions Packages' schemas written in, so it depends only on `zod` and `@cf-loom/contract`, as peers.
 - The Snapshot also describes Private Elements, so they have a Baseline. Their shapes are readable by anyone with access to the registry; only their code stays out of the package.
-- Applications publish a Contract that holds only Dependencies, so every use of a Service's Elements is known (see [Applications](packages/contract/README.md#applications) in the contract README).
+- Applications publish a Contract that holds only Dependencies, so the registry records every use of a Service's Elements, an Application's included (see [Applications](packages/contract/README.md#applications) in the contract README).
 
 ## The Contract Package
 
@@ -111,7 +111,6 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 - A Service or Application reaches a Provider only through a Dependency, declared with the tools, which then enable the typed client or the EventHandler stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
-- Published Dependencies form the dependency graph the Compatibility Check reads before an Element is retired or its Visibility narrowed: for every Contract Package, Applications' included, the highest published version of each major (see [The Baseline](COMPATIBILITY.md#the-baseline) in COMPATIBILITY.md), unless that version is deprecated in the registry. An organization ends an old major by deprecating it (`npm deprecate @org/contract-web-admin@2 "…"`); until then its Dependencies count, and the check's error names the package and the major that block the retirement or the narrowing. A Consumer whose deployed Release is older than its highest publish is covered by the deploy rule. How the graph is read is in [Reading the graph](packages/cli/ARCHITECTURE.md#reading-the-graph) in the CLI's ARCHITECTURE.md.
 
 ## Wire protocol
 

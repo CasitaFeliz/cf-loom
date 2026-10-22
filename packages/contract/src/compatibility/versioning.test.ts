@@ -8,6 +8,7 @@ import {
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type EndpointSnapshot,
+  type EventSnapshot,
   type GuardSnapshot,
   type PeerMove,
   type PublishedApplicationSnapshot,
@@ -44,9 +45,9 @@ const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
 function aBreakingChange(site: ChangeSite): Change {
   return {
     site,
-    difference: { kind: 'retired', dependencies: [] },
+    difference: { kind: 'retired' },
     class: 'breaking',
-    approval: 'not-needed',
+    approval: 'needed',
   };
 }
 
@@ -152,7 +153,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
     ...serviceHeading,
     endpoints: { [orderById]: getOrder, [latestOrder]: anEndpointOf(visibility) },
   };
-  const report = compatibilityReportOf(baseline, proposed, []);
+  const report = compatibilityReportOf(baseline, proposed);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }
@@ -218,7 +219,7 @@ function comparedReportOf(
   baseline: PublishedServiceSnapshot | PublishedDefinitionsSnapshot,
   proposed: ServiceSnapshot | DefinitionsSnapshot,
 ): ComparedReport {
-  const report = compatibilityReportOf(baseline, proposed, []);
+  const report = compatibilityReportOf(baseline, proposed);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }
@@ -380,6 +381,30 @@ describe('versionBumpOf', () => {
     expect(bump).toBe('patch');
   });
 
+  test('narrowing an Internal Event bumps major', () => {
+    const event: EventSnapshot = {
+      visibility: 'internal',
+      lifecycle: 'active',
+      description: 'An order was placed',
+      body: { type: 'object', mode: 'strict', fields: {} },
+    };
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      endpoints: {},
+      events: { 'OrderPlaced@1': { ...event, lifecycle: 'active' } },
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: {},
+      events: { 'OrderPlaced@1': { ...event, visibility: 'private' } },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(versionBumpOf(report, unmoved)).toBe('major');
+  });
+
   test('a shadowed Public Endpoint bumps major', () => {
     const report = reportOfShadowing('public');
 
@@ -391,12 +416,7 @@ describe('versionBumpOf', () => {
   test('narrowing Public to Private bumps major: the wider Visibility decides', () => {
     const narrowed: Change = {
       site: publicEndpoint,
-      difference: {
-        kind: 'visibility-narrowed',
-        from: 'public',
-        to: 'private',
-        dependencies: [],
-      },
+      difference: { kind: 'visibility-narrowed', from: 'public', to: 'private' },
       class: 'breaking',
       approval: 'needed',
     };
@@ -428,7 +448,7 @@ describe('versionBumpOf', () => {
       ...anApplication(),
       dependencies: { 'orders-service': ordersDependency('4.0.0') },
     };
-    const report = compatibilityReportOf(baseline, proposed, []);
+    const report = compatibilityReportOf(baseline, proposed);
 
     const bump = report.kind === 'compared' ? versionBumpOf(report, unmoved) : 'no-baseline';
 

@@ -7,7 +7,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 - Every change to a Contract is judged against its Baseline, read from the registry (see [The Baseline](#the-baseline)).
 - The Snapshot covers all three Visibilities and resolves every imported Guard and schema from its Definitions Package, so adopting a new Definitions Package version shows up as a change on the Elements that use it.
 - Each difference is a Breaking, Additive or Neutral Change. When the tooling cannot prove a change compatible, it is Breaking. There is no warning level.
-- The types of `@cf-loom/contract` refuse what TypeScript can state exactly, and `generate` repeats every rule the types refuse, since a cast, or a list or path typed wider than a literal, skips them; `generate` fails on every other rule that needs no Baseline, reporting them all at once; `check` adds only the rules that compare with the Baseline or the dependency graph. A declaration never throws.
+- The types of `@cf-loom/contract` refuse what TypeScript can state exactly, and `generate` repeats every rule the types refuse, since a cast, or a list or path typed wider than a literal, skips them; `generate` fails on every other rule that needs no Baseline, reporting them all at once; `check` adds only the rules that compare with the Baseline. A declaration never throws.
 - Breaking means a deployed Consumer or Release can fail at runtime. A Consumer's code that stops compiling when it upgrades the Contract Package, such as an exhaustive `switch` over an enum that lost a value, is visible and opt-in, so it is not Breaking. The exceptions are renaming an Endpoint (see [Elements](#elements)), and removing a Definitions Package's shared schema, Guard or Rejection, since Services import them by name.
 - Additive guarantees that what is already deployed keeps working against the new version, not that a Consumer built on the new version works against an older Release. The Input and Success rules rely on this, so a Contract Package version is published when a Release implementing it is deployed; a Release whose Handlers are stubs counts (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README). How the publish is wired into the deploy is the organization's.
 - With no Baseline, `check` has nothing to compare, so only what `generate` enforces applies (such as [Not allowed in a Contract](#not-allowed-in-a-contract)); the package's first version that is not a prerelease is 1.0.0.
@@ -15,7 +15,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 
 ### The Baseline
 
-- The Baseline is the highest published version of the package, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. A prerelease (`2.0.0-rc.1`) never counts as the highest published version, for the Baseline or for the dependency graph. Every publish goes on the newest major; there is no publishing on an older one.
+- The Baseline is the highest published version of the package, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. A prerelease (`2.0.0-rc.1`) never counts as the highest published version. Every publish goes on the newest major; there is no publishing on an older one.
 
 ## Versioning
 
@@ -45,12 +45,12 @@ The version also protects Consumers' installs. The Contract Package's peers are 
 | Delete an Element not Retired in the Baseline | Not allowed: the check fails |
 | Reuse the identity of a Retired Element (an Endpoint's method and path; a Message's name and version) | Not allowed: the check fails. A new Message Version of a Retired one is not a reuse |
 | Move an Endpoint's path or method | A new Endpoint plus the retirement of the old one |
-| Rename an Endpoint (its `name`; method and path unchanged) | Breaking on a Public or Internal Endpoint, since Callers' generated code uses the name and Dependencies record it; the check lists every Dependency on it. Neutral on a Private one |
+| Rename an Endpoint (its `name`; method and path unchanged) | Breaking on a Public or Internal Endpoint, since Callers' generated code uses the name and Dependencies record it. Neutral on a Private one |
 | Make a Breaking Change to an existing Message Version other than retiring it or narrowing its Visibility | Not allowed: the check fails (see [Messages](#messages)) |
 | Turn a Command into an Event, or the reverse | A new Message, under a new name, plus the retirement of the old one: a name belongs to one kind across the whole Contract and its history |
 | Add an Endpoint that takes a URL routing sent to an existing Endpoint of the same method (`/orders/latest` next to `/orders/:id`) | Breaking on the existing one, whose Input loses that value; the Change names the Endpoint that takes it (routing precedence is in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md). Which values a param's schema accepts is not read: `/orders/latest` takes from `/orders/:id` even when `id` is a uuid. A Retired Endpoint that is still declared shadows too, but is never shadowed, since it has no Input to lose; deleting it is Neutral. Routes outside the Contract are not seen (see [Endpoints](ARCHITECTURE.md#endpoints) in ARCHITECTURE.md) |
 | Widen Visibility (Private → Internal → Public) | Additive |
-| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking. No Deprecation needed, since the Element stays Active, but no Dependency may lose reach (which Elements a Service or an Application may depend on is in [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md), and an Endpoint also needs a Breaking Change Approval |
+| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking, since a Dependency may lose reach (which Elements a Service or an Application may depend on is in [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md). No Deprecation needed, since the Element stays Active |
 
 ### Fields
 
@@ -175,9 +175,8 @@ Standard Rejections:
 ### Retirement
 
 - Every Element must be Deprecated in the Baseline before it can be Retired.
-- The check lists every Dependency on the Element in the dependency graph (see [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md).
-- **Endpoint:** Breaking. No Dependency may use it, and it still needs a Breaking Change Approval, since a Public Endpoint may have Callers with no Contract.
-- **Message:** Breaking, but needs no Breaking Change Approval; instead, no Dependency may use it. See also the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages).
+- **Endpoint or Event:** Breaking, and needs a Breaking Change Approval: the check does not know who still calls the Endpoint or subscribes to the Event, a Public Endpoint's Callers with no Contract included. See also the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages).
+- **Command:** Breaking, but needs no Breaking Change Approval: a Deprecated Command is no longer sent, and the deploy rule drains its durable consumer before the Release that retires it deploys (see [ARCHITECTURE.md](ARCHITECTURE.md#messages)).
 
 ### Dependencies
 
@@ -189,7 +188,7 @@ Adding or removing a Subscription is Neutral, but a removed Subscription's name 
 
 ## Breaking Change Approval
 
-- A Breaking Change on a Contract, on any Visibility, merges only with a Breaking Change Approval from an Approver of that Contract, tied to the exact commit: a new commit after the approval needs a new one. The author of a change should not approve it, unless the configuration allows it (`allowSelfApproval`, see [Configuration](packages/cli/README.md#configuration) in the CLI README), for example while one person works on it. The one exception is retiring or narrowing a Message, which is gated by its conditions instead.
+- A Breaking Change on a Contract, on any Visibility, merges only with a Breaking Change Approval from an Approver of that Contract, tied to the exact commit: a new commit after the approval needs a new one. The author of a change should not approve it, unless the configuration allows it (`allowSelfApproval`, see [Configuration](packages/cli/README.md#configuration) in the CLI README), for example while one person works on it. The one exception is retiring a Command, which needs none (see [Retirement](#retirement)).
 - By default cf-loom only says which changes need an Approval: `cf-loom check` reports them and exits with a status of its own for "needs an Approval" (see [Commands](packages/cli/README.md#commands) in the CLI README), and the organization enforces the Approval with its own review process (required reviews, owners of `contract.snapshot.json`, dismissing approvals on new commits).
 - An organization that wants cf-loom to verify the Approval configures an Approval source, which tells `check` who approved which commit. cf-loom then checks the commit, the configured Approvers and self-approval itself. cf-loom ships no default source.
 - Publishing never depends on the Approval: a Breaking Change on a Public or Internal Element that is deployed still publishes as a major, so the version tells the truth.

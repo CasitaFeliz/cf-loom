@@ -116,11 +116,13 @@ type Kind = {
   readonly held: (entries: Entries<Held>, body?: ObjectNode) => Partial<PublishedServiceSnapshot>;
   readonly declared: (entries: Entries<Lifecycle>, body?: ObjectNode) => Partial<ServiceSnapshot>;
   readonly named: 'event' | 'command';
+  readonly retiring: 'needed' | 'not-needed';
 };
 
 const event: Kind = {
   name: 'Event',
   named: 'event',
+  retiring: 'needed',
   site: (identity) => ({ kind: 'event', identity, visibility: 'internal' }),
   held: (entries, body = plain) => ({
     events: byIdentity(entries, (held) => publishedEvent(held, body)),
@@ -132,6 +134,7 @@ const event: Kind = {
 const command: Kind = {
   name: 'Command',
   named: 'command',
+  retiring: 'not-needed',
   site: (identity) => ({ kind: 'command', identity }),
   held: (entries, body = plain) => ({
     commands: byIdentity(entries, (held) => publishedCommand(held, body)),
@@ -146,7 +149,7 @@ function changesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const report = compatibilityReportOf(baseline, proposed, []);
+  const report = compatibilityReportOf(baseline, proposed);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }
@@ -197,9 +200,9 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
       expect(changes).toEqual([
         {
           site,
-          difference: { kind: 'retired', dependencies: [] },
+          difference: { kind: 'retired' },
           class: 'breaking',
-          approval: 'not-needed',
+          approval: kind.retiring,
         },
         { site, difference: bodyChange(true), class: 'not-allowed' },
       ]);
@@ -207,7 +210,7 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
   );
 
   test.each(kinds)(
-    'retiring a $name Deprecated in the Baseline, with no Dependency, is Breaking and needs no Approval',
+    'retiring a $name Deprecated in the Baseline is Breaking; its Approval is $retiring',
     (kind) => {
       const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }));
       const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'retired' }));
@@ -217,15 +220,15 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
       expect(changes).toEqual([
         {
           site: kind.site('OrderPlaced@1'),
-          difference: { kind: 'retired', dependencies: [] },
+          difference: { kind: 'retired' },
           class: 'breaking',
-          approval: 'not-needed',
+          approval: kind.retiring,
         },
       ]);
     },
   );
 
-  test('narrowing an Event’s Visibility, with no Dependency, is Breaking and needs no Approval', () => {
+  test('narrowing an Event’s Visibility is Breaking and needs an Approval', () => {
     const baseline = aBaseline({
       events: { 'OrderPlaced@1': publishedEvent('active', plain, 'internal') },
     });
@@ -238,15 +241,32 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
     expect(changes).toEqual([
       {
         site: event.site('OrderPlaced@1'),
-        difference: {
-          kind: 'visibility-narrowed',
-          from: 'internal',
-          to: 'private',
-          dependencies: [],
-        },
+        difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
         class: 'breaking',
-        approval: 'not-needed',
+        approval: 'needed',
       },
+    ]);
+  });
+
+  test('narrowing an Event and making a Breaking change to its body gives a Breaking narrowing that needs an Approval, and a body change that is not allowed', () => {
+    const baseline = aBaseline({
+      events: { 'OrderPlaced@1': publishedEvent('active', plain, 'internal') },
+    });
+    const proposed = aProposed({
+      events: { 'OrderPlaced@1': anEvent('active', withRequiredNote, 'private') },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    const site = event.site('OrderPlaced@1');
+    expect(changes).toEqual([
+      {
+        site,
+        difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
+        class: 'breaking',
+        approval: 'needed',
+      },
+      { site, difference: bodyChange(true), class: 'not-allowed' },
     ]);
   });
 });

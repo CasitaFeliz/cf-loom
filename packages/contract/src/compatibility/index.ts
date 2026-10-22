@@ -1,5 +1,4 @@
 export { compatibilityReportOf } from './check.ts';
-export type { DependencyGraph, GraphPackage } from './graph.ts';
 export { publishedSnapshotOf } from './merge.ts';
 export type { PeerMove, PeerRanges } from './peers.ts';
 export type {
@@ -9,7 +8,6 @@ export type {
   ComparedReport,
   CompatibilityReport,
   Difference,
-  GraphDependency,
   Position,
   ShapeDifference,
 } from './report.ts';

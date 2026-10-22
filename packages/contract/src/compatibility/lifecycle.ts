@@ -1,7 +1,6 @@
 import type { Lifecycle } from '../declarations/index.ts';
-import type { Dependents } from './graph.ts';
 import type { Pair } from './pairs.ts';
-import type { Difference, GraphDependency } from './report.ts';
+import type { Difference } from './report.ts';
 
 /**
  * How an Element's lifecycle moved: from none, for an added Element, or from the Baseline's. An
@@ -9,25 +8,19 @@ import type { Difference, GraphDependency } from './report.ts';
  */
 export function lifecycleDifferenceOf(
   pair: Pair<{ readonly lifecycle: Lifecycle }>,
-  dependents: Dependents,
 ): Difference | undefined {
-  const dependencies = () => dependents(pair.identity);
   switch (pair.kind) {
     case 'added':
-      return movedTo(pair.proposed.lifecycle, undefined, dependencies);
+      return movedTo(pair.proposed.lifecycle, undefined);
     case 'kept':
-      return movedTo(pair.proposed.lifecycle, pair.baseline.lifecycle, dependencies);
+      return movedTo(pair.proposed.lifecycle, pair.baseline.lifecycle);
     case 'dropped':
     case 'reused':
       return undefined;
   }
 }
 
-function movedTo(
-  to: Lifecycle,
-  from: Lifecycle | undefined,
-  dependencies: () => readonly GraphDependency[],
-): Difference | undefined {
+function movedTo(to: Lifecycle, from: Lifecycle | undefined): Difference | undefined {
   if (from === 'retired') {
     return to === 'retired' ? undefined : { kind: 'retired-brought-back', lifecycle: to };
   }
@@ -37,8 +30,6 @@ function movedTo(
     case 'deprecated':
       return from === 'active' ? { kind: 'deprecated' } : undefined;
     case 'retired':
-      return from === 'deprecated'
-        ? { kind: 'retired', dependencies: dependencies() }
-        : { kind: 'retired-before-deprecated' };
+      return from === 'deprecated' ? { kind: 'retired' } : { kind: 'retired-before-deprecated' };
   }
 }

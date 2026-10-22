@@ -134,7 +134,7 @@ function selectedEventFailures(
   return [];
 }
 
-/** A Dependency lists an Event only for a Subscription, since it blocks that Event's retirement. */
+/** A Dependency lists an Event only for a Subscription, since a Dependency names only what its owner uses. */
 function unusedEventFailures(
   { at, name, element }: Selected,
   subscribed: ReadonlySet<unknown>,

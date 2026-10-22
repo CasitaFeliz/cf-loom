@@ -63,7 +63,7 @@ function subscriptionSite(name: string): ChangeSite {
 }
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
-  return compatibilityReportOf(baseline, proposed, []);
+  return compatibilityReportOf(baseline, proposed);
 }
 
 function changesOf(
