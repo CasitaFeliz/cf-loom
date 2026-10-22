@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { type ContractDirectory, fixed } from './directories/index.ts';
+import { fixed, npm } from './directories/index.ts';
 import { type ApprovalSource, defineConfig } from './index.ts';
-
-/** A Contract directory as the README's example builds one, standing in for `github()`. */
-function github(_options: { readonly org: string }): ContractDirectory {
-  return { list: async () => ({ kind: 'listed', names: [] }) };
-}
 
 const myApprovalSource: ApprovalSource = {
   approvalsOf: async () => [{ approver: '@org/platform-team' }],
@@ -23,8 +18,8 @@ describe('defineConfig', () => {
   test('the README’s configuration declares every documented field', () => {
     const written = {
       scope: '@org',
-      registry: 'https://npm.internal.example',
-      directory: github({ org: 'org' }),
+      registry: 'https://registry.npmjs.org',
+      directory: npm({ org: 'org', token: 'npm_read-token' }),
       approvals: myApprovalSource,
       approvers: ['@org/platform-team'],
       allowSelfApproval: false,

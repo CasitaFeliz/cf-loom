@@ -9,12 +9,12 @@ Each Service, Application or Definitions Package configures the tools in `cf-loo
 ```ts
 // cf-loom.config.ts
 import { defineConfig } from '@cf-loom/cli';
-import { github } from '@cf-loom/cli/directories';
+import { npm } from '@cf-loom/cli/directories';
 
 export const config = defineConfig({
   scope: '@org',                     // publishes @org/contract-orders-service
-  registry: 'https://npm.internal.example',
-  directory: github({ org: 'org' }),   // how to list every Contract Package in the scope
+  registry: 'https://registry.npmjs.org',
+  directory: npm({ org: 'org', token: process.env.NPM_READ_TOKEN }),   // how to list every Contract Package in the scope
   // optional: only when cf-loom should verify Approvals itself
   approvals: myApprovalSource,
   approvers: ['@org/platform-team'],
@@ -24,9 +24,11 @@ export const config = defineConfig({
 
 `scope` is always required; `registry` and `directory` are required by `check`, `publish`, `broker-plan` and `route-plan`; `generate`, `verify` and `package` run offline. An Approval source implements `ApprovalSource = { approvalsOf(commit: string): Promise<{ approver: string }[]> }`: expanding teams is the source's job, and the commit and its author come from git.
 
-npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. `@cf-loom/cli/directories` ships directories for the registries that can list a scope authoritatively (npm organizations, GitHub, GitLab, CodeArtifact, Azure Artifacts, Artifactory, Nexus 3.88+), a git-repository directory that `publish` writes to for any other registry (see [Publishing to the directory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md#publishing-to-the-directory)), and `fixed(names)`, a fixed list for tests. Versions and metadata always come from the standard package metadata. The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. The directory is read with the same credentials the check uses, which must be able to read the whole scope.
+npm-compatible registries have no standard way to list the packages in a scope, so the names come from a pluggable Contract directory that returns the complete list or fails, never a partial one. `@cf-loom/cli/directories` ships `npm({ org, token })`, for an npm organization, a git-repository directory that `publish` writes to for any other registry (see [Publishing to the directory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/ARCHITECTURE.md#publishing-to-the-directory)), and `fixed(names)`, a fixed list for tests; a JFrog Artifactory directory is planned. Versions and metadata always come from the standard package metadata. The directory fails closed: any error, paging limit or listed package whose metadata cannot be read fails the check. A directory reads with the credentials it is configured with, which must be able to read the whole scope: a registry cannot tell a directory about a package its credentials may not read.
 
 A Contract directory is a `ContractDirectory`, `{ list }`, so an organization may write its own. `list` resolves to a `Listed`: `{ kind: 'listed', names }`, the npm names of the scope's packages, or `{ kind: 'failed', message }`, one line saying why the list is not complete; it never resolves to a partial list. `fixed(names)` lists the names it is given, copied when it is called: `directory: fixed(['@org/contract-orders-service', '@org/contract-billing-service'])`.
+
+`npm({ org, token, registry })` lists the packages of the npm organization `org` (lower-case, without `@`) that are in its scope, `@<org>/…`, from the registry's organization listing, read afresh on each `list`. npm lists other packages the organization has access to as well, and those are left out. `token` is a read-only access token, such as `process.env.NPM_READ_TOKEN`, of a member who can read every package of the scope; its surrounding whitespace is ignored. Without a token npm lists only public packages, so a missing `token`, or one of only whitespace and control characters, fails the listing without a request. `registry` is `https://registry.npmjs.org` unless the organization's registry serves the same listing; Verdaccio does not. Only its origin and path are used, not its user, password, query or fragment. Any answer but 200, a network error, a redirect (refused, so the token never leaves the registry) or a body that is not a map of package names fails the listing; npmjs.com answers an error for an organization with too many packages to list. A failure message never contains the token.
 
 A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package `<scope>/<name>`. A Contract Package `cf-loom package` writes is `0.0.0`, in its package.json and in `contract.version`, so a Dependency declared on it records `against: '0.0.0'`; only `publish` derives a version.
 
