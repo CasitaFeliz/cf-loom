@@ -153,6 +153,16 @@ describe('npm', () => {
     },
   );
 
+  test('a token that is not a string fails as no token and makes no request', async () => {
+    const registry = await aRegistry();
+    const directory = npm({ org: 'org', token: 42 as unknown as string, registry: registry.url });
+
+    const listed = await directory.list();
+
+    expect(messageOf(listed)).toContain('has no token');
+    expect(registry.requests).toEqual([]);
+  });
+
   test('a registry with a path keeps its path', async () => {
     const registry = await aRegistry();
     const directory = npm({ org: 'org', token, registry: `${registry.url}/registry/npm` });
@@ -184,6 +194,19 @@ describe('npm', () => {
     await directory.list();
 
     expect(registry.requests.map((request) => request.path)).toEqual(['/-/org/a%20b%2Fc/package']);
+  });
+
+  test('an organization that cannot be encoded in a URL is a failure, not a throw', async () => {
+    const registry = await aRegistry();
+    const directory = npm({ org: '\uD800', token, registry: registry.url });
+
+    const listed = await directory.list();
+
+    expect(listed).toEqual({
+      kind: 'failed',
+      message: 'npm({ org }) has an organization that cannot be put in a URL',
+    });
+    expect(registry.requests).toEqual([]);
   });
 
   test.each([
@@ -308,6 +331,24 @@ describe('npm', () => {
     expect(messageOf(listed)).not.toContain(token);
   });
 
+  test.each([
+    ['an ANSI sequence', '\u001b[0m'],
+    ['a control character', '\u0007'],
+  ])(
+    'a message does not contain the token, even when npm’s error splits it with %s',
+    async (_, splitter) => {
+      const error = `${token.slice(0, 4)}${splitter}${token.slice(4)} is not a token`;
+      const registry = await aRegistry({ status: 401, body: JSON.stringify({ error }) });
+      const directory = npm({ org: 'org', token, registry: registry.url });
+
+      const listed = await directory.list();
+
+      expect(listed.kind).toBe('failed');
+      expect(messageOf(listed)).toContain('is not a token');
+      expect(messageOf(listed)).not.toContain(token);
+    },
+  );
+
   test('a token with a trailing newline is used without it, in the request and in the message', async () => {
     const error = `${token} is not a token`;
     const registry = await aRegistry({ status: 401, body: JSON.stringify({ error }) });
@@ -341,6 +382,7 @@ describe('npm', () => {
       kind: 'failed',
       message: `${registry.url}/npm answered 500 listing the packages of the npm organization org: down`,
     });
+    expect(registry.requests.map((request) => request.path)).toEqual(['/npm/-/org/org/package']);
   });
 
   test('npm makes no request until list is called', async () => {

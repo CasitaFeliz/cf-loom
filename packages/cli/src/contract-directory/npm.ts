@@ -9,11 +9,14 @@ export type NpmOptions = {
   readonly org: string;
   /**
    * A read-only access token of a member who can read every package of the scope, since npm
-   * leaves restricted packages out of the listing without one; `undefined` or a blank token fails
-   * the listing.
+   * leaves restricted packages out of the listing without one; its surrounding whitespace is
+   * ignored, and `undefined` or a blank token fails the listing.
    */
   readonly token: string | undefined;
-  /** The registry that serves npm's organization listing: `https://registry.npmjs.org` unless set. */
+  /**
+   * The registry that serves npm's organization listing: `https://registry.npmjs.org` unless set;
+   * only its origin and path are used, not its user, password, query or fragment.
+   */
   readonly registry?: string;
 };
 
@@ -45,17 +48,19 @@ async function listOrganization(
   token: string | undefined,
   registry: string,
 ): Promise<Listed> {
-  const secret = token?.trim();
-  if (secret === undefined || secret === '') {
+  if (typeof token !== 'string' || token.trim() === '') {
     return failed(
       `npm({ org: '${org}' }) has no token, and npm lists only public packages without one`,
     );
+  }
+  if (!org.isWellFormed()) {
+    return failed('npm({ org }) has an organization that cannot be put in a URL');
   }
   const base = baseOf(registry);
   if (base === undefined) {
     return failed(`npm({ org: '${org}' }) has a registry that is no http or https URL`);
   }
-  const reading = { org, registry: base, token: secret };
+  const reading = { org, registry: base, token: token.trim() };
   const answer = await ask(reading);
   switch (answer.kind) {
     case 'unreachable':
@@ -74,9 +79,9 @@ function baseOf(registry: string): string | undefined {
 }
 
 async function ask(reading: Reading): Promise<Answer> {
-  const url = `${reading.registry}/-/org/${encodeURIComponent(reading.org)}/package`;
-  const headers = { accept: 'application/json', authorization: `Bearer ${reading.token}` };
   try {
+    const url = `${reading.registry}/-/org/${encodeURIComponent(reading.org)}/package`;
+    const headers = { accept: 'application/json', authorization: `Bearer ${reading.token}` };
     const response = await fetch(url, { headers, redirect: 'manual' });
     const body = await response.text();
     return { kind: 'answered', status: response.status, statusText: response.statusText, body };
@@ -120,7 +125,8 @@ function namesIn(reading: Reading, body: string): Listed {
     return failedWithoutToken(reading, message);
   }
   const scope = `@${reading.org}/`;
-  return { kind: 'listed', names: Object.keys(packages).filter((name) => name.startsWith(scope)) };
+  const names = Object.keys(packages).filter((name) => name.startsWith(scope));
+  return { kind: 'listed', names };
 }
 
 function isNameMap(value: unknown): value is Record<string, string> {
@@ -147,16 +153,20 @@ function parseJson(text: string): unknown {
 }
 
 function failedWithoutToken(reading: Reading, message: string): Listed {
-  return failed(message.replaceAll(reading.token, ''));
+  const withoutToken = oneLine(message)
+    .replaceAll(reading.token, '')
+    .replaceAll(oneLine(reading.token), '');
+  return failed(withoutToken);
 }
 
 function failed(message: string): Listed {
-  const withoutAnsi = message.replaceAll(ansiSequence, '');
-  return {
-    kind: 'failed',
-    message: withoutAnsi
-      .replace(/\s+/g, ' ')
-      .replace(/\p{Cc}/gu, '')
-      .trim(),
-  };
+  return { kind: 'failed', message: oneLine(message) };
+}
+
+function oneLine(text: string): string {
+  return text
+    .replaceAll(ansiSequence, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\p{Cc}/gu, '')
+    .trim();
 }
