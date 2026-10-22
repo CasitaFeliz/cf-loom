@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { PublishedDefinitionsSnapshot, PublishedSnapshot } from '@cf-loom/contract/internal';
-import { type Built, builtWithTsc } from '../building/index.ts';
+import { type Building, type Built, builtWithTsc } from '../building/index.ts';
 import {
   contractPackageFilesOf,
   definitionsManifestOf,
@@ -18,7 +18,7 @@ import {
   packedPathsOf,
   publishFolder,
 } from '../registry/index.ts';
-import { type CopiedFile, removeStaged, stagedIn } from '../writing/index.ts';
+import { type CopiedFile, type Removed, removeStaged, stagedIn } from '../writing/index.ts';
 
 /** What a publish puts out: the package's Snapshot as published with its text, the peers it is built with and its dist-tag. */
 export type ToPublish = {
@@ -29,44 +29,94 @@ export type ToPublish = {
   readonly tag: DistTag;
 };
 
+/** How a publish ends: the version put or why not, and the lines naming a staging folder it could not remove. */
+export type PublishedPackage = {
+  readonly put: { readonly kind: 'published' } | Failed;
+  readonly left: readonly string[];
+};
+
+/** Who builds a staged package: cf-loom, with the project's `tsc`, or its author before `publish`. */
+type Build = 'with-tsc' | 'by-author';
+
 /** The files a package is staged from: those written, and those of the project copied as they are. */
 type StagedFiles = {
   readonly kind: 'files';
   readonly files: readonly PackageFile[];
   readonly copied: readonly CopiedFile[];
+  readonly build: Build;
 };
+
+/** What a Definitions Package is published as: its Snapshot as published with its text, and the peers it is built with. */
+type DefinitionsToStage = {
+  readonly published: PublishedDefinitionsSnapshot;
+  readonly text: string;
+  readonly peers: Peers;
+};
+
+/** A staged folder, as it is built and as it is published. */
+type StagedPackage = { readonly building: Building; readonly publishing: Publishing };
 
 /**
  * Stages the package of a published Snapshot inside the project, builds a Contract Package there
  * with the project's own TypeScript, publishes it through the organization's npm and removes the
- * staging folder, whatever the outcome.
+ * staging folder, whatever the outcome; a folder that cannot be removed is named, not thrown.
  */
 export async function publishedPackageOf(
   run: Run,
   toPublish: ToPublish,
-): Promise<{ readonly kind: 'published' } | Failed> {
-  const { project, published, tag } = toPublish;
+): Promise<PublishedPackage> {
+  const { project } = toPublish;
   const npm = { directory: project.directory, env: run.env };
   const files = await stagedFilesOf(npm, toPublish);
   if (files.kind === 'failed') {
-    return files;
+    return { put: files, left: [] };
   }
   const staged = stagedIn(project.directory, files.files, files.copied);
   if (staged.kind === 'failed') {
-    return staged;
+    return { put: staged, left: [] };
   }
+  let put: PublishedPackage['put'];
+  let removed: Removed;
   try {
-    const packageName = publishedNameOf(project.scope, published);
-    const publishing = { folder: staged.folder, packageName, version: published.version, tag };
-    const built = await builtIfContractPackage(publishing, project, published.kind);
-    return built.kind === 'failed' ? built : await publishFolder(npm, publishing);
+    put = await builtAndPublished(npm, files.build, stagedPackageOf(staged.folder, toPublish));
   } finally {
-    removeStaged(staged.folder);
+    removed = removeStaged(staged.folder, project.directory);
+  }
+  return { put, left: removed.kind === 'left' ? [removed.line] : [] };
+}
+
+function stagedPackageOf(folder: string, toPublish: ToPublish): StagedPackage {
+  const { project, published, tag } = toPublish;
+  const { directory, rootFile, scope } = project;
+  const { version } = published;
+  const packageName = publishedNameOf(scope, published);
+  const rootPath = join(directory, rootFile);
+  const building = { folder, rootPath, spec: `${packageName}@${version}` };
+  return { building, publishing: { folder, packageName, version, tag } };
+}
+
+async function builtAndPublished(
+  npm: NpmPlace,
+  build: Build,
+  { building, publishing }: StagedPackage,
+): Promise<PublishedPackage['put']> {
+  const built = await builtAs(build, building);
+  return built.kind === 'failed' ? built : await publishFolder(npm, publishing);
+}
+
+async function builtAs(build: Build, building: Building): Promise<Built> {
+  switch (build) {
+    case 'with-tsc':
+      return await builtWithTsc(building);
+    case 'by-author':
+      return { kind: 'built' };
   }
 }
 
-async function stagedFilesOf(npm: NpmPlace, toPublish: ToPublish): Promise<StagedFiles | Failed> {
-  const { project, published, text, peers } = toPublish;
+async function stagedFilesOf(
+  npm: NpmPlace,
+  { project, published, text, peers }: ToPublish,
+): Promise<StagedFiles | Failed> {
   switch (published.kind) {
     case 'service':
     case 'application': {
@@ -75,21 +125,20 @@ async function stagedFilesOf(npm: NpmPlace, toPublish: ToPublish): Promise<Stage
       if (generated.kind === 'unnamed') {
         return { kind: 'failed', message: generated.line };
       }
-      return { kind: 'files', files: generated.files, copied: [] };
+      return { kind: 'files', files: generated.files, copied: [], build: 'with-tsc' };
     }
     case 'definitions':
-      return await definitionsFilesOf(npm, toPublish, published);
+      return await definitionsFilesOf(npm, project, { published, text, peers });
   }
 }
 
 /** A Definitions Package's files: its own as `npm pack` lists them, with its package.json and `snapshot.json` written over. */
 async function definitionsFilesOf(
   npm: NpmPlace,
-  { project, text, peers }: ToPublish,
-  published: PublishedDefinitionsSnapshot,
+  { scope, manifest: source }: Pick<Project, 'scope' | 'manifest'>,
+  { published, text, peers }: DefinitionsToStage,
 ): Promise<StagedFiles | Failed> {
-  const packaging = { scope: project.scope, peers };
-  const manifest = definitionsManifestOf(project.manifest, published, packaging);
+  const manifest = definitionsManifestOf(source, published, { scope, peers });
   if (manifest.kind === 'unpublishable') {
     return { kind: 'failed', message: manifest.line };
   }
@@ -97,19 +146,7 @@ async function definitionsFilesOf(
   if (packed.kind === 'failed') {
     return packed;
   }
-  const copied = packed.paths.map((path) => ({ from: join(project.directory, path), path }));
-  return { kind: 'files', files: [manifest.file, { path: packagePaths.snapshot, text }], copied };
-}
-
-/** A Contract Package is built with the project's TypeScript; a Definitions Package is built by its author. */
-async function builtIfContractPackage(
-  { folder, packageName, version }: Publishing,
-  { directory, rootFile }: Project,
-  kind: PublishedSnapshot['kind'],
-): Promise<Built> {
-  if (kind === 'definitions') {
-    return { kind: 'built' };
-  }
-  const rootPath = join(directory, rootFile);
-  return await builtWithTsc({ folder, rootPath, spec: `${packageName}@${version}` });
+  const copied = packed.paths.map((path) => ({ from: join(npm.directory, path), path }));
+  const files = [manifest.file, { path: packagePaths.snapshot, text }];
+  return { kind: 'files', files, copied, build: 'by-author' };
 }

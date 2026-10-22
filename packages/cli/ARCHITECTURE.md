@@ -8,7 +8,7 @@ The entry `src/index.ts` (`.`) re-exports from `config/`, and `src/internal/inde
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, the Definitions Packages a root lists as the root file resolves them, the version of an installed package, the files under a folder through linked folders, where each declaration is exported, and the npm name a project publishes as | none |
+| `loading/` | importing a user's TypeScript file in one line of failure, the project's package.json, where each kind of root sits, the root, the Definitions Packages a root lists as the root file resolves them, the version of an installed package, the files under a folder through linked folders, where each declaration is exported, the npm name a project publishes as, a program run with no shell and how it ended, and a text's first line or on one line | none |
 | `config/` | `defineConfig`, `Config`, and loading `cf-loom.config.ts` | `loading` |
 | `project/` | a project as every command but `init` reads it: its package, configuration and root, the committed `contract.snapshot.json` as read, and the valid root with its canonical Snapshot; a failure is a closed value, the root's rules broken or a tooling error | `config`, `loading` |
 | `source-text/` | spelling generated TypeScript: the header line, string and JSON literals, identifiers, import lines and relative `.ts` specifiers, a module from its imports and body | none |

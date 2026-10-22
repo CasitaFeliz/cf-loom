@@ -1,4 +1,5 @@
-import { type Failed, failed, jsonFromNpm, lineOf, type NpmPlace, textFromNpm } from './npm.ts';
+import { lineOf } from '../loading/index.ts';
+import { type Failed, failed, jsonFromNpm, type NpmPlace, textFromNpm } from './npm.ts';
 
 const registrySetting = 'npm_config_registry';
 const credentialsInUrl =

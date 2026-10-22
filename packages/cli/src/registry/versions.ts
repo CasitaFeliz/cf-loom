@@ -14,8 +14,8 @@ const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 export type Versions = { readonly kind: 'versions'; readonly versions: readonly string[] };
 
 /** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
-export type Release = {
-  readonly kind: 'release';
+export type VersionMetadata = {
+  readonly kind: 'metadata';
   readonly peers: PeerRanges;
   readonly digests: readonly string[];
 };
@@ -49,8 +49,8 @@ export function versionsFrom(packageName: string, printed: unknown): Versions | 
   };
 }
 
-/** The highest of versions listed lowest first that is not a prerelease, as the Baseline is. */
-export function highestReleaseOf(versions: readonly string[]): string | undefined {
+/** The version of the Baseline: the highest of versions listed lowest first that is not a prerelease. */
+export function baselineVersionOf(versions: readonly string[]): string | undefined {
   return versions.filter((version) => !isPrerelease(version)).at(-1);
 }
 
@@ -59,7 +59,7 @@ export function highestReleaseOf(versions: readonly string[]): string | undefine
  * published by cf-loom as the declared kind, with peer ranges that are a map of texts and a
  * tarball with a sha512 digest to check it against.
  */
-export function releaseFrom(source: BaselineSource, printed: unknown): Release | Failed {
+export function metadataFrom(source: BaselineSource, printed: unknown): VersionMetadata | Failed {
   const { spec, version, declared } = source;
   if (ownOf(printed, 'version') !== version) {
     return failed(`npm view ${spec} printed no metadata`);
@@ -76,7 +76,9 @@ export function releaseFrom(source: BaselineSource, printed: unknown): Release |
     return failed(`${spec} has peerDependencies that are no map of ranges`);
   }
   const digests = digestsOf(spec, ownOf(printed, 'dist'));
-  return digests.kind === 'failed' ? digests : { kind: 'release', peers, digests: digests.digests };
+  return digests.kind === 'failed'
+    ? digests
+    : { kind: 'metadata', peers, digests: digests.digests };
 }
 
 function peersFrom(peerDependencies: unknown): PeerRanges | undefined {

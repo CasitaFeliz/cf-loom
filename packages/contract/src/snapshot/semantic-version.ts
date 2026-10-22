@@ -9,6 +9,9 @@ type Parts = {
   readonly prerelease: readonly string[];
 };
 
+/** How far a publish moves a version: the number it raises, the numbers below it going back to 0. */
+export type VersionBump = 'major' | 'minor' | 'patch';
+
 /** Whether a value is a semantic version, a prerelease or a build included, as `publish` writes `version`. */
 export function isSemanticVersion(value: unknown): value is string {
   return typeof value === 'string' && semanticVersion.test(value);
@@ -45,6 +48,50 @@ export function caretLineOf(version: string): string {
     return major;
   }
   return minor === '0' ? `0.0.${patch}` : `0.${minor}`;
+}
+
+/**
+ * The semantic version a bump moves a version to: the number it raises, the numbers below it back
+ * to 0, and no prerelease or build. The version must be a semantic version, which
+ * `isSemanticVersion` tells.
+ */
+export function bumpedVersionOf(version: string, bump: VersionBump): string {
+  const [major, minor, patch] = partsOf(version).core;
+  switch (bump) {
+    case 'major':
+      return `${BigInt(major) + 1n}.0.0`;
+    case 'minor':
+      return `${major}.${BigInt(minor) + 1n}.0`;
+    case 'patch':
+      return `${major}.${minor}.${BigInt(patch) + 1n}`;
+  }
+}
+
+/**
+ * The prerelease `<version>-<n>` that comes next for a version's numbers: `n` is one above the
+ * highest `<version>-<n>` among the listed versions, or 0 when none is listed. Every version must
+ * be a semantic version, which `isSemanticVersion` tells.
+ */
+export function nextPrereleaseOf(version: string, listed: readonly string[]): string {
+  const numbers = partsOf(version).core.join('.');
+  let next = 0n;
+  for (const other of listed) {
+    const counter = counterOf(numbers, other);
+    if (counter !== undefined && counter >= next) {
+      next = counter + 1n;
+    }
+  }
+  return `${numbers}-${next}`;
+}
+
+/** The `<n>` of a version that is `<numbers>-<n>`, with no leading zero. */
+function counterOf(numbers: string, version: string): bigint | undefined {
+  const { core, prerelease } = partsOf(version);
+  if (prerelease.length !== 1 || core.join('.') !== numbers) {
+    return undefined;
+  }
+  const [identifier = ''] = prerelease;
+  return /^(0|[1-9]\d*)$/.test(identifier) ? BigInt(identifier) : undefined;
 }
 
 function partsOf(version: string): Parts {

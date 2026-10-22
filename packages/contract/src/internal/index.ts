@@ -9,7 +9,6 @@ export type {
   PeerRanges,
   Position,
   ShapeDifference,
-  VersionBump,
 } from '../compatibility/index.ts';
 export {
   compatibilityReportOf,
@@ -69,6 +68,7 @@ export type {
   SubscriptionTombstone,
 } from '../snapshot/index.ts';
 export {
+  bumpedVersionOf,
   canonicalSnapshotOf,
   canonicalTextOf,
   compareSemanticVersions,
@@ -79,6 +79,7 @@ export {
   isDeclaredRejection,
   isPrerelease,
   isSemanticVersion,
+  nextPrereleaseOf,
   ownRejectionsOf,
   schemaOriginsOf,
   snapshotOf,

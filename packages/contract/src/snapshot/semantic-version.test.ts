@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { compareSemanticVersions, isPrerelease, isSemanticVersion } from '../internal/index.ts';
+import {
+  bumpedVersionOf,
+  compareSemanticVersions,
+  isPrerelease,
+  isSemanticVersion,
+  nextPrereleaseOf,
+} from '../internal/index.ts';
 
 describe('isSemanticVersion', () => {
   test.each(['0.0.0', '3.4.0', '10.20.30', '1.0.0-rc.1', '1.0.0-0.alpha-1', '1.0.0+build.5'])(
@@ -118,5 +124,77 @@ describe('compareSemanticVersions', () => {
     const backwards = compareSemanticVersions('1.0.0', '1.0.0-rc.1');
 
     expect([Math.sign(forwards), Math.sign(backwards)]).toEqual([-1, 1]);
+  });
+});
+
+describe('bumpedVersionOf', () => {
+  test.each([
+    ['major', '1.4.7', '2.0.0'],
+    ['minor', '1.4.7', '1.5.0'],
+    ['patch', '1.4.7', '1.4.8'],
+    ['major', '0.0.0', '1.0.0'],
+    ['minor', '0.9.9', '0.10.0'],
+    ['patch', '0.0.9', '0.0.10'],
+  ] as const)('a %s bump of %s is %s', (bump, version, bumped) => {
+    expect(bumpedVersionOf(version, bump)).toBe(bumped);
+  });
+
+  test('a bump of a prerelease or a build is a plain version of the numbers raised', () => {
+    const bumped = [
+      bumpedVersionOf('1.4.7-rc.1', 'patch'),
+      bumpedVersionOf('1.4.7+build.5', 'minor'),
+    ];
+
+    expect(bumped).toEqual(['1.4.8', '1.5.0']);
+  });
+
+  test('numbers beyond what a double holds are still raised exactly', () => {
+    const bumped = bumpedVersionOf('1.0.9007199254740993', 'patch');
+
+    expect(bumped).toBe('1.0.9007199254740994');
+  });
+});
+
+describe('nextPrereleaseOf', () => {
+  test('a version no prerelease of it is listed for takes the counter 0', () => {
+    const next = nextPrereleaseOf('1.1.0', ['1.0.0', '1.0.1']);
+
+    expect(next).toBe('1.1.0-0');
+  });
+
+  test('the counter is one above the highest listed for the same numbers', () => {
+    const listed = ['1.1.0-0', '1.1.0-3', '1.1.0-12', '1.1.0-2'];
+
+    const next = nextPrereleaseOf('1.1.0', listed);
+
+    expect(next).toBe('1.1.0-13');
+  });
+
+  test('a prerelease of other numbers, one with a name or several identifiers, and the version itself are not counted', () => {
+    const listed = [
+      '1.0.0-7',
+      '1.1.0',
+      '1.1.0-rc.1',
+      '1.1.0-1.2',
+      '1.1.0-1a',
+      '2.0.0-3',
+      '1.1.0-0',
+    ];
+
+    const next = nextPrereleaseOf('1.1.0', listed);
+
+    expect(next).toBe('1.1.0-1');
+  });
+
+  test('a counter beyond what a double holds is still raised exactly', () => {
+    const next = nextPrereleaseOf('1.0.0', ['1.0.0-9007199254740993']);
+
+    expect(next).toBe('1.0.0-9007199254740994');
+  });
+
+  test('the build of a listed version does not change its counter', () => {
+    const next = nextPrereleaseOf('1.0.0', ['1.0.0-4+build.1']);
+
+    expect(next).toBe('1.0.0-5');
   });
 });

@@ -1489,10 +1489,15 @@ function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
   return ranAgainst(lab, changed, 'check', ...args);
 }
 
-/** A project whose root `before` was published as 1.0.0, then became `after` and was generated. */
-async function aChangedProject(lab: Lab, { before, after }: { before: Files; after: Files }) {
+/** A project whose root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */
+async function aChangedProject(
+  lab: Lab,
+  { before, after }: { before: Files; after: Files },
+  alsoListed: readonly string[] = [],
+) {
   const project = await aGeneratedProject(lab, before);
-  const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+  const listed = ['1.0.0', ...alsoListed].map((version) => publishedAs(project, version));
+  const served = servedAs(ordersPackage, ...listed);
   write(project, after);
   await generateIn(lab, project);
   return { project, served };
@@ -2134,17 +2139,62 @@ function putsOf(registry: Registry) {
   return registry.published.map(({ name, version, distTags }) => ({ name, version, distTags }));
 }
 
+/** Every `PUT` the registry was sent, whether it took it or not. */
+function putRequestsOf(registry: Registry) {
+  return registry.requests.filter((request) => request.method === 'PUT');
+}
+
 /** The files of the one version npm put to the registry, by path. */
 function publishedFilesOf(registry: Registry): Readonly<Record<string, string>> {
   const [put] = registry.published;
   return entriesOf(put!.tarball);
 }
 
-/** What `publish` left in the folder it stages packages in. */
-function leftInStaging(project: string): string[] {
+/** The entries of a project's top level that `generate` and the test's own files make. */
+const projectEntries = [
+  'cf-loom.config.ts',
+  'contract.snapshot.json',
+  'dist',
+  'node_modules',
+  'package.json',
+  'src',
+];
+
+/** What `publish` left behind: the folders in its staging place, and any entry at the project's top level that is not the project's. */
+function leftBehindIn(project: string): string[] {
   const folder = join(project, stagingFolder);
-  return existsSync(folder) ? readdirSync(folder) : [];
+  const staged = existsSync(folder) ? readdirSync(folder) : [];
+  const strays = readdirSync(project).filter((name) => !projectEntries.includes(name));
+  return [...staged, ...strays];
 }
+
+/** Puts a package named typescript in the project, whose `tsc` runs the script given and is called with `-p <folder>`. */
+function withTsc(project: string, script: string): void {
+  rmSync(join(project, 'node_modules/typescript'));
+  const manifest = { name: 'typescript', version: '7.0.0', bin: { tsc: './bin/tsc' } };
+  write(project, {
+    'node_modules/typescript/package.json': JSON.stringify(manifest),
+    'node_modules/typescript/bin/tsc': script,
+  });
+}
+
+/** A `tsc` that writes a built package, makes the folder it stages packages in read-only, then runs `ending`. */
+function aTscThatLocksItsStaging(ending: string): string {
+  return [
+    "const { chmodSync, mkdirSync, writeFileSync } = require('node:fs');",
+    "const { dirname, join } = require('node:path');",
+    'const folder = process.argv[3];',
+    "mkdirSync(join(folder, 'dist'), { recursive: true });",
+    "writeFileSync(join(folder, 'dist/index.js'), 'export {};\\n');",
+    "writeFileSync(join(folder, 'dist/index.d.ts'), 'export {};\\n');",
+    'chmodSync(dirname(folder), 0o555);',
+    ending,
+  ].join('\n');
+}
+
+/** The line that names a staging folder `publish` could not remove. */
+const leftBehindLine =
+  /^node_modules\/\.cache\/cf-loom\/publish-\w+ was left behind: [^\n]+: delete it\n$/;
 
 /** The SHA-256 of a Snapshot's canonical text without its version and generator, as `cfLoom` records it. */
 function snapshotHashOf(snapshotJson: string): string {
@@ -2214,7 +2264,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       stdout: `${checkedAgainstOrders}\nNo Change against ${ordersPackage}@1.0.0\n`,
       stderr: '',
     });
-    expect(leftInStaging(project)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
   });
 
   test('with --prerelease a package never published publishes 1.0.0-0, and the next publish 1.0.0-1, both tagged latest', async ({
@@ -2331,6 +2381,32 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(checked.stdout.split('\n')[0]).toBe(checkedAgainstOrders);
   });
 
+  test('with --prerelease above a Baseline the counter is one above the highest prerelease listed of the version it derives', async ({
+    lab,
+  }) => {
+    const listed = ['1.1.0-0', '1.1.0-rc.1', '2.0.0-3'];
+    const changed = await aChangedProject(lab, addedSuccessField, listed);
+
+    const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
+
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-1`);
+    const distTags = { next: '1.1.0-1' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-1', distTags }]);
+  });
+
+  test('--force on a package never published publishes 1.0.0 with the latest dist-tag, as without it', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} }, '--force');
+
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0`);
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0', distTags }]);
+  });
+
   test('an unchanged Snapshot and unchanged peers publish nothing, say so and exit 0', async ({
     lab,
   }) => {
@@ -2341,7 +2417,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${ordersPackage}@1.0.0; --force publishes anyway`;
     expect(ran).toEqual({ status: 0, stdout: `${checkedAgainstOrders}\n${nothing}\n`, stderr: '' });
-    expect(putsOf(registry)).toEqual([]);
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('--force publishes a patch when nothing changed', async ({ lab }) => {
@@ -2375,7 +2451,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       ].join('\n'),
       stderr: `${notAllowedLine}\n`,
     });
-    expect(putsOf(registry)).toEqual([]);
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('a registry publish cannot read the Baseline of is a tooling error, and nothing is put', async ({
@@ -2392,7 +2468,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(ran.stderr).toMatch(
       new RegExp(`^npm view ${ordersPackage} failed \\(E500: [^\\n]+\\)\\n$`),
     );
-    expect(putsOf(registry)).toEqual([]);
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('the published snapshot.json carries the version and the Baseline’s history: a deleted Retired Endpoint stays as a tombstone that keeps its retiredIn', async ({
@@ -2520,7 +2596,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
         dependencies: {},
       },
     });
-    expect(leftInStaging(project)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
   });
 
   test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
@@ -2541,17 +2617,27 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       'package.json names @other/definitions, but a Definitions Package of scope @org publishes as @org/definitions',
     ],
     [
-      'depends on a workspace: range',
+      'lists a workspace: range in dependencies',
       { dependencies: { '@org/shared': 'workspace:*' } },
-      'package.json depends on @org/shared as workspace:*, which npm cannot install from the registry',
+      'package.json lists @org/shared in dependencies as workspace:*, which npm cannot install from the registry',
     ],
     [
-      'depends on a catalog: range',
+      'lists a catalog: range in dependencies',
       { dependencies: { left: 'catalog:' } },
-      'package.json depends on left as catalog:, which npm cannot install from the registry',
+      'package.json lists left in dependencies as catalog:, which npm cannot install from the registry',
+    ],
+    [
+      'lists a workspace: range in optionalDependencies',
+      { optionalDependencies: { '@org/shared': 'workspace:^' } },
+      'package.json lists @org/shared in optionalDependencies as workspace:^, which npm cannot install from the registry',
+    ],
+    [
+      'lists a catalog: range in optionalDependencies',
+      { optionalDependencies: { left: 'catalog:' } },
+      'package.json lists left in optionalDependencies as catalog:, which npm cannot install from the registry',
     ],
   ] as const)(
-    'a Definitions Package whose package.json %s is a tooling error, and nothing is put',
+    'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
     async ([, manifest, line], { lab }) => {
       const project = await aGeneratedProject(lab, aBuiltDefinitions());
       write(project, {
@@ -2564,8 +2650,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
       expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
-      expect(putsOf(registry)).toEqual([]);
-      expect(leftInStaging(project)).toEqual([]);
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
     },
   );
 
@@ -2596,8 +2682,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const refused =
       'npm publish @org/definitions@1.0.0 failed (EPRIVATE: This package has been marked as private)';
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
-    expect(putsOf(registry)).toEqual([]);
-    expect(leftInStaging(project)).toEqual([]);
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
   });
 
   test('a project without typescript is a tooling error, and nothing is put or left behind', async ({
@@ -2613,9 +2699,92 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       stdout: '',
       stderr: 'typescript is not installed: publish builds the Contract Package with its tsc\n',
     });
-    expect(putsOf(registry)).toEqual([]);
-    expect(leftInStaging(project)).toEqual([]);
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
   });
+
+  test('a Definitions Package without zod installed is a tooling error naming the peer, and nothing is put or left behind', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    rmSync(join(project, 'node_modules/zod'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: "zod is not installed: the package's peer range is taken from it\n",
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test.for([
+    [
+      'prints a diagnostic and exits 1',
+      "console.log('error TS2322: Type is wrong.\\nmore'); process.exit(1);",
+      'failed: error TS2322: Type is wrong.',
+    ],
+    [
+      'prints only on stderr',
+      "console.error('tsc crashed'); process.exit(1);",
+      'failed: tsc crashed',
+    ],
+    ['prints nothing and exits 2', 'process.exit(2);', 'failed: exit status 2'],
+    ['is stopped by a signal', "process.kill(process.pid, 'SIGKILL');", 'was stopped by SIGKILL'],
+  ] as const)(
+    'a tsc that %s fails publish with one line, and nothing is put or left behind',
+    async ([, script, ending], { lab }) => {
+      const project = await aGeneratedProject(lab, aRoot());
+      withTsc(project, script);
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      const label = `tsc on the Contract Package of ${ordersPackage}@1.0.0`;
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${label} ${ending}\n` });
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'a staging folder that cannot be removed leaves a published version published: publish names the folder',
+    async ({ lab }) => {
+      const project = await aGeneratedProject(lab, aRoot());
+      withTsc(project, aTscThatLocksItsStaging('process.exit(0);'));
+      try {
+        const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+        expect(ran.status).toBe(0);
+        expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0`);
+        expect(ran.stderr).toMatch(leftBehindLine);
+        expect(putsOf(registry)).toHaveLength(1);
+        expect(leftBehindIn(project)).toHaveLength(1);
+      } finally {
+        chmodSync(join(project, stagingFolder), 0o755);
+      }
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'a staging folder that cannot be removed is named after the line of the failure that ended publish',
+    async ({ lab }) => {
+      const project = await aGeneratedProject(lab, aRoot());
+      withTsc(project, aTscThatLocksItsStaging('process.exit(1);'));
+      try {
+        const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+        const failure = `tsc on the Contract Package of ${ordersPackage}@1.0.0 failed: exit status 1`;
+        const [first, second, ...more] = ran.stderr.split('\n');
+        expect([ran.status, ran.stdout, first, more]).toEqual([3, '', failure, ['']]);
+        expect(`${second}\n`).toMatch(leftBehindLine);
+        expect(putRequestsOf(registry)).toEqual([]);
+      } finally {
+        chmodSync(join(project, stagingFolder), 0o755);
+      }
+    },
+  );
 
   test.for([
     [['generate', '--force'], 'Only publish takes --force'],

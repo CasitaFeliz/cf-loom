@@ -1,8 +1,6 @@
+import type { VersionBump } from '../snapshot/index.ts';
 import { type PeerMove, peerBumpOf } from './peers.ts';
 import type { Change, ChangeSite, ComparedReport } from './report.ts';
-
-/** How far a publish moves the version from the Baseline's. */
-export type VersionBump = 'major' | 'minor' | 'patch';
 
 const bumpsInOrder = ['unchanged', 'patch', 'minor', 'major'] as const;
 

@@ -42,10 +42,11 @@ function calledOf(args: readonly string[]): Parsed {
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return { kind: 'usage', exit: usageError('--out takes a folder') };
   }
-  const valued = tokens.find(
-    (token) => token.kind === 'option' && flags.includes(token.name) && token.value !== undefined,
-  );
-  if (valued !== undefined && valued.kind === 'option') {
+  type Token = (typeof tokens)[number];
+  const isValuedFlag = (token: Token): token is Extract<Token, { kind: 'option' }> =>
+    token.kind === 'option' && flags.includes(token.name) && token.value !== undefined;
+  const valued = tokens.find(isValuedFlag);
+  if (valued !== undefined) {
     return { kind: 'usage', exit: usageError(`--${valued.name} takes no value`) };
   }
   const output: Output = json === true ? 'json' : 'lines';

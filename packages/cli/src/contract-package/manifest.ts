@@ -47,6 +47,11 @@ export function manifestOf(
     peerDependencies: peerRangesOf(peers),
     cfLoom: cfLoomOf(snapshot),
   };
+  return manifestFileOf(manifest);
+}
+
+/** A package.json from its fields: two-space JSON and a final line break. */
+export function manifestFileOf(manifest: object): PackageFile {
   return { path: packagePaths.manifest, text: `${JSON.stringify(manifest, null, 2)}\n` };
 }
 
@@ -64,8 +69,18 @@ export function cfLoomOf(snapshot: Snapshot | PublishedSnapshot) {
     format: snapshot.format,
     snapshotHash: snapshotHashOf(snapshot),
     kind: snapshot.kind,
-    dependencies: snapshot.kind === 'definitions' ? {} : snapshot.dependencies,
+    dependencies: dependenciesOf(snapshot),
   };
+}
+
+function dependenciesOf(snapshot: Snapshot | PublishedSnapshot) {
+  switch (snapshot.kind) {
+    case 'service':
+    case 'application':
+      return snapshot.dependencies;
+    case 'definitions':
+      return {};
+  }
 }
 
 /**

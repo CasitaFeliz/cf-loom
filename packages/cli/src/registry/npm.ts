@@ -1,11 +1,5 @@
-import { execFile } from 'node:child_process';
-import { promisify, stripVTControlCharacters } from 'node:util';
 import { ownOf } from '@cf-loom/contract/internal';
-
-const execFileAsync = promisify(execFile);
-const npmTimeoutMilliseconds = 10 * 60 * 1000;
-const maxStdoutBytes = 16 * 1024 * 1024;
-const urlCredentials = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi;
+import { type ChildRan, exitReasonOf, firstLineOf, lineOf, ranChild } from '../loading/index.ts';
 
 /** Where npm runs: the project's directory, whose `.npmrc` npm reads, and the environment the organization's npm login lives in. */
 export type NpmPlace = {
@@ -37,15 +31,7 @@ export type NpmJson = { readonly kind: 'json'; readonly value: unknown } | Refus
 /** What npm printed as text, or why it did not. */
 export type NpmText = { readonly kind: 'text'; readonly text: string } | Failed;
 
-type Ended =
-  | { readonly kind: 'exited'; readonly stdout: string }
-  | {
-      readonly kind: 'errored';
-      readonly stdout: string;
-      readonly stderr: string;
-      readonly status: number;
-    }
-  | Failed;
+type Ended = ChildRan;
 
 /** A failure as a value: npm's text can hold ANSI and line breaks, a message never does. */
 export function failed(message: string): Failed {
@@ -79,52 +65,25 @@ export async function textFromNpm(place: NpmPlace, call: NpmCall): Promise<NpmTe
 }
 
 async function endedOf(place: NpmPlace, call: NpmCall): Promise<Ended> {
-  const args = [...call.args, '--json', '--no-update-notifier'];
-  try {
-    const { stdout } = await execFileAsync('npm', args, {
-      cwd: place.directory,
-      env: { ...place.env, ...call.env },
-      shell: false,
-      timeout: npmTimeoutMilliseconds,
-      maxBuffer: maxStdoutBytes,
-      windowsHide: true,
-      encoding: 'utf8',
-    });
-    return { kind: 'exited', stdout };
-  } catch (e) {
-    return endedByError(call, e);
+  const ended = await ranChild({
+    label: call.label,
+    file: 'npm',
+    args: [...call.args, '--json', '--no-update-notifier'],
+    cwd: place.directory,
+    env: { ...place.env, ...call.env },
+  });
+  if (ended.kind === 'unrunnable') {
+    const reason = `npm cannot be run: ${ended.reason}`;
+    return failed(`${reason}: cf-loom reads the registry through npm, which must be on PATH`);
   }
-}
-
-function endedByError(call: NpmCall, thrown: unknown): Ended {
-  const error = thrown instanceof Error ? thrown : new Error(String(thrown));
-  const { code, killed, signal, stdout, stderr }: Readonly<Record<string, unknown>> = { ...error };
-  if (typeof code === 'number') {
-    return { kind: 'errored', stdout: textOf(stdout), stderr: textOf(stderr), status: code };
-  }
-  if (code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
-    return failed(`${call.label} printed more than 16 MiB`);
-  }
-  if (killed === true) {
-    return failed(`${call.label} did not finish within 10 minutes`);
-  }
-  if (typeof signal === 'string') {
-    return failed(`${call.label} was stopped by ${signal}`);
-  }
-  return failed(
-    `npm cannot be run: ${error.message}: cf-loom reads the registry through npm, which must be on PATH`,
-  );
-}
-
-function textOf(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+  return ended;
 }
 
 function refusalOf(call: NpmCall, ended: Extract<Ended, { kind: 'errored' }>): Refused | Failed {
   const printed = jsonOf(call, ended.stdout);
   const error = printed.kind === 'json' ? errorOf(printed.value) : undefined;
   if (error === undefined) {
-    const reason = firstLineOf(ended.stderr) || `exit status ${ended.status}`;
+    const reason = exitReasonOf([ended.stderr], ended.status);
     return failed(`${call.label} failed: ${reason}`);
   }
   const { code, summary } = error;
@@ -150,20 +109,4 @@ function jsonOf(call: NpmCall, stdout: string): { kind: 'json'; value: unknown }
   } catch {
     return failed(`${call.label} printed no JSON: ${firstLineOf(stdout)}`);
   }
-}
-
-function firstLineOf(text: string): string {
-  return text.trim().split('\n', 1)[0] ?? '';
-}
-
-/**
- * A text on one line, without the ANSI sequences and control characters npm or a registry may
- * print, and without the user and password of a URL in it.
- */
-export function lineOf(text: string): string {
-  return stripVTControlCharacters(text)
-    .replace(urlCredentials, '$1')
-    .replace(/\p{Cc}+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }

@@ -49,11 +49,12 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
     const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${same}`;
     return done([...opening, `${nothing}; --force publishes anyway`]);
   }
-  const put = await publishedPackageOf(run, toPublishOf(prepared, derived));
+  const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived));
   if (put.kind === 'failed') {
-    return toolingError(put.message);
+    return { status: 3, stdout: [], stderr: [put.message, ...left] };
   }
-  return done([...opening, `Published ${checked.packageName}@${derived.version}`]);
+  const published = `Published ${checked.packageName}@${derived.version}`;
+  return { status: 0, stdout: [...opening, published], stderr: left };
 }
 
 async function preparedOf(run: Run): Promise<Prepared | Stopped> {
