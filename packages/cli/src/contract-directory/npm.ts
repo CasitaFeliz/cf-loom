@@ -10,7 +10,7 @@ export type NpmOptions = {
   /**
    * A read-only access token of a member who can read every package of the scope, since npm
    * leaves restricted packages out of the listing without one; its surrounding whitespace is
-   * ignored, and `undefined` or a blank token fails the listing.
+   * ignored, and `undefined` or a token of only whitespace and control characters fails the listing.
    */
   readonly token: string | undefined;
   /**
