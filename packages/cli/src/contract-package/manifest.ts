@@ -16,8 +16,8 @@ export type Packaging = { readonly scope: string; readonly version: string; read
 
 /**
  * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and
- * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom`
- * metadata the dependency graph is read from.
+ * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom` metadata:
+ * the hash and kind the check reads without downloading the package, and its Dependencies.
  */
 export function manifestOf(
   snapshot: ServiceSnapshot | ApplicationSnapshot,

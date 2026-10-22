@@ -13,10 +13,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./directories": {
-      "types": "./dist/directories/index.d.ts",
-      "default": "./dist/directories/index.js"
     }
   },
   "bin": {
