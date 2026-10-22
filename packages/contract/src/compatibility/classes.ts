@@ -1,17 +1,10 @@
 import type { Visibility } from '../declarations/index.ts';
 import { shapeClassOf } from './positions.ts';
-import type {
-  ChangeSite,
-  Classification,
-  Difference,
-  EndpointPosition,
-  GraphDependency,
-} from './report.ts';
+import type { ChangeSite, Classification, Difference, EndpointPosition } from './report.ts';
 
 /**
  * The class COMPATIBILITY.md gives a difference at a site, and whether it needs a Breaking Change
- * Approval: a Message Version takes no Breaking Change but its retirement or narrowing, which its
- * conditions gate instead of an Approval.
+ * Approval: a Message Version takes no Breaking Change but its retirement or narrowing.
  */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the class of each kind of difference
 export function classificationOf(site: ChangeSite, difference: Difference): Classification {
@@ -36,7 +29,7 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
       return { class: 'not-allowed' };
     case 'retired':
     case 'visibility-narrowed':
-      return gatedClassOf(site, difference.dependencies);
+      return retiredOrNarrowedClassOf(site);
     case 'removed':
     case 'status-changed':
     case 'body-added':
@@ -75,39 +68,35 @@ function bodyRemovedClassOf(site: ChangeSite, position: EndpointPosition): Class
   }
 }
 
-/**
- * How a Breaking Change gets through a site: an Approval at every site, but a Message Version's
- * retirement or narrowing, which its conditions gate. A Subscription is no Message Version, so a
- * Breaking Change on it would need an Approval.
- */
-function gateOf(site: ChangeSite): 'approval' | 'conditions' {
+/** A Breaking Change needs an Approval, but a Message Version takes none: the check refuses it. */
+function breakingClassOf(site: ChangeSite): Classification {
   switch (site.kind) {
     case 'event':
     case 'command':
-      return 'conditions';
+      return { class: 'not-allowed' };
     case 'endpoint':
     case 'code':
     case 'shared-schema':
     case 'guard':
     case 'subscription':
-      return 'approval';
-  }
-}
-
-/** A Breaking Change that needs an Approval, or that a Message Version's conditions refuse outright. */
-function breakingClassOf(site: ChangeSite): Classification {
-  switch (gateOf(site)) {
-    case 'approval':
       return { class: 'breaking', approval: 'needed' };
-    case 'conditions':
-      return { class: 'not-allowed' };
   }
 }
 
-/** A retirement or narrowing is Not allowed while a Dependency would lose the Element, else Breaking. */
-function gatedClassOf(site: ChangeSite, dependencies: readonly GraphDependency[]): Classification {
-  if (dependencies.length > 0) {
-    return { class: 'not-allowed' };
+/**
+ * Retiring an Element or narrowing its Visibility needs an Approval, except retiring a Command: a
+ * Deprecated Command is no longer sent, and the deploy rule drains it first.
+ */
+function retiredOrNarrowedClassOf(site: ChangeSite): Classification {
+  switch (site.kind) {
+    case 'command':
+      return { class: 'breaking', approval: 'not-needed' };
+    case 'endpoint':
+    case 'event':
+    case 'code':
+    case 'shared-schema':
+    case 'guard':
+    case 'subscription':
+      return { class: 'breaking', approval: 'needed' };
   }
-  return { class: 'breaking', approval: gateOf(site) === 'approval' ? 'needed' : 'not-needed' };
 }

@@ -195,7 +195,7 @@ verifyGenerated(contract);   // or generate(contract, { mode: 'verify' })
 ```
 
 **C18. Expected failures are values.** A failure the code expects (a construct the allow-list refuses, invalid
-Input, a missing durable consumer, a registry that cannot list a scope) is a member of a closed union returned to the
+Input, a missing durable consumer, a registry that cannot be reached) is a member of a closed union returned to the
 caller and decided with a `switch` (C16); cf-loom adds no `Result` library, so its packages keep no runtime dependency
 besides their peers. A `throw` is for a bug, with a message a developer reads. A user's Handler that throws is not a
 bug of cf-loom: the runtime catches it and answers a Fault, as the design says. *Why:* a failure that throws is a
@@ -209,9 +209,9 @@ type Walked =
 
 **C19. A parameter object has a name and a responsibility.** A function takes at most three parameters **(lint)**: the
 values it needs, or one object that is a thing of the domain (a matched Endpoint, a Baseline and its declared
-Snapshot). A dependency object narrows what it takes (`Pick<Directory, 'list'>`). A twelve-field options bag handed
-through every function is a global under another name. *Why:* the signature is the function's contract; a bag says the
-contract is "everything".
+Snapshot). A dependency object narrows what it takes (`Pick<BrokerConnection, 'publish'>`). A twelve-field options
+bag handed through every function is a global under another name. *Why:* the signature is the function's contract; a
+bag says the contract is "everything".
 
 ## Comments and docs
 

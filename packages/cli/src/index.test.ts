@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { fixed, npm } from './directories/index.ts';
 import { type ApprovalSource, defineConfig } from './index.ts';
 
 const myApprovalSource: ApprovalSource = {
@@ -19,7 +18,6 @@ describe('defineConfig', () => {
     const written = {
       scope: '@org',
       registry: 'https://registry.npmjs.org',
-      directory: npm({ org: 'org', token: 'npm_read-token' }),
       approvals: myApprovalSource,
       approvers: ['@org/platform-team'],
       allowSelfApproval: false,
@@ -28,17 +26,6 @@ describe('defineConfig', () => {
     const defined = defineConfig(written);
 
     expect(defined).toBe(written);
-  });
-
-  test('a fixed directory is a configuration’s directory', async () => {
-    const defined = defineConfig({
-      scope: '@org',
-      directory: fixed(['@org/contract-orders-service']),
-    });
-
-    const listed = await defined.directory?.list();
-
-    expect(listed).toEqual({ kind: 'listed', names: ['@org/contract-orders-service'] });
   });
 
   test('a field the configuration does not declare is a type error', () => {

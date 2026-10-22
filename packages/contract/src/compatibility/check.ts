@@ -14,13 +14,6 @@ import { classificationOf } from './classes.ts';
 import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.ts';
 import { endpointDifferencesOf } from './endpoints.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
-import {
-  type DependencyGraph,
-  type Dependents,
-  dependenciesLosingReach,
-  dependenciesOn,
-  type LosingReach,
-} from './graph.ts';
 import { guardDifferencesOf } from './guards.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { publishedSnapshotOf } from './merge.ts';
@@ -40,11 +33,10 @@ import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
-/** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified, with the Dependencies it reaches. */
+/** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified. */
 export function compatibilityReportOf(
   baseline: PublishedSnapshot | undefined,
   proposed: Snapshot,
-  graph: DependencyGraph,
 ): CompatibilityReport {
   if (baseline === undefined) {
     return { kind: 'no-baseline' };
@@ -52,21 +44,17 @@ export function compatibilityReportOf(
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
   return {
     kind: 'compared',
-    changes: changesOf(baseline, proposed, graph),
+    changes: changesOf(baseline, proposed),
     hashChanged: hashedTextOf(merged) !== hashedTextOf(baseline),
   };
 }
 
 /** An Application holds only Dependencies, so it has no Change to judge. */
-function changesOf(
-  baseline: PublishedSnapshot,
-  proposed: Snapshot,
-  graph: DependencyGraph,
-): readonly Change[] {
+function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
   if (baseline.kind === 'service' && proposed.kind === 'service') {
     return [
-      ...endpointChangesOf(baseline, proposed, graph),
-      ...eventChangesOf(baseline, proposed, graph),
+      ...endpointChangesOf(baseline, proposed),
+      ...eventChangesOf(baseline, proposed),
       ...commandChangesOf(baseline, proposed),
       ...siteChangesOf(serviceCodeDifferencesOf(baseline, proposed)),
       ...siteChangesOf(subscriptionDifferencesOf(baseline, proposed)),
@@ -94,99 +82,72 @@ function siteChangesOf(sites: readonly SiteDifferences[]): readonly Change[] {
   return sites.flatMap(({ site, differences }) => changesAt(site, differences));
 }
 
-/** What the rules judging a Service's Endpoints read of the graph and the two Snapshots, computed once. */
-type EndpointContext = {
-  readonly dependents: Dependents;
-  readonly losingReach: LosingReach;
-  readonly defs: BothDefs;
-  readonly paths: EndpointPaths;
-};
-
 function endpointChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
-  graph: DependencyGraph,
 ): readonly Change[] {
-  const service = baseline.name;
-  const context: EndpointContext = {
-    dependents: (identity) => dependenciesOn(graph, service, { kind: 'endpoint', identity }),
-    losingReach: (identity, to) =>
-      dependenciesLosingReach(graph, service, { kind: 'endpoint', identity, to }),
-    defs: bothDefsOf(baseline, proposed),
-    paths: endpointPathsOf(baseline, proposed),
-  };
+  const defs = bothDefsOf(baseline, proposed);
+  const paths = endpointPathsOf(baseline, proposed);
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    endpointPairChangesOf(pair, context),
+    endpointPairChangesOf(pair, defs, paths),
   );
 }
 
 function endpointPairChangesOf(
   pair: Pair<EndpointSnapshot>,
-  context: EndpointContext,
+  defs: BothDefs,
+  paths: EndpointPaths,
 ): readonly Change[] {
   const visibility = siteVisibilityOf(pair);
   const site: ChangeSite = { kind: 'endpoint', identity: pair.identity, visibility };
   return changesAt(site, [
     presenceDifferenceOf(pair),
-    lifecycleDifferenceOf(pair, context.dependents),
-    visibilityDifferenceOf(pair, context.losingReach),
-    renameDifferenceOf(pair, context.dependents),
-    ...shadowingDifferencesOf(pair, context.paths),
-    ...endpointDifferencesOf(pair, context.defs),
+    lifecycleDifferenceOf(pair),
+    visibilityDifferenceOf(pair),
+    renameDifferenceOf(pair),
+    ...shadowingDifferencesOf(pair, paths),
+    ...endpointDifferencesOf(pair, defs),
   ]);
 }
-
-/** What the rules judging a Service's Events read of the graph and the two Snapshots, computed once. */
-type EventContext = {
-  readonly dependents: Dependents;
-  readonly losingReach: LosingReach;
-  readonly defs: BothDefs;
-  readonly history: MessageHistory;
-};
 
 function eventChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
-  graph: DependencyGraph,
 ): readonly Change[] {
-  const service = baseline.name;
-  const context: EventContext = {
-    dependents: (identity) => dependenciesOn(graph, service, { kind: 'event', identity }),
-    losingReach: (identity, to) =>
-      dependenciesLosingReach(graph, service, { kind: 'event', identity, to }),
-    defs: bothDefsOf(baseline, proposed),
-    history: messageHistoryOf(baseline, proposed, 'event'),
-  };
+  const defs = bothDefsOf(baseline, proposed);
+  const history = messageHistoryOf(baseline, proposed, 'event');
   return pairsOf(baseline.events, proposed.events).flatMap((pair) =>
-    eventPairChangesOf(pair, context),
+    eventPairChangesOf(pair, defs, history),
   );
 }
 
-function eventPairChangesOf(pair: Pair<EventSnapshot>, context: EventContext): readonly Change[] {
+function eventPairChangesOf(
+  pair: Pair<EventSnapshot>,
+  defs: BothDefs,
+  history: MessageHistory,
+): readonly Change[] {
   const visibility = siteVisibilityOf(pair);
   const site: ChangeSite = { kind: 'event', identity: pair.identity, visibility };
   return changesAt(site, [
     presenceDifferenceOf(pair),
-    ...historyDifferencesOf(pair, context.history),
-    lifecycleDifferenceOf(pair, context.dependents),
-    visibilityDifferenceOf(pair, context.losingReach),
-    ...messageBodyDifferencesOf(pair, context.defs),
+    ...historyDifferencesOf(pair, history),
+    lifecycleDifferenceOf(pair),
+    visibilityDifferenceOf(pair),
+    ...messageBodyDifferencesOf(pair, defs),
   ]);
 }
 
-/** A Command is always Private, so no Contract depends on one. */
 function commandChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const noDependents: Dependents = () => [];
   const defs = bothDefsOf(baseline, proposed);
   const history = messageHistoryOf(baseline, proposed, 'command');
   return pairsOf(baseline.commands, proposed.commands).flatMap((pair) =>
     changesAt({ kind: 'command', identity: pair.identity }, [
       presenceDifferenceOf(pair),
       ...historyDifferencesOf(pair, history),
-      lifecycleDifferenceOf(pair, noDependents),
+      lifecycleDifferenceOf(pair),
       ...messageBodyDifferencesOf(pair, defs),
     ]),
   );

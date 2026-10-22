@@ -1,5 +1,3 @@
-import type { ContractDirectory } from '../contract-directory/index.ts';
-
 /**
  * Tells the tools who approved which commit, so `check` verifies a Breaking Change Approval
  * itself; expanding teams is the source's job.
@@ -14,8 +12,6 @@ export type Config = {
   readonly scope: string;
   /** The registry `check` and `publish` read and publish to; `generate` and `verify` run offline. */
   readonly registry?: string;
-  /** How to list every Contract Package in the scope, for the dependency graph. */
-  readonly directory?: ContractDirectory;
   /** Where Approvals are read, only when cf-loom should verify them itself. */
   readonly approvals?: ApprovalSource;
   /** Who may give a Breaking Change Approval: people or teams. */

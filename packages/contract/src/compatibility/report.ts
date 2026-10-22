@@ -24,9 +24,6 @@ export type ChangeSite =
   /** A Definitions Package's Guard by name: no Endpoint attaches it until a Service does. */
   | { readonly kind: 'guard'; readonly name: string };
 
-/** A Dependency the dependency graph holds on an Element: the Contract Package that declares it, at the highest version of the major it blocks. */
-export type GraphDependency = { readonly name: string; readonly version: string };
-
 /**
  * Where a shape is read, which decides what makes a change to it Breaking: Input, Success (a
  * Rejection's body included) or Message.
@@ -111,8 +108,8 @@ export type Difference =
   | { readonly kind: 'added' }
   | { readonly kind: 'deprecated' }
   | { readonly kind: 'reactivated' }
-  /** An Element Retired, with every Dependency the graph holds on it: while one remains, it is Not allowed. */
-  | { readonly kind: 'retired'; readonly dependencies: readonly GraphDependency[] }
+  /** An Element Retired that the Baseline holds Deprecated. */
+  | { readonly kind: 'retired' }
   | { readonly kind: 'retired-before-deprecated' }
   | { readonly kind: 'retired-brought-back'; readonly lifecycle: 'active' | 'deprecated' }
   | { readonly kind: 'tombstoned' }
@@ -130,7 +127,6 @@ export type Difference =
       readonly from: string;
       readonly to: string;
       readonly visibility: Visibility;
-      readonly dependencies: readonly GraphDependency[];
     }
   /**
    * URLs this Endpoint won by routing precedence in the Baseline that an Endpoint the Baseline does
@@ -138,13 +134,8 @@ export type Difference =
    */
   | { readonly kind: 'shadowed'; readonly by: string }
   | { readonly kind: 'visibility-widened'; readonly from: Visibility; readonly to: Visibility }
-  /** A Visibility narrowed, with the Dependencies that lose reach: while one remains, it is Not allowed. */
-  | {
-      readonly kind: 'visibility-narrowed';
-      readonly from: Visibility;
-      readonly to: Visibility;
-      readonly dependencies: readonly GraphDependency[];
-    }
+  /** A Visibility narrowed: a Dependency may lose reach. */
+  | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
   /**
    * A difference inside a schema, at its path from the site, read in one Position, or in `every`
    * for a shared schema, which takes the strongest class of the three.

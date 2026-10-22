@@ -37,7 +37,7 @@ type ApplicationDeclaration = {
   readonly dependencies: readonly ApplicationDependencies[];
 };
 
-/** An Application's declared Contract, published so every use of a Service's Elements is known. */
+/** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */
 export type Application<Declaration extends ApplicationDeclaration = ApplicationDeclaration> =
   Readonly<Declaration> & { readonly kind: 'application' };
 

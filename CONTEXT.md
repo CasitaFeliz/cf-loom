@@ -150,10 +150,6 @@ _Avoid_: upstream, producer, server
 A declaration that a Service receives an Event, its own or another Service's. A Subscription to another Service's Event is also a Dependency.
 _Avoid_: listener, binding
 
-**Contract directory**:
-Where the tooling gets the complete list of an organization's Contract Packages, to read every Dependency. It returns the whole list or fails.
-_Avoid_: catalog, index (one kind of directory)
-
 ### Implementation
 
 **Handler**: **EndpointHandler**, **CommandHandler**, **EventHandler**, **GuardHandler**:

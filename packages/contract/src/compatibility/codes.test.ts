@@ -107,7 +107,7 @@ function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
 }
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
-  const report = compatibilityReportOf(baseline, proposed, []);
+  const report = compatibilityReportOf(baseline, proposed);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }

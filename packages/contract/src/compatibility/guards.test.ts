@@ -84,7 +84,7 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
 }
 
 function reportOf(baseline: PublishedDefinitionsSnapshot, proposed: DefinitionsSnapshot) {
-  const report = compatibilityReportOf(baseline, proposed, []);
+  const report = compatibilityReportOf(baseline, proposed);
   if (report.kind !== 'compared') {
     throw new Error('the Baseline was given, so the report must have compared');
   }
