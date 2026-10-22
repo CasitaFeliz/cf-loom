@@ -48,19 +48,20 @@ async function listOrganization(
   token: string | undefined,
   registry: string,
 ): Promise<Listed> {
-  if (typeof token !== 'string' || token.trim() === '') {
+  if (typeof org !== 'string' || !org.isWellFormed()) {
+    return failed('npm({ org }) has an organization that cannot be put in a URL');
+  }
+  const secret = typeof token === 'string' ? token.trim() : '';
+  if (secret === '') {
     return failed(
       `npm({ org: '${org}' }) has no token, and npm lists only public packages without one`,
     );
-  }
-  if (!org.isWellFormed()) {
-    return failed('npm({ org }) has an organization that cannot be put in a URL');
   }
   const base = baseOf(registry);
   if (base === undefined) {
     return failed(`npm({ org: '${org}' }) has a registry that is no http or https URL`);
   }
-  const reading = { org, registry: base, token: token.trim() };
+  const reading = { org, registry: base, token: secret };
   const answer = await ask(reading);
   switch (answer.kind) {
     case 'unreachable':
@@ -79,9 +80,9 @@ function baseOf(registry: string): string | undefined {
 }
 
 async function ask(reading: Reading): Promise<Answer> {
+  const url = `${reading.registry}/-/org/${encodeURIComponent(reading.org)}/package`;
+  const headers = { accept: 'application/json', authorization: `Bearer ${reading.token}` };
   try {
-    const url = `${reading.registry}/-/org/${encodeURIComponent(reading.org)}/package`;
-    const headers = { accept: 'application/json', authorization: `Bearer ${reading.token}` };
     const response = await fetch(url, { headers, redirect: 'manual' });
     const body = await response.text();
     return { kind: 'answered', status: response.status, statusText: response.statusText, body };
@@ -153,10 +154,7 @@ function parseJson(text: string): unknown {
 }
 
 function failedWithoutToken(reading: Reading, message: string): Listed {
-  const withoutToken = oneLine(message)
-    .replaceAll(reading.token, '')
-    .replaceAll(oneLine(reading.token), '');
-  return failed(withoutToken);
+  return failed(oneLine(message).replaceAll(oneLine(reading.token), '<token>'));
 }
 
 function failed(message: string): Listed {

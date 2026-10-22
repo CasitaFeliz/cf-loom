@@ -196,6 +196,19 @@ describe('npm', () => {
     expect(registry.requests.map((request) => request.path)).toEqual(['/-/org/a%20b%2Fc/package']);
   });
 
+  test('an organization that is not a string is a failure, not a throw', async () => {
+    const registry = await aRegistry();
+    const directory = npm({ org: null as unknown as string, token, registry: registry.url });
+
+    const listed = await directory.list();
+
+    expect(listed).toEqual({
+      kind: 'failed',
+      message: 'npm({ org }) has an organization that cannot be put in a URL',
+    });
+    expect(registry.requests).toEqual([]);
+  });
+
   test('an organization that cannot be encoded in a URL is a failure, not a throw', async () => {
     const registry = await aRegistry();
     const directory = npm({ org: '\uD800', token, registry: registry.url });
@@ -348,6 +361,33 @@ describe('npm', () => {
       expect(messageOf(listed)).not.toContain(token);
     },
   );
+
+  test('a message does not contain the token, even when npm’s error nests it in itself', async () => {
+    const nested = `${token.slice(0, 5)}${token}${token.slice(5)}`;
+    const error = `${token.slice(0, 5)}${nested}${token.slice(5)} is not a token`;
+    const registry = await aRegistry({ status: 401, body: JSON.stringify({ error }) });
+    const directory = npm({ org: 'org', token, registry: registry.url });
+
+    const listed = await directory.list();
+
+    expect(listed.kind).toBe('failed');
+    expect(messageOf(listed)).not.toContain(token);
+  });
+
+  test('a message does not contain a token with a tab, as npm’s error repeats it on one line', async () => {
+    const tabbed = 'npm_read\t-token';
+    const registry = await aRegistry({
+      status: 401,
+      body: JSON.stringify({ error: `${tabbed} is not a token` }),
+    });
+    const directory = npm({ org: 'org', token: tabbed, registry: registry.url });
+
+    const listed = await directory.list();
+
+    expect(listed.kind).toBe('failed');
+    expect(messageOf(listed)).toContain('is not a token');
+    expect(messageOf(listed)).not.toContain('npm_read -token');
+  });
 
   test('a token with a trailing newline is used without it, in the request and in the message', async () => {
     const error = `${token} is not a token`;
