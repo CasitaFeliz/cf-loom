@@ -1,17 +1,18 @@
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { type AddressInfo, connect } from 'node:net';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { canonicalTextOf, type PublishedSnapshot } from '@cf-loom/contract/internal';
 import { test as baseTest, describe, expect } from 'vitest';
@@ -132,6 +133,11 @@ function aPackageTarball(snapshotJson: Buffer | string, folder = 'package'): Buf
   ]);
 }
 
+const hiddenEntry = tarOf([{ path: 'package/snapshot.json', content: 'real' }]).subarray(
+  0,
+  2 * block,
+);
+
 function paxRecord(key: string, value: string): string {
   const rest = ` ${key}=${value}\n`;
   const withOneDigitMore = rest.length + String(rest.length).length;
@@ -150,6 +156,7 @@ type ServedVersion = {
   readonly version: string;
   readonly manifest: Readonly<Record<string, unknown>>;
   readonly tarball: Buffer;
+  readonly packed: Buffer | undefined;
   readonly dist: Readonly<Record<string, unknown>> | null;
 };
 
@@ -161,6 +168,7 @@ type VersionOptions = {
   readonly manifest?: Readonly<Record<string, unknown>>;
   readonly snapshotJson?: Buffer | string;
   readonly tarball?: Buffer;
+  readonly packed?: Buffer;
   readonly dist?: Readonly<Record<string, unknown>> | null;
 };
 
@@ -178,7 +186,8 @@ function aVersion(version: string, options: VersionOptions = {}): ServedVersion 
     ...options.manifest,
   };
   const tarball = options.tarball ?? aPackageTarball(snapshotJson);
-  return { version, manifest, tarball, dist: options.dist === undefined ? {} : options.dist };
+  const dist = options.dist === undefined ? {} : options.dist;
+  return { version, manifest, tarball, packed: options.packed, dist };
 }
 
 type FakePackage = {
@@ -222,21 +231,33 @@ function tarballPathOf(packageName: string, version: string): string {
   return `/tarballs/${packageName.replace('@', '').replace('/', '-')}-${version}.tgz`;
 }
 
-function packumentOf(name: string, served: FakePackage, url: string) {
+function packedPathOf(packageName: string, version: string): string {
+  return tarballPathOf(packageName, `${version}-packed`);
+}
+
+function distOf(tarballPath: string, bytes: Buffer, url: string) {
+  return {
+    tarball: `${url}${tarballPath}`,
+    integrity: integrityOf(bytes, 'sha512'),
+    shasum: createHash('sha1').update(bytes).digest('hex'),
+  };
+}
+
+/** What a client asked of a packument: where the registry is, and whether it took the abbreviated one. */
+type View = { readonly url: string; readonly isAbbreviated: boolean };
+
+function packumentOf(name: string, served: FakePackage, { url, isAbbreviated }: View) {
   if (served.unpublishedAt !== undefined) {
     return { name, time: { unpublished: { time: served.unpublishedAt, versions: [] } } };
   }
   const versions = Object.fromEntries(
     served.versions.map((version) => {
-      const dist =
-        version.dist === null
-          ? undefined
-          : {
-              tarball: `${url}${tarballPathOf(name, version.version)}`,
-              integrity: integrityOf(version.tarball, 'sha512'),
-              shasum: createHash('sha1').update(version.tarball).digest('hex'),
-              ...version.dist,
-            };
+      const packed = isAbbreviated ? version.packed : undefined;
+      const sent =
+        packed === undefined
+          ? distOf(tarballPathOf(name, version.version), version.tarball, url)
+          : distOf(packedPathOf(name, version.version), packed, url);
+      const dist = version.dist === null ? undefined : { ...sent, ...version.dist };
       return [version.version, { name, ...version.manifest, dist }];
     }),
   );
@@ -245,7 +266,25 @@ function packumentOf(name: string, served: FakePackage, url: string) {
   return { name, 'dist-tags': distTags, versions };
 }
 
-function answerOf(path: string, options: RegistryOptions, url: string): Answer {
+function bytesAnswer(body: Buffer): Answer {
+  return { status: 200, body, contentType: 'application/octet-stream' };
+}
+
+function tarballAnswerOf(path: string, packageName: string, served: FakePackage) {
+  for (const { version, tarball, packed } of served.versions) {
+    if (path === tarballPathOf(packageName, version)) {
+      return bytesAnswer(tarball);
+    }
+    if (packed !== undefined && path === packedPathOf(packageName, version)) {
+      return bytesAnswer(packed);
+    }
+  }
+  return undefined;
+}
+
+type Asked = { readonly path: string; readonly accept: string | undefined };
+
+function answerOf({ path, accept }: Asked, options: RegistryOptions, url: string): Answer {
   const override = options.answers?.[path];
   if (override !== undefined) {
     return override;
@@ -253,14 +292,14 @@ function answerOf(path: string, options: RegistryOptions, url: string): Answer {
   if (path === '/-/whoami') {
     return options.whoami ?? jsonAnswer(200, { username: 'tester' });
   }
-  const packages = Object.entries(options.packages ?? {});
-  for (const [name, served] of packages) {
+  const isAbbreviated = accept?.startsWith('application/vnd.npm.install-v1+json') === true;
+  for (const [name, served] of Object.entries(options.packages ?? {})) {
     if (path === `/${name.replace('/', '%2f')}`) {
-      return jsonAnswer(200, packumentOf(name, served, url));
+      return jsonAnswer(200, packumentOf(name, served, { url, isAbbreviated }));
     }
-    const tarball = served.versions.find((v) => path === tarballPathOf(name, v.version));
+    const tarball = tarballAnswerOf(path, name, served);
     if (tarball !== undefined) {
-      return { status: 200, body: tarball.tarball, contentType: 'application/octet-stream' };
+      return tarball;
     }
   }
   return jsonAnswer(404, { error: 'Not found' });
@@ -272,7 +311,8 @@ async function aRegistry(options: RegistryOptions = {}): Promise<Registry> {
     const path = request.url ?? '';
     const authorization = request.headers.authorization;
     requests.push({ method: request.method ?? '', path, authorization });
-    const answer = answerOf(path, options, `http://${request.headers.host}`);
+    const accept = request.headers.accept;
+    const answer = answerOf({ path, accept }, options, `http://${request.headers.host}`);
     if (answer === 'hang') {
       return;
     }
@@ -290,7 +330,26 @@ async function aRegistry(options: RegistryOptions = {}): Promise<Registry> {
   return { url: `http://${host}`, host, requests, close };
 }
 
-function loginTo(registry: Registry): string {
+type Address = Pick<Registry, 'url' | 'host'>;
+
+/** A host and port that were taken, so no other test is given them, with nothing listening on them. */
+async function aDeadAddress(): Promise<Address & { readonly release: () => void }> {
+  const listener = createServer();
+  await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  const holder = connect({ host: '127.0.0.1', port: (listener.address() as AddressInfo).port });
+  await once(holder, 'connect');
+  const host = `127.0.0.1:${holder.localPort}`;
+  return {
+    url: `http://${host}`,
+    host,
+    release: () => {
+      holder.destroy();
+      listener.close();
+    },
+  };
+}
+
+function loginTo(registry: Address): string {
   return `@org:registry=${registry.url}/\n//${registry.host}/:_authToken=${token}\n`;
 }
 
@@ -303,20 +362,23 @@ type PlaceOptions = {
 
 type Lab = {
   readonly aRegistry: (options?: RegistryOptions) => Promise<Registry>;
+  readonly aDeadAddress: () => Promise<Address>;
   readonly aPlace: (options: PlaceOptions) => NpmPlace;
   readonly aFolder: () => string;
 };
 
 const { PATH: inheritedPath = '' } = process.env;
 const npmSettings = /^npm_config_/i;
+const proxySettings = /^(?:https?|all|no)_proxy$/i;
 
-/** Everything of the process environment but npm's own settings, so no developer configuration reaches a test. */
+/** Everything of the process environment but npm's own settings and proxies, so no developer configuration reaches a test. */
 const inheritedEnvironment = Object.entries(process.env).filter(
-  ([name, value]) => value !== undefined && !npmSettings.test(name),
+  ([name, value]) => value !== undefined && !npmSettings.test(name) && !proxySettings.test(name),
 );
 
 function aLab(): Lab & { readonly dispose: () => Promise<void> } {
   const registries: Registry[] = [];
+  const dead: { readonly release: () => void }[] = [];
   const folders: string[] = [];
   const aFolder = () => {
     const folder = mkdtempSync(join(tmpdir(), 'cf-loom-registry-test-'));
@@ -355,10 +417,18 @@ function aLab(): Lab & { readonly dispose: () => Promise<void> } {
       registries.push(registry);
       return registry;
     },
+    aDeadAddress: async () => {
+      const address = await aDeadAddress();
+      dead.push(address);
+      return address;
+    },
     aPlace,
     aFolder,
     dispose: async () => {
       await Promise.all(registries.map((registry) => registry.close()));
+      for (const address of dead) {
+        address.release();
+      }
       for (const folder of folders) {
         rmSync(folder, { recursive: true, force: true });
       }
@@ -426,6 +496,11 @@ function aStubNpm(lab: Lab, body: string): string {
   writeFileSync(join(folder, 'npm'), `#!/bin/sh\n${body}\n`);
   chmodSync(join(folder, 'npm'), 0o755);
   return `${folder}${delimiter}${inheritedPath}`;
+}
+
+function aPackLockingNpm(lab: Lab, folder: string): string {
+  const body = `PATH='${inheritedPath}'\nexport PATH\nnpm "$@"\nstatus=$?\ncase "$1" in pack) chmod 555 '${folder}';; esac\nexit $status`;
+  return aStubNpm(lab, body);
 }
 
 function tarballsRequested(registry: Registry): readonly string[] {
@@ -606,6 +681,57 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
   });
 
+  test('whoami asks the scope’s registry although the default registry holds credentials', async ({
+    lab,
+  }) => {
+    const registry = await lab.aRegistry();
+    const npm = lab.aPlace({
+      userConfig: `${loginTo(registry)}registry=https://bob:pw@elsewhere.invalid/\n`,
+    });
+
+    const read = await baselineOf(npm, orders, '@org');
+
+    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+  });
+
+  test('a default registry that holds credentials, with none for the scope, fails without them', async ({
+    lab,
+  }) => {
+    const registry = await lab.aRegistry();
+    const authority = `bob:pw@${registry.host}`;
+    const npm = lab.aPlace({ userConfig: `registry=http://${authority}/\n` });
+
+    const read = await baselineOf(npm, orders, '@org');
+
+    expect(failureIn(read)).toMatch(/^npm config get registry failed: .*protected/);
+    expect(failureIn(read)).not.toContain('pw');
+  });
+
+  test('a registry URL’s user is left out of what is printed', async ({ lab }) => {
+    const registry = await lab.aRegistry();
+    const npm = lab.aPlace({
+      userConfig: `@org:registry=http://alice@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`,
+    });
+
+    const read = await baselineOf(npm, orders, '@org');
+
+    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+  });
+
+  test('a registry URL’s user is left out of a refusal too', async ({ lab }) => {
+    const registry = await lab.aRegistry({ whoami: jsonAnswer(401, { error: 'bad token' }) });
+    const npm = lab.aPlace({
+      userConfig: `@org:registry=http://alice@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`,
+    });
+
+    const read = await baselineOf(npm, orders, '@org');
+
+    expect(failureIn(read)).toContain(
+      `${ordersPackage} is not in ${registry.url}/, and npm has no login`,
+    );
+    expect(failureIn(read)).not.toContain('alice');
+  });
+
   test.for([
     ['refuses the login', jsonAnswer(401, { error: 'bad token' })],
     ['answers no username', jsonAnswer(200, {})],
@@ -651,7 +777,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const { read, registry } = await readOrders(lab, served);
 
     expect(failureIn(read)).toBe(
-      `${ordersPackage}@1.1.0 is the package of a application, not of a service`,
+      `${ordersPackage}@1.1.0 is the package of kind application, not service`,
     );
     expect(tarballsRequested(registry)).toEqual([]);
   });
@@ -695,6 +821,26 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     },
   );
 
+  test.for([
+    ['a scope that is no text', orders, Symbol('org')],
+    ['no declared Snapshot', null, '@org'],
+    ['a name that is no text', { kind: 'service', name: 7 }, '@org'],
+    ['a kind cf-loom does not know', { kind: 'library', name: 'orders-service' }, '@org'],
+  ] as const)(
+    '%s fails rather than throws, asking nothing of the registry',
+    async ([, declared, scope], { lab }) => {
+      const registry = await lab.aRegistry();
+      const npm = lab.aPlace({ userConfig: loginTo(registry) });
+
+      const read = await baselineOf(npm, declared as never, scope as never);
+
+      expect(failureIn(read)).toBe(
+        'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
+      );
+      expect(registry.requests).toEqual([]);
+    },
+  );
+
   test('a package whose every version was unpublished fails, saying so', async ({ lab }) => {
     const unpublished = { versions: [], unpublishedAt: '2020-01-02T00:00:00.000Z' };
 
@@ -708,10 +854,22 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(registry.requests.map((request) => request.path)).not.toContain('/-/whoami');
   });
 
-  test('a package that lists no version fails', async ({ lab }) => {
-    const { read } = await readOrders(lab, ordersWith());
+  test.for([
+    ['lists no version', ordersWith()],
+    [
+      'has versions but no latest dist-tag',
+      {
+        packages: {
+          [ordersPackage]: { versions: [aVersion('1.0.0')], distTags: { next: '1.0.0' } },
+        },
+      },
+    ],
+  ] as const)('a package that %s fails, saying so', async ([, served], { lab }) => {
+    const { read } = await readOrders(lab, served);
 
-    expect(failureIn(read)).toBe(`${ordersPackage} lists no version`);
+    expect(failureIn(read)).toBe(
+      `${ordersPackage} lists no version, or has no latest dist-tag, which npm view needs to list them`,
+    );
   });
 
   test.for([
@@ -734,9 +892,8 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   );
 
   test('a refused connection fails rather than throws', async ({ lab }) => {
-    const registry = await lab.aRegistry();
+    const registry = await lab.aDeadAddress();
     const npm = lab.aPlace({ userConfig: loginTo(registry) });
-    await registry.close();
 
     const read = await baselineOf(npm, orders, '@org');
 
@@ -817,6 +974,18 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     );
   });
 
+  test('a tarball that npm pack reads from other metadata than npm view fails', async ({ lab }) => {
+    const forged = { ...aPublishedSnapshot(orders, '1.0.0'), generator: 'forged' };
+    const packed = aPackageTarball(canonicalTextOf(forged));
+
+    const { read, registry } = await readOrders(lab, ordersWith(aVersion('1.0.0', { packed })));
+
+    expect(failureIn(read)).toBe(
+      `${ordersPackage}@1.0.0's tarball does not match the sha512 integrity npm view lists`,
+    );
+    expect(tarballsRequested(registry)).toEqual([packedPathOf(ordersPackage, '1.0.0')]);
+  });
+
   test.for([404, 500])('a tarball the registry answers with %s fails', async (status, { lab }) => {
     const answers = { [tarballPathOf(ordersPackage, '1.0.0')]: { status } };
 
@@ -849,6 +1018,25 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
         tarOf([{ path: 'package/snapshot.json', content: 'x'.repeat(1000) }]).subarray(0, 700),
       ),
       'is no tar archive',
+    ],
+    [
+      'has data after a zero block',
+      gzipSync(
+        Buffer.concat([
+          tarOf([{ path: 'package/snapshot.json', content: 'decoy' }]).subarray(0, -block),
+          tarOf([{ path: 'package/snapshot.json', content: 'real' }]),
+        ]),
+      ),
+      'has data after its end',
+    ],
+    [
+      'has a pax size that differs from its header',
+      aTarball([
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'x', content: paxRecord('size', '0') },
+        { path: 'package/padding', content: hiddenEntry },
+      ]),
+      'has a pax size that differs from its header',
     ],
     [
       'has a malformed pax header',
@@ -929,6 +1117,39 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       ],
       'has more than one snapshot.json',
     ],
+    [
+      'two, one of them a contiguous file',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/snapshot.json', type: '7', content: 'real' },
+      ],
+      'has more than one snapshot.json',
+    ],
+    [
+      'two, one named by an old extended header',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'PaxHeader/x', type: 'X', content: paxRecord('path', 'package/snapshot.json') },
+        { path: 'package/placeholder', content: 'real' },
+      ],
+      'has more than one snapshot.json',
+    ],
+    [
+      'two, one behind a dot segment',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package/./snapshot.json', content: 'real' },
+      ],
+      'has more than one snapshot.json',
+    ],
+    [
+      'two, one behind an empty segment',
+      [
+        { path: 'package/snapshot.json', content: 'decoy' },
+        { path: 'package//snapshot.json', content: 'real' },
+      ],
+      'has more than one snapshot.json',
+    ],
   ] as const)('a tarball with %s fails', async ([, entries, said], { lab }) => {
     const tarball = aTarball(entries);
 
@@ -937,9 +1158,12 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(failureIn(read)).toBe(`${ordersPackage}@1.0.0 ${said}`);
   });
 
-  test('a tarball with a GNU long-name entry fails', async ({ lab }) => {
+  test.for([
+    ['a GNU long-name', 'L'],
+    ['an old GNU long-name', 'N'],
+  ] as const)('a tarball with %s entry fails', async ([, type], { lab }) => {
     const tarball = aTarball([
-      { path: '././@LongLink', type: 'L', content: 'package/dist/a-long-name.js\0' },
+      { path: '././@LongLink', type, content: 'package/dist/a-long-name.js\0' },
       { path: 'package/dist/a-long-name.js', content: 'export {};' },
       {
         path: 'package/snapshot.json',
@@ -969,7 +1193,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   test.for([
     ['its first folder is called anything', 'folder'],
     ['it sits behind a ustar prefix', 'prefix'],
-    ['a pax path names it and the pax size is ignored', 'pax'],
+    ['a pax path names it and a pax size agrees with the header', 'pax'],
   ] as const)('snapshot.json is found when %s', async ([, placing], { lab }) => {
     const json = canonicalTextOf(aPublishedSnapshot(orders, '1.0.0'));
     const placed = {
@@ -979,7 +1203,9 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
         {
           path: 'PaxHeader/x',
           type: 'x',
-          content: paxRecord('path', 'package/snapshot.json') + paxRecord('size', '1'),
+          content:
+            paxRecord('path', 'package/snapshot.json') +
+            paxRecord('size', String(Buffer.byteLength(json))),
         },
         { path: 'placeholder', content: json },
       ],
@@ -1034,15 +1260,24 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   });
 });
 
+function packDestinationIn(calls: readonly string[]): string {
+  const [, destination] = /--pack-destination (\S+)/.exec(calls.join('\n')) ?? [];
+  if (destination === undefined) {
+    throw new Error(`npm pack was not called: ${calls.join('; ')}`);
+  }
+  return destination;
+}
+
 describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
   test.for([
     ['succeeds', ordersWith(aVersion('1.0.0')), 'baseline'],
     ['fails', ordersWith(aVersion('1.0.0', { snapshotJson: '{' })), 'failed'],
   ] as const)(
-    'the temporary folder is removed whether a read %s',
+    'the temporary folder is made under the system’s and removed whether a read %s',
     async ([, served, kind], { lab }) => {
       const registry = await lab.aRegistry(served);
-      const npm = lab.aPlace({ userConfig: loginTo(registry) });
+      const recording = aRecordingNpm(lab);
+      const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
       const tmp = lab.aFolder();
       const { TMPDIR: before } = process.env;
       setEnvironment('TMPDIR', tmp);
@@ -1051,8 +1286,52 @@ describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
         setEnvironment('TMPDIR', before),
       );
 
+      const destination = packDestinationIn(recording.calls());
       expect(read.kind).toBe(kind);
-      expect(readdirSync(tmp)).toEqual([]);
+      expect(destination.startsWith(`${tmp}${sep}`)).toBe(true);
+      expect(existsSync(destination)).toBe(false);
     },
   );
+
+  test('a temporary folder that cannot be removed does not fail a read', async ({ lab }) => {
+    const registry = await lab.aRegistry(ordersWith(aVersion('1.0.0')));
+    const tmp = lab.aFolder();
+    const npm = lab.aPlace({ userConfig: loginTo(registry), path: aPackLockingNpm(lab, tmp) });
+    const { TMPDIR: before } = process.env;
+    setEnvironment('TMPDIR', tmp);
+
+    const read = await baselineOf(npm, orders, '@org').finally(() => {
+      setEnvironment('TMPDIR', before);
+      chmodSync(tmp, 0o755);
+    });
+
+    expect(read.kind).toBe('baseline');
+  });
+
+  test('a temporary folder that cannot be made fails rather than throws', async ({ lab }) => {
+    const registry = await lab.aRegistry(ordersWith(aVersion('1.0.0')));
+    const npm = lab.aPlace({ userConfig: loginTo(registry) });
+    const { TMPDIR: before } = process.env;
+    setEnvironment('TMPDIR', join(lab.aFolder(), 'nowhere'));
+
+    const read = await baselineOf(npm, orders, '@org').finally(() =>
+      setEnvironment('TMPDIR', before),
+    );
+
+    expect(failureIn(read)).toMatch(
+      /^@org\/contract-orders-service@1.0.0's tarball cannot be read: /,
+    );
+  });
+
+  test('a tarball npm names but did not write fails rather than throws', async ({ lab }) => {
+    const metadata = `{"version":"1.0.0","cfLoom":{"kind":"service"},"dist":{"tarball":"http://x/y.tgz","integrity":"sha512-${'A'.repeat(86)}=="}}`;
+    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${metadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '[{"filename":"missing.tgz"}]';;\nesac`;
+    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
+
+    const read = await baselineOf(npm, orders, '@org');
+
+    expect(failureIn(read)).toMatch(
+      /^@org\/contract-orders-service@1.0.0's tarball cannot be read: /,
+    );
+  });
 });

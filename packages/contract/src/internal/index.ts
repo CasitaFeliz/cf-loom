@@ -95,6 +95,7 @@ export {
   failureLineOf,
   follows,
   kebabCase,
+  locationOf,
   upperSnakeCase,
   validateContract,
   walkedTextPartsOf,

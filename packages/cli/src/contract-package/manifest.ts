@@ -28,6 +28,8 @@ export function publishedNameOf(
       return `${scope}/contract-${name}`;
     case 'definitions':
       return `${scope}/${name}`;
+    default:
+      throw new Error(`no package is published for a Snapshot of kind ${String(kind)}`);
   }
 }
 

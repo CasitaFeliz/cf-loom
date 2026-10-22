@@ -5,6 +5,7 @@ import { ownOf } from '@cf-loom/contract/internal';
 const execFileAsync = promisify(execFile);
 const npmTimeoutMilliseconds = 10 * 60 * 1000;
 const maxStdoutBytes = 16 * 1024 * 1024;
+const urlCredentials = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi;
 
 /** Where npm runs: the project's directory, whose `.npmrc` npm reads, and the environment the organization's npm login lives in. */
 export type NpmPlace = {
@@ -153,9 +154,13 @@ function firstLineOf(text: string): string {
   return text.trim().split('\n', 1)[0] ?? '';
 }
 
-/** A text on one line, without the ANSI sequences and control characters npm or a registry may print. */
+/**
+ * A text on one line, without the ANSI sequences and control characters npm or a registry may
+ * print, and without the user and password of a URL in it.
+ */
 export function lineOf(text: string): string {
   return stripVTControlCharacters(text)
+    .replace(urlCredentials, '$1')
     .replace(/\p{Cc}+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();

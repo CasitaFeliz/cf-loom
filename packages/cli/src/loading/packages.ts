@@ -4,6 +4,7 @@ import {
   listedDefinitionsOf,
   type ResolvedDefinitions,
 } from '@cf-loom/contract/internal';
+import { publishedNameOf } from '../contract-package/index.ts';
 import { installedPackageOf, type LookedUp } from './installed-package.ts';
 
 /** A listed Definitions Package as installed, with what its module exports, by name. */
@@ -31,7 +32,8 @@ export async function resolvePackages(
   const packages: InstalledDefinitions[] = [];
   const named = listedDefinitionsOf(root).filter(({ name }) => follows(kebabCase, name));
   for (const definitions of named) {
-    const packageName = `${resolving.scope}/${definitions.name}`;
+    const { name } = definitions;
+    const packageName = publishedNameOf(resolving.scope, { kind: 'definitions', name });
     const installed = await installedPackageOf(packageName, resolving);
     if (installed.kind === 'failed') {
       return installed;

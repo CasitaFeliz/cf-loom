@@ -1,10 +1,13 @@
 import {
   decodeSnapshot,
+  locationOf,
+  ownOf,
   type PeerRanges,
   type PublishedSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { publishedNameOf } from '../contract-package/index.ts';
+import { isRootKind } from '../loading/index.ts';
 import { type Failed, failed, jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
 import { snapshotTextOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';
@@ -39,6 +42,13 @@ export type ReadBaseline =
 
 type Declared = Pick<Snapshot, 'kind' | 'name'>;
 
+/** npm's 404 for a package, before anything is known of why the registry lacks it. */
+type NotFound = { readonly kind: 'not-found' };
+
+const unnamable = failed(
+  'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
+);
+
 /** A package and every version it lists, lowest first. */
 type Published = { readonly packageName: string; readonly versions: readonly string[] };
 
@@ -52,22 +62,44 @@ export async function baselineOf(
   declared: Declared,
   scope: string,
 ): Promise<ReadBaseline> {
-  const packageName = publishedNameOf(scope, declared);
+  const packageName = packageNameOf(scope, declared);
+  if (typeof packageName !== 'string') {
+    return packageName;
+  }
   const listed = await versionsOf(npm, packageName);
   switch (listed.kind) {
     case 'failed':
       return listed;
-    case 'unknown-package':
-      return await unknownPackageOf(npm, packageName, scope);
+    case 'not-found':
+      return await baselineOfMissing(npm, packageName, scope);
     case 'versions':
       return await baselineAmong(npm, { packageName, versions: listed.versions }, declared);
   }
 }
 
+/** The package's name, or why none can be named: a caller outside the types may pass anything. */
+function packageNameOf(scope: unknown, declared: unknown): string | Failed {
+  const name = ownOf(declared, 'name');
+  const kind = ownOf(declared, 'kind');
+  if (typeof scope !== 'string' || typeof name !== 'string' || typeof kind !== 'string') {
+    return unnamable;
+  }
+  return isRootKind(kind) ? publishedNameOf(scope, { kind, name }) : unnamable;
+}
+
+async function baselineOfMissing(
+  npm: NpmPlace,
+  packageName: string,
+  scope: string,
+): Promise<ReadBaseline> {
+  const unknown = await unknownPackageOf(npm, packageName, scope);
+  return unknown.kind === 'failed' ? unknown : { kind: 'no-baseline', packageName, why: unknown };
+}
+
 async function versionsOf(
   npm: NpmPlace,
   packageName: string,
-): Promise<Versions | Failed | { readonly kind: 'unknown-package' }> {
+): Promise<Versions | NotFound | Failed> {
   const call = { label: `npm view ${packageName}`, args: ['view', packageName, 'versions'] };
   const run = await jsonFromNpm(npm, call);
   switch (run.kind) {
@@ -80,10 +112,7 @@ async function versionsOf(
   }
 }
 
-function refusedViewOf(
-  packageName: string,
-  refused: Refused,
-): Failed | { readonly kind: 'unknown-package' } {
+function refusedViewOf(packageName: string, refused: Refused): NotFound | Failed {
   if (refused.code !== 'E404') {
     return failed(refused.message);
   }
@@ -91,7 +120,7 @@ function refusedViewOf(
     const gone = 'its Baseline is gone, so nothing can be checked against it';
     return failed(`${packageName} was unpublished: ${refused.summary}; ${gone}`);
   }
-  return { kind: 'unknown-package' };
+  return { kind: 'not-found' };
 }
 
 async function baselineAmong(
@@ -108,7 +137,7 @@ async function baselineAmong(
   if (release.kind === 'failed') {
     return release;
   }
-  const text = await snapshotTextOf(npm, source.spec);
+  const text = await snapshotTextOf(npm, { spec: source.spec, digests: release.digests });
   if (text.kind === 'failed') {
     return text;
   }
@@ -151,7 +180,7 @@ function snapshotFrom(
       return failed(`${spec}'s snapshot.json is ${newer}`);
     }
     case 'malformed': {
-      const location = decoded.at.length === 0 ? '(root)' : decoded.at.join('.');
+      const location = locationOf(decoded.at);
       return failed(`${spec}'s snapshot.json is malformed: ${location} ${decoded.reason}`);
     }
     case 'decoded': {

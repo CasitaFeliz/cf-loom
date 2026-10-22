@@ -11,6 +11,8 @@ export type UnknownPackage = {
 
 type Registry = { readonly kind: 'registry'; readonly registry: string };
 
+type Unset = { readonly kind: 'unset' };
+
 type Login =
   | { readonly kind: 'user'; readonly username: string }
   | { readonly kind: 'refused'; readonly why: string };
@@ -24,7 +26,7 @@ export async function unknownPackageOf(
   npm: NpmPlace,
   packageName: string,
   scope: string,
-): Promise<{ kind: 'no-baseline'; packageName: string; why: UnknownPackage } | Failed> {
+): Promise<UnknownPackage | Failed> {
   const served = await registryOf(npm, scope);
   if (served.kind === 'failed') {
     return served;
@@ -34,32 +36,35 @@ export async function unknownPackageOf(
   if (login.kind === 'refused') {
     const refusal = `npm has no login there it accepts (${login.why})`;
     const looksUnpublished = 'a package your login cannot read looks unpublished';
-    return failed(`${packageName} is not in ${registry}, and ${refusal}: ${looksUnpublished}`);
+    return failed(
+      `${packageName} is not in ${lineOf(registry)}, and ${refusal}: ${looksUnpublished}`,
+    );
   }
-  const why = { kind: 'unknown-package', registry, username: login.username } as const;
-  return { kind: 'no-baseline', packageName, why };
+  return { kind: 'unknown-package', registry: lineOf(registry), username: login.username };
 }
 
+/** The scope's own registry, or else the default one; each asked alone, since npm refuses one that holds credentials. */
 async function registryOf(npm: NpmPlace, scope: string): Promise<Registry | Failed> {
-  const key = `${scope}:registry`;
-  const call = { label: `npm config get ${key}`, args: ['config', 'get', key, 'registry'] };
+  const scoped = await registryAt(npm, `${scope}:registry`);
+  if (scoped.kind !== 'unset') {
+    return scoped;
+  }
+  const standard = await registryAt(npm, 'registry');
+  return standard.kind === 'unset'
+    ? failed(`npm did not say which registry serves ${scope}`)
+    : standard;
+}
+
+async function registryAt(npm: NpmPlace, key: string): Promise<Registry | Unset | Failed> {
+  const call = { label: `npm config get ${key}`, args: ['config', 'get', key] };
   const run = await textFromNpm(npm, call);
   if (run.kind === 'failed') {
     return run;
   }
-  const lines = run.text.split('\n');
-  const scoped = settingOf(lines, key);
-  const registry =
-    scoped === undefined || scoped === 'undefined' ? settingOf(lines, 'registry') : scoped;
-  if (registry === undefined || registry === '' || registry === 'undefined') {
-    return failed(`npm did not say which registry serves ${scope}`);
-  }
-  return { kind: 'registry', registry: lineOf(registry) };
-}
-
-function settingOf(lines: readonly string[], key: string): string | undefined {
-  const line = lines.find((candidate) => candidate.startsWith(`${key}=`));
-  return line?.slice(key.length + 1).trim();
+  const registry = run.text.trim();
+  return registry === '' || registry === 'undefined'
+    ? { kind: 'unset' }
+    : { kind: 'registry', registry };
 }
 
 async function loginOn(npm: NpmPlace, registry: string): Promise<Login> {

@@ -8,13 +8,17 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from './npm.ts';
 
-const sha512 = /^sha512-[A-Za-z0-9+/]{86}==(?:\?\S*)?$/;
+const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
 /** The versions a package lists, lowest first. */
 export type Versions = { readonly kind: 'versions'; readonly versions: readonly string[] };
 
-/** What a version's metadata says that a Baseline relies on: its peer ranges. */
-export type Release = { readonly kind: 'release'; readonly peers: PeerRanges };
+/** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
+export type Release = {
+  readonly kind: 'release';
+  readonly peers: PeerRanges;
+  readonly digests: readonly string[];
+};
 
 /** The version of a package a Baseline is read from, and the declared Snapshot it must be the Baseline of. */
 export type BaselineSource = {
@@ -30,7 +34,9 @@ export type BaselineSource = {
 export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
   const items: readonly unknown[] = Array.isArray(printed) ? printed : [printed];
   if (items.length === 0 || printed === undefined) {
-    return failed(`${packageName} lists no version`);
+    return failed(
+      `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`,
+    );
   }
   const unreadable = items.find((item) => !isSemanticVersion(item));
   if (unreadable !== undefined) {
@@ -51,7 +57,7 @@ export function highestReleaseOf(versions: readonly string[]): string | undefine
 /**
  * The metadata `npm view <package>@<version>` printed for the version a Baseline is read from:
  * published by cf-loom as the declared kind, with peer ranges that are a map of texts and a
- * tarball whose integrity npm can check with a sha512.
+ * tarball with a sha512 digest to check it against.
  */
 export function releaseFrom(source: BaselineSource, printed: unknown): Release | Failed {
   const { spec, version, declared } = source;
@@ -63,13 +69,14 @@ export function releaseFrom(source: BaselineSource, printed: unknown): Release |
     return failed(`${spec} has no cfLoom: it was not published by cf-loom publish`);
   }
   if (kind !== declared.kind) {
-    return failed(`${spec} is the package of a ${kind}, not of a ${declared.kind}`);
+    return failed(`${spec} is the package of kind ${kind}, not ${declared.kind}`);
   }
   const peers = peersFrom(ownOf(printed, 'peerDependencies'));
   if (peers === undefined) {
     return failed(`${spec} has peerDependencies that are no map of ranges`);
   }
-  return unverifiableTarball(spec, ownOf(printed, 'dist')) ?? { kind: 'release', peers };
+  const digests = digestsOf(spec, ownOf(printed, 'dist'));
+  return digests.kind === 'failed' ? digests : { kind: 'release', peers, digests: digests.digests };
 }
 
 function peersFrom(peerDependencies: unknown): PeerRanges | undefined {
@@ -93,14 +100,18 @@ function peersFrom(peerDependencies: unknown): PeerRanges | undefined {
   return peers;
 }
 
-function unverifiableTarball(spec: string, dist: unknown): Failed | undefined {
+function digestsOf(
+  spec: string,
+  dist: unknown,
+): { readonly kind: 'digests'; readonly digests: readonly string[] } | Failed {
   if (typeof ownOf(dist, 'tarball') !== 'string') {
     return failed(`${spec} has no tarball`);
   }
   const integrity = ownOf(dist, 'integrity');
   const hashes = typeof integrity === 'string' ? integrity.split(/\s+/) : [];
-  if (!hashes.some((hash) => sha512.test(hash))) {
+  const digests = hashes.flatMap((hash) => sha512.exec(hash)?.slice(1) ?? []);
+  if (digests.length === 0) {
     return failed(`${spec} has no sha512 integrity, so its tarball cannot be verified`);
   }
-  return undefined;
+  return { kind: 'digests', digests };
 }
