@@ -1,5 +1,5 @@
 export type { Failure } from './failures.ts';
-export { failureLineOf } from './failures.ts';
+export { failureLineOf, locationOf } from './failures.ts';
 export { follows, kebabCase, upperSnakeCase } from './grammars.ts';
 export type {
   RootPackage,

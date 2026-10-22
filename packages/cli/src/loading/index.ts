@@ -10,6 +10,7 @@ export type { InstalledDefinitions, ResolvedPackages, Resolving } from './packag
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';
 export { projectPackageOf } from './project-package.ts';
+export { publishedNameOf } from './published-name.ts';
 export type { LoadedRoot } from './root.ts';
 export { loadRoot } from './root.ts';
 export type { RootKind, RootPlace } from './roots.ts';

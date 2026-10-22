@@ -20,7 +20,12 @@ export type {
   SubscriptionTombstone,
 } from './published.ts';
 export { isDeclared, isSubscriptionTombstone } from './published.ts';
-export { caretLineOf, compareSemanticVersions, isSemanticVersion } from './semantic-version.ts';
+export {
+  caretLineOf,
+  compareSemanticVersions,
+  isPrerelease,
+  isSemanticVersion,
+} from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';
 export type {
   ApplicationSnapshot,

@@ -80,9 +80,14 @@ export function failure(at: Path, rule: Rule, message: string): DeclarationFailu
   return { kind: 'declaration', at, rule, message };
 }
 
+/** Where something sits in a Snapshot on one line, its segments joined by dots, `(root)` for none. */
+export function locationOf(at: Path): string {
+  return at.length === 0 ? '(root)' : at.join('.');
+}
+
 /** One failure on one line, where it sits first, as every tool that reports a root's rules words it. */
 export function failureLineOf(broken: Failure): string {
-  const location = broken.at.length === 0 ? '(root)' : broken.at.join('.');
+  const location = locationOf(broken.at);
   switch (broken.kind) {
     case 'declaration':
       return `${location} ${broken.rule}: ${broken.message}`;

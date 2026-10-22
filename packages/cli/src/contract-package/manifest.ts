@@ -5,6 +5,7 @@ import {
   type ServiceSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
+import { publishedNameOf } from '../loading/index.ts';
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
@@ -24,7 +25,7 @@ export function manifestOf(
   { scope, version, peers }: Packaging,
 ): PackageFile {
   const manifest = {
-    name: `${scope}/contract-${snapshot.name}`,
+    name: publishedNameOf(scope, snapshot),
     version,
     type: 'module',
     exports: {

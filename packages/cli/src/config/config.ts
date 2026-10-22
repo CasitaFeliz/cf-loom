@@ -10,8 +10,6 @@ export type ApprovalSource = {
 export type Config = {
   /** The npm scope the Contract Package is published under and Definitions Packages are found in. */
   readonly scope: string;
-  /** The registry `check` and `publish` read and publish to; `generate` and `verify` run offline. */
-  readonly registry?: string;
   /** Where Approvals are read, only when cf-loom should verify them itself. */
   readonly approvals?: ApprovalSource;
   /** Who may give a Breaking Change Approval: people or teams. */
