@@ -10,20 +10,15 @@ const stagingParent = 'node_modules/.cache/cf-loom';
 /** A file of the project to publish as it is, by its path in the project and in the package. */
 export type CopiedFile = { readonly from: string; readonly path: string };
 
-/** The folder a package was staged in, or why it could not be. */
+/** The folder a package was staged in, or why it could not be and the lines naming a folder it could not remove. */
 export type Staged =
   | { readonly kind: 'staged'; readonly folder: string }
-  | { readonly kind: 'failed'; readonly message: string };
-
-/** A staging folder removed, or the line saying where it was left and why. */
-export type Removed =
-  | { readonly kind: 'removed' }
-  | { readonly kind: 'left'; readonly line: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly left: readonly string[] };
 
 /**
  * Stages a package in a new folder of the project's staging place: the files copied, then the
  * files given over them. The folder is removed with `removeStaged`, and by this function when
- * it fails.
+ * it fails, which names it if it stays.
  */
 export function stagedIn(
   directory: string,
@@ -40,27 +35,20 @@ export function stagedIn(
     return { kind: 'staged', folder };
   } catch (e) {
     const message = `${stagingParent} cannot be written: ${oneLineOf(e, directory)}`;
-    return { kind: 'failed', message: withLeftover(message, folder, directory) };
+    const left = folder === undefined ? [] : removeStaged(folder, directory);
+    return { kind: 'failed', message, left };
   }
 }
 
-/** Removes a folder `stagedIn` made, and what was built in it; a folder that stays is told, never thrown. */
-export function removeStaged(folder: string, directory: string): Removed {
+/** Removes a folder `stagedIn` made, and what was built in it; a folder that stays is named in a line, never thrown. */
+export function removeStaged(folder: string, directory: string): readonly string[] {
   try {
     rmSync(folder, { recursive: true, force: true });
-    return { kind: 'removed' };
+    return [];
   } catch (e) {
     const left = `${stagingParent}/${basename(folder)} was left behind: ${oneLineOf(e, directory)}`;
-    return { kind: 'left', line: `${left}: delete it` };
+    return [`${left}: delete it`];
   }
-}
-
-function withLeftover(message: string, folder: string | undefined, directory: string): string {
-  if (folder === undefined) {
-    return message;
-  }
-  const removed = removeStaged(folder, directory);
-  return removed.kind === 'left' ? `${message}; ${removed.line}` : message;
 }
 
 function copyAll(folder: string, copied: readonly CopiedFile[]): void {

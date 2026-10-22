@@ -2636,6 +2636,26 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       { optionalDependencies: { left: 'catalog:' } },
       'package.json lists left in optionalDependencies as catalog:, which npm cannot install from the registry',
     ],
+    [
+      'lists a file: range in dependencies',
+      { dependencies: { '@org/shared': 'file:../shared' } },
+      'package.json lists @org/shared in dependencies as file:../shared, which npm cannot install from the registry',
+    ],
+    [
+      'lists a link: range in dependencies',
+      { dependencies: { '@org/shared': 'link:../shared' } },
+      'package.json lists @org/shared in dependencies as link:../shared, which npm cannot install from the registry',
+    ],
+    [
+      'lists a file: range in optionalDependencies',
+      { optionalDependencies: { left: 'file:./vendor/left.tgz' } },
+      'package.json lists left in optionalDependencies as file:./vendor/left.tgz, which npm cannot install from the registry',
+    ],
+    [
+      'lists a link: range in optionalDependencies',
+      { optionalDependencies: { left: 'link:./vendor/left' } },
+      'package.json lists left in optionalDependencies as link:./vendor/left, which npm cannot install from the registry',
+    ],
   ] as const)(
     'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
     async ([, manifest, line], { lab }) => {
@@ -2785,6 +2805,22 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       }
     },
   );
+
+  test('a staging place that cannot be made is a tooling error with one line, and nothing is put', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    rmSync(join(project, 'node_modules/.cache'), { recursive: true, force: true });
+    write(project, { 'node_modules/.cache': '' });
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).toBe('');
+    expect(ran.stderr).toMatch(/^node_modules\/\.cache\/cf-loom cannot be written: [^\n]+\n$/);
+    expect(ran.stderr).not.toContain('was left behind');
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
 
   test.for([
     [['generate', '--force'], 'Only publish takes --force'],

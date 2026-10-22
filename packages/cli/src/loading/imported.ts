@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { extname, relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { firstLineOf } from './lines.ts';
+import { firstLineOf } from '../child-process/index.ts';
 
 /** A user's module as Node imported it, or why it could not be, in one line. */
 export type Imported =

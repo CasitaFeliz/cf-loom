@@ -91,7 +91,12 @@ function counterOf(numbers: string, version: string): bigint | undefined {
     return undefined;
   }
   const [identifier = ''] = prerelease;
-  return /^(0|[1-9]\d*)$/.test(identifier) ? BigInt(identifier) : undefined;
+  return isNumericIdentifier(identifier) ? BigInt(identifier) : undefined;
+}
+
+/** A prerelease identifier of digits only, which a semantic version writes with no leading zero. */
+function isNumericIdentifier(identifier: string): boolean {
+  return /^(0|[1-9]\d*)$/.test(identifier);
 }
 
 function partsOf(version: string): Parts {
@@ -121,8 +126,8 @@ function compareNumbers(left: string, right: string): number {
 
 /** Numeric identifiers order by number and come before the others, which order by code point. */
 function compareIdentifiers(left: string, right: string): number {
-  const leftIsNumeric = /^\d+$/.test(left);
-  const rightIsNumeric = /^\d+$/.test(right);
+  const leftIsNumeric = isNumericIdentifier(left);
+  const rightIsNumeric = isNumericIdentifier(right);
   if (leftIsNumeric && rightIsNumeric) {
     return compareNumbers(left, right);
   }

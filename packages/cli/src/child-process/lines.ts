@@ -8,8 +8,8 @@ export function firstLineOf(text: string): string {
 }
 
 /**
- * A text on one line, without the ANSI sequences and control characters npm or a registry may
- * print, and without the user and password of a URL in it.
+ * A text on one line, without the ANSI sequences and control characters a program may print,
+ * and without the user and password of a URL in it.
  */
 export function lineOf(text: string): string {
   return stripVTControlCharacters(text)

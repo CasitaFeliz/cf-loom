@@ -1,5 +1,6 @@
 import { ownOf } from '@cf-loom/contract/internal';
-import { type Failed, failed, jsonFromNpm, type NpmPlace } from './npm.ts';
+import { type Failed, failed } from '../child-process/index.ts';
+import { jsonFromNpm, type NpmPlace } from './npm.ts';
 
 /** The dist-tag a version is published under. */
 export type DistTag = 'latest' | 'next';

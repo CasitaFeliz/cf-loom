@@ -13,7 +13,7 @@ export type DefinitionsManifest =
 const installedFields = ['dependencies', 'optionalDependencies'] as const;
 
 /** The ranges npm publishes unchanged and no registry can install. */
-const uninstallableRange = /^(workspace|catalog):/;
+const uninstallableRange = /^(workspace|catalog|file|link):/;
 
 /** A dependency a package.json lists under a field. */
 type Listed = { readonly field: string; readonly name: string; readonly range: string };

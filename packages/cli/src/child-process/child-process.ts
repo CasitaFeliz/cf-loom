@@ -15,6 +15,9 @@ export type ChildCall = {
   readonly env?: Readonly<Record<string, string | undefined>>;
 };
 
+/** A step that stopped, in one line without control characters. */
+export type Failed = { readonly kind: 'failed'; readonly message: string };
+
 /** A program that ran: what it printed when it exited, or the line saying a limit or a signal stopped it. */
 export type ChildRan =
   | { readonly kind: 'exited'; readonly stdout: string }
@@ -24,7 +27,7 @@ export type ChildRan =
       readonly stderr: string;
       readonly status: number;
     }
-  | { readonly kind: 'failed'; readonly message: string };
+  | Failed;
 
 /** How a program ended: it ran, or it could not be started. */
 export type ChildEnded = ChildRan | { readonly kind: 'unrunnable'; readonly reason: string };
@@ -74,7 +77,8 @@ function endedByError(label: string, thrown: unknown): ChildEnded {
   return { kind: 'unrunnable', reason: lineOf(error.message) };
 }
 
-function failed(message: string): ChildEnded {
+/** A failure as a value: a program's text can hold ANSI and line breaks, a message never does. */
+export function failed(message: string): Failed {
   return { kind: 'failed', message: lineOf(message) };
 }
 

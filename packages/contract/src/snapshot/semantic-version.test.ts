@@ -69,7 +69,7 @@ describe('compareSemanticVersions', () => {
     expect(ordered).toEqual(['1.2.0', '1.2.9', '1.2.10', '1.10.0', '2.0.0']);
   });
 
-  test('prereleases come before their release, ordered as semver.org orders them', () => {
+  test('a prerelease comes before the same version that is not a prerelease, and prereleases order as semver.org orders them', () => {
     const ascending = [
       '1.0.0-alpha',
       '1.0.0-alpha.1',

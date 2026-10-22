@@ -6,7 +6,7 @@ import {
   type PeerRanges,
   type Snapshot,
 } from '@cf-loom/contract/internal';
-import { type Failed, failed } from './npm.ts';
+import { type Failed, failed } from '../child-process/index.ts';
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 

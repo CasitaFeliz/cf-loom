@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { exitReasonOf, installedManifestOf, lineOf, ranChild } from '../loading/index.ts';
+import { exitReasonOf, type Failed, failed, ranChild } from '../child-process/index.ts';
+import { installedManifestOf } from '../loading/index.ts';
 
 /** What `tsc -p` builds: a staged folder, the root file whose project's TypeScript builds it, and the package it is of. */
 export type Building = {
@@ -9,9 +10,7 @@ export type Building = {
 };
 
 /** The folder built, or why it was not, in one line. */
-export type Built =
-  | { readonly kind: 'built' }
-  | { readonly kind: 'failed'; readonly message: string };
+export type Built = { readonly kind: 'built' } | Failed;
 
 /**
  * Builds a staged Contract Package with `tsc -p`, the TypeScript installed where the root file
@@ -43,14 +42,8 @@ export async function builtWithTsc({ folder, rootPath, spec }: Building): Promis
   }
 }
 
-function failed(message: string): Extract<Built, { kind: 'failed' }> {
-  return { kind: 'failed', message: lineOf(message) };
-}
-
 /** The script the project's TypeScript names as its `tsc`, or why there is none. */
-function tscOf(
-  rootPath: string,
-): { readonly kind: 'tsc'; readonly path: string } | Extract<Built, { kind: 'failed' }> {
+function tscOf(rootPath: string): { readonly kind: 'tsc'; readonly path: string } | Failed {
   const installed = installedManifestOf('typescript', rootPath);
   if (installed.kind === 'failed') {
     const message = `${installed.message}: publish builds the Contract Package with its tsc`;

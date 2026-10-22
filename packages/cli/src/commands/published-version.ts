@@ -1,4 +1,4 @@
-import { bumpedVersionOf, nextPrereleaseOf, type versionBumpOf } from '@cf-loom/contract/internal';
+import { bumpedVersionOf, nextPrereleaseOf, type VersionBump } from '@cf-loom/contract/internal';
 import type { DistTag } from '../registry/index.ts';
 
 /** How `publish` was asked to run: publish even when nothing changed, and publish a prerelease of the version it derives. */
@@ -15,7 +15,7 @@ export type DerivedVersion = {
 export type Derived = DerivedVersion | { readonly kind: 'unchanged'; readonly baseline: string };
 
 /** A Baseline's version and how far the proposed Snapshot and peer ranges move from it. */
-type Moved = { readonly version: string; readonly bump: ReturnType<typeof versionBumpOf> };
+type Moved = { readonly version: string; readonly bump: VersionBump | 'unchanged' };
 
 /** What the version is derived from: the Baseline and its bump, every listed version, and the options. */
 export type Deriving = {

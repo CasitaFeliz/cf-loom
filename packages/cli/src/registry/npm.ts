@@ -1,14 +1,19 @@
 import { ownOf } from '@cf-loom/contract/internal';
-import { type ChildRan, exitReasonOf, firstLineOf, lineOf, ranChild } from '../loading/index.ts';
+import {
+  type ChildRan,
+  exitReasonOf,
+  type Failed,
+  failed,
+  firstLineOf,
+  lineOf,
+  ranChild,
+} from '../child-process/index.ts';
 
 /** Where npm runs: the project's directory, whose `.npmrc` npm reads, and the environment the organization's npm login lives in. */
 export type NpmPlace = {
   readonly directory: string;
   readonly env: Readonly<Record<string, string | undefined>>;
 };
-
-/** A read that stopped, in one line without control characters. */
-export type Failed = { readonly kind: 'failed'; readonly message: string };
 
 /** One run of npm: what it is called in messages, its arguments, and the environment it adds to the place's. */
 export type NpmCall = {
@@ -30,13 +35,6 @@ export type NpmJson = { readonly kind: 'json'; readonly value: unknown } | Refus
 
 /** What npm printed as text, or why it did not. */
 export type NpmText = { readonly kind: 'text'; readonly text: string } | Failed;
-
-type Ended = ChildRan;
-
-/** A failure as a value: npm's text can hold ANSI and line breaks, a message never does. */
-export function failed(message: string): Failed {
-  return { kind: 'failed', message: lineOf(message) };
-}
 
 /** Runs the npm on the place's PATH, with no shell, and reads its JSON. */
 export async function jsonFromNpm(place: NpmPlace, call: NpmCall): Promise<NpmJson> {
@@ -64,7 +62,7 @@ export async function textFromNpm(place: NpmPlace, call: NpmCall): Promise<NpmTe
   }
 }
 
-async function endedOf(place: NpmPlace, call: NpmCall): Promise<Ended> {
+async function endedOf(place: NpmPlace, call: NpmCall): Promise<ChildRan> {
   const ended = await ranChild({
     label: call.label,
     file: 'npm',
@@ -79,7 +77,7 @@ async function endedOf(place: NpmPlace, call: NpmCall): Promise<Ended> {
   return ended;
 }
 
-function refusalOf(call: NpmCall, ended: Extract<Ended, { kind: 'errored' }>): Refused | Failed {
+function refusalOf(call: NpmCall, ended: Extract<ChildRan, { kind: 'errored' }>): Refused | Failed {
   const printed = jsonOf(call, ended.stdout);
   const error = printed.kind === 'json' ? errorOf(printed.value) : undefined;
   if (error === undefined) {

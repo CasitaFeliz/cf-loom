@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { PublishedDefinitionsSnapshot, PublishedSnapshot } from '@cf-loom/contract/internal';
 import { type Building, type Built, builtWithTsc } from '../building/index.ts';
+import type { Failed } from '../child-process/index.ts';
 import {
   contractPackageFilesOf,
   definitionsManifestOf,
@@ -12,13 +13,12 @@ import { publishedNameOf } from '../loading/index.ts';
 import type { Project, Run } from '../project/index.ts';
 import {
   type DistTag,
-  type Failed,
   type NpmPlace,
   type Publishing,
   packedPathsOf,
   publishFolder,
 } from '../registry/index.ts';
-import { type CopiedFile, type Removed, removeStaged, stagedIn } from '../writing/index.ts';
+import { type CopiedFile, removeStaged, stagedIn } from '../writing/index.ts';
 
 /** What a publish puts out: the package's Snapshot as published with its text, the peers it is built with and its dist-tag. */
 export type ToPublish = {
@@ -73,16 +73,16 @@ export async function publishedPackageOf(
   }
   const staged = stagedIn(project.directory, files.files, files.copied);
   if (staged.kind === 'failed') {
-    return { put: staged, left: [] };
+    return { put: staged, left: staged.left };
   }
   let put: PublishedPackage['put'];
-  let removed: Removed;
+  let left: readonly string[];
   try {
     put = await builtAndPublished(npm, files.build, stagedPackageOf(staged.folder, toPublish));
   } finally {
-    removed = removeStaged(staged.folder, project.directory);
+    left = removeStaged(staged.folder, project.directory);
   }
-  return { put, left: removed.kind === 'left' ? [removed.line] : [] };
+  return { put, left };
 }
 
 function stagedPackageOf(folder: string, toPublish: ToPublish): StagedPackage {
@@ -135,7 +135,7 @@ async function stagedFilesOf(
 /** A Definitions Package's files: its own as `npm pack` lists them, with its package.json and `snapshot.json` written over. */
 async function definitionsFilesOf(
   npm: NpmPlace,
-  { scope, manifest: source }: Pick<Project, 'scope' | 'manifest'>,
+  { directory, scope, manifest: source }: Pick<Project, 'directory' | 'scope' | 'manifest'>,
   { published, text, peers }: DefinitionsToStage,
 ): Promise<StagedFiles | Failed> {
   const manifest = definitionsManifestOf(source, published, { scope, peers });
@@ -146,7 +146,7 @@ async function definitionsFilesOf(
   if (packed.kind === 'failed') {
     return packed;
   }
-  const copied = packed.paths.map((path) => ({ from: join(npm.directory, path), path }));
+  const copied = packed.paths.map((path) => ({ from: join(directory, path), path }));
   const files = [manifest.file, { path: packagePaths.snapshot, text }];
   return { kind: 'files', files, copied, build: 'by-author' };
 }
