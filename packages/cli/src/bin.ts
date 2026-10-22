@@ -17,7 +17,7 @@ type Parsed =
   | { readonly kind: 'usage'; readonly exit: Exit };
 
 /** Reads the arguments; `--out <dir>` and `--json` are the options, any other a usage error. */
-function parsed(args: readonly string[]): Parsed {
+function calledOf(args: readonly string[]): Parsed {
   const { positionals, tokens, values } = parseArgs({
     args: [...args],
     allowPositionals: true,
@@ -35,7 +35,9 @@ function parsed(args: readonly string[]): Parsed {
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return { kind: 'usage', exit: usageError('--out takes a folder') };
   }
-  if (json !== undefined && json !== true) {
+  const isValuedJson = (token: (typeof tokens)[number]) =>
+    token.kind === 'option' && token.name === 'json' && token.value !== undefined;
+  if (tokens.some(isValuedJson)) {
     return { kind: 'usage', exit: usageError('--json takes no value') };
   }
   const output: Output = json === true ? 'json' : 'lines';
@@ -45,7 +47,7 @@ function parsed(args: readonly string[]): Parsed {
 
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */
 async function exitOf(args: readonly string[]): Promise<Exit> {
-  const read = parsed(args);
+  const read = calledOf(args);
   if (read.kind === 'usage') {
     return read.exit;
   }

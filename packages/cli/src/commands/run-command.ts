@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
 import type { Run } from '../project/index.ts';
 import { check, type Output } from './check.ts';
@@ -7,6 +8,9 @@ import { generate } from './generate.ts';
 import { init } from './init.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
 import { verify } from './verify.ts';
+
+/** The package folder of the CLI, where its sources or its build sit, so a throw names the file in it. */
+const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
   'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json]';
@@ -25,7 +29,7 @@ export function usageError(message: string): Exit {
 
 /** A throw, which is a bug of cf-loom, as the tooling error that says so, in the output the command prints. */
 export function crashedExitOf(thrown: unknown, output: Output): Exit {
-  const exit = toolingError(`cf-loom failed: ${oneLineOf(thrown, import.meta.dirname)}`);
+  const exit = toolingError(`cf-loom failed: ${oneLineOf(thrown, packageRoot)}`);
   switch (output) {
     case 'lines':
       return exit;

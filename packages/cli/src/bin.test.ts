@@ -1367,6 +1367,22 @@ const aDefinitionsRoot: Files = {
   ].join('\n'),
 };
 
+/** The Definitions Package `@org/definitions`, with a Rejection, a Guard and a shared schema. */
+const aDefinitionsRootOfEverySite: Files = {
+  'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+  'src/definitions/index.ts': [
+    "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+    "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
+    'export const money = z.object({ amount: z.number() });',
+    'export const definitions = defineDefinitions({',
+    "  name: 'definitions', guards: [apiKey], schemas: { money }, rejections: [gone],",
+    '});',
+    '',
+  ].join('\n'),
+};
+
 /** The Application `@org/web-admin`, whose root lists no Dependency. */
 const anApplicationRoot: Files = {
   'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
@@ -1723,6 +1739,75 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     ]);
   });
 
+  test.for([
+    ['U+2028', '\\u2028'],
+    ['U+2029', '\\u2029'],
+    ['U+0085', '\\u0085'],
+  ] as const)(
+    'a field key holding %s is written escaped, so no reader splits the line there',
+    async ([, sequence], { lab }) => {
+      const changed = await aChangedProject(lab, {
+        before: aRoot({ body: `z.object({ ok: z.boolean(), 'odd${sequence}key': z.number() })` }),
+        after: aRoot(),
+      });
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      const key = `"odd${sequence}key"`;
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `endpoints.GET /ping schema field-removed at success.body.fields.${key} (success): ${approval}`,
+        '',
+      ]);
+    },
+  );
+
+  test.for([
+    ['U+2028', '\\u2028'],
+    ['U+2029', '\\u2029'],
+    ['U+0085', '\\u0085'],
+  ] as const)(
+    'an enum value holding %s is written escaped, so no reader splits the line there',
+    async ([, sequence], { lab }) => {
+      const body = (values: string) => `z.object({ kind: z.enum([${values}]) })`;
+      const changed = await aChangedProject(lab, {
+        before: aRoot({ body: body("'a'") }),
+        after: aRoot({ body: body(`'a', 'b${sequence}c'`) }),
+      });
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      const change = 'endpoints.GET /ping schema value-added at success.body.fields.kind (success)';
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `${change} value="b${sequence}c" enum=closed: ${approval}`,
+        '',
+      ]);
+    },
+  );
+
+  test.for(['codes', 'guards', 'schemas'] as const)(
+    'a Baseline whose %s hold a name with a line break is written as JSON, so the Change stays on one line',
+    async (section, { lab }) => {
+      const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+      const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+      const [declared] = Object.values(snapshot[section]);
+      const more = { [section]: { ...snapshot[section], 'odd\nname': declared } };
+      const served = servedAs('@org/definitions', publishedAs(project, '1.0.0', more));
+
+      const { ran } = await checkedAgainst(lab, { project, served });
+
+      const approval = 'Breaking, needs a Breaking Change Approval';
+      expect(ran.stdout.split('\n')).toEqual([
+        'Checked against @org/definitions@1.0.0',
+        `${section}."odd\\nname" removed: ${approval}`,
+        '',
+      ]);
+    },
+  );
+
   test('a Change that needs a Breaking Change Approval exits 2, saying how many', async ({
     lab,
   }) => {
@@ -1951,12 +2036,24 @@ describe('cf-loom', () => {
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
   });
 
-  test('a throw is a tooling error that says cf-loom failed, never a stack trace', () => {
+  test.for([
+    ['--json=false', '--json'],
+    ['--json=true', '--json'],
+    ['--json', '--json=false'],
+  ] as const)('--json takes no value, however often it is given: %s %s', ([first, second]) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', first, second);
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+  });
+
+  test('a throw is a tooling error that says cf-loom failed and where in cf-loom, never a stack trace', () => {
     const ran = cfLoomInRemovedFolder('generate');
 
     expect(ran.status).toBe(3);
     expect(ran.stdout).toBe('');
-    expect(ran.stderr).toMatch(/^cf-loom failed: ENOENT[^\n]*\n$/);
+    expect(ran.stderr).toMatch(/^cf-loom failed: \S+:\d+: ENOENT[^\n]*\n$/);
   });
 
   test('check --json writes the document of a throw too, and stderr keeps its line', () => {
@@ -1964,7 +2061,7 @@ describe('cf-loom', () => {
 
     const errors = ran.stderr.trimEnd().split('\n');
     expect(ran.status).toBe(3);
-    expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: ENOENT/)]);
+    expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: \S+:\d+: ENOENT/)]);
     expect(ran.stdout.split('\n')).toHaveLength(2);
     expect(JSON.parse(ran.stdout)).toEqual({ status: 3, errors });
   });

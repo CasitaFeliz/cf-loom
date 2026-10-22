@@ -21,7 +21,7 @@ export type Ending = {
   readonly stderr: readonly string[];
 };
 
-/** What a Change says apart from its class: its site, its kinds, and the path and Position of a schema. */
+/** What a Change says apart from its class: its site, its kinds, and the path and Position of a Difference that has them. */
 export type ChangeParts = {
   readonly site: string;
   readonly difference: string;
@@ -32,6 +32,9 @@ export type ChangeParts = {
 
 /** What a path segment or a text may be on a Change line without quotes. */
 const plainToken = /^[\w@/{}$-]+$/;
+
+/** The characters besides the ones JSON escapes that some readers end a line at: NEL, LS and PS. */
+const lineEndings = /[\u0085\u2028\u2029]/g;
 
 /** How `check` ends for these Changes: Not allowed fails, then a needed Approval, else done. */
 export function endingOf(changes: readonly Change[]): Ending {
@@ -59,13 +62,13 @@ export function siteOf(site: ChangeSite): string {
     case 'command':
       return `commands.${site.identity}`;
     case 'code':
-      return `codes.${site.code}`;
+      return `codes.${tokenOf(site.code)}`;
     case 'subscription':
-      return `subscriptions.${site.name}`;
+      return `subscriptions.${tokenOf(site.name)}`;
     case 'shared-schema':
-      return `schemas.${site.name}`;
+      return `schemas.${tokenOf(site.name)}`;
     case 'guard':
-      return `guards.${site.name}`;
+      return `guards.${tokenOf(site.name)}`;
   }
 }
 
@@ -86,16 +89,23 @@ export function partsOf(change: Change): ChangeParts {
     site: siteOf(change.site),
     difference: difference.kind,
     shape: difference.kind === 'schema' ? difference.shape.kind : null,
-    at: 'at' in difference ? locationText(difference.at) : null,
+    at: 'at' in difference ? locationTextOf(difference.at) : null,
     position: 'position' in difference ? difference.position : null,
   };
 }
 
 /** A text as it stands on a Change line: itself when plain, else as JSON, so it never splits the line. */
 export function tokenOf(text: string): string {
-  return plainToken.test(text) ? text : JSON.stringify(text);
+  return plainToken.test(text) ? text : jsonTextOf(text);
 }
 
-function locationText(at: Path): string {
+/** A value as JSON that no reader splits into lines: the line endings JSON leaves as they are, written as escapes. */
+export function jsonTextOf(value: unknown): string {
+  const escaped = (character: string) =>
+    `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
+  return JSON.stringify(value).replace(lineEndings, escaped);
+}
+
+function locationTextOf(at: Path): string {
   return locationOf(at.map((segment) => tokenOf(String(segment))));
 }

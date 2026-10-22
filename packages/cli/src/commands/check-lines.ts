@@ -1,5 +1,5 @@
 import type { Change } from '@cf-loom/contract/internal';
-import { type Checked, type Ending, partsOf, reasonOf, tokenOf } from './checked.ts';
+import { type Checked, type Ending, jsonTextOf, partsOf, reasonOf, tokenOf } from './checked.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
 const jsonFields = new Set(['value']);
@@ -27,7 +27,7 @@ function fieldsOf({ difference }: Change): string[] {
 
 function valueTextOf(name: string, value: unknown): string {
   if (jsonFields.has(name)) {
-    return JSON.stringify(value);
+    return jsonTextOf(value);
   }
   return typeof value === 'string' ? tokenOf(value) : String(value);
 }

@@ -57,7 +57,7 @@ Each command prints one line per thing it did or found, never a stack trace:
 | `package` | `Wrote <dir>` |
 | `check` | `Checked against <package>@<version>`, then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is Not allowed or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it`, or `<package> has no Baseline: it has only prereleases, the highest <version>` |
 
-A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, from the tables below; the path and Position of a schema; and every other field of the Difference and of its shape, in the order of the tables, as `name=value`. A `value` is written as JSON, so `1` and `"1"` differ. Any other path segment or text that is not made of letters, digits and `_ @ / { } $ -` is written as JSON too (`"two words"`, `"two\nlines"`), so a key with a space or a line break never splits the line. `<site>` is one of `endpoints.<identity>`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`, and `<class>` is one of `Breaking, needs a Breaking Change Approval`, `Breaking, needs no Approval`, `Additive`, `Neutral` or `Not allowed`:
+A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, from the tables below; the path and Position of a Difference that has them; and every other field of the Difference and of its shape, in the order of the tables, as `name=value`. A `value` is written as JSON, so `1` and `"1"` differ. Any other path segment or text that is not made of ASCII letters, digits and `_ @ / { } $ -` is written as JSON too (`"two words"`, `"two\nlines"`), so a key with a space or a line break never splits the line. `<site>` is one of `endpoints.<identity>`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`, and `<class>` is one of `Breaking, needs a Breaking Change Approval`, `Breaking, needs no Approval`, `Additive`, `Neutral` or `Not allowed`:
 
 ```
 endpoints.GET /orders/{} schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval
@@ -65,7 +65,7 @@ endpoints.GET /orders/{} renamed from=getOrder to=fetchOrder visibility=public: 
 commands.ChargeCard@1 retired: Breaking, needs no Approval
 ```
 
-The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success`, `message` or `every` (a shared schema, judged in all three), and the kind of its shape:
+The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success`, `message` or `every` (a shared schema, judged in all three), and the kind of its shape; a `body-added` or `body-removed` carries `at` and a `position` of `input` or `success`; a `header-refuses-text` carries `at`:
 
 | Kind | Fields | COMPATIBILITY.md |
 | --- | --- | --- |
@@ -88,12 +88,12 @@ The kinds of a Difference, and the fields it carries besides the ones the line h
 | `schema` | the shape's | the shape kinds below, in the tables of [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields), [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions), [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints) and [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data) |
 | `removed` |  | [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): remove a shared schema, Guard or Rejection from a Definitions Package |
 | `status-changed` | `from`, `to` | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): change a Success's status; [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): change the HTTP status of a code |
-| `body-added` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): add an Input body, or a body where a Success had none |
-| `body-removed` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): remove an Input body, or the body of a Success |
+| `body-added` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): add an Input body, or a body where a Success had none; [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): a body where a Rejection had none, by the Success rules |
+| `body-removed` |  | [Bodies, Success status and headers](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#bodies-success-status-and-headers): remove an Input body, or the body of a Success; [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): the body of a Rejection, by the Success rules |
 | `param-renamed` | `from`, `to` | [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query): rename a path param |
 | `header-refuses-text` |  | [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query): add an optional Input header whose schema refuses some text |
-| `rejection-added` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): add a Rejection to an Endpoint |
-| `rejection-removed` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): remove a Rejection from an Endpoint |
+| `rejection-added` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): add a Rejection to an Endpoint; [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#guards): a Guard gaining a Rejection |
+| `rejection-removed` | `code` | [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections): remove a Rejection from an Endpoint; [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#guards): a Guard losing a Rejection, by the Rejection rules |
 
 The kinds of a shape, the `<shape>` of a `schema` Difference:
 
@@ -160,9 +160,9 @@ Exit 3, a tooling error:
 | `<package> is not installed: install it to list it`, `<package> has no version in its package.json`, `<package> cannot be loaded: …`, for a listed Definitions Package | `generate`, `verify`, `package`, `check` |
 | `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package`, `check` |
 | `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package`, `check` |
-| `npm cannot be run: <reason>: cf-loom reads the registry through npm, which must be on PATH`, `<npm call> failed (<code>: <summary>)`, `<npm call> failed: <first line npm printed on stderr, or exit status <n>>`, `<npm call> printed no JSON: <line>`, `<npm call> printed more than 16 MiB`, `<npm call> did not finish within 10 minutes`, `<npm call> was stopped by <signal>`, where `<npm call>` is `npm view <package>`, `npm view <package>@<version>`, `npm pack <package>@<version>`, `npm config get <key>` or `npm whoami` | `check` |
+| `npm cannot be run: <reason>: cf-loom reads the registry through npm, which must be on PATH`, `<npm call> failed (<code>: <summary>)`, `<npm call> failed: <first line npm printed on stderr, or exit status <n>>`, `<npm call> printed no JSON: <line>`, `<npm call> printed more than 16 MiB`, `<npm call> did not finish within 10 minutes`, `<npm call> was stopped by <signal>`, where `<npm call>` is `npm view <package>`, `npm view <package>@<version>`, `npm pack <package>@<version>` or `npm config get <key>` | `check` |
 | `<package> was unpublished: <summary>; its Baseline is gone, so nothing can be checked against it`, `<package> lists no version, or has no latest dist-tag, which npm view needs to list them`, `<package> lists <key>, which is no semantic version` | `check` |
-| `<package> is not in <registry>, and npm has no login there it accepts (<reason>): a package your login cannot read looks unpublished`, `npm did not say which registry serves <scope>`, `npm config get <key> failed: npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL` | `check` |
+| `<package> is not in <registry>, and npm has no login there it accepts (<reason>): a package your login cannot read looks unpublished`, `npm did not say which registry serves <scope>`, `npm config get <key> failed: npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL`, where `<reason>` is `<code>: <summary>`, as npm refused `npm whoami`, `npm whoami printed no user name`, or a failure of `npm whoami` worded as the `<npm call>` lines above say | `check` |
 | `npm view <spec> printed no metadata`, `<spec> has no cfLoom: it was not published by cf-loom publish`, `<spec> is the package of kind <kind>, not <kind>`, `<spec> has peerDependencies that are no map of ranges`, `<spec> has no tarball`, `<spec> has no sha512 integrity, so its tarball cannot be verified`, where `<spec>` is `<package>@<version>` | `check` |
 | `npm pack <spec> printed no tarball`, `<spec>'s tarball does not match the sha512 integrity npm view lists`, `<spec> has no snapshot.json`, `<spec> has more than one snapshot.json`, `<spec>'s snapshot.json is no UTF-8 text` | `check` |
 | `<spec>'s tarball cannot be read: <reason>`, where `<reason>` is `is larger than 64 MiB`, `is larger than 64 MiB unpacked`, `is no gzip`, `is no tar archive`, `has data after its end`, `has a tar entry npm does not write`, `has a pax header npm does not write`, `has a pax header with a byte beyond ASCII`, `has a path npm does not write`, `has a path that is not printable ASCII, or that holds a ":" or a "\"`, `has a folder named snapshot.json`, or the message of the error that made the file unreadable | `check` |
@@ -181,7 +181,7 @@ Exit 3, a tooling error:
 | `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package` |
 | `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package` |
 | `subscriptions.<name> is <name in code> in code, as <other> is: rename the Subscription`, where `<other>` is another Subscription, a Command's Message Version, an own Event's or Command's Reader, a def or an import of `src/readers.generated.ts` | `generate`, `verify` |
-| `cf-loom failed: <what was thrown>`, for a throw, which is a bug of cf-loom: with `check --json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
+| `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `check --json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
 
 Exit 3, a usage error, each followed on the same line by the usage:
 
@@ -214,8 +214,8 @@ type CheckJson =
         site: string;                     // as in the line, e.g. "endpoints.GET /orders/{}"
         difference: string;               // the Difference kind
         shape: string | null;             // the ShapeDifference kind of a schema difference
-        at: string | null;                // the path of a schema Difference
-        position: string | null;          // the Position of a schema Difference
+        at: string | null;                // the path of a Difference that has one: schema, body-added, body-removed, header-refuses-text
+        position: string | null;          // the Position of a Difference that has one: schema, body-added, body-removed
         class: 'breaking' | 'additive' | 'neutral' | 'not-allowed';
         approval: 'needed' | 'not-needed' | null;
       }[];
