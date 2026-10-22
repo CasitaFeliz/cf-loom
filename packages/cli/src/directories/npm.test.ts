@@ -153,6 +153,19 @@ describe('npm', () => {
     },
   );
 
+  test.each(['\u0007', '\u001b[0m'])(
+    'a token of only control characters (%j) fails as no token and makes no request',
+    async (control) => {
+      const registry = await aRegistry();
+      const directory = npm({ org: 'org', token: control, registry: registry.url });
+
+      const listed = await directory.list();
+
+      expect(messageOf(listed)).toContain('has no token');
+      expect(registry.requests).toEqual([]);
+    },
+  );
+
   test('a token that is not a string fails as no token and makes no request', async () => {
     const registry = await aRegistry();
     const directory = npm({ org: 'org', token: 42 as unknown as string, registry: registry.url });

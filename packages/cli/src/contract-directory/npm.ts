@@ -52,7 +52,7 @@ async function listOrganization(
     return failed('npm({ org }) has an organization that cannot be put in a URL');
   }
   const secret = typeof token === 'string' ? token.trim() : '';
-  if (secret === '') {
+  if (oneLine(secret) === '') {
     return failed(
       `npm({ org: '${org}' }) has no token, and npm lists only public packages without one`,
     );
