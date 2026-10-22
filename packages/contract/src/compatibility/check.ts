@@ -82,28 +82,21 @@ function siteChangesOf(sites: readonly SiteDifferences[]): readonly Change[] {
   return sites.flatMap(({ site, differences }) => changesAt(site, differences));
 }
 
-/** What the rules judging a Service's Endpoints read of the two Snapshots, computed once. */
-type EndpointContext = {
-  readonly defs: BothDefs;
-  readonly paths: EndpointPaths;
-};
-
 function endpointChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const context: EndpointContext = {
-    defs: bothDefsOf(baseline, proposed),
-    paths: endpointPathsOf(baseline, proposed),
-  };
+  const defs = bothDefsOf(baseline, proposed);
+  const paths = endpointPathsOf(baseline, proposed);
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    endpointPairChangesOf(pair, context),
+    endpointPairChangesOf(pair, defs, paths),
   );
 }
 
 function endpointPairChangesOf(
   pair: Pair<EndpointSnapshot>,
-  context: EndpointContext,
+  defs: BothDefs,
+  paths: EndpointPaths,
 ): readonly Change[] {
   const visibility = siteVisibilityOf(pair);
   const site: ChangeSite = { kind: 'endpoint', identity: pair.identity, visibility };
@@ -112,39 +105,35 @@ function endpointPairChangesOf(
     lifecycleDifferenceOf(pair),
     visibilityDifferenceOf(pair),
     renameDifferenceOf(pair),
-    ...shadowingDifferencesOf(pair, context.paths),
-    ...endpointDifferencesOf(pair, context.defs),
+    ...shadowingDifferencesOf(pair, paths),
+    ...endpointDifferencesOf(pair, defs),
   ]);
 }
-
-/** What the rules judging a Service's Events read of the two Snapshots, computed once. */
-type EventContext = {
-  readonly defs: BothDefs;
-  readonly history: MessageHistory;
-};
 
 function eventChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const context: EventContext = {
-    defs: bothDefsOf(baseline, proposed),
-    history: messageHistoryOf(baseline, proposed, 'event'),
-  };
+  const defs = bothDefsOf(baseline, proposed);
+  const history = messageHistoryOf(baseline, proposed, 'event');
   return pairsOf(baseline.events, proposed.events).flatMap((pair) =>
-    eventPairChangesOf(pair, context),
+    eventPairChangesOf(pair, defs, history),
   );
 }
 
-function eventPairChangesOf(pair: Pair<EventSnapshot>, context: EventContext): readonly Change[] {
+function eventPairChangesOf(
+  pair: Pair<EventSnapshot>,
+  defs: BothDefs,
+  history: MessageHistory,
+): readonly Change[] {
   const visibility = siteVisibilityOf(pair);
   const site: ChangeSite = { kind: 'event', identity: pair.identity, visibility };
   return changesAt(site, [
     presenceDifferenceOf(pair),
-    ...historyDifferencesOf(pair, context.history),
+    ...historyDifferencesOf(pair, history),
     lifecycleDifferenceOf(pair),
     visibilityDifferenceOf(pair),
-    ...messageBodyDifferencesOf(pair, context.defs),
+    ...messageBodyDifferencesOf(pair, defs),
   ]);
 }
 

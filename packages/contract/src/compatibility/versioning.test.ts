@@ -42,13 +42,8 @@ const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
 const subscription: ChangeSite = { kind: 'subscription', name: 'notify-on-placed' };
 const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
 
-function aBreakingChange(site: ChangeSite): Change {
-  return {
-    site,
-    difference: { kind: 'retired' },
-    class: 'breaking',
-    approval: 'needed',
-  };
+function aBreakingChange(site: ChangeSite, approval: 'needed' | 'not-needed' = 'needed'): Change {
+  return { site, difference: { kind: 'retired' }, class: 'breaking', approval };
 }
 
 function anAdditiveChange(site: ChangeSite): Change {
@@ -271,7 +266,7 @@ describe('versionBumpOf', () => {
   });
 
   test('a Command’s Breaking Change bumps patch: a Command is always Private', () => {
-    const report = aReport([aBreakingChange(command), anAdditiveChange(command)]);
+    const report = aReport([aBreakingChange(command, 'not-needed'), anAdditiveChange(command)]);
 
     const bump = versionBumpOf(report, unmoved);
 
