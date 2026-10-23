@@ -1,5 +1,6 @@
 import type { $ZodIssue } from 'zod/v4/core';
 import type { Path } from '../walker/index.ts';
+import { locationOf } from './failures.ts';
 
 /** One place where a decoded value breaks what its definition promises, and what it breaks. */
 export type Problem = { readonly at: Path; readonly reason: string };
@@ -22,4 +23,9 @@ export function problemOf(issues: readonly $ZodIssue[], definer: string): Proble
     return { at, reason };
   }
   return { at, reason: issue.message };
+}
+
+/** A problem on one line, where it sits first, as every tool that reports a decoded value words it. */
+export function problemLineOf(problem: Problem): string {
+  return `${locationOf(problem.at)} ${problem.reason}`;
 }

@@ -5,8 +5,8 @@ import {
   type SnapshotFormat,
   snapshotFormats,
 } from '../snapshot/index.ts';
+import { type Problem, problemOf } from '../validation/index.ts';
 import { ownOf } from '../written/index.ts';
-import { type Problem, problemOf } from './problem.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
 

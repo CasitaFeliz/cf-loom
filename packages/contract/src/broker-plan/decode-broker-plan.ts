@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import type { $ZodRawIssue } from 'zod/v4/core';
-import { type Problem, problemOf } from '../decoding/index.ts';
-import { locationOf } from '../validation/index.ts';
+import { type Problem, problemLineOf, problemOf } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
-import { isBrokerPrefix, prefixedNameOf, prefixedSubjectOf } from '../wire/index.ts';
+import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
 
 /** A value read as a broker plan: the plan, or the first place it breaks the shape `cf-loom broker-plan --json` prints. */
@@ -60,40 +59,41 @@ export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {
-  return { kind: 'malformed', reason: `${locationOf(problem.at)} ${problem.reason}` };
+  return { kind: 'malformed', reason: problemLineOf(problem) };
 }
 
-/** A name or subject of the plan, and what a prefixed plan must start it with. */
-type Carrier = { readonly at: Path; readonly text: string; readonly start: string };
+/** A name or subject of the plan, where it sits and whether it carries the plan's prefix. */
+type Carrier = { readonly at: Path; readonly isCarried: boolean };
 
 function uncarriedProblemOf(brokerPlan: BrokerPlan): Problem | undefined {
-  if (brokerPlan.prefix === null) {
+  const { prefix } = brokerPlan;
+  if (prefix === null) {
     return undefined;
   }
-  const uncarried = carriersOf(brokerPlan, brokerPlan.prefix).find(
-    (carrier) => !carrier.text.startsWith(carrier.start),
-  );
+  const uncarried = carriersOf(brokerPlan, prefix).find((carrier) => !carrier.isCarried);
   if (uncarried === undefined) {
     return undefined;
   }
-  return { at: uncarried.at, reason: `does not start with ${uncarried.start}` };
+  return { at: uncarried.at, reason: `does not carry the prefix ${prefix}` };
 }
 
 function carriersOf(brokerPlan: BrokerPlan, prefix: string): readonly Carrier[] {
-  const name = prefixedNameOf(prefix, '');
-  const subject = prefixedSubjectOf(prefix, '');
   const carriers: Carrier[] = [];
-  for (const [streamName, { subjects }] of Object.entries(brokerPlan.streams)) {
-    carriers.push({ at: ['streams', streamName], text: streamName, start: name });
-    for (const [index, text] of subjects.entries()) {
-      carriers.push({ at: ['streams', streamName, 'subjects', index], text, start: subject });
+  for (const [name, { subjects }] of Object.entries(brokerPlan.streams)) {
+    carriers.push({ at: ['streams', name], isCarried: isPrefixedName(prefix, name) });
+    for (const [index, subject] of subjects.entries()) {
+      const at = ['streams', name, 'subjects', index];
+      carriers.push({ at, isCarried: isPrefixedSubject(prefix, subject) });
     }
   }
-  for (const [consumerName, consumer] of Object.entries(brokerPlan.consumers)) {
-    const at = ['consumers', consumerName];
-    carriers.push({ at, text: consumerName, start: name });
-    carriers.push({ at: [...at, 'stream'], text: consumer.stream, start: name });
-    carriers.push({ at: [...at, 'subject'], text: consumer.subject, start: subject });
+  for (const [name, consumer] of Object.entries(brokerPlan.consumers)) {
+    const at = ['consumers', name];
+    carriers.push({ at, isCarried: isPrefixedName(prefix, name) });
+    carriers.push({ at: [...at, 'stream'], isCarried: isPrefixedName(prefix, consumer.stream) });
+    carriers.push({
+      at: [...at, 'subject'],
+      isCarried: isPrefixedSubject(prefix, consumer.subject),
+    });
   }
   return carriers;
 }

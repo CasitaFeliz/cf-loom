@@ -181,27 +181,27 @@ describe('reading a broker plan', () => {
     [
       'a stream name',
       aPlanWithStream({}, 'orders-service'),
-      'streams.orders-service does not start with staging_',
+      'streams.orders-service does not carry the prefix staging',
     ],
     [
       'a stream subject',
       aPlanWithStream({ subjects: [orderCreated, 'orders-service.event.OrderCreated.v2'] }),
-      `streams.${ordersStream}.subjects.1 does not start with staging.`,
+      `streams.${ordersStream}.subjects.1 does not carry the prefix staging`,
     ],
     [
       'a durable consumer name',
       aPlanWithConsumer({}, 'billing-service_draft-invoice'),
-      'consumers.billing-service_draft-invoice does not start with staging_',
+      'consumers.billing-service_draft-invoice does not carry the prefix staging',
     ],
     [
       'a durable consumer stream',
       aPlanWithConsumer({ stream: 'orders-service' }),
-      `consumers.${invoiceConsumer}.stream does not start with staging_`,
+      `consumers.${invoiceConsumer}.stream does not carry the prefix staging`,
     ],
     [
       'a durable consumer subject',
       aPlanWithConsumer({ subject: 'orders-service.event.OrderCreated.v1' }),
-      `consumers.${invoiceConsumer}.subject does not start with staging.`,
+      `consumers.${invoiceConsumer}.subject does not carry the prefix staging`,
     ],
   ])(
     'a prefixed plan whose %s does not carry the prefix is malformed, naming it',

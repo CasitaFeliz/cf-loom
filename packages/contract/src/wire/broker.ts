@@ -71,6 +71,16 @@ export function prefixedNameOf(prefix: string | null, name: string): string {
   return prefix === null ? name : `${prefix}_${name}`;
 }
 
+/** Whether a name carries the prefix `prefixedNameOf` puts in front of it; any name does without a prefix. */
+export function isPrefixedName(prefix: string | null, name: string): boolean {
+  return name.startsWith(prefixedNameOf(prefix, ''));
+}
+
+/** Whether a subject carries the prefix `prefixedSubjectOf` puts in front of it; any subject does without a prefix. */
+export function isPrefixedSubject(prefix: string | null, subject: string): boolean {
+  return subject.startsWith(prefixedSubjectOf(prefix, ''));
+}
+
 /** Whether a transport header would take the name of one cf-loom sets on every Message, in any case. */
 export function isReservedHeader(name: string): boolean {
   const lowered = name.toLowerCase();
