@@ -197,8 +197,8 @@ describe('the Wire protocol over the broker', () => {
     expect(fits).toEqual([...uncarriedNames.map(() => 'uncarried-name'), 'travels']);
   });
 
-  test('a transport header value NATS would change is refused', () => {
-    const changedValues = [
+  test('a transport header value NATS would not carry as given is refused', () => {
+    const uncarriedValues = [
       'a\rb',
       'a\nb',
       ' x',
@@ -214,12 +214,12 @@ describe('the Wire protocol over the broker', () => {
     ];
     const carriedValues = ['a b', 'a\tb', '日本 café', 'a\u0001b', ''];
 
-    const fits = [...changedValues, ...carriedValues].map((value) =>
+    const fits = [...uncarriedValues, ...carriedValues].map((value) =>
       transportHeaderFitOf('x-note', value),
     );
 
     expect(fits).toEqual([
-      ...changedValues.map(() => 'uncarried-value'),
+      ...uncarriedValues.map(() => 'uncarried-value'),
       ...carriedValues.map(() => 'travels'),
     ]);
   });
