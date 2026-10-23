@@ -20,9 +20,10 @@ import {
   dropDurable,
   durableInfoOf,
 } from '../../test/durables.ts';
+import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
-import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
+import { type ConsumedFault, messaging } from '../index.ts';
 import { type BrokerPlan, jetstream } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
@@ -68,14 +69,14 @@ function aPrefix(): string {
   return `c-${tests}`;
 }
 
-/** The Service’s own `connect`: opens a connection to the test server and closes it when the test ends. */
-function aConnect() {
+/** The Service’s own `connect`: opens a connection to the test server, with the methods `replacing` gives, and closes it when the test ends. */
+function aConnect(replacing?: Replacing) {
   const opened: NatsConnection[] = [];
   const connectService = async (): Promise<NatsConnection> => {
     const connection = await connect({ servers: server.url });
     opened.push(connection);
     onTestFinished(() => connection.close());
-    return connection;
+    return replacing === undefined ? connection : withMethods(connection, replacing(connection));
   };
   return { connect: connectService, opened };
 }
@@ -90,6 +91,9 @@ function anOrders(prefix: string) {
     chargeDurable: `${prefix}_orders-service_command_ChargeCard_v1`,
   };
 }
+
+/** The methods of a NATS connection a test replaces, given the connection they are replaced on. */
+type Replacing = (connection: NatsConnection) => Partial<NatsConnection>;
 
 type Orders = ReturnType<typeof anOrders>;
 
@@ -125,15 +129,20 @@ function handlersOf(
   };
 }
 
-/** A messaging over `jetstream()` on the test server, closed when the test ends. */
+/** A messaging over `jetstream()` on the test server, closed when the test ends, with the connection it opened. */
 async function aMessaging(
   prefix: string,
-  onServiceFault: (fault: ConsumedFault) => void = () => undefined,
-): Promise<Messaging<typeof contract>> {
-  const broker = jetstream({ connect: aConnect().connect, prefix });
+  settings: {
+    readonly onServiceFault?: (fault: ConsumedFault) => void;
+    readonly replacing?: Replacing;
+  } = {},
+) {
+  const service = aConnect(settings.replacing);
+  const broker = jetstream({ connect: service.connect, prefix });
+  const onServiceFault = settings.onServiceFault ?? (() => undefined);
   const opened = await messaging(contract, broker, { onServiceFault });
   onTestFinished(() => opened.close());
-  return opened;
+  return { ...opened, connections: service.opened };
 }
 
 /** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
@@ -613,8 +622,10 @@ describe('consuming over jetstream()', () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
-    const orders = await aMessaging(prefix, () => {
-      throw new Error('the hook is down');
+    const orders = await aMessaging(prefix, {
+      onServiceFault: () => {
+        throw new Error('the hook is down');
+      },
     });
     const throwingOnce = ({ meta }: Received) => {
       if (meta.deliveryCount === 1) {
