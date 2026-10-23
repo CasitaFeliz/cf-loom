@@ -604,6 +604,30 @@ describe('consuming over jetstream()', () => {
     expect(seenOf(overMemory)).toEqual(given);
   });
 
+  test('a Message whose broker headers take exactly the bytes JetStream stores reaches the Handler with its Fact id and transport headers as given, over jetstream() as over memory()', async () => {
+    const given = { factId: 'o-1', headers: { 'x-pad': 'p'.repeat(65_458) } };
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const overJetstream: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(overJetstream));
+    const overMemory: Received[] = [];
+    const inMemory = await messaging(contract, memory());
+    onTestFinished(() => inMemory.close());
+    await inMemory.consume(handlersOf(overMemory));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+
+    await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
+    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    const seenOf = (received: Received[]) => {
+      return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
+    };
+    expect(seenOf(overJetstream)).toEqual(given);
+    expect(seenOf(overMemory)).toEqual(given);
+  });
+
   test('a header published with several values reaches the Handler as its values joined with ", "', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
