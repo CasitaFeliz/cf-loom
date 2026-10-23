@@ -11,6 +11,7 @@ import {
   isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
+  receivedHeadersOf,
   streamNameOf,
   subjectOf,
 } from '../internal/index.ts';
@@ -183,5 +184,18 @@ describe('the Wire protocol over the broker', () => {
       'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
       'Cf-Loom-Fact-Id': 'o-1:created',
     });
+  });
+
+  test('a Message’s broker headers read back give its broker message id, its Fact id and its transport headers', () => {
+    const message = {
+      messageId: 'OrderCreated.v2:o-1:created',
+      factId: 'o-1:created',
+      headers: { traceparent: '00-abc-def-01' },
+    };
+    const entries = Object.entries(brokerHeadersOf(message));
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({ kind: 'read', ...message });
   });
 });

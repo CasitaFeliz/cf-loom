@@ -36,6 +36,47 @@ export function brokerHeadersOf(message: {
   };
 }
 
+/** A delivered Message's broker headers read back: its ids and transport headers, or the names of the cf-loom headers it lacks. */
+export type ReceivedHeaders =
+  | {
+      readonly kind: 'read';
+      readonly messageId: string;
+      readonly factId: string;
+      readonly headers: Readonly<Record<string, string>>;
+    }
+  | { readonly kind: 'missing'; readonly names: readonly string[] };
+
+/**
+ * The inverse of `brokerHeadersOf`: the ids from `Nats-Msg-Id` and `Cf-Loom-Fact-Id`, an empty one
+ * missing, and every other header as a transport header, the values of a name given several times joined with `, `.
+ */
+export function receivedHeadersOf(
+  entries: readonly (readonly [string, string])[],
+): ReceivedHeaders {
+  const valueByName = joinedByName(entries);
+  const messageId = valueByName.get(brokerMessageIdHeader) ?? '';
+  const factId = valueByName.get(factIdHeader) ?? '';
+  const ids = [
+    [brokerMessageIdHeader, messageId],
+    [factIdHeader, factId],
+  ];
+  const names = ids.filter(([, id]) => id === '').map(([name]) => name);
+  if (names.length > 0) {
+    return { kind: 'missing', names };
+  }
+  const transport = [...valueByName].filter(([name]) => !isReservedHeader(name));
+  return { kind: 'read', messageId, factId, headers: Object.fromEntries(transport) };
+}
+
+function joinedByName(entries: readonly (readonly [string, string])[]): Map<string, string> {
+  const valueByName = new Map<string, string>();
+  for (const [name, value] of entries) {
+    const before = valueByName.get(name);
+    valueByName.set(name, before === undefined ? value : `${before}, ${value}`);
+  }
+  return valueByName;
+}
+
 /** The stream of a Service, named after it: its own Messages travel on it, and a consumer of its Events reads it. */
 export function streamNameOf(service: string): string {
   return service;
