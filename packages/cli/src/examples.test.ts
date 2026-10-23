@@ -90,13 +90,13 @@ const test = baseTest.extend<{ examples: Published }>({
   examples: [
     // biome-ignore lint/correctness/noEmptyPattern: vitest reads what a fixture needs from this pattern
     async ({}, use) => {
-      const folder = mkdtempSync(join(tmpdir(), 'cf-loom-examples-'));
       const registry = await aRegistry();
+      const folder = mkdtempSync(join(tmpdir(), 'cf-loom-examples-'));
       try {
         await use(await publishedExamplesIn(folder, registry));
       } finally {
-        await registry.close();
         rmSync(folder, { recursive: true, force: true });
+        await registry.close();
       }
     },
     { scope: 'file' },
