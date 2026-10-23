@@ -219,7 +219,7 @@ describe('the Wire protocol over the broker', () => {
     );
 
     expect(fits).toEqual([
-      ...changedValues.map(() => 'changed-value'),
+      ...changedValues.map(() => 'uncarried-value'),
       ...carriedValues.map(() => 'travels'),
     ]);
   });

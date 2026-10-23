@@ -95,7 +95,7 @@ function refusalOf(name: string, fit: Exclude<TransportHeaderFit, 'travels'>): s
       return `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`;
     case 'uncarried-name':
       return `The transport header name ${JSON.stringify(name)} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`;
-    case 'changed-value':
+    case 'uncarried-value':
       return `The transport header ${name} has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate`;
   }
 }

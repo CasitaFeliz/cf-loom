@@ -120,8 +120,8 @@ export function isPrefixedSubject(prefix: string | null, subject: string): boole
   return subject.startsWith(prefixedSubjectOf(prefix, ''));
 }
 
-/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves, a name NATS cannot carry, or a value NATS would change. */
-export type TransportHeaderFit = 'travels' | 'reserved-name' | 'uncarried-name' | 'changed-value';
+/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves, a name NATS cannot carry, or a value NATS would not carry as given. */
+export type TransportHeaderFit = 'travels' | 'reserved-name' | 'uncarried-name' | 'uncarried-value';
 
 /** How a transport header fares over the Broker, so the core refuses one NATS would act on, refuse or change. */
 export function transportHeaderFitOf(name: string, value: unknown): TransportHeaderFit {
@@ -131,7 +131,7 @@ export function transportHeaderFitOf(name: string, value: unknown): TransportHea
   if (!isCarriedName(name)) {
     return 'uncarried-name';
   }
-  return isCarriedValue(value) ? 'travels' : 'changed-value';
+  return isCarriedValue(value) ? 'travels' : 'uncarried-value';
 }
 
 /** Whether NATS carries a header name: one or more visible ASCII characters but the colon. */
