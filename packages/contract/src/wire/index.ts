@@ -14,6 +14,7 @@ export {
   brokerMessageIdOf,
   durableNameOf,
   isBrokerPrefix,
+  isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
   isReservedHeader,

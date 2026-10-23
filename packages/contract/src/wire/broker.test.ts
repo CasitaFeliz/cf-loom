@@ -6,6 +6,7 @@ import {
   brokerMessageIdOf,
   durableNameOf,
   isBrokerPrefix,
+  isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
   prefixedNameOf,
@@ -223,6 +224,15 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
+  test('a Fact id or broker message id must be a non-empty header value NATS carries unchanged', () => {
+    const refused = ['', ' o-1', 'o-1\n', 'o-1 ', 'o-1\uD800', 1, undefined];
+    const accepted = ['o-1:created', 'pedido ñ\t1'];
+
+    const verdicts = [...refused, ...accepted].map(isIdHeaderValue);
+
+    expect(verdicts).toEqual([...refused.map(() => false), ...accepted.map(() => true)]);
+  });
+
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
     const message = {
       messageId: 'OrderCreated.v2:o-1:created',
@@ -268,6 +278,17 @@ describe('the Wire protocol over the broker', () => {
       { kind: 'missing', names: ['Nats-Msg-Id', 'Cf-Loom-Fact-Id'] },
       { kind: 'missing', names: ['Nats-Msg-Id', 'Cf-Loom-Fact-Id'] },
     ]);
+  });
+
+  test('an id the Fact id’s rule refuses reads as missing', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1 '],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({ kind: 'missing', names: ['Cf-Loom-Fact-Id'] });
   });
 
   test('a header named as one of cf-loom’s own in another case is neither an id nor a transport header', () => {

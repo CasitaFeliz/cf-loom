@@ -167,6 +167,7 @@ export {
   invalidInputRejectionOf,
   invalidInputResponseOf,
   isBrokerPrefix,
+  isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
   isQueryText,

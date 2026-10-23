@@ -57,7 +57,7 @@ export function receivedHeadersOf(
     [brokerMessageIdHeader, messageId],
     [factIdHeader, factId],
   ];
-  const names = ids.filter(([, id]) => id === '').map(([name]) => name);
+  const names = ids.filter(([, id]) => !isIdHeaderValue(id)).map(([name]) => name);
   if (names.length > 0) {
     return { kind: 'missing', names };
   }
@@ -137,6 +137,11 @@ export function transportHeaderFitOf(name: string, value: unknown): TransportHea
 /** Whether NATS carries a header name: one or more visible ASCII characters but the colon. */
 function isCarriedName(name: string): boolean {
   return /^[\x21-\x39\x3b-\x7e]+$/.test(name);
+}
+
+/** Whether a text can be a Fact id or a broker message id: a non-empty header value NATS carries unchanged. */
+export function isIdHeaderValue(text: unknown): text is string {
+  return isCarriedValue(text) && text !== '';
 }
 
 /** Whether NATS carries a header value unchanged: a string with no CR or LF, no whitespace at either end for `trim` and no lone surrogate. */
