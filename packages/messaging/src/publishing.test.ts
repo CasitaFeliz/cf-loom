@@ -225,6 +225,24 @@ describe('publisher.publish', () => {
     },
   );
 
+  test.each([' x', 'x\n', 'x ', 'x\uD800'])(
+    'a header whose value is %j would not arrive as given over NATS: it throws and nothing is sent',
+    async (value) => {
+      const { publisher, published } = await opened();
+
+      const publishing = publisher.publish(
+        'OrderCreated',
+        { v2, v3 },
+        { headers: { 'x-note': value } },
+      );
+
+      await expect(publishing).rejects.toThrow(
+        'The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
+      );
+      expect(published).toEqual([]);
+    },
+  );
+
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();
 

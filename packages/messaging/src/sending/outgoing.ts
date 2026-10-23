@@ -3,6 +3,7 @@ import {
   brokerMessageIdOf,
   jsonBytesOf,
   messageIdentityOf,
+  type TransportHeaderFit,
   transportHeaderFitOf,
 } from '@cf-loom/contract/internal';
 import { checkedMessageBody } from '@cf-loom/handlers/internal';
@@ -78,16 +79,20 @@ export function transportHeadersOf(
 ): Readonly<Record<string, string>> {
   for (const [name, value] of Object.entries(headers)) {
     const fit = transportHeaderFitOf(name, value);
-    if (fit === 'reserved-name') {
-      throw new Error(
-        `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
-      );
-    }
-    if (fit === 'uncarried-name') {
-      const quoted = JSON.stringify(name);
-      const reason = 'it is empty or holds a colon, a space, a control or a non-ASCII character';
-      throw new Error(`The transport header name ${quoted} cannot travel over NATS: ${reason}`);
+    if (fit !== 'travels') {
+      throw new Error(refusalOf(name, fit));
     }
   }
   return { ...headers };
+}
+
+function refusalOf(name: string, fit: Exclude<TransportHeaderFit, 'travels'>): string {
+  switch (fit) {
+    case 'reserved-name':
+      return `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`;
+    case 'uncarried-name':
+      return `The transport header name ${JSON.stringify(name)} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`;
+    case 'changed-value':
+      return `The transport header ${name} has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate`;
+  }
 }
