@@ -56,7 +56,7 @@ export {
   successParts,
   writtenAt,
 } from './parts.ts';
-export { reachedGuardsOf, reachOf } from './reach.ts';
+export { reachedCodesOf, reachedGuardsOf, reachOf } from './reach.ts';
 export {
   attachedGuardOf,
   attachedGuardsOf,

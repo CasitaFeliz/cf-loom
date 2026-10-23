@@ -1,6 +1,7 @@
 import { isLive } from '../declarations/index.ts';
 import { reachedDefsOf, type SchemaNode } from '../walker/index.ts';
-import { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
+import { reachedCodesOf } from '../written/index.ts';
+import { isDeclaredRejection, type ListedRejection, ownRejectionsOf } from './own-rejections.ts';
 import {
   type EndpointTombstone,
   isDeclared,
@@ -30,7 +31,14 @@ export function exportedSnapshotOf(
   const exportedEndpoints = Object.values(endpoints);
   const attached = exportedEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
   const guards = keptOf(snapshot.guards, reachedGuardNamesOf(attached, snapshot.guards));
-  const codes = keptOf(snapshot.codes, reachedCodesOf(exportedEndpoints, guards, snapshot));
+  const reachedCodes = reachedCodesOf(
+    { endpoints: exportedEndpoints, guards: Object.values(guards) },
+    {
+      ownCodesOf: (endpoint) => declaredCodesOf(ownRejectionsOf(endpoint, snapshot)),
+      answeredBy: ({ rejections }) => rejections,
+    },
+  );
+  const codes = keptOf(snapshot.codes, reachedCodes);
   const nodes = [
     ...exportedEndpoints.flatMap(endpointNodesOf),
     ...Object.values(events).map(({ body }) => body),
@@ -62,19 +70,9 @@ function isKeyedExported<Declared extends Exportable>(
   return isDeclared<Declared>(element) && element.visibility !== 'private' && isLive(element);
 }
 
-/**
- * The codes the reached Guards answer and those the Endpoints list themselves, the Standard
- * Rejections' left to `standardRejections`.
- */
-function reachedCodesOf(
-  endpoints: readonly EndpointSnapshot[],
-  guards: ExportedSnapshot['guards'],
-  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
-): ReadonlySet<string> {
-  const guardCodes = Object.values(guards).flatMap(({ rejections }) => rejections);
-  const listed = endpoints.flatMap((endpoint) => ownRejectionsOf(endpoint, snapshot));
-  const endpointCodes = listed.filter(isDeclaredRejection).map(({ code }) => code);
-  return new Set([...guardCodes, ...endpointCodes]);
+/** The codes an Endpoint lists itself, the Standard not-found Rejection left out. */
+function declaredCodesOf(listed: readonly ListedRejection[]): readonly string[] {
+  return listed.filter(isDeclaredRejection).map(({ code }) => code);
 }
 
 function endpointNodesOf({ input, success }: EndpointSnapshot): readonly SchemaNode[] {

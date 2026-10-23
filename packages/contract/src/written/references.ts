@@ -8,7 +8,7 @@ import type {
   LocatedRejection,
   Root,
 } from './located.ts';
-import { reachedGuardsOf } from './reach.ts';
+import { reachedCodesOf, reachedGuardsOf } from './reach.ts';
 import { isPlainObject, listOf, textOf } from './written.ts';
 
 /** What the Guards and Rejections of a root are gathered from. */
@@ -105,7 +105,13 @@ export function codesOf(
     readonly rejections: readonly LocatedRejection[];
   },
 ): readonly LocatedCode[] {
-  const reached = reachedCodesOf(endpoints, gathered.guards);
+  const reached = reachedCodesOf(
+    { endpoints, guards: gathered.guards.filter((located) => located.reached) },
+    {
+      ownCodesOf: ({ endpoint }) => declaredCodesOf(endpoint.rejections),
+      answeredBy: ({ guard }) => declaredCodesOf(guard.rejections),
+    },
+  );
   const everything = root.kind === 'definitions';
   const byCode = new Map<string, LocatedCode>();
   for (const located of gathered.rejections) {
@@ -125,14 +131,8 @@ function locatedGuardOf(guard: Guard, reached: boolean): LocatedGuard {
   return { at: ['guards', textOf(guard.name)], guard, reached };
 }
 
-function reachedCodesOf(
-  endpoints: readonly LocatedEndpoint[],
-  guards: readonly LocatedGuard[],
-): ReadonlySet<string> {
-  const ofEndpoints = endpoints.flatMap((located) => listOf(located.endpoint.rejections));
-  const ofGuards = guards
-    .filter((located) => located.reached)
-    .flatMap((located) => listOf(located.guard.rejections));
-  const rejections = [...ofEndpoints, ...ofGuards].filter(isRejection);
-  return new Set(rejections.map((rejection) => textOf(rejection.code)));
+function declaredCodesOf(rejections: readonly unknown[] | undefined): readonly string[] {
+  return listOf(rejections)
+    .filter(isRejection)
+    .map((rejection) => textOf(rejection.code));
 }
