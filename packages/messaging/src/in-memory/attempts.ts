@@ -2,7 +2,6 @@ import type { Command, Event } from '@cf-loom/contract';
 import {
   brokerMessageIdOf,
   isCommand,
-  isIdHeaderValue,
   isSubscription,
   jsonBytesOf,
   messageIdentityOf,
@@ -10,7 +9,7 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import { factIdOf, transportHeadersOf } from '../sending/index.ts';
+import { checkedIdOf, factIdOf, transportHeadersOf } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
@@ -76,12 +75,7 @@ function messageIdOf(message: Event | Command, factId: string, given: string | u
   if (given === undefined) {
     return brokerMessageIdOf(message, factId);
   }
-  if (!isIdHeaderValue(given)) {
-    throw new Error(
-      'A broker message id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
-    );
-  }
-  return given;
+  return checkedIdOf('broker message id', given);
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {

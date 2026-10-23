@@ -68,9 +68,14 @@ export function factIdOf(given: string | undefined): string {
   if (given === undefined) {
     return globalThis.crypto.randomUUID();
   }
+  return checkedIdOf('Fact id', given);
+}
+
+/** The id given, which travels in a header, or a throw that names what the id is and what makes one. */
+export function checkedIdOf(kind: 'Fact id' | 'broker message id', given: string): string {
   if (!isIdHeaderValue(given)) {
     throw new Error(
-      'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+      `A ${kind} is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate`,
     );
   }
   return given;
