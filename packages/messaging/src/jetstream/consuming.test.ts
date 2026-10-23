@@ -207,6 +207,14 @@ async function waitUntilSettled(stream: string, durable: string, delivered: numb
 
 const oneSecond = 1_000_000_000;
 
+/** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
+function aGate() {
+  const gate = Promise.withResolvers<undefined>();
+  const open = () => gate.resolve(undefined);
+  onTestFinished(open);
+  return { opened: gate.promise, open };
+}
+
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
     const prefix = aPrefix();
@@ -657,4 +665,46 @@ describe('consuming over jetstream()', () => {
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
   }, 15_000);
+
+  test('each durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const firstGate = aGate();
+    const holdingTheFirst = ({ body }: Received) => {
+      return (body as { orderId: string }).orderId === 'o-1' ? firstGate.opened : undefined;
+    };
+    await orders.consume(handlersOf(received, { notify: holdingTheFirst }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    await aWhile();
+    const whileHeld = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    firstGate.open();
+
+    expect(received).toHaveLength(1);
+    expect(whileHeld).toMatchObject({ num_pending: 1, delivered: { consumer_seq: 1 } });
+    await waitUntilSettled(names.stream, names.notifyDurable, 2);
+    expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
+  });
+
+  test('the Handlers of two durable consumers run at the same time', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(
+      handlersOf(received, { notify: () => gate.opened, charge: () => gate.opened }),
+    );
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    gate.open();
+  });
 });
