@@ -1,6 +1,7 @@
 import { brokerHeadersOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type JetStreamOptions, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
+import type { NatsConnectionImpl } from '@nats-io/nats-core/internal';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
 import { durablesFoundOf } from './finding.ts';
 import { pullFrom } from './pulling.ts';
@@ -20,7 +21,9 @@ export function jetStreamConnectionOf(
     },
     consume: async (consumers, closing) => {
       const manager = await managerOf(natsConnection, options);
-      const found = await durablesFoundOf(manager, prefix, consumers);
+      const inboxPrefix = inboxPrefixOf(natsConnection);
+      const search = { manager, prefix, apiPrefix: client.apiPrefix, inboxPrefix };
+      const found = await durablesFoundOf(search, consumers);
       if (found.kind === 'refused') {
         throw new Error(found.lines.join('\n'));
       }
@@ -54,6 +57,11 @@ function closedSignalOf(natsConnection: NatsConnection): AbortSignal {
   const abort = () => closed.abort();
   natsConnection.closed().then(abort, abort);
   return closed.signal;
+}
+
+/** The prefix of the inboxes the Service opened its connection with, which a pull replies on as nats.js's pulls do. */
+function inboxPrefixOf(natsConnection: NatsConnection): string | undefined {
+  return (natsConnection as Partial<NatsConnectionImpl>).options?.inboxPrefix;
 }
 
 function natsHeadersOf(message: OutgoingMessage) {

@@ -23,20 +23,27 @@ type Pullable =
   | { readonly kind: 'pullable'; readonly durable: FoundDurable }
   | { readonly kind: 'refused'; readonly line: string };
 
-type FoundInfo =
-  | { readonly kind: 'found'; readonly info: ConsumerInfo }
+type DurableLookup =
+  | { readonly kind: 'found'; readonly consumerInfo: ConsumerInfo }
   | { readonly kind: 'missing'; readonly line: string };
+
+/** What finding durable consumers needs: JetStream's manager, the prefix of every name, and the prefixes a pull is addressed with. */
+export type Search = {
+  readonly manager: JetStreamManager;
+  readonly prefix: string | null;
+  readonly apiPrefix: string;
+  readonly inboxPrefix: string | undefined;
+};
 
 /** Asks NATS for the prefixed durable consumer of each consumer, every one before any is pulled from. */
 export async function durablesFoundOf(
-  manager: JetStreamManager,
-  prefix: string | null,
+  search: Search,
   consumers: readonly BrokerConsumer[],
 ): Promise<Found> {
   const durables: FoundDurable[] = [];
   const lines: string[] = [];
   for (const consumer of consumers) {
-    const pullable = await pullableOf(manager, prefix, consumer);
+    const pullable = await pullableOf(search, consumer);
     if (pullable.kind === 'pullable') {
       durables.push(pullable.durable);
     } else {
@@ -46,42 +53,41 @@ export async function durablesFoundOf(
   return lines.length > 0 ? { kind: 'refused', lines } : { kind: 'found', durables };
 }
 
-async function pullableOf(
-  manager: JetStreamManager,
-  prefix: string | null,
-  consumer: BrokerConsumer,
-): Promise<Pullable> {
+async function pullableOf(search: Search, consumer: BrokerConsumer): Promise<Pullable> {
+  const { manager, prefix, apiPrefix, inboxPrefix } = search;
   const stream = prefixedNameOf(prefix, consumer.stream);
-  const durable = prefixedNameOf(prefix, consumer.durable);
-  const found = await foundInfoOf(manager, stream, durable);
-  if (found.kind === 'missing') {
-    return { kind: 'refused', line: found.line };
+  const durableName = prefixedNameOf(prefix, consumer.durable);
+  const lookup = await durableLookupOf(manager, stream, durableName);
+  if (lookup.kind === 'missing') {
+    return { kind: 'refused', line: lookup.line };
   }
+  const { consumerInfo } = lookup;
   const subject = prefixedSubjectOf(prefix, consumer.subject);
-  const differences = shapeDifferencesOf(found.info.config, subject);
+  const differences = shapeDifferencesOf(consumerInfo.config, subject);
   if (differences.length > 0) {
-    const line = `The durable consumer ${durable} ${differences.join(' and ')}: ${planRemedy}`;
+    const line = `The durable consumer ${durableName} ${differences.join(' and ')}: ${planRemedy}`;
     return { kind: 'refused', line };
   }
-  const request = pullRequestOf(found.info, manager);
-  return { kind: 'pullable', durable: { consumer, request, waits: waitsOf(found.info.config) } };
+  const request = pullRequestOf(consumerInfo, apiPrefix, inboxPrefix);
+  const waits = waitsOf(consumerInfo.config);
+  return { kind: 'pullable', durable: { consumer, request, waits } };
 }
 
 /** What NATS holds about the durable consumer, or the line for the stream or durable consumer it says does not exist; any other error is thrown. */
-async function foundInfoOf(
+async function durableLookupOf(
   manager: JetStreamManager,
   stream: string,
-  durable: string,
-): Promise<FoundInfo> {
+  durableName: string,
+): Promise<DurableLookup> {
   try {
-    return { kind: 'found', info: await manager.consumers.info(stream, durable) };
+    return { kind: 'found', consumerInfo: await manager.consumers.info(stream, durableName) };
   } catch (error) {
     if (isApiError(error, JetStreamApiCodes.StreamNotFound)) {
-      const line = `The stream ${stream}, which the durable consumer ${durable} reads, does not exist: ${planRemedy}`;
+      const line = `The stream ${stream}, which the durable consumer ${durableName} reads, does not exist: ${planRemedy}`;
       return { kind: 'missing', line };
     }
     if (isApiError(error, JetStreamApiCodes.ConsumerNotFound)) {
-      const line = `The durable consumer ${durable} does not exist on the stream ${stream}: ${planRemedy}`;
+      const line = `The durable consumer ${durableName} does not exist on the stream ${stream}: ${planRemedy}`;
       return { kind: 'missing', line };
     }
     throw error;

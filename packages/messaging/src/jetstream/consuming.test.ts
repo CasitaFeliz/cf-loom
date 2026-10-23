@@ -803,6 +803,42 @@ describe('consuming over jetstream()', () => {
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
     expect(consoleSpies.map((spy) => spy.mock.calls)).toEqual([[], [], [], [], []]);
   }, 10_000);
+  test('two fresh Messages on one durable consumer reach the Handler with delivery count 1 each', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(received));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
+  });
+
+  test('the wait of a second fresh Message is the first entry of the backoff, so a slow Handler keeps it too', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    const waits = [oneSecond, 6 * oneSecond];
+    await arrangeOrders(prefix, { ack_wait: oneSecond, backoff: waits });
+    const received: Received[] = [];
+    const slowSecond = ({ body }: Received) => {
+      return (body as { orderId: string }).orderId === 'o-2'
+        ? sleep(2_500).then(() => undefined)
+        : undefined;
+    };
+    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
+    for (const process of processes) {
+      await process.consume(handlersOf(received, { notify: slowSecond }));
+    }
+
+    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+
+    await waitUntilSettled(names.stream, names.notifyDurable, 2);
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
+  }, 15_000);
 });
 
 describe('closing while consuming over jetstream()', () => {
@@ -963,9 +999,9 @@ describe('closing while consuming over jetstream()', () => {
 });
 
 describe('pulling over jetstream()', () => {
-  test('a durable consumer with a max_expires of 5 seconds delivers', async () => {
+  test('a durable consumer with a max_expires of 500 milliseconds delivers', async () => {
     const prefix = aPrefix();
-    await arrangeOrders(prefix, { max_expires: 5 * oneSecond });
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
@@ -980,7 +1016,7 @@ describe('pulling over jetstream()', () => {
     await arrangeOrders(prefix, { max_expires: oneSecond });
     const received: Received[] = [];
     let lost = 0;
-    const losingTheFirstPull: Replacing = (connection) => ({
+    const losingTheFirstTwoPulls: Replacing = (connection) => ({
       publish: (subject, data, options) => {
         if (subject.includes('.CONSUMER.MSG.NEXT.') && lost < 2) {
           lost += 1;
@@ -989,7 +1025,7 @@ describe('pulling over jetstream()', () => {
         connection.publish(subject, data, options);
       },
     });
-    const orders = await aMessaging(prefix, { replacing: losingTheFirstPull });
+    const orders = await aMessaging(prefix, { replacing: losingTheFirstTwoPulls });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
 
     await orders.consume(handlersOf(received));
@@ -1002,9 +1038,9 @@ describe('pulling over jetstream()', () => {
     ['no max_expires', {}, 30],
     ['a max_expires of 5 seconds', { max_expires: 5 * oneSecond }, 5],
     ['a max_expires of 40 seconds', { max_expires: 40 * oneSecond }, 30],
-    ['a max_expires under a second', { max_expires: oneSecond / 2 }, 1],
+    ['a max_expires of half a second', { max_expires: oneSecond / 2 }, 0.5],
   ])(
-    'a pull for a durable consumer with %s expires within what it allows, from one to 30 seconds',
+    'a pull for a durable consumer with %s expires within what it allows, 30 seconds at most',
     async (_name, settings, seconds) => {
       const prefix = aPrefix();
       await arrangeOrders(prefix, settings);

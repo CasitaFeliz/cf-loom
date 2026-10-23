@@ -1,14 +1,11 @@
-import type { ConsumerInfo, JetStreamManager } from '@nats-io/jetstream';
+import type { ConsumerInfo } from '@nats-io/jetstream';
 import { createInbox, type Msg, millis, type NatsConnection, nanos } from '@nats-io/nats-core';
 import { type PulledMessage, pulledMessageOf } from './pulled-message.ts';
 
 /** The longest a pull waits for a Message, which nats.js's pulls wait too. */
 const longestExpiryMs = 30_000;
 
-/** The shortest expiry the Broker takes of nats.js's pulls, and so of ours. */
-const shortestExpiryMs = 1_000;
-
-/** How long past its expiry a pull waits for the Broker to say it expired, before it asks again. */
+/** How many expiries a pull waits for an answer before it is sent again. */
 const lateFactor = 2;
 
 /** What a pull of one Message asks of a durable consumer: where, which inbox prefix its reply comes back on, and how long it waits for a Message. */
@@ -28,15 +25,19 @@ const none: Pull = { kind: 'none' };
 
 const failed: Pull = { kind: 'failed' };
 
-/** The request that pulls one Message from a durable consumer, which expires within the longest `max_expires` it takes. */
-export function pullRequestOf(info: ConsumerInfo, manager: JetStreamManager): PullRequest {
-  const { stream_name: stream, name } = info;
-  const maxExpiryMs = info.config.max_expires === undefined ? 0 : millis(info.config.max_expires);
-  const expiryMs = maxExpiryMs > 0 ? Math.min(longestExpiryMs, maxExpiryMs) : longestExpiryMs;
+/** The request that pulls one Message from a durable consumer, which expires within its `max_expires` and after 30 seconds at most. */
+export function pullRequestOf(
+  consumerInfo: ConsumerInfo,
+  apiPrefix: string,
+  inboxPrefix: string | undefined,
+): PullRequest {
+  const { stream_name: stream, name } = consumerInfo;
+  const maxExpires = consumerInfo.config.max_expires;
+  const maxExpiryMs = maxExpires === undefined ? 0 : millis(maxExpires);
   return {
-    subject: `${manager.jetstream().apiPrefix}.CONSUMER.MSG.NEXT.${stream}.${name}`,
-    inboxPrefix: manager.getOptions().watcherPrefix,
-    expiryMs: Math.max(shortestExpiryMs, expiryMs),
+    subject: `${apiPrefix}.CONSUMER.MSG.NEXT.${stream}.${name}`,
+    inboxPrefix,
+    expiryMs: maxExpiryMs > 0 ? Math.min(longestExpiryMs, maxExpiryMs) : longestExpiryMs,
   };
 }
 

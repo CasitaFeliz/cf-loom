@@ -2,9 +2,6 @@ import type { Msg, MsgHdrs } from '@nats-io/nats-core';
 
 const encoder = new TextEncoder();
 
-/** The position of the delivery count in the `$JS.ACK.<domain>.<account hash>.<stream>.<durable consumer>.<delivery count>.…` subject NATS gives a delivered Message to be acknowledged on. */
-const deliveryCountToken = 6;
-
 /**
  * A Message the Broker delivered to a pull, with what its Handler needs of it and the
  * acknowledgements NATS understands; nats.js builds its own only for its own pulls.
@@ -22,14 +19,25 @@ export type PulledMessage = {
 /** A delivered Message read for its delivery count, answerable with each acknowledgement. */
 export function pulledMessageOf(message: Msg): PulledMessage {
   const answer = (text: string) => message.respond(encoder.encode(text));
-  const tokens = (message.reply ?? '').split('.');
   return {
     headers: message.headers,
     data: message.data,
-    deliveryCount: Number.parseInt(tokens[deliveryCountToken] ?? '', 10),
+    deliveryCount: deliveryCountOf(message.reply ?? ''),
     ack: () => answer('+ACK'),
     nak: () => answer('-NAK'),
     term: (reason) => answer(reason ? `+TERM ${reason}` : '+TERM'),
     working: () => answer('+WPI'),
   };
+}
+
+/**
+ * The delivery count in the subject a delivered Message is acknowledged on, which NATS writes as
+ * `$JS.ACK.<stream>.<durable consumer>.<delivery count>.…`, or with a domain and an account hash after `ACK`.
+ */
+function deliveryCountOf(reply: string): number {
+  const tokens = reply.split('.');
+  if (tokens.length === 9) {
+    tokens.splice(2, 0, '_', '');
+  }
+  return Number.parseInt(tokens[6] ?? '', 10);
 }
