@@ -1,6 +1,6 @@
 # @cf-loom/messaging
 
-`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `PublishError` and `InvalidMessageError`; and its types, the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream and `@cf-loom/messaging/memory` an in-memory one for tests and local development, `memory` and its types (see [Adapters](#adapters)). What the Broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Pruning](#pruning); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `PublishError` and `InvalidMessageError`; and its types, the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream and `@cf-loom/messaging/memory` an in-memory one for tests and local development, `memory` and its types (see [Adapters](#adapters)). What the Broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Leftover durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
@@ -77,7 +77,7 @@ An adapter is a `Broker` (see [Types](#types)): `connect` receives the Service's
 
 ### JetStream
 
-`jetstream({ servers, prefix })` from `@cf-loom/messaging/jetstream` connects to NATS JetStream, as `src/main.ts` does in [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README; its broker client is an optional peer dependency (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md) and `prefix` is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) there. The adapter's `apply` applies the broker plan (see [Applying the plan](#applying-the-plan)).
+`jetstream({ connect, prefix })` from `@cf-loom/messaging/jetstream` connects to NATS JetStream, as `src/main.ts` does in [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README. The option `connect` is the Service's own function that opens a NATS connection, with the transport and authentication the Service chooses (`connect` from `@nats-io/transport-node`, for one); cf-loom calls it once for each `messaging()` and once for each `apply`, and drains each connection it opened: a `messaging()`'s at `close`, an `apply`'s when it ends. Its NATS packages are optional peer dependencies (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md) and `prefix` is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) there. What `jetstream()` returns is a `Broker` that also has `apply`, which applies the broker plan (see [Applying the plan](#applying-the-plan)).
 
 ### In memory
 
@@ -110,11 +110,11 @@ await running.close();
 - **`deliver(message, body, meta?)`** delivers one new Message now, as attempt 1, whatever was delivered before, so a test can deliver the same fact twice to check that a Handler is safe to run again. It takes an Event or a Command Message Version: an Event reaches every consumed Subscription to it, a Command its CommandHandler, and it resolves to the most severe settlement, `'ended'` before `'pending'` before `'acked'`. It joins the line behind the Messages already lined up. Its body is written as a Subscriber reads it, like `fakeEvent`'s (see [Faking Events](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/testing/README.md#faking-events) in the testing README), written back through each consumer's Reader as a direct call's is (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README): a body that breaks a Reader rejects with `InvalidInputError` at `body`, and nothing is delivered. `meta` is `{ factId?, messageId?, headers? }`: the Fact id is random when left out, the broker message id defaults to `<Name>.v<version>:<factId>`, and `headers` are the transport headers the Handler receives, `{}` when left out. An empty Fact id, or a header named as one of cf-loom's own, is refused as `publish` refuses it (see [Publishing and sending](#publishing-and-sending)). Delivering a Message Version nothing consumes, because no Subscription takes the Event, its Handler is a stub, it is Retired or `consume` was not called, rejects, naming it.
 - **Redelivery.** The adapter never redelivers on its own: a Message whose Handler threw or returned a retryable Fault stays in `broker.pending`, listed for the Subscription or Command it is pending for, until `redeliver()` delivers every pending Message again, each to that consumer alone, as attempt `deliveryCount + 1`; acknowledged or ended, it leaves the list. A Message that fails again waits for the next `redeliver()`, and one that left the list meanwhile is skipped. `redeliver()` resolves once the Messages it lined up have settled, and `settled()` covers the Messages their Handlers publish; each call is its own pass, so two calls made together can deliver the same Message. A Message left pending while messaging closes is listed too. After the connection is closed, `deliver` and `redeliver` reject. Each Message in `pending` is listed as `{ element, subject, messageId, factId, deliveryCount, headers, body }`, its body the wire JSON, as in `messages`.
 - **Duplicates.** A repeated broker message id from `publish` or `send` is dropped, neither recorded in `messages` nor delivered, for the adapter's whole lifetime.
-- **Not a broker emulator.** It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and ignores `apply`; tests against a real Broker remain the organization's. One `memory()` serves one connection: a second `messaging()` through it rejects, even after the first is closed.
+- **Not a broker emulator.** It models nothing of the organization's broker configuration (deduplication window, redelivery limits, backoff, retention) and has no `apply`; tests against a real Broker remain the organization's. One `memory()` serves one connection: a second `messaging()` through it rejects, even after the first is closed.
 
 ## The broker plan
 
-`cf-loom broker-plan` (see [Commands](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#commands) in the CLI README) prints the desired state from the Snapshots: each stream and its subjects, each Subscription's durable consumer and the stream it reads, each Command Version's durable consumer (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with), the durable consumers left over from removed Subscriptions and Retired Command Versions, and which subjects each Service may publish and subscribe to. `--json` prints it in a fixed shape, so the organization's own tooling can read it; names carry the prefix when one is given:
+`cf-loom broker-plan` (see [Commands](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#commands) in the CLI README) prints the desired state of one Service from its committed `contract.snapshot.json`, offline: each stream and its subjects, each Subscription's durable consumer and the stream it reads, and each durable consumer of a Command Version that is not Retired (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with). `--json` prints it in a fixed shape, so the organization's own tooling can read it; names carry the prefix when one is given:
 
 ```json
 {
@@ -125,26 +125,23 @@ await running.close();
   "consumers": {
     "orders-service_command_ChargeCard_v1": { "service": "orders-service", "stream": "orders-service", "subject": "orders-service.command.ChargeCard.v1" },
     "orders-service_notify-on-settled": { "service": "orders-service", "stream": "payments-service", "subject": "payments-service.event.PaymentSettled.v1" }
-  },
-  "orphans": {
-    "orders-service_legacy-sync": { "service": "orders-service", "stream": "orders-service", "subject": "orders-service.event.OrderCreated.v1" }
-  },
-  "permissions": {
-    "orders-service": { "publish": ["orders-service.command.ChargeCard.v1", "orders-service.event.OrderCreated.v1", "orders-service.event.OrderCreated.v2"], "subscribe": ["payments-service.event.PaymentSettled.v1"] }
   }
 }
 ```
 
 ## Applying the plan
 
-Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with the adapter's `apply`, in a deploy step, or from its own infrastructure tooling:
+Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with the `apply` of what `jetstream()` returns, in a deploy step, or from its own infrastructure tooling. `apply` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything.
 
 ```ts
-await broker.apply(plan, limits);                    // creates and updates, never removes
-await broker.apply(plan, limits, { prune: true });   // also deletes orphaned durable consumers
+import { connect } from '@nats-io/transport-node';
+import { jetstream } from '@cf-loom/messaging/jetstream';
+
+const broker = jetstream({ connect: () => connect({ servers: process.env.NATS_URL }), prefix: process.env.BROKER_PREFIX });
+await broker.apply(plan, limits);   // creates and updates, never removes
 ```
 
-`plan` is the JSON above; computing it needs the Baseline, which the CLI reads from the registry through npm, and a running Service has neither. `limits` holds every setting cf-loom has no opinion on: for each stream `retention`, `maxAge`, `duplicateWindow`, `replicas` and `storage`, for each durable consumer `deliverPolicy`, `ackWait`, `maxDeliver`, `backoff` and `maxAckPending`, keyed by the names the plan prints; `streamDefaults` and `consumerDefaults` fill in whatever a stream or durable consumer does not set. `apply` refuses to create a stream or durable consumer with any setting left unset, naming it and the setting. `cf-loom broker-plan --limits-skeleton` prints the `limits` for the plan with every key empty:
+`plan` is the JSON above, as `cf-loom broker-plan --json` prints it. `limits` holds every setting cf-loom has no opinion on: for each stream `retention`, `maxAge`, `duplicateWindow`, `replicas` and `storage`, for each durable consumer `deliverPolicy`, `ackWait`, `maxDeliver`, `backoff` and `maxAckPending`, keyed by the names the plan prints; `streamDefaults` and `consumerDefaults` fill in whatever a stream or durable consumer does not set. `apply` refuses to create a stream or durable consumer with any setting left unset, naming it and the setting. For example:
 
 ```ts
 await broker.apply(plan, {
@@ -155,11 +152,11 @@ await broker.apply(plan, {
 });
 ```
 
-Without `prune`, `apply` only creates streams and durable consumers, adds subjects and updates limits, so a Release running side by side with an older plan never removes what a newer Release needs: applying without `prune` is safe before the new Release deploys and while the old one runs. A Release fails fast when the plan was not applied: `messaging()` checks that the Service's stream covers every subject it publishes or sends, `consume` that the durable consumer of every Subscription and Command Version it serves exists, one with a stubbed Handler included, and each fails with an error naming what is missing.
+`apply` only creates streams and durable consumers, adds subjects and updates limits; it never removes anything, so applying a newer plan never takes away what an older Release still running consumes: applying is safe before the new Release deploys and while the old one runs. `apply` creates the plan's streams before its durable consumers, and refuses a durable consumer whose stream does not exist yet, naming the stream, keeping what it created; a Provider's plan is applied before its Subscribers', and when two Services subscribe to each other's Events, applying the first again after the second completes it. A Release fails fast when the plan was not applied: `messaging()` checks that the Service's stream covers every subject it publishes or sends, `consume` that the durable consumer of every Subscription and Command Version whose Handler it pulls exists, and each fails with an error naming what is missing.
 
-## Pruning
+## Leftover durable consumers
 
-Pruning deletes the durable consumers of removed Subscriptions and Retired Command Versions, so it runs only once the Release that dropped them is no longer running (see the deploy rule in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). `apply` refuses to delete a durable consumer that still has pending or ack-pending Messages, with an error naming the durable consumer and both counts, unless `{ prune: true, force: true }` is given: the deploy rule has a Command Version's durable consumer drained first. `cf-loom broker-plan --orphans` reads the Broker, the one thing `broker-plan` does that needs broker access, read-only, and lists the orphaned durable consumers with those counts. After a prune, rolling back to a Release before it needs that Release's plan applied again, since its durable consumers are gone.
+cf-loom never removes a durable consumer. A Service's durable consumers are all named `[<prefix>_]<service>_…`, on its own stream or on its Providers' (see [The broker plan](#the-broker-plan)), so those a removed Subscription or a Retired Command Version left behind are the ones under that name that the Service's plan does not list. The organization finds and deletes them with its own tooling, once no running Release consumes them and, for a Command Version, once its durable consumer is drained (see the deploy rule in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Rolling back to a Release that consumed a deleted one needs that Release's plan applied again.
 
 ## Types
 

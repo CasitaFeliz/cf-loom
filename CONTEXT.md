@@ -173,7 +173,7 @@ One way a value broke its part of the Contract: the part and path, cf-loom's cod
 _Avoid_: error, violation
 
 **Plan**:
-A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan (streams, durable consumers, permissions) and the route plan (routes by Visibility). The organization decides how to apply it.
+A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan, the streams and durable consumers a Service needs on the Broker. The organization decides how to apply it.
 _Avoid_: manifest, deployment config
 
 **EventPublisher**:

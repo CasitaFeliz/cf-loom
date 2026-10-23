@@ -89,7 +89,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 - A Private Endpoint is called only by the owning Service's own processes or its infrastructure (for example a health check).
 - Private Elements have no Consumers: the owning Service is never a Consumer of its own Contract. The compatibility rules protect Private Elements for the Releases running side by side.
 - Authentication and authorization belong to Guards: a Public Endpoint may still require authentication.
-- cf-loom derives which routes each Visibility allows (`cf-loom route-plan`) but does not enforce Visibility on the network: the organization applies the plan to its gateway, ingress or network rules, or Visibility on HTTP stays a declaration.
+- cf-loom does not enforce Visibility on the network: the organization enforces it with its gateway, ingress or network rules, or Visibility on HTTP stays a declaration.
 
 ## Endpoints
 
@@ -105,8 +105,8 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract (see [Over the Broker](#over-the-broker)).
-- cf-loom derives the Broker's desired state (streams, durable consumers, orphans, permissions) but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README). Visibility is enforced at the Broker only if the organization applies the derived permissions.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's durable consumer has been drained by the Release that deprecated it (see [Pruning](packages/messaging/README.md#pruning) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
+- cf-loom derives the Broker's desired state, the streams and durable consumers each Service needs, but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README), and so does whether the Broker enforces Visibility.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's durable consumer has been drained by the Release that deprecated it (see [Leftover durable consumers](packages/messaging/README.md#leftover-durable-consumers) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 

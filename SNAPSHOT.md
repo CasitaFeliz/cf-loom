@@ -156,7 +156,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event; its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)), and tombstones are how `broker-plan` finds the durable consumers to remove and the streams they read.
+- A removed Subscription stays as a tombstone that keeps its Event, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones
