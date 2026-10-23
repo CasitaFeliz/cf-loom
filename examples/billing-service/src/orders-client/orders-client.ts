@@ -1,5 +1,6 @@
 import { type Client, client } from '@cf-loom/client';
 import { ordersDeps } from '../contract/dependencies/orders-service.dependencies.ts';
+import { environmentValue } from '../environment/environment.ts';
 
 /** A client of orders-service that already sends billing's API key. */
 export type OrdersClient = Client<typeof ordersDeps, 'x-api-key'>;
@@ -16,10 +17,4 @@ export function ordersClient(): OrdersClient {
     headers: { 'x-api-key': environmentValue('ORDERS_SERVICE_API_KEY') },
   });
   return cached;
-}
-
-function environmentValue(name: string): string {
-  const value = process.env[name];
-  if (value === undefined) throw new Error(`${name} is not set`);
-  return value;
 }
