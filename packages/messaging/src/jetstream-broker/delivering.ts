@@ -2,6 +2,7 @@ import { receivedHeadersOf } from '@cf-loom/contract/internal';
 import type { JsMsg } from '@nats-io/jetstream';
 import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
 import type { Binding } from './binding.ts';
+import { waitOf, whileWorking } from './in-progress.ts';
 
 const leftPending: Settlement = { kind: 'pending', fault: undefined };
 
@@ -18,7 +19,11 @@ export async function deliver(message: JsMsg, binding: Binding): Promise<void> {
   const { messageId, factId, headers } = read;
   const { deliveryCount } = message.info;
   const delivery = { messageId, factId, deliveryCount, headers, body: message.data };
-  applySettlement(message, await receivedBy(binding.consumer, delivery));
+  const wait = waitOf(binding.waits, deliveryCount);
+  const settlement = await whileWorking(message, wait, () =>
+    receivedBy(binding.consumer, delivery),
+  );
+  applySettlement(message, settlement);
 }
 
 function headerEntriesOf(message: JsMsg): readonly (readonly [string, string])[] {

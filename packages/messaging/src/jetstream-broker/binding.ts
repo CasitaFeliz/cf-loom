@@ -3,9 +3,14 @@ import { type Consumer, JetStreamApiCodes, type JetStreamManager } from '@nats-i
 import type { BrokerConsumer } from '../broker/index.ts';
 import { isApiError } from './applied.ts';
 import { shapeDifferencesOf } from './durable-shape.ts';
+import { type Waits, waitsOf } from './in-progress.ts';
 
 /** A consumer of the Service bound to its durable consumer on the Broker, which pulls its Messages. */
-export type Binding = { readonly consumer: BrokerConsumer; readonly pulled: Consumer };
+export type Binding = {
+  readonly consumer: BrokerConsumer;
+  readonly pulled: Consumer;
+  readonly waits: Waits;
+};
 
 /** Every consumer bound, or a line for each durable consumer or stream that is not there, naming it. */
 export type Bound =
@@ -55,7 +60,8 @@ async function lookedUp(
       return { kind: 'refused', line };
     }
     const pulled = manager.jetstream().consumers.getConsumerFromInfo(info);
-    return { kind: 'bound', binding: { consumer, pulled } };
+    const waits = waitsOf(info.config);
+    return { kind: 'bound', binding: { consumer, pulled, waits } };
   } catch (error) {
     if (isApiError(error, JetStreamApiCodes.StreamNotFound)) {
       const line = `The stream ${stream}, which the durable consumer ${durable} reads, does not exist: ${apply}`;

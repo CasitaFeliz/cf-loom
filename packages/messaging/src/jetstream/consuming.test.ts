@@ -11,6 +11,7 @@ import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loo
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
 import { arrangeDurable, arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
@@ -200,7 +201,7 @@ async function waitUntilSettled(stream: string, durable: string, delivered: numb
         delivered: { consumer_seq: delivered },
       });
     },
-    { timeout: 4_000 },
+    { timeout: 8_000 },
   );
 }
 
@@ -615,4 +616,45 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
   }, 10_000);
+
+  test('a Handler running past the ack wait keeps its Message: another process of the Service is not given it meanwhile', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const slow = () => sleep(2_500).then(() => undefined);
+    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
+    for (const process of processes) {
+      await process.consume(handlersOf(received, { notify: slow }));
+    }
+
+    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await waitUntilSettled(names.stream, names.notifyDurable, 1);
+    expect(received).toHaveLength(1);
+  }, 10_000);
+
+  test('a durable consumer with a backoff whose later wait is shorter keeps that delivery’s Message too', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    const waits = [2_400_000_000, 600_000_000];
+    await arrangeOrders(prefix, { ack_wait: waits[0] as number, backoff: waits });
+    const received: Received[] = [];
+    const throwingThenSlow = async ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      await sleep(1_500);
+      return undefined;
+    };
+    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
+    for (const process of processes) {
+      await process.consume(handlersOf(received, { notify: throwingThenSlow }));
+    }
+
+    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await waitUntilSettled(names.stream, names.notifyDurable, 2);
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  }, 15_000);
 });
