@@ -1,4 +1,6 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: the ./internal entry, a list of re-exports that the Package layout forbids splitting into several files
+export type { BrokerPlan, BrokerPlanConsumer, BrokerPlanStream } from '../broker-plan/index.ts';
+export { brokerPlanOf } from '../broker-plan/index.ts';
 export type {
   Change,
   ChangeClass,
@@ -128,6 +130,7 @@ export {
 } from '../walker/index.ts';
 export type {
   Committed,
+  DurableConsumed,
   InputIssue,
   InvalidInputBody,
   Matchable,
@@ -152,6 +155,7 @@ export {
   invalidInputBodyOf,
   invalidInputRejectionOf,
   invalidInputResponseOf,
+  isBrokerPrefix,
   isQueryText,
   isReservedHeader,
   isSegmentText,
@@ -162,6 +166,8 @@ export {
   malformedBodyIssueOf,
   matchOf,
   notJsonContentType,
+  prefixedNameOf,
+  prefixedSubjectOf,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionBodyReaderOf,

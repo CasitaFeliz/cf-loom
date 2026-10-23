@@ -111,7 +111,7 @@ function cfLoomThrowing(message: string, ...args: string[]) {
 const isRoot = process.getuid?.() === 0;
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | publish [--force] [--prerelease]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | publish [--force] [--prerelease]';
 
 const config = [
   "import { defineConfig } from '@cf-loom/cli';",
@@ -2849,12 +2849,16 @@ describe('cf-loom', () => {
     });
   });
 
-  test('only check takes --json', () => {
+  test('only check and broker-plan take --json', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'generate', '--json');
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `Only check takes --json. ${usage}\n` });
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Only check and broker-plan take --json. ${usage}\n`,
+    });
   });
 
   test('check takes no argument', () => {

@@ -4,7 +4,7 @@ How `messaging` (see [README.md](README.md)) is split into modules, as [Package 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `broker/`, `sending/` and `messaging/`; `memory/index.ts` re-exports `in-memory/`, and `jetstream/index.ts` is the JetStream adapter's entry. The wire rules of [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker), a subject, a durable consumer's name, the broker message id, the headers cf-loom sets and a body's JSON from bytes and its bytes from JSON, live in `@cf-loom/contract`'s `wire/`, which the CLI's broker plan shares; the runs of the Message Handlers and the Handler map's lookup live in `@cf-loom/handlers`'s `./internal`.
+The entry `src/index.ts` (`.`) re-exports from `broker/`, `sending/` and `messaging/`; `memory/index.ts` re-exports `in-memory/`, and `jetstream/index.ts` is the JetStream adapter's entry. The wire rules of [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker), a subject, a durable consumer's name, a prefix and the names and subjects it prefixes, the broker message id, the headers cf-loom sets and a body's JSON from bytes and its bytes from JSON, live in `@cf-loom/contract`'s `wire/`, and the broker plan the CLI prints in its `broker-plan/`; the runs of the Message Handlers and the Handler map's lookup live in `@cf-loom/handlers`'s `./internal`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |

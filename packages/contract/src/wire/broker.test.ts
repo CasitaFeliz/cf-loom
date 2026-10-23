@@ -4,7 +4,10 @@ import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
 import {
   brokerMessageIdOf,
   durableNameOf,
+  isBrokerPrefix,
   isReservedHeader,
+  prefixedNameOf,
+  prefixedSubjectOf,
   subjectOf,
 } from '../internal/index.ts';
 
@@ -48,6 +51,38 @@ describe('the Wire protocol over the broker', () => {
       'orders-service_notify-on-created',
       'orders-service_command_ChargeCard_v1',
     ]);
+  });
+
+  test('a prefixed subject is <prefix>.<subject> and a prefixed stream or durable consumer <prefix>_<name>', () => {
+    const subject = subjectOf('orders-service', orderCreatedV2);
+
+    const prefixed = [
+      prefixedSubjectOf('staging', subject),
+      prefixedNameOf('staging', 'orders-service'),
+      prefixedNameOf('staging', durableNameOf('orders-service', notifyOnCreated)),
+    ];
+
+    expect(prefixed).toEqual([
+      'staging.orders-service.event.OrderCreated.v2',
+      'staging_orders-service',
+      'staging_orders-service_notify-on-created',
+    ]);
+  });
+
+  test('with no prefix a subject, a stream and a durable consumer are themselves', () => {
+    const subject = subjectOf('orders-service', orderCreatedV2);
+
+    const names = [prefixedSubjectOf(null, subject), prefixedNameOf(null, 'orders-service')];
+
+    expect(names).toEqual(['orders-service.event.OrderCreated.v2', 'orders-service']);
+  });
+
+  test('a prefix is kebab-case, as a Service name is', () => {
+    const texts = ['staging', 'pr-123', 'stag_ing', 'a.b', '*', '>', 'Staging', '', 'a b'];
+
+    const accepted = texts.map(isBrokerPrefix);
+
+    expect(accepted).toEqual([true, true, false, false, false, false, false, false, false]);
   });
 
   test('a broker message id is <Name>.v<n>:<factId>', () => {

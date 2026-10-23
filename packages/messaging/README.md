@@ -114,7 +114,7 @@ await running.close();
 
 ## The broker plan
 
-`cf-loom broker-plan` (see [Commands](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#commands) in the CLI README) prints the desired state of one Service from its committed `contract.snapshot.json`, offline: each stream and its subjects, each Subscription's durable consumer and the stream it reads, and each durable consumer of a Command Version that is not Retired (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with). `--json` prints it in a fixed shape, so the organization's own tooling can read it; names carry the prefix when one is given:
+`cf-loom broker-plan` (see [Commands](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#commands) in the CLI README) prints the desired state of one Service from its committed `contract.snapshot.json`, offline: the Service's stream, which holds the subject of each of its Events' and Commands' Message Versions that are not Retired, and which a Service that publishes and sends nothing does not have; each Subscription's durable consumer and the stream it reads; and each durable consumer of a Command Version that is not Retired (`orders-service_command_ChargeCard_v1`, which no kebab-case Subscription name can collide with). `--json` prints it on one line in a fixed shape, shown here across lines, with names and subjects in code point order, so the organization's own tooling can read it; with a prefix, every subject, stream and durable consumer name carries it, and `service`, a Service's name, never does:
 
 ```json
 {
@@ -156,7 +156,7 @@ await broker.apply(plan, {
 
 ## Leftover durable consumers
 
-cf-loom never removes a durable consumer. A Service's durable consumers are all named `[<prefix>_]<service>_…`, on its own stream or on its Providers' (see [The broker plan](#the-broker-plan)), so those a removed Subscription or a Retired Command Version left behind are the ones under that name that the Service's plan does not list. The organization finds and deletes them with its own tooling, once no running Release consumes them and, for a Command Version, once its durable consumer is drained (see the deploy rule in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Rolling back to a Release that consumed a deleted one needs that Release's plan applied again.
+cf-loom never removes a durable consumer. A prefix holds no `_` (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md), so `<prefix>_<service>_` names one Service of one environment; on a Broker where one Service runs with a prefix, every Service runs with one, or a Service named as a prefix would read that environment's durable consumers as its own. A Service's durable consumers are all named `[<prefix>_]<service>_…`, on its own stream or on its Providers' (see [The broker plan](#the-broker-plan)), so those a removed Subscription or a Retired Command Version left behind are the ones under that name that the Service's plan does not list. The organization finds and deletes them with its own tooling, once no running Release consumes them and, for a Command Version, once its durable consumer is drained (see the deploy rule in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Rolling back to a Release that consumed a deleted one needs that Release's plan applied again.
 
 ## Types
 
