@@ -254,6 +254,47 @@ function searchQueryOf({
   return serviceSnapshot(root, aContext({ packages: [] })).endpoints['GET /search']?.input.query;
 }
 
+/**
+ * A Service listing the Definitions Package, whose Public Endpoint attaches a chain of three Guards,
+ * only the last answering DEEP, and whose Private Endpoint lists PURGED.
+ */
+function codeReachSnapshot() {
+  const deep = defineRejection({ code: 'DEEP', status: 403, message: 'Deep' });
+  const purged = defineRejection({ code: 'PURGED', status: 410, message: 'Purged' });
+  const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
+  const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
+  const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
+  const getOrder = defineEndpoint({
+    name: 'getOrder',
+    method: 'GET',
+    path: '/orders',
+    visibility: 'public',
+    description: 'Every order',
+    guards: [inner, middle, outer],
+    success: { status: 200, body: z.object({ count: z.int() }) },
+  });
+  const purgeOrders = defineEndpoint({
+    name: 'purgeOrders',
+    method: 'DELETE',
+    path: '/orders',
+    visibility: 'private',
+    description: 'Every order gone',
+    success: { status: 204 },
+    rejections: [purged],
+  });
+  const group = defineGroup({
+    name: 'orders',
+    description: 'Orders',
+    endpoints: [getOrder, purgeOrders],
+  });
+  const root = defineContract({
+    name: 'orders-service',
+    definitions: [orgDefinitions],
+    groups: [group],
+  });
+  return serviceSnapshot(root);
+}
+
 function textOf(snapshot: Snapshot): string {
   return canonicalTextOf(snapshot);
 }
@@ -452,6 +493,20 @@ describe('snapshotOf: a Service', () => {
       'ORDER_LOCKED',
       'UNAUTHENTICATED',
     ]);
+  });
+
+  test.each([
+    { reach: 'a Guard at the end of the attached chain answers', code: 'DEEP', written: true },
+    { reach: 'only a Private Endpoint lists', code: 'PURGED', written: true },
+    {
+      reach: 'only a listed Definitions Package declares, and no Endpoint reaches',
+      code: 'UNUSED',
+      written: false,
+    },
+  ])('a code $reach is written: $written', ({ code, written }) => {
+    const snapshot = codeReachSnapshot();
+
+    expect(code in snapshot.codes).toBe(written);
   });
 
   test('a code carries its origin, status, message and body, and is not removed', () => {

@@ -249,6 +249,16 @@ describe('exportedSnapshotOf', () => {
       },
       kept: [orderLocked],
     },
+    {
+      reach: 'a Guard two Guards down its Guard’s guards answers',
+      entry: attaching('apiKey'),
+      guards: {
+        apiKey: aGuardEntry({ guards: ['session'] }),
+        session: aGuardEntry({ guards: ['user'] }),
+        user: aGuardEntry({ rejections: [orderLocked] }),
+      },
+      kept: [orderLocked],
+    },
     { reach: 'only a Private Endpoint lists', entry: anEndpointEntry(), guards: {}, kept: [] },
   ])('a code $reach: the codes kept are $kept', ({ entry, guards, kept }) => {
     const purging = { ...privateEntry, rejections: [orderLocked] };
@@ -258,6 +268,23 @@ describe('exportedSnapshotOf', () => {
     const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints, guards, codes }));
 
     expect(Object.keys(cut.codes)).toEqual(kept);
+  });
+
+  test.each([
+    { reach: 'a Guard at the end of the attached chain answers', code: 'DEEP', kept: true },
+    { reach: 'only a Public Endpoint lists', code: orderLocked, kept: true },
+    { reach: 'only a Private Endpoint lists', code: 'PURGED', kept: false },
+    {
+      reach: 'only a listed Definitions Package declares, which the declared Snapshot never writes',
+      code: 'UNUSED',
+      kept: false,
+    },
+  ])('a code $reach, cut from the declared Snapshot, is kept: $kept', ({ code, kept }) => {
+    const snapshot = codeReachSnapshot();
+
+    const cut = exportedSnapshotOf(snapshot);
+
+    expect(code in cut.codes).toBe(kept);
   });
 
   test('the Standard Rejections’ codes are left to standardRejections, notFound included when an Endpoint lists it', () => {
@@ -536,11 +563,14 @@ function eventsSnapshot(): ServiceSnapshot {
   return serviceSnapshotOf(root);
 }
 
-/** The Snapshot of a Service root that lists no Definitions Package. */
-function serviceSnapshotOf(root: ReturnType<typeof defineContract>): ServiceSnapshot {
+/** The Snapshot of a Service root, the Definitions Packages it lists given resolved. */
+function serviceSnapshotOf(
+  root: ReturnType<typeof defineContract>,
+  packages: readonly ResolvedDefinitions[] = [],
+): ServiceSnapshot {
   const rootPackage = {
     packageName: 'orders-service',
-    originOf: () => undefined,
+    originOf: schemaOriginsOf(packages),
     exportsOf: () => [],
   };
   const validated = validateContract(root, rootPackage);
@@ -549,7 +579,7 @@ function serviceSnapshotOf(root: ReturnType<typeof defineContract>): ServiceSnap
   }
   const snapshot = snapshotOf(validated, {
     generator: 'test',
-    packages: [],
+    packages,
     committed: undefined,
     now: 0,
   });
@@ -593,23 +623,52 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
   const packages: readonly ResolvedDefinitions[] = [
     { definitions, packageName: '@org/definitions', version: '1.0.0' },
   ];
-  const originOf = schemaOriginsOf(packages);
-  const validated = validateContract(root, {
-    packageName: 'orders-service',
-    originOf,
-    exportsOf: () => [],
+  return serviceSnapshotOf(root, packages);
+}
+
+/**
+ * A Service listing a Definitions Package, whose Public Endpoint lists ORDER_LOCKED and attaches a
+ * chain of three Guards, only the last answering DEEP, and whose Private Endpoint lists PURGED.
+ */
+function codeReachSnapshot(): ServiceSnapshot {
+  const locked = defineRejection({ code: orderLocked, status: 409, message: 'Locked' });
+  const deep = defineRejection({ code: 'DEEP', status: 403, message: 'Deep' });
+  const purged = defineRejection({ code: 'PURGED', status: 410, message: 'Purged' });
+  const unused = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
+  const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
+  const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
+  const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
+  const definitions = defineDefinitions({ name: 'definitions', rejections: [unused] });
+  const getOrder = defineEndpoint({
+    name: 'getOrder',
+    method: 'GET',
+    path: '/orders',
+    visibility: 'public',
+    description: 'Every order',
+    guards: [inner, middle, outer],
+    success: { status: 200, body: z.object({ count: z.int() }) },
+    rejections: [locked],
   });
-  if (validated.kind !== 'valid') {
-    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
-  }
-  const snapshot = snapshotOf(validated, {
-    generator: 'test',
-    packages,
-    committed: undefined,
-    now: 0,
+  const purgeOrders = defineEndpoint({
+    name: 'purgeOrders',
+    method: 'DELETE',
+    path: '/orders',
+    visibility: 'private',
+    description: 'Every order gone',
+    success: { status: 204 },
+    rejections: [purged],
   });
-  if (snapshot.kind !== 'service') {
-    throw new Error('The fixture is no Service');
-  }
-  return snapshot;
+  const group = defineGroup({
+    name: 'orders',
+    description: 'Orders',
+    endpoints: [getOrder, purgeOrders],
+  });
+  const root = defineContract({
+    name: 'orders-service',
+    definitions: [definitions],
+    groups: [group],
+  });
+  return serviceSnapshotOf(root, [
+    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+  ]);
 }

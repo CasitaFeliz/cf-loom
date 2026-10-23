@@ -30,3 +30,22 @@ export function reachOf<Key>(
 export function reachedGuardsOf(guards: readonly unknown[]): readonly Guard[] {
   return reachOf(guards.filter(isGuard), (guard) => listOf(guard.guards).filter(isGuard));
 }
+
+/**
+ * Every code some Endpoints reach, each once: those an Endpoint lists itself and those a Guard they
+ * reach answers; the caller gives the Guards they reach and reads each one's codes.
+ */
+export function reachedCodesOf<EndpointEntry, GuardEntry>(
+  reached: {
+    readonly endpoints: readonly EndpointEntry[];
+    readonly guards: readonly GuardEntry[];
+  },
+  read: {
+    readonly ownCodesOf: (endpoint: EndpointEntry) => readonly string[];
+    readonly answeredBy: (guard: GuardEntry) => readonly string[];
+  },
+): ReadonlySet<string> {
+  const own = reached.endpoints.flatMap(read.ownCodesOf);
+  const answered = reached.guards.flatMap(read.answeredBy);
+  return new Set([...own, ...answered]);
+}
