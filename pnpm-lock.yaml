@@ -235,6 +235,15 @@ importers:
       '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@nats-io/jetstream':
+        specifier: 'catalog:'
+        version: 3.4.0
+      '@nats-io/nats-core':
+        specifier: 'catalog:'
+        version: 3.4.0
+      '@nats-io/transport-node':
+        specifier: 'catalog:'
+        version: 3.4.0
       '@org/contract-orders-service':
         specifier: workspace:*
         version: link:../orders-service/contract-package
@@ -269,6 +278,15 @@ importers:
       '@cf-loom/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@nats-io/jetstream':
+        specifier: 'catalog:'
+        version: 3.4.0
+      '@nats-io/nats-core':
+        specifier: 'catalog:'
+        version: 3.4.0
+      '@nats-io/transport-node':
+        specifier: 'catalog:'
+        version: 3.4.0
       '@org/definitions':
         specifier: workspace:*
         version: link:../org-definitions

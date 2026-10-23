@@ -12,6 +12,9 @@
     "@cf-loom/handlers": "workspace:*",
     "@cf-loom/messaging": "workspace:*",
     "@cf-loom/server": "workspace:*",
+    "@nats-io/jetstream": "catalog:",
+    "@nats-io/nats-core": "catalog:",
+    "@nats-io/transport-node": "catalog:",
     "@org/definitions": "workspace:*",
     "zod": "catalog:"
   },
