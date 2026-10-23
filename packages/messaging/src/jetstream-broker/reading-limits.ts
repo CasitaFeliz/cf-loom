@@ -66,7 +66,9 @@ function choice<const Choice extends string>(choices: readonly Choice[]) {
 }
 
 const durationText = 'a duration such as 500ms, 30s, 2m, 1h or 7d';
-const unlimitedCountText = "a whole number from 1, or 'unlimited'";
+const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
+  input === 'unlimited' ? -1 : countOf(input),
+);
 const notAnObject = { error: () => 'is not an object' };
 
 const streamShape = {
@@ -82,32 +84,65 @@ const streamShape = {
 const durableShape = {
   deliverPolicy: choice(deliverPolicies).optional(),
   ackWait: readAs(`${durationText}, or a list of them`, nanosListOf).optional(),
-  maxDeliver: readAs(unlimitedCountText, (input) =>
-    input === 'unlimited' ? -1 : countOf(input),
-  ).optional(),
-  maxAckPending: readAs(unlimitedCountText, (input) =>
-    input === 'unlimited' ? -1 : countOf(input),
-  ).optional(),
+  maxDeliver: unlimitedCount.optional(),
+  maxAckPending: unlimitedCount.optional(),
 } satisfies Record<keyof DurableConsumerLimits, z.ZodType>;
 
 const streamLimits = z.strictObject(streamShape, notAnObject);
 const durableLimits = z.strictObject(durableShape, notAnObject);
-
-const brokerLimits = z.strictObject(
-  {
-    streamDefaults: streamLimits.optional(),
-    consumerDefaults: durableLimits.optional(),
-    streams: z.record(z.string(), streamLimits.optional(), notAnObject).optional(),
-    consumers: z.record(z.string(), durableLimits.optional(), notAnObject).optional(),
-  },
-  notAnObject,
-);
 
 /** The name of each setting of a stream's limits. */
 export const streamSettingNames = streamLimits.keyof().options;
 
 /** The name of each setting of a durable consumer's limits. */
 export const durableSettingNames = durableLimits.keyof().options;
+
+/** The settings of limits that are not `undefined`, which leaves one unset like a missing key. */
+function definedOf<Limits extends object>(
+  names: readonly (keyof Limits)[],
+  limits: Limits,
+): Partial<Limits> {
+  const defined: Partial<Limits> = {};
+  for (const name of names) {
+    const setting = limits[name];
+    if (setting !== undefined) {
+      defined[name] = setting;
+    }
+  }
+  return defined;
+}
+
+function hasEntry<Entry>(pair: readonly [string, Entry | undefined]): pair is [string, Entry] {
+  return pair[1] !== undefined;
+}
+
+/** A record of limits keyed by name, without the entries that are `undefined`. */
+function entriesOf<Entry>(entries: Readonly<Record<string, Entry | undefined>>) {
+  return Object.fromEntries(Object.entries(entries).filter(hasEntry));
+}
+
+const definedStreamLimits = streamLimits.transform((limits) =>
+  definedOf(streamSettingNames, limits),
+);
+const definedDurableLimits = durableLimits.transform((limits) =>
+  definedOf(durableSettingNames, limits),
+);
+
+const brokerLimits = z.strictObject(
+  {
+    streamDefaults: definedStreamLimits.optional(),
+    consumerDefaults: definedDurableLimits.optional(),
+    streams: z
+      .record(z.string(), definedStreamLimits.optional(), notAnObject)
+      .transform(entriesOf)
+      .optional(),
+    consumers: z
+      .record(z.string(), definedDurableLimits.optional(), notAnObject)
+      .transform(entriesOf)
+      .optional(),
+  },
+  notAnObject,
+);
 
 /** A stream's limits as NATS counts them, each possibly unset. */
 export type NatsStreamLimits = z.output<typeof streamLimits>;

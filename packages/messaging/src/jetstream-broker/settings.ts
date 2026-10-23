@@ -67,30 +67,14 @@ function unlistedLinesOf(plan: BrokerPlan, limits: NatsBrokerLimits): readonly s
   ];
 }
 
-/** The names limits holds an entry for that the plan does not list; an `undefined` entry is none. */
+/** The names limits holds an entry for that the plan does not list. */
 function unlistedNamesOf(
   listed: Readonly<Record<string, unknown>>,
   entries: Readonly<Record<string, unknown>> | undefined,
 ): readonly string[] {
   return Object.entries(entries ?? {})
-    .filter(([name, entry]) => entry !== undefined && !Object.hasOwn(listed, name))
+    .filter(([name]) => !Object.hasOwn(listed, name))
     .map(([name]) => name);
-}
-
-/** A stream's or durable consumer's own settings over the defaults; an own setting left `undefined` leaves the default. */
-function overlaid<Limits extends object>(
-  names: readonly (keyof Limits)[],
-  defaults: Limits | undefined,
-  own: Limits | undefined,
-): Partial<Limits> {
-  const merged: Partial<Limits> = { ...defaults };
-  for (const name of names) {
-    const setting = own?.[name];
-    if (setting !== undefined) {
-      merged[name] = setting;
-    }
-  }
-  return merged;
 }
 
 function unsetNamesOf<Name extends string>(
@@ -112,8 +96,7 @@ function streamsOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<Planned
   const planned: PlannedStream[] = [];
   const lines: string[] = [];
   for (const [name, stream] of Object.entries(plan.streams)) {
-    const own = limits.streams?.[name];
-    const streamLimits = overlaid(streamSettingNames, limits.streamDefaults, own);
+    const streamLimits = { ...limits.streamDefaults, ...limits.streams?.[name] };
     if (isStreamSet(streamLimits)) {
       planned.push({ name, subjects: stream.subjects, settings: streamConfigOf(streamLimits) });
     } else {
@@ -128,8 +111,7 @@ function durablesOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<Planne
   const planned: PlannedDurable[] = [];
   const lines: string[] = [];
   for (const [name, consumer] of Object.entries(plan.consumers)) {
-    const own = limits.consumers?.[name];
-    const durableLimits = overlaid(durableSettingNames, limits.consumerDefaults, own);
+    const durableLimits = { ...limits.consumerDefaults, ...limits.consumers?.[name] };
     if (isDurableSet(durableLimits)) {
       const durable = { name, subject: consumer.subject };
       planned.push({

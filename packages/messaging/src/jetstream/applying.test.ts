@@ -230,7 +230,7 @@ describe('applying a broker plan with jetstream()', () => {
     expect(subjects).toEqual([wildcard]);
   });
 
-  test('apply updates every limit of an existing stream and durable consumer to the limits’ and keeps the settings limits does not name', async () => {
+  test('apply updates the limits of an existing stream and durable consumer that NATS lets change and keeps the settings limits does not name', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(
@@ -417,6 +417,21 @@ describe('applying a broker plan with jetstream()', () => {
     expect(stream.max_age).toBe(31_536_000_000_000_000);
   });
 
+  test('the longest duration NATS holds in 64 bits reaches it exactly, in nanoseconds', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streamDefaults: { ...testLimits.streamDefaults, maxAge: '106751d' },
+    };
+
+    await broker.apply(orders.plan, limits);
+
+    const stream = await streamConfigOf(server.url, orders.stream);
+    expect(stream.max_age).toBe(9_223_286_400_000_000_000);
+  });
+
   test('an undefined setting in a stream’s or durable consumer’s own limits leaves the default in place', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
@@ -569,6 +584,22 @@ describe('what applying a broker plan refuses', () => {
 
     expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
     expect(error.message).toContain('storage');
+    expect(error.cause).toBeInstanceOf(JetStreamApiError);
+  });
+
+  test('more replicas than a single NATS server holds reject apply naming the stream, with NATS’s error as its cause', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streamDefaults: { ...testLimits.streamDefaults, replicas: 3 },
+    };
+
+    const error = await rejectionOf(broker.apply(orders.plan, limits));
+
+    expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
+    expect(error.message).toContain('replicas');
     expect(error.cause).toBeInstanceOf(JetStreamApiError);
   });
 
@@ -761,6 +792,23 @@ describe('what applying a broker plan refuses', () => {
         'limits.consumerDefaults.backoff is a key BrokerLimits does not define',
         `limits.streams.${orders.stream}.replica is a key BrokerLimits does not define`,
       ].sort(),
+    );
+    expect(service.opened).toHaveLength(0);
+  });
+
+  test('apply refuses a setting name limits does not know even when its value is undefined', async () => {
+    const prefix = aPrefix();
+    const service = aConnect();
+    const broker = jetstream({ connect: service.connect, prefix });
+    const limits = {
+      ...testLimits,
+      streamDefaults: { ...testLimits.streamDefaults, maxBytes: undefined },
+    };
+
+    const error = await rejectionOf(broker.apply(anOrders(prefix).plan, limits));
+
+    expect(error.message).toBe(
+      'limits.streamDefaults.maxBytes is a key BrokerLimits does not define',
     );
     expect(service.opened).toHaveLength(0);
   });
