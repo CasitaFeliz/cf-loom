@@ -17,10 +17,17 @@ export type BrokerService = {
   readonly subjects: readonly string[];
 };
 
-/** One messaging's connection to a broker; `close` is called once no Handler runs. */
+/** One messaging's connection to a broker. */
 export type BrokerConnection = {
+  /** Sends one Message and resolves once the broker has taken it. */
   readonly publish: (message: OutgoingMessage) => Promise<void>;
-  readonly consume: (consumers: readonly BrokerConsumer[]) => Promise<void>;
+  /**
+   * Hands the consumers to the broker; resolves once consuming has started and rejects having
+   * started nothing. Once `closing` aborts, or if it already has, it hands nothing more to `receive`;
+   * a Message still handed over is left pending by the core.
+   */
+  readonly consume: (consumers: readonly BrokerConsumer[], closing: AbortSignal) => Promise<void>;
+  /** Called once every `receive` has settled; ends what `consume` started and finishes applying any Settlement. */
   readonly close: () => Promise<void>;
 };
 
