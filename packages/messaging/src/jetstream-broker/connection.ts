@@ -2,6 +2,9 @@ import { brokerHeadersOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type JetStreamOptions, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
+import { bindingsOf } from './binding.ts';
+import { pullFrom } from './pulling.ts';
+import { managerOf } from './stream-check.ts';
 
 /** The connection `messaging()` publishes, consumes and closes through, over the NATS connection the Service opened. */
 export function jetStreamConnectionOf(
@@ -10,14 +13,23 @@ export function jetStreamConnectionOf(
   options: JetStreamOptions | undefined,
 ): BrokerConnection {
   const client = jetStreamClientOf(natsConnection, options);
+  const loops: Promise<void>[] = [];
   return {
     publish: async (message) => {
       const subject = prefixedSubjectOf(prefix, message.subject);
       await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
     },
-    // TODO(#128)
-    consume: () => Promise.reject(new Error('jetstream() does not consume yet')),
-    close: () => drainOnce(natsConnection),
+    consume: async (consumers, closing) => {
+      const manager = await managerOf(natsConnection, options);
+      const bindings = await bindingsOf(manager, prefix, consumers);
+      for (const binding of bindings) {
+        loops.push(pullFrom(binding, natsConnection, closing));
+      }
+    },
+    close: async () => {
+      await drainOnce(natsConnection);
+      await Promise.all(loops);
+    },
   };
 }
 

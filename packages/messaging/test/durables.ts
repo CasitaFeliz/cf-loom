@@ -1,3 +1,5 @@
+// biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
+import type { BrokerPlan } from '@cf-loom/contract/internal';
 import {
   type ConsumerConfig,
   type ConsumerInfo,
@@ -19,6 +21,22 @@ export async function arrangeDurable(
     await manager.consumers.add(stream, config);
   } finally {
     await connection.close();
+  }
+}
+
+/**
+ * Creates every durable consumer of a broker plan as the organization's tooling would from
+ * `cf-loom broker-plan`, with the NATS client and not `apply`: a pull consumer with explicit
+ * acknowledgements filtered on its subject, with `settings` over that.
+ */
+export async function arrangeDurablesOf(
+  url: string,
+  plan: BrokerPlan,
+  settings: Partial<ConsumerConfig> = {},
+): Promise<void> {
+  for (const [name, durable] of Object.entries(plan.consumers)) {
+    const shape = { ack_policy: 'explicit', filter_subject: durable.subject } as const;
+    await arrangeDurable(url, durable.stream, { ...shape, ...settings, durable_name: name });
   }
 }
 
