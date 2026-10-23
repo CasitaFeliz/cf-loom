@@ -230,30 +230,51 @@ describe('applying a broker plan with jetstream()', () => {
     expect(subjects).toEqual([wildcard]);
   });
 
-  test('apply updates the limits of an existing stream and durable consumer and keeps the settings limits does not name', async () => {
+  test('apply updates every limit of an existing stream and durable consumer to the limits’ and keeps the settings limits does not name', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(
       server.url,
       { name: orders.stream, subjects: [orders.charge, orders.created] },
-      { max_bytes: 1_000_000, max_age: 86_400 * nanosPerSecond },
+      {
+        max_bytes: 1_000_000,
+        max_age: 86_400 * nanosPerSecond,
+        duplicate_window: 60 * nanosPerSecond,
+        retention: 'limits',
+      },
     );
     await arrangeDurable(server.url, orders.stream, {
       durable_name: orders.chargeDurable,
       filter_subject: orders.charge,
       ack_policy: 'explicit',
       ack_wait: 10 * nanosPerSecond,
+      max_deliver: 3,
+      max_ack_pending: 7,
       description: 'arranged by hand',
     });
     const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streams: { [orders.stream]: { retention: 'interest' } },
+    };
 
-    await broker.apply(orders.plan, testLimits);
+    await broker.apply(orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
     const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(stream).toMatchObject({ max_age: 604_800 * nanosPerSecond, max_bytes: 1_000_000 });
+    expect(stream).toMatchObject({
+      retention: 'interest',
+      max_age: 604_800 * nanosPerSecond,
+      duplicate_window: 120 * nanosPerSecond,
+      num_replicas: 1,
+      storage: 'file',
+      max_bytes: 1_000_000,
+    });
     expect(durable).toMatchObject({
+      deliver_policy: 'all',
       ack_wait: 30 * nanosPerSecond,
+      max_deliver: 5,
+      max_ack_pending: 100,
       description: 'arranged by hand',
     });
   });
@@ -381,6 +402,55 @@ describe('applying a broker plan with jetstream()', () => {
     expect(durable).toMatchObject({ max_deliver: -1, max_ack_pending: -1 });
   });
 
+  test('a duration of a year reaches NATS exactly, in nanoseconds', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streamDefaults: { ...testLimits.streamDefaults, maxAge: '365d' },
+    };
+
+    await broker.apply(orders.plan, limits);
+
+    const stream = await streamConfigOf(server.url, orders.stream);
+    expect(stream.max_age).toBe(31_536_000_000_000_000);
+  });
+
+  test('an undefined setting in a stream’s or durable consumer’s own limits leaves the default in place', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streams: { [orders.stream]: { maxAge: undefined, replicas: undefined } },
+      consumers: { [orders.chargeDurable]: { ackWait: undefined } },
+    };
+
+    await broker.apply(orders.plan, limits);
+
+    const stream = await streamConfigOf(server.url, orders.stream);
+    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(stream).toMatchObject({ max_age: 604_800 * nanosPerSecond, num_replicas: 1 });
+    expect(durable.ack_wait).toBe(30 * nanosPerSecond);
+  });
+
+  test('an undefined entry for a stream, a durable consumer or a name the plan does not list leaves the defaults in place', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const limits: BrokerLimits = {
+      ...testLimits,
+      streams: { [orders.stream]: undefined, [`${prefix}_unlisted`]: undefined },
+      consumers: { [orders.chargeDurable]: undefined, [`${prefix}_unlisted_durable`]: undefined },
+    };
+
+    await broker.apply(orders.plan, limits);
+
+    const stream = await streamConfigOf(server.url, orders.stream);
+    expect(stream.max_age).toBe(604_800 * nanosPerSecond);
+  });
+
   test('a list of ack waits reaches NATS as its backoff, the first as the ack wait', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
@@ -455,6 +525,34 @@ describe('what applying a broker plan refuses', () => {
 
     const info = await durableInfoOf(server.url, billing.orders.stream, billing.durable);
     expect(info?.config.filter_subject).toBe(billing.orders.created);
+  });
+
+  test('apply stops at the first durable consumer it cannot apply and creates none after it', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await jetstream({ connect: aConnect().connect, prefix }).apply(orders.plan, testLimits);
+    const first = `${prefix}_billing-service_first`;
+    const second = `${prefix}_billing-service_second`;
+    const plan: BrokerPlan = {
+      prefix,
+      streams: {},
+      consumers: {
+        [first]: {
+          service: 'billing-service',
+          stream: `${prefix}_absent`,
+          subject: orders.created,
+        },
+        [second]: { service: 'billing-service', stream: orders.stream, subject: orders.created },
+      },
+    };
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+
+    const error = await rejectionOf(broker.apply(plan, testLimits));
+
+    expect(error.message).toContain(
+      `The durable consumer ${first} reads the stream ${prefix}_absent`,
+    );
+    await expect(durableInfoOf(server.url, orders.stream, second)).resolves.toBeUndefined();
   });
 
   test('a stream’s storage, which NATS does not change, rejects apply naming the stream, with NATS’s error as its cause', async () => {
@@ -556,6 +654,28 @@ describe('what applying a broker plan refuses', () => {
     expect(service.opened).toHaveLength(0);
   });
 
+  test('apply refuses an undefined setting and an undefined entry that no default fills, as unset', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const service = aConnect();
+    const broker = jetstream({ connect: service.connect, prefix });
+    const limits: BrokerLimits = {
+      streamDefaults: { ...testLimits.streamDefaults, maxAge: undefined },
+      consumerDefaults: undefined,
+      consumers: { [orders.chargeDurable]: undefined },
+    };
+
+    const error = await rejectionOf(broker.apply(orders.plan, limits));
+
+    expect(error.message).toBe(
+      [
+        `The stream ${orders.stream} has no maxAge in limits.streams or limits.streamDefaults`,
+        `The durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.consumers or limits.consumerDefaults`,
+      ].join('\n'),
+    );
+    expect(service.opened).toHaveLength(0);
+  });
+
   test.each([
     [
       'a duration that is no duration',
@@ -573,9 +693,19 @@ describe('what applying a broker plan refuses', () => {
       "limits.consumerDefaults.ackWait '0s' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
     [
-      'a duration NATS cannot count in nanoseconds',
+      'a duration of millions of years',
       { streamDefaults: { maxAge: '999999999999d' } },
       "limits.streamDefaults.maxAge '999999999999d' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or 'unlimited'",
+    ],
+    [
+      'a duration beyond what NATS counts, 64 bits of nanoseconds',
+      { streamDefaults: { maxAge: '106752d' } },
+      "limits.streamDefaults.maxAge '106752d' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or 'unlimited'",
+    ],
+    [
+      'a duration whose nanoseconds a number cannot hold exactly',
+      { streamDefaults: { duplicateWindow: '9000000000001ms' } },
+      "limits.streamDefaults.duplicateWindow '9000000000001ms' is not a duration such as 500ms, 30s, 2m, 1h or 7d",
     ],
     [
       'no replicas',
@@ -673,11 +803,27 @@ describe('the connection applying a broker plan uses', () => {
 
   test('apply drains the connection when NATS refuses', async () => {
     const prefix = aPrefix();
-    const billing = aBilling(prefix);
+    const orders = anOrders(prefix);
+    await arrangeStream(
+      server.url,
+      { name: orders.stream, subjects: [orders.charge, orders.created] },
+      { storage: 'memory' },
+    );
     const service = aConnect();
     const broker = jetstream({ connect: service.connect, prefix });
 
-    await rejectionOf(broker.apply(billing.plan, testLimits));
+    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+
+    expect(error.cause).toBeInstanceOf(JetStreamApiError);
+    expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test('apply drains the connection when it refuses a durable consumer whose stream does not exist', async () => {
+    const prefix = aPrefix();
+    const service = aConnect();
+    const broker = jetstream({ connect: service.connect, prefix });
+
+    await rejectionOf(broker.apply(aBilling(prefix).plan, testLimits));
 
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
