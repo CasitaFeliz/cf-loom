@@ -409,6 +409,44 @@ describe('deliver()', () => {
     },
   );
 
+  test('a Fact id and transport headers whose broker headers would take more bytes than JetStream stores are refused, naming the Message Version, and no Handler runs', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-pad': 'p'.repeat(30_000) };
+
+    const delivering = broker.deliver(chargeCardV1, charge, {
+      factId: 'f'.repeat(20_000),
+      headers,
+    });
+
+    await expect(delivering).rejects.toThrow(
+      'The broker headers of ChargeCard@1 would take 70069 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+    );
+    expect(received).toEqual([]);
+  });
+
+  test('a broker message id given is counted in place of <Name>.v<n>:<factId>, so a long one is refused and no Handler runs', async () => {
+    const { broker, received } = await running();
+
+    const delivering = broker.deliver(chargeCardV1, charge, {
+      factId: 'f-1',
+      messageId: 'm'.repeat(65_500),
+    });
+
+    await expect(delivering).rejects.toThrow(
+      /^The broker headers of ChargeCard@1 would take 65549 bytes, over the 65535 JetStream stores/,
+    );
+    expect(received).toEqual([]);
+  });
+
+  test('broker headers of exactly the bytes JetStream stores are delivered as given', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-pad': 'p'.repeat(65_460) };
+
+    await broker.deliver(chargeCardV1, charge, { factId: 'f-1', headers });
+
+    expect(received.map(({ meta }) => [meta.factId, meta.headers])).toEqual([['f-1', headers]]);
+  });
+
   test('the same fact delivered twice reaches the Handler twice', async () => {
     const { broker, received } = await running();
 
