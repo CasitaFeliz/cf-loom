@@ -26,6 +26,7 @@ import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type ConsumedFault, messaging } from '../index.ts';
+import { memory } from '../memory/index.ts';
 import { type BrokerPlan, jetstream } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
@@ -567,6 +568,40 @@ describe('consuming over jetstream()', () => {
       deliveryCount: 1,
       headers: { traceparent: '00-abc-def-01' },
     });
+  });
+
+  test('a Fact id and transport headers the rule lets through reach the Handler as given, over jetstream() as over memory()', async () => {
+    const given = {
+      factId: 'pedido ñ\t1',
+      headers: {
+        'x-note': 'café  con\tleche',
+        'x-empty': '',
+        'x-ctl': 'a\u0001b',
+        'x-text': '日本 🎉',
+        traceparent: 'A',
+        Traceparent: 'B',
+      },
+    };
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const overJetstream: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(overJetstream));
+    const overMemory: Received[] = [];
+    const inMemory = await messaging(contract, memory());
+    onTestFinished(() => inMemory.close());
+    await inMemory.consume(handlersOf(overMemory));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+
+    await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
+    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    const seenOf = (received: Received[]) => {
+      return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
+    };
+    expect(seenOf(overJetstream)).toEqual(given);
+    expect(seenOf(overMemory)).toEqual(given);
   });
 
   test('a header published with several values reaches the Handler as its values joined with ", "', async () => {
