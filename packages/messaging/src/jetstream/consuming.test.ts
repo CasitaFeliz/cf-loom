@@ -229,6 +229,14 @@ function aGate() {
   return { opened: gate.promise, open };
 }
 
+/** Waits until the durable consumer has a pull open on the Broker, so a Message published now is delivered at once. */
+async function waitUntilPulling(stream: string, durable: string): Promise<void> {
+  await vi.waitFor(async () => {
+    const info = await durableInfoOf(server.url, stream, durable);
+    expect(info?.num_waiting).toBe(1);
+  });
+}
+
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
     const prefix = aPrefix();
@@ -745,5 +753,170 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
+  }, 10_000);
+});
+
+describe('closing while consuming over jetstream()', () => {
+  test('close stops pulling at once: a Message published while a Handler runs is not delivered, and stays pending for the next consumer', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    await waitUntilPulling(names.stream, names.chargeDurable);
+    const closing = orders.close();
+
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' });
+    await aWhile();
+    const whileClosing = await durableInfoOf(server.url, names.stream, names.chargeDurable);
+    gate.open();
+    await closing;
+
+    expect(whileClosing).toMatchObject({
+      num_pending: 1,
+      num_ack_pending: 0,
+      num_waiting: 0,
+      delivered: { consumer_seq: 0 },
+    });
+    const next = await aMessaging(prefix);
+    await next.consume(handlersOf(received));
+    await vi.waitFor(() =>
+      expect(received.map(({ handler }) => handler)).toContain('ChargeCard@1'),
+    );
+  });
+
+  test('close waits for a running Handler and acknowledges its Message before it drains the connection', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    const closing = orders.close();
+
+    await aWhile();
+    const drainedWhileRunning = orders.connections.map((connection) => connection.isDraining());
+    gate.open();
+    await closing;
+
+    expect(drainedWhileRunning).toEqual([false]);
+    expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
+    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    expect(info).toMatchObject({ num_ack_pending: 0, ack_floor: { consumer_seq: 1 } });
+  });
+
+  test('a Message NATS hands over after close started is handed back, so the next consumer gets it at once', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    let closing: Promise<void> | undefined;
+    let closeOrders = () => {};
+    const closingWhenHandedOver: Replacing = (connection) => ({
+      subscribe: (subject, options) => {
+        const callback = options?.callback;
+        if (callback === undefined) {
+          return connection.subscribe(subject, options);
+        }
+        const handingOver: typeof callback = (error, message) => {
+          callback(error, message);
+          if (message?.reply?.startsWith('$JS.ACK.')) {
+            closeOrders();
+          }
+        };
+        return connection.subscribe(subject, { ...options, callback: handingOver });
+      },
+    });
+    const orders = await aMessaging(prefix, { replacing: closingWhenHandedOver });
+    closeOrders = () => {
+      closing ??= orders.close();
+    };
+    await orders.consume(handlersOf(received));
+    await waitUntilPulling(names.stream, names.notifyDurable);
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await closing;
+
+    expect(received).toEqual([]);
+    const next = await aMessaging(prefix);
+    await next.consume(handlersOf(received));
+    await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 4_000 });
+    expect(received[0]?.meta.deliveryCount).toBe(2);
+  }, 10_000);
+
+  test('after close the connection is closed and no durable consumer has a pull open', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf([]));
+    await waitUntilPulling(names.stream, names.notifyDurable);
+    await waitUntilPulling(names.stream, names.chargeDurable);
+
+    await orders.close();
+
+    expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
+    const infos = [
+      await durableInfoOf(server.url, names.stream, names.notifyDurable),
+      await durableInfoOf(server.url, names.stream, names.chargeDurable),
+    ];
+    expect(infos.map((info) => info?.num_waiting)).toEqual([0, 0]);
+  });
+
+  test('close during consume’s binding means no pull at all', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    let holding = false;
+    const binding = aGate();
+    const holdingBinding: Replacing = (connection) => ({
+      request: async (subject, data, options) => {
+        if (holding) {
+          await binding.opened;
+        }
+        return await connection.request(subject, data, options);
+      },
+    });
+    const orders = await aMessaging(prefix, { replacing: holdingBinding });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    holding = true;
+    const consuming = orders.consume(handlersOf(received));
+
+    const closing = orders.close();
+    binding.open();
+    await Promise.all([consuming, closing]);
+
+    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    expect(received).toEqual([]);
+    expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
+  });
+
+  test('an acknowledgement the Service’s closed connection cannot send leaves the Message for redelivery, and nothing throws', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    await orders.connections[0]?.close();
+    await sleep(800);
+    gate.open();
+    await orders.close();
+
+    const next = await aMessaging(prefix);
+    await next.consume(handlersOf(received));
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
   }, 10_000);
 });

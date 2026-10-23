@@ -1,4 +1,4 @@
-import type { Consumer, JsMsg } from '@nats-io/jetstream';
+import type { Consumer, ConsumerMessages, JsMsg } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Binding } from './binding.ts';
 import { deliver } from './delivering.ts';
@@ -24,10 +24,10 @@ export async function pullFrom(
   stopping: AbortSignal,
 ): Promise<void> {
   while (!stopping.aborted && !natsConnection.isClosed() && !natsConnection.isDraining()) {
-    const pulled = await pulledFrom(binding.pulled);
+    const pulled = await pulledFrom(binding.pulled, stopping);
     switch (pulled.kind) {
       case 'message':
-        await deliver(pulled.message, binding);
+        await deliveredOrHandedBack(pulled.message, binding, stopping);
         break;
       case 'expired':
         break;
@@ -38,16 +38,43 @@ export async function pullFrom(
   }
 }
 
-async function pulledFrom(pulled: Consumer): Promise<Pulled> {
+async function pulledFrom(pulled: Consumer, stopping: AbortSignal): Promise<Pulled> {
   try {
     const messages = await pulled.fetch(oneMessage);
+    return await firstOf(messages, stopping);
+  } catch {
+    return { kind: 'failed' };
+  }
+}
+
+/** The first Message of a pull, which is stopped at once when `stopping` aborts, so NATS delivers it nothing more. */
+async function firstOf(messages: ConsumerMessages, stopping: AbortSignal): Promise<Pulled> {
+  const stop = () => messages.stop();
+  stopping.addEventListener('abort', stop);
+  if (stopping.aborted) {
+    stop();
+  }
+  try {
     for await (const message of messages) {
       return { kind: 'message', message };
     }
     return { kind: 'expired' };
-  } catch {
-    return { kind: 'failed' };
+  } finally {
+    stopping.removeEventListener('abort', stop);
   }
+}
+
+/** A Message that was already on its way when pulling stopped goes back to NATS for another process, not to a Handler. */
+async function deliveredOrHandedBack(
+  message: JsMsg,
+  binding: Binding,
+  stopping: AbortSignal,
+): Promise<void> {
+  if (stopping.aborted) {
+    message.nak();
+    return;
+  }
+  await deliver(message, binding);
 }
 
 /** Waits the retry pause, or less when `stopping` aborts; its timer and listener never outlive it. */
