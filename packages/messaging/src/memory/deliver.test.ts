@@ -339,7 +339,7 @@ describe('deliver()', () => {
       const delivering = broker.deliver(chargeCardV1, charge, { headers: { [name]: 'x' } });
 
       await expect(delivering).rejects.toThrow(
-        `The transport header ${name} takes a name cf-loom sets itself`,
+        `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
       );
       expect(received).toEqual([]);
     },

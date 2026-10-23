@@ -183,23 +183,24 @@ describe('publisher.publish', () => {
     expect(published.map((message) => message.headers)).toEqual([headers, headers]);
   });
 
-  test.each(['Nats-Msg-Id', 'Cf-Loom-Fact-Id', 'nats-msg-id', 'CF-LOOM-FACT-ID'])(
-    'a header named %s throws and nothing is sent',
-    async (name) => {
-      const { publisher, published } = await opened();
+  test.each([
+    'Nats-Msg-Id',
+    'Cf-Loom-Fact-Id',
+    'nats-msg-id',
+    'CF-LOOM-FACT-ID',
+    'Nats-TTL',
+    'nats-expected-stream',
+    'Cf-Loom-Tenant',
+  ])('a header named %s throws and nothing is sent', async (name) => {
+    const { publisher, published } = await opened();
 
-      const publishing = publisher.publish(
-        'OrderCreated',
-        { v2, v3 },
-        { headers: { [name]: 'x' } },
-      );
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers: { [name]: 'x' } });
 
-      await expect(publishing).rejects.toThrow(
-        `The transport header ${name} takes a name cf-loom sets itself`,
-      );
-      expect(published).toEqual([]);
-    },
-  );
+    await expect(publishing).rejects.toThrow(
+      `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
+    );
+    expect(published).toEqual([]);
+  });
 
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();

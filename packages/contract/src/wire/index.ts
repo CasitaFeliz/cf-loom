@@ -17,7 +17,6 @@ export {
   isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
-  isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,

@@ -1,9 +1,9 @@
 import type { Command, Event } from '@cf-loom/contract';
 import {
   brokerMessageIdOf,
-  isReservedHeader,
   jsonBytesOf,
   messageIdentityOf,
+  transportHeaderFitOf,
 } from '@cf-loom/contract/internal';
 import { checkedMessageBody } from '@cf-loom/handlers/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
@@ -72,13 +72,16 @@ export function factIdOf(given: string | undefined): string {
   return given;
 }
 
-/** The transport headers as given, none of them taking a name cf-loom sets itself. */
+/** The transport headers as given, each one reaching every Broker unchanged. */
 export function transportHeadersOf(
   headers: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
-  const reserved = Object.keys(headers).find(isReservedHeader);
-  if (reserved !== undefined) {
-    throw new Error(`The transport header ${reserved} takes a name cf-loom sets itself`);
+  for (const [name, value] of Object.entries(headers)) {
+    if (transportHeaderFitOf(name, value) === 'reserved-name') {
+      throw new Error(
+        `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
+      );
+    }
   }
   return { ...headers };
 }

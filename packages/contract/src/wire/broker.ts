@@ -155,7 +155,7 @@ function isCarriedValue(value: unknown): value is string {
 }
 
 /** Whether a transport header would take a name in the namespace of cf-loom's headers or of NATS's, in any case. */
-export function isReservedHeader(name: string): boolean {
+function isReservedHeader(name: string): boolean {
   const lowered = name.toLowerCase();
   return lowered.startsWith('cf-loom-') || lowered.startsWith('nats-');
 }

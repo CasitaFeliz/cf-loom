@@ -171,7 +171,6 @@ export {
   isPrefixedName,
   isPrefixedSubject,
   isQueryText,
-  isReservedHeader,
   isSegmentText,
   isTextValue,
   jsonBytesOf,
