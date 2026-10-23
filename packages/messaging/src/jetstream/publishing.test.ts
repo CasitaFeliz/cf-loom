@@ -182,6 +182,30 @@ describe('publishing over jetstream()', () => {
     await expect(messagesIn(stream)).resolves.toBe(2);
   });
 
+  test.each([
+    [
+      { headers: { 'trace id': 'x' } },
+      /^The transport header name "trace id" cannot travel over NATS/,
+    ],
+    [{ factId: 'o-1 ' }, /^A Fact id is a non-empty string /],
+    [
+      { headers: { 'Nats-Expected-Stream': 'other' } },
+      /^The transport header Nats-Expected-Stream takes a name /,
+    ],
+  ])(
+    'publish with %j rejects with cf-loom’s error, not the NATS client’s, and the stream stores nothing',
+    async (options, message) => {
+      const { publisher, stream } = await aMessaging();
+      const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
+
+      const error = await rejectionOf(publisher.publish('OrderCreated', bodies, options));
+
+      expect(error).not.toBeInstanceOf(PublishError);
+      expect(error).toMatchObject({ message: expect.stringMatching(message) });
+      await expect(messagesIn(stream)).resolves.toBe(0);
+    },
+  );
+
   test('a publish the NATS client rejects rejects with a PublishError whose cause is that very error', async () => {
     const refusing = aWatchedConnect();
     const prefix = aPrefix();
