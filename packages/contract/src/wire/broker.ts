@@ -56,7 +56,7 @@ export function receivedHeadersOf(
   const valueByName = joinedByName(entries);
   const messageId = valueByName.get(brokerMessageIdHeader) ?? '';
   const factId = valueByName.get(factIdHeader) ?? '';
-  const ids = [
+  const ids: (readonly [string, string])[] = [
     [brokerMessageIdHeader, messageId],
     [factIdHeader, factId],
   ];
