@@ -511,17 +511,27 @@ describe('cf-loom broker-plan: what it refuses', () => {
     });
   });
 
-  test.for([
-    [['generate', '--prefix', 'staging'], 'Only broker-plan takes --prefix'],
-    [['broker-plan', 'now'], 'broker-plan takes no argument'],
-  ] as const)(
-    'only broker-plan takes --prefix, and broker-plan takes no argument',
-    ([args, message]) => {
-      const project = aProject({});
+  test('only broker-plan takes --prefix', () => {
+    const project = aProject({});
 
-      const ran = cfLoom(project, ...args);
+    const ran = cfLoom(project, 'generate', '--prefix', 'staging');
 
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${message}. ${usage}\n` });
-    },
-  );
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Only broker-plan takes --prefix. ${usage}\n`,
+    });
+  });
+
+  test('broker-plan takes no argument', () => {
+    const project = aProject({});
+
+    const ran = cfLoom(project, 'broker-plan', 'now');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `broker-plan takes no argument. ${usage}\n`,
+    });
+  });
 });
