@@ -11,7 +11,7 @@ import {
 } from '@cf-loom/contract';
 import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
-import { headers, type NatsConnection } from '@nats-io/nats-core';
+import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
@@ -224,13 +224,16 @@ async function waitUntilSettled(stream: string, durable: string, delivered: numb
 
 const oneSecond = 1_000_000_000;
 
-/** The methods of a NATS connection that record each request for a Message a durable consumer is pulled with: its subject and how long it waits, in nanoseconds. */
-function recordingPulls(pulls: { subject: string; expires: number }[]): Replacing {
+/** A request for a Message a durable consumer is pulled with: its subject, how long it waits in nanoseconds, and when it was sent. */
+type RecordedPull = { readonly subject: string; readonly expires: number; readonly at: number };
+
+/** The methods of a NATS connection that record each request for a Message a durable consumer is pulled with. */
+function recordingPulls(pulls: RecordedPull[]): Replacing {
   return (connection) => ({
     publish: (subject, data, options) => {
       if (subject.includes('.CONSUMER.MSG.NEXT.')) {
         const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
-        pulls.push({ subject, expires: JSON.parse(text).expires });
+        pulls.push({ subject, expires: JSON.parse(text).expires, at: Date.now() });
       }
       connection.publish(subject, data, options);
     },
@@ -246,7 +249,7 @@ function activeTimers(): number {
 async function aConsumingWithFailingPulls(prefix: string) {
   const names = anOrders(prefix);
   await arrangeOrders(prefix);
-  const pulls: { subject: string; expires: number }[] = [];
+  const pulls: RecordedPull[] = [];
   const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
   await orders.consume(handlersOf([]));
   await dropDurable(server.url, names.stream, names.notifyDurable);
@@ -928,10 +931,11 @@ describe('closing while consuming over jetstream()', () => {
     expect(received[0]?.meta.deliveryCount).toBe(2);
   }, 10_000);
 
-  test('after close the connection is closed and no durable consumer has a pull open', async () => {
+  test('close with pulls open leaves no timer or pull behind: the connection is closed and no durable consumer has a pull open', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
+    const timersBefore = activeTimers();
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf([]));
     await waitUntilPulling(names.stream, names.notifyDurable);
@@ -940,6 +944,7 @@ describe('closing while consuming over jetstream()', () => {
     await orders.close();
 
     expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
+    expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
     const infos = [
       await durableInfoOf(server.url, names.stream, names.notifyDurable),
       await durableInfoOf(server.url, names.stream, names.chargeDurable),
@@ -1034,6 +1039,96 @@ describe('pulling over jetstream()', () => {
     expect(lost).toBe(2);
   }, 10_000);
 
+  test('pulls that expire leave no subscription behind', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    const subscriptions: Subscription[] = [];
+    let recording = false;
+    const recordingSubscriptions: Replacing = (connection) => ({
+      subscribe: (subject, options) => {
+        const subscription = connection.subscribe(subject, options);
+        if (recording) {
+          subscriptions.push(subscription);
+        }
+        return subscription;
+      },
+    });
+    const orders = await aMessaging(prefix, { replacing: recordingSubscriptions });
+    await orders.consume(handlersOf([]));
+
+    recording = true;
+    await vi.waitFor(() => expect(subscriptions.length).toBeGreaterThanOrEqual(8), {
+      timeout: 5_000,
+    });
+
+    expect(
+      subscriptions.filter((subscription) => !subscription.isClosed()).length,
+    ).toBeLessThanOrEqual(2);
+  }, 10_000);
+
+  test('pulls that expire leave no abort listener behind', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    const removed = vi.spyOn(EventTarget.prototype, 'removeEventListener');
+    const pulls: RecordedPull[] = [];
+    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
+    await orders.consume(handlersOf([]));
+
+    await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(8), { timeout: 5_000 });
+
+    const listening = new Map<EventTarget, number>();
+    for (const [spy, step] of [
+      [added, 1],
+      [removed, -1],
+    ] as const) {
+      spy.mock.calls.forEach(([type], call) => {
+        const target = spy.mock.contexts[call] as EventTarget;
+        if (type === 'abort' && target instanceof AbortSignal) {
+          listening.set(target, (listening.get(target) ?? 0) + step);
+        }
+      });
+    }
+    expect(Math.max(0, ...listening.values())).toBeLessThanOrEqual(2);
+  }, 10_000);
+
+  test('a pull that expired is followed at once by the next, not after the retry pause', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    const pulls: RecordedPull[] = [];
+    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
+    const received: Received[] = [];
+    const ofNotify = () => pulls.filter(({ subject }) => subject.endsWith(names.notifyDurable));
+
+    await orders.consume(handlersOf(received));
+
+    await vi.waitFor(() => expect(ofNotify().length).toBeGreaterThanOrEqual(4), { timeout: 5_000 });
+    const sentAt = ofNotify().map(({ at }) => at);
+    const gaps = sentAt.slice(1).map((at, index) => at - (sentAt[index] ?? at));
+    expect(Math.max(...gaps)).toBeLessThan(1_000);
+    expect(received).toEqual([]);
+  }, 10_000);
+
+  test('a pull the Broker answers with 409 is asked again only after the retry pause', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const pulls: RecordedPull[] = [];
+    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
+    await orders.consume(handlersOf([]));
+    await waitUntilPulling(names.stream, names.notifyDurable);
+    const pulledBefore = pulls.length;
+
+    const deletedAt = Date.now();
+    await dropDurable(server.url, names.stream, names.notifyDurable);
+
+    const nextOf = () =>
+      pulls.slice(pulledBefore).find(({ subject }) => subject.endsWith(names.notifyDurable));
+    await vi.waitFor(() => expect(nextOf()).toBeDefined(), { timeout: 3_000 });
+    expect((nextOf()?.at ?? 0) - deletedAt).toBeGreaterThanOrEqual(900);
+  }, 10_000);
+
   test.each([
     ['no max_expires', {}, 30],
     ['a max_expires of 5 seconds', { max_expires: 5 * oneSecond }, 5],
@@ -1044,7 +1139,7 @@ describe('pulling over jetstream()', () => {
     async (_name, settings, seconds) => {
       const prefix = aPrefix();
       await arrangeOrders(prefix, settings);
-      const pulls: { subject: string; expires: number }[] = [];
+      const pulls: RecordedPull[] = [];
       const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
 
       await orders.consume(handlersOf([]));
