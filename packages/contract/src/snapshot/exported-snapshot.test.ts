@@ -250,7 +250,7 @@ describe('exportedSnapshotOf', () => {
       kept: [orderLocked],
     },
     {
-      reach: 'a Guard two Guards down its Guard’s guards answers',
+      reach: 'a Guard its Guard’s Guard lists answers',
       entry: attaching('apiKey'),
       guards: {
         apiKey: aGuardEntry({ guards: ['session'] }),
