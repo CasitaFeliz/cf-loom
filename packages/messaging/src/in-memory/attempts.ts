@@ -2,6 +2,7 @@ import type { Command, Event } from '@cf-loom/contract';
 import {
   brokerMessageIdOf,
   isCommand,
+  isIdHeaderValue,
   isSubscription,
   jsonBytesOf,
   messageIdentityOf,
@@ -62,12 +63,25 @@ function attemptsOf(
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
   const factId = factIdOf(meta.factId);
-  const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
+  const messageId = messageIdOf(message, factId, meta.messageId);
   const headers = transportHeadersOf(meta.headers ?? {});
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
     return { consumer, delivery: firstDeliveryOf({ messageId, factId, headers, body: bytes }) };
   });
+}
+
+/** The broker message id a test gave, which must arrive as given as a Fact id must, or the one a Message of the Fact id has. */
+function messageIdOf(message: Event | Command, factId: string, given: string | undefined): string {
+  if (given === undefined) {
+    return brokerMessageIdOf(message, factId);
+  }
+  if (!isIdHeaderValue(given)) {
+    throw new Error(
+      'A broker message id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+    );
+  }
+  return given;
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {
