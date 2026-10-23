@@ -31,12 +31,25 @@
   "devDependencies": {
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
+    "@nats-io/jetstream": "catalog:",
+    "@nats-io/nats-core": "catalog:",
+    "@nats-io/transport-node": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
+    "@nats-io/jetstream": "catalog:",
+    "@nats-io/nats-core": "catalog:",
     "zod": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@nats-io/jetstream": {
+      "optional": true
+    },
+    "@nats-io/nats-core": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=24"
