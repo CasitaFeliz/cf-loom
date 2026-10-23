@@ -1,4 +1,3 @@
-// biome-ignore-all lint/style/useNamingConvention: the environment variables orders-service reads
 import { join } from 'node:path';
 import { client } from '@cf-loom/client';
 import { serve } from '@cf-loom/server';
@@ -7,6 +6,7 @@ import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/n
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
+import { brokerPrefix, ordersEnvironment } from './environments.ts';
 import { applyPlanOf } from './nats-broker.ts';
 import { aServiceProcess, type ServiceProcess } from './service-process.ts';
 
@@ -23,12 +23,8 @@ let ordersUrl = '';
 beforeAll(async () => {
   const server = await aNatsServer();
   nats = server;
-  await applyPlanOf(ordersDir, server.url, 't-1');
-  orders = await aServiceProcess(ordersDir, {
-    BROKER_PREFIX: 't-1',
-    NATS_URL: server.url,
-    PORT: '0',
-  });
+  await applyPlanOf(ordersDir, server.url, brokerPrefix);
+  orders = await aServiceProcess(ordersDir, ordersEnvironment(server.url));
   ordersUrl = `http://127.0.0.1:${orders.port}`;
   vi.stubEnv('ORDERS_SERVICE_URL', ordersUrl);
   vi.stubEnv('ORDERS_SERVICE_API_KEY', 'billing-key');
@@ -38,7 +34,7 @@ afterAll(async () => {
   vi.unstubAllEnvs();
   await orders?.stop();
   await nats?.stop();
-});
+}, 30_000);
 
 function anInvoiceRequest(orderId: string): Request {
   return new Request('http://billing.test/invoices', {
