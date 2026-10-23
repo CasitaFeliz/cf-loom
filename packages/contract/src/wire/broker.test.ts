@@ -8,6 +8,7 @@ import {
   isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
+  streamNameOf,
   subjectOf,
 } from '../internal/index.ts';
 
@@ -41,6 +42,12 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
+  test('a stream is named after its Service', () => {
+    const stream = streamNameOf('orders-service');
+
+    expect(stream).toBe('orders-service');
+  });
+
   test('a Subscription’s durable consumer is <service>_<name> and a Command Version’s <service>_command_<Name>_v<n>', () => {
     const durables = [
       durableNameOf('orders-service', notifyOnCreated),
@@ -58,7 +65,7 @@ describe('the Wire protocol over the broker', () => {
 
     const prefixed = [
       prefixedSubjectOf('staging', subject),
-      prefixedNameOf('staging', 'orders-service'),
+      prefixedNameOf('staging', streamNameOf('orders-service')),
       prefixedNameOf('staging', durableNameOf('orders-service', notifyOnCreated)),
     ];
 
@@ -72,9 +79,17 @@ describe('the Wire protocol over the broker', () => {
   test('with no prefix a subject, a stream and a durable consumer are themselves', () => {
     const subject = subjectOf('orders-service', orderCreatedV2);
 
-    const names = [prefixedSubjectOf(null, subject), prefixedNameOf(null, 'orders-service')];
+    const names = [
+      prefixedSubjectOf(null, subject),
+      prefixedNameOf(null, streamNameOf('orders-service')),
+      prefixedNameOf(null, durableNameOf('orders-service', notifyOnCreated)),
+    ];
 
-    expect(names).toEqual(['orders-service.event.OrderCreated.v2', 'orders-service']);
+    expect(names).toEqual([
+      'orders-service.event.OrderCreated.v2',
+      'orders-service',
+      'orders-service_notify-on-created',
+    ]);
   });
 
   test('a prefix is kebab-case, as a Service name is', () => {

@@ -23,6 +23,7 @@ import { type Lab, test } from '../test/npm-lab.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
 import { entriesOf } from '../test/tarball.ts';
+import { usage } from '../test/usage.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
@@ -109,9 +110,6 @@ function cfLoomThrowing(message: string, ...args: string[]) {
 
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
-
-const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | publish [--force] [--prerelease]';
 
 const config = [
   "import { defineConfig } from '@cf-loom/cli';",

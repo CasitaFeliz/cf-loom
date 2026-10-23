@@ -14,6 +14,7 @@ import { afterEach, describe, expect, test } from 'vitest';
 import { bin } from '../test/cf-loom-run.ts';
 import { aDeadAddress } from '../test/dead-address.ts';
 import { payments } from '../test/payments-package.ts';
+import { usage } from '../test/usage.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
@@ -96,9 +97,6 @@ function importOf(imported: string, specifier: string): string {
 function lines(written: readonly string[]): string {
   return `${written.join('\n')}\n`;
 }
-
-const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | publish [--force] [--prerelease]';
 
 const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' });
 
@@ -476,7 +474,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
   });
 
   test.for([
-    ['a stale Snapshot', aMessagingService(), 1, staleSnapshotLine],
+    ['a missing Snapshot', aMessagingService(), 1, staleSnapshotLine],
     [
       'an Application',
       anApplication,
@@ -499,16 +497,12 @@ describe('cf-loom broker-plan: what it refuses', () => {
   );
 
   test.for([
-    ['--prefix', 'stag_ing'],
-    ['--prefix', undefined],
-  ] as const)('a prefix that is not kebab-case is a usage error: %s %s', ([option, value]) => {
+    ['a prefix with an underscore', ['--prefix', 'stag_ing']],
+    ['no prefix after the option', ['--prefix']],
+  ] as const)('a prefix that is not kebab-case is a usage error: %s', ([_case, options]) => {
     const project = aProject({});
 
-    const ran = cfLoom(
-      project,
-      'broker-plan',
-      ...(value === undefined ? [option] : [option, value]),
-    );
+    const ran = cfLoom(project, 'broker-plan', ...options);
 
     expect(ran).toEqual({
       status: 3,
@@ -520,11 +514,14 @@ describe('cf-loom broker-plan: what it refuses', () => {
   test.for([
     [['generate', '--prefix', 'staging'], 'Only broker-plan takes --prefix'],
     [['broker-plan', 'now'], 'broker-plan takes no argument'],
-  ] as const)('broker-plan and its option are called wrongly: %s', ([args, message]) => {
-    const project = aProject({});
+  ] as const)(
+    'only broker-plan takes --prefix, and broker-plan takes no argument',
+    ([args, message]) => {
+      const project = aProject({});
 
-    const ran = cfLoom(project, ...args);
+      const ran = cfLoom(project, ...args);
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${message}. ${usage}\n` });
-  });
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${message}. ${usage}\n` });
+    },
+  );
 });

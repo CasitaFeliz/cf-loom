@@ -16,6 +16,7 @@ export {
   isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
+  streamNameOf,
   subjectOf,
 } from './broker.ts';
 export { jsonContentType } from './content-type.ts';

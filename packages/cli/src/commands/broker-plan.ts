@@ -1,10 +1,15 @@
 import { type BrokerPlan, brokerPlanOf } from '@cf-loom/contract/internal';
 import { builtOf, type Run } from '../project/index.ts';
-import { brokerPlanLinesOf } from './broker-plan-lines.ts';
 import type { Output } from './check.ts';
 import { errorsExitOf } from './check-json.ts';
-import type { Stopped } from './comparison.ts';
-import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
+import {
+  committedStopOf,
+  done,
+  type Exit,
+  failureExitOf,
+  type Stopped,
+  toolingError,
+} from './exit.ts';
 
 /** The broker plan of a Service, with its name for the line that says the plan is empty. */
 type Planned = { readonly kind: 'planned'; readonly service: string; readonly plan: BrokerPlan };
@@ -54,4 +59,16 @@ async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Sto
 
 function noPlanLine(root: string): string {
   return `${root} has no broker plan: only a Service's Messages travel through the Broker`;
+}
+
+/** The lines `broker-plan` prints: each stream with its subjects, then each durable consumer, or that the Service needs none. */
+function brokerPlanLinesOf(plan: BrokerPlan, service: string): readonly string[] {
+  const streams = Object.entries(plan.streams).map(
+    ([name, stream]) => `Stream ${name}: ${stream.subjects.join(' ')}`,
+  );
+  const consumers = Object.entries(plan.consumers).map(
+    ([name, consumer]) => `Durable consumer ${name} on ${consumer.stream}: ${consumer.subject}`,
+  );
+  const lines = [...streams, ...consumers];
+  return lines.length === 0 ? [`${service} needs no stream and no durable consumer`] : lines;
 }

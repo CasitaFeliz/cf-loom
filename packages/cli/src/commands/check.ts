@@ -2,10 +2,10 @@ import type { Run } from '../project/index.ts';
 import { checkedJsonOf, errorsExitOf } from './check-json.ts';
 import { linesOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
-import { checkedFrom, committedBuiltOf, comparisonOf, type Stopped } from './comparison.ts';
-import type { Exit } from './exit.ts';
+import { checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
+import type { Exit, Stopped } from './exit.ts';
 
-/** How a command prints: its lines, or, for `check`, one JSON document. */
+/** How a command prints: its lines, or, for `check` and `broker-plan`, one JSON document. */
 export type Output = 'lines' | 'json';
 
 /**

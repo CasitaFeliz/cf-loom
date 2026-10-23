@@ -3,14 +3,8 @@ import { type Peers, peerRangesOf } from '../contract-package/index.ts';
 import type { Run } from '../project/index.ts';
 import { comparedLinesOf } from './check-lines.ts';
 import { endingOf } from './checked.ts';
-import {
-  type Comparison,
-  checkedFrom,
-  committedBuiltOf,
-  comparisonOf,
-  type Stopped,
-} from './comparison.ts';
-import { done, type Exit, toolingError } from './exit.ts';
+import { type Comparison, checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
+import { done, type Exit, type Stopped, toolingError } from './exit.ts';
 import { builtPeersOf } from './peers.ts';
 import { publishedPackageOf, type ToPublish } from './published-package.ts';
 import {

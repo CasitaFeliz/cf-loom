@@ -14,7 +14,7 @@ export function checkedJsonOf(checked: Checked, status: Ending['status']): strin
   });
 }
 
-/** A stop as `check --json` ends: the document of its lines as errors on stdout, its lines kept on stderr. */
+/** A stop as a `--json` command ends: the document of its lines as errors on stdout, its lines kept on stderr. */
 export function errorsExitOf(stop: Exit): Exit {
   const document = JSON.stringify({ status: stop.status, errors: stop.stderr });
   return { ...stop, stdout: [document] };

@@ -175,6 +175,7 @@ export {
   reservedFaults,
   reservedResponseOf,
   segmentOf,
+  streamNameOf,
   subjectOf,
   successResponseOf,
   textOfValue,

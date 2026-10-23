@@ -18,7 +18,9 @@ const optionTypes = {
   prerelease: { type: 'boolean' },
 } as const;
 const knownOptions = Object.keys(optionTypes);
-const flags = ['json', 'force', 'prerelease'];
+const flags = Object.entries(optionTypes)
+  .filter(([, { type }]) => type === 'boolean')
+  .map(([name]) => name);
 
 /** The command the arguments name, or the usage error they are. */
 type Parsed =

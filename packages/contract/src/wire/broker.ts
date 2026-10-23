@@ -23,6 +23,11 @@ export function brokerMessageIdOf(
   return `${subjectVersionOf(message)}:${factId}`;
 }
 
+/** The stream of a Service, named after it: its own Messages travel on it, and a consumer of its Events reads it. */
+export function streamNameOf(service: string): string {
+  return service;
+}
+
 /** What has a durable consumer: a Subscription by its name, or a Command's Message Version. */
 export type DurableConsumed =
   | { readonly kind: 'subscription'; readonly name: string }
