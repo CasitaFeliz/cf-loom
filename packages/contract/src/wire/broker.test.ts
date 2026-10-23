@@ -177,6 +177,25 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
+  test('a transport header name NATS cannot carry is refused', () => {
+    const uncarriedNames = [
+      'a:b',
+      'trace id',
+      'a\tb',
+      'a\u0001b',
+      'a\u007fb',
+      'café',
+      'a\uD800',
+      '',
+    ];
+
+    const fits = [...uncarriedNames, 'x-b3_trace.id!'].map((name) =>
+      transportHeaderFitOf(name, 'x'),
+    );
+
+    expect(fits).toEqual([...uncarriedNames.map(() => 'uncarried-name'), 'travels']);
+  });
+
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
     const message = {
       messageId: 'OrderCreated.v2:o-1:created',
