@@ -72,10 +72,13 @@ function aPrefix(): string {
 }
 
 /** The Service’s own `connect`: opens a connection to the test server, with the methods `replacing` gives, and closes it when the test ends. */
-function aConnect(replacing?: Replacing, servers: string = server.url) {
+function aConnect(replacing?: Replacing, servers: string = server.url, inboxPrefix?: string) {
   const opened: NatsConnection[] = [];
   const connectService = async (): Promise<NatsConnection> => {
-    const connection = await connect({ servers });
+    const connection = await connect({
+      servers,
+      ...(inboxPrefix === undefined ? {} : { inboxPrefix }),
+    });
     opened.push(connection);
     onTestFinished(() => connection.close());
     return replacing === undefined ? connection : withMethods(connection, replacing(connection));
@@ -138,9 +141,10 @@ async function aMessaging(
     readonly onServiceFault?: (fault: ConsumedFault) => void;
     readonly replacing?: Replacing;
     readonly servers?: string;
+    readonly inboxPrefix?: string;
   } = {},
 ) {
-  const service = aConnect(settings.replacing, settings.servers);
+  const service = aConnect(settings.replacing, settings.servers, settings.inboxPrefix);
   const broker = jetstream({ connect: service.connect, prefix });
   const onServiceFault = settings.onServiceFault ?? (() => undefined);
   const opened = await messaging(contract, broker, { onServiceFault });
@@ -1065,6 +1069,31 @@ describe('pulling over jetstream()', () => {
       subscriptions.filter((subscription) => !subscription.isClosed()).length,
     ).toBeLessThanOrEqual(2);
   }, 10_000);
+
+  test('pulls subscribe on the inbox prefix the Service’s connection was opened with', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const subjects: string[] = [];
+    let recording = false;
+    const recordingSubjects: Replacing = (connection) => ({
+      subscribe: (subject, options) => {
+        if (recording) {
+          subjects.push(subject);
+        }
+        return connection.subscribe(subject, options);
+      },
+    });
+    const orders = await aMessaging(prefix, {
+      replacing: recordingSubjects,
+      inboxPrefix: 'svc_in',
+    });
+    recording = true;
+
+    await orders.consume(handlersOf([]));
+
+    await vi.waitFor(() => expect(subjects.length).toBeGreaterThanOrEqual(2));
+    expect(subjects.filter((subject) => !subject.startsWith('svc_in.'))).toEqual([]);
+  });
 
   test('pulls that expire leave no abort listener behind', async () => {
     const prefix = aPrefix();
