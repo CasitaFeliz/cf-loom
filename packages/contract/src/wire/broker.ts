@@ -120,20 +120,33 @@ export function isPrefixedSubject(prefix: string | null, subject: string): boole
   return subject.startsWith(prefixedSubjectOf(prefix, ''));
 }
 
-/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves, or a name NATS cannot carry. */
-export type TransportHeaderFit = 'travels' | 'reserved-name' | 'uncarried-name';
+/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves, a name NATS cannot carry, or a value NATS would change. */
+export type TransportHeaderFit = 'travels' | 'reserved-name' | 'uncarried-name' | 'changed-value';
 
 /** How a transport header fares over the Broker, so the core refuses one NATS would act on, refuse or change. */
-export function transportHeaderFitOf(name: string, _value: unknown): TransportHeaderFit {
+export function transportHeaderFitOf(name: string, value: unknown): TransportHeaderFit {
   if (isReservedHeader(name)) {
     return 'reserved-name';
   }
-  return isCarriedName(name) ? 'travels' : 'uncarried-name';
+  if (!isCarriedName(name)) {
+    return 'uncarried-name';
+  }
+  return isCarriedValue(value) ? 'travels' : 'changed-value';
 }
 
 /** Whether NATS carries a header name: one or more visible ASCII characters but the colon. */
 function isCarriedName(name: string): boolean {
   return /^[\x21-\x39\x3b-\x7e]+$/.test(name);
+}
+
+/** Whether NATS carries a header value unchanged: a string with no CR or LF, no whitespace at either end for `trim` and no lone surrogate. */
+function isCarriedValue(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    !/[\r\n]/.test(value) &&
+    value.trim() === value &&
+    value.isWellFormed()
+  );
 }
 
 /** Whether a transport header would take a name in the namespace of cf-loom's headers or of NATS's, in any case. */

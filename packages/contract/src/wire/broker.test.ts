@@ -196,6 +196,33 @@ describe('the Wire protocol over the broker', () => {
     expect(fits).toEqual([...uncarriedNames.map(() => 'uncarried-name'), 'travels']);
   });
 
+  test('a transport header value NATS would change is refused', () => {
+    const changedValues = [
+      'a\rb',
+      'a\nb',
+      ' x',
+      'x ',
+      '\tx',
+      'x\t',
+      '\u00a0x',
+      'x\ufeff',
+      '\u3000x',
+      'x\uD800',
+      1,
+      undefined,
+    ];
+    const carriedValues = ['a b', 'a\tb', '日本 café', 'a\u0001b', ''];
+
+    const fits = [...changedValues, ...carriedValues].map((value) =>
+      transportHeaderFitOf('x-note', value),
+    );
+
+    expect(fits).toEqual([
+      ...changedValues.map(() => 'changed-value'),
+      ...carriedValues.map(() => 'travels'),
+    ]);
+  });
+
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
     const message = {
       messageId: 'OrderCreated.v2:o-1:created',
