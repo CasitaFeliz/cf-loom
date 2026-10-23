@@ -394,6 +394,25 @@ describe('sender.send', () => {
     expect(decoded(published[0])).toEqual(charge);
   });
 
+  test('send refuses a Fact id or a transport header publish refuses, and sends nothing', async () => {
+    const { sender, published } = await opened();
+
+    const refusals = [
+      await rejectionOf(sender.send('ChargeCard', charge, { factId: 'o-1 ' })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'Nats-TTL': '1h' } })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'trace id': 'x' } })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'x-note': 'x\n' } })),
+    ];
+
+    expect(refusals.map((error) => (error as Error).message)).toEqual([
+      expect.stringMatching(/^A Fact id is a non-empty string /),
+      expect.stringMatching(/^The transport header Nats-TTL takes a name /),
+      expect.stringMatching(/^The transport header name "trace id" cannot travel /),
+      expect.stringMatching(/^The transport header x-note has a value /),
+    ]);
+    expect(published).toEqual([]);
+  });
+
   test('a body that breaks the schema throws InvalidMessageError and nothing is sent', async () => {
     const { sender, published } = await opened();
 
