@@ -25,8 +25,9 @@ export function jetStreamConnectionOf(
       if (bound.kind === 'refused') {
         throw new Error(bound.lines.join('\n'));
       }
+      const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
       for (const binding of bound.bindings) {
-        loops.push(pullFrom(binding, natsConnection, closing));
+        loops.push(pullFrom(binding, natsConnection, stopping));
       }
     },
     close: async () => {
@@ -49,6 +50,14 @@ export async function drainOnce(natsConnection: NatsConnection): Promise<void> {
     return;
   }
   await natsConnection.drain();
+}
+
+/** A signal that aborts when the connection closes, so a pause or a pull ends with it. */
+function closedSignalOf(natsConnection: NatsConnection): AbortSignal {
+  const closed = new AbortController();
+  const abort = () => closed.abort();
+  natsConnection.closed().then(abort, abort);
+  return closed.signal;
 }
 
 function natsHeadersOf(message: OutgoingMessage) {

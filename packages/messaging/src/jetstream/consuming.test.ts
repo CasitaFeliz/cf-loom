@@ -14,7 +14,12 @@ import { connect } from '@nats-io/transport-node';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { arrangeDurable, arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
+import {
+  arrangeDurable,
+  arrangeDurablesOf,
+  dropDurable,
+  durableInfoOf,
+} from '../../test/durables.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
@@ -707,4 +712,27 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2));
     gate.open();
   });
+
+  test('a durable consumer deleted and created again while consuming is consumed again, with no new consume', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(received));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await waitUntilSettled(names.stream, names.notifyDurable, 1);
+    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await arrangeDurable(server.url, names.stream, {
+      durable_name: names.notifyDurable,
+      ack_policy: 'explicit',
+      filter_subject: names.created,
+      deliver_policy: 'new',
+    });
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
+    expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
+  }, 10_000);
 });

@@ -40,6 +40,17 @@ export async function arrangeDurablesOf(
   }
 }
 
+/** Deletes a durable consumer a test arranged, with the NATS client. */
+export async function dropDurable(url: string, stream: string, durable: string): Promise<void> {
+  const connection = await connect({ servers: url });
+  try {
+    const manager = await jetstreamManager(connection);
+    await manager.consumers.delete(stream, durable);
+  } finally {
+    await connection.close();
+  }
+}
+
 /** What NATS holds about a durable consumer, read with the NATS client; undefined when it holds none. */
 export async function durableInfoOf(
   url: string,
