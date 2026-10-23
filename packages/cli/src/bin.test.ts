@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -16,15 +16,15 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
+import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import type { Registry, RegistryOptions } from '../test/fake-registry.ts';
-import { loginTo, type NpmEnvironment, token } from '../test/npm-environment.ts';
+import { loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
 import { entriesOf } from '../test/tarball.ts';
 
 const cliDir = join(import.meta.dirname, '..');
-const bin = join(cliDir, 'src', 'bin.ts');
 const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
 const rootDir = join(cliDir, '..', '..');
 const zodDir = realpathSync(join(cliDir, 'node_modules/zod'));
@@ -1333,25 +1333,12 @@ describe('cf-loom verify', () => {
 
 type Files = Readonly<Record<string, string>>;
 
-type Ran = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
-
 const checkTimeout = 60_000;
 const checkedAgainstOrders = `Checked against ${ordersPackage}@1.0.0`;
 const staleSnapshot = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
 const approvalNeededLine =
   '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it';
 const notAllowedLine = 'The check failed: 1 Change(s) not allowed';
-
-/** Runs the CLI without blocking the test's event loop, so the lab's registry can answer npm. */
-function cfLoomWith(project: string, env: NpmEnvironment, ...args: string[]): Promise<Ran> {
-  return new Promise((resolve) => {
-    const options = { cwd: project, env, encoding: 'utf8' } as const;
-    execFile(process.execPath, [bin, ...args], options, (error, stdout, stderr) => {
-      const status = error === null ? 0 : error.code;
-      resolve({ status: typeof status === 'number' ? status : null, stdout, stderr });
-    });
-  });
-}
 
 type MessagingOptions = {
   readonly body?: string;
