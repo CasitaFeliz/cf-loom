@@ -21,8 +21,11 @@ export function jetStreamConnectionOf(
     },
     consume: async (consumers, closing) => {
       const manager = await managerOf(natsConnection, options);
-      const bindings = await bindingsOf(manager, prefix, consumers);
-      for (const binding of bindings) {
+      const bound = await bindingsOf(manager, prefix, consumers);
+      if (bound.kind === 'refused') {
+        throw new Error(bound.lines.join('\n'));
+      }
+      for (const binding of bound.bindings) {
         loops.push(pullFrom(binding, natsConnection, closing));
       }
     },

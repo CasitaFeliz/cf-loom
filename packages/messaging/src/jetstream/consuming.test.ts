@@ -5,11 +5,11 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { arrangeDurablesOf } from '../../test/durables.ts';
+import { arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, planOf } from '../../test/streams.ts';
+import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type Messaging, messaging } from '../index.ts';
-import { jetstream } from './index.ts';
+import { type BrokerPlan, jetstream } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
 
@@ -123,6 +123,19 @@ async function arrangeOrders(prefix: string): Promise<void> {
   await arrangeDurablesOf(server.url, planOf(contract, prefix));
 }
 
+/** The plan with only the durable consumers named kept, to arrange some of Orders’ durable consumers and not others. */
+function onlyDurablesOf(plan: BrokerPlan, ...names: readonly string[]): BrokerPlan {
+  const kept = Object.entries(plan.consumers).filter(([name]) => names.includes(name));
+  return { ...plan, consumers: Object.fromEntries(kept) };
+}
+
+/** Waits for what a test expects not to happen: the window in which it would have. */
+function aWhile(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+const apply = "apply the Service's broker plan";
+
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
     const prefix = aPrefix();
@@ -140,6 +153,79 @@ describe('consuming over jetstream()', () => {
         { handler: 'ChargeCard@1', body: { orderId: 'o-1' } },
         { handler: 'notify-on-created', body: { orderId: 'o-2' } },
       ]),
+    );
+  });
+
+  test('consume rejects naming each durable consumer that does not exist and the stream it reads, and pulls from none', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangePlanOf(server.url, contract, prefix);
+    const plan = planOf(contract, prefix);
+    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    const received: Received[] = [];
+    const messagingOfOrders = await aMessaging(prefix);
+    await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    const consuming = messagingOfOrders.consume(handlersOf(received));
+
+    await expect(consuming).rejects.toThrow(
+      `The durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+    );
+    await aWhile();
+    const info = await durableInfoOf(server.url, orders.stream, orders.notifyDurable);
+    expect(received).toEqual([]);
+    expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
+  });
+
+  test('consume rejects naming every durable consumer that does not exist', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangePlanOf(server.url, contract, prefix);
+    const messagingOfOrders = await aMessaging(prefix);
+
+    const consuming = messagingOfOrders.consume(handlersOf([]));
+
+    const error = await consuming.catch((rejected: unknown) => rejected);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message.split('\n').sort()).toEqual([
+      `The durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+      `The durable consumer ${orders.notifyDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+    ]);
+  });
+
+  test('consume called again once the missing durable consumer exists starts consuming', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangePlanOf(server.url, contract, prefix);
+    const plan = planOf(contract, prefix);
+    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    const received: Received[] = [];
+    const messagingOfOrders = await aMessaging(prefix);
+    await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' });
+    await messagingOfOrders.consume(handlersOf(received)).catch(() => undefined);
+    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+
+    await messagingOfOrders.consume(handlersOf(received));
+
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    expect(received.map(({ handler }) => handler).sort()).toEqual([
+      'ChargeCard@1',
+      'notify-on-created',
+    ]);
+  });
+
+  test('consume rejects naming the stream when the stream a durable consumer reads does not exist', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const messagingOfOrders = await aMessaging(prefix);
+    await dropStream(server.url, orders.stream);
+
+    const consuming = messagingOfOrders.consume(handlersOf([]));
+
+    await expect(consuming).rejects.toThrow(
+      `The stream ${orders.stream}, which the durable consumer ${orders.notifyDurable} reads, does not exist: ${apply}`,
     );
   });
 });
