@@ -1,6 +1,6 @@
 import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
-import { jetstreamManager } from '@nats-io/jetstream';
-import type { NatsConnection } from '@nats-io/nats-core';
+import { jetstream as jetStreamClientOf, jetstreamManager } from '@nats-io/jetstream';
+import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
@@ -117,6 +117,20 @@ async function storedOn(stream: string, subject: string) {
   return { body: new TextDecoder().decode(stored?.data), headers };
 }
 
+/** Publishes a Message the way a publisher other than cf-loom would: exactly these headers, over a connection of its own. */
+async function publishRaw(
+  subject: string,
+  body: unknown,
+  entries: readonly (readonly [string, string])[],
+): Promise<void> {
+  const connection = await aConnection();
+  const raw = headers();
+  for (const [name, value] of entries) {
+    raw.append(name, value);
+  }
+  await jetStreamClientOf(connection).publish(subject, JSON.stringify(body), { headers: raw });
+}
+
 async function messagesIn(stream: string): Promise<number> {
   const manager = await jetstreamManager(await aConnection());
   return (await manager.streams.info(stream)).state.messages;
@@ -169,6 +183,69 @@ describe('publishing over jetstream()', () => {
       body: '{"orderId":"o-1"}',
       headers: { 'Nats-Msg-Id': 'ChargeCard.v1:o-1:charge', 'Cf-Loom-Fact-Id': 'o-1:charge' },
     });
+  });
+
+  test('a publish whose broker headers take exactly the bytes JetStream stores stores each version with its Fact id and transport headers as given', async () => {
+    const { publisher, prefix, stream } = await aMessaging();
+    const pad = 'p'.repeat(65_458);
+
+    await publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } },
+      { factId: 'o-1', headers: { 'x-pad': pad } },
+    );
+
+    const stored = (version: number) => {
+      return storedOn(stream, `${prefix}.orders-service.event.OrderCreated.v${version}`);
+    };
+    const expected = (version: number) => ({
+      'Nats-Msg-Id': `OrderCreated.v${version}:o-1`,
+      'Cf-Loom-Fact-Id': 'o-1',
+      'x-pad': pad,
+    });
+    await expect(stored(1)).resolves.toMatchObject({ headers: expected(1) });
+    await expect(stored(2)).resolves.toMatchObject({ headers: expected(2) });
+  });
+
+  test('a publish with broker headers one byte over rejects with cf-loom’s error, not a PublishError, and the stream stores nothing', async () => {
+    const { publisher, stream } = await aMessaging();
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
+    const padded = { 'x-pad': 'p'.repeat(65_459) };
+
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', bodies, { factId: 'o-1', headers: padded }),
+    );
+
+    expect(error).not.toBeInstanceOf(PublishError);
+    expect(error).toMatchObject({
+      message: expect.stringMatching(
+        /^The broker headers of OrderCreated@1 would take 65536 bytes/,
+      ),
+    });
+    await expect(messagesIn(stream)).resolves.toBe(0);
+  });
+
+  test('nats.js publishing the same broker headers itself is stored at 65,535 bytes and refused at 65,536, so the bound is the server’s own', async () => {
+    const { prefix, stream } = await aMessaging();
+    const subject = `${prefix}.orders-service.event.OrderCreated.v1`;
+    const entriesOf = (factId: string, pad: string): [string, string][] => [
+      ['Nats-Msg-Id', `OrderCreated.v1:${factId}`],
+      ['Cf-Loom-Fact-Id', factId],
+      ['x-pad', pad],
+    ];
+
+    const atTheBound = await rejectionOf(
+      publishRaw(subject, { orderId: 'o-1' }, entriesOf('o-1', 'p'.repeat(65_458))),
+    );
+    const oneOver = await rejectionOf(
+      publishRaw(subject, { orderId: 'o-2' }, entriesOf('o-2', 'p'.repeat(65_459))),
+    );
+
+    expect(atTheBound).toBeUndefined();
+    expect(oneOver).toMatchObject({
+      message: expect.stringContaining('header size exceeds maximum allowed of 64k'),
+    });
+    await expect(messagesIn(stream)).resolves.toBe(1);
   });
 
   test('publishing the same fact again resolves, and the stream keeps one Message per version', async () => {

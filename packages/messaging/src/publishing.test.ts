@@ -58,9 +58,26 @@ const chargeCardV2 = defineCommand({
   body: z.object({ orderId: z.uuid(), amount: z.number().min(0) }),
 });
 
+const grownV9 = defineEvent({
+  name: 'Grown',
+  version: 9,
+  visibility: 'internal',
+  lifecycle: 'deprecated',
+  description: 'A tree grew',
+  body: z.object({ treeId: z.string() }),
+});
+
+const grownV10 = defineEvent({
+  name: 'Grown',
+  version: 10,
+  visibility: 'internal',
+  description: 'A tree grew, ten times over',
+  body: z.object({ treeId: z.string() }),
+});
+
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV3, orderCreatedV1, orderCreatedV2],
+  events: [orderCreatedV3, orderCreatedV1, orderCreatedV2, grownV9, grownV10],
   commands: [chargeCardV1, chargeCardV2],
 });
 
@@ -306,6 +323,90 @@ describe('publisher.publish', () => {
     expect(published).toEqual([]);
   });
 
+  test('a Fact id whose broker headers would take more bytes than JetStream stores throws naming the Message Version and its bytes, and nothing is sent', async () => {
+    const { publisher, published } = await opened();
+
+    const publishing = publisher.publish(
+      'OrderCreated',
+      { v2, v3 },
+      { factId: 'o'.repeat(33_000) },
+    );
+
+    await expect(publishing).rejects.toThrow(
+      'The broker headers of OrderCreated@2 would take 66062 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+    );
+    expect(published).toEqual([]);
+  });
+
+  test('transport headers that together take more bytes than JetStream stores throw the same way, though each one alone travels', async () => {
+    const { publisher, published } = await opened();
+    const headers = {
+      'x-a': 'a'.repeat(30_000),
+      'x-b': 'b'.repeat(30_000),
+      'x-c': 'c'.repeat(30_000),
+    };
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1', headers });
+
+    await expect(publishing).rejects.toThrow(
+      /^The broker headers of OrderCreated@2 would take 90089 bytes, over the 65535 JetStream stores/,
+    );
+    expect(published).toEqual([]);
+  });
+
+  test('broker headers of exactly the bytes JetStream stores reach the broker as given', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'x-pad': 'p'.repeat(65_458) };
+
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1', headers });
+
+    expect(published).toMatchObject([
+      { factId: 'o-1', headers },
+      { factId: 'o-1', headers },
+    ]);
+  });
+
+  test('each Message Version’s broker headers are measured with its own broker message id, so one that does not fit refuses the whole publish', async () => {
+    const { publisher, published } = await opened();
+    const factId = 'g'.repeat(32_740);
+    const bodies = { v9: { treeId: 't-1' }, v10: { treeId: 't-1' } };
+
+    const publishing = publisher.publish('Grown', bodies, { factId });
+
+    await expect(publishing).rejects.toThrow(
+      /^The broker headers of Grown@10 would take 65536 bytes, over the 65535 JetStream stores/,
+    );
+    expect(published).toEqual([]);
+  });
+
+  test('broker headers too large are refused before a body that breaks its schema', async () => {
+    const { publisher, published } = await opened();
+    const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
+
+    const publishing = publisher.publish(
+      'OrderCreated',
+      { v2, v3: broken },
+      { factId: 'o'.repeat(33_000) },
+    );
+
+    await expect(publishing).rejects.toThrow(/^The broker headers of OrderCreated@2 would take /);
+    expect(published).toEqual([]);
+  });
+
+  test('broker headers too large are refused after a transport header that cannot travel', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'Nats-TTL': '1' };
+
+    const publishing = publisher.publish(
+      'OrderCreated',
+      { v2, v3 },
+      { factId: 'o'.repeat(33_000), headers },
+    );
+
+    await expect(publishing).rejects.toThrow(/^The transport header Nats-TTL takes a name /);
+    expect(published).toEqual([]);
+  });
+
   test('a body that breaks its version’s schema throws InvalidMessageError naming the version and the path, and no version is sent', async () => {
     const { publisher, published } = await opened();
     const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
@@ -430,6 +531,17 @@ describe('sender.send', () => {
       expect.stringMatching(/^The transport header name "trace id" cannot travel /),
       expect.stringMatching(/^The transport header x-note has a value /),
     ]);
+    expect(published).toEqual([]);
+  });
+
+  test('send refuses broker headers too large for JetStream, naming the Command’s Message Version, and sends nothing', async () => {
+    const { sender, published } = await opened();
+
+    const sending = sender.send('ChargeCard', charge, { factId: 'o'.repeat(33_000) });
+
+    await expect(sending).rejects.toThrow(
+      'The broker headers of ChargeCard@2 would take 66060 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+    );
     expect(published).toEqual([]);
   });
 

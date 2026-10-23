@@ -152,6 +152,7 @@ export type {
 } from '../wire/index.ts';
 export {
   bodyOf,
+  brokerHeaderBytesOf,
   brokerHeadersOf,
   brokerMessageIdOf,
   committedValues,
@@ -178,6 +179,7 @@ export {
   jsonOfBytes,
   malformedBodyIssueOf,
   matchOf,
+  maxBrokerHeaderBytes,
   notJsonContentType,
   prefixedNameOf,
   prefixedSubjectOf,

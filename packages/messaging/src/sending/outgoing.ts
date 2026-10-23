@@ -1,8 +1,10 @@
 import type { Command, Event } from '@cf-loom/contract';
 import {
+  brokerHeaderBytesOf,
   brokerMessageIdOf,
   isIdHeaderValue,
   jsonBytesOf,
+  maxBrokerHeaderBytes,
   messageIdentityOf,
   type TransportHeaderFit,
   transportHeaderFitOf,
@@ -16,15 +18,25 @@ import type { MessageOptions } from './types.ts';
 /** A Message Version of one call and the body the calling code gave it. */
 export type Given = { readonly version: PublishedVersion | SentVersion; readonly body: unknown };
 
+/** The parts of a Message its broker headers are written from. */
+type HeaderParts = Pick<OutgoingMessage, 'messageId' | 'factId' | 'headers'>;
+
+/** A Message Version of one call, the body the calling code gave it and its checked header parts. */
+type Headed = Given & { readonly parts: HeaderParts };
+
 /** A body as its version's schema parsed it. */
-type Parsed = { readonly version: Given['version']; readonly value: unknown };
+type Parsed = {
+  readonly version: Given['version'];
+  readonly value: unknown;
+  readonly parts: HeaderParts;
+};
 
 /** A Message ready to leave, beside the Message Version it carries. */
 export type Outgoing = { readonly version: Event | Command; readonly message: OutgoingMessage };
 
 /**
- * The Messages of one call, sharing one Fact id: every body checked with its version's schema
- * before any is built, so an invalid one throws and nothing leaves.
+ * The Messages of one call, sharing one Fact id: every Message's broker headers and every body
+ * checked before any is built, so a refused one throws and nothing leaves.
  */
 export function outgoingOf(
   given: readonly Given[],
@@ -32,26 +44,25 @@ export function outgoingOf(
 ): readonly Outgoing[] {
   const factId = factIdOf(options.factId);
   const headers = transportHeadersOf(options.headers ?? {});
-  return parsedBodiesOf(given).map(({ version, value }) => ({
+  const headed = given.map(({ version, body }) => {
+    const messageId = brokerMessageIdOf(version.message, factId);
+    const parts = checkedHeaderPartsOf(version.message, { messageId, factId, headers });
+    return { version, body, parts };
+  });
+  return parsedBodiesOf(headed).map(({ version, value, parts }) => ({
     version: version.message,
-    message: {
-      subject: version.subject,
-      messageId: brokerMessageIdOf(version.message, factId),
-      factId,
-      headers,
-      body: jsonBytesOf(value),
-    },
+    message: { subject: version.subject, ...parts, body: jsonBytesOf(value) },
   }));
 }
 
 /** Every body parsed with its version's schema, unknown keys stripped; any that breaks it throws. */
-function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
+function parsedBodiesOf(headed: readonly Headed[]): readonly Parsed[] {
   const parsed: Parsed[] = [];
   const invalid: InvalidBody[] = [];
-  for (const { version, body } of given) {
+  for (const { version, body, parts } of headed) {
     const checked = checkedMessageBody(version.message.body, body);
     if (checked.kind === 'value') {
-      parsed.push({ version, value: checked.value });
+      parsed.push({ version, value: checked.value, parts });
       continue;
     }
     const identity = messageIdentityOf(version.message.name, version.message.version);
@@ -79,6 +90,18 @@ export function checkedIdOf(kind: 'Fact id' | 'broker message id', given: string
     );
   }
   return given;
+}
+
+/** A Message's ids and transport headers, unchanged, or a throw naming its Message Version when its broker headers would take more bytes than JetStream stores. */
+export function checkedHeaderPartsOf(version: Event | Command, parts: HeaderParts): HeaderParts {
+  const bytes = brokerHeaderBytesOf(parts);
+  if (bytes > maxBrokerHeaderBytes) {
+    const identity = messageIdentityOf(version.name, version.version);
+    throw new Error(
+      `The broker headers of ${identity} would take ${bytes} bytes, over the ${maxBrokerHeaderBytes} JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id`,
+    );
+  }
+  return parts;
 }
 
 /** The transport headers as given, each one reaching every Broker unchanged. */

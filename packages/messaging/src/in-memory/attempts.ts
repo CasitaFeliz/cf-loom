@@ -9,7 +9,12 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import { checkedIdOf, factIdOf, transportHeadersOf } from '../sending/index.ts';
+import {
+  checkedHeaderPartsOf,
+  checkedIdOf,
+  factIdOf,
+  transportHeadersOf,
+} from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
@@ -64,9 +69,10 @@ function attemptsOf(
   const factId = factIdOf(meta.factId);
   const messageId = messageIdOf(message, factId, meta.messageId);
   const headers = transportHeadersOf(meta.headers ?? {});
+  const parts = checkedHeaderPartsOf(message, { messageId, factId, headers });
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
-    return { consumer, delivery: firstDeliveryOf({ messageId, factId, headers, body: bytes }) };
+    return { consumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
   });
 }
 
