@@ -183,6 +183,26 @@ describe('publisher.publish', () => {
     expect(published.map((message) => message.headers)).toEqual([headers, headers]);
   });
 
+  test('a Fact id and transport headers that travel unchanged reach the broker exactly as given', async () => {
+    const { publisher, published } = await opened();
+    const headers = {
+      'x-note': 'café  con\tleche',
+      'x-empty': '',
+      'x-ctl': 'a\u0001b',
+      'x-text': '日本 🎉',
+      traceparent: 'A',
+      // biome-ignore lint/style/useNamingConvention: a header name that differs from the one above only in case
+      Traceparent: 'B',
+    };
+
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'pedido ñ\t1', headers });
+
+    expect(published.map(({ factId, headers: sent }) => ({ factId, headers: sent }))).toEqual([
+      { factId: 'pedido ñ\t1', headers },
+      { factId: 'pedido ñ\t1', headers },
+    ]);
+  });
+
   test.each([
     'Nats-Msg-Id',
     'Cf-Loom-Fact-Id',
