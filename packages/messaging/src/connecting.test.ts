@@ -154,12 +154,52 @@ async function consumingWith(notifying: (typeof handlers.subscriptions)['notify-
 }
 
 describe('messaging() and close', () => {
-  test('messaging() connects through the broker, telling it the Service’s name, which names its stream', async () => {
+  test('messaging() connects through the broker, telling it the Service’s name, its stream and the subjects it publishes and sends', async () => {
     const { broker, recorded } = aBroker();
 
     await messaging(contract, broker);
 
-    expect(recorded.connectedWith).toEqual([{ name: 'orders-service' }]);
+    expect(recorded.connectedWith).toEqual([
+      {
+        name: 'orders-service',
+        stream: 'orders-service',
+        subjects: ['orders-service.event.OrderCreated.v1', 'orders-service.command.ChargeCard.v1'],
+      },
+    ]);
+  });
+
+  test('the subjects the broker is told leave out Retired Event versions and Command versions that are not Active', async () => {
+    const orderCreated = (version: number, lifecycle?: 'deprecated' | 'retired') =>
+      defineEvent({
+        name: 'OrderCreated',
+        version,
+        visibility: 'internal',
+        ...(lifecycle === undefined ? {} : { lifecycle }),
+        description: 'An order was created',
+        body: orderBody,
+      });
+    const chargeCard = (version: number, lifecycle?: 'deprecated') =>
+      defineCommand({
+        name: 'ChargeCard',
+        version,
+        ...(lifecycle === undefined ? {} : { lifecycle }),
+        description: 'Charges the order’s card',
+        body: orderBody,
+      });
+    const evolved = defineContract({
+      name: 'orders-service',
+      events: [orderCreated(3), orderCreated(1, 'retired'), orderCreated(2, 'deprecated')],
+      commands: [chargeCard(1, 'deprecated'), chargeCard(2)],
+    });
+    const { broker, recorded } = aBroker();
+
+    await messaging(evolved, broker);
+
+    expect(recorded.connectedWith[0]?.subjects).toEqual([
+      'orders-service.event.OrderCreated.v2',
+      'orders-service.event.OrderCreated.v3',
+      'orders-service.command.ChargeCard.v2',
+    ]);
   });
 
   test('messaging() given something that is no Contract rejects and connects nothing', async () => {

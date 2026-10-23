@@ -26,11 +26,12 @@ export type Consumed = {
 };
 
 /**
- * Where each Message of a Contract travels, computed once: the Service's name, its live Events in
- * version order, its Active Commands, and what `consume` pulls.
+ * Where each Message of a Contract travels, computed once: the Service's name and its stream, its
+ * live Events in version order, its Active Commands, and what `consume` pulls.
  */
 export type Subjects = {
   readonly service: string;
+  readonly stream: string;
   readonly published: readonly PublishedVersion[];
   readonly sent: readonly SentVersion[];
   readonly consumed: readonly Consumed[];
@@ -45,6 +46,7 @@ export function subjectsOf(root: unknown): Subjects {
   const active = commands.filter((command) => lifecycleOf(command) === 'active');
   return {
     service,
+    stream: streamNameOf(service),
     published: events.map((event) => ({ message: event, subject: subjectOf(service, event) })),
     sent: active.map((command) => ({ message: command, subject: subjectOf(service, command) })),
     consumed: [

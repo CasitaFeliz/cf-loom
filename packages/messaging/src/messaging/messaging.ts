@@ -1,8 +1,8 @@
 import type { Contract } from '@cf-loom/contract';
-import type { Broker, ConsumedFault } from '../broker/index.ts';
+import type { Broker, BrokerService, ConsumedFault } from '../broker/index.ts';
 import { type ConsumedHandlers, consumersOf, reportOf } from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
-import { subjectsOf } from '../subjects/index.ts';
+import { type Subjects, subjectsOf } from '../subjects/index.ts';
 import { MessagingLife } from './life.ts';
 
 /** What is operational about messaging and no part of the Contract: the hook for what Message Handlers end or fail with. */
@@ -26,7 +26,7 @@ export async function messaging<const C extends Contract>(
   options: MessagingOptions = {},
 ): Promise<Messaging<C>> {
   const subjects = subjectsOf(contract);
-  const life = new MessagingLife(await broker.connect({ name: subjects.service }));
+  const life = new MessagingLife(await broker.connect(brokerServiceOf(subjects)));
   const connectionOf = () => life.connectionOf();
   const publish = publishOf(subjects, connectionOf);
   const send = sendOf(subjects, connectionOf);
@@ -36,5 +36,14 @@ export async function messaging<const C extends Contract>(
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers) => life.consume(() => consumersOf(subjects.consumed, handlers, report)),
     close: () => life.close(),
+  };
+}
+
+function brokerServiceOf(subjects: Subjects): BrokerService {
+  const versions = [...subjects.published, ...subjects.sent];
+  return {
+    name: subjects.service,
+    stream: subjects.stream,
+    subjects: versions.map((version) => version.subject),
   };
 }

@@ -73,7 +73,7 @@ Messages are validated with the generated Reader schemas (see [The Contract Pack
 
 ## Adapters
 
-An adapter is a `Broker` (see [Types](#types)): `connect` receives the Service's name and returns the connection `messaging` publishes, consumes and closes through, so an organization on another Broker may write its own. The core computes every subject, stream and durable consumer name unprefixed, and the adapter adds the prefix; an `OutgoingMessage`'s `messageId` is the id the Broker deduplicates by; each `BrokerConsumer`'s `receive` runs its Handler and resolves to the `Settlement` the adapter applies, acknowledging, ending (JetStream `term`) or leaving the Message for redelivery, and a `receive` that rejects, which only an `onServiceFault` that throws causes, leaves it for redelivery; `close` is called once nothing is in flight: Handlers running, `publish`, `send` and `consume`, which the core keeps, not the adapter.
+An adapter is a `Broker` (see [Types](#types)): `connect` receives the Service's name, its stream and the subjects of the Messages it publishes and sends, unprefixed, and returns the connection `messaging` publishes, consumes and closes through, so an organization on another Broker may write its own. The core computes every subject, stream and durable consumer name unprefixed, and the adapter adds the prefix; an `OutgoingMessage`'s `messageId` is the id the Broker deduplicates by; each `BrokerConsumer`'s `receive` runs its Handler and resolves to the `Settlement` the adapter applies, acknowledging, ending (JetStream `term`) or leaving the Message for redelivery, and a `receive` that rejects, which only an `onServiceFault` that throws causes, leaves it for redelivery; `close` is called once nothing is in flight: Handlers running, `publish`, `send` and `consume`, which the core keeps, not the adapter.
 
 ### JetStream
 
@@ -167,7 +167,7 @@ cf-loom never removes a durable consumer. A prefix holds no `_` (see [Over the B
 - `ConsumedFault`: what `onServiceFault` receives, `invalid-body`, `returned` or `thrown`.
 - `PublishError`, with `factId` and `sent`: what `publish` throws when a version could not be sent.
 - `InvalidMessageError`, with `invalid`, each version's `identity` and `issues`: what `publish` and `send` throw given a body that breaks its schema.
-- `Broker`, `{ connect }`: what `messaging()` connects through, an adapter's or the organization's own; `BrokerService`, `{ name }`, what it tells the Broker.
+- `Broker`, `{ connect }`: what `messaging()` connects through, an adapter's or the organization's own; `BrokerService`, `{ name, stream, subjects }`, what it tells the Broker: the Service's name, its stream and the subjects of the Messages it publishes and sends, unprefixed.
 - `BrokerConnection`, `{ publish, consume, close }`: one connection to a Broker.
 - `OutgoingMessage`, `{ subject, messageId, factId, headers, body }`: a Message as it leaves, its body the UTF-8 JSON bytes.
 - `BrokerConsumer`, `{ durable, stream, subject, element, reader, receive }`: the durable consumer of a Subscription or Command Version whose Handler is pulled, with the Element it consumes and the Reader its Handler reads with.

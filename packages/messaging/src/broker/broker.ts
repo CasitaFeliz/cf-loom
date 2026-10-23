@@ -7,8 +7,15 @@ export type Broker = {
   readonly connect: (service: BrokerService) => Promise<BrokerConnection>;
 };
 
-/** What `connect` tells the broker: the Service's name, which names its stream. */
-export type BrokerService = { readonly name: string };
+/**
+ * What `connect` tells the broker, unprefixed: the Service's name, the stream named after it, and
+ * the subjects of the Messages it publishes and sends, which that stream must hold.
+ */
+export type BrokerService = {
+  readonly name: string;
+  readonly stream: string;
+  readonly subjects: readonly string[];
+};
 
 /** One messaging's connection to a broker; `close` is called once no Handler runs. */
 export type BrokerConnection = {
