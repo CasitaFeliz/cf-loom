@@ -8,7 +8,8 @@ import {
   defineSubscription,
 } from '@cf-loom/contract';
 import { type Fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
-import type { NatsConnection } from '@nats-io/nats-core';
+import { jetstream as jetStreamClientOf } from '@nats-io/jetstream';
+import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
@@ -148,6 +149,39 @@ const apply = "apply the Service's broker plan";
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** Publishes a Message the way a publisher other than cf-loom would: exactly these headers, a name given twice kept twice. */
+async function publishRaw(
+  subject: string,
+  body: unknown,
+  entries: readonly (readonly [string, string])[],
+): Promise<void> {
+  const connection = await connect({ servers: server.url });
+  try {
+    const raw = headers();
+    for (const [name, value] of entries) {
+      raw.append(name, value);
+    }
+    await jetStreamClientOf(connection).publish(subject, JSON.stringify(body), { headers: raw });
+  } finally {
+    await connection.close();
+  }
+}
+
+/** The reasons of the Messages the Broker's advisories say were terminated, collected from now on. */
+async function terminationsOf(): Promise<string[]> {
+  const connection = await connect({ servers: server.url });
+  onTestFinished(() => connection.close());
+  const reasons: string[] = [];
+  const advisories = connection.subscribe('$JS.EVENT.ADVISORY.CONSUMER.MSG_TERMINATED.>');
+  void (async () => {
+    for await (const advisory of advisories) {
+      reasons.push(advisory.json<{ reason: string }>().reason);
+    }
+  })();
+  await connection.flush();
+  return reasons;
+}
 
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
@@ -406,4 +440,83 @@ describe('consuming over jetstream()', () => {
 
     await expect(consuming).rejects.toThrow('jetstream is not enabled');
   });
+
+  test('the Handler receives the Message’s broker message id, Fact id, delivery count 1 and transport headers, without cf-loom’s own', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(received));
+
+    await orders.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'o-1:created', headers: { traceparent: '00-abc-def-01' } },
+    );
+
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0]?.meta).toEqual({
+      messageId: 'OrderCreated.v1:o-1:created',
+      factId: 'o-1:created',
+      deliveryCount: 1,
+      headers: { traceparent: '00-abc-def-01' },
+    });
+  });
+
+  test('a header published with several values reaches the Handler as its values joined with ", "', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(received));
+
+    await publishRaw(names.created, { orderId: 'o-1' }, [
+      ['Nats-Msg-Id', 'OrderCreated.v1:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1'],
+      ['tracestate', 'a=1'],
+      ['tracestate', 'b=2'],
+    ]);
+
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    expect(received[0]?.meta.headers).toEqual({ tracestate: 'a=1, b=2' });
+  });
+
+  test.each([
+    ['a Cf-Loom-Fact-Id header', [['Nats-Msg-Id', 'm-1']], 'no Cf-Loom-Fact-Id header'],
+    ['a Nats-Msg-Id header', [['Cf-Loom-Fact-Id', 'f-1']], 'no Nats-Msg-Id header'],
+    [
+      'a Cf-Loom-Fact-Id value',
+      [
+        ['Nats-Msg-Id', 'm-1'],
+        ['Cf-Loom-Fact-Id', ''],
+      ],
+      'no Cf-Loom-Fact-Id header',
+    ],
+    ['either id header', [], 'no Nats-Msg-Id header, no Cf-Loom-Fact-Id header'],
+  ] as const)(
+    'a Message without %s is ended without running the Handler, and never comes again',
+    async (_name, ids, reason) => {
+      const prefix = aPrefix();
+      const names = anOrders(prefix);
+      await arrangeOrders(prefix);
+      const terminated = await terminationsOf();
+      const received: Received[] = [];
+      const orders = await aMessaging(prefix);
+      await orders.consume(handlersOf(received));
+
+      await publishRaw(names.created, { orderId: 'o-1' }, ids);
+
+      await vi.waitFor(async () => {
+        const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+        expect(info).toMatchObject({
+          num_pending: 0,
+          num_ack_pending: 0,
+          delivered: { consumer_seq: 1 },
+        });
+      });
+      await vi.waitFor(() => expect(terminated).toEqual([reason]));
+      expect(received).toEqual([]);
+    },
+  );
 });
