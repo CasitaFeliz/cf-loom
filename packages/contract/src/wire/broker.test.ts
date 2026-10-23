@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
 import {
+  brokerHeadersOf,
   brokerMessageIdOf,
   durableNameOf,
   isBrokerPrefix,
@@ -118,5 +119,21 @@ describe('the Wire protocol over the broker', () => {
     const reserved = names.map(isReservedHeader);
 
     expect(reserved).toEqual([true, true, true, true, false]);
+  });
+
+  test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
+    const message = {
+      messageId: 'OrderCreated.v2:o-1:created',
+      factId: 'o-1:created',
+      headers: { traceparent: '00-abc-def-01' },
+    };
+
+    const headers = brokerHeadersOf(message);
+
+    expect(headers).toEqual({
+      traceparent: '00-abc-def-01',
+      'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
+      'Cf-Loom-Fact-Id': 'o-1:created',
+    });
   });
 });

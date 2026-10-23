@@ -23,6 +23,19 @@ export function brokerMessageIdOf(
   return `${subjectVersionOf(message)}:${factId}`;
 }
 
+/** The broker headers a Message travels with: its transport headers, its broker message id in `Nats-Msg-Id` and its Fact id in `Cf-Loom-Fact-Id`. */
+export function brokerHeadersOf(message: {
+  readonly messageId: string;
+  readonly factId: string;
+  readonly headers: Readonly<Record<string, string>>;
+}): Readonly<Record<string, string>> {
+  return {
+    ...message.headers,
+    [brokerMessageIdHeader]: message.messageId,
+    [factIdHeader]: message.factId,
+  };
+}
+
 /** The stream of a Service, named after it: its own Messages travel on it, and a consumer of its Events reads it. */
 export function streamNameOf(service: string): string {
   return service;

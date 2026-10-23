@@ -10,6 +10,7 @@ export {
 } from './body.ts';
 export type { DurableConsumed } from './broker.ts';
 export {
+  brokerHeadersOf,
   brokerMessageIdOf,
   durableNameOf,
   isBrokerPrefix,

@@ -142,6 +142,7 @@ export type {
 } from '../wire/index.ts';
 export {
   bodyOf,
+  brokerHeadersOf,
   brokerMessageIdOf,
   committedValues,
   deprecatedAtOfHeader,
