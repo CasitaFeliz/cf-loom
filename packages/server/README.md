@@ -8,13 +8,14 @@
 // src/main.ts
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
+import { connect } from '@nats-io/transport-node';
 import { jetstream } from '@cf-loom/messaging/jetstream';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 import { startMessaging } from './messaging.ts';
 
 const running = await startMessaging(jetstream({
-  servers: process.env.NATS_URL!,
+  connect: () => connect({ servers: process.env.NATS_URL }),   // the Service's own transport and auth
   prefix: process.env.BROKER_PREFIX,   // optional, e.g. one per environment
 }));
 const http = serve(contract, handlers);      // (Request) => Promise<Response>

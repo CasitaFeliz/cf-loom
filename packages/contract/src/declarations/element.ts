@@ -1,7 +1,7 @@
 /** The Visibilities an Element may declare, as values, so the runtime repeats the type's rule. */
 export const visibilities = ['public', 'internal', 'private'] as const;
 
-/** How far on the network an Element reaches; the route plan and the check read it. */
+/** How far on the network an Element reaches; the Compatibility Check reads it. */
 export type Visibility = (typeof visibilities)[number];
 
 /** The lifecycles an Element may declare, as values, so the runtime repeats the type's rule. */
