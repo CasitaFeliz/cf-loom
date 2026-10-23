@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
+import { payments } from '../test/payments-package.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
@@ -316,33 +317,6 @@ const messages = lines([
   "  lifecycle: 'retired',",
   '  body: z.object({ orderId: z.uuid() }),',
   '});',
-]);
-
-/** A Provider's Contract Package, written by hand, exporting the Event `PaymentSettled@1`. */
-const payments = lines([
-  "import { defineEvent } from '@cf-loom/contract';",
-  "import { z } from 'zod';",
-  '',
-  'export const paymentSettledV1 = defineEvent({',
-  "  name: 'PaymentSettled',",
-  '  version: 1,',
-  "  visibility: 'internal',",
-  "  description: 'A payment was settled',",
-  '  body: z.object({ paymentId: z.uuid() }),',
-  '});',
-  '',
-  'export const payments = {',
-  "  name: 'payments-service',",
-  "  version: '5.1.0',",
-  '  endpoints: {},',
-  '  events: { paymentSettledV1 },',
-  '  standardRejections: {',
-  "    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },",
-  "    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },",
-  "    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },",
-  '  },',
-  '  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },',
-  '} as const;',
 ]);
 
 /** The Subscription to the Dependency's Event, which every messaging root declares. */

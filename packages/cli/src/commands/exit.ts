@@ -20,6 +20,9 @@ export type Exit = {
   readonly stderr: readonly string[];
 };
 
+/** A command that ended before it did its work, with the exit it ends with. */
+export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
+
 /** A command that did what was asked, with the lines that say what it did. */
 export function done(lines: readonly string[]): Exit {
   return { status: 0, stdout: lines, stderr: [] };

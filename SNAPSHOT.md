@@ -108,7 +108,7 @@ A Definitions Package's Snapshot:
 "commands": { "ChargeCard@1":   { "lifecycle": "active", "description": "", "body": {} } }
 ```
 
-Subjects and stream names are derived from these identities at runtime and are not stored.
+Subjects, stream names and durable consumer names are derived from these identities, by the adapter and by `cf-loom broker-plan`, and are not stored.
 
 ## Origin
 

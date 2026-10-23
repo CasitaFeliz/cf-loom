@@ -129,7 +129,7 @@ The id shared by every Message one `publish` or `send` call sends for the same f
 _Avoid_: correlation id, event id
 
 **Broker**:
-The message system a Service's messaging runs on, through an adapter: it holds each Service's stream and the durable consumers, and delivers Messages at least once.
+The message system a Service's messaging runs on, through an adapter: it holds the Services' streams and durable consumers, and delivers Messages at least once.
 _Avoid_: bus, queue, message bus
 
 **Release**:

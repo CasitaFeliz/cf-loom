@@ -6,6 +6,7 @@ import {
   isContract,
   isLive,
   lifecycleOf,
+  streamNameOf,
   subjectOf,
 } from '@cf-loom/contract/internal';
 
@@ -89,22 +90,22 @@ function consumedCommandOf(service: string, command: Command): Consumed {
     element: command,
     at: { map: 'commands', key: codeNameOf(command) },
     subject: subjectOf(service, command),
-    stream: service,
+    stream: streamNameOf(service),
     durable: durableNameOf(service, command),
   };
 }
 
 function consumedSubscriptionOf(contract: Contract, subscription: Subscription): Consumed {
-  const stream = eventServiceOf(contract, subscription.event);
-  if (stream === undefined) {
+  const provider = eventServiceOf(contract, subscription.event);
+  if (provider === undefined) {
     const message = `${subscription.name} subscribes to an Event neither the root nor a Dependency lists`;
     throw new Error(message);
   }
   return {
     element: subscription,
     at: { map: 'subscriptions', key: subscription.name },
-    subject: subjectOf(stream, subscription.event),
-    stream,
+    subject: subjectOf(provider, subscription.event),
+    stream: streamNameOf(provider),
     durable: durableNameOf(contract.name, subscription),
   };
 }

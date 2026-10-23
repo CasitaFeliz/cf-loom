@@ -10,27 +10,31 @@ import {
   usageError,
 } from './commands/index.ts';
 
-const knownOptions = ['out', 'json', 'force', 'prerelease'];
-const flags = ['json', 'force', 'prerelease'];
+const optionTypes = {
+  out: { type: 'string' },
+  prefix: { type: 'string' },
+  json: { type: 'boolean' },
+  force: { type: 'boolean' },
+  prerelease: { type: 'boolean' },
+} as const;
+const knownOptions = Object.keys(optionTypes);
+const flags = Object.entries(optionTypes)
+  .filter(([, { type }]) => type === 'boolean')
+  .map(([name]) => name);
 
 /** The command the arguments name, or the usage error they are. */
 type Parsed =
   | { readonly kind: 'called'; readonly called: Called }
   | { readonly kind: 'usage'; readonly exit: Exit };
 
-/** Reads the arguments; `--out <dir>`, `--json`, `--force` and `--prerelease` are the options, any other a usage error. */
+/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--json`, `--force` and `--prerelease` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const { positionals, tokens, values } = parseArgs({
     args: [...args],
     allowPositionals: true,
     strict: false,
     tokens: true,
-    options: {
-      out: { type: 'string' },
-      json: { type: 'boolean' },
-      force: { type: 'boolean' },
-      prerelease: { type: 'boolean' },
-    },
+    options: optionTypes,
   });
   const unknown = tokens.find(
     (token) => token.kind === 'option' && !knownOptions.includes(token.name),
@@ -38,7 +42,7 @@ function calledOf(args: readonly string[]): Parsed {
   if (unknown !== undefined && unknown.kind === 'option') {
     return { kind: 'usage', exit: usageError(`Unknown option: ${unknown.rawName}`) };
   }
-  const { out, json, force, prerelease } = values;
+  const { out, prefix, json, force, prerelease } = values;
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return { kind: 'usage', exit: usageError('--out takes a folder') };
   }
@@ -51,7 +55,12 @@ function calledOf(args: readonly string[]): Parsed {
   }
   const output: Output = json === true ? 'json' : 'lines';
   const options = { positionals, output, force: force === true, prerelease: prerelease === true };
-  return { kind: 'called', called: out === undefined ? options : { ...options, out } };
+  const called: Called = {
+    ...options,
+    ...(out === undefined ? {} : { out }),
+    ...(prefix === undefined ? {} : { prefix: typeof prefix === 'string' ? prefix : '' }),
+  };
+  return { kind: 'called', called };
 }
 
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */

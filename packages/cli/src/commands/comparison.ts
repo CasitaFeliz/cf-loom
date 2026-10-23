@@ -6,10 +6,7 @@ import {
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
 import type { Checked } from './checked.ts';
-import { committedStopOf, type Exit, failureExitOf, toolingError } from './exit.ts';
-
-/** Why a command ended before it compared. */
-export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
+import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
 
 /** A package's Baseline as the registry holds it. */
 type BaselineRead = Extract<ReadBaseline, { readonly kind: 'baseline' }>;

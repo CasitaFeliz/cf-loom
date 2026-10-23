@@ -8,7 +8,17 @@ export {
   notJsonContentType,
   receivedBodyOf,
 } from './body.ts';
-export { brokerMessageIdOf, durableNameOf, isReservedHeader, subjectOf } from './broker.ts';
+export type { DurableConsumed } from './broker.ts';
+export {
+  brokerMessageIdOf,
+  durableNameOf,
+  isBrokerPrefix,
+  isReservedHeader,
+  prefixedNameOf,
+  prefixedSubjectOf,
+  streamNameOf,
+  subjectOf,
+} from './broker.ts';
 export { jsonContentType } from './content-type.ts';
 export { deprecatedAtOfHeader, deprecationHeader, withDeprecation } from './deprecation.ts';
 export type { Committed, RejectionEnvelope } from './envelopes.ts';

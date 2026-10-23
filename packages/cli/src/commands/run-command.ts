@@ -1,6 +1,8 @@
 import { join } from 'node:path';
+import { isBrokerPrefix } from '@cf-loom/contract/internal';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
 import type { Run } from '../project/index.ts';
+import { brokerPlanCommand } from './broker-plan.ts';
 import { check, type Output } from './check.ts';
 import { errorsExitOf } from './check-json.ts';
 import { type Exit, toolingError } from './exit.ts';
@@ -14,12 +16,13 @@ import { verify } from './verify.ts';
 const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | publish [--force] [--prerelease]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
   readonly positionals: readonly string[];
   readonly out?: string;
+  readonly prefix?: string;
   readonly output: Output;
   readonly force: boolean;
   readonly prerelease: boolean;
@@ -62,6 +65,8 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
         : await packageCommand(run, out ?? defaultPackageFolder);
     case 'check':
       return rest.length > 0 ? usageError('check takes no argument') : await check(run, output);
+    case 'broker-plan':
+      return await brokerPlanExitOf(rest, called, run);
     case 'publish':
       return rest.length > 0
         ? usageError('publish takes no argument')
@@ -73,14 +78,17 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
 
 /** The usage error of an option given to a command that does not take it. */
 function misplacedOptionIn(
-  { out, output, force, prerelease }: Called,
+  { out, prefix, output, force, prerelease }: Called,
   command: string | undefined,
 ): Exit | undefined {
   if (out !== undefined && command !== 'package') {
     return usageError('Only package takes --out');
   }
-  if (output === 'json' && command !== 'check') {
-    return usageError('Only check takes --json');
+  if (prefix !== undefined && command !== 'broker-plan') {
+    return usageError('Only broker-plan takes --prefix');
+  }
+  if (output === 'json' && command !== 'check' && command !== 'broker-plan') {
+    return usageError('Only check and broker-plan take --json');
   }
   if (force && command !== 'publish') {
     return usageError('Only publish takes --force');
@@ -89,6 +97,20 @@ function misplacedOptionIn(
     return usageError('Only publish takes --prerelease');
   }
   return undefined;
+}
+
+async function brokerPlanExitOf(
+  rest: readonly string[],
+  { prefix, output }: Called,
+  run: Run,
+): Promise<Exit> {
+  if (rest.length > 0) {
+    return usageError('broker-plan takes no argument');
+  }
+  if (prefix !== undefined && !isBrokerPrefix(prefix)) {
+    return usageError('--prefix takes a prefix in kebab-case, such as staging');
+  }
+  return await brokerPlanCommand(run, prefix ?? null, output);
 }
 
 function initOf(rest: readonly string[], run: Run): Exit {
