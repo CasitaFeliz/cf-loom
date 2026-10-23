@@ -4,6 +4,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream } from '../../test/streams.ts';
 import { messaging, PublishError } from '../index.ts';
@@ -64,25 +65,27 @@ async function aConnection(): Promise<NatsConnection> {
 }
 
 /**
- * The Service’s `connect`, over a connection whose requests all fail with the error given from
- * `refuse` on, as a NATS client fails when the Broker refuses a Message.
+ * The Service’s `connect`, over a connection that records the requests its NATS client sends and
+ * fails them all with the error given from `refuse` on, as a NATS client fails when the Broker
+ * refuses a Message.
  */
-function aRefusingConnect() {
+function aWatchedConnect() {
   let refusal: unknown;
-  const refusing = async (): Promise<NatsConnection> => {
+  const requests: { readonly subject: string; readonly timeout: number | undefined }[] = [];
+  const watched = async (): Promise<NatsConnection> => {
     const connection = await aConnection();
-    return new Proxy(connection, {
-      get(target, property) {
-        if (property === 'request' && refusal !== undefined) {
-          return () => Promise.reject(refusal);
-        }
-        const value = Reflect.get(target, property);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
+    const request: NatsConnection['request'] = (subject, payload, options) => {
+      requests.push({ subject, timeout: options?.timeout });
+      if (refusal !== undefined) {
+        return Promise.reject(refusal);
+      }
+      return connection.request(subject, payload, options);
+    };
+    return withMethods(connection, { request });
   };
   return {
-    connect: refusing,
+    connect: watched,
+    requests,
     refuse: (error: unknown) => {
       refusal = error;
     },
@@ -180,7 +183,7 @@ describe('publishing over jetstream()', () => {
   });
 
   test('a publish the NATS client rejects rejects with a PublishError whose cause is that very error', async () => {
-    const refusing = aRefusingConnect();
+    const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
     const { publisher } = await messaging(
@@ -217,7 +220,7 @@ describe('publishing over jetstream()', () => {
   });
 
   test('a send the NATS client rejects rejects with that very error', async () => {
-    const refusing = aRefusingConnect();
+    const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
     const { sender } = await messaging(contract, jetstream({ connect: refusing.connect, prefix }));
@@ -229,11 +232,36 @@ describe('publishing over jetstream()', () => {
     await expect(sending).rejects.toBe(refusal);
   });
 
-  test('close drains the connection the Service’s connect returned', async () => {
+  test('close closes the connection the Service’s connect returned', async () => {
     const { close, opened } = await aMessaging();
 
     await close();
 
     expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test('close resolves when the Service’s connection is already closed', async () => {
+    const { close, opened } = await aMessaging();
+    await opened[0]?.close();
+
+    const closing = close();
+
+    await expect(closing).resolves.toBeUndefined();
+  });
+
+  test('the jetstream options reach the publishing client: the configured timeout is the one a publish waits for the acknowledgement with', async () => {
+    const watching = aWatchedConnect();
+    const prefix = aPrefix();
+    await arrangePlanOf(server.url, contract, prefix);
+    const { sender } = await messaging(
+      contract,
+      jetstream({ connect: watching.connect, prefix, jetstream: { timeout: 1234 } }),
+    );
+
+    await sender.send('ChargeCard', { orderId: 'o-1' });
+
+    const subject = `${prefix}.orders-service.command.ChargeCard.v1`;
+    const published = watching.requests.filter((request) => request.subject === subject);
+    expect(published.map((request) => request.timeout)).toEqual([1234]);
   });
 });

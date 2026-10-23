@@ -3,6 +3,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, arrangeStream } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
@@ -181,6 +182,20 @@ describe('jetstream()', () => {
         `${prefix}.orders-service.command.ChargeCard.v1`,
       ]),
     );
+  });
+
+  test('messaging() rejects with the stream check’s own error when draining the connection fails too', async () => {
+    const checkFailure = new Error('the Broker did not answer');
+    const connectBroken = async () =>
+      withMethods(await connect({ servers: server.url }), {
+        request: () => Promise.reject(checkFailure),
+        isClosed: () => true,
+        drain: () => Promise.reject(new Error('closed connection')),
+      });
+
+    const opening = messaging(contract, jetstream({ connect: connectBroken, prefix: aPrefix() }));
+
+    await expect(opening).rejects.toBe(checkFailure);
   });
 
   test('a Service that publishes and sends nothing connects with no stream on the Broker', async () => {

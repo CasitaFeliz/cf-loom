@@ -13,23 +13,23 @@ export type ArrangedStream = { readonly name: string; readonly subjects: readonl
 
 /** Creates a stream as a test arranges it, with the NATS client and not through `apply`. */
 export async function arrangeStream(url: string, stream: ArrangedStream): Promise<void> {
-  const nc = await connect({ servers: url });
+  const connection = await connect({ servers: url });
   try {
-    const jsm = await jetstreamManager(nc);
-    await jsm.streams.add({ name: stream.name, subjects: [...stream.subjects] });
+    const manager = await jetstreamManager(connection);
+    await manager.streams.add({ name: stream.name, subjects: [...stream.subjects] });
   } finally {
-    await nc.close();
+    await connection.close();
   }
 }
 
 /** Deletes a stream a test arranged, with the NATS client. */
 export async function dropStream(url: string, name: string): Promise<void> {
-  const nc = await connect({ servers: url });
+  const connection = await connect({ servers: url });
   try {
-    const jsm = await jetstreamManager(nc);
-    await jsm.streams.delete(name);
+    const manager = await jetstreamManager(connection);
+    await manager.streams.delete(name);
   } finally {
-    await nc.close();
+    await connection.close();
   }
 }
 

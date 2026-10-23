@@ -5,11 +5,11 @@ import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
 
 /** The connection `messaging()` publishes, consumes and closes through, over the NATS connection the Service opened. */
 export function jetStreamConnectionOf(
-  nc: NatsConnection,
+  natsConnection: NatsConnection,
   prefix: string | null,
   options: JetStreamOptions | undefined,
 ): BrokerConnection {
-  const client = jetStreamClientOf(nc, options);
+  const client = jetStreamClientOf(natsConnection, options);
   return {
     publish: async (message) => {
       const subject = prefixedSubjectOf(prefix, message.subject);
@@ -17,8 +17,13 @@ export function jetStreamConnectionOf(
     },
     // TODO(#128)
     consume: () => Promise.reject(new Error('jetstream() does not consume yet')),
-    close: () => nc.drain(),
+    close: () => drainUnlessClosed(natsConnection),
   };
+}
+
+/** Drains the connection the Service opened, or does nothing when it is closed already, so no drain replaces the error that led to it. */
+export function drainUnlessClosed(natsConnection: NatsConnection): Promise<void> {
+  return natsConnection.isClosed() ? Promise.resolve() : natsConnection.drain();
 }
 
 function natsHeadersOf(message: OutgoingMessage) {
