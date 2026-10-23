@@ -39,7 +39,7 @@ export function brokerHeadersOf(message: {
 /** The most bytes a Message's broker headers may take on the wire: JetStream refuses a publish whose header block is longer, which no configuration raises. */
 export const maxBrokerHeaderBytes = 65_535;
 
-/** The bytes a Message's broker headers take as nats-core writes them and JetStream measures them: the `NATS/1.0` line, one `<name>: <value>` line each, and the blank line. */
+/** The bytes a Message's broker headers take as nats-core writes them and JetStream measures them: the `NATS/1.0` line, one `<name>: <value>` line each, and the blank line, in UTF-8 bytes. */
 export function brokerHeaderBytesOf(message: {
   readonly messageId: string;
   readonly factId: string;

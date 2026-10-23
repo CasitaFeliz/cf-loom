@@ -473,6 +473,21 @@ describe('deliver()', () => {
     expect(received).toEqual([]);
   });
 
+  test('broker headers too large are refused before a body the Reader refuses, and no Handler runs', async () => {
+    const { broker, received } = await running();
+    const wrong = { orderId: 'not-a-uuid' };
+
+    const rejection = await rejectionOf(
+      broker.deliver(chargeCardV1, wrong, { factId: 'o'.repeat(33_000) }),
+    );
+
+    expect(rejection).not.toBeInstanceOf(InvalidInputError);
+    expect(rejection).toMatchObject({
+      message: expect.stringMatching(/^The broker headers of ChargeCard@1 would take 66060 bytes/),
+    });
+    expect(received).toEqual([]);
+  });
+
   test.each([
     ['a stub’s Subscription', paymentSettledV1, 'PaymentSettled@1'],
     ['a Retired Command', refundV1, 'Refund@1'],
