@@ -8,12 +8,12 @@ import {
   isBrokerPrefix,
   isPrefixedName,
   isPrefixedSubject,
-  isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,
   streamNameOf,
   subjectOf,
+  transportHeaderFitOf,
 } from '../internal/index.ts';
 
 const orderCreatedV2 = defineEvent({
@@ -156,18 +156,25 @@ describe('the Wire protocol over the broker', () => {
     expect(messageId).toBe('OrderCreated.v2:o-1:created');
   });
 
-  test('both reserved header names are reserved in any case', () => {
-    const names = [
+  test('a transport header in cf-loom’s or NATS’s namespace is reserved in any case', () => {
+    const reservedNames = [
       'Nats-Msg-Id',
       'nats-msg-id',
       'Cf-Loom-Fact-Id',
       'CF-LOOM-FACT-ID',
-      'traceparent',
+      'Cf-Loom-Tenant',
+      'Nats-TTL',
+      'nats-expected-stream',
+      'NATS-ROLLUP',
     ];
+    const otherNames = ['traceparent', 'Nats', 'NatsTTL', 'X-Nats-Id', 'Cf-Loom'];
 
-    const reserved = names.map(isReservedHeader);
+    const fits = [...reservedNames, ...otherNames].map((name) => transportHeaderFitOf(name, 'x'));
 
-    expect(reserved).toEqual([true, true, true, true, false]);
+    expect(fits).toEqual([
+      ...reservedNames.map(() => 'reserved-name'),
+      ...otherNames.map(() => 'travels'),
+    ]);
   });
 
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
@@ -223,6 +230,26 @@ describe('the Wire protocol over the broker', () => {
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['nats-msg-id', 'other'],
       ['CF-LOOM-FACT-ID', 'other'],
+      ['traceparent', '00-abc-def-01'],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({
+      kind: 'read',
+      messageId: 'OrderCreated.v2:o-1',
+      factId: 'o-1',
+      headers: { traceparent: '00-abc-def-01' },
+    });
+  });
+
+  test('broker headers in a namespace a transport header may not take read back as neither ids nor transport headers', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1'],
+      ['Nats-TTL', '1h'],
+      ['nats-expected-stream', 'other'],
+      ['Cf-Loom-Tenant', 't-1'],
       ['traceparent', '00-abc-def-01'],
     ];
 

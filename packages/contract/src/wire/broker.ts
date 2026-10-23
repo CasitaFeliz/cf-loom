@@ -120,8 +120,16 @@ export function isPrefixedSubject(prefix: string | null, subject: string): boole
   return subject.startsWith(prefixedSubjectOf(prefix, ''));
 }
 
-/** Whether a transport header would take the name of one cf-loom sets on every Message, in any case. */
+/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves. */
+export type TransportHeaderFit = 'travels' | 'reserved-name';
+
+/** How a transport header fares over the Broker, so the core refuses one NATS would act on, refuse or change. */
+export function transportHeaderFitOf(name: string, _value: unknown): TransportHeaderFit {
+  return isReservedHeader(name) ? 'reserved-name' : 'travels';
+}
+
+/** Whether a transport header would take a name in the namespace of cf-loom's headers or of NATS's, in any case. */
 export function isReservedHeader(name: string): boolean {
   const lowered = name.toLowerCase();
-  return lowered === factIdHeader.toLowerCase() || lowered === brokerMessageIdHeader.toLowerCase();
+  return lowered.startsWith('cf-loom-') || lowered.startsWith('nats-');
 }

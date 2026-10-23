@@ -148,6 +148,7 @@ export type {
   SentRejection,
   SentSuccess,
   TextSource,
+  TransportHeaderFit,
 } from '../wire/index.ts';
 export {
   bodyOf,
@@ -193,6 +194,7 @@ export {
   successResponseOf,
   textOfValue,
   textPartsOf,
+  transportHeaderFitOf,
   withDeprecation,
 } from '../wire/index.ts';
 export type { AnswerableRejection, Issue, IssuePart, Part, PathSegment } from '../written/index.ts';

@@ -8,7 +8,7 @@ export {
   notJsonContentType,
   receivedBodyOf,
 } from './body.ts';
-export type { DurableConsumed, ReceivedHeaders } from './broker.ts';
+export type { DurableConsumed, ReceivedHeaders, TransportHeaderFit } from './broker.ts';
 export {
   brokerHeadersOf,
   brokerMessageIdOf,
@@ -22,6 +22,7 @@ export {
   receivedHeadersOf,
   streamNameOf,
   subjectOf,
+  transportHeaderFitOf,
 } from './broker.ts';
 export { jsonContentType } from './content-type.ts';
 export { deprecatedAtOfHeader, deprecationHeader, withDeprecation } from './deprecation.ts';
