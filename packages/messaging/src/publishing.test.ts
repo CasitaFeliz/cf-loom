@@ -243,6 +243,20 @@ describe('publisher.publish', () => {
     },
   );
 
+  test.each([' o-1', 'o-1 ', 'o-1\n', 'o-1\r', 'o-1\uD800'])(
+    'a Fact id of %j would not arrive as given over NATS: it throws and nothing is sent',
+    async (factId) => {
+      const { publisher, published } = await opened();
+
+      const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId });
+
+      await expect(publishing).rejects.toThrow(
+        'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+      );
+      expect(published).toEqual([]);
+    },
+  );
+
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();
 

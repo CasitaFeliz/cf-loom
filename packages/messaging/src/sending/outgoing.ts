@@ -1,6 +1,7 @@
 import type { Command, Event } from '@cf-loom/contract';
 import {
   brokerMessageIdOf,
+  isIdHeaderValue,
   jsonBytesOf,
   messageIdentityOf,
   type TransportHeaderFit,
@@ -62,13 +63,15 @@ function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
   return parsed;
 }
 
-/** The Fact id given, which travels in a header and the broker message id, or a random one. */
+/** The Fact id given, which travels in a header and the broker message id as given on every Broker, or a random one. */
 export function factIdOf(given: string | undefined): string {
   if (given === undefined) {
     return globalThis.crypto.randomUUID();
   }
-  if (typeof given !== 'string' || given === '') {
-    throw new Error('A Fact id is a non-empty string');
+  if (!isIdHeaderValue(given)) {
+    throw new Error(
+      'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+    );
   }
   return given;
 }
