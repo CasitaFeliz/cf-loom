@@ -23,6 +23,18 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install nats-server
+        if: runner.arch == 'X64'
+        env:
+          NATS_SERVER_VERSION: v2.15.1
+          NATS_SERVER_SHA256: bf5edc7b1ce98e885c368cb43a886eb148dc5d0551d99f3cf6141fb5e1954c70
+        run: |
+          archive="nats-server-${NATS_SERVER_VERSION}-linux-amd64"
+          curl -fsSL -o "$RUNNER_TEMP/$archive.tar.gz" \
+            "https://github.com/nats-io/nats-server/releases/download/${NATS_SERVER_VERSION}/$archive.tar.gz"
+          echo "${NATS_SERVER_SHA256}  $RUNNER_TEMP/$archive.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
       - run: pnpm biome ci --error-on-warnings .
       - run: node scripts/check-tsdoc.ts
       - run: node scripts/check-layout.ts

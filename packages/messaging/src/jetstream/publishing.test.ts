@@ -106,6 +106,7 @@ async function aMessaging() {
 /** What a stream stores last on a subject: its body text and every header. */
 async function storedOn(stream: string, subject: string) {
   const manager = await jetstreamManager(await aConnection());
+  // biome-ignore lint/style/useNamingConvention: nats.js spells the request `last_by_subj`
   const stored = await manager.streams.getMessage(stream, { last_by_subj: subject });
   const headers = Object.fromEntries(
     (stored?.header.keys() ?? []).map((name) => [name, stored?.header.get(name)]),
