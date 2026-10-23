@@ -1,13 +1,20 @@
-import { isBrokerPrefix } from '@cf-loom/contract/internal';
+import { type BrokerPlan, isBrokerPrefix } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
+import { type Applier, applyPlan } from './applying.ts';
 import { drainOnce, jetStreamConnectionOf } from './connection.ts';
-import { missingSubjectsOf, type PrefixedStream, prefixedStreamOf } from './stream-check.ts';
+import type { BrokerLimits } from './limits.ts';
+import {
+  managerOf,
+  missingSubjectsOf,
+  type PrefixedStream,
+  prefixedStreamOf,
+} from './stream-check.ts';
 
 /** What `jetstream()` takes: the Service's own way to open a NATS connection, the prefix of every name it uses on the Broker, and the options of nats.js's JetStream client, if any. */
 export type JetStreamBrokerOptions = {
-  /** Opens one NATS connection with the transport and authentication the Service chooses; cf-loom calls it once for each `messaging()` and drains what it returns. */
+  /** Opens one NATS connection with the transport and authentication the Service chooses; cf-loom calls it once for each `messaging()` and each `apply`, and drains what it returns. */
   readonly connect: () => Promise<NatsConnection>;
   /** Goes in front of every subject, stream and durable consumer name, so several environments share one Broker; kebab-case, as a Service name is. */
   readonly prefix?: string | undefined;
@@ -15,13 +22,25 @@ export type JetStreamBrokerOptions = {
   readonly jetstream?: JetStreamOptions | undefined;
 };
 
+/** A Broker on NATS JetStream that can also apply a Service's broker plan, which `messaging()` never does. */
+export type JetStreamBroker = Broker & {
+  /**
+   * Creates the plan's streams, then its durable consumers, adding subjects and updating limits and
+   * never removing anything; it stops at the first it cannot apply, keeping what it did.
+   */
+  readonly apply: (plan: BrokerPlan, limits: BrokerLimits) => Promise<void>;
+};
+
 /**
  * A Broker on NATS JetStream: each `messaging()` opens its own connection and starts only once the
- * Service's stream holds every subject it publishes and sends.
+ * Service's stream holds every subject it publishes and sends; `apply` applies a broker plan on a
+ * connection of its own.
  */
-export function jetstream(options: JetStreamBrokerOptions): Broker {
+export function jetstream(options: JetStreamBrokerOptions): JetStreamBroker {
   const prefix = checkedPrefixOf(options.prefix);
+  const applier: Applier = { connect: options.connect, prefix, jetstream: options.jetstream };
   return {
+    apply: (plan, limits) => applyPlan(applier, plan, limits),
     connect: async (service) => {
       const natsConnection = await options.connect();
       const stream = prefixedStreamOf(service, prefix);
@@ -37,7 +56,8 @@ async function checkStreamOrDrain(
   options: JetStreamOptions | undefined,
 ): Promise<void> {
   try {
-    const missing = await missingSubjectsOf(natsConnection, stream, options);
+    const manager = await managerOf(natsConnection, options);
+    const missing = await missingSubjectsOf(manager, stream);
     if (missing.length > 0) {
       const subjects = missing.join(', ');
       throw new Error(

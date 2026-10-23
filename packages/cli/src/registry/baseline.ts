@@ -1,9 +1,9 @@
 import {
   decodeSnapshot,
-  locationOf,
   ownOf,
   type PeerRanges,
   type PublishedSnapshot,
+  problemLineOf,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
@@ -182,10 +182,8 @@ function snapshotFrom(
       const newer = `in format ${decoded.format}, newer than this cf-loom reads: upgrade @cf-loom/cli`;
       return failed(`${spec}'s snapshot.json is ${newer}`);
     }
-    case 'malformed': {
-      const location = locationOf(decoded.at);
-      return failed(`${spec}'s snapshot.json is malformed: ${location} ${decoded.reason}`);
-    }
+    case 'malformed':
+      return failed(`${spec}'s snapshot.json is malformed: ${problemLineOf(decoded)}`);
     case 'decoded': {
       const { snapshot } = decoded;
       const isBaseline =

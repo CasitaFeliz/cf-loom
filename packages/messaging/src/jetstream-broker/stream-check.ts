@@ -14,14 +14,20 @@ export function prefixedStreamOf(service: BrokerService, prefix: string | null):
   };
 }
 
-/** The subjects the Service's stream does not hold, as the server answers which streams hold each, so a stream made with a wildcard holds them. */
-export async function missingSubjectsOf(
+/** The one JetStream manager of a connection, with the Service's options and no `$JS.API.INFO` request. */
+export function managerOf(
   natsConnection: NatsConnection,
-  stream: PrefixedStream,
   options: JetStreamOptions | undefined,
-): Promise<readonly string[]> {
+): Promise<JetStreamManager> {
   // biome-ignore lint/style/useNamingConvention: nats.js spells the option `checkAPI`
-  const manager = await jetstreamManager(natsConnection, { ...options, checkAPI: false });
+  return jetstreamManager(natsConnection, { ...options, checkAPI: false });
+}
+
+/** The subjects the stream does not hold, as the server answers which streams hold each, so a stream made with a wildcard holds them. */
+export async function missingSubjectsOf(
+  manager: JetStreamManager,
+  stream: PrefixedStream,
+): Promise<readonly string[]> {
   const missing: string[] = [];
   for (const subject of stream.subjects) {
     const held = await isHeld(manager, stream.name, subject);

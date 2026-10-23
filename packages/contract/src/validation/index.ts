@@ -1,6 +1,8 @@
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';
 export { follows, kebabCase, upperSnakeCase } from './grammars.ts';
+export type { Problem } from './problem.ts';
+export { problemLineOf, problemOf } from './problem.ts';
 export type {
   RootPackage,
   ValidatedContract,

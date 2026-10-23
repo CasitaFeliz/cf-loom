@@ -1,6 +1,11 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: the ./internal entry, a list of re-exports that the Package layout forbids splitting into several files
-export type { BrokerPlan, BrokerPlanConsumer, BrokerPlanStream } from '../broker-plan/index.ts';
-export { brokerPlanOf } from '../broker-plan/index.ts';
+export type {
+  BrokerPlan,
+  BrokerPlanConsumer,
+  BrokerPlanStream,
+  DecodedBrokerPlan,
+} from '../broker-plan/index.ts';
+export { brokerPlanOf, decodeBrokerPlan } from '../broker-plan/index.ts';
 export type {
   Change,
   ChangeClass,
@@ -91,6 +96,7 @@ export {
 } from '../snapshot/index.ts';
 export type {
   Failure,
+  Problem,
   RootPackage,
   TextPartNodes,
   ValidatedContract,
@@ -101,6 +107,8 @@ export {
   follows,
   kebabCase,
   locationOf,
+  problemLineOf,
+  problemOf,
   upperSnakeCase,
   validateContract,
   walkedTextPartsOf,
@@ -157,6 +165,8 @@ export {
   invalidInputRejectionOf,
   invalidInputResponseOf,
   isBrokerPrefix,
+  isPrefixedName,
+  isPrefixedSubject,
   isQueryText,
   isReservedHeader,
   isSegmentText,
