@@ -20,12 +20,12 @@ const running = await startMessaging(jetstream({
 }));
 const http = serve(contract, handlers);      // (Request) => Promise<Response>
 const server = nodeHttp(http).listen(3000);
-await running.consume(handlers);
 
 process.on('SIGTERM', () => {
   server.close();
   void running.close();
 });
+await running.consume(handlers);
 ```
 
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). `serve(contract, handlers, { maxBodyBytes })` refuses a larger body with `BODY_TOO_LARGE` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), and counts the bytes read, not `Content-Length`; without it cf-loom sets no limit, leaving it to the host or the organization's gateway. The limit is operational, not part of the Contract.
