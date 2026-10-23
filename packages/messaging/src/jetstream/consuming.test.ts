@@ -1,4 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
+
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   type ContractPackage,
   defineCommand,
@@ -11,16 +13,15 @@ import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loo
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { withMethods } from '../../test/connections.ts';
 import {
   arrangeDurable,
   arrangeDurablesOf,
   dropDurable,
   durableInfoOf,
 } from '../../test/durables.ts';
-import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type ConsumedFault, messaging } from '../index.ts';

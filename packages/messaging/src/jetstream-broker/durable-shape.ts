@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { AckPolicy, type ConsumerConfig } from '@nats-io/jetstream';
 
 /** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject. */
