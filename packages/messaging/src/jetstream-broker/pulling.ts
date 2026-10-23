@@ -23,7 +23,7 @@ export async function pullFrom(
   natsConnection: NatsConnection,
   stopping: AbortSignal,
 ): Promise<void> {
-  while (!stopping.aborted && !natsConnection.isClosed() && !natsConnection.isDraining()) {
+  while (isPulling(natsConnection, stopping)) {
     const pulled = await pulledFrom(binding.pulled, stopping);
     switch (pulled.kind) {
       case 'message':
@@ -36,6 +36,10 @@ export async function pullFrom(
         break;
     }
   }
+}
+
+function isPulling(natsConnection: NatsConnection, stopping: AbortSignal): boolean {
+  return !stopping.aborted && !natsConnection.isClosed() && !natsConnection.isDraining();
 }
 
 async function pulledFrom(pulled: Consumer, stopping: AbortSignal): Promise<Pulled> {
@@ -87,5 +91,8 @@ function pause(stopping: AbortSignal): Promise<void> {
     };
     const timer = setTimeout(wake, retryPauseMs);
     stopping.addEventListener('abort', wake);
+    if (stopping.aborted) {
+      wake();
+    }
   });
 }

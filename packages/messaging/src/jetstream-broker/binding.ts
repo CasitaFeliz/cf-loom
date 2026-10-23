@@ -1,5 +1,10 @@
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
-import { type Consumer, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
+import {
+  type Consumer,
+  type ConsumerInfo,
+  JetStreamApiCodes,
+  type JetStreamManager,
+} from '@nats-io/jetstream';
 import type { BrokerConsumer } from '../broker/index.ts';
 import { isApiError } from './applied.ts';
 import { shapeDifferencesOf } from './durable-shape.ts';
@@ -20,6 +25,10 @@ export type Bound =
 type Looked =
   | { readonly kind: 'bound'; readonly binding: Binding }
   | { readonly kind: 'refused'; readonly line: string };
+
+type Asked =
+  | { readonly kind: 'held'; readonly info: ConsumerInfo }
+  | { readonly kind: 'missing'; readonly line: string };
 
 const apply = "apply the Service's broker plan";
 
@@ -49,27 +58,36 @@ async function lookedUp(
 ): Promise<Looked> {
   const stream = prefixedNameOf(prefix, consumer.stream);
   const durable = prefixedNameOf(prefix, consumer.durable);
+  const asked = await askedFor(manager, stream, durable);
+  if (asked.kind === 'missing') {
+    return { kind: 'refused', line: asked.line };
+  }
+  const subject = prefixedSubjectOf(prefix, consumer.subject);
+  const differences = shapeDifferencesOf(asked.info.config, subject);
+  if (differences.length > 0) {
+    const line = `The durable consumer ${durable} ${differences.join(' and ')}: ${apply}`;
+    return { kind: 'refused', line };
+  }
+  const pulled = manager.jetstream().consumers.getConsumerFromInfo(asked.info);
+  return { kind: 'bound', binding: { consumer, pulled, waits: waitsOf(asked.info.config) } };
+}
+
+/** What NATS holds about the durable consumer, or the line for the stream or durable consumer it says does not exist; any other error is thrown. */
+async function askedFor(
+  manager: JetStreamManager,
+  stream: string,
+  durable: string,
+): Promise<Asked> {
   try {
-    const info = await manager.consumers.info(stream, durable);
-    const differences = shapeDifferencesOf(
-      info.config,
-      prefixedSubjectOf(prefix, consumer.subject),
-    );
-    if (differences.length > 0) {
-      const line = `The durable consumer ${durable} ${differences.join(' and ')}: ${apply}`;
-      return { kind: 'refused', line };
-    }
-    const pulled = manager.jetstream().consumers.getConsumerFromInfo(info);
-    const waits = waitsOf(info.config);
-    return { kind: 'bound', binding: { consumer, pulled, waits } };
+    return { kind: 'held', info: await manager.consumers.info(stream, durable) };
   } catch (error) {
     if (isApiError(error, JetStreamApiCodes.StreamNotFound)) {
       const line = `The stream ${stream}, which the durable consumer ${durable} reads, does not exist: ${apply}`;
-      return { kind: 'refused', line };
+      return { kind: 'missing', line };
     }
     if (isApiError(error, JetStreamApiCodes.ConsumerNotFound)) {
       const line = `The durable consumer ${durable} does not exist on the stream ${stream}: ${apply}`;
-      return { kind: 'refused', line };
+      return { kind: 'missing', line };
     }
     throw error;
   }

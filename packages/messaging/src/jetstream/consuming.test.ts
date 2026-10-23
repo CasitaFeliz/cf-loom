@@ -238,6 +238,13 @@ async function waitUntilPulling(stream: string, durable: string): Promise<void> 
   });
 }
 
+/** Spies on every console method, so a test can say the adapter wrote nothing. */
+function spiesOnConsole() {
+  return (['debug', 'error', 'info', 'log', 'warn'] as const).map((method) => {
+    return vi.spyOn(console, method).mockImplementation(() => undefined);
+  });
+}
+
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
     const prefix = aPrefix();
@@ -556,6 +563,7 @@ describe('consuming over jetstream()', () => {
       const names = anOrders(prefix);
       await arrangeOrders(prefix);
       const terminated = await terminationsOf();
+      const consoleSpies = spiesOnConsole();
       const received: Received[] = [];
       const orders = await aMessaging(prefix);
       await orders.consume(handlersOf(received));
@@ -572,6 +580,7 @@ describe('consuming over jetstream()', () => {
       });
       await vi.waitFor(() => expect(terminated).toEqual([reason]));
       expect(received).toEqual([]);
+      expect(consoleSpies.map((spy) => spy.mock.calls)).toEqual([[], [], [], [], []]);
     },
   );
 
@@ -737,6 +746,7 @@ describe('consuming over jetstream()', () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
+    const consoleSpies = spiesOnConsole();
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
@@ -754,6 +764,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
+    expect(consoleSpies.map((spy) => spy.mock.calls)).toEqual([[], [], [], [], []]);
   }, 10_000);
 });
 
