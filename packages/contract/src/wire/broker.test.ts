@@ -190,7 +190,7 @@ describe('the Wire protocol over the broker', () => {
       '',
     ];
 
-    const fits = [...uncarriedNames, 'x-b3_trace.id!'].map((name) =>
+    const fits = [...uncarriedNames, 'x-b3_trace.id!~'].map((name) =>
       transportHeaderFitOf(name, 'x'),
     );
 
