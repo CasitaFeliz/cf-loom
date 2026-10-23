@@ -9,6 +9,7 @@ import {
   managerOf,
   missingSubjectsOf,
   type PrefixedStream,
+  planRemedy,
   prefixedStreamOf,
 } from './stream-check.ts';
 
@@ -60,9 +61,7 @@ async function checkStreamOrDrain(
     const missing = await missingSubjectsOf(manager, stream);
     if (missing.length > 0) {
       const subjects = missing.join(', ');
-      throw new Error(
-        `The stream ${stream.name} does not hold ${subjects}: apply the Service's broker plan`,
-      );
+      throw new Error(`The stream ${stream.name} does not hold ${subjects}: ${planRemedy}`);
     }
   } catch (error) {
     await drainOnce(natsConnection);

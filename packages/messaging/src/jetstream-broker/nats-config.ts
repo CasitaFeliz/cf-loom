@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import type { ConsumerConfig, StreamConfig } from '@nats-io/jetstream';
+import { durableShapeOf } from './durable-shape.ts';
 import type { NatsDurableLimits, NatsStreamLimits, SetLimits } from './reading-limits.ts';
 
 /** A stream's limits as the NATS settings nats.js takes, the same for creating the stream and for updating it. */
@@ -24,8 +25,7 @@ export function durableConfigOf(
   const [firstWait, ...laterWaits] = limits.ackWait;
   return {
     durable_name: durable.name,
-    ack_policy: 'explicit',
-    filter_subject: durable.subject,
+    ...durableShapeOf(durable.subject),
     deliver_policy: limits.deliverPolicy,
     ack_wait: firstWait,
     backoff: laterWaits.length === 0 ? [] : [...limits.ackWait],

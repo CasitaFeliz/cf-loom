@@ -8,7 +8,7 @@ export {
   notJsonContentType,
   receivedBodyOf,
 } from './body.ts';
-export type { DurableConsumed } from './broker.ts';
+export type { DurableConsumed, ReceivedHeaders } from './broker.ts';
 export {
   brokerHeadersOf,
   brokerMessageIdOf,
@@ -19,6 +19,7 @@ export {
   isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
+  receivedHeadersOf,
   streamNameOf,
   subjectOf,
 } from './broker.ts';

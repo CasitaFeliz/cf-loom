@@ -20,6 +20,7 @@ const leftPending: Settlement = { kind: 'pending', fault: undefined };
 export class MessagingLife {
   readonly #connection: BrokerConnection;
   #state: State = { kind: 'open', consumption: 'none' };
+  readonly #closing = new AbortController();
   readonly #inFlight = new Set<Promise<unknown>>();
 
   constructor(connection: BrokerConnection) {
@@ -60,7 +61,7 @@ export class MessagingLife {
     const consumers = consumersOf().map((consumer) => this.#trackedConsumer(consumer));
     this.#consumption('taken');
     try {
-      await this.tracked(this.#connection.consume(consumers));
+      await this.tracked(this.#connection.consume(consumers, this.#closing.signal));
     } catch (e) {
       this.#consumption('none');
       throw e;
@@ -72,6 +73,7 @@ export class MessagingLife {
     const state = this.#state;
     switch (state.kind) {
       case 'open': {
+        this.#closing.abort();
         const idle = Promise.withResolvers<void>();
         const closed = idle.promise.then(() => this.#connection.close());
         this.#state = { kind: 'closing', closed, idle: idle.resolve };

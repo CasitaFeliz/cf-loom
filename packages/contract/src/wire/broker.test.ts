@@ -11,6 +11,7 @@ import {
   isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
+  receivedHeadersOf,
   streamNameOf,
   subjectOf,
 } from '../internal/index.ts';
@@ -182,6 +183,73 @@ describe('the Wire protocol over the broker', () => {
       traceparent: '00-abc-def-01',
       'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
       'Cf-Loom-Fact-Id': 'o-1:created',
+    });
+  });
+
+  test('a Message’s broker headers read back give its broker message id, its Fact id and its transport headers', () => {
+    const message = {
+      messageId: 'OrderCreated.v2:o-1:created',
+      factId: 'o-1:created',
+      headers: { traceparent: '00-abc-def-01' },
+    };
+    const entries = Object.entries(brokerHeadersOf(message));
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({ kind: 'read', ...message });
+  });
+
+  test('broker headers without Cf-Loom-Fact-Id or Nats-Msg-Id, or with an empty one, read as missing, naming each', () => {
+    const withoutFactId: [string, string][] = [['Nats-Msg-Id', 'OrderCreated.v2:o-1']];
+    const withoutMessageId: [string, string][] = [['Cf-Loom-Fact-Id', 'o-1']];
+    const emptyBoth: [string, string][] = [
+      ['Nats-Msg-Id', ''],
+      ['Cf-Loom-Fact-Id', ''],
+    ];
+
+    const reads = [withoutFactId, withoutMessageId, emptyBoth, []].map(receivedHeadersOf);
+
+    expect(reads).toEqual([
+      { kind: 'missing', names: ['Cf-Loom-Fact-Id'] },
+      { kind: 'missing', names: ['Nats-Msg-Id'] },
+      { kind: 'missing', names: ['Nats-Msg-Id', 'Cf-Loom-Fact-Id'] },
+      { kind: 'missing', names: ['Nats-Msg-Id', 'Cf-Loom-Fact-Id'] },
+    ]);
+  });
+
+  test('a header named as one of cf-loom’s own in another case is neither an id nor a transport header', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1'],
+      ['nats-msg-id', 'other'],
+      ['CF-LOOM-FACT-ID', 'other'],
+      ['traceparent', '00-abc-def-01'],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({
+      kind: 'read',
+      messageId: 'OrderCreated.v2:o-1',
+      factId: 'o-1',
+      headers: { traceparent: '00-abc-def-01' },
+    });
+  });
+
+  test('a header given several values reads as one value, its values joined with ", "', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1'],
+      ['tracestate', 'a=1'],
+      ['traceparent', '00-abc-def-01'],
+      ['tracestate', 'b=2'],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toMatchObject({
+      kind: 'read',
+      headers: { traceparent: '00-abc-def-01', tracestate: 'a=1, b=2' },
     });
   });
 });

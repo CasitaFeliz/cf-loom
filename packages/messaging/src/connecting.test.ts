@@ -65,6 +65,7 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
     connectedWith: [] as BrokerService[],
     published: [] as OutgoingMessage[],
     consumers: [] as BrokerConsumer[],
+    closings: [] as AbortSignal[],
     consumes: 0,
     closes: 0,
   };
@@ -78,8 +79,9 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
         publish: async (message) => {
           recorded.published.push(message);
         },
-        consume: async (consumers) => {
+        consume: async (consumers, closing) => {
           recorded.consumes += 1;
+          recorded.closings.push(closing);
           if (recorded.consumes <= (failing.consumes ?? 0)) {
             throw new Error('no such durable consumer');
           }
@@ -377,6 +379,24 @@ describe('messaging() and close', () => {
       'close',
       'closed',
     ]);
+  });
+
+  test('close aborts the signal consume handed the broker as soon as it starts, before the Handlers running finish', async () => {
+    const gate = aGate();
+    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+      await gate.opened;
+    });
+    const { recorded, deliver, close } = await consumingWith(notifying);
+    const delivered = deliver('orders-service.event.OrderCreated.v1', body);
+    const abortedBeforeClose = recorded.closings.map((closing) => closing.aborted);
+
+    const closing = close();
+    const abortedWhileRunning = recorded.closings.map((signal) => signal.aborted);
+    gate.open();
+    await Promise.all([delivered, closing]);
+
+    expect(abortedBeforeClose).toEqual([false]);
+    expect(abortedWhileRunning).toEqual([true]);
   });
 
   test('close waits for a consume in flight before it closes the connection', async () => {
