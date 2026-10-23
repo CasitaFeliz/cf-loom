@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
 import {
+  brokerHeaderBytesOf,
   brokerHeadersOf,
   brokerMessageIdOf,
   durableNameOf,
@@ -247,6 +248,26 @@ describe('the Wire protocol over the broker', () => {
       'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
       'Cf-Loom-Fact-Id': 'o-1:created',
     });
+  });
+
+  test('a Message’s broker headers take 12 bytes plus each header’s name, value and 4, as nats-core writes them', () => {
+    const message = { messageId: 'OrderCreated.v1:o-1', factId: 'o-1', headers: {} };
+
+    const bytes = [
+      brokerHeaderBytesOf(message),
+      brokerHeaderBytesOf({ ...message, headers: { traceparent: 'A' } }),
+    ];
+
+    expect(bytes).toEqual([68, 84]);
+  });
+
+  test('broker headers are counted in UTF-8 bytes, so a Fact id counts twice', () => {
+    const ascii = { messageId: 'OrderCreated.v1:n', factId: 'n', headers: {} };
+    const accented = { messageId: 'OrderCreated.v1:ñ', factId: 'ñ', headers: {} };
+
+    const bytes = [brokerHeaderBytesOf(ascii), brokerHeaderBytesOf(accented)];
+
+    expect(bytes).toEqual([64, 66]);
   });
 
   test('a Message’s broker headers read back give its broker message id, its Fact id and its transport headers', () => {

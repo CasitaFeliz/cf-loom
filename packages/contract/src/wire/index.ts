@@ -10,6 +10,7 @@ export {
 } from './body.ts';
 export type { DurableConsumed, ReceivedHeaders, TransportHeaderFit } from './broker.ts';
 export {
+  brokerHeaderBytesOf,
   brokerHeadersOf,
   brokerMessageIdOf,
   durableNameOf,
@@ -17,6 +18,7 @@ export {
   isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
+  maxBrokerHeaderBytes,
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,
