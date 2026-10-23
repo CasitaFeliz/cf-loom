@@ -1,12 +1,18 @@
 {
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "${configDir}",
+    "rootDir": "${configDir}/../..",
     "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/example.tsbuildinfo",
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "cf-loom.config.ts", "vitest.config.ts"],
+  "include": [
+    "src",
+    "test",
+    "cf-loom.config.ts",
+    "vitest.config.ts",
+    "../../packages/messaging/test/nats-server.ts"
+  ],
   "references": [
     {
       "path": "../../packages/contract/tsconfig.build.json"
