@@ -1,32 +1,32 @@
 import { receivedHeadersOf } from '@cf-loom/contract/internal';
-import type { JsMsg } from '@nats-io/jetstream';
-import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
-import type { Binding } from './binding.ts';
+import type { Settlement } from '../broker/index.ts';
+import type { FoundDurable } from './finding.ts';
 import { waitOf, whileWorking } from './in-progress.ts';
-
-const leftPending: Settlement = { kind: 'pending', fault: undefined };
+import type { PulledMessage } from './pulled-message.ts';
 
 /**
- * Hands one JetStream Message to its Handler and applies the Settlement it comes back with; a
- * Message without cf-loom's ids is ended, since cf-loom never published it and cannot identify it.
+ * Hands one Message to its Handler and applies the Settlement it comes back with; one whose
+ * `receive` rejects is left to NATS, and one without cf-loom's ids is ended, since cf-loom never published it.
  */
-export async function deliver(message: JsMsg, binding: Binding): Promise<void> {
+export async function deliver(message: PulledMessage, durable: FoundDurable): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
   if (read.kind === 'missing') {
     message.term(read.names.map((name) => `no ${name} header`).join(', '));
     return;
   }
   const { messageId, factId, headers } = read;
-  const { deliveryCount } = message.info;
+  const { deliveryCount } = message;
   const delivery = { messageId, factId, deliveryCount, headers, body: message.data };
-  const wait = waitOf(binding.waits, deliveryCount);
+  const wait = waitOf(durable.waits, deliveryCount);
   const settlement = await whileWorking(message, wait, () =>
-    receivedBy(binding.consumer, delivery),
-  );
-  applySettlement(message, settlement);
+    durable.consumer.receive(delivery),
+  ).catch(() => undefined);
+  if (settlement !== undefined) {
+    applySettlement(message, settlement);
+  }
 }
 
-function headerEntriesOf(message: JsMsg): readonly (readonly [string, string])[] {
+function headerEntriesOf(message: PulledMessage): readonly (readonly [string, string])[] {
   const entries: (readonly [string, string])[] = [];
   for (const [name, values] of message.headers ?? []) {
     for (const value of values) {
@@ -36,16 +36,7 @@ function headerEntriesOf(message: JsMsg): readonly (readonly [string, string])[]
   return entries;
 }
 
-/** What `receive` settles to; one that rejects, which only an `onServiceFault` that throws causes, leaves the Message for redelivery. */
-async function receivedBy(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
-  try {
-    return await consumer.receive(delivery);
-  } catch {
-    return leftPending;
-  }
-}
-
-function applySettlement(message: JsMsg, settlement: Settlement): void {
+function applySettlement(message: PulledMessage, settlement: Settlement): void {
   switch (settlement.kind) {
     case 'acked':
       message.ack();

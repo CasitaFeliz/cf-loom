@@ -1,35 +1,28 @@
-import type { Consumer, ConsumerMessages, JsMsg } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
-import type { Binding } from './binding.ts';
 import { deliver } from './delivering.ts';
-
-// biome-ignore lint/style/useNamingConvention: nats.js spells the option in snake case
-const oneMessage = { max_messages: 1 };
+import type { FoundDurable } from './finding.ts';
+import { pullOnce } from './pull-once.ts';
+import type { PulledMessage } from './pulled-message.ts';
 
 /** How long a durable consumer waits before it pulls again after a pull failed, as when its durable consumer was deleted. */
 const retryPauseMs = 1_000;
 
-type Pulled =
-  | { readonly kind: 'message'; readonly message: JsMsg }
-  | { readonly kind: 'expired' }
-  | { readonly kind: 'failed' };
-
 /**
- * Pulls one Message at a time from a durable consumer and delivers it, until `stopping` aborts or the
- * connection ends; a pull that fails is tried again after a pause, silently.
+ * Pulls one Message at a time from a durable consumer and delivers it, until `stopping` aborts, which is
+ * when the core starts closing or the connection closes; a pull that fails is tried again after a pause, silently.
  */
 export async function pullFrom(
-  binding: Binding,
+  durable: FoundDurable,
   natsConnection: NatsConnection,
   stopping: AbortSignal,
 ): Promise<void> {
   while (isPulling(natsConnection, stopping)) {
-    const pulled = await pulledFrom(binding.pulled, stopping);
-    switch (pulled.kind) {
+    const pull = await pullOnce(durable.request, natsConnection, stopping);
+    switch (pull.kind) {
       case 'message':
-        await deliveredOrHandedBack(pulled.message, binding, stopping);
+        await deliveredOrHandedBack(pull.message, durable, stopping);
         break;
-      case 'expired':
+      case 'none':
         break;
       case 'failed':
         await pause(stopping);
@@ -42,43 +35,17 @@ function isPulling(natsConnection: NatsConnection, stopping: AbortSignal): boole
   return !stopping.aborted && !natsConnection.isClosed() && !natsConnection.isDraining();
 }
 
-async function pulledFrom(pulled: Consumer, stopping: AbortSignal): Promise<Pulled> {
-  try {
-    const messages = await pulled.fetch(oneMessage);
-    return await firstOf(messages, stopping);
-  } catch {
-    return { kind: 'failed' };
-  }
-}
-
-/** The first Message of a pull, which is stopped at once when `stopping` aborts, so NATS delivers it nothing more. */
-async function firstOf(messages: ConsumerMessages, stopping: AbortSignal): Promise<Pulled> {
-  const stop = () => messages.stop();
-  stopping.addEventListener('abort', stop);
-  if (stopping.aborted) {
-    stop();
-  }
-  try {
-    for await (const message of messages) {
-      return { kind: 'message', message };
-    }
-    return { kind: 'expired' };
-  } finally {
-    stopping.removeEventListener('abort', stop);
-  }
-}
-
 /** A Message that was already on its way when pulling stopped goes back to NATS for another process, not to a Handler. */
 async function deliveredOrHandedBack(
-  message: JsMsg,
-  binding: Binding,
+  message: PulledMessage,
+  durable: FoundDurable,
   stopping: AbortSignal,
 ): Promise<void> {
   if (stopping.aborted) {
     message.nak();
     return;
   }
-  await deliver(message, binding);
+  await deliver(message, durable);
 }
 
 /** Waits the retry pause, or less when `stopping` aborts; its timer and listener never outlive it. */

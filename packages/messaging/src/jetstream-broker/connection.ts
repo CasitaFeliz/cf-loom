@@ -2,7 +2,7 @@ import { brokerHeadersOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type JetStreamOptions, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
-import { bindingsOf } from './binding.ts';
+import { durablesFoundOf } from './finding.ts';
 import { pullFrom } from './pulling.ts';
 import { managerOf } from './stream-check.ts';
 
@@ -13,7 +13,6 @@ export function jetStreamConnectionOf(
   options: JetStreamOptions | undefined,
 ): BrokerConnection {
   const client = jetStreamClientOf(natsConnection, options);
-  const loops: Promise<void>[] = [];
   return {
     publish: async (message) => {
       const subject = prefixedSubjectOf(prefix, message.subject);
@@ -21,19 +20,16 @@ export function jetStreamConnectionOf(
     },
     consume: async (consumers, closing) => {
       const manager = await managerOf(natsConnection, options);
-      const bound = await bindingsOf(manager, prefix, consumers);
-      if (bound.kind === 'refused') {
-        throw new Error(bound.lines.join('\n'));
+      const found = await durablesFoundOf(manager, prefix, consumers);
+      if (found.kind === 'refused') {
+        throw new Error(found.lines.join('\n'));
       }
       const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
-      for (const binding of bound.bindings) {
-        loops.push(pullFrom(binding, natsConnection, stopping));
+      for (const durable of found.durables) {
+        void pullFrom(durable, natsConnection, stopping);
       }
     },
-    close: async () => {
-      await drainOnce(natsConnection);
-      await Promise.all(loops);
-    },
+    close: () => drainOnce(natsConnection),
   };
 }
 

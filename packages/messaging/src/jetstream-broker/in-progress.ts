@@ -1,5 +1,6 @@
-import type { ConsumerConfig, JsMsg } from '@nats-io/jetstream';
+import type { ConsumerConfig } from '@nats-io/jetstream';
 import { millis } from '@nats-io/nats-core';
+import type { PulledMessage } from './pulled-message.ts';
 
 /** The wait NATS gives a durable consumer's delivery when its configuration holds none. */
 const natsAckWaitMs = 30_000;
@@ -30,7 +31,7 @@ export function waitOf(waits: Waits, deliveryCount: number): number {
 
 /** Runs `run` while sending the Message in-progress acknowledgements, so NATS does not give it to another process meanwhile. */
 export async function whileWorking<Result>(
-  message: JsMsg,
+  message: PulledMessage,
   wait: number,
   run: () => Promise<Result>,
 ): Promise<Result> {
