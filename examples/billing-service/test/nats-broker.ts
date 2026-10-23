@@ -2,11 +2,11 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { type BrokerLimits, type BrokerPlan, jetstream } from '@cf-loom/messaging/jetstream';
-import { JetStreamApiCodes, JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
+import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
 /** Every setting of a test's plans, for one throwaway nats-server, which holds one replica of anything. */
-export const testLimits: BrokerLimits = {
+const testLimits: BrokerLimits = {
   consumerDefaults: { ackWait: '30s', deliverPolicy: 'all', maxAckPending: 100, maxDeliver: 5 },
   streamDefaults: {
     duplicateWindow: '2m',
@@ -51,11 +51,6 @@ export async function lastMessageOn(
       return undefined;
     }
     return { factId: stored.header.get('Cf-Loom-Fact-Id'), seq: stored.seq };
-  } catch (error) {
-    if (error instanceof JetStreamApiError && error.code === JetStreamApiCodes.NoMessageFound) {
-      return undefined;
-    }
-    throw error;
   } finally {
     await connection.close();
   }
@@ -82,12 +77,12 @@ export async function durableStateOf(
   const connection = await connect({ servers: url });
   try {
     const manager = await jetstreamManager(connection);
-    const info = await manager.consumers.info(stream, durable);
+    const consumer = await manager.consumers.info(stream, durable);
     return {
-      ackFloor: info.ack_floor.stream_seq,
-      ackPending: info.num_ack_pending,
-      pending: info.num_pending,
-      redelivered: info.num_redelivered,
+      ackFloor: consumer.ack_floor.stream_seq,
+      ackPending: consumer.num_ack_pending,
+      pending: consumer.num_pending,
+      redelivered: consumer.num_redelivered,
     };
   } finally {
     await connection.close();

@@ -49,7 +49,7 @@ export async function aServiceProcess(
     port,
     stderr,
     stop: () => {
-      stopping ??= stopped({ child, exited });
+      stopping ??= terminate({ child, exited });
       return stopping;
     },
   };
@@ -90,19 +90,23 @@ async function listeningPort(started: Started, stderr: () => string): Promise<nu
     timer = setTimeout(() => resolve('timed out'), startTimeoutMs);
   });
   try {
-    const first = await Promise.race([portPrinted(started.child.stdout), started.exited, timedOut]);
-    if (typeof first === 'number') {
-      return first;
+    const winner = await Promise.race([
+      portPrinted(started.child.stdout),
+      started.exited,
+      timedOut,
+    ]);
+    if (typeof winner === 'number') {
+      return winner;
     }
     started.child.kill('SIGKILL');
-    const why = first === 'timed out' ? `did not listen within ${startTimeoutMs} ms` : 'exited';
+    const why = winner === 'timed out' ? `did not listen within ${startTimeoutMs} ms` : 'exited';
     throw new Error(`The Service ${why} before it listened: ${stderr()}`);
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function stopped({ child, exited }: Started): Promise<Exit> {
+async function terminate({ child, exited }: Started): Promise<Exit> {
   child.kill('SIGTERM');
   const killer = setTimeout(() => child.kill('SIGKILL'), stopTimeoutMs);
   try {
