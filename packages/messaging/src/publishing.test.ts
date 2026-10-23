@@ -306,6 +306,21 @@ describe('publisher.publish', () => {
     expect(published).toEqual([]);
   });
 
+  test('a Fact id whose broker headers would take more bytes than JetStream stores throws naming the Message Version and its bytes, and nothing is sent', async () => {
+    const { publisher, published } = await opened();
+
+    const publishing = publisher.publish(
+      'OrderCreated',
+      { v2, v3 },
+      { factId: 'o'.repeat(33_000) },
+    );
+
+    await expect(publishing).rejects.toThrow(
+      'The broker headers of OrderCreated@2 would take 66062 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+    );
+    expect(published).toEqual([]);
+  });
+
   test('a body that breaks its version’s schema throws InvalidMessageError naming the version and the path, and no version is sent', async () => {
     const { publisher, published } = await opened();
     const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
