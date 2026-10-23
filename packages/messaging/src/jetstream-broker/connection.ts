@@ -17,13 +17,23 @@ export function jetStreamConnectionOf(
     },
     // TODO(#128)
     consume: () => Promise.reject(new Error('jetstream() does not consume yet')),
-    close: () => drainUnlessClosed(natsConnection),
+    close: () => drainOnce(natsConnection),
   };
 }
 
-/** Drains the connection the Service opened, or does nothing when it is closed already, so no drain replaces the error that led to it. */
-export function drainUnlessClosed(natsConnection: NatsConnection): Promise<void> {
-  return natsConnection.isClosed() ? Promise.resolve() : natsConnection.drain();
+/**
+ * Drains the connection the Service opened, unless it is closed already, or draining because the
+ * Service started that, and then waits for it; so no drain replaces the error that led to it.
+ */
+export async function drainOnce(natsConnection: NatsConnection): Promise<void> {
+  if (natsConnection.isClosed()) {
+    return;
+  }
+  if (natsConnection.isDraining()) {
+    await natsConnection.closed();
+    return;
+  }
+  await natsConnection.drain();
 }
 
 function natsHeadersOf(message: OutgoingMessage) {

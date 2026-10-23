@@ -184,16 +184,15 @@ describe('jetstream()', () => {
     );
   });
 
-  test('messaging() rejects with the stream check’s own error when draining the connection fails too', async () => {
+  test('messaging() rejects with the stream check’s own error when the Service’s connection is already closed', async () => {
     const checkFailure = new Error('the Broker did not answer');
-    const connectBroken = async () =>
-      withMethods(await connect({ servers: server.url }), {
-        request: () => Promise.reject(checkFailure),
-        isClosed: () => true,
-        drain: () => Promise.reject(new Error('closed connection')),
-      });
+    const connectClosed = async () => {
+      const connection = await connect({ servers: server.url });
+      await connection.close();
+      return withMethods(connection, { request: () => Promise.reject(checkFailure) });
+    };
 
-    const opening = messaging(contract, jetstream({ connect: connectBroken, prefix: aPrefix() }));
+    const opening = messaging(contract, jetstream({ connect: connectClosed, prefix: aPrefix() }));
 
     await expect(opening).rejects.toBe(checkFailure);
   });

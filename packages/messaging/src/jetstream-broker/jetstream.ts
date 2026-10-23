@@ -2,7 +2,7 @@ import { isBrokerPrefix } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
-import { drainUnlessClosed, jetStreamConnectionOf } from './connection.ts';
+import { drainOnce, jetStreamConnectionOf } from './connection.ts';
 import { missingSubjectsOf, type PrefixedStream, prefixedStreamOf } from './stream-check.ts';
 
 /** What `jetstream()` takes: the Service's own way to open a NATS connection, the prefix of every name it uses on the Broker, and the options of nats.js's JetStream client, if any. */
@@ -45,7 +45,7 @@ async function checkStreamOrDrain(
       );
     }
   } catch (error) {
-    await drainUnlessClosed(natsConnection);
+    await drainOnce(natsConnection);
     throw error;
   }
 }

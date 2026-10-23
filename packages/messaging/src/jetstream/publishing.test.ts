@@ -249,6 +249,17 @@ describe('publishing over jetstream()', () => {
     await expect(closing).resolves.toBeUndefined();
   });
 
+  test('close resolves when the Service is already draining its connection', async () => {
+    const { close, opened } = await aMessaging();
+    const draining = opened[0]?.drain();
+
+    const closing = close();
+
+    await expect(closing).resolves.toBeUndefined();
+    await draining;
+    expect(opened[0]?.isClosed()).toBe(true);
+  });
+
   test('the jetstream options reach the publishing client: the configured timeout is the one a publish waits for the acknowledgement with', async () => {
     const watching = aWatchedConnect();
     const prefix = aPrefix();
