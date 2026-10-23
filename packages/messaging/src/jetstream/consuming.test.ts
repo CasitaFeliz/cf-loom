@@ -7,8 +7,8 @@ import {
   defineEvent,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
-import { jetstream as jetStreamClientOf } from '@nats-io/jetstream';
+import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
+import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { arrangeDurable, arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
-import { type Messaging, messaging } from '../index.ts';
+import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
 import { type BrokerPlan, jetstream } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
@@ -120,17 +120,23 @@ function handlersOf(
 }
 
 /** A messaging over `jetstream()` on the test server, closed when the test ends. */
-async function aMessaging(prefix: string): Promise<Messaging<typeof contract>> {
+async function aMessaging(
+  prefix: string,
+  onServiceFault: (fault: ConsumedFault) => void = () => undefined,
+): Promise<Messaging<typeof contract>> {
   const broker = jetstream({ connect: aConnect().connect, prefix });
-  const opened = await messaging(contract, broker, { onServiceFault: () => undefined });
+  const opened = await messaging(contract, broker, { onServiceFault });
   onTestFinished(() => opened.close());
   return opened;
 }
 
-/** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them. */
-async function arrangeOrders(prefix: string): Promise<void> {
+/** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
+async function arrangeOrders(
+  prefix: string,
+  settings: Partial<ConsumerConfig> = {},
+): Promise<void> {
   await arrangePlanOf(server.url, contract, prefix);
-  await arrangeDurablesOf(server.url, planOf(contract, prefix));
+  await arrangeDurablesOf(server.url, planOf(contract, prefix), settings);
 }
 
 /** The plan with only the durable consumers named kept, to arrange some of Orders’ durable consumers and not others. */
@@ -182,6 +188,23 @@ async function terminationsOf(): Promise<string[]> {
   await connection.flush();
   return reasons;
 }
+
+/** Waits for the durable consumer to hold nothing pending and nothing awaiting acknowledgement after `delivered` deliveries. */
+async function waitUntilSettled(stream: string, durable: string, delivered: number): Promise<void> {
+  await vi.waitFor(
+    async () => {
+      const info = await durableInfoOf(server.url, stream, durable);
+      expect(info).toMatchObject({
+        num_pending: 0,
+        num_ack_pending: 0,
+        delivered: { consumer_seq: delivered },
+      });
+    },
+    { timeout: 4_000 },
+  );
+}
+
+const oneSecond = 1_000_000_000;
 
 describe('consuming over jetstream()', () => {
   test('consume binds each Subscription and Command Version to its prefixed durable consumer, and a Message published before or after it reaches its Handler', async () => {
@@ -519,4 +542,77 @@ describe('consuming over jetstream()', () => {
       expect(received).toEqual([]);
     },
   );
+
+  test('returning nothing acknowledges the Message', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    await orders.consume(handlersOf(received));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await waitUntilSettled(names.stream, names.notifyDurable, 1);
+    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    expect(info?.ack_floor.consumer_seq).toBe(1);
+    expect(received).toHaveLength(1);
+  });
+
+  test('a Fault that is not retryable ends the Message: it is not delivered again', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const failing = () => fault({ committed: 'no', retryable: false, message: 'cannot be done' });
+    await orders.consume(handlersOf(received, { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await waitUntilSettled(names.stream, names.notifyDurable, 1);
+    expect(received).toHaveLength(1);
+  });
+
+  test('a throw leaves the Message unacknowledged, and NATS delivers it again after the ack wait with delivery count 2', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    await waitUntilSettled(names.stream, names.notifyDurable, 2);
+  }, 10_000);
+
+  test('a receive that rejects, because onServiceFault threw, leaves the Message for redelivery', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix, () => {
+      throw new Error('the hook is down');
+    });
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  }, 10_000);
 });
