@@ -46,10 +46,7 @@ export type ReceivedHeaders =
     }
   | { readonly kind: 'missing'; readonly names: readonly string[] };
 
-/**
- * The inverse of `brokerHeadersOf`: the ids from `Nats-Msg-Id` and `Cf-Loom-Fact-Id`, an empty one
- * missing, and every other header as a transport header, the values of a name given several times joined with `, `.
- */
+/** The inverse of `brokerHeadersOf`: a delivered Message's ids and transport headers, or the ids it lacks. */
 export function receivedHeadersOf(
   entries: readonly (readonly [string, string])[],
 ): ReceivedHeaders {
@@ -68,6 +65,7 @@ export function receivedHeadersOf(
   return { kind: 'read', messageId, factId, headers: Object.fromEntries(transport) };
 }
 
+/** The values of each header name joined with `, `, as an HTTP header given several times is. */
 function joinedByName(entries: readonly (readonly [string, string])[]): Map<string, string> {
   const valueByName = new Map<string, string>();
   for (const [name, value] of entries) {
