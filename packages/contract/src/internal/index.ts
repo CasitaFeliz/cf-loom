@@ -35,8 +35,8 @@ export {
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
-export type { DecodedSnapshot } from '../decoding/index.ts';
-export { decodeSnapshot } from '../decoding/index.ts';
+export type { DecodedSnapshot, Problem } from '../decoding/index.ts';
+export { decodeSnapshot, problemOf } from '../decoding/index.ts';
 export type { Parsed, SchemaIssue } from '../issues/index.ts';
 export { encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';

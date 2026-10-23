@@ -1,7 +1,7 @@
 import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
-import type { Problem } from './decode.ts';
+import type { Problem } from './problem.ts';
 import { usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */

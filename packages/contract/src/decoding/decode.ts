@@ -1,18 +1,14 @@
 import type { z } from 'zod';
-import type { $ZodIssue } from 'zod/v4/core';
 import {
   canonicalSnapshotOf,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormats,
 } from '../snapshot/index.ts';
-import type { Path } from '../walker/index.ts';
 import { ownOf } from '../written/index.ts';
+import { type Problem, problemOf } from './problem.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
-
-/** One place where a Snapshot breaks what its format promises, and what it breaks. */
-export type Problem = { readonly at: Path; readonly reason: string };
 
 /** A `snapshot.json` as decoded: the published Snapshot, or why it cannot be trusted. */
 export type DecodedSnapshot =
@@ -87,31 +83,11 @@ function decodedWithinStack(
 function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): DecodedSnapshot {
   const structured = structure.safeParse(json);
   if (!structured.success) {
-    return { kind: 'malformed', ...problemOf(structured.error.issues) };
+    return { kind: 'malformed', ...problemOf(structured.error.issues, 'its format') };
   }
   const problem = heldProblemOf(structured.data);
   if (problem !== undefined) {
     return { kind: 'malformed', ...problem };
   }
   return { kind: 'decoded', snapshot: canonicalSnapshotOf(structured.data) };
-}
-
-/** The first of the structure's issues as one place and one reason. */
-function problemOf(issues: readonly $ZodIssue[]): Problem {
-  const [issue] = issues;
-  if (issue === undefined) {
-    return { at: [], reason: 'is not a Snapshot its format defines' };
-  }
-  const at: Path = issue.path.map((step) => (typeof step === 'symbol' ? String(step) : step));
-  if (issue.code === 'unrecognized_keys') {
-    return { at: [...at, issue.keys[0] ?? ''], reason: 'is a key its format does not define' };
-  }
-  if (issue.code === 'invalid_union') {
-    const reason =
-      issue.errors.length === 0
-        ? 'is not a value its format defines'
-        : 'matches none of the forms its format defines';
-    return { at, reason };
-  }
-  return { at, reason: issue.message };
 }
