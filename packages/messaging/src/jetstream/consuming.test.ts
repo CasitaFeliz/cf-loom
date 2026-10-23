@@ -5,7 +5,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
+import { arrangeDurable, arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type Messaging, messaging } from '../index.ts';
@@ -76,6 +76,8 @@ function anOrders(prefix: string) {
     chargeDurable: `${prefix}_orders-service_command_ChargeCard_v1`,
   };
 }
+
+type Orders = ReturnType<typeof anOrders>;
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
 
@@ -227,5 +229,73 @@ describe('consuming over jetstream()', () => {
     await expect(consuming).rejects.toThrow(
       `The stream ${orders.stream}, which the durable consumer ${orders.notifyDurable} reads, does not exist: ${apply}`,
     );
+  });
+
+  test.each([
+    [
+      'a push consumer',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subject: orders.created,
+        deliver_subject: 'somewhere.else',
+      }),
+      () => 'is a push consumer, not a pull consumer',
+    ],
+    [
+      'one that does not acknowledge explicitly',
+      (orders: Orders) => ({ ack_policy: 'none' as const, filter_subject: orders.created }),
+      () => 'has the ack policy none, not explicit',
+    ],
+    [
+      'one filtered on another subject',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subject: `${orders.created}.other`,
+      }),
+      (orders: Orders) => `filters ${orders.created}.other, not ${orders.created}`,
+    ],
+    [
+      'one filtered on no subject',
+      () => ({ ack_policy: 'explicit' as const }),
+      (orders: Orders) => `filters every subject, not ${orders.created}`,
+    ],
+  ])(
+    'consume refuses %s, naming the durable consumer and what differs',
+    async (_name, config, difference) => {
+      const prefix = aPrefix();
+      const orders = anOrders(prefix);
+      await arrangePlanOf(server.url, contract, prefix);
+      const plan = planOf(contract, prefix);
+      await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+      await arrangeDurable(server.url, orders.stream, {
+        ...config(orders),
+        durable_name: orders.notifyDurable,
+      });
+      const messagingOfOrders = await aMessaging(prefix);
+
+      const consuming = messagingOfOrders.consume(handlersOf([]));
+
+      await expect(consuming).rejects.toThrow(
+        `The durable consumer ${orders.notifyDurable} ${difference(orders)}: ${apply}`,
+      );
+    },
+  );
+
+  test('consume binds a durable consumer that filters on its subject through filter_subjects', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangePlanOf(server.url, contract, prefix);
+    const plan = planOf(contract, prefix);
+    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurable(server.url, orders.stream, {
+      ack_policy: 'explicit',
+      filter_subjects: [orders.created],
+      durable_name: orders.notifyDurable,
+    });
+    const messagingOfOrders = await aMessaging(prefix);
+
+    const consuming = messagingOfOrders.consume(handlersOf([]));
+
+    await expect(consuming).resolves.toBeUndefined();
   });
 });

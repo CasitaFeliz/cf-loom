@@ -1,7 +1,8 @@
-import { prefixedNameOf } from '@cf-loom/contract/internal';
+import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type Consumer, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
 import type { BrokerConsumer } from '../broker/index.ts';
 import { isApiError } from './applied.ts';
+import { shapeDifferencesOf } from './durable-shape.ts';
 
 /** A consumer of the Service bound to its durable consumer on the Broker, which pulls its Messages. */
 export type Binding = { readonly consumer: BrokerConsumer; readonly pulled: Consumer };
@@ -45,6 +46,14 @@ async function lookedUp(
   const durable = prefixedNameOf(prefix, consumer.durable);
   try {
     const info = await manager.consumers.info(stream, durable);
+    const differences = shapeDifferencesOf(
+      info.config,
+      prefixedSubjectOf(prefix, consumer.subject),
+    );
+    if (differences.length > 0) {
+      const line = `The durable consumer ${durable} ${differences.join(' and ')}: ${apply}`;
+      return { kind: 'refused', line };
+    }
     const pulled = manager.jetstream().consumers.getConsumerFromInfo(info);
     return { kind: 'bound', binding: { consumer, pulled } };
   } catch (error) {
