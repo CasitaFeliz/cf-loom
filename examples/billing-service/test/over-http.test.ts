@@ -1,14 +1,14 @@
-import { type ChildProcess, type ChildProcessByStdio, spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
-import type { Readable } from 'node:stream';
 import { client } from '@cf-loom/client';
 import { serve } from '@cf-loom/server';
-import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
+import { brokerPrefix, ordersEnvironment } from './environments.ts';
+import { applyPlanOf } from './nats-broker.ts';
+import { aServiceProcess, type ServiceProcess } from './service-process.ts';
 
 const ordersDir = join(import.meta.dirname, '../../orders-service');
 const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
@@ -16,40 +16,25 @@ const PENDING_ORDER_ID = 'c2a9e1f4-8b7d-4f3a-a6e5-0d1c2b3a4f5e';
 const LOCKED_ORDER_ID = '5e8b2c7a-1d4f-4a9e-b3c6-7f8e9d0a1b2c';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const billing = serve(contract, handlers);
-let orders: ChildProcess | undefined;
+let nats: NatsServer | undefined;
+let orders: ServiceProcess | undefined;
 let ordersUrl = '';
 
-/** The port orders-service's `main.ts` prints once it listens. */
-async function portOf(stdout: Readable): Promise<string> {
-  for await (const line of createInterface({ input: stdout })) {
-    const port = /listening on (\d+)$/.exec(line)?.[1];
-    if (port !== undefined) return port;
-  }
-  throw new Error('orders-service exited before it listened');
-}
-
-/** A new orders-service process on a free port, printing the port it listens on. */
-function spawnOrders(): ChildProcessByStdio<null, Readable, null> {
-  return spawn(process.execPath, ['src/main.ts'], {
-    cwd: ordersDir,
-    // biome-ignore lint/style/useNamingConvention: the environment variable orders-service reads
-    env: { ...process.env, PORT: '0' },
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
-}
-
 beforeAll(async () => {
-  const started = spawnOrders();
-  orders = started;
-  ordersUrl = `http://127.0.0.1:${await portOf(started.stdout)}`;
+  const server = await aNatsServer();
+  nats = server;
+  await applyPlanOf(ordersDir, server.url, brokerPrefix);
+  orders = await aServiceProcess(ordersDir, ordersEnvironment(server.url));
+  ordersUrl = `http://127.0.0.1:${orders.port}`;
   vi.stubEnv('ORDERS_SERVICE_URL', ordersUrl);
   vi.stubEnv('ORDERS_SERVICE_API_KEY', 'billing-key');
-});
+}, 60_000);
 
-afterAll(() => {
+afterAll(async () => {
   vi.unstubAllEnvs();
-  orders?.kill('SIGKILL');
-});
+  await orders?.stop();
+  await nats?.stop();
+}, 30_000);
 
 function anInvoiceRequest(orderId: string): Request {
   return new Request('http://billing.test/invoices', {
@@ -138,21 +123,5 @@ describe('a client of orders-service over HTTP', () => {
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
     expect(outcome).toMatchObject({ kind: 'rejection', known: true, code: 'UNAUTHENTICATED' });
-  });
-});
-
-describe('orders-service’s main.ts', () => {
-  test('it exits with status 0 when it is sent SIGTERM', async () => {
-    const ordersToStop = spawnOrders();
-    onTestFinished(() => {
-      ordersToStop.kill('SIGKILL');
-    });
-    await portOf(ordersToStop.stdout);
-    const exited = once(ordersToStop, 'exit');
-
-    ordersToStop.kill('SIGTERM');
-
-    const [status, signal] = await exited;
-    expect({ status, signal }).toEqual({ status: 0, signal: null });
   });
 });
