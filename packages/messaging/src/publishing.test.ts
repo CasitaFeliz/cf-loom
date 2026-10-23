@@ -202,6 +202,29 @@ describe('publisher.publish', () => {
     expect(published).toEqual([]);
   });
 
+  test.each([
+    ['trace id', '"trace id"'],
+    ['a:b', '"a:b"'],
+    ['café', '"café"'],
+    ['', '""'],
+  ])(
+    'a header whose name is %j cannot travel over NATS: it throws and nothing is sent',
+    async (name, quoted) => {
+      const { publisher, published } = await opened();
+
+      const publishing = publisher.publish(
+        'OrderCreated',
+        { v2, v3 },
+        { headers: { [name]: 'x' } },
+      );
+
+      await expect(publishing).rejects.toThrow(
+        `The transport header name ${quoted} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`,
+      );
+      expect(published).toEqual([]);
+    },
+  );
+
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();
 

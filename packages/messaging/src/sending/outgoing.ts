@@ -77,10 +77,16 @@ export function transportHeadersOf(
   headers: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   for (const [name, value] of Object.entries(headers)) {
-    if (transportHeaderFitOf(name, value) === 'reserved-name') {
+    const fit = transportHeaderFitOf(name, value);
+    if (fit === 'reserved-name') {
       throw new Error(
         `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
       );
+    }
+    if (fit === 'uncarried-name') {
+      const quoted = JSON.stringify(name);
+      const reason = 'it is empty or holds a colon, a space, a control or a non-ASCII character';
+      throw new Error(`The transport header name ${quoted} cannot travel over NATS: ${reason}`);
     }
   }
   return { ...headers };
