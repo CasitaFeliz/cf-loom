@@ -156,4 +156,12 @@ Where a Message travels follows from the Contract, so a Subscriber finds another
 
 On the wire a Message's body is the UTF-8 JSON of the Message body alone; the Message Version is in the subject, two headers carry the ids, `Nats-Msg-Id`, the broker message id, and `Cf-Loom-Fact-Id`, and the transport headers travel as the broker headers they were given (see [Publishing and sending](packages/messaging/README.md#publishing-and-sending) in the messaging README).
 
-Read back from the Broker, a Message's ids are the values of `Nats-Msg-Id` and `Cf-Loom-Fact-Id`, and every other header is a transport header, the several values of one name joined into one with `, `; a header named as one of those two in another case is neither an id nor a transport header. A Message lacking either id, or with one empty, was not published by cf-loom and is never handled.
+A Fact id and the transport headers arrive as given on every Broker, so cf-loom refuses, before anything is sent, what NATS would act on, refuse or change:
+
+- a transport header named in cf-loom's `Cf-Loom-` or NATS's `Nats-` namespace, in any case, since JetStream acts on its own headers (`Nats-Expected-Stream` refuses a publish, `Nats-TTL` changes what is stored);
+- a transport header name NATS cannot carry: an empty one, which other NATS libraries drop, or one holding a `:`, a space, a control or a non-ASCII character, which nats.js refuses;
+- a Fact id or transport header value that would not arrive as given: one holding a CR or LF, which nats.js refuses; one with whitespace leading or trailing, as JavaScript's `trim` removes it, a no-break space and the other Unicode spaces included, which nats.js trims; or one holding a lone surrogate, which no UTF-8 can carry. A Fact id is never empty.
+
+Anything else travels as given: any other character of a value, an empty value, and two names that differ only in case, which are two headers.
+
+Read back from the Broker, a Message's ids are the values of `Nats-Msg-Id` and `Cf-Loom-Fact-Id`, and its transport headers are the headers named outside the `Cf-Loom-` and `Nats-` namespaces, in any case, the several values of one name joined with `, `; any other header in those namespaces, the two ids' names in another case among them, is neither an id nor a transport header. A Message lacking either id, or with one the Fact id's rule refuses, an empty one among them, was not published by cf-loom and is never handled.

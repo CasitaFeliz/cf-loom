@@ -331,15 +331,79 @@ describe('deliver()', () => {
     expect(received.map(({ meta }) => meta.headers)).toEqual([headers, {}]);
   });
 
-  test.each(['Nats-Msg-Id', 'cf-loom-fact-id'])(
-    'a header named %s is refused, and no Handler runs',
-    async (name) => {
+  test.each([
+    [
+      { 'Nats-Msg-Id': 'x' },
+      'The transport header Nats-Msg-Id takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-',
+    ],
+    [
+      { 'cf-loom-fact-id': 'x' },
+      'The transport header cf-loom-fact-id takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-',
+    ],
+    [
+      { 'nats-expected-stream': 'other' },
+      'The transport header nats-expected-stream takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-',
+    ],
+    [
+      { 'trace id': 'x' },
+      'The transport header name "trace id" cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character',
+    ],
+    [
+      { 'x-note': 'x ' },
+      'The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
+    ],
+  ])('the headers %j are refused, and no Handler runs', async (headers, message) => {
+    const { broker, received } = await running();
+
+    const delivering = broker.deliver(chargeCardV1, charge, { headers });
+
+    await expect(delivering).rejects.toThrow(message);
+    expect(received).toEqual([]);
+  });
+
+  test('a bad Fact id and bad headers together are refused for the Fact id first', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const delivering = broker.deliver(chargeCardV1, charge, { factId: 'f-1 ', headers });
+
+    await expect(delivering).rejects.toThrow(/^A Fact id is a non-empty string /);
+    expect(received).toEqual([]);
+  });
+
+  test('two bad headers are refused for the first one the record lists', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const delivering = broker.deliver(chargeCardV1, charge, { headers });
+
+    await expect(delivering).rejects.toThrow(/^The transport header x-a has a value /);
+    expect(received).toEqual([]);
+  });
+
+  test.each([' f-1', 'f-1 ', 'f-1\n', 'f-1\uD800'])(
+    'a Fact id of %j is refused, and no Handler runs',
+    async (factId) => {
       const { broker, received } = await running();
 
-      const delivering = broker.deliver(chargeCardV1, charge, { headers: { [name]: 'x' } });
+      const delivering = broker.deliver(chargeCardV1, charge, { factId });
 
       await expect(delivering).rejects.toThrow(
-        `The transport header ${name} takes a name cf-loom sets itself`,
+        'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+      );
+      expect(received).toEqual([]);
+    },
+  );
+
+  test.each(['', ' m-1', 'm-1 ', 'm-1\n', 'm-1\uD800'])(
+    'a broker message id of %j is refused, and no Handler runs',
+    async (messageId) => {
+      const { broker, received } = await running();
+
+      const delivering = broker.deliver(chargeCardV1, charge, { messageId });
+
+      await expect(delivering).rejects.toThrow(
+        'A broker message id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
       );
       expect(received).toEqual([]);
     },

@@ -183,9 +183,53 @@ describe('publisher.publish', () => {
     expect(published.map((message) => message.headers)).toEqual([headers, headers]);
   });
 
-  test.each(['Nats-Msg-Id', 'Cf-Loom-Fact-Id', 'nats-msg-id', 'CF-LOOM-FACT-ID'])(
-    'a header named %s throws and nothing is sent',
-    async (name) => {
+  test('a Fact id and transport headers that travel unchanged reach the broker exactly as given', async () => {
+    const { publisher, published } = await opened();
+    const headers = {
+      'x-note': 'café  con\tleche',
+      'x-empty': '',
+      'x-ctl': 'a\u0001b',
+      'x-text': '日本 🎉',
+      traceparent: 'A',
+      // biome-ignore lint/style/useNamingConvention: a header name that differs from the one above only in case
+      Traceparent: 'B',
+    };
+
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'pedido ñ\t1', headers });
+
+    expect(published.map(({ factId, headers: sent }) => ({ factId, headers: sent }))).toEqual([
+      { factId: 'pedido ñ\t1', headers },
+      { factId: 'pedido ñ\t1', headers },
+    ]);
+  });
+
+  test.each([
+    'Nats-Msg-Id',
+    'Cf-Loom-Fact-Id',
+    'nats-msg-id',
+    'CF-LOOM-FACT-ID',
+    'Nats-TTL',
+    'nats-expected-stream',
+    'Cf-Loom-Tenant',
+  ])('a header named %s throws and nothing is sent', async (name) => {
+    const { publisher, published } = await opened();
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers: { [name]: 'x' } });
+
+    await expect(publishing).rejects.toThrow(
+      `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
+    );
+    expect(published).toEqual([]);
+  });
+
+  test.each([
+    ['trace id', '"trace id"'],
+    ['a:b', '"a:b"'],
+    ['café', '"café"'],
+    ['', '""'],
+  ])(
+    'a header whose name is %j cannot travel over NATS: it throws and nothing is sent',
+    async (name, quoted) => {
       const { publisher, published } = await opened();
 
       const publishing = publisher.publish(
@@ -195,11 +239,63 @@ describe('publisher.publish', () => {
       );
 
       await expect(publishing).rejects.toThrow(
-        `The transport header ${name} takes a name cf-loom sets itself`,
+        `The transport header name ${quoted} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`,
       );
       expect(published).toEqual([]);
     },
   );
+
+  test.each([' x', 'x\n', 'x ', 'x\uD800'])(
+    'a header whose value is %j would not arrive as given over NATS: it throws and nothing is sent',
+    async (value) => {
+      const { publisher, published } = await opened();
+
+      const publishing = publisher.publish(
+        'OrderCreated',
+        { v2, v3 },
+        { headers: { 'x-note': value } },
+      );
+
+      await expect(publishing).rejects.toThrow(
+        'The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
+      );
+      expect(published).toEqual([]);
+    },
+  );
+
+  test.each([' o-1', 'o-1 ', 'o-1\n', 'o-1\r', 'o-1\uD800'])(
+    'a Fact id of %j would not arrive as given over NATS: it throws and nothing is sent',
+    async (factId) => {
+      const { publisher, published } = await opened();
+
+      const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId });
+
+      await expect(publishing).rejects.toThrow(
+        'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+      );
+      expect(published).toEqual([]);
+    },
+  );
+
+  test('a bad Fact id and bad headers together throw for the Fact id first', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1 ', headers });
+
+    await expect(publishing).rejects.toThrow(/^A Fact id is a non-empty string /);
+    expect(published).toEqual([]);
+  });
+
+  test('two bad headers throw for the first one the record lists', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers });
+
+    await expect(publishing).rejects.toThrow(/^The transport header x-a has a value /);
+    expect(published).toEqual([]);
+  });
 
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();
@@ -316,6 +412,25 @@ describe('sender.send', () => {
       { factId: 'o-1:charge', messageId: 'ChargeCard.v2:o-1:charge', headers: {} },
     ]);
     expect(decoded(published[0])).toEqual(charge);
+  });
+
+  test('send refuses a Fact id or a transport header publish refuses, and sends nothing', async () => {
+    const { sender, published } = await opened();
+
+    const refusals = [
+      await rejectionOf(sender.send('ChargeCard', charge, { factId: 'o-1 ' })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'Nats-TTL': '1h' } })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'trace id': 'x' } })),
+      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'x-note': 'x\n' } })),
+    ];
+
+    expect(refusals.map((error) => (error as Error).message)).toEqual([
+      expect.stringMatching(/^A Fact id is a non-empty string /),
+      expect.stringMatching(/^The transport header Nats-TTL takes a name /),
+      expect.stringMatching(/^The transport header name "trace id" cannot travel /),
+      expect.stringMatching(/^The transport header x-note has a value /),
+    ]);
+    expect(published).toEqual([]);
   });
 
   test('a body that breaks the schema throws InvalidMessageError and nothing is sent', async () => {

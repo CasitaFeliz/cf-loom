@@ -1,9 +1,11 @@
 import type { Command, Event } from '@cf-loom/contract';
 import {
   brokerMessageIdOf,
-  isReservedHeader,
+  isIdHeaderValue,
   jsonBytesOf,
   messageIdentityOf,
+  type TransportHeaderFit,
+  transportHeaderFitOf,
 } from '@cf-loom/contract/internal';
 import { checkedMessageBody } from '@cf-loom/handlers/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
@@ -61,24 +63,44 @@ function parsedBodiesOf(given: readonly Given[]): readonly Parsed[] {
   return parsed;
 }
 
-/** The Fact id given, which travels in a header and the broker message id, or a random one. */
+/** The Fact id given, which travels in a header and the broker message id as given on every Broker, or a random one. */
 export function factIdOf(given: string | undefined): string {
   if (given === undefined) {
     return globalThis.crypto.randomUUID();
   }
-  if (typeof given !== 'string' || given === '') {
-    throw new Error('A Fact id is a non-empty string');
+  return checkedIdOf('Fact id', given);
+}
+
+/** The id given, which travels in a header, or a throw that names what the id is and what makes one. */
+export function checkedIdOf(kind: 'Fact id' | 'broker message id', given: string): string {
+  if (!isIdHeaderValue(given)) {
+    throw new Error(
+      `A ${kind} is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate`,
+    );
   }
   return given;
 }
 
-/** The transport headers as given, none of them taking a name cf-loom sets itself. */
+/** The transport headers as given, each one reaching every Broker unchanged. */
 export function transportHeadersOf(
   headers: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
-  const reserved = Object.keys(headers).find(isReservedHeader);
-  if (reserved !== undefined) {
-    throw new Error(`The transport header ${reserved} takes a name cf-loom sets itself`);
+  for (const [name, value] of Object.entries(headers)) {
+    const fit = transportHeaderFitOf(name, value);
+    if (fit !== 'travels') {
+      throw new Error(refusalOf(name, fit));
+    }
   }
   return { ...headers };
+}
+
+function refusalOf(name: string, fit: Exclude<TransportHeaderFit, 'travels'>): string {
+  switch (fit) {
+    case 'reserved-name':
+      return `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`;
+    case 'uncarried-name':
+      return `The transport header name ${JSON.stringify(name)} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`;
+    case 'uncarried-value':
+      return `The transport header ${name} has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate`;
+  }
 }

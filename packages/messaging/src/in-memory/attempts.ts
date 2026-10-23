@@ -9,7 +9,7 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import { factIdOf, transportHeadersOf } from '../sending/index.ts';
+import { checkedIdOf, factIdOf, transportHeadersOf } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
@@ -62,12 +62,20 @@ function attemptsOf(
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
   const factId = factIdOf(meta.factId);
-  const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
+  const messageId = messageIdOf(message, factId, meta.messageId);
   const headers = transportHeadersOf(meta.headers ?? {});
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
     return { consumer, delivery: firstDeliveryOf({ messageId, factId, headers, body: bytes }) };
   });
+}
+
+/** The broker message id a test gave, which must arrive as given as a Fact id must, or the one a Message of the Fact id has. */
+function messageIdOf(message: Event | Command, factId: string, given: string | undefined): string {
+  if (given === undefined) {
+    return brokerMessageIdOf(message, factId);
+  }
+  return checkedIdOf('broker message id', given);
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {

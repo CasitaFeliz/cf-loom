@@ -6,14 +6,15 @@ import {
   brokerMessageIdOf,
   durableNameOf,
   isBrokerPrefix,
+  isIdHeaderValue,
   isPrefixedName,
   isPrefixedSubject,
-  isReservedHeader,
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,
   streamNameOf,
   subjectOf,
+  transportHeaderFitOf,
 } from '../internal/index.ts';
 
 const orderCreatedV2 = defineEvent({
@@ -156,18 +157,80 @@ describe('the Wire protocol over the broker', () => {
     expect(messageId).toBe('OrderCreated.v2:o-1:created');
   });
 
-  test('both reserved header names are reserved in any case', () => {
-    const names = [
+  test('a transport header in cf-loom’s or NATS’s namespace is reserved in any case', () => {
+    const reservedNames = [
       'Nats-Msg-Id',
       'nats-msg-id',
       'Cf-Loom-Fact-Id',
       'CF-LOOM-FACT-ID',
-      'traceparent',
+      'Cf-Loom-Tenant',
+      'Nats-TTL',
+      'nats-expected-stream',
+      'NATS-ROLLUP',
+    ];
+    const otherNames = ['traceparent', 'Nats', 'NatsTTL', 'X-Nats-Id', 'Cf-Loom'];
+
+    const fits = [...reservedNames, ...otherNames].map((name) => transportHeaderFitOf(name, 'x'));
+
+    expect(fits).toEqual([
+      ...reservedNames.map(() => 'reserved-name'),
+      ...otherNames.map(() => 'travels'),
+    ]);
+  });
+
+  test('a transport header name NATS cannot carry is refused', () => {
+    const uncarriedNames = [
+      'a:b',
+      'trace id',
+      'a\tb',
+      'a\u0001b',
+      'a\u007fb',
+      'café',
+      'a\uD800',
+      '',
     ];
 
-    const reserved = names.map(isReservedHeader);
+    const fits = [...uncarriedNames, 'x-b3_trace.id!~'].map((name) =>
+      transportHeaderFitOf(name, 'x'),
+    );
 
-    expect(reserved).toEqual([true, true, true, true, false]);
+    expect(fits).toEqual([...uncarriedNames.map(() => 'uncarried-name'), 'travels']);
+  });
+
+  test('a transport header value NATS would not carry as given is refused', () => {
+    const uncarriedValues = [
+      'a\rb',
+      'a\nb',
+      ' x',
+      'x ',
+      '\tx',
+      'x\t',
+      '\u00a0x',
+      'x\ufeff',
+      '\u3000x',
+      'x\uD800',
+      1,
+      undefined,
+    ];
+    const carriedValues = ['a b', 'a\tb', '日本 café', 'a\u0001b', ''];
+
+    const fits = [...uncarriedValues, ...carriedValues].map((value) =>
+      transportHeaderFitOf('x-note', value),
+    );
+
+    expect(fits).toEqual([
+      ...uncarriedValues.map(() => 'uncarried-value'),
+      ...carriedValues.map(() => 'travels'),
+    ]);
+  });
+
+  test('a Fact id or broker message id must be a non-empty header value NATS carries unchanged', () => {
+    const refused = ['', ' o-1', 'o-1\n', 'o-1 ', 'o-1\uD800', 1, undefined];
+    const accepted = ['o-1:created', 'pedido ñ\t1'];
+
+    const verdicts = [...refused, ...accepted].map(isIdHeaderValue);
+
+    expect(verdicts).toEqual([...refused.map(() => false), ...accepted.map(() => true)]);
   });
 
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
@@ -217,12 +280,43 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
+  test('an id the Fact id’s rule refuses reads as missing', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1 '],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({ kind: 'missing', names: ['Cf-Loom-Fact-Id'] });
+  });
+
   test('a header named as one of cf-loom’s own in another case is neither an id nor a transport header', () => {
     const entries: [string, string][] = [
       ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['nats-msg-id', 'other'],
       ['CF-LOOM-FACT-ID', 'other'],
+      ['traceparent', '00-abc-def-01'],
+    ];
+
+    const read = receivedHeadersOf(entries);
+
+    expect(read).toEqual({
+      kind: 'read',
+      messageId: 'OrderCreated.v2:o-1',
+      factId: 'o-1',
+      headers: { traceparent: '00-abc-def-01' },
+    });
+  });
+
+  test('broker headers in a namespace a transport header may not take read back as neither ids nor transport headers', () => {
+    const entries: [string, string][] = [
+      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Cf-Loom-Fact-Id', 'o-1'],
+      ['Nats-TTL', '1h'],
+      ['nats-expected-stream', 'other'],
+      ['Cf-Loom-Tenant', 't-1'],
       ['traceparent', '00-abc-def-01'],
     ];
 

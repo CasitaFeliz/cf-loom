@@ -57,7 +57,7 @@ export function receivedHeadersOf(
     [brokerMessageIdHeader, messageId],
     [factIdHeader, factId],
   ];
-  const names = ids.filter(([, id]) => id === '').map(([name]) => name);
+  const names = ids.filter(([, id]) => !isIdHeaderValue(id)).map(([name]) => name);
   if (names.length > 0) {
     return { kind: 'missing', names };
   }
@@ -120,8 +120,42 @@ export function isPrefixedSubject(prefix: string | null, subject: string): boole
   return subject.startsWith(prefixedSubjectOf(prefix, ''));
 }
 
-/** Whether a transport header would take the name of one cf-loom sets on every Message, in any case. */
-export function isReservedHeader(name: string): boolean {
+/** Whether a transport header reaches every Broker as given, or why not: a name cf-loom or NATS reserves, a name NATS cannot carry, or a value NATS would not carry as given. */
+export type TransportHeaderFit = 'travels' | 'reserved-name' | 'uncarried-name' | 'uncarried-value';
+
+/** How a transport header fares over the Broker, so the core refuses one NATS would act on, refuse or change. */
+export function transportHeaderFitOf(name: string, value: unknown): TransportHeaderFit {
+  if (isReservedHeader(name)) {
+    return 'reserved-name';
+  }
+  if (!isCarriedName(name)) {
+    return 'uncarried-name';
+  }
+  return isCarriedValue(value) ? 'travels' : 'uncarried-value';
+}
+
+/** Whether NATS carries a header name: one or more visible ASCII characters but the colon. */
+function isCarriedName(name: string): boolean {
+  return /^[\x21-\x39\x3b-\x7e]+$/.test(name);
+}
+
+/** Whether a text can be a Fact id or a broker message id: a non-empty header value NATS carries unchanged. */
+export function isIdHeaderValue(text: unknown): text is string {
+  return isCarriedValue(text) && text !== '';
+}
+
+/** Whether NATS carries a header value unchanged: a string with no CR or LF, no whitespace at either end for `trim` and no lone surrogate. */
+function isCarriedValue(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    !/[\r\n]/.test(value) &&
+    value.trim() === value &&
+    value.isWellFormed()
+  );
+}
+
+/** Whether a transport header would take a name in the namespace of cf-loom's headers or of NATS's, in any case. */
+function isReservedHeader(name: string): boolean {
   const lowered = name.toLowerCase();
-  return lowered === factIdHeader.toLowerCase() || lowered === brokerMessageIdHeader.toLowerCase();
+  return lowered.startsWith('cf-loom-') || lowered.startsWith('nats-');
 }
