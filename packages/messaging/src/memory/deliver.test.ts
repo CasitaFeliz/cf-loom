@@ -361,6 +361,26 @@ describe('deliver()', () => {
     expect(received).toEqual([]);
   });
 
+  test('a bad Fact id and bad headers together are refused for the Fact id first', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const delivering = broker.deliver(chargeCardV1, charge, { factId: 'f-1 ', headers });
+
+    await expect(delivering).rejects.toThrow(/^A Fact id is a non-empty string /);
+    expect(received).toEqual([]);
+  });
+
+  test('two bad headers are refused for the first one the record lists', async () => {
+    const { broker, received } = await running();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const delivering = broker.deliver(chargeCardV1, charge, { headers });
+
+    await expect(delivering).rejects.toThrow(/^The transport header x-a has a value /);
+    expect(received).toEqual([]);
+  });
+
   test.each([' f-1', 'f-1 ', 'f-1\n', 'f-1\uD800'])(
     'a Fact id of %j is refused, and no Handler runs',
     async (factId) => {

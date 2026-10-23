@@ -277,6 +277,26 @@ describe('publisher.publish', () => {
     },
   );
 
+  test('a bad Fact id and bad headers together throw for the Fact id first', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1 ', headers });
+
+    await expect(publishing).rejects.toThrow(/^A Fact id is a non-empty string /);
+    expect(published).toEqual([]);
+  });
+
+  test('two bad headers throw for the first one the record lists', async () => {
+    const { publisher, published } = await opened();
+    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
+
+    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers });
+
+    await expect(publishing).rejects.toThrow(/^The transport header x-a has a value /);
+    expect(published).toEqual([]);
+  });
+
   test('an empty Fact id throws and nothing is sent', async () => {
     const { publisher, published } = await opened();
 
