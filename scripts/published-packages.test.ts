@@ -66,14 +66,20 @@ describe('the packages pnpm publishes', () => {
       packages = published.map(packed);
     }, 120_000);
 
-    it('packs every file its exports and bin point at, and its README', () => {
+    it('packs every file its exports and bin point at', () => {
       const missing = packages.flatMap(({ name, files, manifest }) => {
         const targets = [...targetsOf(manifest.exports), ...targetsOf(manifest.bin)];
-        const expected = [...targets.map((target) => posix.normalize(target)), 'README.md'];
+        const expected = targets.map((target) => posix.normalize(target));
         return expected.filter((path) => !files.has(path)).map((path) => `${name}: ${path}`);
       });
 
       expect(missing).toEqual([]);
+    });
+
+    it('packs its README', () => {
+      const without = packages.filter(({ files }) => !files.has('README.md'));
+
+      expect(without.map(({ name }) => name)).toEqual([]);
     });
 
     it('packs its sources without their tests', () => {
