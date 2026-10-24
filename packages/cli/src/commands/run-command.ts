@@ -8,6 +8,7 @@ import { errorsExitOf } from './check-json.ts';
 import { type Exit, toolingError } from './exit.ts';
 import { generate } from './generate.ts';
 import { init } from './init.ts';
+import { openApiCommand } from './openapi.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
 import { publish } from './publish.ts';
 import { verify } from './verify.ts';
@@ -16,7 +17,7 @@ import { verify } from './verify.ts';
 const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | publish [--force] [--prerelease]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | openapi | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
@@ -67,6 +68,8 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
       return rest.length > 0 ? usageError('check takes no argument') : await check(run, output);
     case 'broker-plan':
       return await brokerPlanExitOf(rest, called, run);
+    case 'openapi':
+      return rest.length > 0 ? usageError('openapi takes no argument') : await openApiCommand(run);
     case 'publish':
       return rest.length > 0
         ? usageError('publish takes no argument')
