@@ -2,11 +2,11 @@ import { type Messaging, messaging } from '@cf-loom/messaging';
 import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
 import { fakeEvent } from '@cf-loom/testing';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import draftInvoiceOnCreatedHandler from '../src/billing/draft-invoice-on-created.handler.ts';
 import { draftsOf } from '../src/billing/drafts.ts';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
-import handlers from '../src/handlers.generated.ts';
-import draftInvoiceOnCreatedHandler from '../src/subscriptions/draft-invoice-on-created.handler.ts';
+import handlers from '../src/generated/handlers.generated.ts';
 
 const DELIVERED_ORDER_ID = 'a1f0c3d2-5b4e-4c6a-9d8e-7f6a5b4c3d2e';
 const REPEATED_ORDER_ID = 'b2e1d4c3-6a5f-4d7b-8e9f-0a1b2c3d4e5f';

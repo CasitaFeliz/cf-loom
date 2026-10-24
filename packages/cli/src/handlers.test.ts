@@ -100,6 +100,52 @@ const config = lines([
   "export const config = defineConfig({ scope: '@org' });",
 ]);
 
+/** A `cf-loom.config.ts` setting `layout` to the source text given, as its author wrote it. */
+function configWith(layout: string): string {
+  return lines([
+    "import { defineConfig } from '@cf-loom/cli';",
+    '',
+    `export const config = defineConfig({ scope: '@org', layout: ${layout} });`,
+  ]);
+}
+
+/** The files of a Service, its config setting `layout` to the source text given. */
+function withLayout(
+  files: Readonly<Record<string, string>>,
+  layout: string,
+): Readonly<Record<string, string>> {
+  return { ...files, 'cf-loom.config.ts': configWith(layout) };
+}
+
+/** A layout that moves every Handler and both generated files. */
+const movedLayout = lines([
+  '{',
+  "  endpoint: 'src/http/{group}/{name}.handler.ts',",
+  "  guard: 'src/security/{name}.handler.ts',",
+  "  command: 'src/billing/{name}.v{version}.handler.ts',",
+  "  subscription: 'src/reactions/{name}.handler.ts',",
+  "  handlerMap: 'src/generated/handlers.generated.ts',",
+  "  readers: 'src/generated/readers.generated.ts',",
+  '}',
+]).trimEnd();
+
+/** Every file a command left under `src/` outside the Contract, and the Snapshot, with its text. */
+function writtenBy(project: string): Readonly<Record<string, string>> {
+  const entries = readdirSync(join(project, 'src'), { recursive: true, withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name).slice(project.length + 1))
+    .filter((path) => !path.startsWith('src/contract/'));
+  return Object.fromEntries(
+    ['contract.snapshot.json', ...files].map((path) => [path, read(project, path)]),
+  );
+}
+
+/** The line `generate` and `verify` print for a Handler file nothing declared names. */
+function orphanLine(path: string): string {
+  return `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it`;
+}
+
 const apiKeyGuard = lines([
   "import { defineGuard } from '@cf-loom/contract';",
   "import { z } from 'zod';",
@@ -254,6 +300,29 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
       )
       .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
   };
+}
+
+/** The Service with an Endpoint named `apiKey`, as its Guard is. */
+function withEndpointNamedLikeGuard(): Readonly<Record<string, string>> {
+  return {
+    ...aService(),
+    'src/contract/endpoints/orders/api-key.endpoint.ts': anEndpoint({
+      name: 'apiKey',
+      path: '/api-key',
+      guards: '[apiKeyGuard]',
+      imports: ["import { apiKey as apiKeyGuard } from '../../guards/api-key.guard.ts';"],
+    }),
+    'src/contract/index.ts': aRoot({ apiKey: './endpoints/orders/api-key.endpoint.ts' }),
+  };
+}
+
+/** Every file under a folder of a project, by its path from the folder, with its text. */
+function treeOf(project: string, folder: string): Readonly<Record<string, string>> {
+  const entries = readdirSync(join(project, folder), { recursive: true, withFileTypes: true });
+  const paths = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name).slice(join(project, folder).length + 1));
+  return Object.fromEntries(paths.map((path) => [path, read(project, join(folder, path))]));
 }
 
 const messages = lines([
@@ -918,6 +987,338 @@ describe('cf-loom generate: stubs', () => {
   });
 });
 
+describe('cf-loom generate: a configured layout', () => {
+  test('an empty layout writes exactly the files of no layout', () => {
+    const plain = aProject(aService());
+    const laidOut = aProject(withLayout(aService(), '{}'));
+
+    cfLoom(plain, 'generate');
+    cfLoom(laidOut, 'generate');
+
+    expect(writtenBy(laidOut)).toEqual(writtenBy(plain));
+  });
+
+  test('an Endpoint’s stub is written where layout.endpoint puts it, from its Group and name', () => {
+    const project = aProject(
+      withLayout(aService(), "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/http/orders/get-order.handler.ts')).toBe(
+      lines([
+        "import { handle } from '@cf-loom/handlers';",
+        "import { getOrder } from '../../contract/endpoints/orders/get-order.endpoint.ts';",
+        '',
+        'export default handle.stub(getOrder);',
+      ]),
+    );
+  });
+
+  test('a Guard’s stub is written where layout.guard puts it', () => {
+    const project = aProject(withLayout(aService(), "{ guard: 'src/security/{name}.handler.ts' }"));
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/security/api-key.handler.ts')).toBe(
+      lines([
+        "import { handle } from '@cf-loom/handlers';",
+        "import { apiKey } from '../contract/guards/api-key.guard.ts';",
+        '',
+        'export default handle.stub(apiKey);',
+      ]),
+    );
+  });
+
+  test('a Command’s Message Version’s stub is written with its version, importing its pairing from the configured readers', () => {
+    const project = aProject(
+      withLayout(
+        aMessagingService(),
+        `{
+          command: 'src/billing/{name}.v{version}.handler.ts',
+          readers: 'src/generated/readers.generated.ts',
+        }`,
+      ),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/billing/charge-card.v2.handler.ts')).toBe(
+      lines([
+        "import { handle } from '@cf-loom/handlers';",
+        "import { chargeCardV2 } from '../generated/readers.generated.ts';",
+        '',
+        'export default handle.stub(chargeCardV2);',
+      ]),
+    );
+  });
+
+  test('a Subscription’s stub is written where layout.subscription puts it', () => {
+    const project = aProject(
+      withLayout(aMessagingService(), "{ subscription: 'src/reactions/{name}.handler.ts' }"),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/reactions/notify-on-settled.handler.ts')).toBe(
+      lines([
+        "import { handle } from '@cf-loom/handlers';",
+        "import { notifyOnSettled } from '../readers.generated.ts';",
+        '',
+        'export default handle.stub(notifyOnSettled);',
+      ]),
+    );
+  });
+
+  test('the Handler map at layout.handlerMap imports each Handler relative to itself', () => {
+    const project = aProject(
+      withLayout(
+        aService(),
+        `{
+          endpoint: 'src/http/{group}/{name}.handler.ts',
+          handlerMap: 'src/generated/handlers.generated.ts',
+        }`,
+      ),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/generated/handlers.generated.ts')).toBe(
+      lines([
+        header,
+        importOf('apiKeyGuardHandler', '../guards/api-key.handler.ts'),
+        importOf('createOrderEndpointHandler', '../http/orders/create-order.handler.ts'),
+        importOf('getOrderEndpointHandler', '../http/orders/get-order.handler.ts'),
+        '',
+        'export default {',
+        '  endpoints: {',
+        '    createOrder: createOrderEndpointHandler,',
+        '    getOrder: getOrderEndpointHandler,',
+        '  },',
+        '  guards: {',
+        '    apiKey: apiKeyGuardHandler,',
+        '  },',
+        '  commands: {},',
+        '  subscriptions: {},',
+        '  deprecatedAt: {},',
+        '};',
+      ]),
+    );
+  });
+
+  test('the readers at layout.readers import the root relative to themselves', () => {
+    const project = aProject(
+      withLayout(aMessagingService(), "{ readers: 'src/generated/readers.generated.ts' }"),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/generated/readers.generated.ts')).toContain(
+      "import { contract } from '../contract/index.ts';",
+    );
+  });
+
+  test('generate says each file it wrote, at its configured path', () => {
+    const project = aProject(withLayout(aService(), movedLayout));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stdout).toBe(
+      lines([
+        'Wrote contract.snapshot.json',
+        'Wrote src/generated/handlers.generated.ts',
+        'Wrote src/generated/readers.generated.ts',
+        'Wrote src/http/orders/create-order.handler.ts',
+        'Wrote src/http/orders/get-order.handler.ts',
+        'Wrote src/security/api-key.handler.ts',
+      ]),
+    );
+  });
+
+  test('the Snapshot is the same with and without a layout', () => {
+    const plain = aProject(aMessagingService());
+    const laidOut = aProject(withLayout(aMessagingService(), movedLayout));
+
+    cfLoom(plain, 'generate');
+    cfLoom(laidOut, 'generate');
+
+    expect(read(laidOut, 'contract.snapshot.json')).toBe(read(plain, 'contract.snapshot.json'));
+  });
+
+  test('the Contract Package is the same with and without a layout', () => {
+    const plain = aProject(aMessagingService());
+    const laidOut = aProject(withLayout(aMessagingService(), movedLayout));
+    cfLoom(plain, 'generate');
+    cfLoom(laidOut, 'generate');
+
+    cfLoom(plain, 'package');
+    cfLoom(laidOut, 'package');
+
+    expect(treeOf(laidOut, '.cf-loom/contract-package')).toEqual(
+      treeOf(plain, '.cf-loom/contract-package'),
+    );
+  });
+
+  test('two Command Versions at one path exit 3 naming both, and write nothing', () => {
+    const project = aProject(
+      withLayout(aMessagingService(), "{ command: 'src/commands/{name}.handler.ts' }"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'commands.ChargeCard@1 and commands.ChargeCard@2 are both src/commands/charge-card.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+    expect(handlerFiles(project)).toEqual([]);
+  });
+
+  test('an Endpoint and a Guard at one path exit 3 naming both', () => {
+    const project = aProject(
+      withLayout(
+        withEndpointNamedLikeGuard(),
+        `{
+          endpoint: 'src/handlers/{name}.handler.ts',
+          guard: 'src/handlers/{name}.handler.ts',
+        }`,
+      ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'endpoints.apiKey and guards.apiKey are both src/handlers/api-key.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('a Retired Command’s Message Version still declared collides with a live one at its path', () => {
+    const service = aMessagingService();
+    const project = aProject(
+      withLayout(
+        {
+          ...service,
+          'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '').replace(
+            "  description: 'Charge a card',\n  lifecycle: 'deprecated',",
+            "  description: 'Charge a card',\n  lifecycle: 'retired',",
+          ),
+        },
+        "{ command: 'src/commands/{name}.handler.ts' }",
+      ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'commands.ChargeCard@1 and commands.ChargeCard@2 are both src/commands/charge-card.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('after layout.endpoint changes, the Handlers left at the old paths are orphans', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        orphanLine('src/endpoints/orders/create-order.handler.ts'),
+        orphanLine('src/endpoints/orders/get-order.handler.ts'),
+      ]),
+    });
+  });
+
+  test('a Handler file anywhere under src/ that nothing declared names is an orphan', () => {
+    const project = aProject({
+      ...aService(),
+      'src/http/error.handler.ts': "export default 'x';\n",
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${orphanLine('src/http/error.handler.ts')}\n`,
+    });
+  });
+
+  test('a Handler file under src/contract/ is no Handler', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/support/error.handler.ts': "export default 'x';\n",
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test.skipIf(isRoot)(
+    'an unreadable folder under src/ outside the Handlers’ folders is a tooling error (skipped as root)',
+    () => {
+      const project = aProject({ ...aService(), 'src/support/kept.txt': '' });
+      chmodSync(join(project, 'src/support'), 0o000);
+
+      const ran = cfLoom(project, 'generate');
+
+      chmodSync(join(project, 'src/support'), 0o755);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^src\/support cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+
+  test.each([
+    ['handlerMap', 'src/generated/handlers.generated.ts', 'src/handlers.generated.ts'],
+    ['readers', 'src/generated/readers.generated.ts', 'src/readers.generated.ts'],
+  ])('moving layout.%s to %s leaves the file at %s an orphan', (field, moved, old) => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, `{ ${field}: '${moved}' }`));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${old} is a file cf-loom generate wrote, at no path the layout names: delete it\n`,
+    });
+  });
+
+  test('a .generated.ts file that does not start with the generated header is no orphan', () => {
+    const project = aProject({ ...aService(), 'src/schema.generated.ts': 'export {};\n' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test.skipIf(isRoot)(
+    'a .generated.ts file that cannot be read is a tooling error (skipped as root)',
+    () => {
+      const project = aProject({ ...aService(), 'src/schema.generated.ts': 'export {};\n' });
+      chmodSync(join(project, 'src/schema.generated.ts'), 0o000);
+
+      const ran = cfLoom(project, 'generate');
+
+      chmodSync(join(project, 'src/schema.generated.ts'), 0o644);
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^src\/schema\.generated\.ts cannot be read: EACCES[^\n]*\n$/);
+    },
+  );
+});
+
 describe('cf-loom generate: what it refuses', () => {
   test('an Endpoint exported by no file under src/contract exits 1 naming it, and writes nothing', () => {
     const service = aService();
@@ -1293,6 +1694,18 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked.stdout).toContain('error TS2307');
     expect(checked.stdout).toContain('./guards/api-key.handler.ts');
   });
+  test('a Service generated with a layout passes tsc: the map, the readers and the stubs are all relocated', () => {
+    const project = aProject({
+      ...withLayout(aMessagingService(), movedLayout),
+      'tsconfig.json': tsconfig,
+    });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+
+    const checked = typeCheck(project);
+
+    expect(checked).toEqual({ status: 0, stdout: '' });
+  });
+
   /** A file that type-checks the Handler map and the Message Handlers, with the lines given after. */
   function aCheck(after: readonly string[]): string {
     return lines([
@@ -1645,6 +2058,117 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
   });
 });
 
+describe('cf-loom verify: a configured layout', () => {
+  test('verify exits 0 on a Service generated with a layout', () => {
+    const project = aProject(withLayout(aMessagingService(), movedLayout));
+    cfLoom(project, 'generate');
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: lines([
+        'contract.snapshot.json is up to date',
+        'src/generated/handlers.generated.ts is up to date',
+        'src/generated/readers.generated.ts is up to date',
+      ]),
+      stderr: '',
+    });
+  });
+
+  test('verify exits 1 naming the configured Handler map when it was edited', () => {
+    const project = aProject(withLayout(aService(), movedLayout));
+    cfLoom(project, 'generate');
+    write(project, {
+      'src/generated/handlers.generated.ts': `${read(project, 'src/generated/handlers.generated.ts')}// mine\n`,
+    });
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/generated/handlers.generated.ts was edited or is out of date: run cf-loom generate\n',
+    });
+  });
+
+  test('verify exits 1 naming a configured Handler path that is missing', () => {
+    const project = aProject(withLayout(aService(), movedLayout));
+    cfLoom(project, 'generate');
+    rmSync(join(project, 'src/http/orders/get-order.handler.ts'));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/http/orders/get-order.handler.ts is missing: run cf-loom generate\n',
+    });
+  });
+
+  test('verify exits 3 on two Elements at one Handler path', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ command: 'src/commands/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'commands.ChargeCard@1 and commands.ChargeCard@2 are both src/commands/charge-card.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('after layout.endpoint changes, verify exits 1 naming the Handlers left at the old paths', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(`${orphanLine('src/endpoints/orders/create-order.handler.ts')}\n`);
+    expect(ran.stderr).toContain(`${orphanLine('src/endpoints/orders/get-order.handler.ts')}\n`);
+  });
+
+  test.each([
+    ['handlerMap', 'src/generated/handlers.generated.ts', 'src/handlers.generated.ts'],
+    ['readers', 'src/generated/readers.generated.ts', 'src/readers.generated.ts'],
+  ])(
+    'after layout.%s moves to %s, verify exits 1 naming the file left at %s',
+    (field, moved, old) => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      write(project, withLayout({}, `{ ${field}: '${moved}' }`));
+
+      const ran = cfLoom(project, 'verify');
+
+      expect(ran.status).toBe(1);
+      expect(ran.stderr).toContain(
+        `${old} is a file cf-loom generate wrote, at no path the layout names: delete it\n`,
+      );
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'verify does not read src/contract/, so a folder there it cannot read is not its to find (skipped as root)',
+    () => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      write(project, { 'src/contract/locked/kept.txt': '' });
+      chmodSync(join(project, 'src/contract/locked'), 0o000);
+
+      const ran = cfLoom(project, 'verify');
+
+      chmodSync(join(project, 'src/contract/locked'), 0o755);
+      expect(ran.status).toBe(0);
+    },
+  );
+});
+
 describe('cf-loom: options', () => {
   test('--out is refused for a command other than package', () => {
     const project = aProject(aService());
@@ -1821,7 +2345,7 @@ describe('cf-loom generate and verify: what the file system holds', () => {
   );
 
   test.skipIf(isRoot)(
-    'an unreadable folder under the Handlers is a tooling error in one line (skipped as root)',
+    'an unreadable folder under src/ is a tooling error in one line (skipped as root)',
     () => {
       const project = aProject({ ...aService(), 'src/endpoints/private/kept.txt': '' });
       chmodSync(join(project, 'src/endpoints/private'), 0o000);

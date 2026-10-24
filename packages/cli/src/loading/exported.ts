@@ -4,7 +4,7 @@ import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 
 /** Where the Contract's own files sit in a project. */
-const contractFolder = 'src/contract';
+export const contractFolder = 'src/contract';
 
 /**
  * Where a declaration is exported, under the name it is exported as: a file by its path relative
@@ -33,7 +33,7 @@ export type ContractExports =
  * imports its declaration from where it is exported: Node gives each the instance the root holds.
  */
 export async function contractExportsOf(directory: string): Promise<ContractExports> {
-  const files = filesUnder(directory, contractFolder, isContractSource);
+  const files = filesUnder(directory, contractFolder, { keeps: isContractSource });
   if (files.kind === 'failed') {
     return files;
   }

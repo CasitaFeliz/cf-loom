@@ -42,7 +42,7 @@ export function handlerLocalOf(handled: Handled): string {
   }
 }
 
-/** A name `readers.generated.ts` declares or imports, and what it names: `commands.ChargeCard@1`. */
+/** A name the readers file declares or imports, and what it names: `commands.ChargeCard@1`. */
 export type NamedInCode = { readonly code: string; readonly names: string };
 
 /**

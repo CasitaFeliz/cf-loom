@@ -7,16 +7,20 @@ export type FilesUnder =
   | { readonly kind: 'files'; readonly files: readonly string[] }
   | { readonly kind: 'failed'; readonly message: string };
 
+/** Which files of a folder are found, and which of its folders are never entered, by path. */
+export type FileFilter = {
+  /** Whether a file, by its path relative to the project, is found. */
+  readonly keeps: (path: string) => boolean;
+  /** Whether a folder, by its path relative to the project, is never entered; none by default. */
+  readonly skips?: (path: string) => boolean;
+};
+
 /**
- * Every file under a folder of a project that a test of its path keeps, by its path relative to
- * the project with `/` between segments, through symbolic links to folders too, each real
- * folder once, so a link back up ends.
+ * Every file under a folder of a project that the filter keeps, by its path relative to the
+ * project with `/` between segments, through symbolic links to folders too, each real folder
+ * once, so a link back up ends; a folder the filter skips is never read.
  */
-export function filesUnder(
-  directory: string,
-  folder: string,
-  isWanted: (path: string) => boolean,
-): FilesUnder {
+export function filesUnder(directory: string, folder: string, filter: FileFilter): FilesUnder {
   const start = join(directory, folder);
   if (kindOf(start) !== 'folder') {
     return { kind: 'files', files: [] };
@@ -35,16 +39,32 @@ export function filesUnder(
     visited.add(read.real);
     for (const name of read.names) {
       const path = join(current, name);
-      const kind = kindOf(path);
       const projectPath = projectPathOf(directory, path);
-      if (kind === 'folder') {
+      const found = foundAt(kindOf(path), projectPath, filter);
+      if (found === 'folder') {
         pending.push(path);
-      } else if (kind === 'file' && isWanted(projectPath)) {
+      } else if (found === 'file') {
         files.push(projectPath);
       }
     }
   }
   return { kind: 'files', files };
+}
+
+/** What the search finds at a path: a folder to enter, a file it keeps, or nothing. */
+function foundAt(
+  kind: 'folder' | 'file' | 'other',
+  projectPath: string,
+  filter: FileFilter,
+): 'folder' | 'file' | 'nothing' {
+  switch (kind) {
+    case 'folder':
+      return filter.skips?.(projectPath) === true ? 'nothing' : 'folder';
+    case 'file':
+      return filter.keeps(projectPath) ? 'file' : 'nothing';
+    case 'other':
+      return 'nothing';
+  }
 }
 
 /** A folder's real path and the names in it, or why it cannot be read. */

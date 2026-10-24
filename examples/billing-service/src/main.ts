@@ -6,7 +6,7 @@ import { nodeHttp } from '@cf-loom/server/node-http';
 import { connect } from '@nats-io/transport-node';
 import { contract } from './contract/index.ts';
 import { environmentValue } from './environment/environment.ts';
-import handlers from './handlers.generated.ts';
+import handlers from './generated/handlers.generated.ts';
 import { ordersClientOf } from './orders-client/orders-client.ts';
 import type { Resources } from './resources.ts';
 

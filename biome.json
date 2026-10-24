@@ -9,7 +9,7 @@
     }
   },
   "files": {
-    "includes": ["**", "!examples/*/contract.snapshot.json", "!examples/*/src/*.generated.ts"]
+    "includes": ["**", "!examples/*/contract.snapshot.json", "!examples/*/src/**/*.generated.ts"]
   },
   "formatter": {
     "indentStyle": "space",

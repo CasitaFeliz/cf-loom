@@ -2,7 +2,7 @@ import { isSchema } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import { isMessageElement, type MessageElement } from '../calls/index.ts';
 
-/** A Command's Message Version or a Subscription with the Reader schema its Handler reads a body with, as `readers.generated.ts` pairs them. */
+/** A Command's Message Version or a Subscription with the Reader schema its Handler reads a body with, as the readers file (`readers.generated.ts` by default) pairs them. */
 export type WithReader<
   Element extends MessageElement = MessageElement,
   Reader extends core.$ZodType = core.$ZodType,

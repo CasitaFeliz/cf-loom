@@ -1,10 +1,12 @@
 import { join } from 'node:path';
-import { loadConfig } from '../config/index.ts';
+import { configFile, defaultLayout, loadConfig, type ServiceLayout } from '../config/index.ts';
 import {
   type InstalledDefinitions,
+  type LoadedRoot,
   loadRoot,
   type PackageName,
   projectPackageOf,
+  type RootKind,
   resolvePackages,
 } from '../loading/index.ts';
 import { type Tooling, tooling } from './failures.ts';
@@ -17,6 +19,11 @@ export type Project = {
   readonly manifest: Readonly<Record<string, unknown>>;
   /** The npm scope of the configuration, which the Contract Package is published under. */
   readonly scope: string;
+  /**
+   * Where the Service's Handlers and generated files live; for an Application or a Definitions
+   * Package it holds the defaults, which are unused.
+   */
+  readonly layout: ServiceLayout;
   readonly root: unknown;
   /** Everything the root file exports, which a Definitions root lists. */
   readonly rootExports: readonly unknown[];
@@ -41,7 +48,7 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   if (config.kind === 'failed') {
     return tooling(config.message);
   }
-  const loaded = await loadRoot(directory);
+  const loaded = await loadedRootOf(directory, config.config.layout);
   if (loaded.kind === 'failed') {
     return tooling(loaded.message);
   }
@@ -53,17 +60,49 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   }
   const { packageName, manifest } = projectPackage;
   const { root, file: rootFile, exports: rootExports } = loaded;
+  const { scope, layout = defaultLayout } = config.config;
   const { packages } = resolved;
-  const { scope } = config.config;
   const project = {
     directory,
     packageName,
     manifest,
     scope,
+    layout,
     root,
     rootExports,
     rootFile,
     packages,
   };
   return { kind: 'read', project };
+}
+
+/** The project's root, unless its configuration sets a `layout` a root without Handlers refuses. */
+async function loadedRootOf(
+  directory: string,
+  layout: ServiceLayout | undefined,
+): Promise<LoadedRoot> {
+  const loaded = await loadRoot(directory);
+  if (loaded.kind === 'failed') {
+    return loaded;
+  }
+  const refusal = layoutRefusalOf(layout, loaded.rootKind);
+  return refusal === undefined ? loaded : { kind: 'failed', message: refusal };
+}
+
+/** The line refusing a `layout` in the configuration of a root that has no Handlers. */
+function layoutRefusalOf(
+  layout: ServiceLayout | undefined,
+  rootKind: RootKind,
+): string | undefined {
+  if (layout === undefined) {
+    return undefined;
+  }
+  switch (rootKind) {
+    case 'service':
+      return undefined;
+    case 'application':
+      return `${configFile}: an Application has no Handlers, so it takes no \`layout\``;
+    case 'definitions':
+      return `${configFile}: a Definitions Package has no Handlers, so it takes no \`layout\``;
+  }
 }

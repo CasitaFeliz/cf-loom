@@ -2,6 +2,7 @@ export {
   camelCaseOf,
   kebabCaseOf,
   kebabCaseOfCode,
+  messageFileNameOf,
   messageVersionStemOf,
   pascalCaseOf,
 } from './identifiers.ts';
