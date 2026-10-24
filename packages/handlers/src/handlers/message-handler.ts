@@ -3,7 +3,7 @@ import type * as core from 'zod/v4/core';
 import type { MessageMeta } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { WithReader } from './reader.ts';
-import type { CallArgument, NoResources, ResourcesField, WithResources } from './resources.ts';
+import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
 type ReadBodyOf<Target extends WithReader> = core.output<Target['reader']>;
@@ -23,7 +23,7 @@ export type CommandImplementation<
 > = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
-  call: WithResources<Resources>,
+  call: MessageCall<Resources>,
 ) => Answered | Promise<Answered>;
 
 /** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a Fault; may be async. */
@@ -33,7 +33,7 @@ export type EventImplementation<
 > = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
-  call: WithResources<Resources>,
+  call: MessageCall<Resources>,
 ) => Answered | Promise<Answered>;
 
 /** The last argument of a Message Handler's direct call: the Resources it takes. */

@@ -12,7 +12,7 @@ import type {
 } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { Admission, Outcome, ResolvedAdmission, ResolvedOutcome } from '../outcomes/index.ts';
-import type { CallArgument, NoResources, ResourcesField, WithResources } from './resources.ts';
+import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 
 /** What an EndpointHandler's implementation returns, given the Input, the Context and the Resources it takes; may be async. */
 export type EndpointImplementation<
@@ -21,7 +21,7 @@ export type EndpointImplementation<
 > = (
   input: InputOf<Target>,
   context: ContextOf<Target>,
-  call: WithResources<Resources>,
+  call: ResourcesField<Resources>,
 ) => Outcome<Target> | Promise<Outcome<Target>>;
 
 /** `qualifier`, only when the Guard declares one. */

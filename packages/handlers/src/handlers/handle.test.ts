@@ -373,6 +373,27 @@ describe('handle and Resources', () => {
     expect(calls).toBeDefined();
   });
 
+  test('a Handler that takes none, with an unannotated last parameter, may find its resources undefined', () => {
+    type NoResourcesTaken = Readonly<Record<never, never>>;
+
+    handle(getOrder, (_input, _context, call) => {
+      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      return reject(notFound);
+    });
+    handle(chargeCard, (_body, _meta, call) => {
+      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+    });
+    handle(notifyOnPaid, (_body, _meta, call) => {
+      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+    });
+    handle(apiKey, (_demands, _context, call) => {
+      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      return admit({ callerId: 'c-1' });
+    });
+
+    expect(getOrder.name).toBe('getOrder');
+  });
+
   test('a stub takes no Resources', () => {
     const getOrderStub = handle.stub(getOrder);
     const apiKeyStub = handle.stub(apiKey);
