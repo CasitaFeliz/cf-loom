@@ -40,7 +40,7 @@ function aCopyOf(example: string, folder: string): string {
   const source = join(examplesDir, example);
   const copy = mkdtempSync(join(folder, `${example}-`));
   const isLeftOut = (path: string) =>
-    basename(path) === 'node_modules' || path === join(source, 'contract-package');
+    basename(path) === 'node_modules' || path === join(source, '.cf-loom');
   cpSync(source, copy, { recursive: true, filter: (path) => !isLeftOut(path) });
   const installed = readdirSync(join(source, 'node_modules')).filter((name) => name !== '.cache');
   for (const name of installed) {

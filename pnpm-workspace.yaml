@@ -1,7 +1,6 @@
 packages:
   - packages/*
   - examples/*
-  - examples/*/contract-package
 
 catalog:
   '@biomejs/biome': ^2.5.15
@@ -14,5 +13,3 @@ catalog:
   vite: ^8.3.4
   vitest: ^5.0.5
   zod: ^4.6.7
-
-autoInstallPeers: false

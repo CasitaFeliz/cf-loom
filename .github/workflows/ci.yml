@@ -38,5 +38,5 @@ jobs:
       - run: pnpm biome ci --error-on-warnings .
       - run: node scripts/check-tsdoc.ts
       - run: node scripts/check-layout.ts
-      - run: pnpm tsc -b
+      - run: pnpm build
       - run: pnpm vitest run

@@ -16,7 +16,7 @@
     "@nats-io/jetstream": "catalog:",
     "@nats-io/nats-core": "catalog:",
     "@nats-io/transport-node": "catalog:",
-    "@org/contract-orders-service": "workspace:*",
+    "@org/contract-orders-service": "link:../orders-service/.cf-loom/contract-package",
     "@org/definitions": "workspace:*",
     "zod": "catalog:"
   },

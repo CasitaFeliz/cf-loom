@@ -4,12 +4,12 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b packages/cli/tsconfig.build.json examples/org-definitions/tsconfig.build.json && pnpm --dir examples/orders-service exec cf-loom package && tsc -b",
     "changeset": "changeset",
     "check": "biome check --error-on-warnings . && node scripts/check-tsdoc.ts && node scripts/check-layout.ts",
     "clean": "tsc -b --clean",
     "format": "biome check --write .",
-    "test": "tsc -b && vitest run"
+    "test": "pnpm build && vitest run"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

@@ -159,7 +159,7 @@ snapshots:
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: false
+  autoInstallPeers: true
   excludeLinksFromLockfile: false
 
 catalogs:
@@ -245,8 +245,8 @@ importers:
         specifier: 'catalog:'
         version: 3.4.0
       '@org/contract-orders-service':
-        specifier: workspace:*
-        version: link:../orders-service/contract-package
+        specifier: link:../orders-service/.cf-loom/contract-package
+        version: link:../orders-service/.cf-loom/contract-package
       '@org/definitions':
         specifier: workspace:*
         version: link:../org-definitions
@@ -300,8 +300,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
-
-  examples/orders-service/contract-package: {}
 
   examples/org-definitions:
     devDependencies:

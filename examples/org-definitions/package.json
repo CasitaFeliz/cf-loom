@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "generate": "cf-loom generate"
+    "generate": "cf-loom generate && tsc -b tsconfig.build.json"
   },
   "devDependencies": {
     "@cf-loom/cli": "workspace:*",
