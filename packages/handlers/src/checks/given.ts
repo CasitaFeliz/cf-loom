@@ -15,8 +15,12 @@ import {
   withIssues,
 } from './checked.ts';
 
-/** What one call of an EndpointHandler is given, before it is checked. */
-export type EndpointGiven = { readonly input: unknown; readonly context: unknown };
+/** What one call of an EndpointHandler is given, before it is checked; its Resources are passed on unchecked. */
+export type EndpointGiven = {
+  readonly input: unknown;
+  readonly context: unknown;
+  readonly resources: unknown;
+};
 
 /** What one call of a GuardHandler is given, before it is checked. */
 export type GuardGiven = {

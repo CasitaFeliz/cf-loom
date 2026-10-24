@@ -96,7 +96,8 @@ async function endpointCallOf(
     return checked;
   }
   const { input, context } = checked.value;
-  const returned = await returnedOf(endpoint, () => implementation(input, context), isOutcome);
+  const run = () => implementation(input, context, { resources: given.resources });
+  const returned = await returnedOf(endpoint, run, isOutcome);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }

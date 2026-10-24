@@ -22,6 +22,7 @@ import {
   type MessageMeta,
   reject,
   success,
+  type WithResources,
   withReader,
 } from '../index.ts';
 
@@ -274,6 +275,51 @@ describe('handle', () => {
       kind: 'fault',
       cause: new TypeError("apiKey's Handler returned no Outcome but undefined"),
     });
+  });
+});
+
+describe('handle and Resources', () => {
+  type Orders = { readonly find: (orderId: string) => string | undefined };
+  type OrdersTaken = { readonly orders: Orders };
+
+  test('handle() infers the Resources an EndpointHandler takes from its last parameter', () => {
+    const getOrderHandler = handle(
+      getOrder,
+      (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
+    );
+
+    expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder, OrdersTaken>>();
+    expect(getOrderHandler.element).toBe(getOrder);
+  });
+
+  test('a direct call without the Resources the Handler takes is a type error, and one that takes none needs no last argument', () => {
+    const takes = handle(getOrder, (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+    const takesNone = handle(getOrder, () => reject(notFound));
+    const input = { params: { orderId: ORDER_ID } };
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes orders
+      takes(input, {}),
+      // @ts-expect-error the Handler takes orders
+      takes(input, {}, { resources: {} }),
+      takesNone(input, {}),
+    ];
+
+    expectTypeOf(takes).toBeCallableWith(input, {}, { resources: { orders: { find: () => '' } } });
+    expectTypeOf(takesNone).toBeCallableWith(input, {});
+    expect(calls).toBeDefined();
+  });
+
+  test('a stub takes no Resources', () => {
+    const getOrderStub = handle.stub(getOrder);
+
+    expectTypeOf(getOrderStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
+    expectTypeOf(getOrderStub).toBeCallableWith({ params: { orderId: ORDER_ID } }, {});
   });
 });
 

@@ -16,4 +16,5 @@ export type {
 } from './message-handler.ts';
 export type { WithReader } from './reader.ts';
 export { withReader } from './reader.ts';
+export type { CallArgument, ResourcesField, WithResources } from './resources.ts';
 export { isStub, readerOf, runEndpoint, runGuard, runMessage } from './runs.ts';

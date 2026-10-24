@@ -88,7 +88,11 @@ describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
 
   test('Input that breaks the Contract is invalid-input with its issues, never a throw', async () => {
-    const call = { input: { params: { orderId: 'nope' } }, context: getContext };
+    const call = {
+      input: { params: { orderId: 'nope' } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -107,7 +111,11 @@ describe('runEndpoint', () => {
 
   test('an Outcome that breaks the Contract is invalid-outcome with its issues', async () => {
     const brokenHandler = handle(getOrder, () => success({ id: 'nope' }));
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(brokenHandler, call, standards);
 
@@ -115,7 +123,11 @@ describe('runEndpoint', () => {
   });
 
   test('an answer is the resolved Outcome, Standard Rejections resolved with the given ones', async () => {
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -180,7 +192,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const getOrderHandler = handle(getOrder, () => {
       throw error;
     });
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -210,7 +226,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 
   test('a Fault the Handler returns is answered', async () => {
     const getOrderHandler = handle(getOrder, () => fault({ committed: 'no', retryable: true }));
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -219,7 +239,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 });
 
 describe('what a run tells to be no Outcome', () => {
-  const endpointCall = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+  const endpointCall = {
+    input: { params: { orderId: ORDER_ID } },
+    context: getContext,
+    resources: undefined,
+  };
   const guardCall = {
     demands: { headers: { 'x-api-key': 'k' } },
     context: {},

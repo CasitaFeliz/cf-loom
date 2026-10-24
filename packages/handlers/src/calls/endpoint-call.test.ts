@@ -21,6 +21,7 @@ import {
   type ResolvedOutcome,
   reject,
   success,
+  type WithResources,
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -126,6 +127,54 @@ async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]>
 const created = handle(createOrder, () =>
   success({ headers: { location: `/orders/${ORDER_ID}` }, body: { id: ORDER_ID } }),
 );
+
+describe('an EndpointHandler’s Resources', () => {
+  type Orders = { readonly find: (orderId: string) => string | undefined };
+
+  test('the implementation receives the Resources its direct call is given', async () => {
+    const orders: Orders = { find: () => 'order' };
+    const received: unknown[] = [];
+    const getOrderHandler = handle(
+      getOrder,
+      (_input, _context, { resources }: WithResources<{ readonly orders: Orders }>) => {
+        received.push(resources);
+        return success({ id: ORDER_ID, total: 1 });
+      },
+    );
+
+    await getOrderHandler(getInput, getContext, { resources: { orders } });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toStrictEqual({ orders });
+  });
+
+  test('given the root and the Resources, a Standard Rejection resolves as serve resolves it', async () => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
+    });
+    const contract = defineContract({
+      name: 'orders-service',
+      definitions: [definitions],
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
+    });
+    const orders: Orders = { find: () => undefined };
+    const getOrderHandler = handle(
+      getOrder,
+      (input, _context, { resources }: WithResources<{ readonly orders: Orders }>) =>
+        resources.orders.find(input.params.orderId) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID, total: 1 }),
+    );
+
+    const outcome = await getOrderHandler(getInput, getContext, {
+      contract,
+      resources: { orders },
+    });
+
+    expect(outcome).toMatchObject({ code: 'MISSING', status: 410, message: 'Gone' });
+  });
+});
 
 describe('an EndpointHandler’s Input', () => {
   test('the implementation receives the parsed Input, unknown keys stripped, then the Context', async () => {
