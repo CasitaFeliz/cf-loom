@@ -20,6 +20,7 @@ export type { WithReader } from './reader.ts';
 export { withReader } from './reader.ts';
 export type {
   CallArgument,
+  NoResources,
   ResourcesField,
   ResourcesOf,
   WithResources,

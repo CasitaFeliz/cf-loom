@@ -1,6 +1,7 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import { contextProvidersOf, type ReadingSource } from '@cf-loom/contract/internal';
 import { runGuard } from '@cf-loom/handlers/internal';
+import type { ServedContract } from '../served/index.ts';
 import type { Call } from './call.ts';
 import { type Answered, answeredOfFailedRun, answeredOfNotSuccess } from './runs.ts';
 
@@ -14,7 +15,10 @@ export type GuardRuns = {
  * The runs of a request's Attachments: each with its Guard's parsed demands, the admitted Context
  * of the Guards it lists and its Qualifier; one that does not admit the request answers it.
  */
-export function guardRunsOf(call: Call, standards: StandardRejections): GuardRuns {
+export function guardRunsOf(
+  call: Call,
+  { standards, resources }: Pick<ServedContract, 'standards' | 'resources'>,
+): GuardRuns {
   const contexts = new Map<Guard, unknown>();
   const endpoint = call.endpoint.declared;
   const admit: GuardRuns['admit'] = async (index, demands) => {
@@ -23,7 +27,7 @@ export function guardRunsOf(call: Call, standards: StandardRejections): GuardRun
       throw new Error(`${endpoint.name} has no Attachment at ${index}`);
     }
     const context = contextOf(attachment.guard, contexts);
-    const given = { demands, context, qualifier: attachment.qualifier };
+    const given = { demands, context, qualifier: attachment.qualifier, resources };
     const run = await runGuard(attachment.handler, given, standards);
     const faultedBy = { endpoint: endpoint.name, guard: attachment.guard.name };
     if (run.kind !== 'answered') {

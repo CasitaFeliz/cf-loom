@@ -4,5 +4,6 @@ export type {
   ServedAttachment,
   ServedContract,
   ServedEndpoint,
+  ServedOptions,
 } from './served-contract.ts';
 export { servedContractOf } from './served-contract.ts';

@@ -44,20 +44,27 @@ export type ServedEndpoint = LiveEndpoint | (Declared & { readonly kind: 'retire
 
 /**
  * What `serve()` prepares once: every declared Endpoint, the walked text parts of each Endpoint and
- * Guard, the Standard Rejections and the body limit.
+ * Guard, the Standard Rejections, the body limit and the Resources it hands every run.
  */
 export type ServedContract = {
   readonly endpoints: readonly ServedEndpoint[];
   readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
   readonly standards: StandardRejections;
   readonly maxBodyBytes: number | undefined;
+  readonly resources: unknown;
+};
+
+/** What `serve()` hands a ServedContract besides the Contract and the Handler map. */
+export type ServedOptions = {
+  readonly maxBodyBytes?: number;
+  readonly resources?: unknown;
 };
 
 /** Prepares a Contract and its Handler map for serving, throwing on a Service assembled otherwise. */
 export function servedContractOf(
   root: unknown,
   handlers: ServedHandlers,
-  maxBodyBytes: number | undefined,
+  options: ServedOptions,
 ): ServedContract {
   const contract = contractOf(root);
   const nodes = checkedTextPartsOf(contract);
@@ -65,7 +72,8 @@ export function servedContractOf(
     endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
     nodes,
     standards: standardRejectionsOf(contract),
-    maxBodyBytes,
+    maxBodyBytes: options.maxBodyBytes,
+    resources: options.resources,
   };
 }
 
