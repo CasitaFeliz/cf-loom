@@ -16,8 +16,12 @@ export type MessageMeta = {
   readonly headers: Readonly<Record<string, string>>;
 };
 
-/** What one call of a Message Handler is given: its body as a Subscriber reads it, and its meta. */
-export type MessageGiven = { readonly body: unknown; readonly meta: MessageMeta };
+/** What one call of a Message Handler is given: its body as a Subscriber reads it, its meta, and its Resources, which are passed on unchecked. */
+export type MessageGiven = {
+  readonly body: unknown;
+  readonly meta: MessageMeta;
+  readonly resources: unknown;
+};
 
 /** How one call of a Message Handler went: given a body that breaks its Reader, threw, or answered nothing or a Fault. */
 export type MessageRun =
@@ -46,14 +50,15 @@ export async function messageRunOf(
 
 async function messageCallOf(
   { element, reader, implementation }: MessageWritten,
-  { body, meta }: MessageGiven,
+  { body, meta, resources }: MessageGiven,
   readBody: BodyReading,
 ): Promise<MessageRun> {
   const checked = readBody(reader, body);
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }
-  const returned = await returnedOf(element, () => implementation(checked.value, meta), isAnswered);
+  const run = () => implementation(checked.value, meta, { resources });
+  const returned = await returnedOf(element, run, isAnswered);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', cause: returned.cause };
   }

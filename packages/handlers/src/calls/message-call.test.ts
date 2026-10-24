@@ -7,7 +7,14 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { fault, handle, InvalidInputError, success, withReader } from '../index.ts';
+import {
+  fault,
+  handle,
+  InvalidInputError,
+  success,
+  type WithResources,
+  withReader,
+} from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -67,6 +74,35 @@ async function issuesOf(call: Promise<unknown>): Promise<unknown> {
   );
   return error instanceof InvalidInputError ? error.issues : error;
 }
+
+describe("a Message Handler's Resources", () => {
+  type Notifications = { readonly send: (orderId: string) => void };
+  type NotificationsTaken = { readonly notifications: Notifications };
+
+  test("a CommandHandler's and an EventHandler's implementation receive the Resources their direct call is given", async () => {
+    const notifications: Notifications = { send: () => undefined };
+    const received: unknown[] = [];
+    const chargeCardHandler = handle(
+      chargeCard,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        received.push(resources);
+      },
+    );
+    const notifyOnPaidHandler = handle(
+      notifyOnPaidReader,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        received.push(resources);
+      },
+    );
+
+    await chargeCardHandler(body, meta, { resources: { notifications } });
+    await notifyOnPaidHandler(body, meta, { resources: { notifications } });
+
+    expect(received).toHaveLength(2);
+    expect(received[0]).toStrictEqual({ notifications });
+    expect(received[1]).toStrictEqual({ notifications });
+  });
+});
 
 describe("a Message Handler's body", () => {
   test('the implementation receives the body as a Subscriber reads it, unknown keys stripped', async () => {

@@ -6,7 +6,7 @@ import {
   type GuardRun,
   guardRunOf,
   type MessageElement,
-  type MessageMeta,
+  type MessageGiven,
   type MessageRun,
   messageRunOf,
 } from '../calls/index.ts';
@@ -46,7 +46,7 @@ export function runGuard(
 /** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */
 export function runMessage(
   handler: { readonly element: MessageElement },
-  received: { readonly body: unknown; readonly meta: MessageMeta },
+  received: MessageGiven,
 ): Promise<MessageRun> {
   return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedMessageBody);
 }

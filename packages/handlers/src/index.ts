@@ -13,6 +13,7 @@ export type {
   GuardHandler,
   GuardImplementation,
   HandlerMap,
+  MessageCall,
   WithReader,
   WithResources,
 } from './handlers/index.ts';

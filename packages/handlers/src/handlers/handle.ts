@@ -33,6 +33,7 @@ import type {
   DirectMeta,
   EventHandler,
   EventImplementation,
+  MessageCall,
 } from './message-handler.ts';
 import { isWithReader, type WithReader } from './reader.ts';
 import type { NoResources } from './resources.ts';
@@ -56,9 +57,9 @@ type ImplementationOf<
   : Target extends Guard
     ? GuardImplementation<Target, Resources>
     : Target extends WithReader<Command>
-      ? CommandImplementation<Target>
+      ? CommandImplementation<Target, Resources>
       : Target extends WithReader<Subscription>
-        ? EventImplementation<Target>
+        ? EventImplementation<Target, Resources>
         : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
@@ -67,9 +68,9 @@ type HandlerOf<Target extends HandleTarget, Resources extends object> = Target e
   : Target extends Guard
     ? GuardHandler<Target, Resources>
     : Target extends WithReader<Command>
-      ? CommandHandler<Target>
+      ? CommandHandler<Target, Resources>
       : Target extends WithReader<Subscription>
-        ? EventHandler<Target>
+        ? EventHandler<Target, Resources>
         : never;
 
 function handleImplementation<Target extends HandleTarget, Resources extends object = NoResources>(
@@ -159,9 +160,17 @@ function guardCallOf(written: Written<Guard>) {
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (body: unknown, { messageId, factId, deliveryCount, headers = {} }: DirectMeta) => {
+  return async (
+    body: unknown,
+    { messageId, factId, deliveryCount, headers = {} }: DirectMeta,
+    call?: MessageCall<object>,
+  ) => {
     const meta = { messageId, factId, deliveryCount, headers };
-    const run = await messageRunOf(written, { body, meta }, checkedBody);
+    const run = await messageRunOf(
+      written,
+      { body, meta, resources: call?.resources },
+      checkedBody,
+    );
     return messageAnswerOf(written.element, run);
   };
 }

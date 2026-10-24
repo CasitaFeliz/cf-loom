@@ -14,6 +14,7 @@ export type {
   CommandImplementation,
   EventHandler,
   EventImplementation,
+  MessageCall,
 } from './message-handler.ts';
 export type { WithReader } from './reader.ts';
 export { withReader } from './reader.ts';

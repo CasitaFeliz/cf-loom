@@ -395,6 +395,7 @@ describe('runMessage', () => {
     const run = await runMessage(shipHandler, {
       body: { orderId: ORDER_ID, status: 'refunded', extra: 'dropped' },
       meta,
+      resources: undefined,
     });
 
     expect(run).toEqual({ kind: 'answered', answer: undefined });
@@ -412,7 +413,7 @@ describe('runMessage', () => {
   test('runMessage given a value handle() did not return throws', () => {
     const lookalike = Object.assign(() => undefined, { element: chargeCardV1 });
 
-    const run = () => runMessage(lookalike, { body: {}, meta });
+    const run = () => runMessage(lookalike, { body: {}, meta, resources: undefined });
 
     expect(run).toThrow('Not a Handler');
   });

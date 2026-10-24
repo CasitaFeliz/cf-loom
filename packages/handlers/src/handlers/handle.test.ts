@@ -339,6 +339,39 @@ describe('handle and Resources', () => {
     expect(calls).toBeDefined();
   });
 
+  test('handle() infers the Resources a Message Handler takes from its last parameter', () => {
+    type NotificationsTaken = { readonly notifications: { readonly send: () => void } };
+    const chargeCardHandler = handle(
+      chargeCard,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        resources.notifications.send();
+      },
+    );
+    const notifyOnPaidHandler = handle(
+      notifyOnPaid,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        resources.notifications.send();
+      },
+    );
+    const body = { orderId: ORDER_ID, status: 'paid' } as const;
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes notifications
+      chargeCardHandler(body, meta),
+    ];
+
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<
+      CommandHandler<typeof chargeCard, NotificationsTaken>
+    >();
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<
+      EventHandler<typeof notifyOnPaid, NotificationsTaken>
+    >();
+    expectTypeOf(chargeCardHandler).toBeCallableWith(body, meta, {
+      resources: { notifications: { send: () => undefined } },
+    });
+    expect(calls).toBeDefined();
+  });
+
   test('a stub takes no Resources', () => {
     const getOrderStub = handle.stub(getOrder);
     const apiKeyStub = handle.stub(apiKey);
@@ -346,6 +379,10 @@ describe('handle and Resources', () => {
     expectTypeOf(getOrderStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(getOrderStub).toBeCallableWith({ params: { orderId: ORDER_ID } }, {});
     expectTypeOf(apiKeyStub).toBeCallableWith({ headers: { 'x-api-key': 'k' } }, {});
+    expectTypeOf(handle.stub(chargeCard)).toBeCallableWith(
+      { orderId: ORDER_ID, status: 'paid' },
+      meta,
+    );
   });
 });
 
