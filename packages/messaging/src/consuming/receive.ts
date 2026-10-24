@@ -5,10 +5,11 @@ import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
 import { type About, aboutOf, type Report } from './faults.ts';
 
-/** A pulled Subscription or Command Version, and the Handler the map holds for it. */
+/** A pulled Subscription or Command Version, the Handler the map holds for it and the Resources it runs with. */
 export type Pulled = {
   readonly consumed: Consumed;
   readonly handler: { readonly element: Consumed['element'] };
+  readonly resources: unknown;
 };
 
 /** What became of one delivery once its Handler ran, reported when it ended or failed. */
@@ -38,14 +39,14 @@ function faultOf(settlement: Settlement): ConsumedFault | undefined {
 }
 
 /** The Handler's run on the body received, or the body's one Issue when it is no UTF-8 JSON. */
-async function runOf({ handler }: Pulled, delivery: Delivery): Promise<MessageRun> {
+async function runOf({ handler, resources }: Pulled, delivery: Delivery): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
     return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
   }
   const { messageId, factId, deliveryCount, headers } = delivery;
   const meta = { messageId, factId, deliveryCount, headers };
-  return await runMessage(handler, { body: json.value, meta });
+  return await runMessage(handler, { body: json.value, meta, resources });
 }
 
 /** A run as the broker settles it: a body that breaks its Reader ends, a throw stays pending. */

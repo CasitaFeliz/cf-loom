@@ -1,5 +1,5 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { type HandlerMap, handle, withReader } from '@cf-loom/handlers';
+import { type HandlerMap, handle, type WithResources, withReader } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -161,6 +161,41 @@ describe('publish and send types', () => {
     expectTypeOf<
       Parameters<NonNullable<MessagingOptions['onServiceFault']>>[0]
     >().toEqualTypeOf<ConsumedFault>();
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume without the Resources its Message Handlers take is a type error', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      withReader(notifyOnCreated, orderCreatedV3.body),
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const handlers = { commands: {}, subscriptions: { 'notify-on-created': notifying } };
+    const resources: Notifications = { notifications: { send: () => undefined } };
+
+    const consuming = () => [
+      consume(handlers, { resources }),
+      // @ts-expect-error the Handler takes notifications
+      consume(handlers),
+      // @ts-expect-error the Handler takes notifications
+      consume(handlers, { resources: {} }),
+    ];
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume takes no options when no Message Handler takes Resources', () => {
+    const notifying = handle(withReader(notifyOnCreated, orderCreatedV3.body), () => undefined);
+    const stubbed = handle.stub(withReader(notifyOnCreated, orderCreatedV3.body));
+    const handlers = { commands: {}, subscriptions: { 'notify-on-created': notifying } };
+
+    const consuming = () => [
+      consume(handlers),
+      consume({ commands: {}, subscriptions: { 'notify-on-created': stubbed } }),
+    ];
+
     expect(consuming).toBeTypeOf('function');
   });
 });
