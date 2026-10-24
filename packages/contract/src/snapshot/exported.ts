@@ -16,16 +16,16 @@ export type Providing = {
  */
 export function checkExportedFormat(providing: Providing): void {
   const named = snapshotFormatOf(providing.exportedSnapshot);
-  const subject = `${providing.provider}'s exported Snapshot`;
+  const exported = `${providing.provider}'s exported Snapshot`;
   switch (named.kind) {
     case 'known':
       return;
     case 'newer-format':
       throw new Error(
-        `${subject} is in format ${named.format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
+        `${exported} is in format ${named.format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
       );
     case 'malformed':
-      throw new Error(`${subject} is malformed: ${problemLineOf(named)}`);
+      throw new Error(`${exported} is malformed: ${problemLineOf(named)}`);
   }
 }
 

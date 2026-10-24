@@ -8,7 +8,7 @@ export type NamedFormat =
   | { readonly kind: 'newer-format'; readonly format: number }
   | ({ readonly kind: 'malformed' } & Problem);
 
-/** The format a Snapshot names: a whole number from 1 is one cf-loom knows, else a newer cf-loom wrote it. */
+/** Which format a Snapshot names: one this cf-loom reads, a newer one, or malformed when it is no whole number from 1. */
 export function snapshotFormatOf(snapshot: unknown): NamedFormat {
   const format = ownOf(snapshot, 'format');
   if (typeof format !== 'number' || !Number.isInteger(format) || format < 1) {
