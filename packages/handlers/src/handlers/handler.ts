@@ -58,9 +58,9 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
 };
 
 /**
- * The Handler map `handlers.generated.ts` exports, as `serve` and `consume` take it: each Handler
- * by its name, known by the Endpoint, Guard, Command or Subscription it was written for, since its
- * call signature is the Service's own; and each Deprecated Endpoint's `deprecatedAt`, from the
+ * The shape every Handler map has, which `serve` and `consume` accept: each Handler by its name,
+ * known by the Endpoint, Guard, Command or Subscription it was written for, since its call
+ * signature is the Service's own; and each Deprecated Endpoint's `deprecatedAt`, from the
  * Snapshot.
  */
 export type HandlerMap = {
