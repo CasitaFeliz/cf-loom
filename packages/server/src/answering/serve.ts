@@ -3,7 +3,12 @@ import type { ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
-import { type AnsweredRequest, reportServedFault, type ServedFault } from './hooks.ts';
+import {
+  type AnsweredRequest,
+  answeredRequestOf,
+  reportServedFault,
+  type ServedFault,
+} from './hooks.ts';
 
 /** The fetch-style handler `serve` returns: what an adapter connects to its host. */
 export type Http = (request: Request) => Promise<Response>;
@@ -44,10 +49,8 @@ export function serve(
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;
-    const record = { status, kind: answered.kind, durationMs };
-    options.onOutcome?.(
-      endpoint === undefined ? record : { endpoint: endpoint.declared.name, ...record },
-    );
+    const answer = { status, kind: answered.kind, durationMs };
+    options.onOutcome?.(answeredRequestOf(request.method, endpoint?.declared, answer));
     return answered.response;
   };
 }
