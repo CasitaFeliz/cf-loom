@@ -21,6 +21,7 @@ import {
   type HandlerMap,
   handle,
   type MessageMeta,
+  type ResourcesOf,
   reject,
   success,
   type WithResources,
@@ -383,6 +384,76 @@ describe('handle and Resources', () => {
       { orderId: ORDER_ID, status: 'paid' },
       meta,
     );
+  });
+});
+
+describe('ResourcesOf', () => {
+  type Orders = { readonly find: (orderId: string) => string | undefined };
+  type Callers = { readonly byKey: (key: string) => string };
+  type Resources = { readonly orders: Orders; readonly callers: Callers };
+  type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+
+  test('a Handler map holds every Resource any of its Handlers takes, and a stub takes none', () => {
+    const handlers = {
+      endpoints: {
+        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+          resources.orders.find(ORDER_ID) === undefined
+            ? reject(notFound)
+            : success({ id: ORDER_ID }),
+        ),
+        findOrder: handle.stub(findOrder),
+      },
+      guards: {
+        apiKey: handle(
+          apiKey,
+          (
+            _demands,
+            _context,
+            { resources }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
+          ) => admit({ callerId: resources.callers.byKey('k') }),
+        ),
+      },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
+      readonly orders: Orders;
+      readonly callers: Callers;
+    }>();
+    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+  });
+
+  test('a Handler map none of whose Handlers takes Resources holds none', () => {
+    const handlers = {
+      endpoints: { getOrder: handle(getOrder, () => reject(notFound)) },
+      guards: { apiKey: handle.stub(apiKey) },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<Readonly<Record<never, never>>>();
+    expectTypeOf<
+      ResourcesOf<{ endpoints: Record<never, never>; guards: Record<never, never> }>
+    >().toEqualTypeOf<Readonly<Record<never, never>>>();
+    expect(handlers.guards.apiKey.element).toBe(apiKey);
+  });
+
+  test('the Resources of Handlers that take the same key are the intersection of what they take', () => {
+    type Narrow = { readonly orders: { readonly find: () => string } };
+    const handlers = {
+      endpoints: {
+        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+          resources.orders.find(ORDER_ID) === undefined
+            ? reject(notFound)
+            : success({ id: ORDER_ID }),
+        ),
+        findOrder: handle(findOrder, (_input, _context, { resources }: WithResources<Narrow>) =>
+          resources.orders.find() === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+        ),
+      },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
+      readonly orders: Orders & Narrow['orders'];
+    }>();
+    expect(handlers.endpoints.findOrder.element).toBe(findOrder);
   });
 });
 
