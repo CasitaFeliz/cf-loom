@@ -10,12 +10,78 @@ describe('defineConfig', () => {
     expect(defined).toEqual({ scope: '@org' });
   });
 
-  test('the README’s configuration declares every documented field', () => {
-    const written = { scope: '@org' } as const;
+  test('defineConfig returns a configuration with a layout as it is given', () => {
+    const layout = { endpoint: 'src/billing/{name}.handler.ts' } as const;
 
-    const defined = defineConfig(written);
+    const defined = defineConfig({ scope: '@org', layout });
 
-    expect(defined).toBe(written);
+    expect(defined).toEqual({
+      scope: '@org',
+      layout: { endpoint: 'src/billing/{name}.handler.ts' },
+    });
+  });
+
+  test('a configuration declaring every layout field type-checks', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      layout: {
+        endpoint: 'src/billing/{name}.handler.ts',
+        guard: 'src/guards/{name}.handler.ts',
+        command: 'src/commands/{name}.v{version}.handler.ts',
+        subscription: 'src/billing/{name}.handler.ts',
+        handlerMap: 'src/generated/handlers.generated.ts',
+        readers: 'src/generated/readers.generated.ts',
+      },
+    });
+
+    expect(Object.keys(defined.layout ?? {})).toEqual([
+      'endpoint',
+      'guard',
+      'command',
+      'subscription',
+      'handlerMap',
+      'readers',
+    ]);
+  });
+
+  test('a Handler path that does not end with .handler.ts is a type error', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: a Handler's file ends with `.handler.ts`
+      layout: { guard: 'src/guards/{name}.ts' },
+    });
+
+    expect(defined.scope).toBe('@org');
+  });
+
+  test('a Handler path outside src/ is a type error', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: a Handler's file sits under `src/`
+      layout: { guard: 'lib/guards/{name}.handler.ts' },
+    });
+
+    expect(defined.scope).toBe('@org');
+  });
+
+  test('a generated file’s path that does not end with .generated.ts is a type error', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: a generated file ends with `.generated.ts`
+      layout: { readers: 'src/readers.ts' },
+    });
+
+    expect(defined.scope).toBe('@org');
+  });
+
+  test('a field the layout does not declare is a type error', () => {
+    const defined = defineConfig({
+      scope: '@org',
+      // @ts-expect-error: `endpoints` is not a field of the layout
+      layout: { endpoints: 'src/{name}.handler.ts' },
+    });
+
+    expect(defined.scope).toBe('@org');
   });
 
   test('a field the configuration does not declare is a type error', () => {

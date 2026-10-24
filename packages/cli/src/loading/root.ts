@@ -1,19 +1,17 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { importedModuleOf } from './imported.ts';
-import { rootFiles, rootPlaces } from './roots.ts';
-
-/** The names a root file may export its root under. */
-const rootExports = [...new Set(Object.values(rootPlaces).map(({ exported }) => exported))];
+import { type RootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
 
 /**
- * What a project's root file exports as its root, the file, and everything the file exports, which
- * a Definitions Package lists; or why it could not be loaded.
+ * What a project's root file exports as its root, the kind of root it is, the file, and everything
+ * the file exports, which a Definitions Package lists; or why it could not be loaded.
  */
 export type LoadedRoot =
   | {
       readonly kind: 'loaded';
       readonly root: unknown;
+      readonly rootKind: RootKind;
       readonly file: string;
       readonly exports: readonly unknown[];
     }
@@ -36,16 +34,22 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (imported.kind === 'failed') {
     return failed(`${file} cannot be loaded: ${imported.message}`);
   }
-  const names = rootExports.filter((exported) => imported.exports[exported] !== undefined);
-  const [name, ...more] = names;
-  if (name === undefined) {
-    return failed(`${file} exports none of ${rootExports.join(', ')}`);
+  const kinds = rootKinds.filter(
+    (rootKind) => imported.exports[exportedAs(rootKind)] !== undefined,
+  );
+  const [rootKind, ...more] = kinds;
+  if (rootKind === undefined) {
+    return failed(`${file} exports none of ${rootKinds.map(exportedAs).join(', ')}`);
   }
   if (more.length > 0) {
-    return failed(`${file} exports one root, not ${names.join(' and ')}`);
+    return failed(`${file} exports one root, not ${kinds.map(exportedAs).join(' and ')}`);
   }
   const exports = Object.values(imported.exports);
-  return { kind: 'loaded', root: imported.exports[name], file, exports };
+  return { kind: 'loaded', root: imported.exports[exportedAs(rootKind)], rootKind, file, exports };
+}
+
+function exportedAs(rootKind: RootKind): string {
+  return rootPlaces[rootKind].exported;
 }
 
 function failed(message: string): LoadedRoot {

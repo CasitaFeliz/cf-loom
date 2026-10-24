@@ -216,6 +216,7 @@ export {
   eventServiceOf,
   inputParts,
   isInputPart,
+  isPlainObject,
   isSameRejection,
   isSchema,
   listedDefinitionsOf,

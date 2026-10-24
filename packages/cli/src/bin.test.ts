@@ -673,6 +673,306 @@ describe('cf-loom generate', () => {
   });
 });
 
+/** A `cf-loom.config.ts` setting `layout` to the source text given, as its author wrote it. */
+function aConfigWith(layout: string): string {
+  return [
+    "import { defineConfig } from '@cf-loom/cli';",
+    '',
+    `export const config = defineConfig({ scope: '@org', layout: ${layout} });`,
+    '',
+  ].join('\n');
+}
+
+/** What `generate` ends with for a project whose config sets `layout` to the source text given. */
+function generatedWithLayout(layout: string) {
+  const project = aProject({ 'cf-loom.config.ts': aConfigWith(layout), ...aRoot() });
+  return cfLoom(project, 'generate');
+}
+
+function refusedWith(line: string) {
+  return { status: 3, stdout: '', stderr: `cf-loom.config.ts: ${line}\n` };
+}
+
+describe('cf-loom: the layout of cf-loom.config.ts', () => {
+  test('a layout that is no object is a tooling error', () => {
+    const ran = generatedWithLayout("'src'");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout is an object of paths, such as { endpoint: 'src/http/{group}/{name}.handler.ts' }",
+      ),
+    );
+  });
+
+  test('a layout field the layout does not take is a tooling error naming it', () => {
+    const ran = generatedWithLayout("{ endpoints: 'src/billing/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.endpoints is no field of layout: it takes endpoint, guard, command, subscription, handlerMap and readers',
+      ),
+    );
+  });
+
+  test('a layout field that is no string is a tooling error showing its default', () => {
+    const ran = generatedWithLayout('{ guard: 7 }');
+
+    expect(ran).toEqual(
+      refusedWith("layout.guard is a path such as 'src/guards/{name}.handler.ts'"),
+    );
+  });
+
+  test('a path outside src/ is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: '/srv/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard must be under src/ and outside src/contract/: /srv/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a path under src/contract/ is a tooling error', () => {
+    const ran = generatedWithLayout("{ endpoint: 'src/contract/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.endpoint must be under src/ and outside src/contract/: src/contract/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test.each(['src/{group}/{name}.handler.ts', 'src/e{group}-x/{name}.handler.ts'])(
+    'a path whose first folder under src/ holds a variable, as %s, is a tooling error',
+    (path) => {
+      const ran = generatedWithLayout(`{ endpoint: '${path}' }`);
+
+      expect(ran).toEqual(
+        refusedWith(`layout.endpoint's first folder under src/ holds a variable: ${path}`),
+      );
+    },
+  );
+
+  test('a variable in the file name right under src/ is accepted', () => {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith("{ endpoint: 'src/{name}.handler.ts' }"),
+      ...aRoot(),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'src/ping.handler.ts'))).toBe(true);
+  });
+
+  test('a path with a .. segment is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/../{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/../{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with an empty segment is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards//{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/guards//{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with a segment that starts with a dot is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/.hidden/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/.hidden/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with a backslash is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards\\\\old/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/guards\\old/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with an upper-case letter is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/Guards/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/Guards/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test('a file name that holds .d. is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards/{name}.d.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a file name holding .d., which TypeScript reads as a declaration file: src/guards/{name}.d.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with a brace that is no variable is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards/{name.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: src/guards/{name.handler.ts',
+      ),
+    );
+  });
+
+  test.each([
+    ['.handler.ts', 'src/old.handler.ts/{name}.handler.ts'],
+    ['.generated.ts', 'src/old.generated.ts/{name}.handler.ts'],
+  ])('a folder ending %s is a tooling error', (_ending, path) => {
+    const ran = generatedWithLayout(`{ guard: '${path}' }`);
+
+    expect(ran).toEqual(
+      refusedWith(`layout.guard has a folder ending .handler.ts or .generated.ts: ${path}`),
+    );
+  });
+
+  test('a variable the kind does not take is a tooling error naming it', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards/{group}/{name}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout.guard holds {group}, but a Guard's Handler path takes only {name}: src/guards/{group}/{name}.handler.ts",
+      ),
+    );
+  });
+
+  test('a name in braces that is no variable is a tooling error naming it', () => {
+    const ran = generatedWithLayout("{ endpoint: 'src/billing/{id}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout.endpoint holds {id}, but an Endpoint's Handler path takes only {group} and {name}: src/billing/{id}.handler.ts",
+      ),
+    );
+  });
+
+  test('a variable in the path of the Handler map is a tooling error', () => {
+    const ran = generatedWithLayout("{ handlerMap: 'src/generated/{name}.generated.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout.handlerMap holds {name}, but the Handler map's path takes no variable: src/generated/{name}.generated.ts",
+      ),
+    );
+  });
+
+  test('a Handler path that does not end with .handler.ts, written without its types, is a tooling error', () => {
+    const ran = generatedWithLayout("{ command: 'src/commands/{name}.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith('layout.command must end with .handler.ts: src/commands/{name}.ts'),
+    );
+  });
+
+  test('a generated file’s path that does not end with .generated.ts is a tooling error', () => {
+    const ran = generatedWithLayout("{ readers: 'src/readers.ts' }");
+
+    expect(ran).toEqual(refusedWith('layout.readers must end with .generated.ts: src/readers.ts'));
+  });
+
+  test('the Handler map and the readers at one path are a tooling error', () => {
+    const ran = generatedWithLayout(
+      "{ handlerMap: 'src/generated.generated.ts', readers: 'src/generated.generated.ts' }",
+    );
+
+    expect(ran).toEqual(
+      refusedWith('layout.handlerMap and layout.readers are one file: src/generated.generated.ts'),
+    );
+  });
+
+  test('the Handler map at the readers’ default path is a tooling error', () => {
+    const ran = generatedWithLayout("{ handlerMap: 'src/readers.generated.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith('layout.handlerMap and layout.readers are one file: src/readers.generated.ts'),
+    );
+  });
+
+  test('a layout that spells every default is accepted', () => {
+    const ran = generatedWithLayout(
+      `{
+        endpoint: 'src/endpoints/{group}/{name}.handler.ts',
+        guard: 'src/guards/{name}.handler.ts',
+        command: 'src/commands/{name}.v{version}.handler.ts',
+        subscription: 'src/subscriptions/{name}.handler.ts',
+        handlerMap: 'src/handlers.generated.ts',
+        readers: 'src/readers.generated.ts',
+      }`,
+    );
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a broken layout stops a command that writes no Handler too', () => {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith("{ guard: '/srv/{name}.handler.ts' }"),
+      ...aRoot(),
+    });
+
+    const ran = cfLoom(project, 'openapi');
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard must be under src/ and outside src/contract/: /srv/{name}.handler.ts',
+      ),
+    );
+  });
+
+  test.each([
+    [
+      'an Application',
+      {
+        'src/contract/index.ts': [
+          "import { defineApplication } from '@cf-loom/contract';",
+          "export const application = defineApplication({ name: 'orders-service', dependencies: [] });",
+          '',
+        ].join('\n'),
+      },
+      'an Application has no Handlers, so it takes no `layout`',
+    ],
+    [
+      'a Definitions Package',
+      {
+        'src/definitions/index.ts': [
+          "import { defineDefinitions } from '@cf-loom/contract';",
+          "export const definitions = defineDefinitions({ name: 'orders-service' });",
+          '',
+        ].join('\n'),
+      },
+      'a Definitions Package has no Handlers, so it takes no `layout`',
+    ],
+  ])('%s whose config sets a layout is a tooling error', (_kind, files, line) => {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith("{ endpoint: 'src/billing/{name}.handler.ts' }"),
+      ...files,
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual(refusedWith(line));
+  });
+});
+
 describe('cf-loom generate: what it refuses', () => {
   test('a root whose name is not the unscoped name of package.json exits 1', () => {
     const project = aProject({

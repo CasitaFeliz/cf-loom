@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
-import handlers from '../src/handlers.generated.ts';
+import handlers from '../src/generated/handlers.generated.ts';
 import { ordersClientOf } from '../src/orders-client/orders-client.ts';
 import { brokerPrefix, ordersEnvironment } from './environments.ts';
 import { applyPlanOf } from './nats-broker.ts';

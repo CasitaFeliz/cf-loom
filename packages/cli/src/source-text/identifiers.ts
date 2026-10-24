@@ -18,12 +18,17 @@ export function camelCaseOf(name: string): string {
   return [lowerFirst(first), ...rest.map(upperFirst)].join('');
 }
 
+/** A Message's name as files are named: `ChargeCard` is `charge-card`. */
+export function messageFileNameOf(name: string): string {
+  return kebabCaseOf(camelCaseOf(name));
+}
+
 /** A Message Version's file name stem, `order-created.v2`, as README's Layout names its files. */
 export function messageVersionStemOf(message: {
   readonly name: string;
   readonly version: number;
 }): string {
-  return `${kebabCaseOf(camelCaseOf(message.name))}.v${message.version}`;
+  return `${messageFileNameOf(message.name)}.v${message.version}`;
 }
 
 /** The PascalCase of a camelCase name, as a type names it. */

@@ -26,9 +26,6 @@ import {
 import type { MessageHandled } from './handled.ts';
 import { type Readable, type ReaderSchemas, readerSchemasOf } from './reader-schemas.ts';
 
-/** The file of the Reader schemas of the Service's own Messages and of its pairings. */
-export const readersFile = 'src/readers.generated.ts';
-
 /** The Event a Subscription receives: the Service's own, by name and version, or a Dependency's. */
 type ReceivedEvent =
   | { readonly kind: 'own'; readonly event: MessageVersion }
@@ -39,28 +36,33 @@ type ListedSubscription = { readonly position: number; readonly receives: Receiv
 
 /**
  * Where the root lists each Command's Message Version, by identity, and each Subscription, by
- * name, so `readers.generated.ts` reaches the root's own declarations by position.
+ * name, so the readers file reaches the root's own declarations by position.
  */
 export type RootLists = {
   readonly commands: ReadonlyMap<string, number>;
   readonly subscriptions: ReadonlyMap<string, ListedSubscription>;
 };
 
-/** The text of `readers.generated.ts`, or the line saying which name cannot be written as code. */
+/** The text of the readers file, or the line saying which name cannot be written as code. */
 export type ReadersText =
   | { readonly kind: 'text'; readonly text: string }
   | { readonly kind: 'unnamed'; readonly line: string };
 
-/** Where a Message Handler's stub imports its pairing from: the readers, under its name in code. */
-export function pairingAtOf(handled: MessageHandled): ExportedAt {
+/** Where a Message Handler's stub imports its pairing from: the readers file, under its name in code. */
+export function pairingAtOf(handled: MessageHandled, readersFile: string): ExportedAt {
   return { kind: 'file', path: readersFile, name: pairingNameOf(handled) };
 }
 
 /**
- * The Reader schemas of the Service's own Events and Commands, and each Command's Message Version
- * and Subscription paired with the Reader its Handler reads, reached through the root.
+ * The text of the readers file written at `readersFile`: the Reader schemas of the Service's own
+ * Events and Commands, and each Command's Message Version and Subscription paired with the Reader
+ * its Handler reads, reached through the root.
  */
-export function readersTextOf(snapshot: ServiceSnapshot, lists: RootLists): ReadersText {
+export function readersTextOf(
+  snapshot: ServiceSnapshot,
+  lists: RootLists,
+  readersFile: string,
+): ReadersText {
   const schemas = readerSchemasOf(snapshot);
   const subscriptions = Object.keys(snapshot.subscriptions);
   const commands = schemas.readables
@@ -76,7 +78,7 @@ export function readersTextOf(snapshot: ServiceSnapshot, lists: RootLists): Read
     ...commandPairingLinesOf(commands, lists),
     ...subscriptionPairingLinesOf(subscriptions, lists),
   ];
-  const imports = importsOf(schemas.needs, pairings);
+  const imports = importsOf(schemas.needs, pairings, readersFile);
   const body = bodyOf([schemas.defs, schemas.readers, pairings]);
   return { kind: 'text', text: moduleTextOf({ first: [headerOf('generate')], imports, body }) };
 }
@@ -169,7 +171,11 @@ function positionOf(positions: ReadonlyMap<string, number>, identity: string): n
  * The imports the file needs, in code point order of their specifiers: the root and `withReader`
  * with any pairing, and the modules its schemas call.
  */
-function importsOf(needs: Needs, pairings: readonly string[]): readonly string[] {
+function importsOf(
+  needs: Needs,
+  pairings: readonly string[],
+  readersFile: string,
+): readonly string[] {
   const { file, exported } = rootPlaces.service;
   const root = relativeSpecifierOf(readersFile, file);
   const { name, specifier } = withReaderImport;

@@ -10,24 +10,26 @@ import {
   stringLiteralOf,
 } from '../source-text/index.ts';
 import { handlerLocalOf, pairingNameOf } from './code-names.ts';
-import { type DeprecationStamp, type Handled, handlerPathOf } from './handled.ts';
-
-/** The file of the Handler map, under the Service's `src/`. */
-export const handlerMapFile = 'src/handlers.generated.ts';
+import type { DeprecationStamp, Handled } from './handled.ts';
+import type { HandlerPath } from './handler-paths.ts';
 
 /**
- * The Handler map: plain data importing each Handler, with the stamps of the Deprecated Endpoints,
- * which `serve` takes as it is.
+ * The Handler map written at `file`: plain data importing each Handler, with the stamps of the
+ * Deprecated Endpoints, which `serve` takes as it is.
  */
 export function handlerMapTextOf(
-  handled: readonly Handled[],
+  mapped: readonly HandlerPath[],
   stamps: readonly DeprecationStamp[],
+  file: string,
 ): string {
-  const imports = handled
-    .map((element) => ({ local: handlerLocalOf(element), path: handlerPathOf(element) }))
-    .map(({ local, path }) => ({ local, specifier: relativeSpecifierOf(handlerMapFile, path) }))
+  const imports = mapped
+    .map(({ handled, path }) => ({
+      local: handlerLocalOf(handled),
+      specifier: relativeSpecifierOf(file, path),
+    }))
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ local, specifier }) => defaultImportOf(local, specifier));
+  const handled = mapped.map(({ handled }) => handled);
   const endpoints = handled.filter((element) => element.kind === 'endpoint');
   const guards = handled.filter((element) => element.kind === 'guard');
   const commands = handled.filter((element) => element.kind === 'command');
@@ -44,9 +46,9 @@ export function handlerMapTextOf(
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
 }
 
-/** The stub of a Handler not written yet, importing its Element from where it is exported. */
-export function stubTextOf(handled: Handled, exported: ExportedAt): string {
-  const specifier = specifierOf(handlerPathOf(handled), exported);
+/** The stub of the Handler at `path`, importing its Element from where it is exported. */
+export function stubTextOf(path: string, exported: ExportedAt): string {
+  const specifier = specifierOf(path, exported);
   const imports = [
     namedImportOf(['handle'], '@cf-loom/handlers'),
     namedImportOf([exported.name], specifier),

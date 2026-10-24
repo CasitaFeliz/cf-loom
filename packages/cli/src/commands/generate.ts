@@ -1,7 +1,8 @@
 import { type BuiltService, builtOf, isBuiltService, type Run } from '../project/index.ts';
 import { type GeneratedFile, writeFiles } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
-import { noFileLinesOf, orphanLinesOf } from './handler-files.ts';
+import { noFileLinesOf, placedOf } from './handler-files.ts';
+import { orphanLinesOf } from './orphans.ts';
 import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
 
@@ -25,10 +26,15 @@ export async function generate(run: Run): Promise<Exit> {
 }
 
 /**
- * A Service's files, or every line that stops them: a name the readers cannot write, an Element
- * no stub could import, a Handler file nothing names, a Handler path that is no file.
+ * A Service's files, or every line that stops them: two Elements at one Handler path, a name the
+ * readers cannot write, an Element no stub could import, a file nothing names, a Handler path that
+ * is no file.
  */
-async function generateService(run: Run, service: BuiltService): Promise<Exit> {
+async function generateService(run: Run, built: BuiltService): Promise<Exit> {
+  const service = placedOf(built);
+  if (service.kind === 'tooling') {
+    return toolingError(service.message);
+  }
   const regenerated = serviceFilesOf(service);
   if (regenerated.kind === 'unnamed') {
     return toolingError(regenerated.line);

@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { type Http, serve } from '@cf-loom/server';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
-import handlers from '../src/handlers.generated.ts';
+import handlers from '../src/generated/handlers.generated.ts';
 import { ordersClientOf } from '../src/orders-client/orders-client.ts';
 
 let billing: Http;

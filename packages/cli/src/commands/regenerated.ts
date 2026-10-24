@@ -2,14 +2,12 @@ import { messageIdentityOf } from '@cf-loom/contract/internal';
 import { type BuiltProject, type BuiltService, snapshotFile } from '../project/index.ts';
 import {
   deprecationStampsOf,
-  handledOf,
-  handlerMapFile,
   handlerMapTextOf,
   type RootLists,
-  readersFile,
   readersTextOf,
 } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
+import { mappedPathsOf, type PlacedService } from './handler-files.ts';
 
 /** `contract.snapshot.json`, which every root regenerates. */
 export function snapshotFileOf(built: BuiltProject): GeneratedFile {
@@ -22,15 +20,16 @@ export type ServiceFiles =
   | { readonly kind: 'unnamed'; readonly line: string };
 
 /** The files a Service regenerates beside its Snapshot: its Handler map and its readers. */
-export function serviceFilesOf(service: BuiltService): ServiceFiles {
-  const readers = readersTextOf(service.snapshot, rootListsOf(service));
+export function serviceFilesOf(service: PlacedService): ServiceFiles {
+  const { handlerMap, readers: readersFile } = service.project.layout;
+  const readers = readersTextOf(service.snapshot, rootListsOf(service), readersFile);
   if (readers.kind === 'unnamed') {
     return readers;
   }
-  const handled = handledOf(service.snapshot);
+  const mapped = mappedPathsOf(service);
   const stamps = deprecationStampsOf(service.snapshot);
   const files: readonly GeneratedFile[] = [
-    { path: handlerMapFile, text: handlerMapTextOf(handled, stamps), written: 'always' },
+    { path: handlerMap, text: handlerMapTextOf(mapped, stamps, handlerMap), written: 'always' },
     { path: readersFile, text: readers.text, written: 'always' },
   ];
   return { kind: 'files', files };
