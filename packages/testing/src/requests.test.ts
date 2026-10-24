@@ -6,6 +6,7 @@ import {
   defineGroup,
   defineGuard,
   type Endpoint,
+  type ExportedSnapshot,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
@@ -103,6 +104,12 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
 }
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
+
+/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
+function inFormat(contractPackage: typeof payments, format: unknown): typeof payments {
+  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
+  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+}
 
 const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment, capturePayment] });
 
@@ -282,6 +289,16 @@ describe('fakeProvider: requests', () => {
       fakeProvider(paymentsDeps, { baseUrl: 'https://ann:secret@gateway.test/' });
 
     expect(create).toThrow('has a username or a password');
+  });
+
+  test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {
+    const newer = defineDependencies(inFormat(payments, 2), { endpoints: [getPayment] });
+
+    const create = () => fakeProvider(newer);
+
+    expect(create).toThrow(
+      "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
+    );
   });
 
   test('a path that only begins like the base URL’s path lies outside it', async () => {
