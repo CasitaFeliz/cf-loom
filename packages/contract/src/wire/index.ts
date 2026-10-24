@@ -12,8 +12,10 @@ export type { DurableConsumed, ReceivedHeaders, TransportHeaderFit } from './bro
 export {
   brokerHeaderBytesOf,
   brokerHeadersOf,
+  brokerMessageIdHeader,
   brokerMessageIdOf,
   durableNameOf,
+  factIdHeader,
   isBrokerPrefix,
   isIdHeaderValue,
   isPrefixedName,

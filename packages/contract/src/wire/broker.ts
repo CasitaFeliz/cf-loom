@@ -2,10 +2,10 @@ import { follows, kebabCase } from '../validation/index.ts';
 import { subjectVersionOf } from '../written/index.ts';
 
 /** The header the Fact id travels in, never parsed out of the broker message id. */
-const factIdHeader = 'Cf-Loom-Fact-Id';
+export const factIdHeader = 'Cf-Loom-Fact-Id';
 
 /** The header the broker message id travels in, which the broker deduplicates by. */
-const brokerMessageIdHeader = 'Nats-Msg-Id';
+export const brokerMessageIdHeader = 'Nats-Msg-Id';
 
 /** The subject a Message Version travels on, unprefixed: `<service>.<event|command>.<Name>.v<n>`. */
 export function subjectOf(

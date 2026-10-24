@@ -4,8 +4,10 @@ import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
 import {
   brokerHeaderBytesOf,
   brokerHeadersOf,
+  brokerMessageIdHeader,
   brokerMessageIdOf,
   durableNameOf,
+  factIdHeader,
   isBrokerPrefix,
   isIdHeaderValue,
   isPrefixedName,
@@ -248,6 +250,10 @@ describe('the Wire protocol over the broker', () => {
       'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
       'Cf-Loom-Fact-Id': 'o-1:created',
     });
+  });
+
+  test('the broker message id travels in Nats-Msg-Id and the Fact id in Cf-Loom-Fact-Id', () => {
+    expect([brokerMessageIdHeader, factIdHeader]).toEqual(['Nats-Msg-Id', 'Cf-Loom-Fact-Id']);
   });
 
   test('a Message’s broker headers take 12 bytes plus each header’s name, value and 4, as nats-core writes them', () => {
