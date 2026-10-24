@@ -7,7 +7,27 @@ import { numberSchemaOf, stringSchemaOf } from './scalars.ts';
 export function jsonSchemaOf(node: SchemaNode, dialect: JsonSchemaDialect): JsonSchema {
   const shape = shapeOf(node, dialect);
   const nullable = node.nullable === true ? nullableOf(shape, node) : shape;
-  return { ...nullable, ...definedOf({ description: node.description, examples: node.examples }) };
+  const annotations = definedOf({ description: node.description, examples: node.examples });
+  return annotatedOf(nullable, annotations, dialect);
+}
+
+/**
+ * A schema with its annotations beside it; in draft-07 a bare `$ref` goes in an `allOf` first, since
+ * a tool ignores every keyword beside a `$ref` there.
+ */
+function annotatedOf(
+  schema: JsonSchema,
+  annotations: JsonSchema,
+  dialect: JsonSchemaDialect,
+): JsonSchema {
+  switch (dialect) {
+    case '2020-12':
+      return { ...schema, ...annotations };
+    case 'draft-07':
+      return '$ref' in schema && Object.keys(annotations).length > 0
+        ? { allOf: [schema], ...annotations }
+        : { ...schema, ...annotations };
+  }
 }
 
 /** A schema that also admits `null`: in its `type` where that alone constrains it, else beside it in an `anyOf`. */

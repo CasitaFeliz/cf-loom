@@ -111,6 +111,7 @@ const theEvents = [
   '  body: z.object({',
   '    note: z.string().describe("A note\\u2028on the order"),',
   "    root: tree.nullable().describe('The root'),",
+  "    branch: z.lazy(() => tree).describe('A branch'),",
   '    pair: z.tuple([z.string()], z.number()),',
   '    triple: z.tuple([z.string(), z.number()]),',
   '    nothing: z.tuple([]),',
@@ -195,18 +196,29 @@ function aProjectCommittedWithBodies(recursive: readonly string[]): string {
   return project;
 }
 
-/** A Service whose one Event, Deprecated, has a recursive def as its body, with a description and an example. */
-const aServiceWithDescribedTree = aContractProject([
-  "import { defineContract, defineEvent } from '@cf-loom/contract';",
-  "import { z } from 'zod';",
-  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
-  'export const treeGrownV1 = defineEvent({',
-  "  name: 'TreeGrown', version: 1, visibility: 'internal', lifecycle: 'deprecated',",
-  "  description: 'A tree grew',",
-  "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
-  '});',
-  "export const contract = defineContract({ name: 'orders-service', events: [treeGrownV1] });",
-]);
+/** A Service whose one Event, in the Lifecycle given, has a recursive def as its body, with a description and an example. */
+function aServiceWithDescribedTree(
+  lifecycle: 'active' | 'deprecated',
+): Readonly<Record<string, string>> {
+  return aContractProject([
+    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+    'export const treeGrownV1 = defineEvent({',
+    `  name: 'TreeGrown', version: 1, visibility: 'internal', lifecycle: '${lifecycle}',`,
+    "  description: 'A tree grew',",
+    "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
+    '});',
+    "export const contract = defineContract({ name: 'orders-service', events: [treeGrownV1] });",
+  ]);
+}
+
+/** The payload of `TreeGrown@1` in the Service `aServiceWithDescribedTree` gives. */
+function treeGrownPayloadOf(lifecycle: 'active' | 'deprecated'): unknown {
+  const project = aGeneratedProject(aServiceWithDescribedTree(lifecycle));
+  const written = JSON.parse(cfLoom(project, 'asyncapi').stdout);
+  return valueAt(written, 'channels', 'TreeGrown@1', 'messages', 'TreeGrown@1', 'payload');
+}
 
 /** A Service whose Event `OrderCreated` has the versions 1 to `count`. */
 function aServiceWithVersions(count: number): Readonly<Record<string, string>> {
@@ -459,18 +471,24 @@ describe('cf-loom asyncapi: the payloads', () => {
   });
 
   test('a Deprecated Message Version whose body is a described recursive def keeps its description and examples on its payload', () => {
-    const project = aGeneratedProject(aServiceWithDescribedTree);
-
-    const written = JSON.parse(cfLoom(project, 'asyncapi').stdout);
-
-    expect(
-      valueAt(written, 'channels', 'TreeGrown@1', 'messages', 'TreeGrown@1', 'payload'),
-    ).toEqual({
+    expect(treeGrownPayloadOf('deprecated')).toEqual({
       allOf: [refTo('TreeNodeDef')],
       description: 'The tree',
       examples: [{ label: 'a', children: [] }],
       deprecated: true,
     });
+  });
+
+  test('an Active Message Version whose body is a described recursive def keeps its description and examples on its payload', () => {
+    expect(treeGrownPayloadOf('active')).toEqual({
+      allOf: [refTo('TreeNodeDef')],
+      description: 'The tree',
+      examples: [{ label: 'a', children: [] }],
+    });
+  });
+
+  test('a described recursive def in a property keeps its description beside an allOf of its $ref', () => {
+    expect(noted('branch')).toEqual({ allOf: [refTo('TreeNodeDef')], description: 'A branch' });
   });
 
   test('a recursive def a body reaches is written once as a component named after its type in code', () => {

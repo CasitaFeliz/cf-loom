@@ -210,7 +210,7 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 - `tagged` as `oneOf` its variants, each variant's discriminator field a `const`, with no `discriminator`: without a `mapping`, OpenAPI reads a discriminator value as the name of a component, which a variant written inline is not.
 - `ref` as a `$ref` to `#/components/schemas/<Id>Def`, the def written once there under the name of its type in the Contract Package (`tree` gives `TreeDef`), so a recursion id with no name in code fails as it does for `package`.
 - `nullable` as a `type` that includes `null` for a `string`, `number`, `boolean`, `array`, `tuple`, `record` and `object`; for any other node (a `const` or `enum` would refuse `null` whatever its `type`) as `anyOf` the schema and `{ "type": "null" }`.
-- `description` and `examples` are carried over, beside a `$ref` too, where a draft-07 tool ignores them; `origin` and `formatOptions` are left out.
+- `description` and `examples` are carried over, beside a `$ref` too; in draft-07, where a tool ignores every keyword beside a `$ref`, a `ref` with either is an `allOf` of its `$ref` with them beside it. `origin` and `formatOptions` are left out.
 
 Where JSON Schema cannot say what zod checks, the document says less:
 

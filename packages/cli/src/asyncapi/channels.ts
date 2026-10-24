@@ -41,17 +41,13 @@ function messageOf({ identity, name, event }: PublishedVersion): AsyncApiObject 
 }
 
 /**
- * The schema of the body, with `deprecated` where the Message Version is; a `$ref` goes in an
- * `allOf`, with its annotations beside it, since AsyncAPI ignores what sits beside a `$ref`.
+ * The schema of the body, with `deprecated` where the Message Version is; a bare `$ref` goes in an
+ * `allOf` first, since AsyncAPI ignores what sits beside a `$ref`.
  */
 function payloadOf(event: EventSnapshot): JsonSchema {
   const body = jsonSchemaOf(event.body, 'draft-07');
   if (event.lifecycle !== 'deprecated') {
     return body;
   }
-  if (!('$ref' in body)) {
-    return { ...body, deprecated: true };
-  }
-  const { description, examples, ...ref } = body;
-  return definedOf({ allOf: [ref], description, examples, deprecated: true });
+  return '$ref' in body ? { allOf: [body], deprecated: true } : { ...body, deprecated: true };
 }
