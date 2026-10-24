@@ -12,7 +12,8 @@
 #   <name>@<version> for each. The examples (@org/*) are private and ignored by Changesets: never published.
 # - select-mode and publish both run in the npm environment, which only main can use. Publish
 #   authenticates with npm trusted publishing (OIDC), so no npm token can publish; select-mode reads
-#   npmjs.com with NPM_READ_TOKEN, a read-only secret of that environment.
+#   npmjs.com with NPM_READ_TOKEN, a read-only secret of that environment, which its ~/.npmrc names
+#   as ${NPM_READ_TOKEN} for pnpm to expand, and fails first if the secret does not reach it.
 # - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 30 days and the
 #   versions already published are skipped, so the re-run publishes the rest; otherwise the next push to
 #   main that carries no changeset retries. npm cannot take a version back: fix forward with the next
@@ -79,10 +80,22 @@ jobs:
         with:
           node-version-file: .node-version
       - run: pnpm install --frozen-lockfile
+      - name: Check the read token reaches the job
+        env:
+          NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
+        run: |
+          if [ -z "$NPM_READ_TOKEN" ]; then
+            echo "::error::NPM_READ_TOKEN is empty: save it as a secret of the npm environment (setup step 6)"
+            exit 1
+          fi
+      - name: Read npmjs.com with the read token
+        run: |
+          # shellcheck disable=SC2016 # pnpm expands ${NPM_READ_TOKEN} itself, so the file never holds the token
+          echo '//registry.npmjs.org/:_authToken=${NPM_READ_TOKEN}' >> ~/.npmrc
       - id: select-mode
         uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         env:
-          "npm_config_//registry.npmjs.org/:_authToken": ${{ secrets.NPM_READ_TOKEN }}
+          NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
 
   version:
     needs: select-mode
