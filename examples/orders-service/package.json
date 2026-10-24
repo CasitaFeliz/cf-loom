@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "cf-loom generate && cf-loom package",
+    "generate": "cf-loom generate",
     "start": "node src/main.ts"
   },
   "dependencies": {

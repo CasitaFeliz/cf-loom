@@ -59,7 +59,8 @@ src/
 ├── readers.generated.ts                   Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
-contract-package/                          the Contract Package cf-loom package writes; built, not edited
+.cf-loom/
+└── contract-package/                      the Contract Package cf-loom package writes; built, never edited
 ```
 
 File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
@@ -90,4 +91,4 @@ A Handler is called directly, with the Resources the test builds (see [Testing a
 
 ### Publish
 
-`cf-loom package` writes the Contract Package to `contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package when the Release implementing it is deployed, a Release whose Handlers are stubs included (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
+`cf-loom package` writes the Contract Package to `.cf-loom/contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package when the Release implementing it is deployed, a Release whose Handlers are stubs included (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).

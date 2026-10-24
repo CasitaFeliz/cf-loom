@@ -2,21 +2,27 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { afterAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 const snapshot = JSON.parse(readFileSync(join(serviceDir, 'contract.snapshot.json'), 'utf8'));
 const outDir = mkdtempSync(join(tmpdir(), 'orders-contract-package-'));
 
-afterAll(() => {
-  rmSync(outDir, { recursive: true, force: true });
-});
-
 function cfLoom(...args: string[]) {
   const ran = spawnSync(process.execPath, [bin, ...args], { cwd: serviceDir, encoding: 'utf8' });
   return { status: ran.status, stderr: ran.stderr };
 }
+
+let packaged: ReturnType<typeof cfLoom>;
+
+beforeAll(() => {
+  packaged = cfLoom('package', '--out', outDir);
+});
+
+afterAll(() => {
+  rmSync(outDir, { recursive: true, force: true });
+});
 
 /** Every file `cf-loom package` writes under `dir`, by its path, leaving out a build's and an install's. */
 function filesOf(dir: string): Record<string, string> {
@@ -39,11 +45,11 @@ describe('the committed generated files', () => {
     expect(verified).toEqual({ status: 0, stderr: '' });
   });
 
-  test('cf-loom package writes exactly the committed Contract Package', () => {
-    const packaged = cfLoom('package', '--out', outDir);
+  test('the Contract Package billing links is the one cf-loom package writes from the committed Snapshot', () => {
+    const linked = filesOf(join(serviceDir, '.cf-loom/contract-package'));
 
     expect(packaged).toEqual({ status: 0, stderr: '' });
-    expect(filesOf(outDir)).toEqual(filesOf(join(serviceDir, 'contract-package')));
+    expect(linked).toEqual(filesOf(outDir));
   });
 });
 
@@ -79,7 +85,7 @@ describe('the Snapshot', () => {
 
 describe('the Contract Package', () => {
   test('the Contract Package writes money in and imports nothing from @org/definitions', () => {
-    const files = filesOf(join(serviceDir, 'contract-package'));
+    const files = filesOf(outDir);
     const manifest = JSON.parse(files['package.json'] ?? '{}');
 
     const importing = Object.keys(files).filter((path) =>
@@ -98,7 +104,7 @@ describe('the Contract Package', () => {
   });
 
   test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or charge-on-created', () => {
-    const files = filesOf(join(serviceDir, 'contract-package'));
+    const files = filesOf(outDir);
 
     const events = Object.keys(files).filter((path) => path.startsWith('src/events/'));
     const exported = [files['src/index.ts'], files['src/exported-snapshot.ts']].join('\n');
