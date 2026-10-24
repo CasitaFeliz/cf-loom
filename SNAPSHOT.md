@@ -204,17 +204,17 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 `cf-loom openapi` and `cf-loom asyncapi` (see [Commands](packages/cli/README.md#commands) in the CLI README) read the Snapshot and write each node as JSON Schema 2020-12:
 
 - `string`, `number`, `boolean`, `array`, `record` (`propertyNames` and `additionalProperties`) and `object` (`additionalProperties: false` when `strict`) as their counterparts, with the constraints as the matching keywords: `min` and `max` of a string as `minLength` and `maxLength`, of an array as `minItems` and `maxItems`, `int` as `integer`. JSON Schema counts a string's length in code points where zod counts UTF-16 units, so the two differ on characters beyond U+FFFF.
-- `literal` as `const`; a closed `enum` as `enum`, an open one as `anyOf: [enum, string]`.
+- `literal` as `const` and a closed `enum` as `enum`, each with the `type` of its values (a list when they differ), so a parameter's text can be coerced to one; an open `enum` as `anyOf: [enum, string]`.
 - `tuple` as `prefixItems` with `minItems` of its items, and `items` for `rest`, or `items: false` without one, since zod refuses a missing and an extra item alike.
 - `union` as `anyOf`; `allOf` as `allOf`; `json` as `{}`.
 - `tagged` as `oneOf` its variants, each variant's discriminator field a `const`, with no `discriminator`: without a `mapping`, OpenAPI reads a discriminator value as the name of a component, which a variant written inline is not.
 - `ref` as a `$ref` to `#/components/schemas/<Id>Def`, the def written once there under the name of its type in the Contract Package (`tree` gives `TreeDef`), so a recursion id with no name in code fails as it does for `package`.
-- `nullable` as a `type` that includes `null` when the schema has a `type`; otherwise (`const`, `enum`, `anyOf`, `oneOf`, `allOf`, `$ref`, `{}`) as `anyOf` the schema and `{ "type": "null" }`.
+- `nullable` as a `type` that includes `null` for a `string`, `number`, `boolean`, `array`, `tuple`, `record` and `object`; for any other node (a `const` or `enum` would refuse `null` whatever its `type`) as `anyOf` the schema and `{ "type": "null" }`.
 - `description` and `examples` are carried over, beside a `$ref` too; `origin` and `formatOptions` are left out.
 
 Where JSON Schema cannot say what zod checks, the document says less:
 
-- `format` is written as JSON Schema names it where both admit the same values: `datetime` as `date-time` unless the format is `local` or has `precision: -1`, in which case it stays `datetime`, and `url` as `uri`. A `time` is written with no `format`, since JSON Schema's requires an offset and zod's refuses one. Every other format keeps its name, which 2020-12 reads as an annotation.
+- `format` is written as JSON Schema names it only where both admit the same values: `datetime` as `date-time`, unless the format is `local` or has `precision: -1`, in which case it stays `datetime`. A `time`, a `duration` and an `email` are written with no `format`, since JSON Schema's differ from zod's. Every other format, `url` included, keeps its name, which 2020-12 reads as an annotation.
 - `regex` is written as `pattern` when its flags are among `g`, `d` and `u`; with any other flag no `pattern` is written, since JSON Schema's takes no flags.
 
 The Rejection and Fault Envelopes (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md) are written once as components.

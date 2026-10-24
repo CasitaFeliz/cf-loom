@@ -5,7 +5,6 @@ import {
   bodyOf,
   committedValues,
   deprecatedAtOfHeader,
-  deprecationHeaderOf,
   faultResponseOf,
   faultStatusOf,
   headerTextsOf,
@@ -18,6 +17,7 @@ import {
   isSegmentText,
   jsonBytesOf,
   jsonContentType,
+  jsonMediaType,
   jsonOfBytes,
   malformedBodyIssueOf,
   parseValue,
@@ -370,8 +370,11 @@ describe('the reserved codes and statuses', () => {
 });
 
 describe('the content type', () => {
-  test('bodies travel as UTF-8 JSON', () => {
-    expect(jsonContentType).toBe('application/json; charset=utf-8');
+  test('bodies are JSON, sent as UTF-8', () => {
+    expect([jsonMediaType, jsonContentType]).toEqual([
+      'application/json',
+      'application/json; charset=utf-8',
+    ]);
   });
 
   test('a request names JSON by its media type, whatever its parameters or case', async () => {
@@ -459,10 +462,6 @@ describe('the Deprecation header', () => {
     const response = withDeprecation(new Response(null), '2026-10-17T09:30:00Z');
 
     expect(response.headers.get('deprecation')).toBe('@1792229400');
-  });
-
-  test('the value of the Deprecation header of a stamp is @ and its unix seconds', () => {
-    expect(deprecationHeaderOf('2026-10-17T09:30:00Z')).toBe('@1792229400');
   });
 
   test('a received Deprecation header is read back as the stamp, and anything else as none', () => {

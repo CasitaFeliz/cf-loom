@@ -2,7 +2,9 @@
 export type JsonSchema = Readonly<Record<string, unknown>>;
 
 /** An object made of the fields given, each one left out where its value is `undefined`. */
-export function definedOf(fields: Readonly<Record<string, unknown>>): JsonSchema {
+export function definedOf(
+  fields: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
   return Object.fromEntries(Object.entries(fields).filter(isSet));
 }
 

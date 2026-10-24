@@ -26,7 +26,7 @@ export {
   subjectOf,
   transportHeaderFitOf,
 } from './broker.ts';
-export { jsonContentType } from './content-type.ts';
+export { jsonContentType, jsonMediaType } from './content-type.ts';
 export {
   deprecatedAtOfHeader,
   deprecationHeader,

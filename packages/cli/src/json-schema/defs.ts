@@ -1,7 +1,8 @@
 import { type Defs, reachedDefsOf, type SchemaNode } from '@cf-loom/contract/internal';
-import { type DefUse, defNamesLineOf, defTypeNameOf } from '../schema-code/index.ts';
+import { type DefUse, defNamesLineOf } from '../schema-code/index.ts';
 import { jsonSchemaOf } from './json-schema.ts';
 import type { JsonSchema } from './keywords.ts';
+import { defComponentNameOf } from './refs.ts';
 
 /** The components of the recursive defs some nodes reach, by their names, or why an id has none. */
 export type DefComponents =
@@ -27,5 +28,5 @@ function componentOf(id: string, defs: Defs): readonly [string, JsonSchema] {
   if (def === undefined) {
     throw new Error(`The schemas reference the def ${id}, which the defs given lack`);
   }
-  return [defTypeNameOf(id, 'declared'), jsonSchemaOf(def)];
+  return [defComponentNameOf(id), jsonSchemaOf(def)];
 }

@@ -1,10 +1,6 @@
-import {
-  byCodePoint,
-  type CodeSnapshot,
-  committedValues,
-  reservedFaults,
-} from '@cf-loom/contract/internal';
+import { byCodePoint, committedValues, reservedFaults } from '@cf-loom/contract/internal';
 import { componentRefOf, definedOf, type JsonSchema, jsonSchemaOf } from '../json-schema/index.ts';
+import type { ServedRejection } from './served.ts';
 
 /** The name of the component every Rejection travels in. */
 export const rejectionEnvelopeName = 'RejectionEnvelope';
@@ -12,12 +8,13 @@ export const rejectionEnvelopeName = 'RejectionEnvelope';
 /** The name of the component every Fault travels in. */
 export const faultEnvelopeName = 'FaultEnvelope';
 
-/** The components that say what travels: the two Envelopes, and the Envelope of each code given. */
+/** The components that say what travels: the two Envelopes, and the Envelope of each Rejection given. */
 export function envelopeComponentsOf(
-  codes: readonly string[],
-  resolved: Readonly<Record<string, CodeSnapshot>>,
+  rejections: readonly ServedRejection[],
 ): Readonly<Record<string, JsonSchema>> {
-  const ofCodes = codes.map((code) => [code, codeEnvelopeOf(code, resolved[code])] as const);
+  const ofCodes = rejections.map(
+    (rejection) => [rejection.code, codeEnvelopeOf(rejection)] as const,
+  );
   return Object.fromEntries([
     [rejectionEnvelopeName, rejectionEnvelope],
     [faultEnvelopeName, faultEnvelope],
@@ -60,11 +57,7 @@ const faultEnvelope: JsonSchema = {
  * The Rejection Envelope narrowed to one code, with the body it declares, or none: a code with
  * no body is sent with no `body` key. Its message is any text, since each declaration sends its own.
  */
-function codeEnvelopeOf(code: string, resolved: CodeSnapshot | undefined): JsonSchema {
-  if (resolved === undefined) {
-    throw new Error(`The Endpoints answer the code ${code}, which the codes given lack`);
-  }
-  const { body } = resolved;
+function codeEnvelopeOf({ code, body }: ServedRejection): JsonSchema {
   return {
     allOf: [componentRefOf(rejectionEnvelopeName)],
     properties: {

@@ -27,18 +27,21 @@ export function numberSchemaOf(node: NumberNode): JsonSchema {
   });
 }
 
+/** The formats JSON Schema defines otherwise than zod does, so a document that names them would be stricter. */
+const unwrittenFormats: ReadonlySet<string> = new Set(['time', 'duration', 'email']);
+
 /**
- * A string's `format`, by JSON Schema's name where its values are zod's. Any other format keeps its
- * name, an annotation in 2020-12; a `time` has none, since JSON Schema's requires an offset.
+ * A string's `format`: `date-time` where its values are zod's, none for a format JSON Schema defines
+ * otherwise, else its own name, an annotation in 2020-12.
  */
 function formatOf({ format, formatOptions }: StringNode): string | undefined {
-  if (format === undefined || format === 'time') {
+  if (format === undefined || unwrittenFormats.has(format)) {
     return undefined;
   }
   if (format === 'datetime') {
     return isDateTimeOfRfc3339(formatOptions) ? 'date-time' : format;
   }
-  return format === 'url' ? 'uri' : format;
+  return format;
 }
 
 /** Whether a datetime admits only instants JSON Schema's `date-time` admits: not local, not minute-precise. */

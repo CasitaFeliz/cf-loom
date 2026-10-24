@@ -2,15 +2,17 @@ import type { EndpointSnapshot, Field, ObjectNode } from '@cf-loom/contract/inte
 import { definedOf, jsonSchemaOf } from '../json-schema/index.ts';
 import type { OpenApiObject } from './objects.ts';
 
+/** What a Caller sends to an Endpoint. */
+type Input = EndpointSnapshot['input'];
+
 /** Where in the request a parameter travels. */
 type ParameterIn = 'path' | 'query' | 'header';
 
 /** The parameters of an Endpoint's path, in the order the path names them. */
-export function pathParametersOf({
-  name,
-  params,
-  input,
-}: EndpointSnapshot): readonly OpenApiObject[] {
+export function pathParametersOf(
+  { name, params }: Pick<EndpointSnapshot, 'name' | 'params'>,
+  input: Input,
+): readonly OpenApiObject[] {
   const fields = new Map(Object.entries(input.params?.fields ?? {}));
   return params.map((param) => {
     const field = fields.get(param);
@@ -21,8 +23,8 @@ export function pathParametersOf({
   });
 }
 
-/** The query and header parameters of an Endpoint, its Guards' demands included. */
-export function demandedParametersOf({ input }: EndpointSnapshot): readonly OpenApiObject[] {
+/** The query and header parameters of an Input, its Guards' demands included. */
+export function demandedParametersOf(input: Input): readonly OpenApiObject[] {
   return [...parametersOf('query', input.query), ...parametersOf('header', input.headers)];
 }
 

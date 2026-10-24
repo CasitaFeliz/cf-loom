@@ -179,6 +179,7 @@ export {
   isTextValue,
   jsonBytesOf,
   jsonContentType,
+  jsonMediaType,
   jsonOfBytes,
   malformedBodyIssueOf,
   matchOf,

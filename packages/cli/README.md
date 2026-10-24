@@ -46,7 +46,7 @@ Exit status: 0, done; 1, the check failed (something Not allowed, or a root, or 
 
 ## What the commands print and write
 
-Each command prints one line per thing it did or found, never a stack trace:
+Each command prints one line per thing it did or found, never a stack trace; `openapi` prints its document instead:
 
 | Command | Prints |
 | --- | --- |
@@ -244,18 +244,19 @@ With `--json`, stdout holds exactly one line: the plan, in the shape [The broker
 
 ### openapi
 
-`cf-loom openapi` prints one OpenAPI 3.1.1 document for the Service as JSON indented by two spaces; a failure prints nothing on stdout. `info` is the Service's name at version `0.0.0`, as `package` writes, and `tags` are its Groups in code point order. The document names no `servers`, `security` or `securitySchemes`, which belong to your organization. It describes what `serve` answers, so every Endpoint is written, whatever its Visibility, and your organization filters them (`jq` on `x-cf-loom-visibility`). A body is keyed by `application/json; charset=utf-8`, the content type `serve` sends.
+`cf-loom openapi` prints one OpenAPI 3.1.1 document for the Service as JSON indented by two spaces; a failure prints nothing on stdout. `info` is the Service's name at version `0.0.0`, as `package` writes, and `tags` are its Groups in code point order. The document names no `servers`, which belong to your organization, and the only security schemes it names are those of the `authorization` header (see below). It describes what `serve` answers, so every Endpoint is written, whatever its Visibility, and your organization filters them (`jq` on `x-cf-loom-visibility`). A body is keyed by `application/json`.
 
-A path is the Endpoint's, each param written in braces (`GET /orders/{}` with `["orderId"]` is `/orders/{orderId}`); the paths are in code point order, and the Endpoints of one path share a path item, each under its method in lower case. OpenAPI allows one template per path, so two Endpoints that name a param of one path differently fail (see the exit 3 lines above). An operation holds:
+A path is the Endpoint's, each param written in braces (`GET /orders/{}` with `["orderId"]` is `/orders/{orderId}`); the paths are in code point order, and the Endpoints of one path share a path item, each under its method in lower case. OpenAPI allows one template per path, so two Endpoints that name a param of one path differently fail (see the exit 3 lines above). An OpenAPI operation holds:
 
 | Field | From the Endpoint |
 | --- | --- |
 | `operationId`, `tags`, `description` | its name, its Group in a list, its description (left out when empty) |
 | `deprecated: true` | a Deprecated or Retired Endpoint |
 | `x-cf-loom-visibility`, `x-cf-loom-guards` | its Visibility, and its Guards as `[{ "guard": "apiKey", "qualifier": null }]`, as the Snapshot lists them |
-| `parameters` | the path params in the path's order (`in: path`, required), then each query field, then each header field, Guards' demands included, names as the Snapshot stores them; `required` as declared, a list a query param of an `array` schema, and the schema's `description` also on the parameter |
+| `parameters` | the path params in the path's order (`in: path`, required), then each query field, then each header field, Guards' demands included but the `authorization` header, names as the Snapshot stores them; `required` as declared, a list query param has an `array` schema, and the schema's `description` is also on the parameter. OpenAPI tools ignore a header parameter named `accept`, which is written all the same |
 | `requestBody` | the Input body, required, as JSON; none when it has none |
 | `responses` | by status, below |
+| `security` | the `authorization` header's schemes, below; none without that header |
 
 The responses are one per status, in status order; when several answer one status they are joined, their descriptions with `; ` and their schemas as `oneOf`. A Rejection answers as a body of `{ "$ref": "#/components/schemas/<CODE>" }`, described `<CODE>: <message>`:
 
@@ -266,6 +267,8 @@ The responses are one per status, in status order; when several answer one statu
 | 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one |
 | 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` |
 
-A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input. A `HEAD` operation has no body in any response, since the host drops them.
+A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input. The OpenAPI operation of a `HEAD` Endpoint has no body in any response, since the host drops them.
 
-`components.schemas`, in code point order, holds: `RejectionEnvelope` and `FaultEnvelope`, as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md describes them; one component per code a live Endpoint answers, the `RejectionEnvelope` narrowed to its code as a `const`, any `message` text, and the body it declares (`false`, with no `body` key, when it declares none); and each recursive def a written schema reaches, as `<Id>Def` (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md).
+The `authorization` header is no header parameter, since OpenAPI tools ignore one: it is a security scheme. Each Guard of an Endpoint that is not Retired that demands an `authorization` header is the scheme `components.securitySchemes.<Guard name>`, `{ "type": "apiKey", "in": "header", "name": "authorization" }`; an `authorization` header that no Guard demands, so the Endpoint's own, is the scheme `authorization`. The OpenAPI operation's `security` is one requirement naming every such scheme in code point order, followed by `{}` as an alternative when the header is optional. A document with no such header has no `securitySchemes`.
+
+`components.schemas`, in code point order, holds: `RejectionEnvelope` and `FaultEnvelope`, as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md describes them; one component per code an Endpoint that is not Retired answers, the `RejectionEnvelope` narrowed to its code as a `const`, any `message` text, and the body it declares (`false`, with no `body` key, when it declares none); and each recursive def a written schema reaches, as `<Id>Def` (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md).

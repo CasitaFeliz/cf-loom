@@ -2,14 +2,17 @@ import {
   byCodePoint,
   type EndpointSnapshot,
   methodAndPathOf,
+  type PathSegment,
+  pathSegmentsOf,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 
-/** An Endpoint with its identity, its method and its path as an OpenAPI path template. */
+/** An Endpoint with its identity, its method, its OpenAPI path template and the shape of that path. */
 export type ListedEndpoint = {
   readonly identity: string;
   readonly method: string;
   readonly path: string;
+  readonly shape: string;
   readonly endpoint: EndpointSnapshot;
 };
 
@@ -24,28 +27,31 @@ export function listedEndpointsOf(
 
 function listedOf(identity: string, endpoint: EndpointSnapshot): ListedEndpoint {
   const { method, path } = methodAndPathOf(identity, endpoint.params);
-  return { identity, method, path: templateOf(path), endpoint };
+  const segments = pathSegmentsOf(path);
+  return {
+    identity,
+    method,
+    path: pathTextOf(segments, (name) => `{${name}}`),
+    shape: pathTextOf(segments, () => '{}'),
+    endpoint,
+  };
 }
 
-/** A path that writes a param as `:name`, written as OpenAPI does: `{name}`. */
-function templateOf(path: string): string {
-  const segments = path.split('/').map((segment) => {
-    return segment.startsWith(':') ? `{${segment.slice(1)}}` : segment;
-  });
-  return segments.join('/');
+/** A path's text with each param written as the function says. */
+function pathTextOf(segments: readonly PathSegment[], param: (name: string) => string): string {
+  const texts = segments.map((segment) =>
+    segment.kind === 'param' ? param(segment.name) : segment.text,
+  );
+  return `/${texts.join('/')}`;
 }
 
-/**
- * The line saying which two Endpoints name one position of one path differently, which OpenAPI
- * cannot say: it allows one template for the path, whatever the method; none when none do.
- */
+/** The line naming two Endpoints on one path that name a param differently, which OpenAPI cannot say. */
 export function pathConflictLineOf(listed: readonly ListedEndpoint[]): string | undefined {
   const firstByShape = new Map<string, ListedEndpoint>();
   for (const next of listed) {
-    const shape = next.identity.slice(next.identity.indexOf(' ') + 1);
-    const first = firstByShape.get(shape);
+    const first = firstByShape.get(next.shape);
     if (first === undefined) {
-      firstByShape.set(shape, next);
+      firstByShape.set(next.shape, next);
       continue;
     }
     const position = first.endpoint.params.findIndex(

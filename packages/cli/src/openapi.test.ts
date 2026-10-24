@@ -114,7 +114,7 @@ function valueAt(root: unknown, ...steps: readonly string[]): unknown {
 }
 
 /** The media type every body of the document is keyed by. */
-const mediaType = 'application/json; charset=utf-8';
+const mediaType = 'application/json';
 
 const defsPrefix = '#/components/schemas/';
 
@@ -238,6 +238,8 @@ const orders = [
   '});',
   "const duplicateOrder = defineRejection({ code: 'DUPLICATE_ORDER', status: 409, message: 'The order exists' });",
   "const orderClosed = defineRejection({ code: 'ORDER_CLOSED', status: 422, message: 'The order is closed' });",
+  "const refusal = z.object({ get cause() { return refusal.optional(); } }).meta({ id: 'refusal' });",
+  "const orderRefused = defineRejection({ code: 'ORDER_REFUSED', status: 422, message: 'The order is refused', body: refusal });",
   'export const apiKey = defineGuard({',
   "  name: 'apiKey',",
   "  description: 'An API key per Caller',",
@@ -246,6 +248,13 @@ const orders = [
   '  context: z.object({ callerId: z.string() }),',
   '  rejections: [unauthenticated],',
   '});',
+  ...['bearer', 'optionalBearer', 'staleBearer'].flatMap((name) => [
+    `export const ${name} = defineGuard({`,
+    `  name: '${name}',`,
+    "  description: 'A bearer token',",
+    `  demands: { headers: z.object({ authorization: z.string()${name === 'optionalBearer' ? '.optional()' : ''} }) },`,
+    '});',
+  ]),
   'export const createOrder = defineEndpoint({',
   "  name: 'createOrder',",
   "  method: 'POST',",
@@ -266,7 +275,7 @@ const orders = [
   '  input: {',
   '    params: z.object({ orderId: z.uuid() }),',
   "    query: z.object({ expand: z.array(z.string()).optional(), page: z.int().optional().describe('The page') }),",
-  "    headers: z.object({ 'x-trace-id': z.string().optional() }),",
+  "    headers: z.object({ accept: z.string().optional(), 'x-trace-id': z.string().optional() }),",
   '  },',
   '  success: {',
   '    status: 200,',
@@ -281,11 +290,13 @@ const orders = [
   "  path: '/orders/:orderId/items/:itemId',",
   "  visibility: 'public',",
   "  description: 'One item of an order',",
+  '  guards: [bearer],',
   '  input: {',
   '    params: z.object({ orderId: z.uuid(), itemId: z.string() }),',
   '    query: z.object({ lang: z.string() }),',
   '  },',
   '  success: { status: 200, body: z.object({ itemId: z.string() }) },',
+  '  rejections: [orderRefused],',
   '});',
   'export const deleteOrder = defineEndpoint({',
   "  name: 'deleteOrder',",
@@ -306,7 +317,7 @@ const orders = [
   "  visibility: 'public',",
   "  description: 'Locks an order',",
   "  lifecycle: 'retired',",
-  "  guards: [{ guard: apiKey, qualifier: { scope: 'orders:write' } }],",
+  "  guards: [{ guard: apiKey, qualifier: { scope: 'orders:write' } }, staleBearer],",
   '  input: {',
   '    params: z.object({ orderId: z.uuid() }),',
   '    query: z.object({ force: z.boolean().optional() }),',
@@ -335,7 +346,11 @@ const shapes = [
   "  root: tree.nullable().describe('The root'),",
   "  choice: z.enum(['a', 'b']).nullable(),",
   "  fixed: z.literal('x').nullable(),",
+  '  meaning: z.literal(42),',
   '  pair: z.tuple([z.string(), z.number()]),',
+  '  span: z.iso.duration(),',
+  '  day: z.iso.date(),',
+  '  v4: z.ipv4(),',
   '});',
   'export const echo = defineEndpoint({',
   "  name: 'echo',",
@@ -343,6 +358,7 @@ const shapes = [
   "  path: '/echo',",
   "  visibility: 'public',",
   "  description: 'Answers what it is sent',",
+  '  guards: [optionalBearer, bearer],',
   '  input: { body: everythingIn },',
   '  success: { status: 200, body: everything },',
   '});',
@@ -352,7 +368,7 @@ const shapes = [
   "  path: '/extra',",
   "  visibility: 'public',",
   "  description: 'Takes the extras',",
-  '  input: { body: extras },',
+  '  input: { body: extras, headers: z.object({ authorization: z.string() }) },',
   '  success: { status: 200, body: extras },',
   '  rejections: [tooBig],',
   '});',
@@ -362,6 +378,7 @@ const shapes = [
   "  path: '/proto',",
   "  visibility: 'public',",
   "  description: '',",
+  '  guards: [optionalBearer],',
   '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
   '  success: { status: 204 },',
   '});',
@@ -494,9 +511,9 @@ describe('cf-loom openapi', () => {
   test('a Service that declares no Endpoint has a document with no path', () => {
     const project = aGeneratedProject(aServiceWithoutEndpoints);
 
-    const empty = cfLoom(project, 'openapi');
+    const empty = JSON.parse(cfLoom(project, 'openapi').stdout);
 
-    expect(JSON.parse(empty.stdout)).toMatchObject({ paths: {}, tags: [] });
+    expect([valueAt(empty, 'paths'), valueAt(empty, 'tags')]).toEqual([{}, []]);
   });
 });
 
@@ -528,18 +545,27 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     ]);
   });
 
-  test('a url is the format uri', () => {
-    expect(extra('site')).toEqual({ type: 'string', format: 'uri' });
+  test('a url keeps the name url, which JSON Schema’s uri would admit more than zod’s', () => {
+    expect(extra('site')).toEqual({ type: 'string', format: 'url' });
   });
 
   test('a time writes no format, since JSON Schema’s time requires an offset', () => {
     expect(extra('clock')).toEqual({ type: 'string' });
   });
 
+  test('a duration writes no format, since JSON Schema’s duration is not zod’s', () => {
+    expect(extra('span')).toEqual({ type: 'string' });
+  });
+
+  test('an email writes no format, since JSON Schema’s email is not zod’s', () => {
+    expect(echoed('email')).toEqual({ type: 'string' });
+  });
+
   test('a format JSON Schema names the same keeps its name', () => {
-    expect([echoed('email'), echoed('id')]).toEqual([
-      { type: 'string', format: 'email' },
+    expect([echoed('id'), extra('day'), extra('v4')]).toEqual([
       { type: 'string', format: 'uuid' },
+      { type: 'string', format: 'date' },
+      { type: 'string', format: 'ipv4' },
     ]);
   });
 
@@ -565,16 +591,19 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     expect(echoed('flag')).toEqual({ type: 'boolean' });
   });
 
-  test('a literal is a const', () => {
-    expect(echoed('kind')).toEqual({ const: 'order' });
+  test('a literal is a const of the type of its value', () => {
+    expect([echoed('kind'), extra('meaning')]).toEqual([
+      { type: 'string', const: 'order' },
+      { type: 'number', const: 42 },
+    ]);
   });
 
-  test('a literal of several values is an enum of them, each with its JSON type', () => {
-    expect(echoed('mixed')).toEqual({ enum: [1, 2, true] });
+  test('a literal of several values is an enum of them, typed by each value’s JSON type', () => {
+    expect(echoed('mixed')).toEqual({ type: ['number', 'boolean'], enum: [1, 2, true] });
   });
 
-  test('a closed enum is an enum', () => {
-    expect(echoed('level')).toEqual({ enum: ['high', 'low'] });
+  test('a closed enum is an enum of the type of its values', () => {
+    expect(echoed('level')).toEqual({ type: 'string', enum: ['high', 'low'] });
   });
 
   test('an Open Enum is anyOf the enum and a string', () => {
@@ -583,18 +612,16 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     });
   });
 
-  test('an object lists its properties and its required fields, and admits other keys', () => {
-    const payment = echoed('payment');
+  test('an object lists its properties', () => {
+    expect(keysOf(valueAt(echoed('payment'), 'properties'))).toEqual(['iban', 'last4', 'type']);
+  });
 
-    expect(payment).toEqual({
-      type: 'object',
-      properties: {
-        type: { anyOf: [{ enum: ['card', 'transfer'] }, { type: 'string' }] },
-        last4: { type: 'string' },
-        iban: { type: 'string', format: 'iban' },
-      },
-      required: ['type'],
-    });
+  test('an object lists its required fields', () => {
+    expect(valueAt(echoed('payment'), 'required')).toEqual(['type']);
+  });
+
+  test('an object admits other keys', () => {
+    expect(echoed('payment')).not.toHaveProperty('additionalProperties');
   });
 
   test('an object with no required field has no required keyword', () => {
@@ -657,7 +684,20 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('an intersection that is not of open objects is allOf its items', () => {
-    expect(valueAt(echoed('both'), 'allOf')).toHaveLength(2);
+    expect(echoed('both')).toEqual({
+      allOf: [
+        {
+          type: 'object',
+          properties: { a: { type: 'string' } },
+          required: ['a'],
+        },
+        {
+          type: 'object',
+          propertyNames: { type: 'string' },
+          additionalProperties: { type: 'string' },
+        },
+      ],
+    });
   });
 
   test('a discriminated union is oneOf its variants, each variant’s field a const', () => {
@@ -665,12 +705,12 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
       oneOf: [
         {
           type: 'object',
-          properties: { kind: { const: 'circle' }, r: { type: 'number' } },
+          properties: { kind: { type: 'string', const: 'circle' }, r: { type: 'number' } },
           required: ['kind', 'r'],
         },
         {
           type: 'object',
-          properties: { kind: { const: 'square' }, side: { type: 'number' } },
+          properties: { kind: { type: 'string', const: 'square' }, side: { type: 'number' } },
           required: ['kind', 'side'],
         },
       ],
@@ -692,10 +732,10 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     ]);
   });
 
-  test('a nullable node with no type is anyOf it and null', () => {
+  test('a nullable literal or enum is anyOf it and null, since null would fail its const or enum', () => {
     expect([extra('choice'), extra('fixed')]).toEqual([
-      { anyOf: [{ enum: ['a', 'b'] }, { type: 'null' }] },
-      { anyOf: [{ const: 'x' }, { type: 'null' }] },
+      { anyOf: [{ type: 'string', enum: ['a', 'b'] }, { type: 'null' }] },
+      { anyOf: [{ type: 'string', const: 'x' }, { type: 'null' }] },
     ]);
   });
 
@@ -761,6 +801,7 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
       'BoughDef',
       'ForestDef',
       'LeafDef',
+      'RefusalDef',
       'TreeNodeDef',
       'TwigDef',
       'TwinDef',
@@ -903,10 +944,21 @@ describe('cf-loom openapi: the operations', () => {
   test('a header, a Guard’s demand included, is a header parameter named in lower case', () => {
     const parameters = valueAt(operationOf('/orders/{orderId}', 'get'), 'parameters');
 
-    expect([valueAt(parameters, '3'), valueAt(parameters, '4')]).toEqual([
+    expect([valueAt(parameters, '4'), valueAt(parameters, '5')]).toEqual([
       { name: 'x-api-key', in: 'header', required: false, schema: { type: 'string' } },
       { name: 'x-trace-id', in: 'header', required: false, schema: { type: 'string' } },
     ]);
+  });
+
+  test('an accept header stays a header parameter', () => {
+    const parameters = valueAt(operationOf('/orders/{orderId}', 'get'), 'parameters');
+
+    expect(valueAt(parameters, '3')).toEqual({
+      name: 'accept',
+      in: 'header',
+      required: false,
+      schema: { type: 'string' },
+    });
   });
 
   test('an Input body is a required application/json request body', () => {
@@ -970,16 +1022,22 @@ describe('cf-loom openapi: the responses', () => {
     expect(responseBodyOf('/orders', 'post', '409')).toEqual({
       oneOf: [refTo('DUPLICATE_ORDER'), refTo('ORDER_LOCKED')],
     });
+  });
+
+  test('two Rejections of one status are described by both, joined', () => {
     expect(valueAt(responseOf('/orders', 'post', '409'), 'description')).toBe(
       'DUPLICATE_ORDER: The order exists; ORDER_LOCKED: The order can no longer be changed',
     );
   });
 
   test('every operation answers the invalid-input Rejection', () => {
-    expect([
-      responseBodyOf('/health', 'get', '400'),
-      valueAt(responseOf('/health', 'get', '400'), 'description'),
-    ]).toEqual([refTo('INVALID_INPUT'), 'INVALID_INPUT: Invalid input']);
+    expect(responseBodyOf('/health', 'get', '400')).toEqual(refTo('INVALID_INPUT'));
+  });
+
+  test('the invalid-input Rejection is described by its code and message', () => {
+    expect(valueAt(responseOf('/health', 'get', '400'), 'description')).toBe(
+      'INVALID_INPUT: Invalid input',
+    );
   });
 
   test('every operation answers the not-implemented Rejection', () => {
@@ -999,28 +1057,32 @@ describe('cf-loom openapi: the responses', () => {
     expect(valueAt(issues, 'properties', 'issues', 'type')).toBe('array');
   });
 
-  test('every operation answers the Fault Envelope under 500, for a Fault that is not retryable', () => {
-    expect([
-      responseBodyOf('/health', 'get', '500'),
-      valueAt(responseOf('/health', 'get', '500'), 'description'),
-    ]).toEqual([refTo('FaultEnvelope'), 'A Fault that is not retryable, or INVALID_OUTCOME']);
+  test('every operation answers the Fault Envelope under 500', () => {
+    expect(responseBodyOf('/health', 'get', '500')).toEqual(refTo('FaultEnvelope'));
   });
 
-  test('every operation answers the Fault Envelope under 503, for a retryable Fault', () => {
-    expect([
-      responseBodyOf('/health', 'get', '503'),
-      valueAt(responseOf('/health', 'get', '503'), 'description'),
-    ]).toEqual([refTo('FaultEnvelope'), 'A retryable Fault']);
+  test('the 500 response is described as a Fault that is not retryable', () => {
+    expect(valueAt(responseOf('/health', 'get', '500'), 'description')).toBe(
+      'A Fault that is not retryable, or INVALID_OUTCOME',
+    );
   });
 
-  test('an operation with an Input body answers BODY_TOO_LARGE under 413', () => {
-    expect([
-      responseBodyOf('/orders', 'post', '413'),
-      valueAt(responseOf('/orders', 'post', '413'), 'description'),
-    ]).toEqual([
-      refTo('FaultEnvelope'),
+  test('every operation answers the Fault Envelope under 503', () => {
+    expect(responseBodyOf('/health', 'get', '503')).toEqual(refTo('FaultEnvelope'));
+  });
+
+  test('the 503 response is described as a retryable Fault', () => {
+    expect(valueAt(responseOf('/health', 'get', '503'), 'description')).toBe('A retryable Fault');
+  });
+
+  test('an operation with an Input body answers the Fault Envelope under 413', () => {
+    expect(responseBodyOf('/orders', 'post', '413')).toEqual(refTo('FaultEnvelope'));
+  });
+
+  test('the 413 response is described as BODY_TOO_LARGE', () => {
+    expect(valueAt(responseOf('/orders', 'post', '413'), 'description')).toBe(
       'BODY_TOO_LARGE: The body is too large, when serve is given maxBodyBytes',
-    ]);
+    );
   });
 
   test('an operation with no Input body does not answer 413', () => {
@@ -1130,6 +1192,13 @@ describe('cf-loom openapi: the components', () => {
     });
   });
 
+  test('a def only a Rejection’s body reaches is a component', () => {
+    const rejection = valueAt(componentOf('ORDER_REFUSED'), 'properties', 'rejection');
+
+    expect(valueAt(rejection, 'properties', 'body')).toEqual(refTo('RefusalDef'));
+    expect(valueAt(componentOf('RefusalDef'), 'properties', 'cause')).toEqual(refTo('RefusalDef'));
+  });
+
   test('each code a written Endpoint answers is a component', () => {
     const codes = keysOf(valueAt(document, 'components', 'schemas')).filter((name) =>
       /^[A-Z_]+$/.test(name),
@@ -1140,6 +1209,7 @@ describe('cf-loom openapi: the components', () => {
       'INVALID_INPUT',
       'NOT_IMPLEMENTED',
       'ORDER_LOCKED',
+      'ORDER_REFUSED',
       'PAYLOAD_TOO_BIG',
       'UNAUTHENTICATED',
     ]);
@@ -1160,11 +1230,12 @@ describe('cf-loom openapi: the components', () => {
 });
 
 describe('cf-loom openapi: lifecycle', () => {
-  test('a Deprecated Endpoint is deprecated, and an Active one is not marked', () => {
-    expect([
-      valueAt(operationOf('/orders/{orderId}', 'delete'), 'deprecated'),
-      operationOf('/orders/{orderId}', 'get'),
-    ]).toEqual([true, expect.not.objectContaining({ deprecated: expect.anything() })]);
+  test('a Deprecated Endpoint is deprecated', () => {
+    expect(valueAt(operationOf('/orders/{orderId}', 'delete'), 'deprecated')).toBe(true);
+  });
+
+  test('an Active Endpoint is not marked deprecated', () => {
+    expect(operationOf('/orders/{orderId}', 'get')).not.toHaveProperty('deprecated');
   });
 
   test('each response of a Deprecated Endpoint carries the Deprecation header of its deprecatedAt', () => {
@@ -1192,18 +1263,22 @@ describe('cf-loom openapi: lifecycle', () => {
     expect(valueAt(operationOf('/orders/{orderId}', 'put'), 'deprecated')).toBe(true);
   });
 
-  test('a Retired Endpoint answers only 410, with the Fault Envelope', () => {
-    const responses = valueAt(operationOf('/orders/{orderId}', 'put'), 'responses');
-
-    expect(keysOf(responses)).toEqual(['410']);
-    expect(responseBodyOf('/orders/{orderId}', 'put', '410')).toEqual(refTo('FaultEnvelope'));
-    expect(valueAt(responses, '410', 'description')).toBe('RETIRED: The Endpoint is retired');
+  test('a Retired Endpoint answers only 410', () => {
+    expect(keysOf(valueAt(operationOf('/orders/{orderId}', 'put'), 'responses'))).toEqual(['410']);
   });
 
-  test('a Retired Endpoint keeps its path parameters, and has no query, header or body', () => {
-    const operation = operationOf('/orders/{orderId}', 'put');
+  test('a Retired Endpoint answers 410 with the Fault Envelope', () => {
+    expect(responseBodyOf('/orders/{orderId}', 'put', '410')).toEqual(refTo('FaultEnvelope'));
+  });
 
-    expect(valueAt(operation, 'parameters')).toEqual([
+  test('a Retired Endpoint’s 410 is described as RETIRED', () => {
+    expect(valueAt(responseOf('/orders/{orderId}', 'put', '410'), 'description')).toBe(
+      'RETIRED: The Endpoint is retired',
+    );
+  });
+
+  test('a Retired Endpoint keeps its path parameters and no query or header parameter', () => {
+    expect(valueAt(operationOf('/orders/{orderId}', 'put'), 'parameters')).toEqual([
       {
         name: 'orderId',
         in: 'path',
@@ -1211,17 +1286,102 @@ describe('cf-loom openapi: lifecycle', () => {
         schema: { type: 'string', format: 'uuid' },
       },
     ]);
-    expect(operation).not.toHaveProperty('requestBody');
   });
 
-  test('a Retired Endpoint keeps its Visibility and Guards, and sets no Deprecation header', () => {
-    const operation = operationOf('/orders/{orderId}', 'put');
+  test('a Retired Endpoint has no request body', () => {
+    expect(operationOf('/orders/{orderId}', 'put')).not.toHaveProperty('requestBody');
+  });
 
-    expect(valueAt(operation, 'x-cf-loom-visibility')).toBe('public');
-    expect(valueAt(operation, 'x-cf-loom-guards')).toEqual([
+  test('a Retired Endpoint keeps its Visibility', () => {
+    expect(valueAt(operationOf('/orders/{orderId}', 'put'), 'x-cf-loom-visibility')).toBe('public');
+  });
+
+  test('a Retired Endpoint keeps its Guards', () => {
+    expect(valueAt(operationOf('/orders/{orderId}', 'put'), 'x-cf-loom-guards')).toEqual([
       { guard: 'apiKey', qualifier: { scope: 'orders:write' } },
+      { guard: 'staleBearer', qualifier: null },
     ]);
-    expect(JSON.stringify(operation)).not.toContain('deprecation');
+  });
+
+  test('a Retired Endpoint sets no Deprecation header', () => {
+    expect(JSON.stringify(operationOf('/orders/{orderId}', 'put'))).not.toContain('deprecation');
+  });
+});
+
+describe('cf-loom openapi: the authorization header', () => {
+  const scheme = { type: 'apiKey', in: 'header', name: 'authorization' };
+
+  test('a Guard that demands authorization is a security scheme named after it', () => {
+    expect(valueAt(document, 'components', 'securitySchemes', 'bearer')).toEqual(scheme);
+  });
+
+  test('an Endpoint attaching that Guard requires the scheme', () => {
+    expect(valueAt(operationOf('/orders/{orderId}/items/{itemId}', 'get'), 'security')).toEqual([
+      { bearer: [] },
+    ]);
+  });
+
+  test('an authorization demand is no header parameter', () => {
+    const parameters = valueAt(
+      operationOf('/orders/{orderId}/items/{itemId}', 'get'),
+      'parameters',
+    );
+
+    const names = (parameters as readonly unknown[]).map((parameter) => valueAt(parameter, 'name'));
+
+    expect(names).toEqual(['orderId', 'itemId', 'lang']);
+  });
+
+  test('an optional authorization header adds the empty requirement as an alternative', () => {
+    expect(valueAt(operationOf('/proto', 'post'), 'security')).toEqual([
+      { optionalBearer: [] },
+      {},
+    ]);
+  });
+
+  test('an Endpoint’s own authorization header is the scheme named authorization', () => {
+    expect([
+      valueAt(document, 'components', 'securitySchemes', 'authorization'),
+      valueAt(operationOf('/extra', 'post'), 'security'),
+    ]).toEqual([scheme, [{ authorization: [] }]]);
+  });
+
+  test('an own authorization header is no header parameter either', () => {
+    expect(operationOf('/extra', 'post')).not.toHaveProperty('parameters');
+  });
+
+  test('several Guards that demand authorization are one requirement, its schemes in code point order', () => {
+    const requirement = valueAt(operationOf('/echo', 'post'), 'security', '0');
+
+    expect(keysOf(requirement)).toEqual(['bearer', 'optionalBearer']);
+  });
+
+  test('several Guards that demand authorization require it when one does', () => {
+    expect(valueAt(operationOf('/echo', 'post'), 'security')).toHaveLength(1);
+  });
+
+  test('an Endpoint with no authorization header has no security', () => {
+    expect(operationOf('/health', 'get')).not.toHaveProperty('security');
+  });
+
+  test('a Retired Endpoint has no security', () => {
+    expect(operationOf('/orders/{orderId}', 'put')).not.toHaveProperty('security');
+  });
+
+  test('the security schemes are the Guards of Endpoints that are not Retired, in code point order', () => {
+    expect(keysOf(valueAt(document, 'components', 'securitySchemes'))).toEqual([
+      'authorization',
+      'bearer',
+      'optionalBearer',
+    ]);
+  });
+
+  test('a document with no authorization header has no securitySchemes', () => {
+    const project = aGeneratedProject(aServiceWithBodies(['body']));
+
+    const plain = JSON.parse(cfLoom(project, 'openapi').stdout);
+
+    expect(valueAt(plain, 'components')).not.toHaveProperty('securitySchemes');
   });
 });
 

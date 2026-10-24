@@ -1,22 +1,43 @@
 import type { EnumNode, ObjectNode, SchemaNode, TupleNode } from '@cf-loom/contract/internal';
-import { defTypeNameOf } from '../schema-code/index.ts';
 import { definedOf, type JsonSchema } from './keywords.ts';
-import { componentRefOf } from './refs.ts';
+import { componentRefOf, defComponentNameOf } from './refs.ts';
 import { numberSchemaOf, stringSchemaOf } from './scalars.ts';
 
 /** The JSON Schema of a Snapshot node, with its annotations; a recursive def is a `$ref` to its component. */
 export function jsonSchemaOf(node: SchemaNode): JsonSchema {
   const shape = shapeOf(node);
-  const nullable = node.nullable === true ? nullableOf(shape) : shape;
+  const nullable = node.nullable === true ? nullableOf(shape, node) : shape;
   return { ...nullable, ...definedOf({ description: node.description, examples: node.examples }) };
 }
 
-/** A schema that also admits `null`: in its `type` when it has one, else beside it in an `anyOf`. */
-function nullableOf(shape: JsonSchema): JsonSchema {
+/** A schema that also admits `null`: in its `type` where that alone constrains it, else beside it in an `anyOf`. */
+function nullableOf(shape: JsonSchema, node: SchemaNode): JsonSchema {
   const { type } = shape;
-  return typeof type === 'string'
+  return typeof type === 'string' && hasOnlyItsType(node)
     ? { ...shape, type: [type, 'null'] }
     : { anyOf: [shape, { type: 'null' }] };
+}
+
+/** Whether a node's keywords constrain only values of its own `type`, so `null` can join the type. */
+function hasOnlyItsType(node: SchemaNode): boolean {
+  switch (node.type) {
+    case 'string':
+    case 'number':
+    case 'boolean':
+    case 'object':
+    case 'record':
+    case 'array':
+    case 'tuple':
+      return true;
+    case 'literal':
+    case 'enum':
+    case 'union':
+    case 'tagged':
+    case 'allOf':
+    case 'json':
+    case 'ref':
+      return false;
+  }
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the JSON Schema of each node type
@@ -29,7 +50,7 @@ function shapeOf(node: SchemaNode): JsonSchema {
     case 'boolean':
       return { type: 'boolean' };
     case 'literal':
-      return { const: node.value };
+      return { type: typeof node.value, const: node.value };
     case 'enum':
       return enumSchemaOf(node);
     case 'object':
@@ -55,12 +76,17 @@ function shapeOf(node: SchemaNode): JsonSchema {
     case 'json':
       return {};
     case 'ref':
-      return componentRefOf(defTypeNameOf(node.name, 'declared'));
+      return componentRefOf(defComponentNameOf(node.name));
   }
 }
 
+/** A closed enum is typed by its values' JSON types, so a parameter's text can be coerced to one. */
 function enumSchemaOf({ values, open }: EnumNode): JsonSchema {
-  return open ? { anyOf: [{ enum: values }, { type: 'string' }] } : { enum: values };
+  if (open) {
+    return { anyOf: [{ enum: values }, { type: 'string' }] };
+  }
+  const types = [...new Set(values.map((value) => typeof value))];
+  return { type: types.length === 1 ? types[0] : types, enum: values };
 }
 
 function objectSchemaOf({ fields, mode }: ObjectNode): JsonSchema {
