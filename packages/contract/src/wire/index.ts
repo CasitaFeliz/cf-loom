@@ -26,8 +26,13 @@ export {
   subjectOf,
   transportHeaderFitOf,
 } from './broker.ts';
-export { jsonContentType } from './content-type.ts';
-export { deprecatedAtOfHeader, deprecationHeader, withDeprecation } from './deprecation.ts';
+export { jsonContentType, jsonMediaType } from './content-type.ts';
+export {
+  deprecatedAtOfHeader,
+  deprecationHeader,
+  deprecationHeaderOf,
+  withDeprecation,
+} from './deprecation.ts';
 export type { Committed, RejectionEnvelope } from './envelopes.ts';
 export { committedValues, internalError, receivedEnvelopeOf, reservedFaults } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
@@ -43,6 +48,7 @@ export { matchedOf, matchOf } from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,
+  faultStatusOf,
   rejectionResponseOf,
   reservedResponseOf,
   successResponseOf,

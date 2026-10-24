@@ -6,6 +6,7 @@ import {
   committedValues,
   deprecatedAtOfHeader,
   faultResponseOf,
+  faultStatusOf,
   headerTextsOf,
   headerValuesOf,
   invalidInputBodyOf,
@@ -16,6 +17,7 @@ import {
   isSegmentText,
   jsonBytesOf,
   jsonContentType,
+  jsonMediaType,
   jsonOfBytes,
   malformedBodyIssueOf,
   parseValue,
@@ -356,14 +358,23 @@ describe('the reserved codes and statuses', () => {
     expect(statuses).toEqual([413, 503, 500]);
   });
 
+  test('a Fault the Service produced has the status 503 when it is retryable and 500 otherwise', () => {
+    const statuses = [faultStatusOf({ retryable: true }), faultStatusOf({ retryable: false })];
+
+    expect(statuses).toEqual([503, 500]);
+  });
+
   test('committed is no, yes or unknown', () => {
     expect(committedValues).toEqual(['no', 'yes', 'unknown']);
   });
 });
 
 describe('the content type', () => {
-  test('bodies travel as UTF-8 JSON', () => {
-    expect(jsonContentType).toBe('application/json; charset=utf-8');
+  test('bodies are JSON, sent as UTF-8', () => {
+    expect([jsonMediaType, jsonContentType]).toEqual([
+      'application/json',
+      'application/json; charset=utf-8',
+    ]);
   });
 
   test('a request names JSON by its media type, whatever its parameters or case', async () => {

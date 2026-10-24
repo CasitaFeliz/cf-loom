@@ -17,6 +17,7 @@ import { encodedValueOf, walkSchemas } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { everything } from '../test/everything-schema.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
@@ -46,102 +47,6 @@ function filesUnder(folder: string): readonly string[] {
 function lines(written: readonly string[]): string {
   return `${written.join('\n')}\n`;
 }
-
-/**
- * A schema of every node a Snapshot has, used as a Success body, and with records keyed by an enum
- * or literal, which only Input holds, as an Input body.
- */
-const everything = [
-  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
-  'const forest = z',
-  '  .object({',
-  '    inner: z.object({ a: z.string() }),',
-  "    status: openEnum(['a', \"it's\"]),",
-  "    pick: z.discriminatedUnion('the-type', [z.object({ 'the-type': z.literal('x') })]),",
-  '    note: z.string().nullable(),',
-  '    maybe: z.string().optional(),',
-  '    tuple: z.tuple([z.string()], z.number()),',
-  '    tree,',
-  '    get parent() {',
-  "      return forest.optional().describe('the parent');",
-  '    },',
-  '  })',
-  "  .meta({ id: 'forest' });",
-  'const leaf = z',
-  "  .object({ type: z.literal('leaf'), get parent() { return node.optional(); } })",
-  "  .meta({ id: 'leaf' });",
-  "const node = z.discriminatedUnion('type', [leaf, z.object({ type: z.literal('branch') })]);",
-  'const twig = z',
-  "  .object({ kind: z.literal('twig'), get up() { return stem.optional(); } })",
-  "  .meta({ id: 'twig' });",
-  "const stem = z.discriminatedUnion('kind', [twig, z.object({ kind: z.literal('stem') })]);",
-  'const bough = z',
-  '  .object({',
-  '    get list() {',
-  "      return z.array(z.lazy(() => bough).describe('In a list'));",
-  '    },',
-  '    get named() {',
-  "      return z.record(z.string(), z.lazy(() => bough).describe('By name'));",
-  '    },',
-  '  })',
-  "  .meta({ id: 'bough' });",
-  'const everything = z.object({',
-  '  plain: z.string().min(1).max(10).describe("It\'s a text"),',
-  '  email: z.email(),',
-  '  at: z.iso.datetime({ offset: true, precision: 3 }),',
-  '  site: z.url({ protocol: /^https$/ }),',
-  "  id: z.uuid({ version: 'v4' }),",
-  "  digest: z.hash('sha256'),",
-  "  digest2: z.hash('md5', { enc: 'base64' }),",
-  '  scores: z.record(z.string().min(2), z.number()),',
-  "  rooted: z.object({ tree: tree.optional().describe('The root') }).required(),",
-  '  forest,',
-  '  node,',
-  '  stem,',
-  '  color: z.hex(),',
-  '  pattern: z.string().regex(/^[a-z]+$/i),',
-  '  count: z.int().min(0).lt(100).multipleOf(5),',
-  '  ratio: z.number().gt(0).max(1),',
-  '  flag: z.boolean(),',
-  "  kind: z.literal('order'),",
-  "  level: z.enum(['low', 'high']),",
-  "  status: openEnum(['pending', 'paid']),",
-  '  mixed: z.literal([1, 2, true]),',
-  '  inner: z.object({ a: z.string() }),',
-  '  record: z.record(z.string(), z.number()),',
-  '  list: z.array(z.string()).min(1).max(3),',
-  '  tuple: z.tuple([z.string(), z.number()], z.boolean()),',
-  '  union: z.union([z.string(), z.number()]),',
-  '  payment: z.object({',
-  "    type: openEnum(['card', 'transfer']),",
-  '    last4: z.string().optional(),',
-  '    iban: z.iban().optional(),',
-  '  }),',
-  "  shape: z.discriminatedUnion('kind', [",
-  "    z.object({ kind: z.literal('circle'), r: z.number() }),",
-  "    z.object({ kind: z.literal('square'), side: z.number() }),",
-  '  ]),',
-  '  both: z.intersection(z.object({ a: z.string() }), z.record(z.string(), z.string())),',
-  '  data: z.json(),',
-  '  note: z.string().nullable(),',
-  "  optional: z.string().optional().meta({ examples: ['x'] }),",
-  '  tree,',
-  '  bough,',
-  '});',
-  'const twin = z',
-  '  .object({',
-  '    get kids() {',
-  "      return z.partialRecord(z.enum(['l', 'r']), z.lazy(() => twin).describe('A child'));",
-  '    },',
-  '  })',
-  "  .meta({ id: 'twin' });",
-  'const everythingIn = everything.extend({',
-  '  twin: twin.optional(),',
-  "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
-  "  partial: z.partialRecord(z.enum(['a', 'b']), z.number()),",
-  "  single: z.record(z.literal('a'), z.number()),",
-  '});',
-];
 
 /** An Endpoint with two params, a query, Success headers, a Guard listing another, and a Rejection body. */
 const richEndpoint = [

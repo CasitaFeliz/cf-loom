@@ -50,11 +50,11 @@ export function rejectionResponseOf(rejection: SentRejection): Response {
 /** The response of a Fault the Service produced: only its `committed`, `retryable` and `message` travel. */
 export function faultResponseOf({ committed, retryable, message }: SentFault): Response {
   const envelope = faultEnvelopeOf({ committed, retryable, message });
-  return jsonResponseOf(faultStatusOf(retryable), envelope);
+  return jsonResponseOf(faultStatusOf({ retryable }), envelope);
 }
 
 /** The status a Fault the Service produced travels with: 503 when retryable, else 500. */
-function faultStatusOf(retryable: boolean): number {
+export function faultStatusOf({ retryable }: Pick<SentFault, 'retryable'>): number {
   return retryable ? 503 : 500;
 }
 

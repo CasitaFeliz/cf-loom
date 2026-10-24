@@ -15,7 +15,7 @@ export const config = defineConfig({
 });
 ```
 
-`scope` is always required. `check` and `publish` read the registry through npm (see below); `generate`, `verify`, `package` and `broker-plan` run offline.
+`scope` is always required. `check` and `publish` read the registry through npm (see below); `generate`, `verify`, `package`, `broker-plan` and `openapi` run offline.
 
 cf-loom reads and publishes through the `npm` on your `PATH`, run in the project's directory with its environment, so the registry and the login are your npm configuration, exactly as for installing: `@org:registry=` or `registry=` and an auth token in an `.npmrc` (the project's, yours, or one `NPM_CONFIG_USERCONFIG` names) or in `npm_config_*` variables. cf-loom has no registry or login setting of its own. `publish` runs `npm publish <folder> --tag <tag> --ignore-scripts` there: `latest` for a version that is not a prerelease, and for a prerelease while the package lists no version that is not a prerelease, else `next`, so the package always has the `latest` dist-tag `npm view` needs to list its versions. No lifecycle script of yours runs, and npm's `tag` setting and a `publishConfig.tag` are overridden. The Baseline is the highest version `npm view` lists that is not a prerelease; its `cfLoom` and peer ranges come from `npm view`, and only its tarball is downloaded, with `npm pack`, to read `snapshot.json`; cf-loom requires the tarball to hash to a sha512 that `npm view` lists for the version. A package npm cannot find counts as never published only when `npm whoami` reports a user on the registry your scope uses; a login that cannot read the package also looks unpublished, so the printed line names the registry and the user. Any npm error, a package that lists no version or has no `latest` dist-tag (which `npm view` needs to list them), a package whose versions were all unpublished, a highest version without `cfLoom` or of another kind, a tarball without a sha512 integrity or that does not hash to it, a tarball with a tar entry that `npm pack` does not write, such as a link or a GNU long name, or with a path that is not printable ASCII (0x20 to 0x7E) or holds a `:` or a `\`, such as a file named with an accented letter (cf-loom reads `snapshot.json` out of the tarball by hand, as `npm pack` writes tarballs for printable-ASCII paths without `:` or `\`, and refuses anything else, since npm could unpack it differently), or a `snapshot.json` that cannot be decoded fails with exit 3. So does a package npm cannot find when the registry that serves your scope, `@org:registry=` or else `registry=`, holds a user and password in its URL, which npm will not print: put them in a `//host/:_authToken` or `//host/:_auth` line instead. A registry URL in a printed line never carries a user or password.
 
@@ -35,18 +35,18 @@ A Contract Package is named `<scope>/contract-<name>`, and a Definitions Package
 | `cf-loom add-dependency <service> <element>` | Adds an Element of an installed Contract Package to the Dependencies: an Endpoint by name, an Event as `<Name>@<n>` |
 | `cf-loom generate` | Writes `contract.snapshot.json`, stamping `deprecatedAt` on an Endpoint it first sees Deprecated (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md); for a Service it also regenerates `src/handlers.generated.ts` (its Handlers and each Deprecated Endpoint's `deprecatedAt`) and `src/readers.generated.ts`, and writes the stub of every missing Handler (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README), while an Application or a Definitions Package gets `contract.snapshot.json` only. It fails on an Endpoint or attached Guard that nothing exports under its name (no file under `src/contract/`, or its Definitions Package), on a Handler file that no declared Endpoint, Guard, Command's Message Version or Subscription names, on a Handler path that is no file and on a name `src/readers.generated.ts` cannot write (see the exit 3 lines below), and then writes nothing |
 | `cf-loom broker-plan [--prefix <p>] [--json]` | Prints the streams and durable consumers the Broker must hold for a Service, from the committed `contract.snapshot.json`, which must be what `generate` would write, as for `package`; it reads neither the registry nor the Broker (see [The broker plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#the-broker-plan) in the messaging README); `--json` prints it as one JSON line instead (see [broker-plan --json](#broker-plan---json)). An Application or a Definitions Package has none |
-| `cf-loom openapi` | Writes an OpenAPI 3.1 document of the Endpoints from the Snapshot (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
+| `cf-loom openapi` | Prints an OpenAPI 3.1 document of every Endpoint of a Service as JSON, from the committed `contract.snapshot.json`, which must be what `generate` would write, apart from `generator`, as for `package`; it reads neither the registry nor the Broker, and writes no file: redirect it, `cf-loom openapi > openapi.json`. See [openapi](#openapi) for what it writes of each Endpoint, and [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md for its schemas. An Application or a Definitions Package has none |
 | `cf-loom asyncapi` | Writes an AsyncAPI document of the Events from the Snapshot (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md) |
 | `cf-loom verify` | Fails if `contract.snapshot.json`, `src/handlers.generated.ts` or `src/readers.generated.ts` was edited or is out of date, if a Handler file the Handler map imports is missing or is no file, or if a Handler file names no declared Endpoint, Guard, Command's Message Version or Subscription. It also fails on a name `src/readers.generated.ts` cannot write (see the exit 3 lines below). It compares files only and imports no file under `src/contract/` beyond what the root imports, so it does not repeat `generate`'s export checks; it writes nothing |
 | `cf-loom package [--out <dir>]` | Writes the Contract Package of a Service or an Application to `<dir>`, `.cf-loom/contract-package/` next to `cf-loom.config.ts` by default (it creates `.cf-loom/`, which holds only output, so keep it out of version control), ready for `tsc -p <dir>` (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md, which also says how `publish` generates it). It is generated from the committed `contract.snapshot.json`, which must be what `generate` would write, apart from `generator`, as `verify` compares it (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). The folder must be missing, empty, or a previous output, which holds only what `package` writes (`package.json` with `cfLoom`, `snapshot.json`, `tsconfig.json`, `src/`), beside a build's `dist/` or an install's `node_modules/`, which are kept while the rest is replaced; anything else, a symbolic link included, is refused and left as it was; these rules apply to that folder alone, never to the rest of `.cf-loom/`. A Definitions Package has no Contract Package: `publish` publishes it from its own package.json and built files |
 | `cf-loom check [--json]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, as for `package`, against the Baseline, and prints every Change with its class; it exits 2 when a Change needs a Breaking Change Approval, which your review process enforces (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md). `--json` prints one JSON line instead of the lines on stdout (see [check --json](#check---json)) |
 | `cf-loom publish [--force] [--prerelease]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, against the Baseline, and fails on a Change that is Not allowed; it never waits on a Breaking Change Approval. It derives the version (see [Versioning](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#versioning) in COMPATIBILITY.md), merges the Baseline's history into the Snapshot, and publishes through your npm. A Contract Package is generated as `package` writes it, in a temporary folder under `node_modules/.cache/cf-loom` of the project, built with the `typescript` installed there (TypeScript 7, whose `bin.tsc` `publish` runs), and published. A Definitions Package must be built first: its files as `npm pack` lists them are published with `snapshot.json` and `cfLoom` written in, its `version` set and its `peerDependencies` replaced by carets on the installed `zod` and `@cf-loom/contract`, as for a Contract Package; a `workspace:`, `catalog:`, `file:` or `link:` range in its `dependencies` or `optionalDependencies` fails, since npm publishes it unchanged and no registry can install it. `--force` publishes a patch when nothing changed; `--prerelease` publishes `<version>-<n>`. Until cf-loom 1.0.0 the Snapshot format is not frozen, so publish only prereleases, a Definitions Package included. Two publishes that derive the same version cannot both succeed: rerun the one that failed, which reads the registry again. |
 
-Exit status: 0, done; 1, the check failed (something Not allowed, or a root, or a Snapshot, generated file or Handler file that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). Of what a command finds, 3 comes before 1, and 1 before 2; but a command stops at its first failure, so `check` with a stale Snapshot ends with 1 before it reads the registry. `publish` and `broker-plan` never exit 2.
+Exit status: 0, done; 1, the check failed (something Not allowed, or a root, or a Snapshot, generated file or Handler file that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). Of what a command finds, 3 comes before 1, and 1 before 2; but a command stops at its first failure, so `check` with a stale Snapshot ends with 1 before it reads the registry. `publish`, `broker-plan` and `openapi` never exit 2.
 
 ## What the commands print and write
 
-Each command prints one line per thing it did or found, never a stack trace:
+Each command prints one line per thing it did or found, never a stack trace; `openapi` prints its document instead:
 
 | Command | Prints |
 | --- | --- |
@@ -56,6 +56,7 @@ Each command prints one line per thing it did or found, never a stack trace:
 | `package` | `Wrote <dir>` |
 | `check` | `Checked against <package>@<version>`, then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is Not allowed or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it`, or `<package> has no Baseline: it has only prereleases, the highest <version>` |
 | `broker-plan` | `Stream <stream>: <subject> …`, each subject separated by a space, then `Durable consumer <durable> on <stream>: <subject>` for each durable consumer, each in code point order, or `<service> needs no stream and no durable consumer` |
+| `openapi` | the OpenAPI document as JSON indented by two spaces (see [openapi](#openapi)) |
 | `publish` | `Checked against <package>@<version>` and one line per Change, or `<package> has no Baseline: <reason>`, as `check` prints them; then `Published <package>@<version>`, or `Nothing to publish: the Snapshot and peer ranges are those of <package>@<version>; --force publishes anyway`; and on stderr, with the exit status the publish had, `node_modules/.cache/cf-loom/publish-<id> was left behind: <reason>: delete it` when it could not remove the folder it staged the package in |
 
 Every line on stdout or stderr, the `--json` document included, is written with each line break inside it (`\r`, `\n`, U+0085, U+2028 and U+2029) replaced by the visible text `\r`, `\n`, `\u0085`, `\u2028` and `\u2029`, so no reader splits a line there.
@@ -128,25 +129,25 @@ The kinds of a shape, the `<shape>` of a `schema` Difference:
 | `rest-removed` |  | [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data): remove a tuple's `rest` |
 | `unproven` | `node` (`tuple`, `allOf` or `param`) | [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): a change the tooling cannot prove compatible is Breaking, as under the plain-union rule of [Records, arrays, tuples, intersections, recursion, opaque data](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#records-arrays-tuples-intersections-recursion-opaque-data) |
 
-A failure is one line on stderr. These are every line `init`, `generate`, `verify`, `package`, `check`, `broker-plan` and `publish` print, by exit status.
+A failure is one line on stderr. These are every line `init`, `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi` and `publish` print, by exit status.
 
 Exit 1, the check failed:
 
 | Line | Command |
 | --- | --- |
-| `<location> <rule>: <message>`, `<location> not allowed: <construct> (use <instead>)`, one per rule the root breaks | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
+| `<location> <rule>: <message>`, `<location> not allowed: <construct> (use <instead>)`, one per rule the root breaks | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
 | `endpoints.<name> is exported by no file under src/contract/` (`guards.<name>` for a Guard) | `generate` |
 | `endpoints.<name> is not exported as <name>` (`guards.<name>` for a Guard) | `generate` |
 | `guards.<name> is not exported as <name> by <package>`, for a Guard of a Definitions Package | `generate` |
 | `<path> names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it` | `generate`, `verify` |
 | `<path> is no file: a Handler is a file` | `generate`, `verify` |
-| `contract.snapshot.json is missing or out of date: run cf-loom generate` | `package`, `check`, `broker-plan`, `publish` |
+| `contract.snapshot.json is missing or out of date: run cf-loom generate` | `package`, `check`, `broker-plan`, `openapi`, `publish` |
 | `<path> was edited or is out of date: run cf-loom generate` | `verify` |
 | `<path> is missing: run cf-loom generate` | `verify` |
 | `contract.snapshot.json was edited: it is no JSON (<reason>)` | `verify` |
 | `The check failed: <n> Change(s) not allowed` | `check`, `publish` |
 
-Exit 2, a Change needs a Breaking Change Approval, from `check` only: `publish` never exits 2.
+Exit 2, a Change needs a Breaking Change Approval, from `check` only: `publish`, `broker-plan` and `openapi` never exit 2.
 
 | Line | Command |
 | --- | --- |
@@ -157,12 +158,12 @@ Exit 3, a tooling error:
 | Line | Command |
 | --- | --- |
 | `package.json not found: cf-loom runs next to the package.json of the project`, `package.json is no JSON: …`, `package.json cannot be read: …`, `package.json names no package`, `package.json names no package npm accepts: <name>`, `package.json has no "type": "module": the config and the Contract's files are ES modules` | every command |
-| `cf-loom.config.ts not found: run cf-loom init`, `cf-loom.config.ts cannot be loaded: …`, `cf-loom.config.ts exports no config: export const config = defineConfig({ … })`, `cf-loom.config.ts threw while it was read: …`, `cf-loom.config.ts: scope is required, an npm scope such as '@org'` | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
-| `No root in src/contract/index.ts or src/definitions/index.ts: run cf-loom init`, `A project has one root: both <file> and <file> exist`, `<file> cannot be loaded: …`, `<file> exports none of contract, application, definitions`, `<file> exports one root, not <name> and <name>`, `<file> threw while it was read: …` | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
+| `cf-loom.config.ts not found: run cf-loom init`, `cf-loom.config.ts cannot be loaded: …`, `cf-loom.config.ts exports no config: export const config = defineConfig({ … })`, `cf-loom.config.ts threw while it was read: …`, `cf-loom.config.ts: scope is required, an npm scope such as '@org'` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
+| `No root in src/contract/index.ts or src/definitions/index.ts: run cf-loom init`, `A project has one root: both <file> and <file> exist`, `<file> cannot be loaded: …`, `<file> exports none of contract, application, definitions`, `<file> exports one root, not <name> and <name>`, `<file> threw while it was read: …` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
 | `<file> already exists`, `<folder> is no folder: init cannot write <file>`, `cf-loom.config.ts is no file`, `package.json names no scope to write cf-loom.config.ts with`, `init cannot write: …` | `init` |
-| `<package> is not installed: install it to list it`, `<package> has no version in its package.json`, `<package> cannot be loaded: …`, for a listed Definitions Package | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
-| `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
-| `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package`, `check`, `broker-plan`, `publish` |
+| `<package> is not installed: install it to list it`, `<package> has no version in its package.json`, `<package> cannot be loaded: …`, for a listed Definitions Package | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
+| `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
+| `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
 | `npm cannot be run: <reason>: cf-loom reads the registry through npm, which must be on PATH`, `<npm call> failed (<code>: <summary>)`, `<npm call> failed: <first line npm printed on stderr, or exit status <n>>`, `<npm call> printed no JSON: <line>`, `<npm call> printed more than 16 MiB`, `<npm call> did not finish within 10 minutes`, `<npm call> was stopped by <signal>`, where `<npm call>` is `npm view <package>`, `npm view <package>@<version>`, `npm pack <package>@<version>`, `npm publish <package>@<version>`, `npm pack --dry-run` or `npm config get <key>`, and `<summary>` is the first line of the summary npm printed, here and in the rows below | `check`, `publish` |
 | `<package> was unpublished: <summary>; its Baseline is gone, so nothing can be checked against it`, `<package> lists no version, or has no latest dist-tag, which npm view needs to list them`, `<package> lists <key>, which is no semantic version` | `check`, `publish` |
 | `<package> is not in <registry>, and npm has no login there it accepts (<reason>): a package your login cannot read looks unpublished`, `npm did not say which registry serves <scope>`, `npm config get <key> failed: npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL`, where `<reason>` is `<code>: <summary>`, as npm refused `npm whoami`, `npm whoami printed no user name`, or a failure of `npm whoami` worded as the `<npm call>` lines above say | `check`, `publish` |
@@ -182,14 +183,16 @@ Exit 3, a tooling error:
 | `<peer> has no version in its package.json: the package's peer range is taken from it` | `package`, `publish` |
 | `A Definitions Package has no Contract Package: it is published from its own source` | `package` |
 | `An Application has no broker plan: only a Service's Messages travel through the Broker`, `A Definitions Package has no broker plan: only a Service's Messages travel through the Broker` | `broker-plan` |
+| `An Application has no OpenAPI document: only a Service offers Endpoints`, `A Definitions Package has no OpenAPI document: only a Service offers Endpoints` | `openapi` |
+| `<identity> and <identity> name path param <n> <name> and <name>: an OpenAPI path names it once, so rename one`, for two Endpoints on one path that name one of its params differently (`DELETE /orders/{} and GET /orders/{} name path param 1 id and orderId: …`) | `openapi` |
 | `typescript is not installed: publish builds the Contract Package with its tsc`, `typescript has no version in its package.json: publish builds the Contract Package with its tsc`, `typescript has no tsc in its package.json bin` | `publish` |
 | `<tsc call> failed: <first line tsc printed on stdout, else on stderr, else exit status <n>>`, `<tsc call> cannot be run: <reason>`, `<tsc call> printed more than 16 MiB`, `<tsc call> did not finish within 10 minutes`, `<tsc call> was stopped by <signal>`, where `<tsc call>` is `tsc on the Contract Package of <package>@<version>` | `publish` |
 | `package.json names <name>, but a Definitions Package of scope <scope> publishes as <scope>/<name>` | `publish` |
 | `package.json lists <name> in <field> as <range>, which npm cannot install from the registry`, for a `workspace:`, `catalog:`, `file:` or `link:` range in a Definitions Package's `dependencies` or `optionalDependencies`, `<field>` being the one that lists it | `publish` |
 | `npm pack --dry-run listed no files` | `publish` |
 | `The codes <code> and <code> are one name in code: rename one of them` | `package`, `publish` |
-| `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package`, `publish` |
-| `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package`, `publish` |
+| `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package`, `openapi`, `publish` |
+| `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package`, `openapi`, `publish` |
 | `subscriptions.<name> is <name in code> in code, as <other> is: rename the Subscription`, where `<other>` is another Subscription, a Command's Message Version, an own Event's or Command's Reader, a def or an import of `src/readers.generated.ts` | `generate`, `verify` |
 | `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
 
@@ -207,7 +210,7 @@ Exit 3, a usage error, each followed on the same line by the usage:
 | `--prefix takes a prefix in kebab-case, such as staging` | `broker-plan` |
 | `--json takes no value`, `--force takes no value`, `--prerelease takes no value` | any command |
 | `Unknown kind: <kind>`, `init takes one kind` | `init` |
-| `generate takes no argument`, `verify takes no argument`, `package takes no argument`, `check takes no argument`, `broker-plan takes no argument`, `publish takes no argument` | `generate`, `verify`, `package`, `check`, `broker-plan`, `publish` |
+| `generate takes no argument`, `verify takes no argument`, `package takes no argument`, `check takes no argument`, `broker-plan takes no argument`, `openapi takes no argument`, `publish takes no argument` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `publish` |
 
 Every file `generate` regenerates starts with `// Generated by cf-loom generate. Do not edit.`, and every TypeScript file of a Contract Package with `// Generated by cf-loom package. Do not edit.`; stubs carry no such line, since they are the Service's to replace. A formatter must leave `contract.snapshot.json`, `src/handlers.generated.ts` and `src/readers.generated.ts` byte for byte as `generate` writes them, since `verify` compares them (and `package` the Snapshot) with what `generate` would write, and skip `.cf-loom/`, where `package` writes the Contract Package whole. What the Contract Package's package.json carries in `cfLoom`, and how `snapshotHash` is taken, is in [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) and [Canonical form](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#canonical-form) in SNAPSHOT.md.
 
@@ -238,3 +241,36 @@ type CheckJson =
 ### broker-plan --json
 
 With `--json`, stdout holds exactly one line: the plan, in the shape [The broker plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#the-broker-plan) in the messaging README shows, or, when `broker-plan` stops, `{ status: 1 | 3, errors: string[] }`, as for `check --json`; stderr keeps its lines, and a usage error stays one line on stderr with nothing on stdout.
+
+### openapi
+
+`cf-loom openapi` prints one OpenAPI 3.1.1 document for the Service as JSON indented by two spaces; a failure prints nothing on stdout. `info` is the Service's name at version `0.0.0`, as `package` writes, and `tags` are its Groups in code point order. The document names no `servers`, which belong to your organization, and the only security schemes it names are those of the `authorization` header (see below). It describes what `serve` answers, so every Endpoint is written, whatever its Visibility, and your organization filters them (`jq` on `x-cf-loom-visibility`). A body is keyed by `application/json`.
+
+A path is the Endpoint's, each param written in braces (`GET /orders/{}` with `["orderId"]` is `/orders/{orderId}`); the paths are in code point order, and the Endpoints of one path share a path item, each under its method in lower case. OpenAPI allows one template per path, so two Endpoints that name a param of one path differently fail (see the exit 3 lines above). An OpenAPI operation holds:
+
+| Field | From the Endpoint |
+| --- | --- |
+| `operationId`, `tags`, `description` | its name, its Group in a list, its description (left out when empty) |
+| `deprecated: true` | a Deprecated or Retired Endpoint |
+| `x-cf-loom-visibility`, `x-cf-loom-guards` | its Visibility, and its Guards as `[{ "guard": "apiKey", "qualifier": null }]`, as the Snapshot lists them |
+| `parameters` | the path params in the path's order (`in: path`, required), then each query field, then each header field, Guards' demands included but the `authorization` header, names as the Snapshot stores them; `required` as declared, a list query param has an `array` schema, and the schema's `description` is also on the parameter. OpenAPI tools ignore a header parameter named `accept`, which is written all the same |
+| `requestBody` | the Input body, required, as JSON; none when it has none |
+| `responses` | by status, below |
+| `security` | the `authorization` header's schemes, below; none without that header |
+
+The responses are one per status, in status order; when several answer one status they are joined, their descriptions with `; ` and their schemas as `oneOf`. A Rejection answers as a body of `{ "$ref": "#/components/schemas/<CODE>" }`, described `<CODE>: <message>`:
+
+| Status | Response |
+| --- | --- |
+| the Success's | `Success`, with its headers (each with its `description`) and its body; none for a body-less Success such as a 204 |
+| each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it |
+| 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one |
+| 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` |
+
+A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input. The OpenAPI operation of a `HEAD` Endpoint has no body in any response, since the host drops them.
+
+The `authorization` header is no header parameter, since OpenAPI tools ignore one: it is a security scheme. Each Guard of an Endpoint that is not Retired that demands an `authorization` header is the scheme `components.securitySchemes.<Guard name>`, `{ "type": "apiKey", "in": "header", "name": "authorization" }`; an `authorization` header that no Guard demands, so the Endpoint's own, is the scheme `authorization`. The OpenAPI operation's `security` is one requirement naming every such scheme in code point order, followed by `{}` as an alternative when the header is optional. A document with no such header has no `securitySchemes`.
+
+A literal or closed enum of values of different JSON types, such as `z.literal(['a', 1])`, is written with a `type` list and its `enum`; as a query param or header, a validator that coerces text to the first type that fits may refuse text `serve` accepts (`"1"`).
+
+`components.schemas`, in code point order, holds: `RejectionEnvelope` and `FaultEnvelope`, as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md describes them; one component per code an Endpoint that is not Retired answers, the `RejectionEnvelope` narrowed to its code as a `const`, any `message` text, and the body it declares (`false`, with no `body` key, when it declares none); and each recursive def a written schema reaches, as `<Id>Def` (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md).
