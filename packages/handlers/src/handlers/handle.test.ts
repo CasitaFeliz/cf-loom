@@ -376,22 +376,29 @@ describe('handle and Resources', () => {
   test('a Handler that takes none, with an unannotated last parameter, may find its resources undefined', () => {
     type NoResourcesTaken = Readonly<Record<never, never>>;
 
-    handle(getOrder, (_input, _context, call) => {
-      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
-      return reject(notFound);
-    });
-    handle(chargeCard, (_body, _meta, call) => {
-      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
-    });
-    handle(notifyOnPaid, (_body, _meta, call) => {
-      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
-    });
-    handle(apiKey, (_demands, _context, call) => {
-      expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
-      return admit({ callerId: 'c-1' });
-    });
+    const handlers = [
+      handle(getOrder, (_input, _context, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+        return reject(notFound);
+      }),
+      handle(chargeCard, (_body, _meta, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      }),
+      handle(notifyOnPaid, (_body, _meta, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      }),
+      handle(apiKey, (_demands, _context, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+        return admit({ callerId: 'c-1' });
+      }),
+    ];
 
-    expect(getOrder.name).toBe('getOrder');
+    expect(handlers.map(({ element }) => element)).toEqual([
+      getOrder,
+      chargeCardV1,
+      notifyOnPaidV1,
+      apiKey,
+    ]);
   });
 
   test('a stub takes no Resources', () => {
