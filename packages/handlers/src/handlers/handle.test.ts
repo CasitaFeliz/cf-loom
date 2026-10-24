@@ -16,12 +16,15 @@ import {
   type EventHandler,
   type Fault,
   fault,
+  type GuardCall,
   type GuardHandler,
   type HandlerMap,
   handle,
   type MessageMeta,
+  type ResourcesOf,
   reject,
   success,
+  type WithResources,
   withReader,
 } from '../index.ts';
 
@@ -274,6 +277,211 @@ describe('handle', () => {
       kind: 'fault',
       cause: new TypeError("apiKey's Handler returned no Outcome but undefined"),
     });
+  });
+});
+
+describe('handle and Resources', () => {
+  type Orders = { readonly find: (orderId: string) => string | undefined };
+  type OrdersTaken = { readonly orders: Orders };
+
+  test('handle() infers the Resources an EndpointHandler takes from its last parameter', () => {
+    const getOrderHandler = handle(
+      getOrder,
+      (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
+    );
+
+    expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder, OrdersTaken>>();
+    expect(getOrderHandler.element).toBe(getOrder);
+  });
+
+  test('a direct call without the Resources the Handler takes is a type error, and one that takes none needs no last argument', () => {
+    const takes = handle(getOrder, (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+    const takesNone = handle(getOrder, () => reject(notFound));
+    const input = { params: { orderId: ORDER_ID } };
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes orders
+      takes(input, {}),
+      // @ts-expect-error the Handler takes orders
+      takes(input, {}, { resources: {} }),
+      takesNone(input, {}),
+    ];
+
+    expectTypeOf(takes).toBeCallableWith(input, {}, { resources: { orders: { find: () => '' } } });
+    expectTypeOf(takesNone).toBeCallableWith(input, {});
+    expect(calls).toBeDefined();
+  });
+
+  test('handle() infers the Resources a GuardHandler takes from its last parameter', () => {
+    type CallersTaken = { readonly callers: { readonly byKey: (key: string) => string } };
+    const apiKeyHandler = handle(
+      apiKey,
+      (_demands, _context, { resources }: GuardCall<typeof apiKey, CallersTaken>) =>
+        admit({ callerId: resources.callers.byKey('k') }),
+    );
+    const demands = { headers: { 'x-api-key': 'k' } };
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes callers
+      apiKeyHandler(demands, {}),
+    ];
+
+    expectTypeOf(apiKeyHandler).toEqualTypeOf<GuardHandler<typeof apiKey, CallersTaken>>();
+    expectTypeOf(apiKeyHandler).toBeCallableWith(
+      demands,
+      {},
+      { resources: { callers: { byKey: () => 'c-1' } } },
+    );
+    expect(calls).toBeDefined();
+  });
+
+  test('handle() infers the Resources a Message Handler takes from its last parameter', () => {
+    type NotificationsTaken = { readonly notifications: { readonly send: () => void } };
+    const chargeCardHandler = handle(
+      chargeCard,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        resources.notifications.send();
+      },
+    );
+    const notifyOnPaidHandler = handle(
+      notifyOnPaid,
+      (_body, _meta, { resources }: WithResources<NotificationsTaken>) => {
+        resources.notifications.send();
+      },
+    );
+    const body = { orderId: ORDER_ID, status: 'paid' } as const;
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes notifications
+      chargeCardHandler(body, meta),
+    ];
+
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<
+      CommandHandler<typeof chargeCard, NotificationsTaken>
+    >();
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<
+      EventHandler<typeof notifyOnPaid, NotificationsTaken>
+    >();
+    expectTypeOf(chargeCardHandler).toBeCallableWith(body, meta, {
+      resources: { notifications: { send: () => undefined } },
+    });
+    expect(calls).toBeDefined();
+  });
+
+  test('a Handler that takes none, with an unannotated last parameter, may find its resources undefined', () => {
+    type NoResourcesTaken = Readonly<Record<never, never>>;
+
+    const handlers = [
+      handle(getOrder, (_input, _context, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+        return reject(notFound);
+      }),
+      handle(chargeCard, (_body, _meta, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      }),
+      handle(notifyOnPaid, (_body, _meta, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      }),
+      handle(apiKey, (_demands, _context, call) => {
+        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+        return admit({ callerId: 'c-1' });
+      }),
+    ];
+
+    expect(handlers.map(({ element }) => element)).toEqual([
+      getOrder,
+      chargeCardV1,
+      notifyOnPaidV1,
+      apiKey,
+    ]);
+  });
+
+  test('a stub takes no Resources', () => {
+    const getOrderStub = handle.stub(getOrder);
+    const apiKeyStub = handle.stub(apiKey);
+
+    expectTypeOf(getOrderStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
+    expectTypeOf(getOrderStub).toBeCallableWith({ params: { orderId: ORDER_ID } }, {});
+    expectTypeOf(apiKeyStub).toBeCallableWith({ headers: { 'x-api-key': 'k' } }, {});
+    expectTypeOf(handle.stub(chargeCard)).toBeCallableWith(
+      { orderId: ORDER_ID, status: 'paid' },
+      meta,
+    );
+  });
+});
+
+describe('ResourcesOf', () => {
+  type Orders = { readonly find: (orderId: string) => string | undefined };
+  type Callers = { readonly byKey: (key: string) => string };
+  type Resources = { readonly orders: Orders; readonly callers: Callers };
+  type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+
+  test('a Handler map holds every Resource any of its Handlers takes, and a stub takes none', () => {
+    const handlers = {
+      endpoints: {
+        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+          resources.orders.find(ORDER_ID) === undefined
+            ? reject(notFound)
+            : success({ id: ORDER_ID }),
+        ),
+        findOrder: handle.stub(findOrder),
+      },
+      guards: {
+        apiKey: handle(
+          apiKey,
+          (
+            _demands,
+            _context,
+            { resources }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
+          ) => admit({ callerId: resources.callers.byKey('k') }),
+        ),
+      },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
+      readonly orders: Orders;
+      readonly callers: Callers;
+    }>();
+    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+  });
+
+  test('a Handler map none of whose Handlers takes Resources holds none', () => {
+    const handlers = {
+      endpoints: { getOrder: handle(getOrder, () => reject(notFound)) },
+      guards: { apiKey: handle.stub(apiKey) },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<Readonly<Record<never, never>>>();
+    expectTypeOf<
+      ResourcesOf<{ endpoints: Record<never, never>; guards: Record<never, never> }>
+    >().toEqualTypeOf<Readonly<Record<never, never>>>();
+    expect(handlers.guards.apiKey.element).toBe(apiKey);
+  });
+
+  test('the Resources of Handlers that take the same key are the intersection of what they take', () => {
+    type Narrow = { readonly orders: { readonly find: () => string } };
+    const handlers = {
+      endpoints: {
+        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+          resources.orders.find(ORDER_ID) === undefined
+            ? reject(notFound)
+            : success({ id: ORDER_ID }),
+        ),
+        findOrder: handle(findOrder, (_input, _context, { resources }: WithResources<Narrow>) =>
+          resources.orders.find() === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+        ),
+      },
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
+      readonly orders: Orders & Narrow['orders'];
+    }>();
+    expect(handlers.endpoints.findOrder.element).toBe(findOrder);
   });
 });
 

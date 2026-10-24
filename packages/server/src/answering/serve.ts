@@ -1,14 +1,15 @@
 import type { Contract } from '@cf-loom/contract';
-import type { HandlerMap } from '@cf-loom/handlers';
-import { servedContractOf } from '../served/index.ts';
+import type { ResourcesOf } from '@cf-loom/handlers';
+import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
+import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
 import { type AnsweredRequest, reportServedFault, type ServedFault } from './hooks.ts';
 
 /** The fetch-style handler `serve` returns: what an adapter connects to its host. */
 export type Http = (request: Request) => Promise<Response>;
 
-/** What is operational about serving and no part of the Contract: the body limit and the hooks. */
-export type ServeOptions = {
+/** What `serve` takes besides the Contract and the Handler map: the Resources its Handlers take, and what is operational about serving; none of it is part of the Contract. */
+export type ServeOptions<Resources extends object = NoResources> = ResourcesField<Resources> & {
   /** The most bytes of a body `serve` reads before answering `BODY_TOO_LARGE`; none sets no limit. */
   readonly maxBodyBytes?: number;
   /**
@@ -21,15 +22,20 @@ export type ServeOptions = {
 };
 
 /**
- * Answers a Contract's Endpoints with their Handlers over web-standard HTTP, after checking the
- * Service is assembled as the Contract says.
+ * Answers a Contract's Endpoints with their Handlers over web-standard HTTP, handing each the
+ * Service's Resources, after checking the Service is assembled as the Contract says.
  */
+export function serve<Handlers extends ServedHandlers>(
+  contract: Contract,
+  handlers: Handlers,
+  ...options: CallArgument<ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>>
+): Http;
 export function serve(
   contract: Contract,
-  handlers: Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>,
-  options: ServeOptions = {},
+  handlers: ServedHandlers,
+  options: ServeOptions<object> = {},
 ): Http {
-  const served = servedContractOf(contract, handlers, options.maxBodyBytes);
+  const served = servedContractOf(contract, handlers, options);
   return async (request) => {
     const started = performance.now();
     const { endpoint, answered } = await answerOf(served, request);

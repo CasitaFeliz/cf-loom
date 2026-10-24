@@ -33,8 +33,10 @@ import type {
   DirectMeta,
   EventHandler,
   EventImplementation,
+  MessageCall,
 } from './message-handler.ts';
 import { isWithReader, type WithReader } from './reader.ts';
+import type { NoResources } from './resources.ts';
 import {
   type AnyHandler,
   type AnyWritten,
@@ -47,38 +49,41 @@ import {
 type HandleTarget = Endpoint | Guard | WithReader;
 
 /** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
-type ImplementationOf<Target extends HandleTarget> = Target extends Endpoint
-  ? EndpointImplementation<Target>
+type ImplementationOf<
+  Target extends HandleTarget,
+  Resources extends object,
+> = Target extends Endpoint
+  ? EndpointImplementation<Target, Resources>
   : Target extends Guard
-    ? GuardImplementation<Target>
+    ? GuardImplementation<Target, Resources>
     : Target extends WithReader<Command>
-      ? CommandImplementation<Target>
+      ? CommandImplementation<Target, Resources>
       : Target extends WithReader<Subscription>
-        ? EventImplementation<Target>
+        ? EventImplementation<Target, Resources>
         : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
-type HandlerOf<Target extends HandleTarget> = Target extends Endpoint
-  ? EndpointHandler<Target>
+type HandlerOf<Target extends HandleTarget, Resources extends object> = Target extends Endpoint
+  ? EndpointHandler<Target, Resources>
   : Target extends Guard
-    ? GuardHandler<Target>
+    ? GuardHandler<Target, Resources>
     : Target extends WithReader<Command>
-      ? CommandHandler<Target>
+      ? CommandHandler<Target, Resources>
       : Target extends WithReader<Subscription>
-        ? EventHandler<Target>
+        ? EventHandler<Target, Resources>
         : never;
 
-function handleImplementation<Target extends HandleTarget>(
+function handleImplementation<Target extends HandleTarget, Resources extends object = NoResources>(
   target: Target,
-  implementation: ImplementationOf<Target>,
-): HandlerOf<Target> {
+  implementation: ImplementationOf<Target, Resources>,
+): HandlerOf<Target, Resources> {
   const how = { implementation: implementation as Implementation, stub: false };
-  return handlerOf(target, how) as HandlerOf<Target>;
+  return handlerOf(target, how) as HandlerOf<Target, Resources>;
 }
 
-function stubOf<Target extends HandleTarget>(target: Target): HandlerOf<Target> {
+function stubOf<Target extends HandleTarget>(target: Target): HandlerOf<Target, NoResources> {
   const implementation = isWithReader(target) ? messageStubOf(target.element) : notImplementedStub;
-  return handlerOf(target, { implementation, stub: true }) as HandlerOf<Target>;
+  return handlerOf(target, { implementation, stub: true }) as HandlerOf<Target, NoResources>;
 }
 
 /**
@@ -132,30 +137,46 @@ function directCallOf(written: AnyWritten) {
 }
 
 function endpointCallOf(written: Written<Endpoint>) {
-  return async (input: unknown, context: unknown, directCall?: DirectCall) => {
-    const run = await endpointRunOf(written, { input, context }, standardsOf(directCall));
+  return async (input: unknown, context: unknown, directCall?: DirectCall<object>) => {
+    const resources = directCall?.resources;
+    const run = await endpointRunOf(
+      written,
+      { input, context, resources },
+      standardsOf(directCall),
+    );
     return answerOf(written.element, run);
   };
 }
 
+/** A GuardHandler's last argument as a direct call may leave it, before it is checked. */
+type GuardCallGiven = { readonly qualifier?: unknown; readonly resources?: unknown };
+
 function guardCallOf(written: Written<Guard>) {
-  return async (demands: unknown, context: unknown, qualifier?: unknown) => {
-    const given = { demands, context, qualifier };
+  return async (demands: unknown, context: unknown, call?: GuardCallGiven) => {
+    const given = { demands, context, qualifier: call?.qualifier, resources: call?.resources };
     const run = await guardRunOf(written, given, standardRejectionDefaults);
     return answerOf(written.element, run);
   };
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (body: unknown, { messageId, factId, deliveryCount, headers = {} }: DirectMeta) => {
+  return async (
+    body: unknown,
+    { messageId, factId, deliveryCount, headers = {} }: DirectMeta,
+    call?: MessageCall<object>,
+  ) => {
     const meta = { messageId, factId, deliveryCount, headers };
-    const run = await messageRunOf(written, { body, meta }, checkedBody);
+    const run = await messageRunOf(
+      written,
+      { body, meta, resources: call?.resources },
+      checkedBody,
+    );
     return messageAnswerOf(written.element, run);
   };
 }
 
-function standardsOf(directCall: DirectCall | undefined): StandardRejections {
-  if (directCall === undefined) {
+function standardsOf(directCall: DirectCall<object> | undefined): StandardRejections {
+  if (directCall?.contract === undefined) {
     return standardRejectionDefaults;
   }
   return standardRejectionsOf(directCall.contract);

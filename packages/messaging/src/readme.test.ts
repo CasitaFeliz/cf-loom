@@ -1,14 +1,8 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, type WithResources, withReader } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import {
-  type Broker,
-  type BrokerConsumer,
-  type Messaging,
-  messaging,
-  type OutgoingMessage,
-} from './index.ts';
+import { type Broker, type BrokerConsumer, messaging, type OutgoingMessage } from './index.ts';
 
 const money = z.object({ amount: z.number(), currency: z.string() });
 
@@ -45,20 +39,8 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated],
 });
 
-/** The Service's own `src/messaging.ts`, as the README's Connecting writes it. */
-let started: Messaging<typeof contract> | undefined;
-
-async function startMessaging(broker: Broker): Promise<Messaging<typeof contract>> {
-  started = await messaging(contract, broker);
-  return started;
-}
-
-function ordersMessaging(): Messaging<typeof contract> {
-  if (started === undefined) {
-    throw new Error('startMessaging() was not called');
-  }
-  return started;
-}
+type Resources = { readonly notifications: { readonly send: (orderId: string) => Promise<void> } };
+type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
 /** A broker that records what is published and the consumers it is given, built on the public `Broker` type. */
 function aBroker() {
@@ -87,19 +69,19 @@ describe('the messaging README', () => {
     const traceparent = '00-abc-def-01';
     const v1 = { orderId, total: total.amount };
     const v2 = { orderId, total };
-    await startMessaging(broker);
+    const { publisher, sender, close } = await messaging(contract, broker);
 
-    await ordersMessaging().publisher.publish('OrderCreated', {
+    await publisher.publish('OrderCreated', {
       v1: { orderId, total: total.amount },
       v2: { orderId, total },
     });
-    await ordersMessaging().sender.send('ChargeCard', { orderId });
-    await ordersMessaging().publisher.publish(
+    await sender.send('ChargeCard', { orderId });
+    await publisher.publish(
       'OrderCreated',
       { v1, v2 },
       { factId: `${order.id}:created`, headers: { traceparent } },
     );
-    await ordersMessaging().close();
+    await close();
 
     expect(published.map((message) => message.messageId).slice(3)).toEqual([
       'OrderCreated.v1:o-1:created',
@@ -111,17 +93,28 @@ describe('the messaging README', () => {
   test('the Message Handlers example runs through consume, reading its meta', async () => {
     const { broker, consumers } = aBroker();
     const received: unknown[] = [];
+    const resources: Resources = {
+      notifications: { send: async (orderId) => void received.push(orderId) },
+    };
     const notifyOnCreatedHandler = handle(
       withReader(notifyOnCreated, orderCreatedV2.body),
-      async (body, { messageId, factId, deliveryCount, headers }) => {
-        received.push(body.orderId, { messageId, factId, deliveryCount, headers });
+      async (
+        body,
+        { messageId, factId, deliveryCount, headers },
+        { resources: { notifications } }: Needs<'notifications'>,
+      ) => {
+        await notifications.send(body.orderId);
+        received.push({ messageId, factId, deliveryCount, headers });
       },
     );
-    const running = await startMessaging(broker);
-    await running.consume({
-      commands: { chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), () => {}) },
-      subscriptions: { 'notify-on-created': notifyOnCreatedHandler },
-    });
+    const running = await messaging(contract, broker);
+    await running.consume(
+      {
+        commands: { chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), () => {}) },
+        subscriptions: { 'notify-on-created': notifyOnCreatedHandler },
+      },
+      { resources },
+    );
     const meta = {
       messageId: 'OrderCreated.v2:o-1:created',
       factId: 'o-1:created',

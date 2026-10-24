@@ -1,4 +1,4 @@
-export type { EndpointRun, GuardRun, MessageRun } from '../calls/index.ts';
+export type { EndpointRun, GuardRun, MessageGiven, MessageRun } from '../calls/index.ts';
 export {
   elementNameOf,
   faultLineOf,
@@ -9,6 +9,7 @@ export {
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
 export { checkedBody, checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
+export type { CallArgument, NoResources, ResourcesField } from '../handlers/index.ts';
 export {
   isStub,
   mappedHandlerOf,

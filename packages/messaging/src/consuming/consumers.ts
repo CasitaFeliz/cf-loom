@@ -8,14 +8,17 @@ import { settlementOf } from './receive.ts';
 /** What of the Handler map `consume` reads: the Handlers of Commands and Subscriptions. */
 export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions'>;
 
+/** What one `consume` runs its Handlers with: where it reports faults and the Resources it hands them. */
+type ConsumersRun = { readonly report: Report; readonly resources: unknown };
+
 /**
  * The consumers of one `consume`: each Handler looked up as `serve` looks one up, a stub left out
- * with a warning, since `consume` does not pull from it.
+ * with a warning, since `consume` does not pull from it; the rest run with `consume`'s Resources.
  */
 export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  report: Report,
+  { report, resources }: ConsumersRun,
 ): readonly BrokerConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
@@ -34,6 +37,6 @@ export function consumersOf(
       subject: consumed.subject,
       element: consumed.element,
       reader: readerOf(handler),
-      receive: (delivery) => settlementOf({ consumed, handler }, delivery, report),
+      receive: (delivery) => settlementOf({ consumed, handler, resources }, delivery, report),
     }));
 }

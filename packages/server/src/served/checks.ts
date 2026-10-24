@@ -7,14 +7,11 @@ import {
   type TextPartNodes,
   walkedTextPartsOf,
 } from '@cf-loom/contract/internal';
+import type { HandlerMap } from '@cf-loom/handlers';
 import { mappedHandlerOf } from '@cf-loom/handlers/internal';
-import type { serve } from '../answering/index.ts';
 
-/**
- * What of the Handler map `serve` reads, as its signature takes it: the Handlers of Endpoints and
- * Guards, and the stamps. A type-only import, so `served/` still runs before `answering/`.
- */
-export type ServedHandlers = Parameters<typeof serve>[1];
+/** What of the Handler map `serve` reads: the Handlers of Endpoints and Guards, and the stamps. */
+export type ServedHandlers = Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>;
 
 /** The root `serve` answers for, which must be a Contract; anything else is a bug of the Service. */
 export function contractOf(root: unknown): Contract {

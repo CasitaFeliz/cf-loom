@@ -44,7 +44,7 @@ export async function answerOf(served: ServedContract, request: Request): Promis
 
 async function answeredCallOf(call: Call, served: ServedContract): Promise<Answered> {
   const faultedBy = { endpoint: call.endpoint.declared.name };
-  const runs = guardRunsOf(call, served.standards);
+  const runs = guardRunsOf(call, served);
   const source = { ...partsOf(call, served), admit: runs.admit };
   const reading = await readingOrThrownOf(call.endpoint.declared, source);
   switch (reading.kind) {
@@ -55,7 +55,11 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
     case 'invalid':
       return answeredOfInvalidInput(reading.issues, faultedBy, served.standards);
     case 'input': {
-      const given = { input: reading.input, context: runs.context() };
+      const given = {
+        input: reading.input,
+        context: runs.context(),
+        resources: served.resources,
+      };
       const run = await runEndpoint(call.endpoint.handler, given, served.standards);
       return answeredRunOf(run, faultedBy, served.standards);
     }

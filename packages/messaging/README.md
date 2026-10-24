@@ -1,44 +1,19 @@
 # @cf-loom/messaging
 
-`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `PublishError` and `InvalidMessageError`; and its types, the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream` and its types, `JetStreamBrokerOptions`, `JetStreamBroker`, `BrokerPlan` and `BrokerLimits` among them, and `@cf-loom/messaging/memory` an in-memory one for tests and local development, `memory` and its types (see [Adapters](#adapters)). What the Broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Leftover durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `PublishError` and `InvalidMessageError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream` and its types, `JetStreamBrokerOptions`, `JetStreamBroker`, `BrokerPlan` and `BrokerLimits` among them, and `@cf-loom/messaging/memory` an in-memory one for tests and local development, `memory` and its types (see [Adapters](#adapters)). What the Broker must hold, and how the adapter applies it, is in [The broker plan](#the-broker-plan), [Applying the plan](#applying-the-plan) and [Leftover durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
 ## Connecting
 
-`messaging(contract, broker)` connects through the Broker and resolves to one connection's `Messaging`, `{ publisher, sender, consume, close }`; a Broker that fails to connect rejects it. The Service keeps it in its own module, written by hand, never generated, as a Consumer keeps its client:
-
-```ts
-// src/messaging.ts
-import { type Broker, type Messaging, messaging } from '@cf-loom/messaging';
-import { contract } from './contract/index.ts';
-
-let started: Messaging<typeof contract> | undefined;
-
-export async function startMessaging(broker: Broker): Promise<Messaging<typeof contract>> {
-  started = await messaging(contract, broker);
-  return started;
-}
-
-export function ordersMessaging(): Messaging<typeof contract> {
-  if (started === undefined) {
-    throw new Error('startMessaging() was not called');
-  }
-  return started;
-}
-```
-
-`src/main.ts` starts it with the organization's Broker adapter (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README, which both example Services follow with the JetStream one), a test with the in-memory one (see [In memory](#in-memory)), and Handlers reach it through `ordersMessaging()`. Each `messaging()` is its own connection: connecting again is calling it again. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [Applying the plan](#applying-the-plan)), fails there rather than inside a request. `consume(handlers)` hands the Broker its consumers once per `Messaging`: consuming twice throws, and a `consume` the Broker rejects may be called again. The Service calls `close()` at shutdown, which stops consuming, waits for the Handlers running and for every `publish`, `send` and `consume` in flight, from whichever caller, and closes the connection the moment nothing is in flight: while it waits, publishing and sending still work, and are waited for too, so a Handler running can finish, and a Message delivered meanwhile is left pending, its Handler never run. Calling `close()` again returns the same promise; consuming throws `messaging is closing` while it waits, and once nothing is in flight, publishing, sending and consuming throw `messaging is closed`. Broker options come from the Service; cf-loom has no defaults for them.
+`messaging(contract, broker)` connects through the Broker and resolves to one connection's `Messaging`, `{ publisher, sender, consume, close }`; a Broker that fails to connect rejects it. `src/main.ts` connects it with the organization's Broker adapter (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README, which both example Services follow with the JetStream one), a test with the in-memory one (see [In memory](#in-memory)), and hands its `publisher` and `sender` to the Handlers as Resources, through `serve` and `consume` (see [Resources](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#resources) in the handlers README). Each `messaging()` is its own connection: connecting again is calling it again. The Service connects at startup so a broker problem, a missing stream or durable consumer included (see [Applying the plan](#applying-the-plan)), fails there rather than inside a request. `consume(handlers, { resources })` hands each Message Handler the Resources and hands the Broker its consumers once per `Messaging`: consuming twice throws, and a `consume` the Broker rejects may be called again. The Service calls `close()` at shutdown, which stops consuming, waits for the Handlers running and for every `publish`, `send` and `consume` in flight, from whichever caller, and closes the connection the moment nothing is in flight: while it waits, publishing and sending still work, and are waited for too, so a Handler running can finish, and a Message delivered meanwhile is left pending, its Handler never run. Calling `close()` again returns the same promise; consuming throws `messaging is closing` while it waits, and once nothing is in flight, publishing, sending and consuming throw `messaging is closed`. Broker options come from the Service; cf-loom has no defaults for them.
 
 `messaging(contract, broker, { onServiceFault })` receives what Message Handlers end or fail with, a `ConsumedFault` whose `element` names the Subscription, or the Command's Message Version by its identity (`notify-on-settled`, `ChargeCard@1`), with the Message's `subject`, `messageId` and `factId`: `invalid-body`, a Message ended for failing its schema, with its `issues`; `returned`, a Fault with `retryable: false`, as `fault`; and `thrown`, anything thrown, as `cause`. Without an `onServiceFault`, they go to the console, one line per issue, `<element> <subject> <messageId> <factId>: body.<path> <code>: <message>`, or one line, `<element> <subject> <messageId> <factId>: ` and the Fault's message or `the Handler threw`, with its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
 ## Publishing and sending
 
 ```ts
-// in any Handler
-import { ordersMessaging } from '../../messaging.ts';
-
-const { publisher, sender } = ordersMessaging();
+// in any Handler taking { publisher, sender } as Resources
 await publisher.publish('OrderCreated', {
   v1: { orderId, total: total.amount },   // Deprecated, still published
   v2: { orderId, total },
@@ -62,12 +37,15 @@ Each Message is sent with `<Name>.v<version>:<factId>` as its broker message id 
 
 ```ts
 // src/subscriptions/notify-on-settled.handler.ts
-export default handle(notifyOnSettled, async (body, { messageId, factId, deliveryCount, headers }) => {
-  await notifications.send(body.paymentId);
-});
+export default handle(
+  notifyOnSettled,
+  async (body, { messageId, factId, deliveryCount, headers }, { resources: { notifications } }: Needs<'notifications'>) => {
+    await notifications.send(body.paymentId);
+  },
+);
 ```
 
-`notifyOnSettled` is the Subscription as a Message Handler takes it (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README). A CommandHandler has the same shape. Delivery is at least once (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Returning nothing acknowledges the Message. Throwing, or a Fault with `retryable: true`, leaves it unacknowledged, so the durable consumer's configuration (ack wait, backoff, max deliveries), the organization's, decides when it comes again and what happens after the last attempt; `deliveryCount` tells the Handler which attempt this is. A Fault with `retryable: false` ends it (JetStream `term`): no redelivery, and it is logged. Returning anything else counts as a throw. `headers` are the transport headers the Message was published with (see [Publishing and sending](#publishing-and-sending)). How the adapter keeps a slow Handler's Message from another process of the Service meanwhile is in [In-progress acknowledgements](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/ARCHITECTURE.md#in-progress-acknowledgements).
+`notifyOnSettled` is the Subscription as a Message Handler takes it (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README). A CommandHandler has the same shape, and `Needs` is the Service's own (see [Resources](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#resources) in the handlers README). Delivery is at least once (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Returning nothing acknowledges the Message. Throwing, or a Fault with `retryable: true`, leaves it unacknowledged, so the durable consumer's configuration (ack wait, backoff, max deliveries), the organization's, decides when it comes again and what happens after the last attempt; `deliveryCount` tells the Handler which attempt this is. A Fault with `retryable: false` ends it (JetStream `term`): no redelivery, and it is logged. Returning anything else counts as a throw. `headers` are the transport headers the Message was published with (see [Publishing and sending](#publishing-and-sending)). How the adapter keeps a slow Handler's Message from another process of the Service meanwhile is in [In-progress acknowledgements](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/ARCHITECTURE.md#in-progress-acknowledgements).
 
 Messages are validated with the generated Reader schemas (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md): a Dependency's Event with its Contract Package's, the Service's own with `readers.generated.ts`. A Message that fails its schema, or whose body is no UTF-8 JSON, never reaches the Handler: it is ended without redelivery and logged with its subject, its ids and the issues (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README for what a log carries); where it goes next is the organization's broker configuration.
 
@@ -90,16 +68,18 @@ When `close()` starts, cf-loom drains the subscription of the pull that is open 
 `@cf-loom/messaging/memory` is a broker adapter that keeps everything in memory, for tests and local development:
 
 ```ts
+import { messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
-import { startMessaging } from '../src/messaging.ts';
+import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 
 const broker = memory();
-const running = await startMessaging(broker);
-await running.consume(handlers);
+const running = await messaging(contract, broker);
+const resources = { publisher: running.publisher, sender: running.sender };
+await running.consume(handlers, { resources });
 
-await createOrderHandler({ body: newOrder }, { apiKey: { callerId: 'c-1' } });
+await createOrderHandler({ body: newOrder }, { apiKey: { callerId: 'c-1' } }, { resources });
 await broker.settled();   // OrderCreated v1 and v2 published, ChargeCard v1 sent and handled
 broker.messages;          // each with its subject, body, Fact id, broker message id and transport headers
 
@@ -168,6 +148,7 @@ cf-loom never removes a durable consumer. A prefix holds no `_` (see [Over the B
 
 - `Messaging`, `{ publisher, sender, consume, close }`: one connection's messaging, what `messaging()` resolves to.
 - `MessagingOptions`, `{ onServiceFault? }`: what is operational about messaging and no part of the Contract.
+- `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes besides the Handler map, the Resources its Message Handlers take.
 - `EventPublisher` and `CommandSender`: `publish` and `send`, typed by the Contract's Events and Commands.
 - `MessageOptions`, `{ factId?, headers? }`: what a `publish` or `send` call may add.
 - `ConsumedFault`: what `onServiceFault` receives, `invalid-body`, `returned` or `thrown`.

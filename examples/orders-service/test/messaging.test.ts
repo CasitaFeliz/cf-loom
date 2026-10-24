@@ -1,31 +1,37 @@
 import { randomUUID } from 'node:crypto';
+import { type Messaging, messaging } from '@cf-loom/messaging';
 import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { chargesOf } from '../src/charges/charges.ts';
 import { chargeCardV1 } from '../src/contract/commands/charge-card.v1.command.ts';
 import { orderCreatedV1 } from '../src/contract/events/order-created.v1.event.ts';
+import { contract } from '../src/contract/index.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 import handlers from '../src/handlers.generated.ts';
-import { ordersMessaging, startMessaging } from '../src/messaging.ts';
+import type { Resources } from '../src/resources.ts';
 
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const total = { amount: 1500, currency: 'EUR' };
 const context = { apiKey: { callerId: 'billing-service' } };
 let broker: MemoryBroker;
+let running: Messaging<typeof contract>;
+let resources: Resources;
 
 beforeEach(async () => {
   broker = memory();
-  const running = await startMessaging(broker);
-  await running.consume(handlers);
+  running = await messaging(contract, broker);
+  resources = { publisher: running.publisher, sender: running.sender };
+  await running.consume(handlers, { resources });
 });
 
 afterEach(async () => {
-  await ordersMessaging().close();
+  await running.close();
 });
 
 /** Places an order and waits for the Messages it set going, returning the new order's id. */
 async function placeOrder(): Promise<string> {
-  const outcome = await createOrderHandler({ body: { customerId: CUSTOMER_ID, total } }, context);
+  const input = { body: { customerId: CUSTOMER_ID, total } };
+  const outcome = await createOrderHandler(input, context, { resources });
   await broker.settled();
   if (outcome.kind !== 'success') throw new Error('the order was not placed');
   return outcome.body.id;

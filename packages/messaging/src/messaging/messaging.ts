@@ -1,4 +1,6 @@
 import type { Contract } from '@cf-loom/contract';
+import type { ResourcesOf } from '@cf-loom/handlers';
+import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import type { Broker, BrokerService, ConsumedFault } from '../broker/index.ts';
 import { type ConsumedHandlers, consumersOf, reportOf } from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
@@ -11,11 +13,19 @@ export type MessagingOptions = {
   readonly onServiceFault?: (fault: ConsumedFault) => void;
 };
 
+/** What `consume` takes besides the Handler map: the Resources its Message Handlers take. */
+export type ConsumeOptions<Resources extends object = NoResources> = ResourcesField<Resources>;
+
 /** One connection's messaging, which `messaging()` resolves to: publishing, sending and consuming until it is closed. */
 export type Messaging<C extends Contract> = {
   readonly publisher: EventPublisher<C>;
   readonly sender: CommandSender<C>;
-  readonly consume: (handlers: ConsumedHandlers) => Promise<void>;
+  readonly consume: <Handlers extends ConsumedHandlers>(
+    handlers: Handlers,
+    ...options: CallArgument<
+      ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>
+    >
+  ) => Promise<void>;
   readonly close: () => Promise<void>;
 };
 
@@ -34,7 +44,8 @@ export async function messaging<const C extends Contract>(
   return {
     publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
-    consume: (handlers) => life.consume(() => consumersOf(subjects.consumed, handlers, report)),
+    consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
+      life.consume(() => consumersOf(subjects.consumed, handlers, { report, resources })),
     close: () => life.close(),
   };
 }

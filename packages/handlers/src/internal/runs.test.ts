@@ -88,7 +88,11 @@ describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
 
   test('Input that breaks the Contract is invalid-input with its issues, never a throw', async () => {
-    const call = { input: { params: { orderId: 'nope' } }, context: getContext };
+    const call = {
+      input: { params: { orderId: 'nope' } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -107,7 +111,11 @@ describe('runEndpoint', () => {
 
   test('an Outcome that breaks the Contract is invalid-outcome with its issues', async () => {
     const brokenHandler = handle(getOrder, () => success({ id: 'nope' }));
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(brokenHandler, call, standards);
 
@@ -115,7 +123,11 @@ describe('runEndpoint', () => {
   });
 
   test('an answer is the resolved Outcome, Standard Rejections resolved with the given ones', async () => {
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -137,7 +149,12 @@ describe('runGuard', () => {
 
   test('demands, a Context and a Qualifier that break the Contract are invalid-input', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
-    const call = { demands: {}, context: { apiKey: {} }, qualifier: 'orders:delete' };
+    const call = {
+      demands: {},
+      context: { apiKey: {} },
+      qualifier: 'orders:delete',
+      resources: undefined,
+    };
 
     const runs = [
       await runGuard(apiKeyHandler, { ...call, context: {}, qualifier: undefined }, standards),
@@ -158,7 +175,12 @@ describe('runGuard', () => {
 
   test('an admitted Context that breaks the Contract is invalid-outcome', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 7 }) as never);
-    const call = { demands: { headers: { 'x-api-key': 'k' } }, context: {}, qualifier: undefined };
+    const call = {
+      demands: { headers: { 'x-api-key': 'k' } },
+      context: {},
+      qualifier: undefined,
+      resources: undefined,
+    };
 
     const run = await runGuard(apiKeyHandler, call, standards);
 
@@ -166,7 +188,12 @@ describe('runGuard', () => {
   });
 
   test('an answer is the resolved Admission, a stub’s Rejection resolved with the given ones', async () => {
-    const call = { demands: { headers: { 'x-api-key': 'k' } }, context: {}, qualifier: undefined };
+    const call = {
+      demands: { headers: { 'x-api-key': 'k' } },
+      context: {},
+      qualifier: undefined,
+      resources: undefined,
+    };
 
     const run = await runGuard(handle.stub(apiKey), call, standards);
 
@@ -180,7 +207,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const getOrderHandler = handle(getOrder, () => {
       throw error;
     });
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -198,7 +229,12 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 
   test('a Guard returning success() is thrown, not a throw of the run', async () => {
     const apiKeyHandler = handle(apiKey, () => success() as never);
-    const call = { demands: { headers: { 'x-api-key': 'k' } }, context: {}, qualifier: undefined };
+    const call = {
+      demands: { headers: { 'x-api-key': 'k' } },
+      context: {},
+      qualifier: undefined,
+      resources: undefined,
+    };
 
     const run = await runGuard(apiKeyHandler, call, standards);
 
@@ -210,7 +246,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 
   test('a Fault the Handler returns is answered', async () => {
     const getOrderHandler = handle(getOrder, () => fault({ committed: 'no', retryable: true }));
-    const call = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+    const call = {
+      input: { params: { orderId: ORDER_ID } },
+      context: getContext,
+      resources: undefined,
+    };
 
     const run = await runEndpoint(getOrderHandler, call, standards);
 
@@ -219,11 +259,16 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 });
 
 describe('what a run tells to be no Outcome', () => {
-  const endpointCall = { input: { params: { orderId: ORDER_ID } }, context: getContext };
+  const endpointCall = {
+    input: { params: { orderId: ORDER_ID } },
+    context: getContext,
+    resources: undefined,
+  };
   const guardCall = {
     demands: { headers: { 'x-api-key': 'k' } },
     context: {},
     qualifier: undefined,
+    resources: undefined,
   };
   const fields = { committed: 'no', retryable: true, message: 'Try again' };
 
@@ -261,7 +306,7 @@ describe('what a run tells to be no Outcome', () => {
 describe('a Handler of another kind', () => {
   test('runGuard given an EndpointHandler throws Not a Handler', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
-    const call = { demands: {}, context: {}, qualifier: undefined };
+    const call = { demands: {}, context: {}, qualifier: undefined, resources: undefined };
 
     const run = () => runGuard(getOrderHandler as never, call, standards);
 
@@ -350,6 +395,7 @@ describe('runMessage', () => {
     const run = await runMessage(shipHandler, {
       body: { orderId: ORDER_ID, status: 'refunded', extra: 'dropped' },
       meta,
+      resources: undefined,
     });
 
     expect(run).toEqual({ kind: 'answered', answer: undefined });
@@ -367,7 +413,7 @@ describe('runMessage', () => {
   test('runMessage given a value handle() did not return throws', () => {
     const lookalike = Object.assign(() => undefined, { element: chargeCardV1 });
 
-    const run = () => runMessage(lookalike, { body: {}, meta });
+    const run = () => runMessage(lookalike, { body: {}, meta, resources: undefined });
 
     expect(run).toThrow('Not a Handler');
   });

@@ -1,11 +1,12 @@
 import { join } from 'node:path';
 import { client } from '@cf-loom/client';
-import { serve } from '@cf-loom/server';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { type Http, serve } from '@cf-loom/server';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
+import { ordersClientOf } from '../src/orders-client/orders-client.ts';
 import { brokerPrefix, ordersEnvironment } from './environments.ts';
 import { applyPlanOf } from './nats-broker.ts';
 import { aServiceProcess, type ServiceProcess } from './service-process.ts';
@@ -15,7 +16,7 @@ const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const PENDING_ORDER_ID = 'c2a9e1f4-8b7d-4f3a-a6e5-0d1c2b3a4f5e';
 const LOCKED_ORDER_ID = '5e8b2c7a-1d4f-4a9e-b3c6-7f8e9d0a1b2c';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
-const billing = serve(contract, handlers);
+let billing: Http;
 let nats: NatsServer | undefined;
 let orders: ServiceProcess | undefined;
 let ordersUrl = '';
@@ -26,12 +27,11 @@ beforeAll(async () => {
   await applyPlanOf(ordersDir, server.url, brokerPrefix);
   orders = await aServiceProcess(ordersDir, ordersEnvironment(server.url));
   ordersUrl = `http://127.0.0.1:${orders.port}`;
-  vi.stubEnv('ORDERS_SERVICE_URL', ordersUrl);
-  vi.stubEnv('ORDERS_SERVICE_API_KEY', 'billing-key');
+  const resources = { orders: ordersClientOf(ordersUrl, 'billing-key') };
+  billing = serve(contract, handlers, { resources });
 }, 60_000);
 
 afterAll(async () => {
-  vi.unstubAllEnvs();
   await orders?.stop();
   await nats?.stop();
 }, 30_000);

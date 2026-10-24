@@ -106,7 +106,7 @@ const userTokenHandler = handle(userToken, ({ headers }) => {
   return admit({ userId: 'u-1' });
 });
 
-const permissionHandler = handle(permission, (_demands, { userToken: user }, qualifier) => {
+const permissionHandler = handle(permission, (_demands, { userToken: user }, { qualifier }) => {
   calls.push('permission');
   return admit({ granted: [user.userId, ...qualifier] });
 });

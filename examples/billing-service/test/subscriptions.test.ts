@@ -1,12 +1,11 @@
-import type { Messaging } from '@cf-loom/messaging';
+import { type Messaging, messaging } from '@cf-loom/messaging';
 import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
 import { fakeEvent } from '@cf-loom/testing';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { draftsOf } from '../src/billing/drafts.ts';
 import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
-import type { contract } from '../src/contract/index.ts';
+import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
-import { startMessaging } from '../src/messaging.ts';
 import draftInvoiceOnCreatedHandler from '../src/subscriptions/draft-invoice-on-created.handler.ts';
 
 const DELIVERED_ORDER_ID = 'a1f0c3d2-5b4e-4c6a-9d8e-7f6a5b4c3d2e';
@@ -26,7 +25,7 @@ describe('draft-invoice-on-created over the memory adapter', () => {
 
   beforeEach(async () => {
     broker = memory();
-    running = await startMessaging(broker);
+    running = await messaging(contract, broker);
     await running.consume(handlers);
   });
 

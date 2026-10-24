@@ -8,7 +8,7 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { fault, handle, withReader } from '@cf-loom/handlers';
+import { fault, handle, type WithResources, withReader } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -181,6 +181,44 @@ afterEach(() => {
 });
 
 describe('consume', () => {
+  test('hands its Resources to the Handler of every Message delivered', async () => {
+    type Notifications = { readonly notifications: { readonly sent: string[] } };
+    const resources: Notifications = { notifications: { sent: [] } };
+    const taken: unknown[] = [];
+    const recording = aBroker();
+    const { consume } = await messaging(contract, recording.broker);
+    await consume(
+      {
+        commands: {
+          ...handlers.commands,
+          chargeCardV2: handle(
+            pairings.chargeCardV2,
+            (_given, _meta, call: WithResources<Notifications>) => {
+              taken.push(call.resources);
+            },
+          ),
+        },
+        subscriptions: {
+          ...handlers.subscriptions,
+          'notify-on-created': handle(
+            pairings.notifyOnCreated,
+            (_given, _meta, call: WithResources<Notifications>) => {
+              taken.push(call.resources);
+            },
+          ),
+        },
+      },
+      { resources },
+    );
+
+    await recording.deliver(chargeCard, body);
+    await recording.deliver(created, body);
+
+    expect(taken).toHaveLength(2);
+    expect(taken[0]).toBe(resources);
+    expect(taken[1]).toBe(resources);
+  });
+
   test('consume gives the broker one consumer per Subscription and per Command Version not Retired, with its subject, stream and durable consumer name', async () => {
     const { consumers } = await consuming();
 

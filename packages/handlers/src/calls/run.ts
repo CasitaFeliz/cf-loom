@@ -96,7 +96,8 @@ async function endpointCallOf(
     return checked;
   }
   const { input, context } = checked.value;
-  const returned = await returnedOf(endpoint, () => implementation(input, context), isOutcome);
+  const run = () => implementation(input, context, { resources: given.resources });
+  const returned = await returnedOf(endpoint, run, isOutcome);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
@@ -113,7 +114,7 @@ async function guardCallOf(
     return checked;
   }
   const { demands, context, qualifier } = checked.value;
-  const run = () => implementation(demands, context, qualifier);
+  const run = () => implementation(demands, context, { qualifier, resources: given.resources });
   const returned = await returnedOf(guard, run, isAdmission);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };

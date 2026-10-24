@@ -3,6 +3,7 @@ import type * as core from 'zod/v4/core';
 import type { MessageMeta } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { WithReader } from './reader.ts';
+import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
 type ReadBodyOf<Target extends WithReader> = core.output<Target['reader']>;
@@ -15,26 +16,51 @@ export type DirectMeta = Omit<MessageMeta, 'headers'> & {
 /** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a Fault. */
 type Answered = undefined | Fault;
 
-/** What a CommandHandler's implementation returns: nothing, which acknowledges the Command, or a Fault; may be async. */
-export type CommandImplementation<Target extends WithReader<Command>> = (
+/** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a Fault; may be async. */
+export type CommandImplementation<
+  Target extends WithReader<Command>,
+  Resources extends object = NoResources,
+> = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
+  call: MessageCall<Resources>,
 ) => Answered | Promise<Answered>;
 
-/** What an EventHandler's implementation returns: nothing, which acknowledges the Event, or a Fault; may be async. */
-export type EventImplementation<Target extends WithReader<Subscription>> = (
+/** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a Fault; may be async. */
+export type EventImplementation<
+  Target extends WithReader<Subscription>,
+  Resources extends object = NoResources,
+> = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
+  call: MessageCall<Resources>,
 ) => Answered | Promise<Answered>;
+
+/** The last argument of a Message Handler's direct call: the Resources it takes. */
+export type MessageCall<Resources extends object = NoResources> = ResourcesField<Resources>;
 
 /** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
-export type CommandHandler<Target extends WithReader<Command>> = {
-  (body: ReadBodyOf<Target>, meta: DirectMeta): Promise<Fault | undefined>;
+export type CommandHandler<
+  Target extends WithReader<Command>,
+  Resources extends object = NoResources,
+> = {
+  (
+    body: ReadBodyOf<Target>,
+    meta: DirectMeta,
+    ...call: CallArgument<MessageCall<Resources>>
+  ): Promise<Fault | undefined>;
   readonly element: Target['element'];
 };
 
 /** The Handler of a Subscription: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
-export type EventHandler<Target extends WithReader<Subscription>> = {
-  (body: ReadBodyOf<Target>, meta: DirectMeta): Promise<Fault | undefined>;
+export type EventHandler<
+  Target extends WithReader<Subscription>,
+  Resources extends object = NoResources,
+> = {
+  (
+    body: ReadBodyOf<Target>,
+    meta: DirectMeta,
+    ...call: CallArgument<MessageCall<Resources>>
+  ): Promise<Fault | undefined>;
   readonly element: Target['element'];
 };

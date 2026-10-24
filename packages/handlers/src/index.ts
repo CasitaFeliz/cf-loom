@@ -9,10 +9,14 @@ export type {
   EndpointImplementation,
   EventHandler,
   EventImplementation,
+  GuardCall,
   GuardHandler,
   GuardImplementation,
   HandlerMap,
+  MessageCall,
+  ResourcesOf,
   WithReader,
+  WithResources,
 } from './handlers/index.ts';
 export { handle, withReader } from './handlers/index.ts';
 export type {
