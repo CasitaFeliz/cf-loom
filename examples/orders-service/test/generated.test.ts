@@ -44,13 +44,6 @@ describe('the committed generated files', () => {
 
     expect(verified).toEqual({ status: 0, stderr: '' });
   });
-
-  test('the Contract Package billing links is the one cf-loom package writes from the committed Snapshot', () => {
-    const linked = filesOf(join(serviceDir, '.cf-loom/contract-package'));
-
-    expect(packaged).toEqual({ status: 0, stderr: '' });
-    expect(linked).toEqual(filesOf(outDir));
-  });
 });
 
 describe('the Snapshot', () => {
@@ -84,6 +77,13 @@ describe('the Snapshot', () => {
 });
 
 describe('the Contract Package', () => {
+  test('the Contract Package billing links is the one cf-loom package writes from the committed Snapshot', () => {
+    const linked = filesOf(join(serviceDir, '.cf-loom/contract-package'));
+
+    expect(packaged).toEqual({ status: 0, stderr: '' });
+    expect(linked).toEqual(filesOf(outDir));
+  });
+
   test('the Contract Package writes money in and imports nothing from @org/definitions', () => {
     const files = filesOf(outDir);
     const manifest = JSON.parse(files['package.json'] ?? '{}');

@@ -32,6 +32,9 @@ const folders: string[] = [];
 /** Where `package` writes without `--out`, relative to the project. */
 const defaultOut = '.cf-loom/contract-package';
 
+/** `defaultOut` escaped, to match it literally in a regular expression. */
+const defaultOutPattern = defaultOut.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
 
@@ -1460,7 +1463,9 @@ describe('cf-loom package: where it writes', () => {
 
       chmodSync(join(out, 'src/endpoints'), 0o755);
       expect(ran.status).toBe(3);
-      expect(ran.stderr).toMatch(/^\.cf-loom\/contract-package cannot be written: [^\n]+\n$/);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^${defaultOutPattern} cannot be written: [^\\n]+\\n$`),
+      );
       expect(read(project, `${defaultOut}/node_modules/kept.txt`)).toBe('install');
       expect(read(project, `${defaultOut}/dist/index.js`)).toBe('export {};\n');
     },
@@ -1537,7 +1542,9 @@ describe('cf-loom package: where it writes', () => {
 
       chmodSync(join(project, `${defaultOut}/src`), 0o755);
       expect(ran.status).toBe(3);
-      expect(ran.stderr).toMatch(/^\.cf-loom\/contract-package cannot be read: EACCES[^\n]*\n$/);
+      expect(ran.stderr).toMatch(
+        new RegExp(`^${defaultOutPattern} cannot be read: EACCES[^\\n]*\\n$`),
+      );
     },
   );
 
