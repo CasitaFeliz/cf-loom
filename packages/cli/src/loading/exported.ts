@@ -1,10 +1,24 @@
-import { join } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
 import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 
 /** Where the Contract's own files sit in a project. */
 export const contractFolder = 'src/contract';
+
+/**
+ * Whether a folder, by its real path, is the project's Contract folder or inside it, whichever
+ * link led to it, so a search of `src/` never reads what a link into the Contract reaches.
+ */
+export function insideContractOf(directory: string): (realFolder: string) => boolean {
+  try {
+    const contract = realpathSync(join(directory, contractFolder));
+    return (realFolder) => realFolder === contract || realFolder.startsWith(`${contract}${sep}`);
+  } catch {
+    return () => false;
+  }
+}
 
 /**
  * Where a declaration is exported, under the name it is exported as: a file by its path relative

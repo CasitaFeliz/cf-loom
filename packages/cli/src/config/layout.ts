@@ -1,10 +1,17 @@
+import { isPlainObject } from '@cf-loom/contract/internal';
 import { contractFolder } from '../loading/index.ts';
+import type { Layout } from './config.ts';
 
 /** A field of the layout: a kind of Handler path, or a generated file's. */
-type LayoutField = 'endpoint' | 'guard' | 'command' | 'subscription' | 'handlerMap' | 'readers';
+type LayoutField = keyof Layout;
 
-/** The placeholders a Handler path may hold, each filled from the Element's names. */
-type Placeholder = 'group' | 'name' | 'version';
+/** The variables a Handler path may hold, each filled from the Element's names. */
+const variables = ['group', 'name', 'version'] as const;
+
+type Variable = (typeof variables)[number];
+
+/** The folder a Service's code and generated files sit in. */
+export const layoutFolder = 'src';
 
 /** What a Handler's file name ends with. */
 export const handlerEnding = '.handler.ts';
@@ -16,7 +23,7 @@ export const generatedEnding = '.generated.ts';
 type FieldRules = {
   readonly default: string;
   readonly owner: string;
-  readonly placeholders: readonly Placeholder[];
+  readonly variables: readonly Variable[];
   readonly ending: typeof handlerEnding | typeof generatedEnding;
 };
 
@@ -24,37 +31,37 @@ const fieldRules: Readonly<Record<LayoutField, FieldRules>> = {
   endpoint: {
     default: 'src/endpoints/{group}/{name}.handler.ts',
     owner: "an Endpoint's Handler path",
-    placeholders: ['group', 'name'],
+    variables: ['group', 'name'],
     ending: handlerEnding,
   },
   guard: {
     default: 'src/guards/{name}.handler.ts',
     owner: "a Guard's Handler path",
-    placeholders: ['name'],
+    variables: ['name'],
     ending: handlerEnding,
   },
   command: {
     default: 'src/commands/{name}.v{version}.handler.ts',
     owner: "a Command's Handler path",
-    placeholders: ['name', 'version'],
+    variables: ['name', 'version'],
     ending: handlerEnding,
   },
   subscription: {
     default: 'src/subscriptions/{name}.handler.ts',
     owner: "a Subscription's Handler path",
-    placeholders: ['name'],
+    variables: ['name'],
     ending: handlerEnding,
   },
   handlerMap: {
     default: 'src/handlers.generated.ts',
     owner: "the Handler map's path",
-    placeholders: [],
+    variables: [],
     ending: generatedEnding,
   },
   readers: {
     default: 'src/readers.generated.ts',
     owner: "the readers' path",
-    placeholders: [],
+    variables: [],
     ending: generatedEnding,
   },
 };
@@ -82,13 +89,13 @@ export type LoadedLayout =
   | { readonly kind: 'loaded'; readonly layout: ServiceLayout }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** The values a Handler path's placeholders take, by name. */
-export type PlaceholderValues = Readonly<Record<string, string | number>>;
+/** The values a Handler path's variables take. */
+export type VariableValues = Readonly<Partial<Record<Variable, string | number>>>;
 
-/** A placeholder, `{name}`, with the name it is written with. */
-const placeholderPattern = /\{([^{}]*)\}/g;
+/** A variable, `{name}`, with the name it is written with. */
+const variablePattern = /\{([^{}]*)\}/g;
 
-/** The characters a path's text may hold outside its placeholders. */
+/** The characters a path's text may hold outside its variables. */
 const portableText = /^[a-z0-9._-]*$/;
 
 /**
@@ -127,10 +134,10 @@ export function layoutOf(written: unknown): LoadedLayout {
   return { kind: 'loaded', layout: paths };
 }
 
-/** A path template with its placeholders filled in from an Element's names. */
-export function filledPathOf(template: string, values: PlaceholderValues): string {
-  return template.replace(placeholderPattern, (_, name: string) => {
-    const value = values[name];
+/** A path template with its variables filled in from an Element's names. */
+export function filledPathOf(template: string, values: VariableValues): string {
+  return template.replace(variablePattern, (_, name: string) => {
+    const value = isVariable(name) ? values[name] : undefined;
     if (value === undefined) {
       throw new Error(`The layout holds {${name}}, which was checked at load: a bug.`);
     }
@@ -144,10 +151,11 @@ type PathRule = (field: LayoutField, path: string) => string | undefined;
 const pathRules: readonly PathRule[] = [
   locationRefusalOf,
   endingRefusalOf,
-  placeholderRefusalOf,
-  firstSegmentRefusalOf,
+  variableRefusalOf,
+  firstFolderRefusalOf,
   segmentRefusalOf,
   folderRefusalOf,
+  declarationRefusalOf,
 ];
 
 function pathRefusalOf(field: LayoutField, path: string): string | undefined {
@@ -161,10 +169,10 @@ function pathRefusalOf(field: LayoutField, path: string): string | undefined {
 }
 
 function locationRefusalOf(field: LayoutField, path: string): string | undefined {
-  if (path.startsWith('src/') && !path.startsWith(`${contractFolder}/`)) {
+  if (path.startsWith(`${layoutFolder}/`) && !path.startsWith(`${contractFolder}/`)) {
     return undefined;
   }
-  return `layout.${field} must be under src/ and outside src/contract/: ${path}`;
+  return `layout.${field} must be under ${layoutFolder}/ and outside ${contractFolder}/: ${path}`;
 }
 
 function endingRefusalOf(field: LayoutField, path: string): string | undefined {
@@ -172,28 +180,27 @@ function endingRefusalOf(field: LayoutField, path: string): string | undefined {
   return path.endsWith(ending) ? undefined : `layout.${field} must end with ${ending}: ${path}`;
 }
 
-function placeholderRefusalOf(field: LayoutField, path: string): string | undefined {
-  const { owner, placeholders } = fieldRules[field];
-  const taken: readonly string[] = placeholders;
-  const names = [...path.matchAll(placeholderPattern)].map(([, name = '']) => name);
-  const foreign = names.find((name) => !taken.includes(name));
+function variableRefusalOf(field: LayoutField, path: string): string | undefined {
+  const { owner, variables: taken } = fieldRules[field];
+  const names = [...path.matchAll(variablePattern)].map(([, name = '']) => name);
+  const foreign = names.find((name) => !isVariable(name) || !taken.includes(name));
   if (foreign === undefined) {
     return undefined;
   }
   const takes =
-    placeholders.length === 0
-      ? 'takes no placeholder'
-      : `takes only ${placeholders.map((name) => `{${name}}`).join(' and ')}`;
+    taken.length === 0
+      ? 'takes no variable'
+      : `takes only ${taken.map((name) => `{${name}}`).join(' and ')}`;
   return `layout.${field} holds {${foreign}}, but ${owner} ${takes}: ${path}`;
 }
 
-/** A Group or Subscription named `contract` must never fill into `src/contract/`. */
-function firstSegmentRefusalOf(field: LayoutField, path: string): string | undefined {
-  const [, first = ''] = path.split('/');
-  if (first.replace(placeholderPattern, '') === first) {
+/** No name a variable takes may fill into `src/contract/`, so its first folder is literal. */
+function firstFolderRefusalOf(field: LayoutField, path: string): string | undefined {
+  const [, first = '', ...rest] = path.split('/');
+  if (rest.length === 0 || first.replace(variablePattern, '') === first) {
     return undefined;
   }
-  return `layout.${field} must start with a folder or file name under src/, not a placeholder: ${path}`;
+  return `layout.${field}'s first folder under ${layoutFolder}/ holds a variable: ${path}`;
 }
 
 function segmentRefusalOf(field: LayoutField, path: string): string | undefined {
@@ -204,9 +211,9 @@ function segmentRefusalOf(field: LayoutField, path: string): string | undefined 
   return `layout.${field} has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: ${path}`;
 }
 
-/** A segment is text once placeholders count: every value a placeholder takes starts with a-z or 0-9. */
+/** A segment is text once variables count: every value a variable takes starts with a-z or 0-9. */
 function isPortableSegment(segment: string): boolean {
-  const literal = segment.replace(placeholderPattern, '');
+  const literal = segment.replace(variablePattern, '');
   return segment !== '' && !segment.startsWith('.') && portableText.test(literal);
 }
 
@@ -220,16 +227,22 @@ function folderRefusalOf(field: LayoutField, path: string): string | undefined {
   return `layout.${field} has a folder ending ${handlerEnding} or ${generatedEnding}: ${path}`;
 }
 
-function isPlainObject(value: unknown): value is object {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+/** TypeScript reads `x.d.handler.ts` as the declarations of `x.handler`, not as a module. */
+function declarationRefusalOf(field: LayoutField, path: string): string | undefined {
+  const fileName = path.split('/').at(-1) ?? '';
+  if (!fileName.includes('.d.')) {
+    return undefined;
   }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+  return `layout.${field} has a file name holding .d., which TypeScript reads as a declaration file: ${path}`;
 }
 
 function isLayoutField(key: string): key is LayoutField {
   return Object.hasOwn(fieldRules, key);
+}
+
+function isVariable(name: string): name is Variable {
+  const known: readonly string[] = variables;
+  return known.includes(name);
 }
 
 function failed(message: string): LoadedLayout {

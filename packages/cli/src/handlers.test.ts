@@ -1266,7 +1266,7 @@ describe('cf-loom generate: a configured layout', () => {
   });
 
   test.skipIf(isRoot)(
-    'an unreadable folder under src/ outside the Handlers’ folders is a tooling error (skipped as root)',
+    'an unreadable folder anywhere under src/ is a tooling error (skipped as root)',
     () => {
       const project = aProject({ ...aService(), 'src/support/kept.txt': '' });
       chmodSync(join(project, 'src/support'), 0o000);
@@ -1295,6 +1295,25 @@ describe('cf-loom generate: a configured layout', () => {
       stderr: `${old} is a file cf-loom generate wrote, at no path the layout names: delete it\n`,
     });
   });
+
+  test.each([
+    ['a CRLF line end', `${header}\r\nexport {};\r\n`],
+    ['a byte order mark', `\uFEFF${header}\nexport {};\n`],
+  ])(
+    'a generated file an editor saved with %s, at no path the layout names, is an orphan',
+    (_edit, text) => {
+      const project = aProject({ ...aService(), 'src/old.generated.ts': text });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 1,
+        stdout: '',
+        stderr:
+          'src/old.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it\n',
+      });
+    },
+  );
 
   test('a .generated.ts file that does not start with the generated header is no orphan', () => {
     const project = aProject({ ...aService(), 'src/schema.generated.ts': 'export {};\n' });
@@ -2216,6 +2235,34 @@ describe('cf-loom generate: linked folders and other runs', () => {
         "src/endpoints/other/old.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
   });
+
+  test('a Handler file reached through a link into src/contract/ is no orphan', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/support/stray.handler.ts': "export default 'x';\n",
+    });
+    symlinkSync(join(project, 'src/contract'), join(project, 'src/link'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test.skipIf(isRoot)(
+    'a link into src/contract/ does not lead verify into a folder there it cannot read (skipped as root)',
+    () => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      write(project, { 'src/contract/locked/kept.txt': '' });
+      symlinkSync(join(project, 'src/contract'), join(project, 'src/link'), 'dir');
+      chmodSync(join(project, 'src/contract/locked'), 0o000);
+
+      const ran = cfLoom(project, 'verify');
+
+      chmodSync(join(project, 'src/contract/locked'), 0o755);
+      expect(ran.status).toBe(0);
+    },
+  );
 
   test('a link back up does not loop', () => {
     const project = aProject(aService());

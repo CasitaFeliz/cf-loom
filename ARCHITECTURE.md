@@ -14,7 +14,7 @@ All packages are released together with one version. `zod` and `@cf-loom/contrac
 
 ## Package layout
 
-Every package under `packages/` lays out its `src/` the same way; a Service or a Definitions Package, such as the examples in `examples/`, follows [Layout](README.md#layout) in README.md instead, a Service placing its Handlers and generated files elsewhere with `layout` in `cf-loom.config.ts`, as billing-service does (see [The layout field](packages/cli/README.md#the-layout-field)):
+Every package under `packages/` lays out its `src/` the same way; a Service or a Definitions Package, such as the examples in `examples/`, follows [Layout](README.md#layout) in README.md instead; a Service may place its Handlers and generated files elsewhere with `layout` in `cf-loom.config.ts`, as billing-service does (see [The layout field](packages/cli/README.md#the-layout-field)):
 
 - `src/` holds only entry files: the files the package's `exports` and `bin` point at in `dist/` (`index.ts` for `.`, `internal/index.ts` for `./internal`, one folder per subpath entry such as `node-http/index.ts`, and `bin.ts`), each named, never by a wildcard subpath, with its source file in `src/`, and beside each entry the tests that exercise it as a whole (`src/readme.test.ts`). An entry folder holds its `index.ts` and those tests only. **(check)**
 - An entry file holds named re-exports only, `export { … } from` and `export type { … } from`, or the empty `export {}` of a package not yet written (Biome's `noReExportAll` refuses `export *`), so an entry cannot grow logic; `bin.ts`, a CLI entry that calls the package's API, is the exception. **(check)**

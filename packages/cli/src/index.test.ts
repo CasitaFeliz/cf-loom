@@ -21,7 +21,7 @@ describe('defineConfig', () => {
     });
   });
 
-  test('the README’s configuration declares every documented field', () => {
+  test('a configuration declaring every layout field type-checks', () => {
     const defined = defineConfig({
       scope: '@org',
       layout: {

@@ -11,14 +11,14 @@ export type FilesUnder =
 export type FileFilter = {
   /** Whether a file, by its path relative to the project, is found. */
   readonly keeps: (path: string) => boolean;
-  /** Whether a folder, by its path relative to the project, is never entered; none by default. */
-  readonly skips?: (path: string) => boolean;
+  /** Whether a folder, by its real path, is never read; none by default. */
+  readonly skips?: (realPath: string) => boolean;
 };
 
 /**
  * Every file under a folder of a project that the filter keeps, by its path relative to the
  * project with `/` between segments, through symbolic links to folders too, each real folder
- * once, so a link back up ends; a folder the filter skips is never read.
+ * once, so a link back up ends; a folder the filter skips is never read, however a link led to it.
  */
 export function filesUnder(directory: string, folder: string, filter: FileFilter): FilesUnder {
   const start = join(directory, folder);
@@ -39,11 +39,11 @@ export function filesUnder(directory: string, folder: string, filter: FileFilter
     visited.add(read.real);
     for (const name of read.names) {
       const path = join(current, name);
+      const kind = searchedKindOf(path, filter);
       const projectPath = projectPathOf(directory, path);
-      const found = foundAt(kindOf(path), projectPath, filter);
-      if (found === 'folder') {
+      if (kind === 'folder') {
         pending.push(path);
-      } else if (found === 'file') {
+      } else if (kind === 'file' && filter.keeps(projectPath)) {
         files.push(projectPath);
       }
     }
@@ -51,19 +51,21 @@ export function filesUnder(directory: string, folder: string, filter: FileFilter
   return { kind: 'files', files };
 }
 
-/** What the search finds at a path: a folder to enter, a file it keeps, or nothing. */
-function foundAt(
-  kind: 'folder' | 'file' | 'other',
-  projectPath: string,
-  filter: FileFilter,
-): 'folder' | 'file' | 'nothing' {
-  switch (kind) {
-    case 'folder':
-      return filter.skips?.(projectPath) === true ? 'nothing' : 'folder';
-    case 'file':
-      return filter.keeps(projectPath) ? 'file' : 'nothing';
-    case 'other':
-      return 'nothing';
+/** What a path is to the search: a folder it enters, a file, or neither, a skipped folder being neither. */
+function searchedKindOf(path: string, filter: FileFilter): 'folder' | 'file' | 'other' {
+  const kind = kindOf(path);
+  return kind === 'folder' && isSkipped(path, filter) ? 'other' : kind;
+}
+
+/** Whether the filter skips a folder; one whose real path cannot be told is read, and reports why. */
+function isSkipped(folder: string, filter: FileFilter): boolean {
+  if (filter.skips === undefined) {
+    return false;
+  }
+  try {
+    return filter.skips(realpathSync(folder));
+  } catch {
+    return false;
   }
 }
 

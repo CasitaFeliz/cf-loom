@@ -29,7 +29,7 @@ export function handlerMapTextOf(
     }))
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ local, specifier }) => defaultImportOf(local, specifier));
-  const handled = mapped.map((element) => element.handled);
+  const handled = mapped.map(({ handled }) => handled);
   const endpoints = handled.filter((element) => element.kind === 'endpoint');
   const guards = handled.filter((element) => element.kind === 'guard');
   const commands = handled.filter((element) => element.kind === 'command');

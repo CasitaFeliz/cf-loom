@@ -742,24 +742,27 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test('a path whose first folder under src/ is a placeholder is a tooling error', () => {
-    const ran = generatedWithLayout("{ endpoint: 'src/{group}/{name}.handler.ts' }");
+  test.each(['src/{group}/{name}.handler.ts', 'src/e{group}-x/{name}.handler.ts'])(
+    'a path whose first folder under src/ holds a variable, as %s, is a tooling error',
+    (path) => {
+      const ran = generatedWithLayout(`{ endpoint: '${path}' }`);
 
-    expect(ran).toEqual(
-      refusedWith(
-        'layout.endpoint must start with a folder or file name under src/, not a placeholder: src/{group}/{name}.handler.ts',
-      ),
-    );
-  });
+      expect(ran).toEqual(
+        refusedWith(`layout.endpoint's first folder under src/ holds a variable: ${path}`),
+      );
+    },
+  );
 
-  test('a path whose file name under src/ holds a placeholder is a tooling error', () => {
-    const ran = generatedWithLayout("{ guard: 'src/{name}.handler.ts' }");
+  test('a variable in the file name right under src/ is accepted', () => {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith("{ endpoint: 'src/{name}.handler.ts' }"),
+      ...aRoot(),
+    });
 
-    expect(ran).toEqual(
-      refusedWith(
-        'layout.guard must start with a folder or file name under src/, not a placeholder: src/{name}.handler.ts',
-      ),
-    );
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'src/ping.handler.ts'))).toBe(true);
   });
 
   test('a path with a .. segment is a tooling error', () => {
@@ -812,7 +815,17 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test('a path with a brace that is no placeholder is a tooling error', () => {
+  test('a file name that holds .d. is a tooling error', () => {
+    const ran = generatedWithLayout("{ guard: 'src/guards/{name}.d.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        'layout.guard has a file name holding .d., which TypeScript reads as a declaration file: src/guards/{name}.d.handler.ts',
+      ),
+    );
+  });
+
+  test('a path with a brace that is no variable is a tooling error', () => {
     const ran = generatedWithLayout("{ guard: 'src/guards/{name.handler.ts' }");
 
     expect(ran).toEqual(
@@ -833,7 +846,7 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test('a placeholder the kind does not take is a tooling error naming it', () => {
+  test('a variable the kind does not take is a tooling error naming it', () => {
     const ran = generatedWithLayout("{ guard: 'src/guards/{group}/{name}.handler.ts' }");
 
     expect(ran).toEqual(
@@ -843,7 +856,7 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test('a placeholder that is none is a tooling error naming it', () => {
+  test('a name in braces that is no variable is a tooling error naming it', () => {
     const ran = generatedWithLayout("{ endpoint: 'src/billing/{id}.handler.ts' }");
 
     expect(ran).toEqual(
@@ -853,17 +866,17 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test('a placeholder in the path of the Handler map is a tooling error', () => {
+  test('a variable in the path of the Handler map is a tooling error', () => {
     const ran = generatedWithLayout("{ handlerMap: 'src/generated/{name}.generated.ts' }");
 
     expect(ran).toEqual(
       refusedWith(
-        "layout.handlerMap holds {name}, but the Handler map's path takes no placeholder: src/generated/{name}.generated.ts",
+        "layout.handlerMap holds {name}, but the Handler map's path takes no variable: src/generated/{name}.generated.ts",
       ),
     );
   });
 
-  test('a Handler path that does not end with .handler.ts, given by a cast, is a tooling error', () => {
+  test('a Handler path that does not end with .handler.ts, written without its types, is a tooling error', () => {
     const ran = generatedWithLayout("{ command: 'src/commands/{name}.ts' }");
 
     expect(ran).toEqual(

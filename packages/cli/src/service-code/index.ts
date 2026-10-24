@@ -1,3 +1,4 @@
+export { isWrittenByGenerate } from './generated-header.ts';
 export type { DeclarationHandled, DeprecationStamp, Handled } from './handled.ts';
 export { deprecationStampsOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';

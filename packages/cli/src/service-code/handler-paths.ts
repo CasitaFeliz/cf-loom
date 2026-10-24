@@ -57,7 +57,7 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
   for (const { handled, path } of paths) {
     const earlier = elementsByPath.get(path);
     if (earlier !== undefined) {
-      const both = `${elementOf(earlier)} and ${elementOf(handled)} are both ${path}`;
+      const both = `${elementLabelOf(earlier)} and ${elementLabelOf(handled)} are both ${path}`;
       return `${both}: give each its own path in the layout of ${configFile}`;
     }
     elementsByPath.set(path, handled);
@@ -66,7 +66,7 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
 }
 
 /** An Element as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
-function elementOf(handled: Handled): string {
+function elementLabelOf(handled: Handled): string {
   switch (handled.kind) {
     case 'endpoint':
       return `endpoints.${handled.name}`;

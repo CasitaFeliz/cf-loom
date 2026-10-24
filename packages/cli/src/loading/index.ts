@@ -1,5 +1,5 @@
 export type { ContractExports, ExportedAt, FileExport } from './exported.ts';
-export { contractExportsOf, contractFolder } from './exported.ts';
+export { contractExportsOf, contractFolder, insideContractOf } from './exported.ts';
 export type { FileFilter, FilesUnder } from './files-under.ts';
 export { filesUnder } from './files-under.ts';
 export type { Imported } from './imported.ts';
