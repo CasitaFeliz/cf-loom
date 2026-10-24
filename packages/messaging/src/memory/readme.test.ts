@@ -6,10 +6,10 @@ import {
   defineEvent,
   defineSubscription,
 } from '@cf-loom/contract';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, type WithResources, withReader } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Broker, type Messaging, messaging } from '../index.ts';
+import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
 import { memory } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -77,20 +77,11 @@ const contract = defineContract({
   dependencies: [paymentsDeps],
 });
 
-/** The Service's own `src/messaging.ts`, as the README's Connecting writes it. */
-let started: Messaging<typeof contract> | undefined;
-
-async function startMessaging(broker: Broker): Promise<Messaging<typeof contract>> {
-  started = await messaging(contract, broker);
-  return started;
-}
-
-function ordersMessaging(): Messaging<typeof contract> {
-  if (started === undefined) {
-    throw new Error('startMessaging() was not called');
-  }
-  return started;
-}
+type Resources = {
+  readonly publisher: EventPublisher<typeof contract>;
+  readonly sender: CommandSender<typeof contract>;
+};
+type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
 const charged: string[] = [];
 
@@ -105,8 +96,8 @@ const handlers = {
   subscriptions: {
     'charge-on-created': handle(
       withReader(chargeOnCreated, orderCreatedV2.body),
-      async ({ orderId }) => {
-        await ordersMessaging().sender.send('ChargeCard', { orderId });
+      async ({ orderId }, _meta, { resources: { sender } }: Needs<'sender'>) => {
+        await sender.send('ChargeCard', { orderId });
       },
     ),
     'notify-on-settled': handle(
@@ -119,9 +110,11 @@ const handlers = {
 };
 
 /** An Endpoint Handler of the Service, which publishes the Event of the order it created. */
-async function createOrderHandler(request: { readonly body: { readonly total: number } }) {
+async function createOrderHandler(
+  request: { readonly body: { readonly total: number } },
+  { resources: { publisher } }: Needs<'publisher'>,
+) {
   const total = { amount: request.body.total, currency: 'EUR' };
-  const { publisher } = ordersMessaging();
   await publisher.publish('OrderCreated', {
     v1: { orderId: ORDER_ID, total: total.amount },
     v2: { orderId: ORDER_ID, total },
@@ -131,10 +124,11 @@ async function createOrderHandler(request: { readonly body: { readonly total: nu
 describe('the In memory section of the messaging README', () => {
   test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages lists them, and deliver resolves acked', async () => {
     const broker = memory();
-    const running = await startMessaging(broker);
-    await running.consume(handlers);
+    const running = await messaging(contract, broker);
+    const resources = { publisher: running.publisher, sender: running.sender };
+    await running.consume(handlers, { resources });
 
-    await createOrderHandler({ body: { total: 12 } });
+    await createOrderHandler({ body: { total: 12 } }, { resources });
     await broker.settled();
     const messages = broker.messages.map(({ subject }) => subject);
     const settlement = await broker.deliver(
