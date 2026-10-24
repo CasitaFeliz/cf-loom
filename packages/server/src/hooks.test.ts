@@ -212,7 +212,7 @@ describe('serve: onOutcome', () => {
     }
 
     const getOrderRecord = { method: 'GET', endpoint: 'getOrder', path: '/orders/:orderId' };
-    expect(answered).toEqual([
+    expect(answered).toStrictEqual([
       { ...getOrderRecord, status: 200, kind: 'success', durationMs: expect.any(Number) },
       { ...getOrderRecord, status: 404, kind: 'rejection', durationMs: expect.any(Number) },
       { ...getOrderRecord, status: 503, kind: 'fault', durationMs: expect.any(Number) },
@@ -225,11 +225,11 @@ describe('serve: onOutcome', () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, { onOutcome: (request) => answered.push(request) });
 
-    await http(new Request('http://test/orders', { method: 'PROPFIND' }));
+    await http(new Request('http://test/orders', { method: 'propfind' }));
     await http(new Request('http://test/orders', { method: 'HEAD' }));
 
-    expect(answered).toEqual([
-      { method: 'PROPFIND', status: 404, kind: 'fault', durationMs: expect.any(Number) },
+    expect(answered).toStrictEqual([
+      { method: 'propfind', status: 404, kind: 'fault', durationMs: expect.any(Number) },
       { method: 'HEAD', status: 404, kind: 'fault', durationMs: expect.any(Number) },
     ]);
   });
@@ -261,7 +261,7 @@ describe('serve: onOutcome', () => {
       status: 400,
       durationMs: expect.any(Number),
     };
-    expect(answered).toEqual([
+    expect(answered).toStrictEqual([
       {
         method: 'GET',
         endpoint: 'getOrder',
@@ -287,7 +287,7 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
     await http(new Request('http://test/archive', { method: 'POST' }));
     await http(tooLarge());
 
-    expect(answered).toEqual([
+    expect(answered).toStrictEqual([
       {
         method: 'POST',
         endpoint: 'archive',

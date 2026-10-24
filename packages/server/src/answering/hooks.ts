@@ -50,12 +50,12 @@ export type AnsweredRequest = {
 export function answeredRequestOf(
   method: string,
   endpoint: Endpoint | undefined,
-  answer: Pick<AnsweredRequest, 'status' | 'kind' | 'durationMs'>,
+  sent: Pick<AnsweredRequest, 'status' | 'kind' | 'durationMs'>,
 ): AnsweredRequest {
   if (endpoint === undefined) {
-    return { method, ...answer };
+    return { method, ...sent };
   }
-  return { method: endpoint.method, endpoint: endpoint.name, path: endpoint.path, ...answer };
+  return { method: endpoint.method, endpoint: endpoint.name, path: endpoint.path, ...sent };
 }
 
 /** Hands a Service's Fault to its hook, or to the console without one. */

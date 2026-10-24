@@ -49,8 +49,8 @@ export function serve(
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;
-    const answer = { status, kind: answered.kind, durationMs };
-    options.onOutcome?.(answeredRequestOf(request.method, endpoint?.declared, answer));
+    const sent = { status, kind: answered.kind, durationMs };
+    options.onOutcome?.(answeredRequestOf(request.method, endpoint?.declared, sent));
     return answered.response;
   };
 }
