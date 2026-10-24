@@ -6,6 +6,7 @@ import {
   defineGroup,
   defineGuard,
   type Endpoint,
+  type ExportedSnapshot,
   type StandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
@@ -110,6 +111,12 @@ const orders = contractPackageOf({ searchOrders, createOrder, priceOrder }, defa
 const ordersDeps = defineDependencies(orders, {
   endpoints: [searchOrders, createOrder, priceOrder],
 });
+
+/** The Provider's Contract Package as another cf-loom wrote it: only its exported Snapshot's `format` differs. */
+function inFormat(contractPackage: typeof orders, format: unknown): typeof orders {
+  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format } as ExportedSnapshot;
+  return { ...contractPackage, exportedSnapshot };
+}
 
 /** A client whose `fetch` records each request and answers `response`. */
 function recording(response: () => Response, baseUrl: string | URL = 'http://orders.test') {
@@ -552,5 +559,35 @@ describe('several Guards, checked in Attachment order', () => {
     });
 
     expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+  });
+});
+
+describe('a Provider’s exported Snapshot, read when the client is created', () => {
+  test('a Contract Package in a newer format is refused', () => {
+    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [searchOrders] });
+
+    const create = () => client(newer, { baseUrl: 'http://orders.test' });
+
+    expect(create).toThrow(
+      "orders-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
+    );
+  });
+
+  test('a Contract Package in a newer format is refused even when no Endpoint is listed', () => {
+    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [] });
+
+    const create = () => client(newer, { baseUrl: 'http://orders.test' });
+
+    expect(create).toThrow('is in format 2, newer than this cf-loom reads');
+  });
+
+  test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {
+    const damaged = defineDependencies(inFormat(orders, '1'), { endpoints: [searchOrders] });
+
+    const create = () => client(damaged, { baseUrl: 'http://orders.test' });
+
+    expect(create).toThrow(
+      "orders-service's exported Snapshot is malformed: format is not a whole number from 1",
+    );
   });
 });

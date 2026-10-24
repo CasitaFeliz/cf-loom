@@ -1,3 +1,4 @@
+import { checkExportedFormat } from '@cf-loom/contract/internal';
 import { type AnyDependencies, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
@@ -18,6 +19,7 @@ export function client<
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
+  checkExportedFormat(deps);
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
   const methods = Object.entries(deps.endpoints).map(([name, endpoint]) => {
     const called = calledEndpointOf(endpoint, deps);
