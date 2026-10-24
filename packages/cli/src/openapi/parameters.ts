@@ -1,0 +1,44 @@
+import type { EndpointSnapshot, Field, ObjectNode } from '@cf-loom/contract/internal';
+import { definedOf, jsonSchemaOf } from '../json-schema/index.ts';
+import type { OpenApiObject } from './objects.ts';
+
+/** Where in the request a parameter travels. */
+type ParameterIn = 'path' | 'query' | 'header';
+
+/** The parameters of an Endpoint's path, in the order the path names them. */
+export function pathParametersOf({
+  name,
+  params,
+  input,
+}: EndpointSnapshot): readonly OpenApiObject[] {
+  const fields = new Map(Object.entries(input.params?.fields ?? {}));
+  return params.map((param) => {
+    const field = fields.get(param);
+    if (field === undefined) {
+      throw new Error(`The Endpoint ${name} has the path param ${param}, which its Input lacks`);
+    }
+    return parameterOf('path', param, field);
+  });
+}
+
+/** The query and header parameters of an Endpoint, its Guards' demands included. */
+export function demandedParametersOf({ input }: EndpointSnapshot): readonly OpenApiObject[] {
+  return [...parametersOf('query', input.query), ...parametersOf('header', input.headers)];
+}
+
+function parametersOf(location: ParameterIn, object: ObjectNode | null): readonly OpenApiObject[] {
+  return Object.entries(object?.fields ?? {}).map(([name, field]) =>
+    parameterOf(location, name, field),
+  );
+}
+
+/** A parameter with its schema, which keeps its description beside the parameter's own. */
+function parameterOf(location: ParameterIn, name: string, field: Field): OpenApiObject {
+  return definedOf({
+    name,
+    in: location,
+    required: field.required,
+    description: field.schema.description,
+    schema: jsonSchemaOf(field.schema),
+  });
+}

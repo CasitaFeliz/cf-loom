@@ -69,7 +69,7 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
     case 'broker-plan':
       return await brokerPlanExitOf(rest, called, run);
     case 'openapi':
-      return rest.length > 0 ? usageError('openapi takes no argument') : await openApiCommand(run);
+      return await openApiExitOf(rest, run);
     case 'publish':
       return rest.length > 0
         ? usageError('publish takes no argument')
@@ -114,6 +114,10 @@ async function brokerPlanExitOf(
     return usageError('--prefix takes a prefix in kebab-case, such as staging');
   }
   return await brokerPlanCommand(run, prefix ?? null, output);
+}
+
+async function openApiExitOf(rest: readonly string[], run: Run): Promise<Exit> {
+  return rest.length > 0 ? usageError('openapi takes no argument') : await openApiCommand(run);
 }
 
 function initOf(rest: readonly string[], run: Run): Exit {
