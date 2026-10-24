@@ -8,9 +8,19 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { admit, handle, isRejectionOf, reject, success, withReader } from './index.ts';
+import {
+  admit,
+  type GuardCall,
+  handle,
+  isRejectionOf,
+  type ResourcesOf,
+  reject,
+  success,
+  type WithResources,
+  withReader,
+} from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -96,25 +106,57 @@ const orders = {
 };
 const callers = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
 const permissions = { of: async (_userId: string): Promise<string[]> => ['orders:edit'] };
+const sent: unknown[] = [];
+const notifications = { send: async (...given: unknown[]) => void sent.push(given) };
 
-const getOrderHandler = handle(getOrder, async ({ params }, context) => {
-  const order = await orders.find(params.orderId, context.apiKey.callerId);
-  if (!order) return reject(notFound);
-  if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
-  return success({ id: order.id, status: order.status, total: order.total });
-});
+type Resources = {
+  readonly orders: typeof orders;
+  readonly callers: typeof callers;
+  readonly permissions: typeof permissions;
+  readonly notifications: typeof notifications;
+};
+type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
-const apiKeyHandler = handle(apiKey, async ({ headers }) => {
-  const caller = await callers.byKey(headers['x-api-key']);
-  if (!caller) return reject(unauthenticated);
-  return admit({ callerId: caller.id });
-});
+const resources: Resources = { orders, callers, permissions, notifications };
 
-const permissionHandler = handle(permission, async (_demands, { userToken }, { qualifier }) => {
-  const held = await permissions.of(userToken.userId);
-  const granted = qualifier.every((code) => held.includes(code));
-  return granted ? admit() : reject(forbidden);
-});
+const getOrderHandler = handle(
+  getOrder,
+  async ({ params }, context, { resources: { orders } }: Needs<'orders'>) => {
+    const order = await orders.find(params.orderId, context.apiKey.callerId);
+    if (!order) return reject(notFound);
+    if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
+    return success({ id: order.id, status: order.status, total: order.total });
+  },
+);
+
+const apiKeyHandler = handle(
+  apiKey,
+  async (
+    { headers },
+    _context,
+    { resources: { callers } }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
+  ) => {
+    const caller = await callers.byKey(headers['x-api-key']);
+    if (!caller) return reject(unauthenticated);
+    return admit({ callerId: caller.id });
+  },
+);
+
+const permissionHandler = handle(
+  permission,
+  async (
+    _demands,
+    { userToken },
+    {
+      qualifier,
+      resources: { permissions },
+    }: GuardCall<typeof permission, Pick<Resources, 'permissions'>>,
+  ) => {
+    const held = await permissions.of(userToken.userId);
+    const granted = qualifier.every((code) => held.includes(code));
+    return granted ? admit() : reject(forbidden);
+  },
+);
 
 const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
@@ -129,12 +171,13 @@ const notifyOnSettled = withReader(
   paymentSettledV1.body,
 );
 
-const sent: unknown[] = [];
-const notifications = { send: async (...given: unknown[]) => void sent.push(given) };
-
 const notifyOnSettledHandler = handle(
   notifyOnSettled,
-  async (body, { messageId, factId, deliveryCount, headers }) => {
+  async (
+    body,
+    { messageId, factId, deliveryCount, headers },
+    { resources: { notifications } }: Needs<'notifications'>,
+  ) => {
     await notifications.send(body.paymentId, { messageId, factId, deliveryCount, headers });
   },
 );
@@ -143,11 +186,11 @@ describe('the handlers README', () => {
   test('the direct call of an EventHandler receives its body and meta, headers defaulting to {}', async () => {
     const settled = { paymentId: 'pay-1', method: { unknown: 'wallet' } };
 
-    const answer = await notifyOnSettledHandler(settled, {
-      messageId: 'PaymentSettled.v1:pay-1',
-      factId: 'pay-1',
-      deliveryCount: 1,
-    });
+    const answer = await notifyOnSettledHandler(
+      settled,
+      { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+      { resources },
+    );
 
     expect(answer).toBeUndefined();
     expect(sent).toEqual([
@@ -162,6 +205,7 @@ describe('the handlers README', () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
       { apiKey: { callerId: 'c-1' } },
+      { resources: { orders } },
     );
 
     expect(outcome).toEqual({
@@ -175,6 +219,7 @@ describe('the handlers README', () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
       { apiKey: { callerId: 'c-2' } },
+      { resources: { orders } },
     );
 
     expect(isRejectionOf(outcome, notFound)).toBe(true);
@@ -182,8 +227,8 @@ describe('the handlers README', () => {
 
   test('the GuardHandler example admits a known key and rejects an unknown one', async () => {
     const admissions = [
-      await apiKeyHandler({ headers: { 'x-api-key': 'key-1' } }, {}),
-      await apiKeyHandler({ headers: { 'x-api-key': 'key-2' } }, {}),
+      await apiKeyHandler({ headers: { 'x-api-key': 'key-1' } }, {}, { resources }),
+      await apiKeyHandler({ headers: { 'x-api-key': 'key-2' } }, {}, { resources }),
     ];
 
     expect(admissions).toMatchObject([
@@ -193,26 +238,30 @@ describe('the handlers README', () => {
   });
 
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
+    const context = { userToken: { userId: 'u-1' } };
     const admissions = [
-      await permissionHandler(
-        {},
-        { userToken: { userId: 'u-1' } },
-        {
-          qualifier: ['orders:edit'],
-        },
-      ),
-      await permissionHandler(
-        {},
-        { userToken: { userId: 'u-1' } },
-        {
-          qualifier: ['customers:read'],
-        },
-      ),
+      await permissionHandler({}, context, { qualifier: ['orders:edit'], resources }),
+      await permissionHandler({}, context, { qualifier: ['customers:read'], resources }),
     ];
 
     expect(admissions).toMatchObject([
       { kind: 'admitted' },
       { kind: 'rejection', rejection: forbidden },
     ]);
+  });
+
+  test('ResourcesOf a map holds the Resources its Handlers take together', () => {
+    const handlers = {
+      endpoints: { getOrder: getOrderHandler },
+      guards: { apiKey: apiKeyHandler, permission: permissionHandler },
+      commands: {},
+      subscriptions: { 'notify-on-settled': notifyOnSettledHandler },
+      deprecatedAt: {},
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<
+      Pick<Resources, 'orders' | 'callers' | 'permissions' | 'notifications'>
+    >();
+    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
   });
 });
