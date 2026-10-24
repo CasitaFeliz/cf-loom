@@ -62,7 +62,9 @@ jobs:
 
   select-mode:
     runs-on: ubuntu-latest
-    environment: npm
+    environment:
+      name: npm
+      deployment: false
     permissions:
       contents: read
     outputs:
