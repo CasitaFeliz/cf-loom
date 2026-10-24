@@ -36,7 +36,7 @@ const unwrittenFormats: ReadonlySet<StringFormat> = new Set<StringFormat>([
 
 /**
  * A string's `format`: `date-time` where its values are zod's, none for a format JSON Schema defines
- * otherwise, else its own name, an annotation in 2020-12.
+ * otherwise, else its own name, an annotation where the dialect does not define it.
  */
 function formatOf({ format, formatOptions }: StringNode): string | undefined {
   if (format === undefined || unwrittenFormats.has(format)) {

@@ -279,9 +279,9 @@ A literal or closed enum of values of different JSON types, such as `z.literal([
 
 ### asyncapi
 
-`cf-loom asyncapi` prints one AsyncAPI 3.1.0 document for the Service as JSON indented by two spaces; a failure prints nothing on stdout. `info` is the Service's name at version `0.0.0`, as `package` writes, and `defaultContentType` is `application/json`, since every body is JSON. The document names no `servers`, which belong to your organization. It describes what `publish` sends, so every Event that is not Retired is written, whatever its Visibility, and your organization filters them (`jq` on `x-cf-loom-visibility`, below). Only Events are written: no Command, and no Subscription, since a Subscription to another Service's Event is described by its Provider's document.
+`cf-loom asyncapi` prints one AsyncAPI 3.1.0 document for the Service as JSON indented by two spaces; a failure prints nothing on stdout. `info` is the Service's name at version `0.0.0`, as `package` writes, and `defaultContentType` is `application/json`, since every body is JSON. The document names no `servers`, which belong to your organization. It describes what the Service's EventPublisher publishes (see [Publishing and sending](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#publishing-and-sending) in the messaging README), so every Event that is not Retired is written, whatever its Visibility, and your organization filters them (`jq` on `x-cf-loom-visibility`, below). Only Events are written: no Command, and no Subscription, since a Subscription to another Service's Event is described by its Provider's document.
 
-Each Message Version is a channel keyed by its identity (`OrderCreated@2`), in code point order, with one message and one operation keyed by the same identity:
+Each Message Version is a channel keyed by its identity (`OrderCreated@2`), in code point order, with one AsyncAPI message and one AsyncAPI operation keyed by the same identity:
 
 | Field | From the Message Version |
 | --- | --- |
@@ -290,14 +290,14 @@ Each Message Version is a channel keyed by its identity (`OrderCreated@2`), in c
 | `messages.<identity>.name`, `title` | the Event's name, and the identity |
 | `messages.<identity>.description` | the Event's description (left out when empty) |
 | `messages.<identity>.headers` | `{ "$ref": "#/components/schemas/BrokerHeaders" }` |
-| `messages.<identity>.payload` | the body as JSON Schema draft-07, which AsyncAPI's Schema Object extends (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md); `deprecated: true` is added for a Deprecated Message Version, as `{ "allOf": [{ "$ref": … }], "deprecated": true }` when the body is a recursive def, since AsyncAPI ignores what sits beside a `$ref` |
+| `messages.<identity>.payload` | the body as JSON Schema draft-07, which AsyncAPI's Schema Object extends (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md); `deprecated: true` is added for a Deprecated Message Version, as `{ "allOf": [{ "$ref": … }], "deprecated": true }` when the body is a recursive def, with the body's `description` and `examples` beside the `allOf`, since AsyncAPI ignores what sits beside a `$ref` |
 | `operations.<identity>` | `{ "action": "send", "channel": { "$ref": "#/channels/<identity>" }, "messages": [{ "$ref": "#/channels/<identity>/messages/<identity>" }] }` |
 
-A Retired Message Version is not published, so it has no channel and no operation, and a recursive def only it reaches is no component. AsyncAPI has no `deprecated` on a channel, a message or an operation, which is why a Deprecated Message Version marks its payload.
+A Retired Message Version is not published, so it has no channel and no AsyncAPI operation, and a recursive def only it reaches is no component. AsyncAPI has no `deprecated` on a channel, an AsyncAPI message or an AsyncAPI operation, which is why a Deprecated Message Version marks its `payload`.
 
-`components.schemas`, in code point order, holds `BrokerHeaders`, when the document has a channel, and each recursive def a payload reaches, as `<Id>Def`. `BrokerHeaders` describes the headers every Message travels with (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md): `Cf-Loom-Fact-Id` and `Nats-Msg-Id` are required, non-empty strings, and any other header is a string, a transport header.
+`components.schemas`, in code point order, holds `BrokerHeaders`, when the document has a channel, and each recursive def a `payload` reaches, as `<Id>Def`. `BrokerHeaders` describes the headers every Message travels with (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md): `Cf-Loom-Fact-Id` and `Nats-Msg-Id` are required, non-empty strings, and any other header is a string; transport headers are those outside the `Cf-Loom-` and `Nats-` namespaces.
 
-To keep the channels a consumer may read, drop the Private ones and their operations:
+To keep the channels a Subscriber may read, drop the Private ones and their AsyncAPI operations:
 
 ```sh
 cf-loom asyncapi | jq '[.channels | to_entries[] | select(.value["x-cf-loom-visibility"] == "private") | .key] as $private | del(.channels[$private[]], .operations[$private[]])'

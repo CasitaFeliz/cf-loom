@@ -34,11 +34,8 @@ export type OpenApiWritten =
 /** An Endpoint listed with what `serve` reads and answers of it. */
 type ServedEndpoint = ListedEndpoint & { readonly served: Served };
 
-/** The version a document carries, as the Contract Package `package` writes: only `publish` derives one. */
-const localVersion = '0.0.0';
-
-/** The OpenAPI document of a Service's Endpoints, as `serve` answers them. */
-export function openApiDocumentOf(snapshot: ServiceSnapshot): OpenApiWritten {
+/** The OpenAPI document of a Service's Endpoints at a version, as `serve` answers them. */
+export function openApiDocumentOf(snapshot: ServiceSnapshot, version: string): OpenApiWritten {
   const listed = listedEndpointsOf(snapshot.endpoints);
   const conflict = pathConflictLineOf(listed);
   if (conflict !== undefined) {
@@ -56,7 +53,7 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot): OpenApiWritten {
   const envelopes = envelopeComponentsOf(rejectionsOf(endpoints));
   const document: OpenApiDocument = {
     openapi: '3.1.1',
-    info: { title: snapshot.name, version: localVersion },
+    info: { title: snapshot.name, version },
     tags: tagsOf(listed),
     paths: pathsOf(endpoints),
     components: componentsOf({ ...defs.schemas, ...envelopes }, endpoints),

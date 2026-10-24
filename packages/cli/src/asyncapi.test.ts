@@ -195,6 +195,19 @@ function aProjectCommittedWithBodies(recursive: readonly string[]): string {
   return project;
 }
 
+/** A Service whose one Event, Deprecated, has a recursive def as its body, with a description and an example. */
+const aServiceWithDescribedTree = aContractProject([
+  "import { defineContract, defineEvent } from '@cf-loom/contract';",
+  "import { z } from 'zod';",
+  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+  'export const treeGrownV1 = defineEvent({',
+  "  name: 'TreeGrown', version: 1, visibility: 'internal', lifecycle: 'deprecated',",
+  "  description: 'A tree grew',",
+  "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
+  '});',
+  "export const contract = defineContract({ name: 'orders-service', events: [treeGrownV1] });",
+]);
+
 /** A Service whose Event `OrderCreated` has the versions 1 to `count`. */
 function aServiceWithVersions(count: number): Readonly<Record<string, string>> {
   const versions = Array.from({ length: count }, (_none, index) => index + 1);
@@ -445,6 +458,21 @@ describe('cf-loom asyncapi: the payloads', () => {
     });
   });
 
+  test('a Deprecated Message Version whose body is a described recursive def keeps its description and examples on its payload', () => {
+    const project = aGeneratedProject(aServiceWithDescribedTree);
+
+    const written = JSON.parse(cfLoom(project, 'asyncapi').stdout);
+
+    expect(
+      valueAt(written, 'channels', 'TreeGrown@1', 'messages', 'TreeGrown@1', 'payload'),
+    ).toEqual({
+      allOf: [refTo('TreeNodeDef')],
+      description: 'The tree',
+      examples: [{ label: 'a', children: [] }],
+      deprecated: true,
+    });
+  });
+
   test('a recursive def a body reaches is written once as a component named after its type in code', () => {
     expect(componentOf('TreeNodeDef')).toEqual({
       type: 'object',
@@ -504,7 +532,7 @@ describe('cf-loom asyncapi: the headers', () => {
     });
   });
 
-  test('the broker headers admit any other header as a string, the transport headers', () => {
+  test('the broker headers admit any other header as a string', () => {
     expect(valueAt(componentOf('BrokerHeaders'), 'additionalProperties')).toMatchObject({
       type: 'string',
     });

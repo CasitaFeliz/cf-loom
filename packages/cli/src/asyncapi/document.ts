@@ -8,7 +8,7 @@ import {
   subjectOf,
 } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
-import { channelOf, operationOf, type PublishedEvent } from './channels.ts';
+import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeaders, brokerHeadersName } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
 
@@ -27,15 +27,13 @@ export type AsyncApiWritten =
   | { readonly kind: 'written'; readonly document: AsyncApiDocument }
   | { readonly kind: 'unnamed'; readonly line: string };
 
-/** The version a document carries, as the Contract Package `package` writes: only `publish` derives one. */
-const localVersion = '0.0.0';
-
-/** The AsyncAPI document of the Events a Service publishes, each subject under the prefix, if one is given. */
+/** The AsyncAPI document of the Events a Service publishes at a version, each subject under the prefix, if one is given. */
 export function asyncApiDocumentOf(
   snapshot: ServiceSnapshot,
   prefix: string | null,
+  version: string,
 ): AsyncApiWritten {
-  const published = publishedEventsOf(snapshot, prefix);
+  const published = publishedVersionsOf(snapshot, prefix);
   const defs = defComponentsOf(
     published.map(({ event }) => event.body),
     snapshot.defs,
@@ -46,7 +44,7 @@ export function asyncApiDocumentOf(
   }
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
-    info: { title: snapshot.name, version: localVersion },
+    info: { title: snapshot.name, version },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
@@ -55,11 +53,11 @@ export function asyncApiDocumentOf(
   return { kind: 'written', document };
 }
 
-/** The Events `publish` sends, Internal and Private alike, in code point order of their identity. */
-function publishedEventsOf(
+/** The Message Versions the Service's EventPublisher publishes, Internal and Private alike, in code point order of their identity. */
+function publishedVersionsOf(
   snapshot: ServiceSnapshot,
   prefix: string | null,
-): readonly PublishedEvent[] {
+): readonly PublishedVersion[] {
   return Object.entries(snapshot.events)
     .filter(([, event]) => isLive(event))
     .toSorted(([left], [right]) => byCodePoint(left, right))
@@ -72,18 +70,18 @@ function publishedEventsOf(
 
 /** What each Message Version writes, by its identity, in the order given. */
 function byIdentity(
-  published: readonly PublishedEvent[],
-  objectOf: (publishedEvent: PublishedEvent) => AsyncApiObject,
+  published: readonly PublishedVersion[],
+  objectOf: (publishedVersion: PublishedVersion) => AsyncApiObject,
 ): Readonly<Record<string, AsyncApiObject>> {
   return Object.fromEntries(
-    published.map((publishedEvent) => [publishedEvent.identity, objectOf(publishedEvent)]),
+    published.map((publishedVersion) => [publishedVersion.identity, objectOf(publishedVersion)]),
   );
 }
 
 /** The recursive defs, and the broker headers where a channel is written, each in code point order of its name. */
 function schemasOf(
   defs: Readonly<Record<string, JsonSchema>>,
-  published: readonly PublishedEvent[],
+  published: readonly PublishedVersion[],
 ): Readonly<Record<string, JsonSchema>> {
   const schemas = published.length === 0 ? defs : { ...defs, [brokerHeadersName]: brokerHeaders };
   return Object.fromEntries(
