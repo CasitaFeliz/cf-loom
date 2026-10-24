@@ -3,6 +3,7 @@ import type { Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
+  checkExportedFormat,
   type EndpointSnapshot,
   exportedEntryOf,
   type Matchable,
@@ -41,6 +42,7 @@ export type Provided = {
  * precedence is the Provider's, and each listed one with what its requests are read by.
  */
 export function providedOf(deps: AnyDependencies, base: URL): Provided {
+  checkExportedFormat(deps);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
   for (const [name, endpoint] of Object.entries(deps.endpoints)) {
     const entry = exportedEntryOf(deps, endpoint);
