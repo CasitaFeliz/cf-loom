@@ -31,6 +31,8 @@ The client has one method per Endpoint listed in the Dependency, named after it,
 
 `baseUrl` is a string or a `URL`. Its path is kept as a prefix, such as a gateway's mount, with one trailing slash removed: `client(deps, { baseUrl: 'https://gw.example/payments/' })` calls `getPayment` at `https://gw.example/payments/payments/<id>`. A `baseUrl` with a username or a password, which `fetch` refuses in a URL, or with a query or a fragment, even an empty one, is a bug, and `client()` throws, never showing the password.
 
+Given a Contract Package whose exported Snapshot is in a format the installed cf-loom does not read (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), `client()` throws `<provider>'s exported Snapshot is in format <n>, newer than this cf-loom reads: upgrade the @cf-loom packages`, or, when its `format` is no whole number from 1, `<provider>'s exported Snapshot is malformed: format is not a whole number from 1`.
+
 ### What a call sends
 
 The client checks the Input as the Provider will read the request it sends, every Guard admitting it (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). It sends the parsed value, unknown keys stripped, and its path params, query params and headers as text by the rules of [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http), each path param percent-encoded as one segment; an optional query param left `undefined` sends no key.
