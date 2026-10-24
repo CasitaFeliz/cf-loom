@@ -23,6 +23,29 @@ async function whyNotStarted(serviceDir: string, env: Record<string, string>): P
   }
 }
 
+describe('billing-service’s main.ts with a setting of the orders client empty', () => {
+  const natsUrl = 'nats://127.0.0.1:1';
+
+  test('it refuses to start with ORDERS_SERVICE_URL empty, naming it, before any connection', async () => {
+    const why = await whyNotStarted(billingDir, billingEnvironment(natsUrl, ''));
+
+    expect(why).toContain('ORDERS_SERVICE_URL is not set or empty');
+    expect(why).not.toContain('tried to open a connection');
+  });
+
+  test('it refuses to start with ORDERS_SERVICE_API_KEY empty, naming it, before any connection', async () => {
+    const env = {
+      ...billingEnvironment(natsUrl, 'http://127.0.0.1:1'),
+      ORDERS_SERVICE_API_KEY: '',
+    };
+
+    const why = await whyNotStarted(billingDir, env);
+
+    expect(why).toContain('ORDERS_SERVICE_API_KEY is not set or empty');
+    expect(why).not.toContain('tried to open a connection');
+  });
+});
+
 describe('a Service’s main.ts with NATS_URL empty', () => {
   test('orders-service refuses to start with NATS_URL empty, naming it', async () => {
     const why = await whyNotStarted(ordersDir, ordersEnvironment(''));
