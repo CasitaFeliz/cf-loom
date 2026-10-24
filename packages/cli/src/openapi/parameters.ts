@@ -11,9 +11,9 @@ type ParameterIn = 'path' | 'query' | 'header';
 /** The parameters of an Endpoint's path, in the order the path names them. */
 export function pathParametersOf(
   { name, params }: Pick<EndpointSnapshot, 'name' | 'params'>,
-  input: Input,
+  paramsNode: ObjectNode | null,
 ): readonly OpenApiObject[] {
-  const fields = new Map(Object.entries(input.params?.fields ?? {}));
+  const fields = new Map(Object.entries(paramsNode?.fields ?? {}));
   return params.map((param) => {
     const field = fields.get(param);
     if (field === undefined) {

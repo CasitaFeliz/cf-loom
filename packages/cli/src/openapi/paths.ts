@@ -4,6 +4,7 @@ import {
   methodAndPathOf,
   type PathSegment,
   pathSegmentsOf,
+  readEndpointIdentity,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 
@@ -27,22 +28,25 @@ export function listedEndpointsOf(
 
 function listedOf(identity: string, endpoint: EndpointSnapshot): ListedEndpoint {
   const { method, path } = methodAndPathOf(identity, endpoint.params);
-  const segments = pathSegmentsOf(path);
-  return {
-    identity,
-    method,
-    path: pathTextOf(segments, (name) => `{${name}}`),
-    shape: pathTextOf(segments, () => '{}'),
-    endpoint,
-  };
+  const template = templateOf(pathSegmentsOf(path));
+  return { identity, method, path: template, shape: shapeOf(identity), endpoint };
 }
 
-/** A path's text with each param written as the function says. */
-function pathTextOf(segments: readonly PathSegment[], param: (name: string) => string): string {
+/** A path's text with each param written in braces, as OpenAPI does. */
+function templateOf(segments: readonly PathSegment[]): string {
   const texts = segments.map((segment) =>
-    segment.kind === 'param' ? param(segment.name) : segment.text,
+    segment.kind === 'param' ? `{${segment.name}}` : segment.text,
   );
   return `/${texts.join('/')}`;
+}
+
+/** The path of an identity, which two Endpoints on one path share whatever they name its params. */
+function shapeOf(identity: string): string {
+  const read = readEndpointIdentity(identity);
+  if (read === undefined) {
+    throw new Error(`${identity} is no Endpoint’s identity: a bug.`);
+  }
+  return read.identityPath;
 }
 
 /** The line naming two Endpoints on one path that name a param differently, which OpenAPI cannot say. */

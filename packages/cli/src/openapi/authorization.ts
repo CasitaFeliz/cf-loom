@@ -20,16 +20,16 @@ export const authorizationScheme: OpenApiObject = {
 };
 
 /** An Endpoint's headers without the authorization one, and what that one stands for. */
-export type Separated = {
+export type HeadersAndAuthorization = {
   readonly headers: ObjectNode | null;
   readonly authorization: Authorization | undefined;
 };
 
-/** An Endpoint's headers without the authorization one, which is a scheme per Guard that demands it, else `authorization`. */
+/** Takes the authorization header out of an Endpoint's headers and says which schemes it stands for. */
 export function separatedAuthorizationOf(
   endpoint: EndpointSnapshot,
   guards: ServiceSnapshot['guards'],
-): Separated {
+): HeadersAndAuthorization {
   const { headers } = endpoint.input;
   const header = headers?.fields[authorizationHeader];
   if (headers === null || header === undefined) {
@@ -42,6 +42,7 @@ export function separatedAuthorizationOf(
   };
 }
 
+/** The schemes of an authorization header: each attached Guard that demands it, else the Endpoint's own, `authorization`. */
 function schemesOf(
   endpoint: EndpointSnapshot,
   guards: ServiceSnapshot['guards'],

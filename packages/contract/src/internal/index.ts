@@ -223,6 +223,7 @@ export {
   ownOf,
   partFieldOf,
   pathSegmentsOf,
+  readEndpointIdentity,
   resolutionOf,
   schemaOf,
   standardRejectionsOf,

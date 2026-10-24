@@ -1,4 +1,4 @@
-import type { NumberNode, StringNode } from '@cf-loom/contract/internal';
+import type { NumberNode, StringFormat, StringNode } from '@cf-loom/contract/internal';
 import { definedOf, type JsonSchema } from './keywords.ts';
 
 /** The flags that change nothing JSON Schema's `pattern` matches. */
@@ -28,7 +28,11 @@ export function numberSchemaOf(node: NumberNode): JsonSchema {
 }
 
 /** The formats JSON Schema defines otherwise than zod does, so a document that names them would be stricter. */
-const unwrittenFormats: ReadonlySet<string> = new Set(['time', 'duration', 'email']);
+const unwrittenFormats: ReadonlySet<StringFormat> = new Set<StringFormat>([
+  'time',
+  'duration',
+  'email',
+]);
 
 /**
  * A string's `format`: `date-time` where its values are zod's, none for a format JSON Schema defines

@@ -9,7 +9,7 @@ import { componentRefOf, definedOf, type JsonSchema, jsonSchemaOf } from '../jso
 import { jsonContentOf } from './content.ts';
 import { faultEnvelopeName } from './envelopes.ts';
 import type { OpenApiObject } from './objects.ts';
-import type { Served, ServedRejection } from './served.ts';
+import type { LiveServed, Served, ServedRejection } from './served.ts';
 
 /** What one Outcome of an Endpoint adds to the response of its status. */
 type StatusPart = {
@@ -24,12 +24,17 @@ type ResponseTraits = { readonly isHead: boolean; readonly deprecatedAt: string 
 
 /** The responses `serve` gives an Endpoint, one per status in status order. */
 export function responsesOf(method: string, served: Served): OpenApiObject {
-  const { success, rejections, input } = served;
-  const parts =
-    success === undefined
-      ? [retiredPart]
-      : [successPartOf(success), ...rejections.map(rejectionPartOf), ...faultPartsOf(input)];
-  return responsesFrom(parts, { isHead: method === 'HEAD', deprecatedAt: served.deprecatedAt });
+  const isHead = method === 'HEAD';
+  switch (served.kind) {
+    case 'retired':
+      return responsesFrom([retiredPart], { isHead, deprecatedAt: undefined });
+    case 'live':
+      return responsesFrom(livePartsOf(served), { isHead, deprecatedAt: served.deprecatedAt });
+  }
+}
+
+function livePartsOf({ success, rejections, input }: LiveServed): readonly StatusPart[] {
+  return [successPartOf(success), ...rejections.map(rejectionPartOf), ...faultPartsOf(input)];
 }
 
 /** `RETIRED`, which a Retired Endpoint answers before any Guard. */
@@ -39,7 +44,7 @@ const retiredPart: StatusPart = {
   schema: componentRefOf(faultEnvelopeName),
 };
 
-function successPartOf(success: NonNullable<Served['success']>): StatusPart {
+function successPartOf(success: LiveServed['success']): StatusPart {
   return {
     status: success.status,
     description: 'Success',
@@ -62,7 +67,7 @@ function rejectionPartOf({ code, status, message }: ServedRejection): StatusPart
 }
 
 /** The Faults `serve` may answer any Endpoint: 500 and 503, and 413 when a body is read. */
-function faultPartsOf({ body }: Served['input']): readonly StatusPart[] {
+function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
   const schema = componentRefOf(faultEnvelopeName);
   const tooLarge = reservedFaults.BODY_TOO_LARGE;
   const parts: StatusPart[] = [

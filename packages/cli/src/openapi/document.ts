@@ -5,7 +5,14 @@ import { envelopeComponentsOf } from './envelopes.ts';
 import type { OpenApiObject } from './objects.ts';
 import { operationOf } from './operations.ts';
 import { type ListedEndpoint, listedEndpointsOf, pathConflictLineOf } from './paths.ts';
-import { type Served, type ServedRejection, servedNodesOf, servedOf } from './served.ts';
+import {
+  type Served,
+  type ServedRejection,
+  servedNodesOf,
+  servedOf,
+  servedRejectionsOf,
+  servedSchemesOf,
+} from './served.ts';
 
 /** An OpenAPI 3.1 document as `cf-loom openapi` prints it: a JSON value. */
 export type OpenApiDocument = {
@@ -60,7 +67,7 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot): OpenApiWritten {
 function rejectionsOf(endpoints: readonly ServedEndpoint[]): readonly ServedRejection[] {
   const rejectionByCode = new Map<string, ServedRejection>();
   for (const { served } of endpoints) {
-    for (const rejection of served.rejections) {
+    for (const rejection of servedRejectionsOf(served)) {
       rejectionByCode.set(rejection.code, rejection);
     }
   }
@@ -89,7 +96,7 @@ function componentsOf(
   schemas: Readonly<Record<string, JsonSchema>>,
   endpoints: readonly ServedEndpoint[],
 ): OpenApiDocument['components'] {
-  const names = new Set(endpoints.flatMap(({ served }) => served.authorization?.schemes ?? []));
+  const names = new Set(endpoints.flatMap(({ served }) => servedSchemesOf(served)));
   if (names.size === 0) {
     return { schemas: byName(schemas) };
   }

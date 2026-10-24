@@ -12,9 +12,8 @@ export function jsonSchemaOf(node: SchemaNode): JsonSchema {
 
 /** A schema that also admits `null`: in its `type` where that alone constrains it, else beside it in an `anyOf`. */
 function nullableOf(shape: JsonSchema, node: SchemaNode): JsonSchema {
-  const { type } = shape;
-  return typeof type === 'string' && hasOnlyItsType(node)
-    ? { ...shape, type: [type, 'null'] }
+  return hasOnlyItsType(node)
+    ? { ...shape, type: [shape['type'], 'null'] }
     : { anyOf: [shape, { type: 'null' }] };
 }
 

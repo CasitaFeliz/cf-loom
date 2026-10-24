@@ -118,12 +118,12 @@ const mediaType = 'application/json';
 
 const defsPrefix = '#/components/schemas/';
 
-/** The schema of the Input body of the operation on a path and method. */
+/** The schema of the Input body of the OpenAPI operation on a path and method. */
 function inputBodyOf(path: string, method: string): unknown {
   return valueAt(document, 'paths', path, method, 'requestBody', 'content', mediaType, 'schema');
 }
 
-/** The schema of the body of the response of a status to the operation on a path and method. */
+/** The schema of the body of the response of a status to the OpenAPI operation on a path and method. */
 function responseBodyOf(path: string, method: string, status: string): unknown {
   return valueAt(
     document,
@@ -138,12 +138,12 @@ function responseBodyOf(path: string, method: string, status: string): unknown {
   );
 }
 
-/** The operation on a path and method. */
+/** The OpenAPI operation on a path and method. */
 function operationOf(path: string, method: string): unknown {
   return valueAt(document, 'paths', path, method);
 }
 
-/** The response of a status to the operation on a path and method. */
+/** The response of a status to the OpenAPI operation on a path and method. */
 function responseOf(path: string, method: string, status: string): unknown {
   return valueAt(operationOf(path, method), 'responses', status);
 }
@@ -819,8 +819,8 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 });
 
-describe('cf-loom openapi: the operations', () => {
-  test('an Endpoint is an operation under its path, its method in lower case, its name the operationId', () => {
+describe('cf-loom openapi: the OpenAPI operations', () => {
+  test('an Endpoint is an OpenAPI operation under its path, its method in lower case, its name the operationId', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'operationId')).toBe('createOrder');
   });
 
@@ -844,15 +844,15 @@ describe('cf-loom openapi: the operations', () => {
     ]);
   });
 
-  test('an Endpoint’s description is its operation’s description', () => {
+  test('an Endpoint’s description is its OpenAPI operation’s description', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'description')).toBe('Places a pending order');
   });
 
-  test('an Endpoint with no description has an operation with none', () => {
+  test('an Endpoint with no description has an OpenAPI operation with none', () => {
     expect(operationOf('/proto', 'post')).not.toHaveProperty('description');
   });
 
-  test('an Endpoint’s Group is its operation’s tag', () => {
+  test('an Endpoint’s Group is its OpenAPI operation’s tag', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'tags')).toEqual(['orders']);
   });
 
@@ -874,13 +874,13 @@ describe('cf-loom openapi: the operations', () => {
     expect(visibilities).toEqual(['public', 'internal', 'private']);
   });
 
-  test('an operation lists its Guards with their Qualifiers', () => {
+  test('an OpenAPI operation lists its Guards with their Qualifiers', () => {
     expect(valueAt(operationOf('/orders/{orderId}', 'get'), 'x-cf-loom-guards')).toEqual([
       { guard: 'apiKey', qualifier: { scope: 'orders:read' } },
     ]);
   });
 
-  test('an operation of an Endpoint with no Guard lists none', () => {
+  test('an OpenAPI operation of an Endpoint with no Guard lists none', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'x-cf-loom-guards')).toEqual([]);
   });
 
@@ -1030,7 +1030,7 @@ describe('cf-loom openapi: the responses', () => {
     );
   });
 
-  test('every operation answers the invalid-input Rejection', () => {
+  test('every OpenAPI operation answers the invalid-input Rejection', () => {
     expect(responseBodyOf('/health', 'get', '400')).toEqual(refTo('INVALID_INPUT'));
   });
 
@@ -1040,7 +1040,7 @@ describe('cf-loom openapi: the responses', () => {
     );
   });
 
-  test('every operation answers the not-implemented Rejection', () => {
+  test('every OpenAPI operation answers the not-implemented Rejection', () => {
     expect(responseBodyOf('/health', 'get', '501')).toEqual(refTo('NOT_IMPLEMENTED'));
   });
 
@@ -1057,7 +1057,7 @@ describe('cf-loom openapi: the responses', () => {
     expect(valueAt(issues, 'properties', 'issues', 'type')).toBe('array');
   });
 
-  test('every operation answers the Fault Envelope under 500', () => {
+  test('every OpenAPI operation answers the Fault Envelope under 500', () => {
     expect(responseBodyOf('/health', 'get', '500')).toEqual(refTo('FaultEnvelope'));
   });
 
@@ -1067,7 +1067,7 @@ describe('cf-loom openapi: the responses', () => {
     );
   });
 
-  test('every operation answers the Fault Envelope under 503', () => {
+  test('every OpenAPI operation answers the Fault Envelope under 503', () => {
     expect(responseBodyOf('/health', 'get', '503')).toEqual(refTo('FaultEnvelope'));
   });
 
@@ -1075,7 +1075,7 @@ describe('cf-loom openapi: the responses', () => {
     expect(valueAt(responseOf('/health', 'get', '503'), 'description')).toBe('A retryable Fault');
   });
 
-  test('an operation with an Input body answers the Fault Envelope under 413', () => {
+  test('an OpenAPI operation with an Input body answers the Fault Envelope under 413', () => {
     expect(responseBodyOf('/orders', 'post', '413')).toEqual(refTo('FaultEnvelope'));
   });
 
@@ -1085,7 +1085,7 @@ describe('cf-loom openapi: the responses', () => {
     );
   });
 
-  test('an operation with no Input body does not answer 413', () => {
+  test('an OpenAPI operation with no Input body does not answer 413', () => {
     expect(keysOf(valueAt(operationOf('/health', 'get'), 'responses'))).not.toContain('413');
   });
 
@@ -1107,7 +1107,7 @@ describe('cf-loom openapi: the responses', () => {
     ]);
   });
 
-  test('every response of a HEAD operation has no content, since the host drops every body', () => {
+  test('every response of a HEAD OpenAPI operation has no content, since the host drops every body', () => {
     const responses = valueAt(operationOf('/health', 'head'), 'responses');
 
     const withContent = keysOf(responses).filter((status) =>
