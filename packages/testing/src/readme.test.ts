@@ -12,7 +12,7 @@ import {
   notFound,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, type WithResources, withReader } from '@cf-loom/handlers';
 import { expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeEvent, fakeProvider } from './index.ts';
@@ -143,20 +143,24 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
     event: paymentsDeps.events.paymentSettledV1,
   });
   const received: unknown[] = [];
+  const notifications = { send: async (paymentId: string) => void received.push({ paymentId }) };
   const notifyOnSettledHandler = handle(
     withReader(notifyOnSettled, paymentsDeps.events.paymentSettledV1.body),
-    (body) => {
-      received.push(body);
-      return undefined;
+    async (
+      body,
+      _meta,
+      { resources }: WithResources<{ readonly notifications: typeof notifications }>,
+    ) => {
+      await resources.notifications.send(body.paymentId);
     },
   );
 
   const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
-  const answer = await notifyOnSettledHandler(settled, {
-    messageId: 'PaymentSettled.v1:pay-1',
-    factId: 'pay-1',
-    deliveryCount: 1,
-  });
+  const answer = await notifyOnSettledHandler(
+    settled,
+    { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+    { resources: { notifications } },
+  );
 
   expect(answer).toBeUndefined();
   expect(received).toEqual([{ paymentId: PAYMENT_ID }]);

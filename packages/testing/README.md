@@ -48,7 +48,11 @@ import { fakeEvent } from '@cf-loom/testing';
 import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler.ts';
 
 const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
-await notifyOnSettledHandler(settled, { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 });
+await notifyOnSettledHandler(
+  settled,
+  { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+  { resources: { notifications } },
+);
 ```
 
 `fakeEvent(event, body)` builds the body of an Internal Event a Dependency lists, as its Subscribers read it. The body is given as a Subscriber reads it, with Unknown cases written `{ unknown: … }`. It is written back through the Event's Reader schema and read with it again, as scripted values are (see [Values as a reader sees them](#faking-providers)): its constraints are checked and its unknown keys stripped, and what `fakeEvent` returns is what the Subscription's Handler receives from a direct call, and from `deliver` too (see [In memory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#in-memory) in the messaging README), which sends it as JSON, so a key given as `undefined` does not arrive. A body that breaks the Reader, or throws while it is read, is the test's mistake: `fakeEvent` throws `FakeProviderError`, its message naming the Message Version (`PaymentSettled@1`) and what went wrong, then each Issue at `body` on its own line, never the value, with what threw kept as `cause`. A Private Event, which is always the Service's own, is a type error (see [Scope](#faking-providers)).
