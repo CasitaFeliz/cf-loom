@@ -1,13 +1,33 @@
 import type { EnumNode, ObjectNode, SchemaNode, TupleNode } from '@cf-loom/contract/internal';
-import { definedOf, type JsonSchema } from './keywords.ts';
+import { definedOf, type JsonSchema, type JsonSchemaDialect } from './keywords.ts';
 import { componentRefOf, defComponentNameOf } from './refs.ts';
 import { numberSchemaOf, stringSchemaOf } from './scalars.ts';
 
-/** The JSON Schema of a Snapshot node, with its annotations; a recursive def is a `$ref` to its component. */
-export function jsonSchemaOf(node: SchemaNode): JsonSchema {
-  const shape = shapeOf(node);
+/** The JSON Schema of a Snapshot node in a dialect, with its annotations; a recursive def is a `$ref` to its component. */
+export function jsonSchemaOf(node: SchemaNode, dialect: JsonSchemaDialect): JsonSchema {
+  const shape = shapeOf(node, dialect);
   const nullable = node.nullable === true ? nullableOf(shape, node) : shape;
-  return { ...nullable, ...definedOf({ description: node.description, examples: node.examples }) };
+  const annotations = definedOf({ description: node.description, examples: node.examples });
+  return annotatedOf(nullable, annotations, dialect);
+}
+
+/**
+ * A schema with its annotations beside it; in draft-07 a bare `$ref` goes in an `allOf` first, since
+ * a tool ignores every keyword beside a `$ref` there.
+ */
+function annotatedOf(
+  schema: JsonSchema,
+  annotations: JsonSchema,
+  dialect: JsonSchemaDialect,
+): JsonSchema {
+  switch (dialect) {
+    case '2020-12':
+      return { ...schema, ...annotations };
+    case 'draft-07':
+      return '$ref' in schema && Object.keys(annotations).length > 0
+        ? { allOf: [schema], ...annotations }
+        : { ...schema, ...annotations };
+  }
 }
 
 /** A schema that also admits `null`: in its `type` where that alone constrains it, else beside it in an `anyOf`. */
@@ -40,7 +60,8 @@ function hasOnlyItsType(node: SchemaNode): boolean {
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the JSON Schema of each node type
-function shapeOf(node: SchemaNode): JsonSchema {
+function shapeOf(node: SchemaNode, dialect: JsonSchemaDialect): JsonSchema {
+  const schemaOf = (child: SchemaNode): JsonSchema => jsonSchemaOf(child, dialect);
   switch (node.type) {
     case 'string':
       return stringSchemaOf(node);
@@ -53,25 +74,25 @@ function shapeOf(node: SchemaNode): JsonSchema {
     case 'enum':
       return enumSchemaOf(node);
     case 'object':
-      return objectSchemaOf(node);
+      return objectSchemaOf(node, dialect);
     case 'record':
       return {
         type: 'object',
-        propertyNames: jsonSchemaOf(node.key),
-        additionalProperties: jsonSchemaOf(node.value),
+        propertyNames: schemaOf(node.key),
+        additionalProperties: schemaOf(node.value),
       };
     case 'array': {
-      const items = jsonSchemaOf(node.items);
+      const items = schemaOf(node.items);
       return definedOf({ type: 'array', items, minItems: node.min, maxItems: node.max });
     }
     case 'tuple':
-      return tupleSchemaOf(node);
+      return tupleSchemaOf(node, dialect);
     case 'union':
-      return { anyOf: node.options.map(jsonSchemaOf) };
+      return { anyOf: node.options.map(schemaOf) };
     case 'tagged':
-      return { oneOf: Object.values(node.variants).map(jsonSchemaOf) };
+      return { oneOf: Object.values(node.variants).map(schemaOf) };
     case 'allOf':
-      return { allOf: node.items.map(jsonSchemaOf) };
+      return { allOf: node.items.map(schemaOf) };
     case 'json':
       return {};
     case 'ref':
@@ -88,25 +109,33 @@ function enumSchemaOf({ values, open }: EnumNode): JsonSchema {
   return { type: types.length === 1 ? types[0] : types, enum: values };
 }
 
-function objectSchemaOf({ fields, mode }: ObjectNode): JsonSchema {
+function objectSchemaOf({ fields, mode }: ObjectNode, dialect: JsonSchemaDialect): JsonSchema {
   const entries = Object.entries(fields);
   const required = entries.filter(([, field]) => field.required).map(([name]) => name);
   return definedOf({
     type: 'object',
     properties: Object.fromEntries(
-      entries.map(([name, field]) => [name, jsonSchemaOf(field.schema)]),
+      entries.map(([name, field]) => [name, jsonSchemaOf(field.schema, dialect)]),
     ),
     required: required.length === 0 ? undefined : required,
     additionalProperties: mode === 'strict' ? false : undefined,
   });
 }
 
-/** A tuple closes after its last item, since zod refuses a missing item and an extra one alike. */
-function tupleSchemaOf({ items, rest }: TupleNode): JsonSchema {
-  return {
-    type: 'array',
-    prefixItems: items.map(jsonSchemaOf),
-    minItems: items.length,
-    items: rest === undefined ? false : jsonSchemaOf(rest),
-  };
+/**
+ * A tuple closes after its last item, since zod refuses a missing item and an extra one alike; with
+ * no item it is the array of its rest, since neither dialect takes an empty list of items.
+ */
+function tupleSchemaOf({ items, rest }: TupleNode, dialect: JsonSchemaDialect): JsonSchema {
+  const further = rest === undefined ? false : jsonSchemaOf(rest, dialect);
+  if (items.length === 0) {
+    return { type: 'array', minItems: 0, items: further };
+  }
+  const listed = items.map((item) => jsonSchemaOf(item, dialect));
+  switch (dialect) {
+    case '2020-12':
+      return { type: 'array', prefixItems: listed, minItems: items.length, items: further };
+    case 'draft-07':
+      return { type: 'array', items: listed, minItems: items.length, additionalItems: further };
+  }
 }

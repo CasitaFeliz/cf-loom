@@ -66,7 +66,7 @@ function codeEnvelopeOf({ code, body }: ServedRejection): JsonSchema {
         properties: {
           code: { const: code },
           message: { type: 'string' },
-          body: body === null ? false : jsonSchemaOf(body),
+          body: body === null ? false : jsonSchemaOf(body, '2020-12'),
         },
       }),
     },

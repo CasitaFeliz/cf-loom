@@ -511,7 +511,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     });
   });
 
-  test('only broker-plan takes --prefix', () => {
+  test('only broker-plan and asyncapi take --prefix', () => {
     const project = aProject({});
 
     const ran = cfLoom(project, 'generate', '--prefix', 'staging');
@@ -519,7 +519,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: `Only broker-plan takes --prefix. ${usage}\n`,
+      stderr: `Only broker-plan and asyncapi take --prefix. ${usage}\n`,
     });
   });
 

@@ -7,8 +7,8 @@ import { builtPeersOf } from './peers.ts';
 /** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`, in the folder that holds only cf-loom's output. */
 export const defaultPackageFolder = '.cf-loom/contract-package';
 
-/** The version a Contract Package `package` writes carries, until `publish` derives one. */
-const localVersion = '0.0.0';
+/** The version a Contract Package `package` writes carries, and a document `openapi` or `asyncapi` prints, until `publish` derives one. */
+export const localVersion = '0.0.0';
 
 /**
  * Writes the Contract Package of a Service or an Application to `out`, generated from the

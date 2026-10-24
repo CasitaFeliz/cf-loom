@@ -49,13 +49,13 @@ function successPartOf(success: LiveServed['success']): StatusPart {
     status: success.status,
     description: 'Success',
     headers: headersOf(success.headers),
-    schema: success.body === null ? undefined : jsonSchemaOf(success.body),
+    schema: success.body === null ? undefined : jsonSchemaOf(success.body, '2020-12'),
   };
 }
 
 function headersOf(headers: ObjectNode | null): Readonly<Record<string, OpenApiObject>> {
   const entries = Object.entries(headers?.fields ?? {}).map(([name, field]) => {
-    const schema = jsonSchemaOf(field.schema);
+    const schema = jsonSchemaOf(field.schema, '2020-12');
     const description = field.schema.description;
     return [name, definedOf({ required: field.required, description, schema })] as const;
   });

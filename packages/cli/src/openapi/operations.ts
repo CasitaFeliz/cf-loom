@@ -61,5 +61,7 @@ function listedOrNone<Item>(items: readonly Item[]): readonly Item[] | undefined
 }
 
 function requestBodyOf(body: LiveServed['input']['body']): OpenApiObject | undefined {
-  return body === null ? undefined : { required: true, content: jsonContentOf(jsonSchemaOf(body)) };
+  return body === null
+    ? undefined
+    : { required: true, content: jsonContentOf(jsonSchemaOf(body, '2020-12')) };
 }
