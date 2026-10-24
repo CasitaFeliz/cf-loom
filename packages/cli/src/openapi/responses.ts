@@ -21,7 +21,7 @@ type Answer = {
 };
 
 /** What every response of an operation shares: whether the host drops its bodies, and its Deprecation stamp. */
-type Shared = { readonly isHead: boolean; readonly deprecatedAt: string | undefined };
+type Traits = { readonly isHead: boolean; readonly deprecatedAt: string | undefined };
 
 /**
  * What `serve` answers an Endpoint: its Success, its Rejections and the Faults any Endpoint may
@@ -106,18 +106,18 @@ function faultAnswersOf({ input }: EndpointSnapshot): readonly Answer[] {
 }
 
 /** One response per status in status order: the descriptions joined, the schemas alternatives. */
-function responsesFrom(answers: readonly Answer[], shared: Shared): OpenApiObject {
+function responsesFrom(answers: readonly Answer[], traits: Traits): OpenApiObject {
   const byStatus = new Map<number, Answer[]>();
   for (const answer of answers) {
     byStatus.set(answer.status, [...(byStatus.get(answer.status) ?? []), answer]);
   }
   const statuses = [...byStatus.keys()].sort((left, right) => left - right);
   return Object.fromEntries(
-    statuses.map((status) => [String(status), responseOf(byStatus.get(status) ?? [], shared)]),
+    statuses.map((status) => [String(status), responseOf(byStatus.get(status) ?? [], traits)]),
   );
 }
 
-function responseOf(answers: readonly Answer[], { isHead, deprecatedAt }: Shared): OpenApiObject {
+function responseOf(answers: readonly Answer[], { isHead, deprecatedAt }: Traits): OpenApiObject {
   const answered = answers.flatMap(({ headers }) => Object.entries(headers ?? {}));
   const headers = Object.fromEntries([...answered, ...Object.entries(deprecationOf(deprecatedAt))]);
   const schemas = answers.map(({ schema }) => schema).filter(isSchema);

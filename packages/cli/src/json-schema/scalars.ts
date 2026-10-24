@@ -28,8 +28,8 @@ export function numberSchemaOf(node: NumberNode): JsonSchema {
 }
 
 /**
- * The format JSON Schema knows it by where it admits what zod's does, else the format's own name,
- * which 2020-12 reads as an annotation; none for a `time`, which JSON Schema's requires an offset.
+ * A string's `format`, by JSON Schema's name where its values are zod's. Any other format keeps its
+ * name, an annotation in 2020-12; a `time` has none, since JSON Schema's requires an offset.
  */
 function formatOf({ format, formatOptions }: StringNode): string | undefined {
   if (format === undefined || format === 'time') {

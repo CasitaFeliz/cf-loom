@@ -5,7 +5,9 @@ import {
   bodyOf,
   committedValues,
   deprecatedAtOfHeader,
+  deprecationHeaderOf,
   faultResponseOf,
+  faultStatusOf,
   headerTextsOf,
   headerValuesOf,
   invalidInputBodyOf,
@@ -356,6 +358,12 @@ describe('the reserved codes and statuses', () => {
     expect(statuses).toEqual([413, 503, 500]);
   });
 
+  test('a Fault the Service produced has the status 503 when it is retryable and 500 otherwise', () => {
+    const statuses = [faultStatusOf({ retryable: true }), faultStatusOf({ retryable: false })];
+
+    expect(statuses).toEqual([503, 500]);
+  });
+
   test('committed is no, yes or unknown', () => {
     expect(committedValues).toEqual(['no', 'yes', 'unknown']);
   });
@@ -451,6 +459,10 @@ describe('the Deprecation header', () => {
     const response = withDeprecation(new Response(null), '2026-10-17T09:30:00Z');
 
     expect(response.headers.get('deprecation')).toBe('@1792229400');
+  });
+
+  test('the value of the Deprecation header of a stamp is @ and its unix seconds', () => {
+    expect(deprecationHeaderOf('2026-10-17T09:30:00Z')).toBe('@1792229400');
   });
 
   test('a received Deprecation header is read back as the stamp, and anything else as none', () => {
