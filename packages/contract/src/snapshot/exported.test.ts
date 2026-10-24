@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { defineContract, defineEndpoint, defineGroup, defineGuard } from '../index.ts';
 import {
+  checkExportedFormat,
   type EndpointSnapshot,
+  type ExportedSnapshot,
   exportedEntryOf,
   exportedSnapshotOf,
   snapshotOf,
@@ -64,6 +66,12 @@ const providing = {
   exportedSnapshot: exportedSnapshotOf(declaredSnapshotOf()),
 };
 
+function withFormat(format: unknown): typeof providing {
+  const { format: _written, ...rest } = providing.exportedSnapshot;
+  const exportedSnapshot = format === undefined ? rest : { ...rest, format };
+  return { ...providing, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+}
+
 function entryOf(): EndpointSnapshot {
   return exportedEntryOf(providing, getOrder);
 }
@@ -96,5 +104,35 @@ describe('textPartNodesOf', () => {
     const nodes = textPartNodesOf(entry);
 
     expect(nodes).toEqual({});
+  });
+});
+
+describe('checkExportedFormat', () => {
+  test('an exported Snapshot in a format this cf-loom reads is accepted', () => {
+    const check = () => checkExportedFormat(providing);
+
+    expect(check).not.toThrow();
+  });
+
+  test.each([2, 99])(
+    'an exported Snapshot in format %i, newer than this cf-loom reads, is refused',
+    (format) => {
+      const check = () => checkExportedFormat(withFormat(format));
+
+      expect(check).toThrow(
+        `orders-service's exported Snapshot is in format ${format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
+      );
+    },
+  );
+
+  test.each([
+    { given: 'a text', format: '1' },
+    { given: 'none', format: undefined },
+  ])('an exported Snapshot whose format is $given is refused as malformed', ({ format }) => {
+    const check = () => checkExportedFormat(withFormat(format));
+
+    expect(check).toThrow(
+      "orders-service's exported Snapshot is malformed: format is not a whole number from 1",
+    );
   });
 });

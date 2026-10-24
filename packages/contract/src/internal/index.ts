@@ -80,6 +80,7 @@ export {
   bumpedVersionOf,
   canonicalSnapshotOf,
   canonicalTextOf,
+  checkExportedFormat,
   compareSemanticVersions,
   exportedEntryOf,
   exportedSnapshotOf,

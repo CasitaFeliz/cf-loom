@@ -1,6 +1,7 @@
 import type { Endpoint } from '../declarations/index.ts';
-import type { TextPartNodes } from '../validation/index.ts';
+import { problemLineOf, type TextPartNodes } from '../validation/index.ts';
 import { identityOf } from '../written/index.ts';
+import { snapshotFormatOf } from './format.ts';
 import type { EndpointSnapshot, ExportedSnapshot } from './types.ts';
 
 /** A Provider as a Dependency carries it: its name and the Snapshot its Contract Package exports. */
@@ -8,6 +9,25 @@ export type Providing = {
   readonly provider: string;
   readonly exportedSnapshot: ExportedSnapshot;
 };
+
+/**
+ * Refuses a Provider's exported Snapshot in a format this cf-loom does not read, before any of its
+ * nodes is read, rather than reading it as far as it goes.
+ */
+export function checkExportedFormat(providing: Providing): void {
+  const named = snapshotFormatOf(providing.exportedSnapshot);
+  const subject = `${providing.provider}'s exported Snapshot`;
+  switch (named.kind) {
+    case 'known':
+      return;
+    case 'newer-format':
+      throw new Error(
+        `${subject} is in format ${named.format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
+      );
+    case 'malformed':
+      throw new Error(`${subject} is malformed: ${problemLineOf(named)}`);
+  }
+}
 
 /**
  * An exported Endpoint's entry in its Provider's exported Snapshot, found by identity; every
