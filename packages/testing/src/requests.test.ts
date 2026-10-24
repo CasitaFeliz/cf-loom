@@ -105,10 +105,10 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
 
-/** The Provider's Contract Package as another cf-loom wrote it: only its exported Snapshot's `format` differs. */
+/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
 function inFormat(contractPackage: typeof payments, format: unknown): typeof payments {
-  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format } as ExportedSnapshot;
-  return { ...contractPackage, exportedSnapshot };
+  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
+  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
 }
 
 const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment, capturePayment] });
