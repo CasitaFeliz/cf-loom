@@ -1,0 +1,151 @@
+# Publishes every @cf-loom package to npmjs.com, with restricted access, from the changesets on main.
+#
+# How a version is released
+# - While .changeset/ holds changesets, the version job keeps the PR "chore: version packages" open
+#   (branch changeset-release/main): `changeset version` bumps the fixed group and writes each
+#   CHANGELOG.md. In pre mode (.changeset/pre.json, from `pnpm changeset pre enter rc`), versions are
+#   <version>-rc.<n>, the PR title ends in "(rc)" and the npm dist-tag is rc; `pnpm changeset pre exit`
+#   leaves it, and the next version PR releases to latest.
+# - GITHUB_TOKEN opens that PR, so it gets no CI run: close and reopen it to run the checks before merging.
+# - Merging that PR releases. Once the CI checks pass on main, pack builds and packs every package whose
+#   version npmjs.com does not list, and publish publishes those tarballs with pnpm and pushes a git tag
+#   <name>@<version> for each. The examples (@org/*) are private and ignored by Changesets: never published.
+# - select-mode and publish both run in the npm environment, which only main can use. Publish
+#   authenticates with npm trusted publishing (OIDC), so no npm token can publish; select-mode reads
+#   npmjs.com with NPM_READ_TOKEN, a read-only secret of that environment.
+# - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 30 days and the
+#   versions already published are skipped, so the re-run publishes the rest; otherwise the next push to
+#   main that carries no changeset retries. npm cannot take a version back: fix forward with the next
+#   version.
+#
+# One-time setup by an owner of the @cf-loom npm org and of the repo's settings
+# Steps 1-3, 5 and 6 come before this workflow reaches main; step 7, before the first changeset reaches
+# main; step 4, within 2 days before the first publish.
+# npmjs.com
+# 1. The @cf-loom org has a paid plan, which restricted packages need.
+# 2. A trusted publisher can only be set on an existing package: publish a placeholder 0.0.0 of each,
+#    from an empty folder, logged in with 2FA (a new @cf-loom package needs the same, and step 4,
+#    before its first publish):
+#      for name in cli client contract handlers messaging server testing; do
+#        printf '{"name":"@cf-loom/%s","version":"0.0.0","license":"UNLICENSED"}\n' "$name" > package.json
+#        npm publish --access restricted
+#      done
+# 3. A granular access token, read-only on the @cf-loom packages, which step 6 saves as NPM_READ_TOKEN.
+# 4. No more than 2 days before the first publish (a trusted publisher unused for 2 days expires: delete
+#    it and add it again), for each package (npm >= 11.15, e.g. `npx npm@11 trust ...`):
+#      npm trust github @cf-loom/<name> --repo CasitaFeliz/cf-loom --file release.yml --env npm --allow-publish
+#    then, in the package's settings, Publishing access: "Require two-factor authentication and disallow tokens".
+# GitHub (CasitaFeliz/cf-loom)
+# 5. Settings > Environments: environment npm, Deployment branches and tags: Selected, main only.
+# 6. Settings > Environments > npm > Environment secrets: NPM_READ_TOKEN (step 3), so no branch other
+#    than main can read it.
+# 7. Settings > Actions > General: "Allow GitHub Actions to create and approve pull requests".
+# Renaming this file or the npm environment stops publishing until a trusted publisher for the new name
+# is added to every package.
+name: Publish packages
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  select-mode:
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      deployment: false
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select-mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - id: select-mode
+        uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        env:
+          "npm_config_//registry.npmjs.org/:_authToken": ${{ secrets.NPM_READ_TOKEN }}
+
+  version:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          commit-message: 'chore: version packages'
+          pr-title: 'chore: version packages'
+
+  pack:
+    needs: [checks, select-mode]
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          create-github-releases: false
+          push-git-tags: true

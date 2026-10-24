@@ -25,7 +25,8 @@ export function entriesOf(manifest: { exports?: unknown; bin?: unknown }): Packa
   return { kind: 'entries', entries: { files, bins: new Set(bins), folders } };
 }
 
-function targetsOf(field: unknown): string[] {
+/** Every file path a manifest's `exports` or `bin` field points at, as the manifest writes it. */
+export function targetsOf(field: unknown): string[] {
   if (typeof field === 'string') {
     return [field];
   }

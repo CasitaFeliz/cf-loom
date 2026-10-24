@@ -96,7 +96,7 @@ session stops and brings the state to the user, who decides to merge as it stand
 A PR is done when all of these hold; the main session checks them and lists them in the last round's comment:
 
 - [ ] every test in the plan exists and passes;
-- [ ] CI passes: Biome, the TSDoc check, the layout check, `pnpm build` and Vitest;
+- [ ] CI passes: Biome, the TSDoc check, the layout check, actionlint, `pnpm build` and Vitest;
 - [ ] the last review round found nothing to fix, or the user decided to merge after round 2;
 - [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
@@ -126,3 +126,5 @@ makes CI pass before the merge.
 ## Changesets
 
 When a PR carries a changeset is a rule of the repository ([CLAUDE.md](CLAUDE.md#repository)).
+While changesets wait on `main`, the [release workflow](.github/workflows/release.yml) keeps the PR
+`chore: version packages` open; merging it publishes, and only the user merges it.
