@@ -80,7 +80,7 @@ describe("a Message Handler's Resources", () => {
   type NotificationsTaken = { readonly notifications: Notifications };
 
   test("a CommandHandler's and an EventHandler's implementation receive the Resources their direct call is given", async () => {
-    const notifications: Notifications = { send: () => undefined };
+    const resources = { notifications: { send: () => undefined } };
     const received: unknown[] = [];
     const chargeCardHandler = handle(
       chargeCard,
@@ -95,12 +95,12 @@ describe("a Message Handler's Resources", () => {
       },
     );
 
-    await chargeCardHandler(body, meta, { resources: { notifications } });
-    await notifyOnPaidHandler(body, meta, { resources: { notifications } });
+    await chargeCardHandler(body, meta, { resources });
+    await notifyOnPaidHandler(body, meta, { resources });
 
     expect(received).toHaveLength(2);
-    expect(received[0]).toStrictEqual({ notifications });
-    expect(received[1]).toStrictEqual({ notifications });
+    expect(received[0]).toBe(resources);
+    expect(received[1]).toBe(resources);
   });
 });
 

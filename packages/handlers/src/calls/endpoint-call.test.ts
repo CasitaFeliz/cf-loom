@@ -131,21 +131,22 @@ const created = handle(createOrder, () =>
 describe('an EndpointHandler’s Resources', () => {
   type Orders = { readonly find: (orderId: string) => string | undefined };
 
-  test('the implementation receives the Resources its direct call is given', async () => {
-    const orders: Orders = { find: () => 'order' };
+  test('the implementation receives the Resources its direct call is given, and its Context without them', async () => {
+    const resources = { orders: { find: () => 'order' } };
     const received: unknown[] = [];
     const getOrderHandler = handle(
       getOrder,
-      (_input, _context, { resources }: WithResources<{ readonly orders: Orders }>) => {
-        received.push(resources);
+      (_input, context, call: WithResources<{ readonly orders: Orders }>) => {
+        received.push(context, call.resources);
         return success({ id: ORDER_ID, total: 1 });
       },
     );
 
-    await getOrderHandler(getInput, getContext, { resources: { orders } });
+    await getOrderHandler(getInput, getContext, { resources });
 
-    expect(received).toHaveLength(1);
-    expect(received[0]).toStrictEqual({ orders });
+    expect(received).toHaveLength(2);
+    expect(received[0]).toStrictEqual(getContext);
+    expect(received[1]).toBe(resources);
   });
 
   test('given the root and the Resources, a Standard Rejection resolves as serve resolves it', async () => {

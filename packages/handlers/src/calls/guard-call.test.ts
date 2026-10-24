@@ -90,41 +90,40 @@ describe('a GuardHandler’s direct call', () => {
     expect(received).toEqual([{}, userContext, ['orders:edit']]);
   });
 
-  test('the implementation receives its Qualifier and the Resources its direct call is given', async () => {
-    const permissions = { held: ['orders:edit'] };
+  test('the implementation receives its Qualifier and the Resources its direct call is given, and its Context without them', async () => {
+    const resources = { permissions: { held: ['orders:edit'] } };
     const received: unknown[] = [];
     const permissionHandler = handle(
       permission,
-      (_demands, _context, { qualifier, resources }: GuardCall<typeof permission, Held>) => {
-        received.push(qualifier, resources);
+      (_demands, context, { qualifier, resources: taken }: GuardCall<typeof permission, Held>) => {
+        received.push(context, qualifier, taken);
         return admit();
       },
     );
 
-    await permissionHandler({}, userContext, {
-      qualifier: ['orders:edit'],
-      resources: { permissions },
-    });
+    await permissionHandler({}, userContext, { qualifier: ['orders:edit'], resources });
 
-    expect(received).toHaveLength(2);
-    expect(received[0]).toEqual(['orders:edit']);
-    expect(received[1]).toStrictEqual({ permissions });
+    expect(received).toHaveLength(3);
+    expect(received[0]).toStrictEqual(userContext);
+    expect(received[1]).toEqual(['orders:edit']);
+    expect(received[2]).toBe(resources);
   });
 
   test('a Guard that declares no Qualifier receives the Resources its direct call is given', async () => {
-    const callers = { byKey: () => 'c-1' };
+    const resources = { callers: { byKey: () => 'c-1' } };
     const received: unknown[] = [];
     const apiKeyHandler = handle(
       apiKey,
-      (_demands, _context, { resources }: GuardCall<typeof apiKey, Keyed>) => {
-        received.push(resources);
-        return admit({ callerId: resources.callers.byKey() });
+      (_demands, _context, { resources: taken }: GuardCall<typeof apiKey, Keyed>) => {
+        received.push(taken);
+        return admit({ callerId: taken.callers.byKey() });
       },
     );
 
-    const admission = await apiKeyHandler(apiKeyDemands, {}, { resources: { callers } });
+    const admission = await apiKeyHandler(apiKeyDemands, {}, { resources });
 
-    expect(received).toStrictEqual([{ callers }]);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(resources);
     expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
   });
 
