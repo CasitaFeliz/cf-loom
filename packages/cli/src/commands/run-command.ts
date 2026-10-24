@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { isBrokerPrefix } from '@cf-loom/contract/internal';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
 import type { Run } from '../project/index.ts';
+import { asyncApiCommand } from './asyncapi.ts';
 import { brokerPlanCommand } from './broker-plan.ts';
 import { check, type Output } from './check.ts';
 import { errorsExitOf } from './check-json.ts';
@@ -17,7 +18,7 @@ import { verify } from './verify.ts';
 const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | openapi | publish [--force] [--prerelease]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | openapi | asyncapi [--prefix <p>] | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
@@ -70,6 +71,8 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
       return await brokerPlanExitOf(rest, called, run);
     case 'openapi':
       return await openApiExitOf(rest, run);
+    case 'asyncapi':
+      return await asyncApiExitOf(rest, called, run);
     case 'publish':
       return rest.length > 0
         ? usageError('publish takes no argument')
@@ -87,8 +90,8 @@ function misplacedOptionIn(
   if (out !== undefined && command !== 'package') {
     return usageError('Only package takes --out');
   }
-  if (prefix !== undefined && command !== 'broker-plan') {
-    return usageError('Only broker-plan takes --prefix');
+  if (prefix !== undefined && command !== 'broker-plan' && command !== 'asyncapi') {
+    return usageError('Only broker-plan and asyncapi take --prefix');
   }
   if (output === 'json' && command !== 'check' && command !== 'broker-plan') {
     return usageError('Only check and broker-plan take --json');
@@ -110,10 +113,25 @@ async function brokerPlanExitOf(
   if (rest.length > 0) {
     return usageError('broker-plan takes no argument');
   }
-  if (prefix !== undefined && !isBrokerPrefix(prefix)) {
-    return usageError('--prefix takes a prefix in kebab-case, such as staging');
+  return invalidPrefixExitOf(prefix) ?? (await brokerPlanCommand(run, prefix ?? null, output));
+}
+
+async function asyncApiExitOf(
+  rest: readonly string[],
+  { prefix }: Called,
+  run: Run,
+): Promise<Exit> {
+  if (rest.length > 0) {
+    return usageError('asyncapi takes no argument');
   }
-  return await brokerPlanCommand(run, prefix ?? null, output);
+  return invalidPrefixExitOf(prefix) ?? (await asyncApiCommand(run, prefix ?? null));
+}
+
+/** The usage error of a prefix a Broker's names cannot carry, if it is one. */
+function invalidPrefixExitOf(prefix: string | undefined): Exit | undefined {
+  return prefix !== undefined && !isBrokerPrefix(prefix)
+    ? usageError('--prefix takes a prefix in kebab-case, such as staging')
+    : undefined;
 }
 
 async function openApiExitOf(rest: readonly string[], run: Run): Promise<Exit> {

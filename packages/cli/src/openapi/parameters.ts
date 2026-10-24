@@ -41,6 +41,6 @@ function parameterOf(location: ParameterIn, name: string, field: Field): OpenApi
     in: location,
     required: field.required,
     description: field.schema.description,
-    schema: jsonSchemaOf(field.schema),
+    schema: jsonSchemaOf(field.schema, '2020-12'),
   });
 }

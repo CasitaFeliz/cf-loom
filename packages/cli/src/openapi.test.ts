@@ -1,117 +1,30 @@
-import { spawnSync } from 'node:child_process';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { bin } from '../test/cf-loom-run.ts';
-import { aDeadAddress } from '../test/dead-address.ts';
+import {
+  aContractProject,
+  aDefinitionsPackage,
+  aFixture,
+  aGeneratedProject,
+  anApplication,
+  aProject,
+  cfLoom,
+  cfLoomOffline,
+  generated,
+  keysOf,
+  lines,
+  removeFixtures,
+  removeProjects,
+  staleSnapshotLine,
+  valueAt,
+  write,
+} from '../test/cli-project.ts';
 import { everything } from '../test/everything-schema.ts';
 import { usage } from '../test/usage.ts';
 
-const cliDir = join(import.meta.dirname, '..');
-const packagesDir = join(cliDir, '..');
-const projects: string[] = [];
-const fixtures: string[] = [];
+afterEach(removeProjects);
 
-afterEach(() => {
-  for (const project of projects.splice(0)) {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
-afterAll(() => {
-  for (const fixture of fixtures.splice(0)) {
-    rmSync(fixture, { recursive: true, force: true });
-  }
-});
-
-/** A project in a temporary directory, with cf-loom, its handlers and zod installed. */
-function makeProject(files: Readonly<Record<string, string>>): string {
-  const project = mkdtempSync(join(tmpdir(), 'cf-loom-openapi-'));
-  link(join(packagesDir, 'contract'), join(project, 'node_modules/@cf-loom/contract'));
-  link(join(packagesDir, 'handlers'), join(project, 'node_modules/@cf-loom/handlers'));
-  link(cliDir, join(project, 'node_modules/@cf-loom/cli'));
-  link(realpathSync(join(cliDir, 'node_modules/zod')), join(project, 'node_modules/zod'));
-  write(project, files);
-  return project;
-}
-
-/** A project that the test removes when it ends. */
-function aProject(files: Readonly<Record<string, string>>): string {
-  const project = makeProject(files);
-  projects.push(project);
-  return project;
-}
-
-function link(target: string, path: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  symlinkSync(target, path, 'dir');
-}
-
-function write(project: string, files: Readonly<Record<string, string>>): void {
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(project, path)), { recursive: true });
-    writeFileSync(join(project, path), text);
-  }
-}
-
-function cfLoom(project: string, ...args: string[]) {
-  const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, encoding: 'utf8' });
-  return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
-}
-
-/** Runs the CLI with no npm on PATH and the registry set to an address nothing listens on. */
-async function cfLoomOffline(project: string, ...args: string[]) {
-  const dead = await aDeadAddress();
-  try {
-    const emptyPath = mkdtempSync(join(tmpdir(), 'cf-loom-no-npm-'));
-    projects.push(emptyPath);
-    const env = Object.fromEntries([
-      ...Object.entries(process.env),
-      ['PATH', emptyPath],
-      ['npm_config_registry', dead.url],
-    ]);
-    const options = { cwd: project, env, encoding: 'utf8' } as const;
-    const ran = spawnSync(process.execPath, [bin, ...args], options);
-    return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
-  } finally {
-    dead.release();
-  }
-}
-
-/** The project after `generate` wrote its Snapshot, which `openapi` reads. */
-function generated(project: string): string {
-  const ran = cfLoom(project, 'generate');
-  if (ran.status !== 0) {
-    throw new Error(`generate failed: ${ran.stderr}`);
-  }
-  return project;
-}
-
-function aGeneratedProject(files: Readonly<Record<string, string>>): string {
-  return generated(aProject(files));
-}
-
-function lines(written: readonly string[]): string {
-  return `${written.join('\n')}\n`;
-}
-
-/** The value a document holds after the steps, or `undefined` where a step finds nothing. */
-function valueAt(root: unknown, ...steps: readonly string[]): unknown {
-  let value = root;
-  for (const step of steps) {
-    value = typeof value === 'object' && value !== null ? Reflect.get(value, step) : undefined;
-  }
-  return value;
-}
+afterAll(removeFixtures);
 
 /** The media type every body of the document is keyed by. */
 const mediaType = 'application/json';
@@ -158,11 +71,6 @@ function refTo(name: string): { readonly $ref: string } {
   return { $ref: `${defsPrefix}${name}` };
 }
 
-/** The keys of an object of the document. */
-function keysOf(value: unknown): readonly string[] {
-  return typeof value === 'object' && value !== null ? Object.keys(value) : [];
-}
-
 /** A property of the body `POST /echo` answers, which holds a field of every kind. */
 function echoed(field: string): unknown {
   return valueAt(responseBodyOf('/echo', 'post', '200'), 'properties', field);
@@ -177,14 +85,6 @@ function echoedIn(field: string): unknown {
 function extra(field: string): unknown {
   return valueAt(inputBodyOf('/extra', 'post'), 'properties', field);
 }
-
-const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' });
-
-const config = lines([
-  "import { defineConfig } from '@cf-loom/cli';",
-  '',
-  "export const config = defineConfig({ scope: '@org' });",
-]);
 
 /** `@org/definitions`, installed as built JavaScript with one shared schema. */
 const installedDefinitions: Readonly<Record<string, string>> = {
@@ -204,12 +104,7 @@ const installedDefinitions: Readonly<Record<string, string>> = {
 
 /** A project around a root file. */
 function aRootProject(root: readonly string[]): Readonly<Record<string, string>> {
-  return {
-    'package.json': manifest,
-    'cf-loom.config.ts': config,
-    ...installedDefinitions,
-    'src/contract/index.ts': lines(root),
-  };
+  return { ...aContractProject(root), ...installedDefinitions };
 }
 
 /** The imports every fixture root starts with. */
@@ -348,6 +243,8 @@ const shapes = [
   "  fixed: z.literal('x').nullable(),",
   '  meaning: z.literal(42),',
   '  pair: z.tuple([z.string(), z.number()]),',
+  '  nothing: z.tuple([]),',
+  '  anyNumbers: z.tuple([], z.number()),',
   '  span: z.iso.duration(),',
   '  day: z.iso.date(),',
   '  v4: z.ipv4(),',
@@ -421,26 +318,6 @@ const aServiceWithoutEndpoints = aRootProject([
   "export const contract = defineContract({ name: 'orders-service' });",
 ]);
 
-const anApplication = {
-  'package.json': manifest,
-  'cf-loom.config.ts': config,
-  'src/contract/index.ts': lines([
-    "import { defineApplication } from '@cf-loom/contract';",
-    "export const application = defineApplication({ name: 'orders-service', dependencies: [] });",
-  ]),
-};
-
-const aDefinitionsPackage = {
-  'package.json': manifest,
-  'cf-loom.config.ts': config,
-  'src/definitions/index.ts': lines([
-    "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'orders-service' });",
-  ]),
-};
-
-const staleSnapshotLine = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
-
 /** A Service whose Endpoints take the recursive schemas given as their Input bodies, in the order given. */
 function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<string, string>> {
   const declared = recursive.map((id, index) => [
@@ -489,8 +366,7 @@ let ran: { status: number | null; stdout: string; stderr: string };
 let document: unknown;
 
 beforeAll(() => {
-  fixture = makeProject(theService);
-  fixtures.push(fixture);
+  fixture = aFixture(theService);
   generated(fixture);
   ran = cfLoom(fixture, 'openapi');
   document = JSON.parse(ran.stdout);
@@ -676,6 +552,18 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
       prefixItems: [{ type: 'string' }, { type: 'number' }],
       minItems: 2,
       items: false,
+    });
+  });
+
+  test('an empty tuple admits no item', () => {
+    expect(extra('nothing')).toEqual({ type: 'array', minItems: 0, items: false });
+  });
+
+  test('an empty tuple with rest admits any number of its rest', () => {
+    expect(extra('anyNumbers')).toEqual({
+      type: 'array',
+      minItems: 0,
+      items: { type: 'number' },
     });
   });
 
@@ -1551,7 +1439,7 @@ describe('cf-loom openapi: what it refuses', () => {
 
   test.for([
     ['--out', ['--out', 'folder'], 'Only package takes --out'],
-    ['--prefix', ['--prefix', 'staging'], 'Only broker-plan takes --prefix'],
+    ['--prefix', ['--prefix', 'staging'], 'Only broker-plan and asyncapi take --prefix'],
     ['--json', ['--json'], 'Only check and broker-plan take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
     ['--prerelease', ['--prerelease'], 'Only publish takes --prerelease'],

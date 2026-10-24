@@ -48,6 +48,7 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot): OpenApiWritten {
   const defs = defComponentsOf(
     endpoints.flatMap(({ served }) => servedNodesOf(served)),
     snapshot.defs,
+    '2020-12',
   );
   if (defs.kind === 'unnamed') {
     return { kind: 'unnamed', line: defs.line };
