@@ -1266,7 +1266,7 @@ describe('cf-loom generate: a configured layout', () => {
   });
 
   test.skipIf(isRoot)(
-    'an unreadable folder anywhere under src/ is a tooling error (skipped as root)',
+    'generate fails on an unreadable folder anywhere under src/ (skipped as root)',
     () => {
       const project = aProject({ ...aService(), 'src/support/kept.txt': '' });
       chmodSync(join(project, 'src/support'), 0o000);

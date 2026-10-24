@@ -6,5 +6,5 @@ import { headerOf } from '../source-text/index.ts';
  */
 export function isWrittenByGenerate(text: string): boolean {
   const first = text.split('\n', 1)[0] ?? '';
-  return first.replace(/^﻿/, '').replace(/\r$/, '') === headerOf('generate');
+  return first.replace(/^\uFEFF/, '').replace(/\r$/, '') === headerOf('generate');
 }
