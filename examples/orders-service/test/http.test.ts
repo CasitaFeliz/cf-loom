@@ -1,23 +1,28 @@
 import { admit, handle } from '@cf-loom/handlers';
+import { type Messaging, messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
-import { serve } from '@cf-loom/server';
+import { type Http, serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
-import { ordersMessaging, startMessaging } from '../src/messaging.ts';
+import type { Resources } from '../src/resources.ts';
 
 const PAID_ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const UNKNOWN_ORDER_ID = '00000000-0000-4000-8000-000000000000';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
-const http = serve(contract, handlers, { onServiceFault: () => undefined });
+let running: Messaging<typeof contract>;
+let resources: Resources;
+let http: Http;
 
 beforeAll(async () => {
-  await startMessaging(memory());
+  running = await messaging(contract, memory());
+  resources = { publisher: running.publisher, sender: running.sender };
+  http = serve(contract, handlers, { resources, onServiceFault: () => undefined });
 });
 
 afterAll(async () => {
-  await ordersMessaging().close();
+  await running.close();
 });
 
 function aRequest(path: string, init: RequestInit = {}): Request {
@@ -39,10 +44,11 @@ describe('serve', () => {
 
   test('a test replaces the GuardHandler by spreading the Handler map', async () => {
     const anyKey = handle(apiKey, async () => admit({ callerId: 'test' }));
-    const admitting = serve(contract, {
-      ...handlers,
-      guards: { ...handlers.guards, apiKey: anyKey },
-    });
+    const admitting = serve(
+      contract,
+      { ...handlers, guards: { ...handlers.guards, apiKey: anyKey } },
+      { resources },
+    );
     const request = aRequest(`/orders/${PAID_ORDER_ID}`, { headers: { 'x-api-key': 'any' } });
 
     const response = await admitting(request);
