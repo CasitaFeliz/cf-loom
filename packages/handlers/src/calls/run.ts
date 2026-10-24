@@ -114,7 +114,7 @@ async function guardCallOf(
     return checked;
   }
   const { demands, context, qualifier } = checked.value;
-  const run = () => implementation(demands, context, qualifier);
+  const run = () => implementation(demands, context, { qualifier, resources: given.resources });
   const returned = await returnedOf(guard, run, isAdmission);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };

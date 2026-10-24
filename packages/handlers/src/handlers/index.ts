@@ -3,6 +3,7 @@ export type {
   DirectCall,
   EndpointHandler,
   EndpointImplementation,
+  GuardCall,
   GuardHandler,
   GuardImplementation,
   HandlerMap,

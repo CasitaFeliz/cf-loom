@@ -16,6 +16,7 @@ import {
   type EventHandler,
   type Fault,
   fault,
+  type GuardCall,
   type GuardHandler,
   type HandlerMap,
   handle,
@@ -315,11 +316,36 @@ describe('handle and Resources', () => {
     expect(calls).toBeDefined();
   });
 
+  test('handle() infers the Resources a GuardHandler takes from its last parameter', () => {
+    type CallersTaken = { readonly callers: { readonly byKey: (key: string) => string } };
+    const apiKeyHandler = handle(
+      apiKey,
+      (_demands, _context, { resources }: GuardCall<typeof apiKey, CallersTaken>) =>
+        admit({ callerId: resources.callers.byKey('k') }),
+    );
+    const demands = { headers: { 'x-api-key': 'k' } };
+
+    const calls = () => [
+      // @ts-expect-error the Handler takes callers
+      apiKeyHandler(demands, {}),
+    ];
+
+    expectTypeOf(apiKeyHandler).toEqualTypeOf<GuardHandler<typeof apiKey, CallersTaken>>();
+    expectTypeOf(apiKeyHandler).toBeCallableWith(
+      demands,
+      {},
+      { resources: { callers: { byKey: () => 'c-1' } } },
+    );
+    expect(calls).toBeDefined();
+  });
+
   test('a stub takes no Resources', () => {
     const getOrderStub = handle.stub(getOrder);
+    const apiKeyStub = handle.stub(apiKey);
 
     expectTypeOf(getOrderStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(getOrderStub).toBeCallableWith({ params: { orderId: ORDER_ID } }, {});
+    expectTypeOf(apiKeyStub).toBeCallableWith({ headers: { 'x-api-key': 'k' } }, {});
   });
 });
 

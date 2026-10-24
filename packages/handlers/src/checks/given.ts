@@ -22,11 +22,12 @@ export type EndpointGiven = {
   readonly resources: unknown;
 };
 
-/** What one call of a GuardHandler is given, before it is checked. */
+/** What one call of a GuardHandler is given, before it is checked; its Resources are passed on unchecked. */
 export type GuardGiven = {
   readonly demands: unknown;
   readonly context: unknown;
   readonly qualifier: unknown;
+  readonly resources: unknown;
 };
 
 /** Parsed values by the field a Handler reads them under. */

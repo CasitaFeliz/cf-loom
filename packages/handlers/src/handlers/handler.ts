@@ -24,11 +24,22 @@ export type EndpointImplementation<
   call: WithResources<Resources>,
 ) => Outcome<Target> | Promise<Outcome<Target>>;
 
-/** What a GuardHandler's implementation returns; may be async. */
-export type GuardImplementation<Target extends Guard> = (
+/** `qualifier`, only when the Guard declares one. */
+type QualifierField<Target extends Guard> = Target extends { readonly qualifier: core.$ZodType }
+  ? { readonly qualifier: QualifierOf<Target> }
+  : unknown;
+
+/** A GuardHandler's last argument, to its implementation and its direct call: its Qualifier, when its Guard declares one, and the Resources it takes. */
+export type GuardCall<
+  Target extends Guard,
+  Resources extends object = NoResources,
+> = QualifierField<Target> & ResourcesField<Resources>;
+
+/** What a GuardHandler's implementation returns, given its demands, the Context of the Guards it lists, and its Qualifier and Resources; may be async. */
+export type GuardImplementation<Target extends Guard, Resources extends object = NoResources> = (
   demands: DemandsOf<Target>,
   context: RequiredContextOf<Target>,
-  qualifier: QualifierOf<Target>,
+  call: GuardCall<Target, Resources>,
 ) => Admission<Target> | Promise<Admission<Target>>;
 
 /** The last argument of an EndpointHandler's direct call: the root to resolve Standard Rejections against, as `serve` does, and the Resources the Handler takes. */
@@ -60,19 +71,12 @@ export type HandlerMap = {
   readonly deprecatedAt: Readonly<Record<string, string>>;
 };
 
-/** The Qualifier a GuardHandler's direct call takes third, only when its Guard declares one. */
-type QualifierArgument<Target extends Guard> = Target extends {
-  readonly qualifier: core.$ZodType;
-}
-  ? [qualifier: QualifierOf<Target>]
-  : [];
-
 /** The Handler of one Guard: calling it validates what it is given and answers what `serve` would. */
-export type GuardHandler<Target extends Guard> = {
+export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = {
   (
     demands: DemandsOf<Target>,
     context: RequiredContextOf<Target>,
-    ...qualifier: QualifierArgument<Target>
+    ...call: CallArgument<GuardCall<Target, Resources>>
   ): Promise<ResolvedAdmission<Target>>;
   readonly element: Target;
 };

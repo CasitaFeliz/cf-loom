@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
+  type GuardCall,
   type GuardImplementation,
   handle,
   InvalidInputError,
@@ -46,6 +47,9 @@ const permission = defineGuard({
   rejections: [forbidden],
 });
 
+type Held = { readonly permissions: { readonly held: readonly string[] } };
+type Keyed = { readonly callers: { readonly byKey: () => string } };
+
 const apiKeyDemands = { headers: { 'x-api-key': 'key-1' } };
 const userContext = { userToken: { userId: 'u-1' } };
 
@@ -76,14 +80,52 @@ describe('a GuardHandler’s direct call', () => {
 
   test('the implementation receives the Context of the Guards it lists and its Qualifier', async () => {
     const received: unknown[] = [];
-    const permissionHandler = handle(permission, (demands, context, qualifier) => {
+    const permissionHandler = handle(permission, (demands, context, { qualifier }) => {
       received.push(demands, context, qualifier);
       return admit();
     });
 
-    await permissionHandler({}, userContext, ['orders:edit']);
+    await permissionHandler({}, userContext, { qualifier: ['orders:edit'] });
 
     expect(received).toEqual([{}, userContext, ['orders:edit']]);
+  });
+
+  test('the implementation receives its Qualifier and the Resources its direct call is given', async () => {
+    const permissions = { held: ['orders:edit'] };
+    const received: unknown[] = [];
+    const permissionHandler = handle(
+      permission,
+      (_demands, _context, { qualifier, resources }: GuardCall<typeof permission, Held>) => {
+        received.push(qualifier, resources);
+        return admit();
+      },
+    );
+
+    await permissionHandler({}, userContext, {
+      qualifier: ['orders:edit'],
+      resources: { permissions },
+    });
+
+    expect(received).toHaveLength(2);
+    expect(received[0]).toEqual(['orders:edit']);
+    expect(received[1]).toStrictEqual({ permissions });
+  });
+
+  test('a Guard that declares no Qualifier receives the Resources its direct call is given', async () => {
+    const callers = { byKey: () => 'c-1' };
+    const received: unknown[] = [];
+    const apiKeyHandler = handle(
+      apiKey,
+      (_demands, _context, { resources }: GuardCall<typeof apiKey, Keyed>) => {
+        received.push(resources);
+        return admit({ callerId: resources.callers.byKey() });
+      },
+    );
+
+    const admission = await apiKeyHandler(apiKeyDemands, {}, { resources: { callers } });
+
+    expect(received).toStrictEqual([{ callers }]);
+    expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
   });
 
   test('demands that break a schema throw InvalidInputError', async () => {
@@ -105,7 +147,7 @@ describe('a GuardHandler’s direct call', () => {
     const permissionHandler = handle(permission, () => admit());
 
     const issues = await issuesOf(() =>
-      permissionHandler({}, { userToken: {} } as never, ['orders:edit']),
+      permissionHandler({}, { userToken: {} } as never, { qualifier: ['orders:edit'] }),
     );
 
     expect(issues).toEqual([
@@ -121,7 +163,9 @@ describe('a GuardHandler’s direct call', () => {
   test('a Qualifier that breaks its schema throws InvalidInputError', async () => {
     const permissionHandler = handle(permission, () => admit());
 
-    const issues = await issuesOf(() => permissionHandler({}, userContext, [] as never));
+    const issues = await issuesOf(() =>
+      permissionHandler({}, userContext, { qualifier: [] as never }),
+    );
 
     expect(issues).toEqual([
       { part: 'qualifier', path: [], code: 'too_small', message: expect.any(String) },
@@ -231,15 +275,18 @@ describe('a GuardHandler’s direct call', () => {
     });
   });
 
-  test('a Guard without a qualifier takes two arguments and one with a qualifier three', () => {
+  test('a Guard that declares a Qualifier, called without it, is a type error', () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const permissionHandler = handle(permission, () => admit());
 
     const call = () => [
+      apiKeyHandler(apiKeyDemands, {}),
       // @ts-expect-error apiKey declares no qualifier
-      apiKeyHandler(apiKeyDemands, {}, ['orders:edit']),
+      apiKeyHandler(apiKeyDemands, {}, { qualifier: ['orders:edit'] }),
       // @ts-expect-error permission declares a qualifier
       permissionHandler({}, userContext),
+      // @ts-expect-error permission declares a qualifier
+      permissionHandler({}, userContext, {}),
     ];
 
     expect(call).toBeDefined();
@@ -263,13 +310,13 @@ describe('a GuardHandler’s direct call', () => {
       qualifier: z.object({ region: z.string() }),
     });
     const received: unknown[] = [];
-    const regionalHandler = handle(regional, (_demands, context, qualifier) => {
+    const regionalHandler = handle(regional, (_demands, context, { qualifier }) => {
       received.push(context, qualifier);
       return admit();
     });
     const context = { userToken: { userId: 'u-1', extra: true } } as never;
 
-    await regionalHandler({}, context, { region: 'emea', extra: true } as never);
+    await regionalHandler({}, context, { qualifier: { region: 'emea', extra: true } as never });
 
     expect(received).toEqual([userContext, { region: 'emea' }]);
   });
@@ -278,7 +325,7 @@ describe('a GuardHandler’s direct call', () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     const issues = await issuesOf(() =>
-      Reflect.apply(apiKeyHandler, undefined, [apiKeyDemands, {}, ['orders:edit']]),
+      Reflect.apply(apiKeyHandler, undefined, [apiKeyDemands, {}, { qualifier: ['orders:edit'] }]),
     );
 
     expect(issues).toEqual([

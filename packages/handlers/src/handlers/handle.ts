@@ -54,7 +54,7 @@ type ImplementationOf<
 > = Target extends Endpoint
   ? EndpointImplementation<Target, Resources>
   : Target extends Guard
-    ? GuardImplementation<Target>
+    ? GuardImplementation<Target, Resources>
     : Target extends WithReader<Command>
       ? CommandImplementation<Target>
       : Target extends WithReader<Subscription>
@@ -65,7 +65,7 @@ type ImplementationOf<
 type HandlerOf<Target extends HandleTarget, Resources extends object> = Target extends Endpoint
   ? EndpointHandler<Target, Resources>
   : Target extends Guard
-    ? GuardHandler<Target>
+    ? GuardHandler<Target, Resources>
     : Target extends WithReader<Command>
       ? CommandHandler<Target>
       : Target extends WithReader<Subscription>
@@ -147,9 +147,12 @@ function endpointCallOf(written: Written<Endpoint>) {
   };
 }
 
+/** A GuardHandler's last argument as a direct call may leave it, before it is checked. */
+type GuardCallGiven = { readonly qualifier?: unknown; readonly resources?: unknown };
+
 function guardCallOf(written: Written<Guard>) {
-  return async (demands: unknown, context: unknown, qualifier?: unknown) => {
-    const given = { demands, context, qualifier };
+  return async (demands: unknown, context: unknown, call?: GuardCallGiven) => {
+    const given = { demands, context, qualifier: call?.qualifier, resources: call?.resources };
     const run = await guardRunOf(written, given, standardRejectionDefaults);
     return answerOf(written.element, run);
   };

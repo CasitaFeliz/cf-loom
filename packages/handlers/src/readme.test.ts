@@ -110,7 +110,7 @@ const apiKeyHandler = handle(apiKey, async ({ headers }) => {
   return admit({ callerId: caller.id });
 });
 
-const permissionHandler = handle(permission, async (_demands, { userToken }, qualifier) => {
+const permissionHandler = handle(permission, async (_demands, { userToken }, { qualifier }) => {
   const held = await permissions.of(userToken.userId);
   const granted = qualifier.every((code) => held.includes(code));
   return granted ? admit() : reject(forbidden);
@@ -194,8 +194,20 @@ describe('the handlers README', () => {
 
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
     const admissions = [
-      await permissionHandler({}, { userToken: { userId: 'u-1' } }, ['orders:edit']),
-      await permissionHandler({}, { userToken: { userId: 'u-1' } }, ['customers:read']),
+      await permissionHandler(
+        {},
+        { userToken: { userId: 'u-1' } },
+        {
+          qualifier: ['orders:edit'],
+        },
+      ),
+      await permissionHandler(
+        {},
+        { userToken: { userId: 'u-1' } },
+        {
+          qualifier: ['customers:read'],
+        },
+      ),
     ];
 
     expect(admissions).toMatchObject([

@@ -9,6 +9,7 @@ export type {
   EndpointImplementation,
   EventHandler,
   EventImplementation,
+  GuardCall,
   GuardHandler,
   GuardImplementation,
   HandlerMap,
