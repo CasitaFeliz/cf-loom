@@ -57,7 +57,7 @@ src/
 ├── subscriptions/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  regenerated, never edited
 ├── readers.generated.ts                   Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
-├── resources.ts                           the Service's Resources type
+├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 contract-package/                          the Contract Package cf-loom package writes; built, not edited
 ```
