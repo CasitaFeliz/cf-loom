@@ -168,6 +168,10 @@ _Avoid_: placeholder, mock
 The plain data `handlers.generated.ts` exports, which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of the Guards those Endpoints attach, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `deprecatedAt` of each Deprecated Endpoint.
 _Avoid_: registry, router
 
+**Resources**:
+What a Service hands `serve` and `consume` once, at startup, for its Handlers to reach what lies outside the Contract: its repositories, the clients of its Providers, its EventPublisher and CommandSender. Each Handler takes the ones it needs.
+_Avoid_: dependencies (a Dependency is declared in a Contract), adapters (a broker or host adapter), context (what Guards provide), environment, container; and a REST resource, which a Contract calls an Endpoint
+
 **Issue**:
 One way a value broke its part of the Contract: the part and path, cf-loom's code and a message, never the received value.
 _Avoid_: error, violation
