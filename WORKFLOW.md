@@ -126,6 +126,7 @@ makes CI pass before the merge.
 
 ## Changesets
 
-When a PR carries a changeset is a rule of the repository ([CLAUDE.md](CLAUDE.md#repository)).
+When a PR carries a changeset is a rule of the repository ([.changeset/README.md](.changeset/README.md)).
 While changesets wait on `main`, the [release workflow](.github/workflows/release.yml) keeps the PR
-`chore: version packages` open (in pre mode its title ends in ` (rc)`); merging it publishes, and only the user merges it.
+`chore: version packages` open (in pre mode its title ends in ` (rc)`); merging it publishes, and only the user
+merges it.

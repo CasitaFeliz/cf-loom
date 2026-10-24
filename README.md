@@ -19,7 +19,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig` |
 
-The packages are published to npmjs.com with access restricted to the organization: install them logged in with the organization's npm account. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
+The packages are published to npmjs.com with access restricted to members of the @cf-loom npm organization: install them logged in with an npm account that is a member. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
 
 How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
