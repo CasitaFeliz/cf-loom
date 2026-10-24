@@ -9,7 +9,7 @@ import { settlementOf } from './receive.ts';
 export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions'>;
 
 /** What one `consume` runs its Handlers with: where it reports faults and the Resources it hands them. */
-export type Consuming = { readonly report: Report; readonly resources: unknown };
+type ConsumersRun = { readonly report: Report; readonly resources: unknown };
 
 /**
  * The consumers of one `consume`: each Handler looked up as `serve` looks one up, a stub left out
@@ -18,7 +18,7 @@ export type Consuming = { readonly report: Report; readonly resources: unknown }
 export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { report, resources }: Consuming,
+  { report, resources }: ConsumersRun,
 ): readonly BrokerConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,

@@ -44,10 +44,8 @@ export async function messaging<const C extends Contract>(
   return {
     publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
-    consume: (handlers: ConsumedHandlers, options: ConsumeOptions<object> = {}) =>
-      life.consume(() =>
-        consumersOf(subjects.consumed, handlers, { report, resources: options.resources }),
-      ),
+    consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
+      life.consume(() => consumersOf(subjects.consumed, handlers, { report, resources })),
     close: () => life.close(),
   };
 }
