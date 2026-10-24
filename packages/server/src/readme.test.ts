@@ -3,6 +3,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  type Method,
   notFound,
 } from '@cf-loom/contract';
 import { admit, handle, reject, success, type WithResources } from '@cf-loom/handlers';
@@ -83,11 +84,35 @@ describe('the READMEs', () => {
       resources,
       maxBodyBytes: 1_000_000,
       onServiceFault: (fault) => expectTypeOf(fault.endpoint).toEqualTypeOf<string>(),
-      onOutcome: ({ endpoint, status, kind, durationMs }) => [endpoint, status, kind, durationMs],
+      onOutcome: ({ method, endpoint, path, status, kind, durationMs }) => [
+        method,
+        endpoint,
+        path,
+        status,
+        kind,
+        durationMs,
+      ],
     });
 
     expectTypeOf(http).toEqualTypeOf<Http>();
     expectTypeOf(http).toEqualTypeOf<(request: Request) => Promise<Response>>();
+    expect(typeof http).toBe('function');
+  });
+
+  test('a record with an Endpoint has its path and declared method, one without has neither', () => {
+    const http = serve(contract, handlers, {
+      resources,
+      onOutcome: (record) => {
+        if (record.endpoint !== undefined) {
+          expectTypeOf(record.path).toEqualTypeOf<string>();
+          expectTypeOf(record.method).toEqualTypeOf<Method>();
+          return;
+        }
+        expectTypeOf(record.path).toEqualTypeOf<undefined>();
+        expectTypeOf(record.method).toEqualTypeOf<string>();
+      },
+    });
+
     expect(typeof http).toBe('function');
   });
 });

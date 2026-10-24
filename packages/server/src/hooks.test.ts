@@ -3,6 +3,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
   notFound,
 } from '@cf-loom/contract';
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
@@ -10,10 +11,17 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type AnsweredRequest, type ServedFault, serve } from './index.ts';
 
+const unauthenticated = defineRejection({
+  code: 'UNAUTHENTICATED',
+  status: 401,
+  message: 'Unauthenticated',
+});
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'A key per Caller',
   context: z.object({ callerId: z.string() }),
+  rejections: [unauthenticated],
 });
 
 const getOrder = defineEndpoint({
@@ -192,7 +200,7 @@ describe('serve: onServiceFault', () => {
 });
 
 describe('serve: onOutcome', () => {
-  test('receives the Endpoint, status, kind and duration of every request, no Endpoint when none matched', async () => {
+  test('receives the method, the Endpoint, its declared path, the status, kind and duration of every request, and only the method when none matched', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       onServiceFault: () => undefined,
@@ -203,18 +211,73 @@ describe('serve: onOutcome', () => {
       await http(get(path));
     }
 
-    expect(answered).toEqual([
-      { endpoint: 'getOrder', status: 200, kind: 'success', durationMs: expect.any(Number) },
-      { endpoint: 'getOrder', status: 404, kind: 'rejection', durationMs: expect.any(Number) },
-      { endpoint: 'getOrder', status: 503, kind: 'fault', durationMs: expect.any(Number) },
-      { status: 404, kind: 'fault', durationMs: expect.any(Number) },
+    const getOrderRecord = { method: 'GET', endpoint: 'getOrder', path: '/orders/:orderId' };
+    expect(answered).toStrictEqual([
+      { ...getOrderRecord, status: 200, kind: 'success', durationMs: expect.any(Number) },
+      { ...getOrderRecord, status: 404, kind: 'rejection', durationMs: expect.any(Number) },
+      { ...getOrderRecord, status: 503, kind: 'fault', durationMs: expect.any(Number) },
+      { method: 'GET', status: 404, kind: 'fault', durationMs: expect.any(Number) },
     ]);
     expect(answered.every(({ durationMs }) => durationMs >= 0)).toBe(true);
+  });
+
+  test('a request no Endpoint matched carries its method as received, whatever it is', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, { onOutcome: (request) => answered.push(request) });
+
+    await http(new Request('http://test/orders', { method: 'propfind' }));
+    await http(new Request('http://test/orders', { method: 'HEAD' }));
+
+    expect(answered).toStrictEqual([
+      { method: 'propfind', status: 404, kind: 'fault', durationMs: expect.any(Number) },
+      { method: 'HEAD', status: 404, kind: 'fault', durationMs: expect.any(Number) },
+    ]);
+  });
+
+  test('a Guard’s Rejection and invalid input carry the Endpoint and its path', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(
+      contract,
+      { ...handlers, guards: { apiKey: handle(apiKey, () => reject(unauthenticated)) } },
+      { onOutcome: (request) => answered.push(request) },
+    );
+    const json = { 'content-type': 'application/json' };
+
+    await http(get('/orders/o-1'));
+    await http(
+      new Request('http://test/imports', {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify({ orders: 1 }),
+      }),
+    );
+    await http(new Request('http://test/imports', { method: 'POST', body: 'not json' }));
+
+    const importRecord = {
+      method: 'POST',
+      endpoint: 'importOrders',
+      path: '/imports',
+      kind: 'rejection',
+      status: 400,
+      durationMs: expect.any(Number),
+    };
+    expect(answered).toStrictEqual([
+      {
+        method: 'GET',
+        endpoint: 'getOrder',
+        path: '/orders/:orderId',
+        kind: 'rejection',
+        status: 401,
+        durationMs: expect.any(Number),
+      },
+      importRecord,
+      importRecord,
+    ]);
   });
 });
 
 describe('serve: onOutcome for the Caller’s Faults', () => {
-  test('RETIRED and BODY_TOO_LARGE are recorded with their Endpoint', async () => {
+  test('RETIRED and BODY_TOO_LARGE are recorded with their method, Endpoint and path', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       maxBodyBytes: 8,
@@ -224,9 +287,23 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
     await http(new Request('http://test/archive', { method: 'POST' }));
     await http(tooLarge());
 
-    expect(answered).toEqual([
-      { endpoint: 'archive', status: 410, kind: 'fault', durationMs: expect.any(Number) },
-      { endpoint: 'importOrders', status: 413, kind: 'fault', durationMs: expect.any(Number) },
+    expect(answered).toStrictEqual([
+      {
+        method: 'POST',
+        endpoint: 'archive',
+        path: '/archive',
+        status: 410,
+        kind: 'fault',
+        durationMs: expect.any(Number),
+      },
+      {
+        method: 'POST',
+        endpoint: 'importOrders',
+        path: '/imports',
+        status: 413,
+        kind: 'fault',
+        durationMs: expect.any(Number),
+      },
     ]);
   });
 
