@@ -763,6 +763,19 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'key', 'type'],
       ],
       [
+        'a nullable record key',
+        {
+          defs: {
+            tree: {
+              type: 'record',
+              key: { type: 'string', nullable: true },
+              value: { type: 'string' },
+            },
+          },
+        },
+        ['defs', 'tree', 'key', 'nullable'],
+      ],
+      [
         'a Standard Rejection',
         { standardRejections: { ...standardRejections, gone: standardRejections.notFound } },
         ['standardRejections', 'gone'],

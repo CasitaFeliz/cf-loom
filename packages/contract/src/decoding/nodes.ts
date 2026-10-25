@@ -1,14 +1,15 @@
 import { z } from 'zod';
-import { formatOptionKeysOf, type SchemaNode } from '../walker/index.ts';
+import { formatOptionKeysOf, type SchemaNode, type StringNode } from '../walker/index.ts';
 import { byKey } from './maps.ts';
 import { stringFormatText } from './texts.ts';
 
-const annotations = {
-  nullable: z.literal(true).exactOptional(),
+const keyAnnotations = {
   description: z.string().exactOptional(),
   examples: z.array(z.unknown()).exactOptional(),
   origin: z.string().exactOptional(),
 };
+
+const annotations = { nullable: z.literal(true).exactOptional(), ...keyAnnotations };
 
 const bound = z.number().exactOptional();
 const primitive = z.union([z.string(), z.number(), z.boolean()]);
@@ -26,14 +27,19 @@ export const objectNode = node('object', {
 });
 const refNode = node('ref', { name: z.string() });
 
-/** A string node, whose options are those its string format takes. */
-const stringNode = node('string', {
+const stringOptions = {
   format: stringFormatText.exactOptional(),
   formatOptions: byKey(z.unknown()).exactOptional(),
   regex: z.strictObject({ source: z.string(), flags: z.string() }).exactOptional(),
   min: bound,
   max: bound,
-}).superRefine(({ format, formatOptions }, ctx) => {
+};
+
+/** A string node's options are those its string format takes. */
+function checkedFormatOptions(
+  { format, formatOptions }: Pick<StringNode, 'format' | 'formatOptions'>,
+  ctx: z.RefinementCtx,
+): void {
   const taken = formatOptionKeysOf(format);
   for (const option of Object.keys(formatOptions ?? {})) {
     if (!taken.includes(option)) {
@@ -44,7 +50,14 @@ const stringNode = node('string', {
       });
     }
   }
-});
+}
+
+const stringNode = node('string', stringOptions).superRefine(checkedFormatOptions);
+
+/** A record's key: a string node that is never nullable, since the walker refuses a nullable key. */
+const recordKeyNode = z
+  .strictObject({ type: z.literal('string'), ...keyAnnotations, ...stringOptions })
+  .superRefine(checkedFormatOptions);
 
 const nodes = [
   stringNode,
@@ -59,7 +72,7 @@ const nodes = [
   node('boolean', {}),
   node('enum', { values: z.array(primitive), open: z.boolean() }),
   objectNode,
-  node('record', { key: stringNode, value: child }),
+  node('record', { key: recordKeyNode, value: child }),
   node('array', { items: child, min: bound, max: bound }),
   node('tuple', { items: z.array(child), rest: child.exactOptional() }),
   node('union', { options: z.array(child) }),
