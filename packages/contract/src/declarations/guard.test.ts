@@ -187,6 +187,19 @@ describe('defineGuard', () => {
   });
 });
 
+describe('defineGuard names', () => {
+  test('a name every object already has is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        // @ts-expect-error toString is a name every object already has
+        name: 'toString',
+        description: 'A Guard',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineGuard fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>

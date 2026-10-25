@@ -120,7 +120,52 @@ describe('validateContract: name grammars', () => {
     },
   );
 
-  test.each(['class', 'arguments', 'handle'])(
+  test.each([
+    'then',
+    'toJSON',
+    'constructor',
+    'hasOwnProperty',
+    'isPrototypeOf',
+    'propertyIsEnumerable',
+    'toLocaleString',
+    'toString',
+    'valueOf',
+  ])('an Endpoint named %s, a name every object has or JavaScript calls, fails', (name) => {
+    const endpoint = defineEndpoint({ ...listing, name });
+
+    expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        'name-grammar',
+        `An Endpoint name is camelCase and no reserved word: ${name}`,
+      ),
+    );
+  });
+
+  test.each([...Object.getOwnPropertyNames(Object.prototype), 'then', 'toJSON'])(
+    'an Endpoint named %s, a name of every object or one JavaScript reads, fails the name grammar',
+    (name) => {
+      const endpoint = defineEndpoint({ ...listing, name });
+
+      expect(validateGroups([aGroup('orders', [endpoint])])).toMatchObject({
+        kind: 'invalid',
+        failures: [
+          { at: ['groups', 'orders', 'endpoints', 'GET /orders', 'name'], rule: 'name-grammar' },
+        ],
+      });
+    },
+  );
+
+  test.each(['thenable', 'toStringValue', 'getConstructor'])(
+    'an Endpoint named %s, which only contains a reserved name, is valid',
+    (name) => {
+      const endpoint = defineEndpoint({ ...listing, name });
+
+      expect(validateGroups([aGroup('orders', [endpoint])]).kind).toBe('valid');
+    },
+  );
+
+  test.each(['class', 'arguments', 'handle', 'toString'])(
     'a Guard named %s, in a Definitions Package too, fails',
     (name) => {
       const guard = defineGuard({ name, description: 'A guard' });

@@ -89,6 +89,62 @@ describe('defineEndpoint', () => {
   });
 });
 
+describe('defineEndpoint names', () => {
+  test('a name JavaScript calls on its own is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error then is a name JavaScript calls on its own
+        name: 'then',
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a name every object already has is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error toString is a name every object already has
+        name: 'toString',
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a word code cannot bind a name by is a type error', () => {
+    const declareClass = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error class is an ECMAScript reserved word
+        name: 'class',
+      });
+    const declareHandle = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error every stub imports handle
+        name: 'handle',
+      });
+
+    expect(declareClass).not.toThrow();
+    expect(declareHandle).not.toThrow();
+  });
+
+  test('a name typed as a string skips the rule', () => {
+    const name: string = 'then';
+
+    const endpoint = defineEndpoint({ ...getOrder, name });
+
+    expect(endpoint.name).toBe('then');
+  });
+
+  test('a name that only contains a reserved name compiles and stays a literal', () => {
+    const endpoint = defineEndpoint({ ...getOrder, name: 'thenable' });
+
+    expectTypeOf(endpoint.name).toEqualTypeOf<'thenable'>();
+  });
+});
+
 describe('defineEndpoint path params', () => {
   test('a path’s :name missing from params is a type error', () => {
     const declare = () =>

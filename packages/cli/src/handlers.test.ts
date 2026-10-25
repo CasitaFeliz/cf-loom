@@ -2293,6 +2293,34 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
+  test('an Endpoint named then fails the name grammar, since JavaScript calls it on any object', () => {
+    const service = aService();
+    const project = aProject({
+      ...service,
+      'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
+        name: 'then',
+        method: 'POST',
+        path: '/orders',
+        visibility: 'private',
+      }),
+      'src/contract/index.ts': aRoot({
+        getOrder: './endpoints/orders/get-order.endpoint.ts',
+        // biome-ignore lint/suspicious/noThenProperty: the Endpoint under test is named then
+        then: './endpoints/orders/create-order.endpoint.ts',
+        listOrders: './endpoints/orders/list-orders.endpoint.ts',
+      }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase and no reserved word: then\n',
+    });
+  });
+
   test('a Handler path that is a folder exits 1 naming it', () => {
     const project = aProject({
       ...aService(),

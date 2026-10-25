@@ -33,6 +33,18 @@ describe('defineSubscription', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a Subscription named as every object already has is a type error', () => {
+    const declare = () =>
+      defineSubscription({
+        // @ts-expect-error valueOf is a name every object already has
+        name: 'valueOf',
+        description: 'Notifies the customer of each order created',
+        event: orderCreatedV1,
+      });
+
+    expect(declare).not.toThrow();
+  });
+
   test('a Subscription to something that is not an Event is a type error', () => {
     const chargeCardV1 = defineCommand({
       name: 'ChargeCard',

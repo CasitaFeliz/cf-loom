@@ -277,6 +277,8 @@ describe('validateContract: Subscriptions', () => {
     ['1stAudit', 'A Subscription name is camelCase: 1stAudit'],
     ['delete', 'A Subscription name is camelCase and no reserved word: delete'],
     ['handle', 'A Subscription name is camelCase and no reserved word: handle'],
+    ['then', 'A Subscription name is camelCase and no reserved word: then'],
+    ['toJSON', 'A Subscription name is camelCase and no reserved word: toJSON'],
   ])('a Subscription name %s, which code cannot name, fails the name grammar', (name, message) => {
     const named = defineSubscription({
       name,
