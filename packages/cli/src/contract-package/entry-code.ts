@@ -1,6 +1,7 @@
 import {
   byCodePoint,
   codeNameOf,
+  type EventSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
   standardRejectionNames,
@@ -18,6 +19,7 @@ import {
   relativeSpecifierOf,
   stringLiteralOf,
 } from '../source-text/index.ts';
+import { deprecatedLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
 import { bindingOf, type PackagedDeclaration, siblingOf } from './names.ts';
@@ -32,8 +34,12 @@ export type ServiceEntry = {
   readonly defUses: readonly DefUse[];
 };
 
-/** A declaration as a map of `contract` lists it, by its key there. */
-type Keyed = { readonly key: string; readonly declared: PackagedDeclaration };
+/** A declaration as a map of `contract` lists it, by its key there, with the Element it declares. */
+type Keyed = {
+  readonly key: string;
+  readonly declared: PackagedDeclaration;
+  readonly element: Pick<EventSnapshot, 'description' | 'lifecycle'>;
+};
 
 /**
  * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
@@ -44,11 +50,12 @@ type Keyed = { readonly key: string; readonly declared: PackagedDeclaration };
 export function serviceEntryOf(entry: ServiceEntry): PackageFile {
   const { name, version, defUses } = entry;
   const endpoints = entry.endpoints.map(({ endpoint }): Keyed => {
-    return { key: endpoint.name, declared: { kind: 'endpoint', name: endpoint.name } };
+    const declared = { kind: 'endpoint', name: endpoint.name } as const;
+    return { key: endpoint.name, declared, element: endpoint };
   });
   const events = entry.events.map((event): Keyed => {
     const declared = { kind: 'event', name: event.name, version: event.version } as const;
-    return { key: codeNameOf(event), declared };
+    return { key: codeNameOf(event), declared, element: event.event };
   });
   const body = [
     'export const contract = {',
@@ -77,7 +84,10 @@ function mapLinesOf(field: string, keyed: readonly Keyed[]): readonly string[] {
   if (keyed.length === 0) {
     return [`  ${field}: {},`];
   }
-  const lines = keyed.map(({ key, declared }) => `    ${keyOf(key)}: ${bindingOf(declared)},`);
+  const lines = keyed.flatMap(({ key, declared, element }) => [
+    ...deprecatedLinesOf(element, '    '),
+    `    ${keyOf(key)}: ${bindingOf(declared)},`,
+  ]);
   return [`  ${field}: {`, ...lines, '  },'];
 }
 

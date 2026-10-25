@@ -558,6 +558,37 @@ function aServiceNamed(packageName: string): Readonly<Record<string, string>> {
 /** What npm accepts as a package's name. */
 const npmName = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
 
+/** A Service whose Deprecated Endpoints, `e0`, `e1` and so on, have the descriptions given. */
+function aServiceOfDeprecatedEndpoints(
+  descriptions: readonly string[],
+): Readonly<Record<string, string>> {
+  const names = descriptions.map((_, index) => `e${index}`);
+  const endpoints = descriptions.map((description, index) =>
+    [
+      `export const ${names[index]} = defineEndpoint({`,
+      `  name: '${names[index]}',`,
+      "  method: 'GET',",
+      `  path: '/${names[index]}',`,
+      "  visibility: 'public',",
+      `  description: ${JSON.stringify(description)},`,
+      "  lifecycle: 'deprecated',",
+      '  success: { status: 200, body: z.object({}) },',
+      '});',
+    ].join('\n'),
+  );
+  return {
+    'package.json': JSON.stringify({ name: '@org/orders-service', type: 'module' }),
+    'cf-loom.config.ts': config,
+    'src/contract/index.ts': lines([
+      "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+      "import { z } from 'zod';",
+      ...endpoints,
+      `const all = defineGroup({ name: 'all', description: 'All', endpoints: [${names.join(', ')}] });`,
+      "export const contract = defineContract({ name: 'orders-service', groups: [all] });",
+    ]),
+  };
+}
+
 describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
   test.each([
     ['@payments/orders-service', '@payments/contract-orders-service'],
@@ -794,14 +825,10 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
     packageIn(project);
 
-    expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
-      [
-        '  events: {',
-        '    orderPlacedV1: orderPlacedEventV1,',
-        '    orderPlacedV2: orderPlacedEventV2,',
-        '  },',
-      ].join('\n'),
-    );
+    const entry = read(project, `${defaultOut}/src/index.ts`);
+    expect(entry).toContain('  events: {\n');
+    expect(entry).toContain('    orderPlacedV1: orderPlacedEventV1,\n');
+    expect(entry).toContain('    orderPlacedV2: orderPlacedEventV2,\n  },');
   });
 
   test('the entry lists Events in code point order of their names in code, which may differ from the Snapshot’s', () => {
@@ -837,13 +864,9 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
     const out = join(project, defaultOut);
     expect(read(out, 'src/index.ts')).toContain(
-      [
-        '  endpoints: {',
-        '    getOrder: getOrderEndpoint,',
-        '    listOrders: listOrdersEndpoint,',
-        '  },',
-      ].join('\n'),
+      '  endpoints: {\n    getOrder: getOrderEndpoint,\n',
     );
+    expect(read(out, 'src/index.ts')).toContain('    listOrders: listOrdersEndpoint,\n  },');
     const getOrder = read(out, 'src/endpoints/get-order.ts');
     expect(getOrder).toContain("import * as loom from '@cf-loom/contract';");
     expect(getOrder).toContain('export const getOrderEndpoint = loom.defineEndpoint({');
@@ -856,6 +879,59 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
     expect(read(out, 'src/rejections/order-locked.ts')).toContain(
       'export const orderLockedRejection = loom.defineRejection({',
+    );
+  });
+
+  test('the entry marks a Deprecated Event’s key @deprecated with its description, and an Active Event’s key not', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
+      [
+        '  events: {',
+        '    /** @deprecated An order was placed */',
+        '    orderPlacedV1: orderPlacedEventV1,',
+        '    orderPlacedV2: orderPlacedEventV2,',
+        '  },',
+      ].join('\n'),
+    );
+  });
+
+  test('the entry marks a Deprecated Endpoint’s key @deprecated with its description, and an Active Endpoint’s key not', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
+      [
+        '  endpoints: {',
+        '    getOrder: getOrderEndpoint,',
+        '    /** @deprecated Every order */',
+        '    listOrders: listOrdersEndpoint,',
+        '  },',
+      ].join('\n'),
+    );
+  });
+
+  test('a description of several lines is written one comment line each, with `*/` in it unable to close the comment', () => {
+    const project = aProject(
+      aServiceOfDeprecatedEndpoints(['First line\nSecond */ line\r\nThird']),
+    );
+
+    packageIn(project);
+
+    expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
+      [
+        '  endpoints: {',
+        '    /**',
+        '     * @deprecated First line',
+        '     * Second *\\/ line',
+        '     * Third',
+        '     */',
+        '    e0: e0Endpoint,',
+        '  },',
+      ].join('\n'),
     );
   });
 
@@ -1016,6 +1092,45 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       description: 'An order was placed, with its total',
     });
     expect(Object.keys(orderPlacedV2)).not.toContain('lifecycle');
+  });
+
+  test('its declarations keep @deprecated on the Deprecated Elements’ keys in contract', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+
+    const declarations = read(out, 'dist/index.d.ts')
+      .split('\n')
+      .map((line) => line.trim());
+
+    const lineBefore = (key: string) =>
+      declarations[declarations.findIndex((line) => line.startsWith(`${key}:`)) - 1];
+    expect(lineBefore('listOrders')).toBe('/** @deprecated Every order */');
+    expect(lineBefore('orderPlacedV1')).toBe('/** @deprecated An order was placed */');
+    expect(lineBefore('getOrder')).not.toContain('@deprecated');
+    expect(lineBefore('orderPlacedV2')).not.toContain('@deprecated');
+  });
+
+  test('every description of up to three of `*`, `/`, `@`, `\\`, line breaks, spaces and `a` is written so its comment closes once and the package builds', () => {
+    const alphabet = ['*', '/', '@', '\\', '\n', '\r', ' ', ' ', 'a'];
+    const descriptions: string[] = [];
+    let words = [''];
+    for (let length = 1; length <= 3; length++) {
+      words = words.flatMap((word) => alphabet.map((character) => `${word}${character}`));
+      descriptions.push(...words.filter((word) => word.trim() !== ''));
+    }
+    const project = aProject(aServiceOfDeprecatedEndpoints(descriptions));
+    const out = join(aFolder(), 'contract-orders-service');
+
+    const packaged = packageIn(project, '--out', out);
+
+    expect(packaged).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+    const entry = read(out, 'src/index.ts');
+    expect(entry.split('*/')).toHaveLength(descriptions.length + 1);
+    const keys = descriptions.map((_, index) => `e${index}`);
+    const unclosed = keys.filter((key) => !entry.includes(`*/\n    ${key}: ${key}Endpoint,\n`));
+    expect(unclosed).toEqual([]);
   });
 
   test('its contract carries the Snapshot cut to the Endpoints and Events it exports and what they reach', async () => {
