@@ -65,11 +65,13 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
     return files;
   }
   const exports: ExportedValue[] = [];
+  const modules: Module[] = [];
   for (const path of [...files.files].sort(byCodePoint)) {
     const imported = await importedModuleOf(join(directory, path), directory);
     if (imported.kind === 'failed') {
       return { kind: 'failed', message: `${path} cannot be loaded: ${imported.message}` };
     }
+    modules.push({ path, exports: imported.exports });
     for (const name of namesOf(imported.exports)) {
       exports.push({ kind: 'file', path, name, value: imported.exports[name] });
     }
@@ -77,8 +79,27 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
   return {
     kind: 'exported',
     exports,
-    exportsOf: (declaration) => exports.filter(({ value }) => value === declaration),
+    exportsOf: (declaration) => exportsOfIn(modules, declaration),
   };
+}
+
+/** A file of the Contract and what it exports. */
+type Module = { readonly path: string; readonly exports: Readonly<Record<string, unknown>> };
+
+function exportsOfIn(modules: readonly Module[], declaration: unknown): readonly FileExport[] {
+  return modules.flatMap(({ path, exports }) =>
+    exportNamesOf(exports, declaration).map((name): FileExport => ({ kind: 'file', path, name })),
+  );
+}
+
+/**
+ * The names a module exports `value` under, by identity, `default` included, in code point order.
+ */
+export function exportNamesOf(
+  moduleExports: Readonly<Record<string, unknown>>,
+  value: unknown,
+): readonly string[] {
+  return namesOf(moduleExports).filter((name) => moduleExports[name] === value);
 }
 
 function isContractSource(file: string): boolean {

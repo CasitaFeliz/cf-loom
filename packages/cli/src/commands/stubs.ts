@@ -1,5 +1,5 @@
 import { byCodePoint, isLive } from '@cf-loom/contract/internal';
-import type { ExportsOf } from '../loading/index.ts';
+import { type ExportsOf, exportNamesOf } from '../loading/index.ts';
 import {
   type DeclarationHandled,
   elementLabelOf,
@@ -11,12 +11,12 @@ import {
   stubTextOf,
 } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
-import { locatedUnderOf } from './exported-declarations.ts';
+import { exportedAtOf } from './exported-declarations.ts';
 import type { PlacedService } from './handler-files.ts';
 
 /**
- * The stubs `generate` writes, and a line for every Endpoint and Guard a stub could not import as
- * it is named.
+ * The stubs `generate` writes, and a line for every Endpoint and Guard that nothing exports for a
+ * stub to import.
  */
 export type Stubs = {
   readonly stubs: readonly GeneratedFile[];
@@ -31,7 +31,7 @@ type StubLocated =
 /** A handled Element located, with the path its Handler is written at. */
 type LocatedHandler = StubLocated & { readonly path: string };
 
-/** The stub of every Handler that lacks a file, importing its Element as it is named. */
+/** The stub of every Handler that lacks a file, importing its Element under its name. */
 export function stubsOf(
   service: PlacedService,
   exportsOf: ExportsOf,
@@ -83,24 +83,27 @@ function declarationLocatedOf(
     return packageExportOf(handled, packaged);
   }
   const declaration = declarationOf(service, handled);
-  const located = locatedUnderOf(elementLabelOf(handled), handled.name, exportsOf(declaration));
+  const located = exportedAtOf(elementLabelOf(handled), exportsOf(declaration));
   if (located.kind === 'refused') {
     return located;
   }
-  return { kind: 'exported', target: exportedTargetOf(located.at) };
+  return { kind: 'exported', target: exportedTargetOf(located.at, handled.name) };
 }
 
-/** A Definitions Package's Guard, imported from the package's `.` entry under its name. */
+/**
+ * A Definitions Package's Guard, imported from the package's `.` entry under its name, from the
+ * first export of the entry, in code point order, that holds it.
+ */
 function packageExportOf(
   handled: DeclarationHandled,
   { packageName, exports, guard }: PackagedGuard,
 ): StubLocated {
-  if (exports[handled.name] === guard) {
-    const imported = { kind: 'package', packageName, name: handled.name } as const;
-    return { kind: 'exported', target: exportedTargetOf(imported) };
+  const [exportName] = exportNamesOf(exports, guard);
+  if (exportName === undefined) {
+    return { kind: 'refused', line: `guards.${handled.name} is not exported by ${packageName}` };
   }
-  const line = `guards.${handled.name} is not exported as ${handled.name} by ${packageName}`;
-  return { kind: 'refused', line };
+  const imported = { kind: 'package', packageName, name: exportName } as const;
+  return { kind: 'exported', target: exportedTargetOf(imported, handled.name) };
 }
 
 /** A Guard as a listed Definitions Package declares it, with what the package exports. */
