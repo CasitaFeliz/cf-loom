@@ -75,7 +75,7 @@ export const standardRejectionDefaults: StandardRejections = {
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 };
 
-/** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue of invalid Input says went wrong: a set cf-loom owns, never zod's codes. */
 export const issueCodes = [
   'required',
   'invalid_type',
@@ -88,7 +88,7 @@ export const issueCodes = [
   'malformed',
 ] as const;
 
-/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue says went wrong: a code of the set cf-loom owns, never zod's. */
 export type IssueCode = (typeof issueCodes)[number];
 
 /** The parts of a request an issue of invalid Input may sit in, as values. */
