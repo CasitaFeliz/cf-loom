@@ -37,24 +37,25 @@ export function failureCauseOf(failure: HandlerFailure): unknown {
 }
 
 /** The console line of a hook that threw or rejected, after what it was called for. */
-export function hookThrewLineOf(source: string, hook: HookName): string {
+function hookThrewLineOf(source: string, hook: HookName): string {
   return faultLineOf(source, { message: `${hook} threw` });
 }
 
 /**
- * Calls a hook and awaits it; what it throws or rejects with is logged on its `threw` line and
- * answered, so it never escapes.
+ * Calls a hook and awaits it; what it throws or rejects with is logged on its `threw` line, which
+ * is answered, so it never escapes.
  */
 export async function hookFailureOf<Given>(
   hook: (given: Given) => void | Promise<void>,
   given: Given,
   called: { readonly source: string; readonly hook: HookName },
-): Promise<{ readonly cause: unknown } | undefined> {
+): Promise<string | undefined> {
   try {
     await hook(given);
     return undefined;
   } catch (e) {
-    console.error(...logOf(hookThrewLineOf(called.source, called.hook), e));
-    return { cause: e };
+    const line = hookThrewLineOf(called.source, called.hook);
+    console.error(...logOf(line, e));
+    return line;
   }
 }

@@ -7,11 +7,15 @@ import { type Waits, waitsOf } from './in-progress.ts';
 import { type PullRequest, pullRequestOf } from './pull-once.ts';
 import { planRemedy } from './stream-check.ts';
 
-/** A consumer of the Service with the durable consumer on the Broker its Messages are pulled from, and the waits NATS gives its deliveries. */
+/**
+ * A consumer of the Service with the durable consumer on the Broker its Messages are pulled from,
+ * the waits NATS gives its deliveries, and its `max_deliver` as NATS reports it, `-1` for none.
+ */
 export type FoundDurable = {
   readonly consumer: BrokerConsumer;
   readonly request: PullRequest;
   readonly waits: Waits;
+  readonly maxDeliver: number;
 };
 
 /** Every consumer's durable consumer found, or a line for each durable consumer or stream that is missing or not in the shape cf-loom pulls from, naming it. */
@@ -70,7 +74,8 @@ async function pullableOf(search: Search, consumer: BrokerConsumer): Promise<Pul
   }
   const request = pullRequestOf(consumerInfo, apiPrefix, inboxPrefix);
   const waits = waitsOf(consumerInfo.config);
-  return { kind: 'pullable', durable: { consumer, request, waits } };
+  const maxDeliver = consumerInfo.config.max_deliver ?? -1;
+  return { kind: 'pullable', durable: { consumer, request, waits, maxDeliver } };
 }
 
 /** What NATS holds about the durable consumer, or the line for the stream or durable consumer it says does not exist; any other error is thrown. */

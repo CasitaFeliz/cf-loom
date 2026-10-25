@@ -1,4 +1,9 @@
-import type { BrokerConnection, BrokerConsumer, OutgoingMessage } from '../broker/index.ts';
+import type {
+  BrokerAck,
+  BrokerConnection,
+  BrokerConsumer,
+  OutgoingMessage,
+} from '../broker/index.ts';
 import { type Attempt, firstDeliveryOf } from './attempts.ts';
 import type { Deliveries } from './deliveries.ts';
 import { Recorded } from './recorded.ts';
@@ -15,15 +20,16 @@ export class MemoryConnection implements BrokerConnection {
     this.#deliveries = deliveries;
   }
 
-  readonly publish = async (message: OutgoingMessage): Promise<void> => {
+  readonly publish = async (message: OutgoingMessage): Promise<BrokerAck> => {
     if (this.#recorded.add(message) === 'duplicate') {
-      return;
+      return { duplicate: true };
     }
     const delivery = firstDeliveryOf(message);
     const attempts = this.#consumers
       .filter((consumer) => consumer.subject === message.subject)
       .map((consumer): Attempt => ({ consumer, delivery }));
     this.#deliveries.lineUp(attempts);
+    return { duplicate: false };
   };
 
   readonly consume = async (consumers: readonly BrokerConsumer[]): Promise<void> => {

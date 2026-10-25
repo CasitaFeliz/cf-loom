@@ -7,8 +7,9 @@ import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
 type ReadBodyOf<Target extends Pairing> = core.output<Target['reader']>;
 
-/** The meta a direct call takes: `headers` left out is `{}`. */
-export type DirectMeta = Omit<MessageMeta, 'headers'> & {
+/** The meta a direct call takes: `lastAttempt` left out is `false`, `headers` left out is `{}`. */
+export type DirectMeta = Omit<MessageMeta, 'lastAttempt' | 'headers'> & {
+  readonly lastAttempt?: MessageMeta['lastAttempt'];
   readonly headers?: MessageMeta['headers'];
 };
 

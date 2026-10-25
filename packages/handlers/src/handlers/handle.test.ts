@@ -173,6 +173,21 @@ describe('handle', () => {
     expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
   });
 
+  test('a direct call without lastAttempt gives the Handler lastAttempt false', async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, meta);
+    await notifyOnPaidHandler(
+      { orderId: ORDER_ID, status: 'paid' },
+      { ...meta, lastAttempt: true },
+    );
+
+    expect(given.map(({ lastAttempt }) => lastAttempt)).toEqual([false, true]);
+  });
+
   test("a Message Handler's direct call answers a Fault or nothing", () => {
     const chargeCardHandler = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
 

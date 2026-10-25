@@ -182,10 +182,10 @@ function guardCallOf(written: Written<Guard>) {
 function messageCallOf(written: MessageWritten) {
   return async (
     body: unknown,
-    { messageId, factId, deliveryCount, headers = {} }: DirectMeta,
+    { messageId, factId, deliveryCount, lastAttempt = false, headers = {} }: DirectMeta,
     call?: MessageCall<object>,
   ) => {
-    const meta = { messageId, factId, deliveryCount, headers };
+    const meta = { messageId, factId, deliveryCount, lastAttempt, headers };
     const run = await messageRunOf(
       written,
       { body, meta, resources: call?.resources },

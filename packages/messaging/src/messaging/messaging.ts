@@ -1,16 +1,21 @@
 import type { Contract } from '@cf-loom/contract';
 import type { ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
-import type { Broker, BrokerService, ConsumedFault } from '../broker/index.ts';
-import { type ConsumedHandlers, consumersOf, reportOf } from '../consuming/index.ts';
+import type { Broker, BrokerService } from '../broker/index.ts';
+import {
+  type ConsumedHandlers,
+  consumersOf,
+  reportOf,
+  type ServiceFaultHook,
+} from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
 import { type Subjects, subjectsOf } from '../subjects/index.ts';
 import { MessagingLife } from './life.ts';
 
 /** What is operational about messaging and no part of the Contract: the hook for what Message Handlers end or fail with. */
 export type MessagingOptions = {
-  /** Receives a Message ended for failing its schema, a Fault with `retryable: false`, and anything thrown; the console without it. */
-  readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
+  /** Receives a Message ended for failing its schema, every Fault a Handler returned, retryable or not, and anything thrown; the console without it. */
+  readonly onServiceFault?: ServiceFaultHook;
 };
 
 /** What `consume` takes besides the Handler map: the Resources its Message Handlers take. */
@@ -45,7 +50,9 @@ export async function messaging<const C extends Contract>(
     publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
-      life.consume(() => consumersOf(subjects.consumed, handlers, { report, resources })),
+      life.consume((received) =>
+        consumersOf(subjects.consumed, handlers, { report, resources, received }),
+      ),
     close: () => life.close(),
   };
 }
@@ -53,7 +60,6 @@ export async function messaging<const C extends Contract>(
 function brokerServiceOf(subjects: Subjects): BrokerService {
   const versions = [...subjects.published, ...subjects.sent];
   return {
-    name: subjects.service,
     stream: subjects.stream,
     subjects: versions.map((version) => version.subject),
   };
