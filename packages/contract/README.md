@@ -265,12 +265,13 @@ A set of variants that grows is an object whose `type` is an Open Enum and whose
 
 ## Dependencies
 
-Install the Provider's Contract Package, then declare what is used:
+Install the Provider's Contract Package:
 
 ```bash
 npm install @org/contract-payments-service
-npx cf-loom add-dependency payments-service getPayment
 ```
+
+Then write the Dependency in a file and list it in the root's `dependencies` (see [The root](#the-root)):
 
 ```ts
 // src/contract/dependencies/payments-service.dependency.ts
