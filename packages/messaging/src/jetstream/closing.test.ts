@@ -110,13 +110,13 @@ async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
   }
 }
 
-/** Tells when close asks NATS whether it still answers the Service’s drain, by wrapping the `flush` of the connection the Service’s connect returns. */
-function aFlushSignal() {
+/** Tells when close asks NATS whether it still answers the Service’s drain, by wrapping the `flush` of the connection the Service’s connect returns; `answer` is how the flush is answered, NATS itself unless the test says. */
+function aFlushSignal(answer: (raw: NatsConnection) => Promise<void> = (raw) => raw.flush()) {
   const asked = Promise.withResolvers<undefined>();
   const replacing = (raw: NatsConnection) => ({
     flush: () => {
       asked.resolve(undefined);
-      return raw.flush();
+      return answer(raw);
     },
   });
   return { replacing, asked: asked.promise };
@@ -273,6 +273,27 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
 
     const error = await closing;
     expect(error).toMatchObject({ message: unanswered });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close resolves when NATS answered its flush and the socket dropped before the Service’s drain closed the connection', async () => {
+    const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
+    const flushing = aFlushSignal(() => Promise.resolve());
+    const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
+      nats: { reconnect: false },
+      replacing: flushing.replacing,
+    });
+    proxy.hold();
+    connection.drain().catch(() => undefined);
+    const closing = close();
+    await flushing.asked;
+
+    proxy.drop();
+
+    await expect(closing).resolves.toBeUndefined();
     expect(connection.isClosed()).toBe(true);
   });
 

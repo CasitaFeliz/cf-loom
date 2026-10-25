@@ -50,8 +50,8 @@ export type Ended =
 /**
  * Ends a connection the Service opened by draining it, or by flushing it while the Service drains it, and
  * resolves once it is closed, whoever closed it. NATS did not answer when nats.js rejects the drain, which
- * leaves the connection open and is closed here, closes the connection with an error, or reports a
- * `disconnect` before it closes.
+ * leaves the connection open and is closed here, or, before it answers, closes the connection with an error
+ * or reports a `disconnect`.
  */
 export async function drainOrClose(natsConnection: NatsConnection): Promise<Ended> {
   if (natsConnection.isClosed()) {
