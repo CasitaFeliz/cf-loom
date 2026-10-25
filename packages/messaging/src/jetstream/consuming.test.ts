@@ -439,6 +439,35 @@ describe('consuming over jetstream()', () => {
       () => ({ ack_policy: 'explicit' as const }),
       (orders: Orders) => `filters every subject, not ${orders.created}`,
     ],
+    [
+      'one that delivers headers only',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subject: orders.created,
+        headers_only: true,
+      }),
+      () => "delivers headers only, not the Message's body",
+    ],
+    [
+      'one with priority groups pinned to a client',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subject: orders.created,
+        priority_groups: ['g'],
+        priority_policy: 'pinned_client' as const,
+      }),
+      () => 'has the priority groups g with the policy pinned_client, which a pull must name',
+    ],
+    [
+      'one with priority groups under the overflow policy',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subject: orders.created,
+        priority_groups: ['g', 'h'],
+        priority_policy: 'overflow' as const,
+      }),
+      () => 'has the priority groups g, h with the policy overflow, which a pull must name',
+    ],
   ])(
     'consume refuses %s, naming the durable consumer and what differs',
     async (_name, config, difference) => {
@@ -460,6 +489,18 @@ describe('consuming over jetstream()', () => {
       );
     },
   );
+
+  test('consume accepts a pull consumer with a deliver group, which it pulls from', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { deliver_group: 'workers' });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+
+    await orders.consume(handlersOf(received));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+
+    await vi.waitFor(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
+  });
 
   test('consume accepts a durable consumer that filters on its subject through filter_subjects', async () => {
     const prefix = aPrefix();
