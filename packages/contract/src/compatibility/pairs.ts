@@ -1,3 +1,4 @@
+import type { Lifecycle } from '../declarations/index.ts';
 import {
   type ByKey,
   type DeclaredElement,
@@ -59,6 +60,22 @@ function pairOf<Element extends DeclaredElement>(
     case 'kept':
       return keptOf(counterpart.baseline, counterpart.proposed, identity);
   }
+}
+
+/** The two declarations of a kept Element that are compared. */
+export type Compared<Element> = { readonly baseline: Element; readonly proposed: Element };
+
+/**
+ * The Baseline's and the proposed declaration of an Element to compare, or none: an Element only
+ * one side declares has nothing to compare, and nothing reads what a Retired one still declares.
+ */
+export function comparedShapesOf<Element extends { readonly lifecycle: Lifecycle }>(
+  pair: Pair<Element>,
+): Compared<Element> | undefined {
+  if (pair.kind !== 'kept' || pair.proposed.lifecycle === 'retired') {
+    return undefined;
+  }
+  return { baseline: pair.baseline, proposed: pair.proposed };
 }
 
 function keptOf<Element extends DeclaredElement>(

@@ -2,7 +2,7 @@ import type { EndpointSnapshot } from '../snapshot/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { answeredDifferencesOf, statusDifferencesOf } from './codes.ts';
 import type { BothDefs } from './findings.ts';
-import type { Pair } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 import { partsOf } from './steps.ts';
 import {
@@ -22,17 +22,19 @@ export function endpointSiteOf(pair: Pair<EndpointSnapshot>): ChangeSite {
 }
 
 /**
- * What an Endpoint kept by identity changed in what it reads and answers: its Input (params,
- * query, headers and body), its Success (status, headers and body), then the codes it answers.
+ * What an Endpoint kept by identity, and not Retired now, changed in what it reads and answers:
+ * its Input (params, query, headers and body), its Success (status, headers and body), then the
+ * codes it answers.
  */
 export function endpointDifferencesOf(
   pair: Pair<EndpointSnapshot>,
   defs: BothDefs,
 ): readonly Difference[] {
-  if (pair.kind !== 'kept') {
+  const compared = comparedShapesOf(pair);
+  if (compared === undefined) {
     return [];
   }
-  const { baseline, proposed } = pair;
+  const { baseline, proposed } = compared;
   return [
     ...inputDifferencesOf(baseline, proposed, defs),
     ...successDifferencesOf(baseline.success, proposed.success, defs),

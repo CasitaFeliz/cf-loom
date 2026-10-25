@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
@@ -22,12 +23,16 @@ import {
   type EventSnapshot,
   type GuardSnapshot,
   type ObjectNode,
+  type Path,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  publishedSnapshotOf,
   type RefNode,
   type SchemaNode,
+  type ServiceSnapshot,
+  type Snapshot,
   snapshotOf,
   validateContract,
   walkSchemas,
@@ -280,7 +285,7 @@ const everyNode: SchemaNode = {
     },
     both: {
       required: true,
-      schema: { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] },
+      schema: { type: 'allOf', items: [{ type: 'json' }, { type: 'string' }] },
     },
   },
 };
@@ -567,14 +572,15 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    test('a Snapshot too large or nested too deeply to decode is malformed at the root, never a throw', () => {
+    test('a Snapshot nested far too deeply to decode is malformed at its depth limit, never a throw', () => {
       const nested =
         '{"type":"array","items":'.repeat(5000) + '{"type":"string"}' + '}'.repeat(5000);
       const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
 
       const result = decodeSnapshot(text);
 
-      expect(result).toEqual(malformedAt([], 'is too large or nests too deeply to decode'));
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
     });
 
     test('a shallow Snapshot whose canonical text outgrows a string is malformed at the root, never a throw', () => {
@@ -1385,6 +1391,160 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(malformedAt(['defs', 'a', key]));
     });
 
+    test('a Dependency’s against that is not a semantic version is malformed', () => {
+      const dependencies = { 'payments-service': { against: 'not-a-version', endpoints: [] } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'against']));
+    });
+
+    test('a deprecatedAt on an Active Endpoint is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, deprecatedAt: '2026-10-17T09:30:00Z' };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test.each([
+      ['out of order', [orderLocked, gone]],
+      ['with a code twice', [gone, gone]],
+    ])('an Endpoint’s rejections %s are malformed in the Endpoint', (_name, rejections) => {
+      const endpoint = { ...anEndpoint, rejections };
+      const codes = { ...standardCodes, [orderLocked]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint }, codes });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Guard’s rejections out of order are malformed at its rejections', () => {
+      const guard = { ...aGuard, rejections: [unauthenticated, gone] };
+      const codes = { ...standardCodes, [unauthenticated]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ guards: { apiKey: guard }, codes });
+
+      expect(result).toEqual(malformedAt(['guards', 'apiKey', 'rejections']));
+    });
+
+    test('a Dependency’s endpoints out of id order are malformed at its endpoints', () => {
+      const endpoints = [
+        { id: 'POST /payments', name: 'charge' },
+        { id: 'GET /payments/{}', name: 'getPayment' },
+      ];
+      const dependencies = { 'payments-service': { against: '5.1.0', endpoints } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'endpoints']));
+    });
+
+    test.each<[string, object, string]>([
+      ['enum values', { type: 'enum', values: ['b', 'a'], open: false }, 'values'],
+      ['enum values with one twice', { type: 'enum', values: ['a', 'a'], open: false }, 'values'],
+      ['allOf items', { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] }, 'items'],
+    ])('%s out of canonical order are malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('a union’s options in any order decode', () => {
+      const node = { type: 'union', options: [{ type: 'string' }, { type: 'boolean' }] };
+      const reversed = { type: 'union', options: [{ type: 'boolean' }, { type: 'string' }] };
+
+      const results = [serviceWith({ defs: { a: node } }), serviceWith({ defs: { a: reversed } })];
+
+      expect(results.map(({ kind }) => kind)).toEqual(['decoded', 'decoded']);
+    });
+
+    test.each<[string, object]>([
+      ['a precision that is no integer', { format: 'datetime', formatOptions: { precision: 'x' } }],
+      ['an offset that is no boolean', { format: 'datetime', formatOptions: { offset: 1 } }],
+      ['a version that is no string', { format: 'uuid', formatOptions: { version: 4 } }],
+      ['a protocol that is no regex', { format: 'url', formatOptions: { protocol: 'https' } }],
+    ])('a string format option of the wrong type is malformed: %s', (_name, options) => {
+      const result = serviceWith({ defs: { a: { type: 'string', ...options } } });
+
+      expect(result.kind).toBe('malformed');
+    });
+
+    test('a string format option of its type decodes', () => {
+      const protocol = { source: '^https$', flags: '' };
+      const node = { type: 'string', format: 'url', formatOptions: { protocol } };
+
+      expect(serviceWith({ defs: { a: node } }).kind).toBe('decoded');
+    });
+
+    test.each([4.5, 399, 500, 200])('a code status of %s is malformed at its status', (status) => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a code that is neither the not-implemented one nor removed is malformed', () => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status: 501 } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a removed code, as publish carries a former not-implemented code, decodes', () => {
+      const { version: _version, ...declared } = aService();
+      const proposed: ServiceSnapshot = {
+        ...declared,
+        endpoints: {},
+        events: {},
+        commands: {},
+        subscriptions: {},
+        standardRejections: { ...standardRejections, notImplemented: gone },
+        codes: {
+          [invalidInputCode]: standardCodes[invalidInputCode],
+          [notFoundCode]: standardCodes[notFoundCode],
+          [gone]: standardCodes[notImplementedCode],
+        },
+      };
+      const published = publishedSnapshotOf(aService(), proposed, '3.5.0');
+
+      const result = roundTrip(published);
+
+      expect(published.codes[notImplementedCode]).toMatchObject({ status: 501, removed: true });
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a Success status no Endpoint may declare is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, status: 299 } };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Snapshot nested past 256 levels is malformed at its deepest path, before its structure is read', () => {
+      const depth = 300;
+      const nested =
+        '{"type":"array","items":'.repeat(depth) + '{"type":"nothing"}' + '}'.repeat(depth);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      const result = decodeSnapshot(text);
+
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+    });
+
+    test('a Snapshot nested to 256 levels is read', () => {
+      const depth = 253;
+      const nested =
+        '{"type":"array","items":'.repeat(depth) + '{"type":"string"}' + '}'.repeat(depth);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      expect(decodeSnapshot(text).kind).toBe('decoded');
+    });
+
     test('only the first problem is reported, with its path', () => {
       const result = serviceWith({
         version: 'latest',
@@ -1707,4 +1867,84 @@ describe('walkSchemas and decodeSnapshot agree on bounds', () => {
     );
     return { schema, node, empty: badLength || lengthsBetween.length === 0 };
   }
+});
+
+describe('decodeSnapshot reads what publish writes, and nothing else in order', () => {
+  const examples = ['org-definitions', 'orders-service', 'billing-service'];
+  const examplesDirectory = new URL('../../../../examples/', import.meta.url);
+
+  /** Each example's committed Snapshot published at a version, and the format-1 fixture. */
+  function publishedSnapshots(): readonly (readonly [string, PublishedSnapshot])[] {
+    const published = examples.map((example) => {
+      const file = new URL(`${example}/contract.snapshot.json`, examplesDirectory);
+      const declared: Snapshot = JSON.parse(readFileSync(file, 'utf8'));
+      return [example, publishedSnapshotOf(undefined, declared, '1.0.0')] as const;
+    });
+    return [...published, ['the format-1 fixture', JSON.parse(formatOneFixture)]];
+  }
+
+  /** Where a Snapshot holds an array whose order means nothing, by what holds it. */
+  function orderFreeArraysOf(json: unknown, at: Path = []): readonly Path[] {
+    if (typeof json !== 'object' || json === null) {
+      return [];
+    }
+    const own = Array.isArray(json) ? [] : orderFreeKeysOf(json, at).map((key) => [...at, key]);
+    const entries = Object.entries(json);
+    const nested = entries.flatMap(([key, value]) => orderFreeArraysOf(value, [...at, key]));
+    return [...own, ...nested];
+  }
+
+  function orderFreeKeysOf(object: object, at: Path): readonly string[] {
+    const type = Reflect.get(object, 'type');
+    const section = at.length === 2 ? at[0] : undefined;
+    return [
+      ...(type === 'enum' ? ['values'] : []),
+      ...(type === 'allOf' ? ['items'] : []),
+      ...(section === 'endpoints' || section === 'guards' ? ['rejections'] : []),
+      ...(section === 'dependencies' ? ['endpoints'] : []),
+    ].filter((key) => Array.isArray(Reflect.get(object, key)));
+  }
+
+  /** A copy of a Snapshot's JSON with the array at a path replaced by what `change` makes of it. */
+  function withArrayAt(json: unknown, at: Path, change: (items: unknown[]) => unknown[]): unknown {
+    const copy: unknown = structuredClone(json);
+    let holder = copy;
+    for (const key of at.slice(0, -1)) {
+      holder = Reflect.get(holder as object, key);
+    }
+    const key = String(at.at(-1));
+    Reflect.set(holder as object, key, change([...(Reflect.get(holder as object, key) as [])]));
+    return copy;
+  }
+
+  function arrayAt(json: unknown, at: Path): readonly unknown[] {
+    let value = json;
+    for (const key of at) {
+      value = Reflect.get(value as object, key);
+    }
+    return value as readonly unknown[];
+  }
+
+  test.each(publishedSnapshots())('%s decodes as it was published', (_name, published) => {
+    const result = decodeSnapshot(canonicalTextOf(published));
+
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  test.each(publishedSnapshots())(
+    '%s is malformed with any order-free array reversed or holding an item twice',
+    (_name, published) => {
+      const arrays = orderFreeArraysOf(published).filter((at) => arrayAt(published, at).length > 0);
+      const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+      const changed = [
+        ...arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]])),
+        ...reversible.map((at) => withArrayAt(published, at, (list) => list.reverse())),
+      ];
+
+      const kinds = changed.map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+
+      expect(arrays.length).toBeGreaterThan(0);
+      expect(new Set(kinds)).toEqual(new Set(['malformed']));
+    },
+  );
 });

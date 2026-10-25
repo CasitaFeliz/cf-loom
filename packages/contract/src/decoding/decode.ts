@@ -1,10 +1,12 @@
 import type { z } from 'zod';
 import {
   canonicalSnapshotOf,
+  deepestPathOf,
   type NamedFormat,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormatOf,
+  snapshotNestingLimit,
 } from '../snapshot/index.ts';
 import { problemOf } from '../validation/index.ts';
 import { heldProblemOf } from './references.ts';
@@ -23,9 +25,9 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<PublishedSnapshot>>>
 
 /**
  * A `snapshot.json` from the registry, decoded by the format it names into the published Snapshot
- * in canonical order; anything its format does not define, a name it uses and does not hold, or a
- * def that leads back to itself with no node between, is refused rather than read as far as it
- * goes.
+ * in canonical order; JSON nested past the Snapshot's limit, anything its format does not define,
+ * a name it uses and does not hold, or a def that leads back to itself with no node between, is
+ * refused rather than read as far as it goes.
  */
 export function decodeSnapshot(text: string): DecodedSnapshot {
   const parsed = parsedJsonOf(text);
@@ -33,9 +35,15 @@ export function decodeSnapshot(text: string): DecodedSnapshot {
     return parsed;
   }
   const format = snapshotFormatOf(parsed.json);
-  return format.kind === 'known'
-    ? decodedWithinStack(structures[format.format], parsed.json)
-    : format;
+  if (format.kind !== 'known') {
+    return format;
+  }
+  const tooDeep = deepestPathOf(parsed.json, snapshotNestingLimit);
+  if (tooDeep !== undefined) {
+    const reason = `nests deeper than ${snapshotNestingLimit} levels`;
+    return { kind: 'malformed', at: tooDeep, reason };
+  }
+  return decodedWithinStack(structures[format.format], parsed.json);
 }
 
 type Parsed =

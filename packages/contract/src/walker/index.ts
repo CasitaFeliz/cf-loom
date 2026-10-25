@@ -1,5 +1,6 @@
 export { emptyConstraintOf } from './bounds.ts';
 export {
+  byCanonicalJson,
   byCodePoint,
   canonicalJson,
   indentedCanonicalJson,
@@ -10,6 +11,7 @@ export { leadsBackWithNoNode, nodesWithin, reachedDefsOf } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export { formatOptionKeysOf } from './format-options.ts';
+export { formatSchemaOf } from './format-schemas.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export type {

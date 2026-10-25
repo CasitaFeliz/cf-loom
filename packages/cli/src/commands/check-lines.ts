@@ -73,12 +73,12 @@ function classWordOf(changeClass: CheckedChange['class']): string {
   }
 }
 
-/** The lines a command opens with: the Baseline it compared with and every Change, or why there is no Baseline. */
+/** The lines a command opens with: the Baseline it compared with, or why there is none, then every Change. */
 export function comparedLinesOf({ packageName, against, changes }: Checked): readonly string[] {
-  if (against.kind === 'none') {
-    return [`${packageName} has no Baseline: ${reasonOf(against.why)}`];
-  }
-  const opening = `Checked against ${packageName}@${against.version}${versionNoteOf(against)}`;
+  const opening =
+    against.kind === 'none'
+      ? `${packageName} has no Baseline: ${reasonOf(against.why)}`
+      : `Checked against ${packageName}@${against.version}${versionNoteOf(against)}`;
   return [opening, ...changes.map(changeLineOf)];
 }
 

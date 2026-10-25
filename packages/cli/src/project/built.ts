@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import {
   canonicalSnapshotOf,
   canonicalTextOf,
+  deepestPathOf,
   type RootPackage,
   type ServiceSnapshot,
   type Snapshot,
   type SnapshotContext,
+  snapshotNestingLimit,
   snapshotOf,
   type ValidatedContract,
   type ValidContract,
@@ -14,7 +16,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type Committed, committedOf } from './committed.ts';
-import { type ProjectFailure, type Tooling, tooling } from './failures.ts';
+import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
@@ -59,7 +61,8 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
+ * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator;
+ * a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
  */
 export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
@@ -84,11 +87,25 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
       return validated;
     case 'valid': {
       const snapshot = canonicalSnapshotOf(snapshotOf(validated, context));
+      const tooDeep = tooDeepOf(snapshot);
+      if (tooDeep !== undefined) {
+        return tooDeep;
+      }
       const text = canonicalTextOf(snapshot);
       const bytes = Buffer.from(text, 'utf8');
       return { kind: 'built', project, validated, snapshot, text, bytes, committed };
     }
   }
+}
+
+/** A Snapshot nested deeper than the decoder reads back, as a broken rule at its deepest path. */
+function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
+  const at = deepestPathOf(snapshot, snapshotNestingLimit);
+  if (at === undefined) {
+    return undefined;
+  }
+  const construct = `JSON nested deeper than the ${snapshotNestingLimit} levels a Snapshot holds`;
+  return { kind: 'invalid', failures: [{ kind: 'not-allowed', at, construct }] };
 }
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */

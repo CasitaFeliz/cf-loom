@@ -14,15 +14,19 @@ export type MessageHistory = {
   readonly otherNames: ReadonlySet<string>;
 };
 
-/** One kind of Message's history across the Baseline, tombstones included, and the proposed Snapshot. */
+/**
+ * One kind of Message's history across the Baseline, tombstones included, and the proposed
+ * Snapshot; with no Baseline, the proposed Snapshot is the whole history.
+ */
 export function messageHistoryOf(
-  baseline: PublishedServiceSnapshot,
+  baseline: PublishedServiceSnapshot | undefined,
   proposed: ServiceSnapshot,
   kind: MessageKind,
 ): MessageHistory {
+  const before: Messages = baseline ?? { events: {}, commands: {} };
   const otherKind = kind === 'event' ? 'command' : 'event';
-  const identities = [...identitiesOf(baseline, kind), ...identitiesOf(proposed, kind)];
-  const otherNames = identitiesOf(baseline, otherKind).map((identity) => {
+  const identities = [...identitiesOf(before, kind), ...identitiesOf(proposed, kind)];
+  const otherNames = identitiesOf(before, otherKind).map((identity) => {
     return nameAndVersionOf(identity).name;
   });
   return { identities: new Set(identities), otherKind, otherNames: new Set(otherNames) };

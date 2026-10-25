@@ -839,3 +839,57 @@ function describedAs(difference: Difference): string {
       return difference.kind;
   }
 }
+
+describe('compatibilityReportOf, retiring an Endpoint compares nothing it declares', () => {
+  const deprecated = anEndpoint({ lifecycle: 'deprecated' });
+  const locked: CodeSnapshot = {
+    origin: 'local',
+    status: 409,
+    message: 'Locked',
+    body: null,
+    removed: false,
+  };
+
+  function retiringChangesOf(retired: EndpointSnapshot): readonly Change[] {
+    const baseline: PublishedServiceSnapshot = {
+      ...heading,
+      version: '3.4.0',
+      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      codes: { [orderLocked]: locked },
+    };
+    const proposed = aProposed({ ...retired, lifecycle: 'retired' }, { codes: baseline.codes });
+    return reportOf(baseline, proposed).changes;
+  }
+
+  const body = anOpenObject({ note: required(aString) });
+  const header = anOpenObject({ 'x-trace': required(aString) });
+  test.each<[string, Partial<EndpointSnapshot>]>([
+    ['a Success whose status changed', { success: aSuccess({ status: 201 }) }],
+    ['a Success body added', { success: aSuccess({ body }) }],
+    ['an Input body added', { input: anInput({ body }) }],
+    ['an Input header added', { input: anInput({ headers: header }) }],
+    ['a query param added', { input: anInput({ query: header }) }],
+    [
+      'a path param whose type changed',
+      { input: anInput({ params: theParams(['orderId', aNumber]) }) },
+    ],
+    ['a code answered that was not', { rejections: [orderLocked] }],
+  ])('retiring a Deprecated Endpoint with %s reports only the retirement', (_name, change) => {
+    const changes = retiringChangesOf({ ...deprecated, ...change });
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
+  });
+
+  test('an Endpoint still declared Deprecated with a changed Success reports it', () => {
+    const baseline: PublishedServiceSnapshot = {
+      ...heading,
+      version: '3.4.0',
+      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+    };
+    const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });
+
+    const changes = reportOf(baseline, proposed).changes;
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['status-changed']);
+  });
+});

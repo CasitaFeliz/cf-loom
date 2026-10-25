@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import type { PublishedSnapshot } from '../snapshot/index.ts';
+import { byCodePoint } from '../walker/index.ts';
 import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.ts';
-import { byKey } from './maps.ts';
+import { byKey, inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText } from './texts.ts';
 
 const text = z.string();
+const codeList = inCanonicalOrder(text, byCodePoint);
 const heading = {
   format: z.literal(1),
   name: text,
@@ -20,7 +22,7 @@ const guard = z.strictObject({
   qualifier: schemaNode.nullable(),
   demands: z.strictObject({ headers: objectNode.nullable(), query: objectNode.nullable() }),
   context: schemaNode.nullable(),
-  rejections: z.array(text),
+  rejections: codeList,
 });
 
 const code = z.strictObject({
@@ -38,8 +40,10 @@ const subscription = z.union([
 
 const dependencies = byKey(
   z.strictObject({
-    against: text,
-    endpoints: z.array(z.strictObject({ id: text, name: text })),
+    against: semanticVersionText,
+    endpoints: inCanonicalOrder(z.strictObject({ id: text, name: text }), (left, right) =>
+      byCodePoint(left.id, right.id),
+    ),
   }),
 );
 

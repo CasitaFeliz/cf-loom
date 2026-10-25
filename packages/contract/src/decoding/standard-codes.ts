@@ -1,4 +1,4 @@
-import { standardRejectionNames } from '../declarations/index.ts';
+import { isRejectionStatus, standardRejectionNames } from '../declarations/index.ts';
 import type { PublishedSnapshot } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 
@@ -23,6 +23,29 @@ export function standardBodyProblemsOf(snapshot: PublishedSnapshot): readonly Pr
       ? `holds no body, which the ${name} Standard Rejection always has`
       : `holds a body, which the ${name} Standard Rejection never has`;
     problems.push({ at: ['codes', code, 'body'], reason });
+  }
+  return problems;
+}
+
+/** The status of the not-implemented Rejection, the one Rejection that is no 4xx. */
+const notImplementedStatus = 501;
+
+/**
+ * The codes whose status no Rejection has: a 4xx, or 501 on the code the not-implemented Standard
+ * Rejection names or on a removed code, which `publish` carries forward with the status it last had.
+ */
+export function codeStatusProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
+  if (snapshot.kind === 'application') {
+    return [];
+  }
+  const problems: Problem[] = [];
+  for (const [code, { status, removed }] of Object.entries(snapshot.codes)) {
+    const mayBeNotImplemented = removed || code === snapshot.standardRejections.notImplemented;
+    const allowed =
+      isRejectionStatus(status) || (mayBeNotImplemented && status === notImplementedStatus);
+    if (!allowed) {
+      problems.push({ at: ['codes', code, 'status'], reason: 'is no status a Rejection has' });
+    }
   }
   return problems;
 }

@@ -99,6 +99,7 @@ export {
   canonicalSnapshotOf,
   canonicalTextOf,
   checkExportedFormat,
+  deepestPathOf,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,
@@ -108,6 +109,8 @@ export {
   isSubscriptionTombstone,
   ownRejectionsOf,
   semanticVersionPartsOf,
+  snapshotFormatOf,
+  snapshotNestingLimit,
   snapshotOf,
   textPartNodesOf,
 } from '../snapshot/index.ts';

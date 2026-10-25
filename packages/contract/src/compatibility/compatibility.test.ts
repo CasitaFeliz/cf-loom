@@ -247,12 +247,22 @@ const mismatches: readonly Mismatch[] = [
 ];
 
 describe('compatibilityReportOf, presence', () => {
-  test('with no Baseline nothing is compared, so a first publish may start at any Message Version', () => {
+  test('with no Baseline only the numbering of Message Versions is judged, so a first publish starts at version 1', () => {
     const proposed = aProposed({ events: { 'OrderPlaced@3': anEvent() } });
 
     const report = compatibilityReportOf(undefined, proposed);
 
-    expect(report).toEqual({ kind: 'no-baseline' } satisfies CompatibilityReport);
+    expect(report).toEqual({
+      kind: 'no-baseline',
+      changes: [
+        {
+          site: { kind: 'event', identity: 'OrderPlaced@3', visibility: 'internal' },
+          difference: { kind: 'version-gap', missing: 'OrderPlaced@2' },
+          class: 'additive',
+          verdict: 'refused',
+        },
+      ],
+    } satisfies CompatibilityReport);
   });
 
   test('a Snapshot identical to its Baseline has no Changes and an unchanged hash', () => {
@@ -569,7 +579,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
     },
   );
 
-  test('an Element retired in this change is still compared', () => {
+  test('an Element retired in this change is judged by its lifecycle alone, not by what it declares', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
@@ -582,7 +592,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired', 'status-changed']);
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
   });
 });
 

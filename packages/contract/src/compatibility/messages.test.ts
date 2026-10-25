@@ -204,27 +204,6 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
   });
 
   test.each(kinds)(
-    'changing a $name’s body while retiring it is refused beside a Breaking retirement',
-    (kind) => {
-      const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }, plain));
-      const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'retired' }, withRequiredNote));
-
-      const changes = changesOf(baseline, proposed);
-
-      const site = kind.site('OrderPlaced@1');
-      expect(changes).toEqual([
-        {
-          site,
-          difference: { kind: 'retired' },
-          class: 'breaking',
-          verdict: kind.retiring,
-        },
-        { site, difference: bodyChange(true), class: 'breaking', verdict: 'refused' },
-      ]);
-    },
-  );
-
-  test.each(kinds)(
     'retiring a $name Deprecated in the Baseline is Breaking; its Approval is $retiring',
     (kind) => {
       const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }));
@@ -565,5 +544,130 @@ describe('compatibilityReportOf, a name’s kind across history', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes.map(({ difference }) => difference.kind)).toEqual(['added']);
+  });
+});
+
+describe('compatibilityReportOf, gaps with no Baseline', () => {
+  function noBaselineChangesOf(proposed: ServiceSnapshot): readonly Change[] {
+    const report = compatibilityReportOf(undefined, proposed);
+    if (report.kind !== 'no-baseline') {
+      throw new Error('no Baseline was given, so the report must say so');
+    }
+    return report.changes;
+  }
+
+  function gap(site: ChangeSite, missing: string): Change {
+    return {
+      site,
+      difference: { kind: 'version-gap', missing },
+      class: 'additive',
+      verdict: 'refused',
+    };
+  }
+
+  test.each(kinds)('a first publish of $name versions 1 and 3 refuses the gap on 3', (kind) => {
+    const proposed = aProposed(
+      kind.declared({ 'OrderPlaced@1': 'active', 'OrderPlaced@3': 'active' }),
+    );
+
+    const changes = noBaselineChangesOf(proposed);
+
+    expect(changes).toEqual([gap(kind.site('OrderPlaced@3'), 'OrderPlaced@2')]);
+  });
+
+  test.each(kinds)('a first publish of $name version 2 alone refuses the gap on 2', (kind) => {
+    const proposed = aProposed(kind.declared({ 'OrderPlaced@2': 'active' }));
+
+    const changes = noBaselineChangesOf(proposed);
+
+    expect(changes).toEqual([gap(kind.site('OrderPlaced@2'), 'OrderPlaced@1')]);
+  });
+
+  test.each(kinds)('a first publish of $name versions without a gap has no Change', (kind) => {
+    const proposed = aProposed(
+      kind.declared({ 'OrderPlaced@1': 'active', 'OrderPlaced@2': 'deprecated' }),
+    );
+
+    const changes = noBaselineChangesOf(proposed);
+
+    expect(changes).toEqual([]);
+  });
+});
+
+describe('compatibilityReportOf, a gap is refused with or without a Baseline', () => {
+  test('a version-gap is reported exactly when a version added follows none either side holds', () => {
+    let state = 223;
+    const next = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 2 ** 32;
+    };
+    for (let draw = 0; draw < 300; draw += 1) {
+      const versions = [1, 2, 3, 4, 5].filter(() => next() < 0.6);
+      const withBaseline = next() < 0.7;
+      const held = withBaseline ? versions.filter(() => next() < 0.5) : [];
+      const declared = versions.filter((version) => !held.includes(version) || next() < 0.5);
+      const heldAs: Held = next() < 0.5 ? 'active' : 'tombstone';
+      const baseline = aBaseline(event.held(entriesOf(held, heldAs)));
+      const proposed = aProposed(event.declared(entriesOf(declared, 'active')));
+
+      const report = withBaseline
+        ? compatibilityReportOf(baseline, proposed)
+        : compatibilityReportOf(undefined, proposed);
+
+      const all = [...held, ...declared];
+      const added = declared.filter((version) => !held.includes(version));
+      const gaps = report.changes.filter(({ difference }) => difference.kind === 'version-gap');
+      const label = `draw ${draw}: held ${held} declared ${declared}`;
+      expect(gaps.length > 0, label).toBe(!isGaplessAfter(all, added));
+    }
+  });
+
+  function entriesOf<Value>(versions: readonly number[], value: Value): Entries<Value> {
+    return Object.fromEntries(versions.map((version) => [`OrderPlaced@${version}`, value]));
+  }
+
+  /** Whether every version added follows one held or declared: what the Check judges of a history. */
+  function isGaplessAfter(all: readonly number[], added: readonly number[]): boolean {
+    return added.every((version) => version === 1 || all.includes(version - 1));
+  }
+});
+
+describe('compatibilityReportOf, retiring a Message Version compares nothing it declares', () => {
+  const bodies: readonly [string, ObjectNode][] = [
+    ['a field removed', anObject({})],
+    ['a required field added', withRequiredNote],
+    ['an optional field added', withOptionalNote],
+    ['a field whose type changed', anObject({ id: required({ type: 'number' }) })],
+  ];
+
+  const cases = kinds.flatMap((kind) => bodies.map(([change, body]) => ({ kind, change, body })));
+  test.each(cases)(
+    'retiring a Deprecated $kind.name with $change reports only the retirement',
+    ({ kind, body }) => {
+      const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }));
+      const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'retired' }, body));
+
+      const changes = changesOf(baseline, proposed);
+
+      expect(changes).toEqual([
+        {
+          site: kind.site('OrderPlaced@1'),
+          difference: { kind: 'retired' },
+          class: 'breaking',
+          verdict: kind.retiring,
+        },
+      ]);
+    },
+  );
+
+  test('a still-Active Event whose body lost a field is still refused', () => {
+    const baseline = aBaseline(event.held({ 'OrderPlaced@1': 'active' }));
+    const proposed = aProposed(event.declared({ 'OrderPlaced@1': 'active' }, anObject({})));
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes.map(({ difference, verdict }) => [difference.kind, verdict])).toEqual([
+      ['schema', 'refused'],
+    ]);
   });
 });
