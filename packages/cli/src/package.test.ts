@@ -439,26 +439,24 @@ function aSubscriber(more: readonly string[]): string {
       include: ['src'],
     }),
     'src/contract/index.ts': lines([
-      "import { defineContract, defineDependencies, defineGroup, defineSubscription } from '@cf-loom/contract';",
+      "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
       "import { contract as orders } from '@org/contract-orders-service';",
       '',
-      'export const ordersDeps = defineDependencies(orders, {',
-      '  events: [orders.events.orderPlacedV1, orders.events.orderPlacedV2],',
-      '});',
+      'export const ordersDependency = defineDependency({ provider: orders });',
       'export const auditPlacedV1 = defineSubscription({',
       "  name: 'auditPlacedV1',",
       "  description: 'Audit placed v1',",
-      '  event: ordersDeps.events.orderPlacedV1,',
+      '  event: orders.events.orderPlacedV1,',
       '});',
       'export const auditPlacedV2 = defineSubscription({',
       "  name: 'auditPlacedV2',",
       "  description: 'Audit placed v2',",
-      '  event: ordersDeps.events.orderPlacedV2,',
+      '  event: orders.events.orderPlacedV2,',
       '});',
       'export const contract = defineContract({',
       "  name: 'billing-service',",
       "  groups: [defineGroup({ name: 'audits', description: 'Audits', subscriptions: [auditPlacedV1, auditPlacedV2] })],",
-      '  dependencies: [ordersDeps],',
+      '  dependencies: [ordersDependency],',
       '});',
       ...more,
     ]),
@@ -890,14 +888,14 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         include: ['src'],
       }),
       'src/contract/index.ts': lines([
-        "import { defineApplication, defineDependencies } from '@cf-loom/contract';",
+        "import { defineApplication, defineDependency } from '@cf-loom/contract';",
         "import { contract as orders } from '@org/contract-orders-service';",
         '',
-        'export const ordersDeps = defineDependencies(orders, {',
+        'export const ordersDependency = defineDependency({ provider: orders,',
         '  endpoints: [orders.endpoints.getOrder],',
         '});',
         '',
-        "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDeps] });",
+        "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDependency] });",
       ]),
     });
     link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
@@ -911,7 +909,6 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       'orders-service': {
         against: '0.0.0',
         endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-        events: [],
       },
     });
   });
@@ -939,10 +936,29 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         event: 'orders-service:OrderPlaced@2',
       },
     });
-    expect(snapshot.dependencies['orders-service'].events).toEqual([
-      'OrderPlaced@1',
-      'OrderPlaced@2',
-    ]);
+    expect(snapshot.dependencies).toEqual({
+      'orders-service': { against: '0.0.0', endpoints: [] },
+    });
+  });
+
+  test('cfLoom.dependencies lists per Provider the Events its Subscriptions receive', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([]);
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+    cfLoom(consumer, 'generate');
+
+    const ran = cfLoom(consumer, 'package');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const manifest = JSON.parse(read(consumer, `${defaultOut}/package.json`));
+    expect(manifest.cfLoom.dependencies).toEqual({
+      'orders-service': {
+        against: '0.0.0',
+        endpoints: [],
+        events: ['OrderPlaced@1', 'OrderPlaced@2'],
+      },
+    });
   });
 
   test('a Subscriber’s body type is the Event’s Reader output: an Unknown case type-checks and a bare undeclared value does not', () => {
@@ -950,7 +966,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(typeCheck(out).status).toBe(0);
     const consumer = aSubscriber([
       "import type { z } from 'zod';",
-      'type Placed = z.output<typeof ordersDeps.events.orderPlacedV2.body>;',
+      'type Placed = z.output<typeof orders.events.orderPlacedV2.body>;',
       'const total = { amount: 1, currency: "EUR" };',
       'const orderId = "6f1c1b9e-6c1e-4f9b-9d4c-1f2e3d4c5b6a";',
       "export const read: Placed = { orderId, status: { unknown: 'refunded' }, total };",
@@ -989,11 +1005,11 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
         'cf-loom.config.ts': config,
         'src/contract/index.ts': lines([
-          "import { defineApplication, defineDependencies } from '@cf-loom/contract';",
+          "import { defineApplication, defineDependency } from '@cf-loom/contract';",
           "import { contract as alpha } from '@org/contract-alpha-service';",
           "import { contract as beta } from '@org/contract-beta-service';",
-          'export const alphaDeps = defineDependencies(alpha, { endpoints: [alpha.endpoints.ping] });',
-          'export const betaDeps = defineDependencies(beta, { endpoints: [beta.endpoints.ping] });',
+          'export const alphaDependency = defineDependency({ provider: alpha, endpoints: [alpha.endpoints.ping] });',
+          'export const betaDependency = defineDependency({ provider: beta, endpoints: [beta.endpoints.ping] });',
           `export const application = defineApplication({ name: 'web-admin', dependencies: [${listed}] });`,
         ]),
       });
@@ -1001,8 +1017,8 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       link(beta, join(project, 'node_modules/@org/contract-beta-service'));
       return project;
     };
-    const first = applicationOf('alphaDeps, betaDeps');
-    const second = applicationOf('betaDeps, alphaDeps');
+    const first = applicationOf('alphaDependency, betaDependency');
+    const second = applicationOf('betaDependency, alphaDependency');
 
     packageIn(first);
     packageIn(second);
@@ -1139,10 +1155,10 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         include: ['src'],
       }),
       'src/contract/index.ts': lines([
-        "import { defineApplication, defineDependencies } from '@cf-loom/contract';",
+        "import { defineApplication, defineDependency } from '@cf-loom/contract';",
         "import { contract as orders } from '@org/contract-orders-service';",
-        'export const ordersDeps = defineDependencies(orders, { endpoints: [orders.endpoints.ping] });',
-        "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDeps] });",
+        'export const ordersDependency = defineDependency({ provider: orders, endpoints: [orders.endpoints.ping] });',
+        "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDependency] });",
       ]),
     });
     link(out, join(consumer, 'node_modules/@org/contract-orders-service'));

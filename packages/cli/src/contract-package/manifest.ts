@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 import {
   type ApplicationSnapshot,
+  byCodePoint,
   hashedTextOf,
+  messageIdentityOf,
   type PeerRanges,
   type PublishedApplicationSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  readEventReference,
   type ServiceSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
@@ -73,14 +76,38 @@ export function cfLoomOf(snapshot: Snapshot | PublishedSnapshot) {
   };
 }
 
+/**
+ * Each Dependency as the Snapshot records it, with the Events received from its Provider, which
+ * the Snapshot keeps only in the Subscriptions, so the registry's metadata records every use of a
+ * Provider's Elements.
+ */
 function dependenciesOf(snapshot: Snapshot | PublishedSnapshot) {
-  switch (snapshot.kind) {
-    case 'service':
-    case 'application':
-      return snapshot.dependencies;
-    case 'definitions':
-      return {};
+  if (snapshot.kind === 'definitions') {
+    return {};
   }
+  const received = snapshot.kind === 'service' ? receivedEventsOf(snapshot.subscriptions) : [];
+  const entries = Object.entries(snapshot.dependencies).map(([provider, dependency]) => {
+    const events = received.filter((event) => event.service === provider);
+    const identities = events.map(({ name, version }) => messageIdentityOf(name, version));
+    return [provider, { ...dependency, events: identities.sort(byCodePoint) }] as const;
+  });
+  return Object.fromEntries(entries);
+}
+
+/** The Events a Service's Subscriptions receive, a removed Subscription's not among them. */
+function receivedEventsOf(
+  subscriptions: PublishedServiceSnapshot['subscriptions'],
+): readonly EventReference[] {
+  const live = Object.values(subscriptions).filter(
+    (subscription) => !('removedIn' in subscription),
+  );
+  return live.map(({ event }) => readEventReference(event)).filter(isEventReference);
+}
+
+type EventReference = NonNullable<ReturnType<typeof readEventReference>>;
+
+function isEventReference(reference: EventReference | undefined): reference is EventReference {
+  return reference !== undefined;
 }
 
 /**
