@@ -5,7 +5,6 @@ import {
   internalError,
   invalidInputResponseOf,
   isInputPart,
-  ownOf,
   rejectionResponseOf,
   reservedResponseOf,
   resolutionOf,
@@ -89,7 +88,8 @@ function sentRejectionOf(
   { rejection, ...built }: Extract<NotSuccess, { readonly kind: 'rejection' }>,
   standards: StandardRejections,
 ): SentRejection {
-  return { ...resolutionOf(rejection, standards), body: ownOf(built, 'body') };
+  const body = 'body' in built ? built.body : undefined;
+  return { ...resolutionOf(rejection, standards), body };
 }
 
 /**

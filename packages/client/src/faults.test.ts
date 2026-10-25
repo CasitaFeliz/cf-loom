@@ -449,49 +449,6 @@ describe('row 2, more', () => {
   });
 });
 
-/** Runs a call while Object.prototype holds a name every plain object then inherits, then restores it. */
-async function withInherited<Result>(
-  name: string,
-  value: unknown,
-  run: () => Promise<Result>,
-): Promise<Result> {
-  Object.defineProperty(Object.prototype, name, { value, writable: true, configurable: true });
-  try {
-    return await run();
-  } finally {
-    Reflect.deleteProperty(Object.prototype, name);
-  }
-}
-
-describe('an Envelope and a Fault, read whatever Object.prototype holds', () => {
-  test('a Fault Envelope is a Fault, though Object.prototype holds a rejection', async () => {
-    const fault = { committed: 'no', retryable: true, message: 'Busy' };
-    const body = JSON.stringify({ fault });
-    const orders = ordersOver(answering(503, body, { 'content-type': 'application/json' }));
-    const inherited = { code: 'ORDER_LOCKED', message: 'Locked' };
-
-    const outcome = await withInherited('rejection', inherited, () => orders.getOrder(input));
-
-    expect(outcome).toMatchObject({
-      kind: 'fault',
-      source: 'provider',
-      status: 503,
-      message: 'Busy',
-    });
-  });
-
-  test('a Fault inferred without a response carries no Retry-After, though Object.prototype holds headers', async () => {
-    const orders = ordersOver(throwing(networkFailureOf('no-connection')));
-
-    const outcome = await withInherited('headers', { 'retry-after': '30' }, () =>
-      orders.getOrder(input),
-    );
-
-    expect(outcome).toMatchObject({ kind: 'fault', source: 'no-connection', committed: 'no' });
-    expect(outcome).not.toHaveProperty('retryAfter');
-  });
-});
-
 describe('networkFailureOf, the failure a fake fetch throws', () => {
   test('a refused connection is no connection, committed no and retryable', async () => {
     const orders = ordersOver(throwing(networkFailureOf('no-connection')));

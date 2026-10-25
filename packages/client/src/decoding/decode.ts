@@ -1,4 +1,4 @@
-import { isRejectionEnvelope, receivedEnvelopeOf } from '@cf-loom/contract/internal';
+import { receivedEnvelopeOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { answeredFaultOf, type Inferring, withRetryAfter } from '../inference/index.ts';
 import type { DecodedOutcome } from './outcomes.ts';
@@ -25,7 +25,7 @@ export async function outcomeOf(
       return answeredFaultOf({ kind: 'status', status, headers }, inferring);
     case 'envelope': {
       const { envelope } = read;
-      if (isRejectionEnvelope(envelope)) {
+      if ('rejection' in envelope) {
         return rejectionOf(envelope.rejection, { status, source: 'provider' }, called);
       }
       return withRetryAfter(

@@ -3,11 +3,9 @@ import {
   type AnswerableRejection,
   type Checked,
   headerTextsOf,
-  ownOf,
   rejectionBodyReaderOf,
   rejectionResponseOf,
   resolutionOf,
-  schemaOf,
   successFieldsOf,
   successResponseOf,
   writtenPartOf,
@@ -23,12 +21,10 @@ import type { Answer } from '../scripting/index.ts';
 export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpoint): Response {
   const { endpoint } = listed;
   const given = successFieldsOf(endpoint, scripted);
-  const headers = writtenPartOf('success.headers', schemaOf(endpoint, 'success.headers'), {
-    value: ownOf(given, 'headers'),
+  const headers = writtenPartOf('success.headers', endpoint.success.headers, {
+    value: given['headers'],
   });
-  const body = writtenPartOf('success.body', schemaOf(endpoint, 'success.body'), {
-    value: ownOf(given, 'body'),
-  });
+  const body = writtenPartOf('success.body', endpoint.success.body, { value: given['body'] });
   const sentHeaders = fieldsOf(checkedValueOf(headers));
   const texts = headerTextsOf('success.headers', sentHeaders);
   const textIssues = texts.kind === 'issues' ? texts.issues : [];

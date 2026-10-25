@@ -32,10 +32,7 @@ export function basePathOf(base: URL): string {
   return base.pathname.replace(/\/$/, '');
 }
 
-/**
- * A parsed Input as the Request it travels in under the base URL; a redirect is never followed, and
- * a body left out is stated as none, since the Request reads its init as an object that may inherit one.
- */
+/** A parsed Input as the Request it travels in under the base URL; a redirect is never followed. */
 export function requestOf(endpoint: Endpoint, base: URL, input: ParsedInput): Request {
   const url = new URL(base);
   url.pathname = `${basePathOf(base)}${pathOf(endpoint.path, input.params)}`;
@@ -45,8 +42,8 @@ export function requestOf(endpoint: Endpoint, base: URL, input: ParsedInput): Re
     headers.set(name, text);
   }
   const { method } = endpoint;
-  if (!Object.hasOwn(input, 'body')) {
-    return new Request(url, { method, headers, body: null, redirect: 'manual' });
+  if (!('body' in input)) {
+    return new Request(url, { method, headers, redirect: 'manual' });
   }
   headers.set('content-type', jsonContentType);
   const body = JSON.stringify(input.body);

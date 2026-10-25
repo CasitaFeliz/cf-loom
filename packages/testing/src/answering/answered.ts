@@ -5,7 +5,6 @@ import {
   faultResponseOf,
   follows,
   isJsonValue,
-  isRejectionEnvelope,
   isReservedCode,
   methodNotAllowedResponseOf,
   rejectionResponseOf,
@@ -57,7 +56,7 @@ type ScriptedFault = Extract<Answer, { readonly kind: 'fault' }>;
 /** The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a Fault. */
 function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
   const envelope = envelopeOf({ fault: answer });
-  if (envelope === undefined || isRejectionEnvelope(envelope)) {
+  if (envelope === undefined || !('fault' in envelope)) {
     const what =
       "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
     throw mistakeOf({ ...whoOf(listed), what });
