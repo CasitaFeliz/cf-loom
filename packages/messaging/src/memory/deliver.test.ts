@@ -17,7 +17,7 @@ import {
   type MessageMeta,
   readersOf,
 } from '@cf-loom/handlers';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { type ConsumedFault, InvalidMessageError, type Messaging, messaging } from '../index.ts';
@@ -674,6 +674,12 @@ describe('pending and redeliver()', () => {
     const runtimeListeners = process.listeners('unhandledRejection');
     process.removeAllListeners('unhandledRejection');
     process.on('unhandledRejection', (reason) => void unhandled.push(reason));
+    onTestFinished(() => {
+      process.removeAllListeners('unhandledRejection');
+      for (const listener of runtimeListeners) {
+        process.on('unhandledRejection', listener);
+      }
+    });
     const broker = memory();
     const { consume, publisher } = await messaging(contract, broker);
     await consume({
@@ -696,10 +702,6 @@ describe('pending and redeliver()', () => {
     await broker.deliver(chargeCardV1, charge, { factId: 'o-1' });
     await rejectionOf(broker.settled());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    process.removeAllListeners('unhandledRejection');
-    for (const listener of runtimeListeners) {
-      process.on('unhandledRejection', listener);
-    }
 
     expect(unhandled).toEqual([broken]);
   });
