@@ -4,7 +4,7 @@ const makeOptionalHint = 'make it optional';
 const openEnumHint = 'declare it with openEnum, so readers take values added later';
 const newMessageVersionHint = 'make the change in a new Message Version';
 
-/** What to do about a Change, from a closed table of the moves that fix one; none for a Change no move fixes. */
+/** What to do about a Change, from a closed table of the moves that fix one; none for a Change the table has no row for. */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the hint of each kind of difference
 export function hintOf(change: Change): string | null {
   const { site, difference } = change;
