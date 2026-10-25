@@ -91,8 +91,3 @@ function byNameOf(endpoints: unknown): unknown {
 function byName(selected: unknown, index: number): readonly [string, unknown] {
   return [isEndpoint(selected) ? selected.name : String(index), selected];
 }
-
-/** A Message Version's name in code, `orderCreatedV2`, which a Contract Package keys it by. */
-export function codeNameOf(message: { readonly name: string; readonly version: number }): string {
-  return `${message.name.charAt(0).toLowerCase()}${message.name.slice(1)}V${message.version}`;
-}

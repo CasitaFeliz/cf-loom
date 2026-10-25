@@ -146,7 +146,7 @@ describe('the client’s types', () => {
     expect(client).toBeDefined();
   });
 
-  test('Client<typeof deps, names> is what client() returns with those headers given', () => {
+  test('Client<typeof dependency, names> is what client() returns with those headers given', () => {
     const configured: Client<typeof ordersDependency, 'x-api-key'> = client(ordersDependency, {
       baseUrl,
       headers: { 'x-api-key': 'k' },

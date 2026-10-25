@@ -41,11 +41,11 @@ export type Provided = {
  * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, so routing
  * precedence is the Provider's, and each listed one with what its requests are read by.
  */
-export function providedOf(deps: AnyDependency, base: URL): Provided {
-  const { provider } = deps;
+export function providedOf(dependency: AnyDependency, base: URL): Provided {
+  const { provider } = dependency;
   checkExportedFormat(provider);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
-  for (const [name, endpoint] of Object.entries(deps.endpoints)) {
+  for (const [name, endpoint] of Object.entries(dependency.endpoints)) {
     const entry = exportedEntryOf(provider, endpoint);
     listedByEntry.set(entry, listedEndpointOf(provider, { name, endpoint, entry }));
   }

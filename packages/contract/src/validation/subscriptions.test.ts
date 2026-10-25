@@ -49,8 +49,6 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDependency = defineDependency({ provider: payments });
-
 /** A Subscription the types refuse, as a cast lets an author write it. */
 function aSubscription(name: string, event: unknown): Subscription {
   const declaration = { name, description: 'Receives it', event };
@@ -60,6 +58,7 @@ function aSubscription(name: string, event: unknown): Subscription {
 function validateSubscriptions(
   subscriptions: readonly Subscription[],
   events: readonly Event[] = [orderCreatedV1],
+  provider: typeof payments = payments,
 ) {
   const ordersGroup = defineGroup({
     name: 'orders',
@@ -70,7 +69,7 @@ function validateSubscriptions(
   const contract = defineContract({
     name: 'orders-service',
     groups: [ordersGroup],
-    dependencies: [paymentsDependency],
+    dependencies: [defineDependency({ provider })],
   });
   return validateContract(contract, {
     originOf: () => undefined,
@@ -178,6 +177,35 @@ describe('validateContract: Subscriptions', () => {
         ['groups', 'orders', 'subscriptions', 'onFailed', 'event'],
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: PaymentFailed@1",
+      ),
+    );
+  });
+
+  test('a Subscription to a Provider’s Private Event fails, even one the Provider exported', () => {
+    const privateEvent = defineEvent({
+      name: 'PaymentRefunded',
+      version: 1,
+      visibility: 'private',
+      description: 'A payment was refunded',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const provider = {
+      ...payments,
+      events: { ...payments.events, paymentRefundedV1: privateEvent },
+    } as unknown as typeof payments;
+    const onRefunded = defineSubscription({
+      name: 'onRefunded',
+      description: 'Receives it',
+      event: privateEvent,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onRefunded], [orderCreatedV1], provider);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onRefunded', 'event'],
+        'subscription-event',
+        "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
       ),
     );
   });

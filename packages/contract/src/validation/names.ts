@@ -98,11 +98,11 @@ function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure
 function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFailure[] {
   const providerOf = ({ dependency }: LocatedDependency) => providerNameOf(dependency);
   const named = dependencies.filter((located) => providerOf(located) !== undefined);
-  return repeated(named, (located) => textOf(providerOf(located))).map(({ at }) =>
+  return repeated(named, (located) => textOf(providerOf(located))).map((located) =>
     failure(
-      at,
+      located.at,
       'duplicate-dependency',
-      `A Contract lists one Dependency per Provider: ${textOf(at.at(-1))}`,
+      `A Contract lists one Dependency per Provider: ${textOf(providerOf(located))}`,
     ),
   );
 }

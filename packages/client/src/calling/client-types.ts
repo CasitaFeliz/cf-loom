@@ -3,7 +3,7 @@ import type { ReceivedOutcome } from '../decoding/index.ts';
 import type { AnyDependency } from '../endpoints/index.ts';
 import type { InferFault } from '../inference/index.ts';
 
-type EndpointOf<Deps extends AnyDependency> = Deps['endpoints'][keyof Deps['endpoints']];
+type EndpointOf<D extends AnyDependency> = D['endpoints'][keyof D['endpoints']];
 
 type HeadersOf<Target extends Endpoint> =
   InputOf<Target> extends { readonly headers: infer Headers }
@@ -11,8 +11,8 @@ type HeadersOf<Target extends Endpoint> =
     : Readonly<Record<never, never>>;
 
 /** A header name some Endpoint a Dependency lists declares in its Input, as `client()` may give it. */
-export type ConfiguredName<Deps extends AnyDependency> =
-  EndpointOf<Deps> extends infer Listed
+export type ConfiguredName<D extends AnyDependency> =
+  EndpointOf<D> extends infer Listed
     ? Listed extends Endpoint
       ? keyof HeadersOf<Listed> & string
       : never
@@ -28,8 +28,8 @@ type HeaderSink<Listed, Name> = Listed extends Endpoint
   : never;
 
 /** A configured header's type: its Input type, intersected across every listed Endpoint declaring it. */
-type ConfiguredValueOf<Deps extends AnyDependency, Name> =
-  HeaderSink<EndpointOf<Deps>, Name> extends (value: infer Value) => void ? Value : never;
+type ConfiguredValueOf<D extends AnyDependency, Name> =
+  HeaderSink<EndpointOf<D>, Name> extends (value: infer Value) => void ? Value : never;
 
 /** A header given to `client()`: its value, or a function called per request, which may be async. */
 type ConfiguredHeader<Value> = Value | (() => Value | Promise<Value>);
@@ -42,10 +42,10 @@ export type DeprecationNotice = {
 };
 
 /** How a client reaches a Provider: its URL, headers given once, its `fetch` and its inference. */
-export type ClientOptions<Deps extends AnyDependency, Configured extends string = never> = {
+export type ClientOptions<D extends AnyDependency, Configured extends string = never> = {
   readonly baseUrl: string | URL;
   readonly headers?: {
-    readonly [Name in Configured]: ConfiguredHeader<ConfiguredValueOf<Deps, Name>>;
+    readonly [Name in Configured]: ConfiguredHeader<ConfiguredValueOf<D, Name>>;
   };
   readonly fetch?: Fetch;
   readonly inferFault?: InferFault;
@@ -101,22 +101,22 @@ export type CallOptions = { readonly signal?: AbortSignal };
 type Method<
   Target extends Endpoint,
   Configured extends string,
-  Deps extends AnyDependency,
-  Name extends keyof Deps['endpoints'],
+  D extends AnyDependency,
+  Name extends keyof D['endpoints'],
 > =
   Readonly<Record<never, never>> extends CallInput<Target, Configured>
     ? (
         input?: CallInput<Target, Configured>,
         call?: CallOptions,
-      ) => Promise<ReceivedOutcome<Deps, Name>>
+      ) => Promise<ReceivedOutcome<D, Name>>
     : (
         input: CallInput<Target, Configured>,
         call?: CallOptions,
-      ) => Promise<ReceivedOutcome<Deps, Name>>;
+      ) => Promise<ReceivedOutcome<D, Name>>;
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
-export type Client<Deps extends AnyDependency, Configured extends string = never> = {
-  readonly [Name in keyof Deps['endpoints']]: Deps['endpoints'][Name] extends Endpoint
-    ? Method<Deps['endpoints'][Name], Configured, Deps, Name>
+export type Client<D extends AnyDependency, Configured extends string = never> = {
+  readonly [Name in keyof D['endpoints']]: D['endpoints'][Name] extends Endpoint
+    ? Method<D['endpoints'][Name], Configured, D, Name>
     : never;
 };

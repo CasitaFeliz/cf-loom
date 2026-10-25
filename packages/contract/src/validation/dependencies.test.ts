@@ -132,6 +132,26 @@ describe('validateContract: a Service’s Dependencies', () => {
     );
   });
 
+  test('a second Dependency exporting a Subscription’s Event gives it nothing, so it is unused', () => {
+    const mirror = { ...payments, name: 'mirror-service' };
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: [messages],
+      dependencies: [
+        defineDependency({ provider: payments }),
+        dependencyAsWritten({ provider: mirror }),
+      ],
+    });
+
+    expect(validateInPackage(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'mirror-service'],
+        'unused-dependency',
+        "A Dependency is used: mirror-service gives no Endpoint and no Subscription's Event",
+      ),
+    );
+  });
+
   test('a Dependency on an Endpoint the Provider does not export fails', () => {
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints: [getReceipt] });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
@@ -252,11 +272,46 @@ describe('validateContract: a Dependency written as the types refuse', () => {
         message: "A Dependency's provider is the contract a Contract Package exports",
       },
     },
+    {
+      what: 'a provider whose name is no string',
+      declaration: { provider: { ...payments, name: 5 }, endpoints: [getPayment] },
+      line: {
+        at: ['dependencies', 0],
+        rule: 'dependency-provider',
+        message: "A Dependency's provider is the contract a Contract Package exports",
+      },
+    },
+    {
+      what: 'a provider whose version is no string',
+      declaration: { provider: { ...payments, version: 5 }, endpoints: [getPayment] },
+      line: {
+        at: ['dependencies', 'payments-service'],
+        rule: 'dependency-provider',
+        message: "A Dependency's provider is the contract a Contract Package exports",
+      },
+    },
   ])('$what fails with one line', ({ declaration, line }) => {
     const dependency = dependencyAsWritten(declaration);
     const contract = defineContract({ name: 'orders-service', dependencies: [dependency] });
 
     expect(validateInPackage(contract, noOrigin)).toEqual(failed(line.at, line.rule, line.message));
+  });
+});
+
+describe('validateContract: Dependencies whose providers have no name', () => {
+  test('two of them fail once each, by position, and never as one Provider listed twice', () => {
+    const first = dependencyAsWritten({ provider: undefined, endpoints: [getPayment] });
+    const second = dependencyAsWritten({ provider: { ...payments, name: 5 } });
+    const contract = defineContract({ name: 'orders-service', dependencies: [first, second] });
+
+    const message = "A Dependency's provider is the contract a Contract Package exports";
+    expect(validateInPackage(contract, noOrigin)).toEqual({
+      kind: 'invalid',
+      failures: [
+        { kind: 'declaration', at: ['dependencies', 0], rule: 'dependency-provider', message },
+        { kind: 'declaration', at: ['dependencies', 1], rule: 'dependency-provider', message },
+      ],
+    });
   });
 });
 

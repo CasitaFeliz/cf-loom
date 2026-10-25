@@ -1,7 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type ContractPackage, defineDependency, defineEndpoint, defineEvent } from '../index.ts';
-import { codeNameOf } from '../internal/index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',
@@ -139,7 +138,7 @@ describe('defineDependency fields', () => {
     { what: 'endpoints written null', declaration: { endpoints: null } },
     { what: 'a provider left undefined', declaration: { provider: undefined } },
     { what: 'a provider written null', declaration: { provider: null, endpoints: [getPayment] } },
-  ])('$what never throws, so generate reports it', ({ declaration }) => {
+  ])('$what does not throw, leaving it to generate to report', ({ declaration }) => {
     const written = { provider: payments, ...declaration } as unknown as Parameters<
       typeof defineDependency
     >[0];
@@ -173,15 +172,5 @@ describe('a declared Dependency’s containers', () => {
 
     expect(Object.isFrozen(paymentsDependency.endpoints)).toBe(true);
     expect(paymentsDependency.endpoints.kind).toBe(kind);
-  });
-});
-
-describe('codeNameOf', () => {
-  test('a Message Version’s name in code lower-cases its first letter and appends V and its version', () => {
-    const message = { name: 'OrderCreated', version: 12 };
-
-    const name = codeNameOf(message);
-
-    expect(name).toBe('orderCreatedV12');
   });
 });

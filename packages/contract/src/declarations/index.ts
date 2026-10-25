@@ -4,7 +4,7 @@ export { defineCommand } from './command.ts';
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
 export type { ContractPackage, Dependency, ProvidedEvent } from './dependency.ts';
-export { codeNameOf, defineDependency } from './dependency.ts';
+export { defineDependency } from './dependency.ts';
 export type { Lifecycle, Visibility } from './element.ts';
 export {
   eventVisibilities,
@@ -36,7 +36,7 @@ export type {
   RequiredContextOf,
   SuccessOf,
 } from './inference.ts';
-export { isMessageVersion } from './message-version.ts';
+export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
   isApplication,
   isCommand,

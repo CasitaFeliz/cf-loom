@@ -8,6 +8,7 @@ import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
   entriesOf,
+  eventServiceOf,
   isPlainObject,
   type LocatedDependency,
   type Root,
@@ -97,19 +98,18 @@ function unreachableEndpointFailure(
 }
 
 /**
- * A Dependency that selects no Endpoint is used only when a Subscription receives its Provider's
- * Event; a selection that is no list is reported as such, and not also as unused.
+ * A Dependency that selects no Endpoint is used only when it is the one a Subscription receives its
+ * Event from; a selection that is no list is reported as such, and not also as unused.
  */
 function unusedFailures(
   { at, dependency }: LocatedDependency,
   provider: ContractPackage,
-  { subscriptions }: Declarations,
+  { root, subscriptions }: Declarations,
 ): readonly DeclarationFailure[] {
-  const exportedEvents = new Set<unknown>(Object.values(provider.events));
   const selectsEndpoints =
     !isPlainObject(dependency.endpoints) || entriesOf(dependency.endpoints).length > 0;
-  const receivesEvents = subscriptions.some(({ subscription }) =>
-    exportedEvents.has(subscription.event),
+  const receivesEvents = subscriptions.some(
+    ({ subscription }) => eventServiceOf(root, subscription.event) === provider.name,
   );
   if (selectsEndpoints || receivesEvents) {
     return [];

@@ -9,54 +9,54 @@ import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
 
 /** What `payments.client()` takes: a client's options, its `fetch` and base URL the fake's own. */
-export type FakeClientOptions<Deps extends AnyDependency, Configured extends string = never> = Omit<
-  ClientOptions<Deps, Configured>,
+export type FakeClientOptions<D extends AnyDependency, Configured extends string = never> = Omit<
+  ClientOptions<D, Configured>,
   'baseUrl' | 'fetch'
 >;
 
-type ListedName<Deps extends AnyDependency> = keyof Deps['endpoints'] & string;
+type ListedName<D extends AnyDependency> = keyof D['endpoints'] & string;
 
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed
  * Endpoint's script, and the calls each received.
  */
-export type FakeProvider<Deps extends AnyDependency> = {
+export type FakeProvider<D extends AnyDependency> = {
   readonly fetch: Fetch;
-  client<Configured extends ConfiguredName<Deps> = never>(
-    options?: FakeClientOptions<Deps, Configured>,
-  ): Client<Deps, Configured>;
-  on<Name extends ListedName<Deps>>(
+  client<Configured extends ConfiguredName<D> = never>(
+    options?: FakeClientOptions<D, Configured>,
+  ): Client<D, Configured>;
+  on<Name extends ListedName<D>>(
     name: Name,
-  ): Script<Deps['endpoints'][Name], Deps['provider']['standardRejections']>;
-  calls<Name extends ListedName<Deps>>(name: Name): readonly FakeCall<Deps['endpoints'][Name]>[];
+  ): Script<D['endpoints'][Name], D['provider']['standardRejections']>;
+  calls<Name extends ListedName<D>>(name: Name): readonly FakeCall<D['endpoints'][Name]>[];
 };
 
 /**
  * Fakes the Provider of a Dependency, checked against the Snapshot its Contract Package exports,
  * so it answers only what that Provider could.
  */
-export function fakeProvider<const Deps extends AnyDependency>(
-  deps: Deps,
+export function fakeProvider<const D extends AnyDependency>(
+  dependency: D,
   options: FakeProviderOptions = {},
-): FakeProvider<Deps> {
-  const base = baseUrlOf(options.baseUrl ?? `https://${deps.provider.name}.test`);
-  const faking: Faking = fakingOf(providedOf(deps, base));
+): FakeProvider<D> {
+  const base = baseUrlOf(options.baseUrl ?? `https://${dependency.provider.name}.test`);
+  const faking: Faking = fakingOf(providedOf(dependency, base));
   const fetch = fakeFetchOf(faking);
-  const fake: FakeProvider<Deps> = {
+  const fake: FakeProvider<D> = {
     fetch,
-    client: (clientOptions) => client(deps, { ...clientOptions, baseUrl: base, fetch }),
-    on: (name) => faking.scriptedByNameOf(name).script as ScriptOf<Deps, typeof name>,
-    calls: (name) => faking.calls.callsOf(name) as readonly FakeCallOf<Deps, typeof name>[],
+    client: (clientOptions) => client(dependency, { ...clientOptions, baseUrl: base, fetch }),
+    on: (name) => faking.scriptedByNameOf(name).script as ScriptOf<D, typeof name>,
+    calls: (name) => faking.calls.callsOf(name) as readonly FakeCallOf<D, typeof name>[],
   };
   return Object.freeze(fake);
 }
 
 /** One script for every Endpoint, typed where a test reaches it by name. */
-type ScriptOf<Deps extends AnyDependency, Name extends ListedName<Deps>> = Script<
-  Deps['endpoints'][Name],
-  Deps['provider']['standardRejections']
+type ScriptOf<D extends AnyDependency, Name extends ListedName<D>> = Script<
+  D['endpoints'][Name],
+  D['provider']['standardRejections']
 >;
 
-type FakeCallOf<Deps extends AnyDependency, Name extends ListedName<Deps>> = FakeCall<
-  Deps['endpoints'][Name]
+type FakeCallOf<D extends AnyDependency, Name extends ListedName<D>> = FakeCall<
+  D['endpoints'][Name]
 >;

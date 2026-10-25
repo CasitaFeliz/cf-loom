@@ -351,6 +351,35 @@ function edit(folder: string, path: string, change: (text: string) => string): v
   write(folder, { [path]: change(read(folder, path)) });
 }
 
+/** The Application `web-admin`, depending on `getOrder` of the orders-service Contract Package, not yet linked. */
+function anApplicationConsumer(): string {
+  return aProject({
+    'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
+    'cf-loom.config.ts': config,
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        allowImportingTsExtensions: true,
+        module: 'nodenext',
+        noEmit: true,
+        strict: true,
+        target: 'es2024',
+        types: [],
+      },
+      include: ['src'],
+    }),
+    'src/contract/index.ts': lines([
+      "import { defineApplication, defineDependency } from '@cf-loom/contract';",
+      "import { contract as orders } from '@org/contract-orders-service';",
+      '',
+      'export const ordersDependency = defineDependency({ provider: orders,',
+      '  endpoints: [orders.endpoints.getOrder],',
+      '});',
+      '',
+      "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDependency] });",
+    ]),
+  });
+}
+
 /** A Contract Package of a Service with one Public Endpoint, `ping`, built in a folder of its own. */
 function aProviderPackage(name: string): string {
   const project = aProject({
@@ -873,31 +902,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
   test('a Consumer declares a Dependency on it, type-checks and generates', () => {
     const out = builtPackage();
     expect(typeCheck(out).status).toBe(0);
-    const consumer = aProject({
-      'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
-      'cf-loom.config.ts': config,
-      'tsconfig.json': JSON.stringify({
-        compilerOptions: {
-          allowImportingTsExtensions: true,
-          module: 'nodenext',
-          noEmit: true,
-          strict: true,
-          target: 'es2024',
-          types: [],
-        },
-        include: ['src'],
-      }),
-      'src/contract/index.ts': lines([
-        "import { defineApplication, defineDependency } from '@cf-loom/contract';",
-        "import { contract as orders } from '@org/contract-orders-service';",
-        '',
-        'export const ordersDependency = defineDependency({ provider: orders,',
-        '  endpoints: [orders.endpoints.getOrder],',
-        '});',
-        '',
-        "export const application = defineApplication({ name: 'web-admin', dependencies: [ordersDependency] });",
-      ]),
-    });
+    const consumer = anApplicationConsumer();
     link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
 
     const ran = cfLoom(consumer, 'generate');
@@ -995,6 +1000,76 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
 
     const endpoint = `${defaultOut}/src/endpoints/ping.ts`;
     expect(read(second, endpoint)).toBe(read(first, endpoint));
+  });
+
+  test('cfLoom.dependencies lists each Event a Provider gives once, however many Subscriptions receive it', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([]);
+    const again = [
+      'export const auditPlacedAgain = defineSubscription({',
+      "  name: 'auditPlacedAgain',",
+      "  description: 'Audit placed again',",
+      '  event: orders.events.orderPlacedV1,',
+      '});',
+      'export const contract = defineContract({',
+    ].join('\n');
+    edit(consumer, 'src/contract/index.ts', (text) =>
+      text
+        .replace('export const contract = defineContract({', again)
+        .replace(
+          'subscriptions: [auditPlacedV1, auditPlacedV2]',
+          'subscriptions: [auditPlacedV1, auditPlacedV2, auditPlacedAgain]',
+        ),
+    );
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+    cfLoom(consumer, 'generate');
+
+    cfLoom(consumer, 'package');
+
+    const manifest = JSON.parse(read(consumer, `${defaultOut}/package.json`));
+    expect(manifest.cfLoom.dependencies['orders-service'].events).toEqual([
+      'OrderPlaced@1',
+      'OrderPlaced@2',
+    ]);
+  });
+
+  test('cfLoom.dependencies lists Events by identity, whatever the names of the Subscriptions receiving them', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([]);
+    edit(consumer, 'src/contract/index.ts', (text) =>
+      text.replaceAll('auditPlacedV1', 'zAuditPlaced').replaceAll('auditPlacedV2', 'aAuditPlaced'),
+    );
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+    cfLoom(consumer, 'generate');
+
+    cfLoom(consumer, 'package');
+
+    const manifest = JSON.parse(read(consumer, `${defaultOut}/package.json`));
+    expect(manifest.cfLoom.dependencies['orders-service'].events).toEqual([
+      'OrderPlaced@1',
+      'OrderPlaced@2',
+    ]);
+  });
+
+  test('an Application’s cfLoom.dependencies records each Dependency with no Events', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = anApplicationConsumer();
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+    cfLoom(consumer, 'generate');
+
+    cfLoom(consumer, 'package');
+
+    const manifest = JSON.parse(read(consumer, `${defaultOut}/package.json`));
+    expect(manifest.cfLoom.dependencies).toEqual({
+      'orders-service': {
+        against: '0.0.0',
+        endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
+        events: [],
+      },
+    });
   });
 
   test('cfLoom.dependencies is in canonical order, whatever order the root lists them in', () => {

@@ -3,6 +3,7 @@ import {
   type ApplicationSnapshot,
   byCodePoint,
   hashedTextOf,
+  isSubscriptionTombstone,
   messageIdentityOf,
   type PeerRanges,
   type PublishedApplicationSnapshot,
@@ -82,14 +83,24 @@ export function cfLoomOf(snapshot: Snapshot | PublishedSnapshot) {
  * Provider's Elements.
  */
 function dependenciesOf(snapshot: Snapshot | PublishedSnapshot) {
-  if (snapshot.kind === 'definitions') {
-    return {};
+  switch (snapshot.kind) {
+    case 'service':
+      return withEventsOf(snapshot.dependencies, receivedEventsOf(snapshot.subscriptions));
+    case 'application':
+      return withEventsOf(snapshot.dependencies, []);
+    case 'definitions':
+      return {};
   }
-  const received = snapshot.kind === 'service' ? receivedEventsOf(snapshot.subscriptions) : [];
-  const entries = Object.entries(snapshot.dependencies).map(([provider, dependency]) => {
+}
+
+function withEventsOf(
+  dependencies: PublishedServiceSnapshot['dependencies'],
+  received: readonly EventReference[],
+) {
+  const entries = Object.entries(dependencies).map(([provider, dependency]) => {
     const events = received.filter((event) => event.service === provider);
-    const identities = events.map(({ name, version }) => messageIdentityOf(name, version));
-    return [provider, { ...dependency, events: identities.sort(byCodePoint) }] as const;
+    const identities = new Set(events.map(({ name, version }) => messageIdentityOf(name, version)));
+    return [provider, { ...dependency, events: [...identities].sort(byCodePoint) }] as const;
   });
   return Object.fromEntries(entries);
 }
@@ -98,17 +109,17 @@ function dependenciesOf(snapshot: Snapshot | PublishedSnapshot) {
 function receivedEventsOf(
   subscriptions: PublishedServiceSnapshot['subscriptions'],
 ): readonly EventReference[] {
-  const live = Object.values(subscriptions).filter(
-    (subscription) => !('removedIn' in subscription),
-  );
-  return live.map(({ event }) => readEventReference(event)).filter(isEventReference);
+  const received: EventReference[] = [];
+  for (const subscription of Object.values(subscriptions)) {
+    const reference = readEventReference(subscription.event);
+    if (!isSubscriptionTombstone(subscription) && reference !== undefined) {
+      received.push(reference);
+    }
+  }
+  return received;
 }
 
 type EventReference = NonNullable<ReturnType<typeof readEventReference>>;
-
-function isEventReference(reference: EventReference | undefined): reference is EventReference {
-  return reference !== undefined;
-}
 
 /**
  * The package's own build: strict, no Node or DOM types since Applications import it in

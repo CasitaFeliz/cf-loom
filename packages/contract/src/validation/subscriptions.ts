@@ -1,4 +1,4 @@
-import { isEvent, isLive } from '../declarations/index.ts';
+import { isEvent, isLive, reaches } from '../declarations/index.ts';
 import {
   type Declarations,
   eventServiceOf,
@@ -34,8 +34,13 @@ function eventFailures(
     return [failure(eventAt, 'not-a-declaration', 'event is not an Event')];
   }
   const identity = messageIdentityOf(event.name, event.version);
-  if (eventServiceOf(root, event) === undefined) {
+  const service = eventServiceOf(root, event);
+  if (service === undefined) {
     const message = `A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: ${identity}`;
+    return [failure(eventAt, 'subscription-event', message)];
+  }
+  if (service !== root.name && !reaches('service', event.visibility)) {
+    const message = `A Subscription receives another Service's Event only when it is Public or Internal: ${identity} is ${event.visibility}`;
     return [failure(eventAt, 'subscription-event', message)];
   }
   if (!isLive(event)) {

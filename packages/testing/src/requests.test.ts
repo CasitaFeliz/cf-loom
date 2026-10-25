@@ -269,8 +269,8 @@ describe('fakeProvider: requests', () => {
     async (_, latest) => {
       const declared = [getPayment, capturePayment, getSummary, latest];
       const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const deps = defineDependency({ provider: provider, endpoints: [getPayment] });
-      const fake = fakeProvider(deps);
+      const dependency = defineDependency({ provider: provider, endpoints: [getPayment] });
+      const fake = fakeProvider(dependency);
       fake
         .on('getPayment')
         .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));

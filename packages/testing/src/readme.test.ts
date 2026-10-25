@@ -78,8 +78,11 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events, standardRejections, exportedSnapshot };
 }
 
+/** The Provider's Contract Package, as a Consumer imports it. */
+const payments = contractPackageOf({ getPayment });
+
 const paymentsDependency = defineDependency({
-  provider: contractPackageOf({ getPayment }),
+  provider: payments,
   endpoints: [getPayment],
 });
 
@@ -141,14 +144,14 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
   const notifyOnSettled = defineSubscription({
     name: 'notifyOnSettled',
     description: 'Notify on settled',
-    event: paymentsDependency.provider.events.paymentSettledV1,
+    event: payments.events.paymentSettledV1,
   });
   const readers = readersOf({
     commands: {},
     subscriptions: {
       notifyOnSettled: {
         element: notifyOnSettled,
-        reader: paymentsDependency.provider.events.paymentSettledV1.body,
+        reader: payments.events.paymentSettledV1.body,
       },
     },
   });
@@ -165,7 +168,7 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
     },
   );
 
-  const settled = fakeEvent(paymentsDependency.provider.events.paymentSettledV1, {
+  const settled = fakeEvent(payments.events.paymentSettledV1, {
     paymentId: PAYMENT_ID,
   });
   const answer = await notifyOnSettledHandler(

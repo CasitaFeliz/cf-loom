@@ -60,7 +60,7 @@ const refundV1 = defineCommand({
   body: orderBody,
 });
 
-/** A Dependency's Event as its Provider's Contract Package declares it: its body a Reader. */
+/** A Provider's Event as its Contract Package declares it: its body a Reader. */
 const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,

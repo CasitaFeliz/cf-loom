@@ -820,7 +820,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     });
   });
 
-  test('a Subscription to a Dependency’s Event writes the Provider’s name before the Event’s identity', () => {
+  test('a Subscription to a Provider’s Event writes the Provider’s name before the Event’s identity', () => {
     const snapshot = messagingSnapshot({});
 
     expect(snapshot.subscriptions).toMatchObject({

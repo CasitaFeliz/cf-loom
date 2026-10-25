@@ -73,12 +73,12 @@ export type ReceivedRejection<Target extends Endpoint, Standards extends Standar
 
 /** The Outcome a Caller receives from one Endpoint of a Dependency: a Success, a Rejection or a Fault. */
 export type ReceivedOutcome<
-  Deps extends AnyDependency,
-  Name extends keyof Deps['endpoints'],
-> = Deps['endpoints'][Name] extends infer Target extends Endpoint
+  D extends AnyDependency,
+  Name extends keyof D['endpoints'],
+> = D['endpoints'][Name] extends infer Target extends Endpoint
   ?
       | ReceivedSuccess<Target>
-      | ReceivedRejection<Target, Deps['provider']['standardRejections']>
+      | ReceivedRejection<Target, D['provider']['standardRejections']>
       | ReceivedFault
   : never;
 

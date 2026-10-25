@@ -420,7 +420,7 @@ type MessagingLists = {
 
 /**
  * The root of `aService()`, its Group `orders` also listing its Events, and a Group `payments`
- * listing its Commands and the Subscriptions of `subscriptions.ts`: one to a Dependency's Event,
+ * listing its Commands and the Subscriptions of `subscriptions.ts`: one to a Provider's Event,
  * then one to its own `OrderCreated@2`.
  */
 function aMessagingRoot({
@@ -764,7 +764,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(paired).toEqual([true, true]);
   });
 
-  test('a Subscription to a Dependency’s Event is paired with that Event’s body', () => {
+  test('a Subscription to a Provider’s Event is paired with that Event’s body', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
 

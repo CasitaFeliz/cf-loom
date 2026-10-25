@@ -4,16 +4,15 @@ import { identityOf } from '../written/index.ts';
 import { snapshotFormatOf } from './format.ts';
 import type { EndpointSnapshot } from './types.ts';
 
-/** A Provider's Contract Package, as far as its exported Snapshot is read: its name and that Snapshot. */
-export type Providing = Pick<ContractPackage, 'name' | 'exportedSnapshot'>;
-
 /**
  * Refuses a Provider's exported Snapshot in a format this cf-loom does not read, before any of its
  * nodes is read, rather than reading it as far as it goes.
  */
-export function checkExportedFormat(providing: Providing): void {
-  const named = snapshotFormatOf(providing.exportedSnapshot);
-  const exported = `${providing.name}'s exported Snapshot`;
+export function checkExportedFormat(
+  provider: Pick<ContractPackage, 'name' | 'exportedSnapshot'>,
+): void {
+  const named = snapshotFormatOf(provider.exportedSnapshot);
+  const exported = `${provider.name}'s exported Snapshot`;
   switch (named.kind) {
     case 'known':
       return;
@@ -30,11 +29,14 @@ export function checkExportedFormat(providing: Providing): void {
  * An exported Endpoint's entry in its Provider's exported Snapshot, found by identity; every
  * Endpoint a Contract Package exports has one, so a missing entry is a bug.
  */
-export function exportedEntryOf(providing: Providing, endpoint: Endpoint): EndpointSnapshot {
+export function exportedEntryOf(
+  provider: Pick<ContractPackage, 'name' | 'exportedSnapshot'>,
+  endpoint: Endpoint,
+): EndpointSnapshot {
   const identity = identityOf(endpoint.method, endpoint.path);
-  const entry = providing.exportedSnapshot.endpoints[identity];
+  const entry = provider.exportedSnapshot.endpoints[identity];
   if (entry === undefined) {
-    throw new Error(`The exported Snapshot of ${providing.name} has no ${identity}`);
+    throw new Error(`The exported Snapshot of ${provider.name} has no ${identity}`);
   }
   return entry;
 }

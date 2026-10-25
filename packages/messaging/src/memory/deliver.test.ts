@@ -266,7 +266,7 @@ describe('deliver()', () => {
     },
   );
 
-  test('deliver to a Dependency’s Event reaches the Subscription to it', async () => {
+  test('deliver to a Provider’s Event reaches the Subscription to it', async () => {
     const { broker, received } = await running();
 
     const settlement = await broker.deliver(paymentSettledV1, { paymentId: PAYMENT_ID });

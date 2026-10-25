@@ -20,6 +20,7 @@ import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
+import { payments } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
 import { entriesOf } from '../test/tarball.ts';
@@ -1714,6 +1715,32 @@ function aMessagingRoot({
       `endpoints: [ping], events: [${listed}], commands: [chargeCardV1] }`,
     );
   return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
+}
+
+/** `aRoot` also subscribing, as `notifyOnSettled`, to `PaymentSettled@1` of its Dependency `payments-service`. */
+function aSubscribingRoot(): Files {
+  const root = aRoot();
+  const index = [
+    "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
+    "import { ping } from './ping.endpoint.ts';",
+    "import { payments } from './payments.ts';",
+    '',
+    'export const notifyOnSettled = defineSubscription({',
+    "  name: 'notifyOnSettled',",
+    "  description: 'Notify on settled',",
+    '  event: payments.events.paymentSettledV1,',
+    '});',
+    '',
+    "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping], subscriptions: [notifyOnSettled] });",
+    '',
+    'export const contract = defineContract({',
+    "  name: 'orders-service',",
+    '  groups: [health],',
+    '  dependencies: [defineDependency({ provider: payments })],',
+    '});',
+    '',
+  ].join('\n');
+  return { ...root, 'src/contract/index.ts': index, 'src/contract/payments.ts': payments };
 }
 
 /** The Definitions Package `@org/definitions`, whose root declares nothing. */
@@ -3654,6 +3681,32 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     });
     expect(registry.published[0]?.manifest).toMatchObject({ cfLoom: cfLoomMetadata });
     expect(files['dist/index.js']).toMatch(/version: ['"]1\.0\.0['"]/);
+  });
+
+  test('cfLoom.dependencies leaves out the Event of a Subscription the published Snapshot keeps as removed', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aSubscribingRoot());
+    const { subscriptions } = JSON.parse(read(project, 'contract.snapshot.json'));
+    const removed = {
+      group: 'health',
+      description: 'Legacy',
+      event: 'payments-service:PaymentRefunded@1',
+    };
+    const baseline = { subscriptions: { ...subscriptions, legacySync: removed } };
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0', baseline));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    expect(ran.status).toBe(0);
+    const files = publishedFilesOf(registry);
+    expect(JSON.parse(files['snapshot.json']!).subscriptions.legacySync).toEqual({
+      event: 'payments-service:PaymentRefunded@1',
+      removedIn: '1.0.1',
+    });
+    expect(JSON.parse(files['package.json']!).cfLoom.dependencies).toEqual({
+      'payments-service': { against: '5.1.0', endpoints: [], events: ['PaymentSettled@1'] },
+    });
   });
 
   test('the published tarball holds dist built by tsc with its declarations, and no src', async ({
