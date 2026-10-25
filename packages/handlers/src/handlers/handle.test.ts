@@ -78,7 +78,11 @@ const orderPaidV1 = defineEvent({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const notifyOnPaidV1 = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+const notifyOnPaidV1 = defineSubscription({
+  name: 'notifyOnPaid',
+  description: 'Notify on paid',
+  event: orderPaidV1,
+});
 
 const notifyOnPaid = withReader(notifyOnPaidV1, statusReader);
 
@@ -513,14 +517,15 @@ describe('HandlerMap', () => {
       endpoints: {},
       guards: {},
       commands: { chargeCardV1: handle.stub(chargeCard) },
-      subscriptions: { 'notify-on-paid': handle.stub(notifyOnPaid) },
+      subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
       deprecatedAt: {},
     };
 
     const map: HandlerMap = generated;
 
     expectTypeOf(generated).toExtend<HandlerMap>();
-    expect(map.subscriptions['notify-on-paid']?.element).toBe(notifyOnPaidV1);
+    const { notifyOnPaid: mapped } = map.subscriptions;
+    expect(mapped?.element).toBe(notifyOnPaidV1);
   });
 
   test('refuses a map whose commands hold the Handler of an Endpoint', () => {

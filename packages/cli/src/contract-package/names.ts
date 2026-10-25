@@ -1,10 +1,5 @@
-import { byCodePoint } from '@cf-loom/contract/internal';
-import {
-  camelCaseOf,
-  kebabCaseOf,
-  kebabCaseOfCode,
-  messageVersionStemOf,
-} from '../source-text/index.ts';
+import { byCodePoint, kebabCaseOf } from '@cf-loom/contract/internal';
+import { camelCaseOf, kebabCaseOfCode, messageVersionStemOf } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFiles } from './paths.ts';
 

@@ -39,7 +39,11 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -51,7 +55,7 @@ const contract = defineContract({
 const handlers = {
   commands: { chargeCardV1: handle(withReader(chargeCardV1, orderBody), () => undefined) },
   subscriptions: {
-    'notify-on-created': handle(withReader(notifyOnCreated, orderBody), () => undefined),
+    notifyOnCreated: handle(withReader(notifyOnCreated, orderBody), () => undefined),
   },
 };
 
@@ -147,11 +151,11 @@ function aLoggingBroker(held: {
   return { broker, log, consumers };
 }
 
-/** A messaging consuming, whose `notify-on-created` Handler is the one given. */
-async function consumingWith(notifying: (typeof handlers.subscriptions)['notify-on-created']) {
+/** A messaging consuming, whose `notifyOnCreated` Handler is the one given. */
+async function consumingWith(notifying: (typeof handlers.subscriptions)['notifyOnCreated']) {
   const recording = aBroker();
   const opened = await messaging(contract, recording.broker);
-  await opened.consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+  await opened.consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
   return { ...recording, ...opened };
 }
 
@@ -222,7 +226,7 @@ describe('messaging() and close', () => {
     const opening = messaging(unlisted, aBroker().broker);
 
     await expect(opening).rejects.toThrow(
-      'notify-on-created subscribes to an Event neither the root nor a Dependency lists',
+      'notifyOnCreated subscribes to an Event neither the root nor a Dependency lists',
     );
   });
 
@@ -360,7 +364,7 @@ describe('messaging() and close', () => {
     });
     const { publisher, consume, close } = await messaging(contract, broker);
     publish = () => publisher.publish('OrderCreated', { v1: body });
-    await consume({ ...handlers, subscriptions: { 'notify-on-created': notifying } });
+    await consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
     const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
     const delivered = consumer?.receive(aDelivery(body));
 

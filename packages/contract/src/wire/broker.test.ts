@@ -35,7 +35,11 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV2 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notifies the customer of each order created',
+  event: orderCreatedV2,
+});
 
 describe('the Wire protocol over the broker', () => {
   test('a subject is <service>.<event|command>.<Name>.v<n>', () => {
@@ -56,7 +60,7 @@ describe('the Wire protocol over the broker', () => {
     expect(stream).toBe('orders-service');
   });
 
-  test('a Subscription’s durable consumer is <service>_<name> and a Command Version’s <service>_command_<Name>_v<n>', () => {
+  test('a Subscription’s durable consumer is <service>_<name in kebab-case> and a Command Version’s <service>_command_<Name>_v<n>', () => {
     const durables = [
       durableNameOf('orders-service', notifyOnCreated),
       durableNameOf('orders-service', chargeCardV1),
@@ -66,6 +70,26 @@ describe('the Wire protocol over the broker', () => {
       'orders-service_notify-on-created',
       'orders-service_command_ChargeCard_v1',
     ]);
+  });
+
+  test('two Subscriptions whose names differ only in the case of a letter get two durable consumers', () => {
+    const settle2x = defineSubscription({
+      name: 'settle2x',
+      description: 'Settles lower',
+      event: orderCreatedV2,
+    });
+    const settle2X = defineSubscription({
+      name: 'settle2X',
+      description: 'Settles upper',
+      event: orderCreatedV2,
+    });
+
+    const durables = [
+      durableNameOf('orders-service', settle2x),
+      durableNameOf('orders-service', settle2X),
+    ];
+
+    expect(durables).toEqual(['orders-service_settle2x', 'orders-service_settle2-x']);
   });
 
   test('a prefixed subject is <prefix>.<subject> and a prefixed stream or durable consumer <prefix>_<name>', () => {

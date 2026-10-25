@@ -27,7 +27,11 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',

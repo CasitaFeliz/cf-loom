@@ -280,7 +280,9 @@ describe('decodeSnapshot', () => {
         commands: { 'ChargeCard@1': aCommand },
         guards: { apiKey: aGuard },
         codes: { [orderLocked]: aCode },
-        subscriptions: { 'notify-on-placed': { event: 'orders-service:OrderPlaced@1' } },
+        subscriptions: {
+          notifyOnPlaced: { description: 'Receives it', event: 'orders-service:OrderPlaced@1' },
+        },
         dependencies: {
           'payments-service': {
             against: '5.1.0',
@@ -385,7 +387,7 @@ describe('decodeSnapshot', () => {
     test('a removed Subscription decodes with its Event and removedIn', () => {
       const published = aService({
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
         },
       });
 
@@ -434,7 +436,7 @@ describe('decodeSnapshot', () => {
         version: '0.3.0-rc.1',
         endpoints: { 'GET /orders/{}': { ...retiredEndpoint, retiredIn: '0.2.0-beta.4' } },
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '0.3.0-rc.1' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '0.3.0-rc.1' },
         },
       });
 
@@ -592,7 +594,10 @@ describe('decodeSnapshot', () => {
       },
       {
         where: 'subscriptions',
-        snapshot: { ...aService(), subscriptions: protoKeyed({ event: 'orders-service:A@1' }) },
+        snapshot: {
+          ...aService(),
+          subscriptions: protoKeyed({ description: 'Receives it', event: 'orders-service:A@1' }),
+        },
         at: ['subscriptions', '__proto__'],
       },
       {
@@ -818,11 +823,6 @@ describe('decodeSnapshot', () => {
 
     test.each([
       [
-        'a removedIn that is no semantic version',
-        { subscriptions: { 'legacy-sync': { event: 'orders-service:A@1', removedIn: 'gone' } } },
-        ['subscriptions', 'legacy-sync', 'removedIn'],
-      ],
-      [
         'a Dependency’s Endpoint with a key of its own',
         {
           dependencies: {
@@ -894,6 +894,22 @@ describe('decodeSnapshot', () => {
       const result = decodedFrom({ ...anApplication(), endpoints: {} });
 
       expect(result).toEqual(malformedAt(['endpoints']));
+    });
+
+    test.each([
+      ['no description', { event: 'orders-service:OrderPlaced@1' }],
+      [
+        'a description and a removedIn',
+        { description: 'Receives it', event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+      ],
+      [
+        'a removedIn that is no semantic version',
+        { event: 'orders-service:OrderPlaced@1', removedIn: 'gone' },
+      ],
+    ])('a Subscription with %s is malformed in the Subscription', (_, subscription) => {
+      const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+      expect(elementOf(result)).toEqual(['subscriptions', 'notifyOnPlaced']);
     });
 
     test.each([
@@ -979,9 +995,11 @@ describe('decodeSnapshot', () => {
     test.each(['OrderPlaced@1', 'orders-service:OrderPlaced', ':OrderPlaced@1', 'orders-service:'])(
       'a Subscription’s Event that is no service and identity is malformed at the Event: %s',
       (event) => {
-        const result = serviceWith({ subscriptions: { 'notify-on-placed': { event } } });
+        const result = serviceWith({
+          subscriptions: { notifyOnPlaced: { description: 'Receives it', event } },
+        });
 
-        expect(result).toEqual(malformedAt(['subscriptions', 'notify-on-placed', 'event']));
+        expect(result).toEqual(malformedAt(['subscriptions', 'notifyOnPlaced', 'event']));
       },
     );
 
@@ -1278,7 +1296,13 @@ function declaredSnapshot() {
     groups: [group],
     events: [orderPlaced],
     commands: [chargeCard],
-    subscriptions: [defineSubscription({ name: 'notify-on-placed', event: orderPlaced })],
+    subscriptions: [
+      defineSubscription({
+        name: 'notifyOnPlaced',
+        description: 'Receives it',
+        event: orderPlaced,
+      }),
+    ],
     dependencies: [defineDependencies(payments, { endpoints: [], events: [] })],
   });
   const validated = validateContract(root, {
@@ -1371,8 +1395,8 @@ const formatOneFixture = `{
     "notImplemented": { "code": "NOT_IMPLEMENTED", "message": "No", "origin": "standard", "status": 501 }
   },
   "subscriptions": {
-    "legacy-sync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },
-    "notify-on-placed": { "event": "payments-service:PaymentSettled@1" }
+    "legacySync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },
+    "notifyOnPlaced": { "description": "Receives it", "event": "payments-service:PaymentSettled@1" }
   },
   "version": "3.4.0"
 }

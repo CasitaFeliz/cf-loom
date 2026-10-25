@@ -8,7 +8,7 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections` and a root's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events and Commands included.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections` and a root's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included.
 
 ## The root
 
@@ -29,7 +29,7 @@ export const contract = defineContract({
 
 The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. A root's `name`, a Service's, an Application's or a Definitions Package's, must equal the unscoped part of the `name` in its package.json, or `generate` fails. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections. A Contract's `commands` and `subscriptions` are listed inline in `defineContract`, as literal tuples, so each keeps its exact type: the readers file reaches each by its position in its list. Its `events` keep each Event's exact type too, so `publish` knows its versions (see [Publishing and sending](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#publishing-and-sending) in the messaging README).
 
-Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package or Group name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); a Subscription name is kebab-case from a letter (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`), since its camelCase names its pairing in code; an Endpoint or Guard name is camelCase (`^[a-z][a-zA-Z0-9]*$`); neither a Subscription nor an Endpoint or Guard name is one of the words code cannot use as a name: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports; a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
+Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package or Group name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint, Guard or Subscription name is camelCase (`^[a-z][a-zA-Z0-9]*$`) and none of the words code cannot use as a name: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports; a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
 ## Applications
 
@@ -290,12 +290,13 @@ A Contract Package's Elements are its declarations: a Dependency keeps the Endpo
 ```ts
 // src/contract/subscriptions/notify-on-settled.subscription.ts
 export const notifyOnSettled = defineSubscription({
-  name: 'notify-on-settled',
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
   event: paymentsDeps.events.paymentSettledV1,
 });
 ```
 
-`name` is unique in the Service and names the Subscription's durable consumer (`orders-service_notify-on-settled`). The Event is the Service's own, listed in its root's `events`, or one listed in a Dependency, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in its root's `events`, or one listed in a Dependency, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 

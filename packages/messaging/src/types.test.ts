@@ -68,7 +68,11 @@ const refundV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV3 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV3,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -153,7 +157,7 @@ describe('publish and send types', () => {
   test('consume takes the Handler map; onServiceFault receives a ConsumedFault', () => {
     const notifying = handle(withReader(notifyOnCreated, orderCreatedV3.body), () => undefined);
     const consuming = () =>
-      consume({ commands: {}, subscriptions: { 'notify-on-created': notifying } });
+      consume({ commands: {}, subscriptions: { notifyOnCreated: notifying } });
 
     expectTypeOf(consume)
       .parameter(0)
@@ -172,7 +176,7 @@ describe('publish and send types', () => {
         resources.notifications.send();
       },
     );
-    const handlers = { commands: {}, subscriptions: { 'notify-on-created': notifying } };
+    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying } };
     const resources: Notifications = { notifications: { send: () => undefined } };
 
     const consuming = () => [
@@ -189,11 +193,11 @@ describe('publish and send types', () => {
   test('consume takes no options when no Message Handler takes Resources', () => {
     const notifying = handle(withReader(notifyOnCreated, orderCreatedV3.body), () => undefined);
     const stubbed = handle.stub(withReader(notifyOnCreated, orderCreatedV3.body));
-    const handlers = { commands: {}, subscriptions: { 'notify-on-created': notifying } };
+    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying } };
 
     const consuming = () => [
       consume(handlers),
-      consume({ commands: {}, subscriptions: { 'notify-on-created': stubbed } }),
+      consume({ commands: {}, subscriptions: { notifyOnCreated: stubbed } }),
     ];
 
     expect(consuming).toBeTypeOf('function');

@@ -19,7 +19,7 @@ export default {
     chargeCardV1: chargeCardV1CommandHandler,
   },
   subscriptions: {
-    'charge-on-created': chargeOnCreatedSubscriptionHandler,
+    chargeOnCreated: chargeOnCreatedSubscriptionHandler,
   },
   deprecatedAt: {},
 };

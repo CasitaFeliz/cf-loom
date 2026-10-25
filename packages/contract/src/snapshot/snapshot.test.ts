@@ -179,11 +179,13 @@ const orgPackage: ResolvedDefinitions = {
 };
 
 const notifyOnSettled = defineSubscription({
-  name: 'notify-on-settled',
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
   event: paymentsDeps.events.paymentSettledV1,
 });
 const notifyOnFailed = defineSubscription({
-  name: 'notify-on-failed',
+  name: 'notifyOnFailed',
+  description: 'Notifies the customer of each payment failed',
   event: paymentsDeps.events.paymentFailedV1,
 });
 
@@ -719,7 +721,11 @@ function messagingSnapshot(declared: {
   readonly events?: readonly (typeof orderCreatedV1 | typeof orderCreatedV2)[];
   readonly commands?: readonly (typeof chargeCardV1)[];
 }) {
-  const auditOrders = defineSubscription({ name: 'audit-orders', event: orderCreatedV2 });
+  const auditOrders = defineSubscription({
+    name: 'auditOrders',
+    description: 'Audits each order created',
+    event: orderCreatedV2,
+  });
   const root = defineContract({
     name: 'orders-service',
     events: declared.events ?? [orderCreatedV1, orderCreatedV2],
@@ -787,17 +793,47 @@ describe('snapshotOf: Messages and Subscriptions', () => {
   test('a Subscription to the Service’s own Event writes the Service’s name before the Event’s identity', () => {
     const snapshot = messagingSnapshot({});
 
-    expect(snapshot.subscriptions['audit-orders']).toEqual({
-      event: 'orders-service:OrderCreated@2',
+    expect(snapshot.subscriptions).toMatchObject({
+      auditOrders: { event: 'orders-service:OrderCreated@2' },
     });
   });
 
   test('a Subscription to a Dependency’s Event writes the Provider’s name before the Event’s identity', () => {
     const snapshot = messagingSnapshot({});
 
-    expect(snapshot.subscriptions['notify-on-settled']).toEqual({
-      event: 'payments-service:PaymentSettled@1',
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
     });
+  });
+
+  test('a Subscription writes its description', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnSettled: { description: 'Notifies the customer of each payment settled' },
+    });
+  });
+
+  test('two Subscriptions whose names differ only in the case of a letter get two keys', () => {
+    const settle2x = defineSubscription({
+      name: 'settle2x',
+      description: 'Settles lower',
+      event: orderCreatedV2,
+    });
+    const settle2X = defineSubscription({
+      name: 'settle2X',
+      description: 'Settles upper',
+      event: orderCreatedV2,
+    });
+    const root = defineContract({
+      name: 'orders-service',
+      events: [orderCreatedV2],
+      subscriptions: [settle2x, settle2X],
+    });
+
+    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+
+    expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2X', 'settle2x']);
   });
 
   test('Message Versions are keyed in code point order in the canonical text', () => {

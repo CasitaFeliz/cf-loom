@@ -50,6 +50,7 @@ export function subscriptionSnapshotsOf(
   const entries = subscriptions.map(({ subscription, service }) => {
     const { name, version } = subscription.event;
     const snapshot: SubscriptionSnapshot = {
+      description: subscription.description,
       event: eventReferenceOf(service, name, version),
     };
     return [subscription.name, snapshot] as const;

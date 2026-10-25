@@ -75,9 +75,9 @@ export const commandFields = {
 
 /** The fields of a Subscription. */
 export const subscriptionFields = {
-  declared: { kind: true, name: true, event: true },
-  required: { kind: true, name: true, event: true },
-  strings: { kind: true, name: true },
+  declared: { kind: true, name: true, description: true, event: true },
+  required: { kind: true, name: true, description: true, event: true },
+  strings: { kind: true, name: true, description: true },
   objects: {},
 } satisfies Fields<Subscription>;
 

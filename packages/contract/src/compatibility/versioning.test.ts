@@ -39,7 +39,7 @@ const privateEvent: ChangeSite = {
   visibility: 'private',
 };
 const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
-const subscription: ChangeSite = { kind: 'subscription', name: 'notify-on-placed' };
+const subscription: ChangeSite = { kind: 'subscription', name: 'notifyOnPlaced' };
 const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
 
 function aBreakingChange(site: ChangeSite, approval: 'needed' | 'not-needed' = 'needed'): Change {

@@ -28,7 +28,7 @@ describe('the Snapshot', () => {
   });
 
   test('the Subscription to orders-service’s OrderCreated@1 is recorded with the Dependency on it', () => {
-    const subscription = snapshot.subscriptions['draft-invoice-on-created'];
+    const subscription = snapshot.subscriptions.draftInvoiceOnCreated;
     const dependencyEvents = snapshot.dependencies['orders-service'].events;
 
     expect(subscription.event).toBe('orders-service:OrderCreated@1');

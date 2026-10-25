@@ -122,7 +122,7 @@ function subscriptionsMerged(
     (subscription): SubscriptionSnapshot | SubscriptionTombstone =>
       isSubscriptionTombstone(subscription)
         ? subscription
-        : { ...subscription, removedIn: version },
+        : { event: subscription.event, removedIn: version },
   );
   return { ...tombstones, ...proposed };
 }

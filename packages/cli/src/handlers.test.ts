@@ -390,7 +390,7 @@ const messages = lines([
 
 /** The Subscription to the Dependency's Event, which every messaging root declares. */
 const notifyOnSettled =
-  "defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 })";
+  "defineSubscription({ name: 'notifyOnSettled', description: 'Notify on settled', event: paymentSettledV1 })";
 
 /** What a messaging root lists beside its Group, each line one of `defineContract`'s fields. */
 type MessagingLists = {
@@ -406,7 +406,7 @@ function aMessagingRoot({
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
   subscriptions = [
     notifyOnSettled,
-    "defineSubscription({ name: 'audit-created', event: orderCreatedV2 })",
+    "defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 })",
   ],
 }: MessagingLists = {}): string {
   const root = aService()['src/contract/index.ts'] ?? '';
@@ -545,7 +545,7 @@ describe('cf-loom generate: the Handler map', () => {
       ]),
     );
   });
-  test('commands are keyed by name in code and subscriptions by name, a quoted key; a Retired Command’s Message Version is left out', () => {
+  test('commands are keyed by name in code and subscriptions by name, both unquoted; a Retired Command’s Message Version is left out', () => {
     const project = aProject(aMessagingService());
 
     cfLoom(project, 'generate');
@@ -577,8 +577,8 @@ describe('cf-loom generate: the Handler map', () => {
         '    chargeCardV2: chargeCardV2CommandHandler,',
         '  },',
         '  subscriptions: {',
-        "    'audit-created': auditCreatedSubscriptionHandler,",
-        "    'notify-on-settled': notifyOnSettledSubscriptionHandler,",
+        '    auditCreated: auditCreatedSubscriptionHandler,',
+        '    notifyOnSettled: notifyOnSettledSubscriptionHandler,',
         '  },',
         '  deprecatedAt: {},',
         '};',
@@ -717,7 +717,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
         probeImportOf('payments', 'src/contract/payments.ts'),
         'const { notifyOnSettled } = readers;',
         'console.log(JSON.stringify([',
-        "  notifyOnSettled.element.name === 'notify-on-settled',",
+        "  notifyOnSettled.element.name === 'notifyOnSettled',",
         '  notifyOnSettled.reader === payments.paymentSettledV1.body,',
         ']));',
       ]),
@@ -912,7 +912,7 @@ describe('cf-loom generate: stubs', () => {
     );
   });
 
-  test('a Subscription’s stub sits at src/subscriptions/<name>.handler.ts and imports its pairing from readers.generated.ts', () => {
+  test('a Subscription’s stub sits at src/subscriptions/<name in kebab-case>.handler.ts and imports its pairing from readers.generated.ts', () => {
     const project = aProject(aMessagingService());
 
     cfLoom(project, 'generate');
@@ -1542,15 +1542,16 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test.each([
-    ['1st-audit', 'kebab-case from a letter'],
-    ['delete', 'kebab-case from a letter and no reserved word'],
-    ['handle', 'kebab-case from a letter and no reserved word'],
+    ['charge-on-created', 'camelCase'],
+    ['1stAudit', 'camelCase'],
+    ['delete', 'camelCase and no reserved word'],
+    ['handle', 'camelCase and no reserved word'],
   ])('a Subscription named %s, which is no name in code, fails the name grammar', (name, rule) => {
     const project = aProject(
       aMessagingService({
         subscriptions: [
           notifyOnSettled,
-          `defineSubscription({ name: '${name}', event: orderCreatedV2 })`,
+          `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`,
         ],
       }),
     );
@@ -1569,7 +1570,7 @@ describe('cf-loom generate: what it refuses', () => {
       aMessagingService({
         subscriptions: [
           notifyOnSettled,
-          "defineSubscription({ name: 'charge-card-v1', event: orderCreatedV2 })",
+          "defineSubscription({ name: 'chargeCardV1', description: 'Charge card v1', event: orderCreatedV2 })",
         ],
       }),
     );
@@ -1580,34 +1581,26 @@ describe('cf-loom generate: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr:
-        'subscriptions.charge-card-v1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
+        'subscriptions.chargeCardV1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
     });
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
   });
 
   test.each([
-    [['a-1', 'a1'], 'subscriptions.a1 is a1 in code, as subscriptions.a-1 is'],
     [
-      ['order-created-v2-reader'],
-      'subscriptions.order-created-v2-reader is orderCreatedV2Reader in code, as the Reader of events.OrderCreated@2 is',
+      'orderCreatedV2Reader',
+      'subscriptions.orderCreatedV2Reader is orderCreatedV2Reader in code, as the Reader of events.OrderCreated@2 is',
     ],
     [
-      ['charge-card-v1-reader'],
-      'subscriptions.charge-card-v1-reader is chargeCardV1Reader in code, as the Reader of commands.ChargeCard@1 is',
+      'chargeCardV1Reader',
+      'subscriptions.chargeCardV1Reader is chargeCardV1Reader in code, as the Reader of commands.ChargeCard@1 is',
     ],
-    [
-      ['tree-reader-def'],
-      'subscriptions.tree-reader-def is treeReaderDef in code, as defs.tree is',
-    ],
+    ['treeReaderDef', 'subscriptions.treeReaderDef is treeReaderDef in code, as defs.tree is'],
   ])(
-    'Subscriptions %j, one paired under a name readers.generated.ts already takes, exit 3 naming both',
-    (names, line) => {
-      const declared = names.map(
-        (name) => `defineSubscription({ name: '${name}', event: orderCreatedV2 })`,
-      );
-      const project = aProject(
-        aMessagingService({ subscriptions: [notifyOnSettled, ...declared] }),
-      );
+    'a Subscription named %s, paired under a name readers.generated.ts already takes, exits 3 naming both',
+    (name, line) => {
+      const declared = `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
+      const project = aProject(aMessagingService({ subscriptions: [notifyOnSettled, declared] }));
 
       const ran = cfLoom(project, 'generate');
 
@@ -1615,15 +1608,10 @@ describe('cf-loom generate: what it refuses', () => {
     },
   );
 
-  test.each([
-    ['contract', 'contract'],
-    ['z', 'z'],
-    ['loom', 'loom'],
-    ['with-reader', 'withReader'],
-  ])(
+  test.each(['contract', 'z', 'loom', 'withReader'])(
     'a Subscription named %s, paired under a name readers.generated.ts imports, exits 3 naming both',
-    (name, code) => {
-      const subscription = `defineSubscription({ name: '${name}', event: orderCreatedV2 })`;
+    (name) => {
+      const subscription = `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
       const project = aProject(
         aMessagingService({ subscriptions: [notifyOnSettled, subscription] }),
       );
@@ -1633,7 +1621,7 @@ describe('cf-loom generate: what it refuses', () => {
       expect(ran).toEqual({
         status: 3,
         stdout: '',
-        stderr: `subscriptions.${name} is ${code} in code, as the import ${code} is: rename the Subscription\n`,
+        stderr: `subscriptions.${name} is ${name} in code, as the import ${name} is: rename the Subscription\n`,
       });
     },
   );
@@ -1746,7 +1734,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     write(project, {
       'src/check.ts': aCheck([
         'export const charge: CommandHandler<typeof chargeCardV2> = handlers.commands.chargeCardV2;',
-        "export const audit: EventHandler<typeof auditCreated> = handlers.subscriptions['audit-created'];",
+        'export const audit: EventHandler<typeof auditCreated> = handlers.subscriptions.auditCreated;',
         'export const old: CommandHandler<typeof chargeCardV1> = handlers.commands.chargeCardV1;',
       ]),
     });
@@ -1790,7 +1778,7 @@ describe('cf-loom generate: the Service type-checks', () => {
         "const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1 };",
         "const items = { label: 'root', children: [] };",
         "const orderId = '0b8f5f8e-8a5e-4c1e-9d0c-2f3b8c1d2e3f';",
-        "const audit = handlers.subscriptions['audit-created'];",
+        'const audit = handlers.subscriptions.auditCreated;',
         "export const unknown = audit({ orderId, status: { unknown: 'refunded' }, items }, meta);",
         '// @ts-expect-error an undeclared value is read as its Unknown case, never bare',
         "export const bare = audit({ orderId, status: 'refunded', items }, meta);",
@@ -2033,7 +2021,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       'src/contract/index.ts': aMessagingRoot({
         subscriptions: [
           notifyOnSettled,
-          "defineSubscription({ name: 'charge-card-v1', event: orderCreatedV2 })",
+          "defineSubscription({ name: 'chargeCardV1', description: 'Charge card v1', event: orderCreatedV2 })",
         ],
       }),
     });
@@ -2044,7 +2032,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 3,
       stdout: '',
       stderr:
-        'subscriptions.charge-card-v1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
+        'subscriptions.chargeCardV1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
     });
   });
 

@@ -66,7 +66,7 @@ A Definitions Package's Snapshot:
 | --- | --- | --- |
 | Endpoint | Method and path, params replaced by `{}` | `GET /orders/{}` |
 | Event, Command | Name and version | `OrderCreated@2` |
-| Subscription | Its name | `notify-on-settled` |
+| Subscription | Its name | `notifyOnSettled` |
 | Another Service's Element | Service, then the identity above | `payments-service:PaymentSettled@1` |
 | A Subscription's Event | Service, then the identity, its own Service's included | `orders-service:OrderCreated@1` |
 
@@ -144,8 +144,11 @@ Every code that ever existed in the Contract stays here, with the status and bod
 
 ```json
 "subscriptions": {
-  "notify-on-settled": { "event": "payments-service:PaymentSettled@1" },
-  "legacy-sync": { "event": "orders-service:OrderCreated@1", "removedIn": "3.2.0" }
+  "notifyOnSettled": {
+    "description": "Notifies the customer of each payment settled",
+    "event": "payments-service:PaymentSettled@1"
+  },
+  "legacySync": { "event": "orders-service:OrderCreated@1", "removedIn": "3.2.0" }
 },
 "dependencies": {
   "payments-service": {
@@ -156,7 +159,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
+- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones

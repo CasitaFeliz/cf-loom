@@ -65,9 +65,17 @@ const payments = {
 
 const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
 
-const chargeOnCreated = defineSubscription({ name: 'charge-on-created', event: orderCreatedV2 });
+const chargeOnCreated = defineSubscription({
+  name: 'chargeOnCreated',
+  description: 'Charge on created',
+  event: orderCreatedV2,
+});
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -94,18 +102,15 @@ const handlers = {
     }),
   },
   subscriptions: {
-    'charge-on-created': handle(
+    chargeOnCreated: handle(
       withReader(chargeOnCreated, orderCreatedV2.body),
       async ({ orderId }, _meta, { resources: { sender } }: Needs<'sender'>) => {
         await sender.send('ChargeCard', { orderId });
       },
     ),
-    'notify-on-settled': handle(
-      withReader(notifyOnSettled, paymentSettledV1.body),
-      ({ paymentId }) => {
-        notified.push(paymentId);
-      },
-    ),
+    notifyOnSettled: handle(withReader(notifyOnSettled, paymentSettledV1.body), ({ paymentId }) => {
+      notified.push(paymentId);
+    }),
   },
 };
 

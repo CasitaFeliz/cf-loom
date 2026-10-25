@@ -161,9 +161,10 @@ const messages = lines([
 ]);
 
 const notifyOnSettled =
-  "defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 })";
+  "defineSubscription({ name: 'notifyOnSettled', description: 'Notify on settled', event: paymentSettledV1 })";
 
-const auditCreated = "defineSubscription({ name: 'audit-created', event: orderCreatedV2 })";
+const auditCreated =
+  "defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 })";
 
 /** What a messaging root lists, each as the text of one of `defineContract`'s fields. */
 type MessagingLists = {
@@ -175,8 +176,8 @@ type MessagingLists = {
 /**
  * A Service named `orders-service` with the Events `OrderCreated@1` (Deprecated), `OrderCreated@2`
  * and `OrderPurged@1` (Retired), the Commands `ChargeCard@1` (Deprecated), `ChargeCard@2` and
- * `RefundCard@1` (Retired), and the Subscriptions `notify-on-settled`, to the Event `PaymentSettled@1`
- * of the Dependency `payments-service`, and `audit-created`, to its own `OrderCreated@2`.
+ * `RefundCard@1` (Retired), and the Subscriptions `notifyOnSettled`, to the Event `PaymentSettled@1`
+ * of the Dependency `payments-service`, and `auditCreated`, to its own `OrderCreated@2`.
  */
 function aMessagingService({
   events = '[orderCreatedV1, orderCreatedV2, orderPurgedV1]',

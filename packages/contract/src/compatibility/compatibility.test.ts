@@ -769,7 +769,7 @@ describe('compatibilityReportOf, the report', () => {
         endpoints: { 'GET /orders/{}': aRetired(anEndpoint(), '2.0.0') },
         events: { 'OrderPlaced@1': { lifecycle: 'retired', retiredIn: '2.1.0' } },
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
         },
       });
       const proposed = aProposed({

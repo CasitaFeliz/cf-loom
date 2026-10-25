@@ -30,9 +30,17 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
-const onAudited = defineSubscription({ name: 'on-audited', event: orderAuditedV1 });
+const onAudited = defineSubscription({
+  name: 'onAudited',
+  description: 'On audited',
+  event: orderAuditedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -72,8 +80,8 @@ async function running(
   await started.consume({
     commands: { chargeCardV1: handle(pairings.chargeCard, charge ?? (() => undefined)) },
     subscriptions: {
-      'notify-on-created': handle(pairings.notifyOnCreated, notify ?? (() => undefined)),
-      'on-audited': handle(pairings.onAudited, () => undefined),
+      notifyOnCreated: handle(pairings.notifyOnCreated, notify ?? (() => undefined)),
+      onAudited: handle(pairings.onAudited, () => undefined),
     },
   });
   return connection;
@@ -144,7 +152,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.cause).toEqual({
-      element: 'notify-on-created',
+      element: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
       messageId: 'OrderCreated.v1:o-1',
       factId: 'o-1',
@@ -199,7 +207,7 @@ describe('settled()', () => {
 
     expect(rejection?.message).toBe(
       [
-        'notify-on-created orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: the Handler threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: the Handler threw',
         'ChargeCard@1 orders-service.command.ChargeCard.v1 ChargeCard.v1:o-1 o-1: Card refused',
       ].join('\n'),
     );
@@ -217,7 +225,7 @@ describe('settled()', () => {
 
     const rejection = await rejectionOf(broker.settled());
 
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notify-on-created' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notifyOnCreated' });
   });
 
   test('a failure is reported once: the next settled() resolves', async () => {
@@ -243,7 +251,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(settlement).toBe('pending');
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notify-on-created' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notifyOnCreated' });
   });
 
   test('an onServiceFault that throws leaves the Message pending and makes settled() reject', async () => {
@@ -265,7 +273,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.message).toBe(
-      'notify-on-created orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      'notifyOnCreated orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: onServiceFault threw',
     );
     expect(rejection?.cause).toBe(hook);
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);

@@ -83,9 +83,17 @@ const payments = {
 
 const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -108,8 +116,8 @@ const handlers = {
     chargeCardV2: handle(pairings.chargeCardV2, () => undefined),
   },
   subscriptions: {
-    'notify-on-created': handle(pairings.notifyOnCreated, () => undefined),
-    'notify-on-settled': handle(pairings.notifyOnSettled, () => undefined),
+    notifyOnCreated: handle(pairings.notifyOnCreated, () => undefined),
+    notifyOnSettled: handle(pairings.notifyOnSettled, () => undefined),
   },
 };
 
@@ -166,14 +174,14 @@ async function consuming(
   return { ...recording, faults };
 }
 
-/** A Handler of `notify-on-created` that keeps what it receives and answers what it is given. */
+/** A Handler of `notifyOnCreated` that keeps what it receives and answers what it is given. */
 function receiving(answer: () => unknown = () => undefined) {
   const received: unknown[] = [];
   const notifying = handle(pairings.notifyOnCreated, (given, meta) => {
     received.push(given, meta);
     return answer() as undefined;
   });
-  return { received, subscriptions: { 'notify-on-created': notifying } };
+  return { received, subscriptions: { notifyOnCreated: notifying } };
 }
 
 afterEach(() => {
@@ -200,7 +208,7 @@ describe('consume', () => {
         },
         subscriptions: {
           ...handlers.subscriptions,
-          'notify-on-created': handle(
+          notifyOnCreated: handle(
             pairings.notifyOnCreated,
             (_given, _meta, call: WithResources<Notifications>) => {
               taken.push(call.resources);
@@ -286,18 +294,18 @@ describe('consume', () => {
 
     const { consumers } = await consuming({
       commands: { chargeCardV1: handle.stub(pairings.chargeCardV1) },
-      subscriptions: { 'notify-on-created': handle.stub(pairings.notifyOnCreated) },
+      subscriptions: { notifyOnCreated: handle.stub(pairings.notifyOnCreated) },
     });
 
     expect(consumers.map((consumer) => consumer.element)).toEqual([chargeCardV2, notifyOnSettled]);
     expect(warned.mock.calls).toEqual([
       ["ChargeCard@1's Handler is a stub: consume does not pull its Messages"],
-      ["notify-on-created's Handler is a stub: consume does not pull its Messages"],
+      ["notifyOnCreated's Handler is a stub: consume does not pull its Messages"],
     ]);
   });
 
   test.each([
-    ['subscriptions', 'notify-on-settled', 'subscriptions.notify-on-settled'],
+    ['subscriptions', 'notifyOnSettled', 'subscriptions.notifyOnSettled'],
     ['commands', 'chargeCardV1', 'commands.chargeCardV1'],
   ] as const)(
     'a %s Handler missing from the map throws, naming its key',
@@ -314,14 +322,14 @@ describe('consume', () => {
   test('a Handler written for another Subscription throws, naming its key', async () => {
     const swapped = {
       ...handlers.subscriptions,
-      'notify-on-settled': handlers.subscriptions['notify-on-created'],
+      notifyOnSettled: handlers.subscriptions.notifyOnCreated,
     };
     const { consume } = await messaging(contract, aBroker().broker);
 
     const swapping = consume({ ...handlers, subscriptions: swapped });
 
     await expect(swapping).rejects.toThrow(
-      'subscriptions.notify-on-settled holds no Handler handle() returned for it: run cf-loom generate',
+      'subscriptions.notifyOnSettled holds no Handler handle() returned for it: run cf-loom generate',
     );
   });
 
@@ -332,8 +340,17 @@ describe('consume', () => {
     const inheriting = consume({ ...handlers, subscriptions: inherited });
 
     await expect(inheriting).rejects.toThrow(
-      'subscriptions.notify-on-created has no Handler in the Handler map',
+      'subscriptions.notifyOnCreated has no Handler in the Handler map',
     );
+  });
+
+  test('consume finds a Subscription’s Handler under its camelCase name', async () => {
+    const { received, subscriptions } = receiving();
+    const { deliver } = await consuming({ subscriptions });
+
+    await deliver(created, body);
+
+    expect(received[0]).toEqual(body);
   });
 
   test('consuming twice throws', async () => {
@@ -400,7 +417,7 @@ describe('a Message delivered', () => {
     expect(settlement.kind).toBe('ended');
     expect(faults).toEqual([
       {
-        element: 'notify-on-created',
+        element: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -423,7 +440,7 @@ describe('a Message delivered', () => {
     expect(settlement.kind).toBe('pending');
     expect(faults).toEqual([
       {
-        element: 'notify-on-created',
+        element: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -453,7 +470,7 @@ describe('a Message delivered', () => {
     expect(received).toEqual([]);
     expect(faults).toEqual([
       {
-        element: 'notify-on-created',
+        element: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -489,7 +506,7 @@ describe('a Message delivered', () => {
     await deliver(chargeCard, {});
 
     expect(faults.map((consumedFault) => consumedFault.element)).toEqual([
-      'notify-on-created',
+      'notifyOnCreated',
       'ChargeCard@2',
     ]);
   });
@@ -517,12 +534,12 @@ describe('a Message delivered', () => {
     expect(logged.mock.calls).toEqual([
       [
         expect.stringMatching(
-          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.orderId invalid_format: /,
+          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.orderId invalid_format: /,
         ),
       ],
       [
         expect.stringMatching(
-          /^notify-on-created orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.status invalid_value: /,
+          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.status invalid_value: /,
         ),
       ],
     ]);
@@ -558,7 +575,7 @@ describe('a Message delivered', () => {
 
     expect(logged.mock.calls).toEqual([
       ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1: Card refused', error],
-      ['notify-on-created orders-service.event.OrderCreated.v1 m-1 f-1: the Handler threw', error],
+      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1: the Handler threw', error],
     ]);
   });
 

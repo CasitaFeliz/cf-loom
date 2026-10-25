@@ -73,5 +73,5 @@ export type LocatedEvent = { readonly at: Path; readonly event: Event };
 /** A Command's Message Version and where it sits in its root, by identity: `['commands', 'ChargeCard@1']`. */
 export type LocatedCommand = { readonly at: Path; readonly command: Command };
 
-/** A Subscription and where it sits in its root, by name: `['subscriptions', 'notify-on-settled']`. */
+/** A Subscription and where it sits in its root, by name: `['subscriptions', 'notifyOnSettled']`. */
 export type LocatedSubscription = { readonly at: Path; readonly subscription: Subscription };

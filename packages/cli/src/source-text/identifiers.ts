@@ -1,7 +1,4 @@
-/** The kebab-case of a camelCase name, as files are named: `getOrder` is `get-order`. */
-export function kebabCaseOf(name: string): string {
-  return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-}
+import { kebabCaseOf } from '@cf-loom/contract/internal';
 
 /** The kebab-case of an UPPER_SNAKE_CASE Rejection code: `ORDER_LOCKED` is `order-locked`. */
 export function kebabCaseOfCode(code: string): string {

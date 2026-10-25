@@ -15,13 +15,22 @@ const orderCreatedV1 = defineEvent({
 describe('defineSubscription', () => {
   test('a Subscription keeps its Event itself', () => {
     const notifyOnCreated = defineSubscription({
-      name: 'notify-on-created',
+      name: 'notifyOnCreated',
+      description: 'Notifies the customer of each order created',
       event: orderCreatedV1,
     });
 
     expect(notifyOnCreated.kind).toBe('subscription');
-    expect(notifyOnCreated.name).toBe('notify-on-created');
+    expect(notifyOnCreated.name).toBe('notifyOnCreated');
     expect(notifyOnCreated.event).toBe(orderCreatedV1);
+  });
+
+  test('a Subscription without a description is a type error', () => {
+    const declare = () =>
+      // @ts-expect-error a Subscription declares what it is for
+      defineSubscription({ name: 'notifyOnCreated', event: orderCreatedV1 });
+
+    expect(declare).not.toThrow();
   });
 
   test('a Subscription to something that is not an Event is a type error', () => {
@@ -34,7 +43,7 @@ describe('defineSubscription', () => {
 
     const declare = () =>
       // @ts-expect-error a Subscription receives an Event, never a Command
-      defineSubscription({ name: 'charge', event: chargeCardV1 });
+      defineSubscription({ name: 'charge', description: 'Charges', event: chargeCardV1 });
 
     expect(declare).not.toThrow();
   });
@@ -50,8 +59,12 @@ describe('defineSubscription', () => {
     });
 
     const declare = () =>
-      // @ts-expect-error a Retired Event is never published
-      defineSubscription({ name: 'notify-on-created', event: retiredV1 });
+      defineSubscription({
+        name: 'notifyOnCreated',
+        description: 'Notifies the customer of each order created',
+        // @ts-expect-error a Retired Event is never published
+        event: retiredV1,
+      });
 
     expect(declare).not.toThrow();
   });

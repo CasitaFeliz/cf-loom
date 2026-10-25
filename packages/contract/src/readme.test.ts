@@ -189,7 +189,8 @@ const orderCreatedV1 = defineEvent({
 });
 
 const notifyOnSettled = defineSubscription({
-  name: 'notify-on-settled',
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
   event: paymentsDeps.events.paymentSettledV1,
 });
 
