@@ -8,10 +8,14 @@ to run on the session's. The main session spawns an agent by name and passes wha
 ## The unit of work
 
 Each issue has its own plan. Issues that change the same code, or that depend on each other, may share one branch
-and one PR, implemented together; the others get one each. An issue too large for one reviewable PR is split into
-issues before it is planned. A branch is named `<type>/<issue>-<slug>` (`feat/6-zod-walker`), with every issue it
-closes (`feat/178-179-180-definitions`), its PR title is a Conventional Commit, and its body says `Closes #<issue>` for
-each, links the plans and says what changed.
+and one PR, implemented together, while the PR stays one a reviewer can read whole; the others get a branch and a PR
+each. A shared PR applies every rule below that names an issue to all its issues together: they are made ready,
+counted for the Root-cause cap, held, reviewed, done and merged as one, and an issue they depend on among themselves
+needs no merge first. An issue, or a group, too large for one reviewable PR is split into issues before it is planned.
+A branch is named `<type>/<issues>-<slug>`, the numbers of the issues it closes joined by hyphens
+(`feat/6-zod-walker`, `feat/178-179-180-definitions`); its PR title is a Conventional Commit, typed by its weightiest
+change (`feat` over `fix` over `refactor`), and its body says `Closes #<issue>` for each issue, links the plans and
+says what changed.
 
 ## Required reading
 
@@ -22,7 +26,7 @@ Every session and agent working on an issue reads these before it starts:
 | Every role | [CLAUDE.md](CLAUDE.md), [CONTEXT.md](CONTEXT.md), [CODING_STANDARDS.md](CODING_STANDARDS.md), [Rules for every agent](#rules-for-every-agent) |
 | Planner | The issue and every document it implements |
 | Implementer | This document, the plan, and every document the plan links |
-| Reviewer | The plan, the PR, and the documents its lens checks ([Review](#3-review), [Documentation and chore issues](#documentation-and-chore-issues)) |
+| Reviewer | The plans, the PR, and the documents its lens checks ([Review](#3-review), [Documentation and chore issues](#documentation-and-chore-issues)) |
 
 ## Decisions
 
@@ -129,7 +133,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | Lens | Checks |
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 |
-| Fidelity | The code against the plan; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
+| Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
 | Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more
@@ -160,14 +164,14 @@ to fix and merge, rework the plan, or split the issue.
 
 A PR is done when all of these hold; the main session checks them and lists them in the last round's comment:
 
-- [ ] every test in the plan exists and passes;
+- [ ] every test in every plan of the PR exists and passes;
 - [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head, and actionlint too when the PR
       changes `.github/workflows/`;
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
 - [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
 - [ ] no `TODO` is left without a linked issue;
-- [ ] the plan comment matches what was built.
+- [ ] each issue's plan comment matches what was built.
 
 ## 5. Merge
 
