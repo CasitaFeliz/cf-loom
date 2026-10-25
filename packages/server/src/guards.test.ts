@@ -6,7 +6,7 @@ import {
   defineGuard,
   defineRejection,
 } from '@cf-loom/contract';
-import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, type HandledRequest, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type ServedFault, serve } from './index.ts';
@@ -266,6 +266,33 @@ describe('serve: Guards', () => {
       rejection: { code: 'NOT_IMPLEMENTED', message: 'Not implemented' },
     });
     expect(invalid.status).toBe(400);
+  });
+
+  test('a GuardHandler under serve receives the request’s headers and its signal', async () => {
+    const controller = new AbortController();
+    const received: HandledRequest[] = [];
+    const reading = handle(userToken, (_demands, { request }) => {
+      received.push(request);
+      return admit({ userId: 'u-1' });
+    });
+    const served = { ...handlers, guards: { ...handlers.guards, userToken: reading } };
+    const headers = { authorization: 'Bearer u-1', 'x-request-id': 'r-7' };
+
+    await serve(
+      contract,
+      served,
+    )(
+      new Request('http://test/notes', {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'hi' }),
+        signal: controller.signal,
+      }),
+    );
+    controller.abort();
+
+    expect(received[0]?.headers.get('x-request-id')).toBe('r-7');
+    expect(received[0]?.signal.aborted).toBe(true);
   });
 
   test('a GuardHandler stub answers the not-implemented code its root resolves', async () => {

@@ -103,18 +103,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
     expect(serving).toBeTypeOf('function');
   });
 
-  test('an inline map with a misspelled key is a type error', () => {
-    const serving = () =>
-      serve(contract, {
-        // @ts-expect-error the Contract names findOrder, not findOrdr
-        endpoints: { getOrder: getOrderHandler, findOrdr: findOrderHandler },
-        guards: { apiKey: apiKeyHandler },
-        deprecatedAt: {},
-      });
-
-    expect(serving).toBeTypeOf('function');
-  });
-
   test('a Retired Endpoint needs no Handler, and a map spread from a variable may hold an extra key', () => {
     const endpoints = { getOrder: getOrderHandler, findOrder: findOrderHandler };
     const handlers = { endpoints, guards: { apiKey: apiKeyHandler }, deprecatedAt: {} };

@@ -587,6 +587,22 @@ describe('nodeHttp', () => {
     expect(response.status).toBe(404);
   });
 
+  test('a Handler’s signal is not aborted once its response has finished', async () => {
+    const signals: AbortSignal[] = [];
+    const watching = handle(getOrder, ({ params }, { request }) => {
+      signals.push(request.signal);
+      return success({ id: params.orderId });
+    });
+    const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: watching } };
+    const url = await listening(nodeHttp(serve(contract, served)));
+
+    const response = await fetch(`${url}/orders/o-1`);
+    await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(signals[0]?.aborted).toBe(false);
+  });
+
   test('a Caller that disconnects aborts the signal its EndpointHandler received', async () => {
     const signals: AbortSignal[] = [];
     const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();

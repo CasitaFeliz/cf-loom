@@ -1,5 +1,5 @@
 import { byCodePoint } from '@cf-loom/contract/internal';
-import type { ExportedAt } from '../loading/index.ts';
+import type { ExportedAt, RootPlace } from '../loading/index.ts';
 import {
   defaultImportOf,
   headerOf,
@@ -14,16 +14,13 @@ import {
 import { handlerLocalOf, nameInCodeOf } from './code-names.ts';
 import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
-import { readersTable } from './readers.ts';
+import { handlersPackage, readersTable } from './readers.ts';
 
-/** The package the Handler map imports `HandlerMapOf` from. */
-const handlersPackage = '@cf-loom/handlers';
-
-/** Where the Handler map is written, and the files it imports beside its Handlers. */
+/** Where the Handler map is written, the readers file it imports, and the root it is typed by. */
 type HandlerMapPlace = {
   readonly file: string;
   readonly readersFile: string;
-  readonly rootFile: string;
+  readonly root: Pick<RootPlace, 'file' | 'exported'>;
 };
 
 /**
@@ -34,7 +31,7 @@ type HandlerMapPlace = {
 export function handlerMapTextOf(
   mapped: readonly HandlerPath[],
   stamps: readonly DeprecationStamp[],
-  { file, readersFile, rootFile }: HandlerMapPlace,
+  { file, readersFile, root }: HandlerMapPlace,
 ): string {
   const handlerImports = mapped.map(({ handled, path }) => {
     const specifier = relativeSpecifierOf(file, path);
@@ -45,9 +42,9 @@ export function handlerMapTextOf(
     specifier: readersSpecifier,
     line: namedImportOf([readersTable], readersSpecifier),
   };
-  const rootSpecifier = relativeSpecifierOf(file, rootFile);
+  const rootSpecifier = relativeSpecifierOf(file, root.file);
   const typeImports = [
-    { specifier: rootSpecifier, line: typeImportOf(['contract'], rootSpecifier) },
+    { specifier: rootSpecifier, line: typeImportOf([root.exported], rootSpecifier) },
     { specifier: handlersPackage, line: typeImportOf(['HandlerMapOf'], handlersPackage) },
   ];
   const imports = [...handlerImports, readersImport, ...typeImports]
@@ -66,7 +63,7 @@ export function handlerMapTextOf(
     ...mapLinesOf('subscriptions', subscriptions),
     `  ${readersTable},`,
     ...stampLinesOf(stamps),
-    '} satisfies HandlerMapOf<typeof contract>;',
+    `} satisfies HandlerMapOf<typeof ${root.exported}>;`,
   ];
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
 }
@@ -90,7 +87,7 @@ export function exportedTargetOf(imported: ExportedAt, local: string): StubTarge
 export function stubTextOf(path: string, { imported, local, members }: StubTarget): string {
   const specifier = specifierOf(path, imported);
   const imports = [
-    namedImportOf(['handle'], '@cf-loom/handlers'),
+    namedImportOf(['handle'], handlersPackage),
     namedImportOf([importSpecifierOf(imported.name, local)], specifier),
   ];
   return moduleTextOf({

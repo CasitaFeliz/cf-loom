@@ -21,6 +21,13 @@ export type AttachedGuardOf<Listed> = Listed extends {
   ? Attached
   : Listed;
 
+/** Each Guard an Endpoint attaches, bare or qualified: the type twin of `attachedGuardsOf`; distributes over a union of Endpoints. */
+export type AttachedGuardsOf<Attaching> = Attaching extends {
+  readonly guards: readonly (infer Listed)[];
+}
+  ? Extract<AttachedGuardOf<Listed>, Guard>
+  : never;
+
 /** What an author may write for a Qualifier: a `const` declaration infers its arrays read-only. */
 type ConstInferred<Value> = Value extends object
   ? { readonly [Key in keyof Value]: ConstInferred<Value[Key]> }

@@ -160,7 +160,7 @@ type DirectLastGiven = { readonly resources?: unknown };
 
 function endpointCallOf(written: Written<Endpoint>) {
   return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
-    const given = { input, context: call.context ?? {}, request: requestOf(call) };
+    const given = { input, context: call.context, request: requestOf(call) };
     const run = await endpointRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
   };
@@ -169,7 +169,7 @@ function endpointCallOf(written: Written<Endpoint>) {
 function guardCallOf(written: Written<Guard>) {
   return async (demands: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
     const { qualifier } = call;
-    const given = { demands, context: call.context ?? {}, qualifier, request: requestOf(call) };
+    const given = { demands, context: call.context, qualifier, request: requestOf(call) };
     const run = await guardRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
   };

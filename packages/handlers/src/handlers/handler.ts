@@ -82,11 +82,9 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
   HandledBy<Target>;
 
 /**
- * The shape every Handler map has, which `serve` and `consume` accept: each Handler by its name,
- * known by the Endpoint, Guard, Command or Subscription it was written for, since its call
- * signature is the Service's own; the `readers` pairing each Command's Message Version and
- * Subscription with the Reader its Handler reads with, which `consume` reads with; and each
- * Deprecated Endpoint's `deprecatedAt`, from the Snapshot.
+ * The runtime shape of every Handler map, which the startup checks of `serve` and `consume` read,
+ * whatever the map's type: each Handler known by the Element it was written for, the `readers`
+ * and each Deprecated Endpoint's `deprecatedAt`; `HandlerMapOf` is what they take by type.
  */
 export type HandlerMap = {
   readonly endpoints: Readonly<Record<string, { readonly element: Endpoint }>>;

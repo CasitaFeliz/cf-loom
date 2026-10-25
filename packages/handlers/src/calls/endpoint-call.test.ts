@@ -202,6 +202,19 @@ describe('an EndpointHandler’s second argument', () => {
     expect([...(received[0]?.request.headers ?? [])]).toEqual([]);
   });
 
+  test('the signal a direct call gives reaches the Handler', async () => {
+    const received: EndpointCall<typeof getOrder>[] = [];
+    const getOrderHandler = handle(getOrder, (_input, call) => {
+      received.push(call);
+      return success({ id: ORDER_ID, total: 1 });
+    });
+    const signal = AbortSignal.abort(new Error('the Caller went away'));
+
+    await getOrderHandler(getInput, { context: getContext, request: { signal } });
+
+    expect(received[0]?.request.signal).toBe(signal);
+  });
+
   test('a direct call may leave out the Context only when no Guard gives the Handler one', () => {
     const getOrderHandler = handle.stub(getOrder);
     const deleteOrderHandler = handle.stub(deleteOrder);
@@ -507,23 +520,28 @@ describe('an EndpointHandler’s Rejections', () => {
     });
   });
 
-  test('a direct call’s Rejection has no code, and a direct call takes no contract', async () => {
+  test('a direct call’s Rejection carries no code, by value or by type', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+
+    const outcome = await getOrderHandler(getInput, { context: getContext });
+
+    expect(outcome).not.toHaveProperty('code');
+    expectTypeOf<
+      Extract<CheckedOutcome<typeof getOrder>, { readonly kind: 'rejection' }>
+    >().not.toHaveProperty('code');
+  });
+
+  test('a direct call takes no contract', () => {
     const contract = defineContract({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    const outcome = await getOrderHandler(getInput, { context: getContext });
     // @ts-expect-error a direct call takes no contract
     const withContract = () => getOrderHandler(getInput, { context: getContext }, { contract });
 
-    expect(outcome.kind).toBe('rejection');
     expect(withContract).toBeTypeOf('function');
-    if (outcome.kind === 'rejection') {
-      // @ts-expect-error a Rejection as built has no code
-      expect(outcome.code).toBeUndefined();
-    }
   });
 
   test('a Guard’s Rejection is one the Endpoint answers', async () => {

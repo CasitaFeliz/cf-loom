@@ -43,7 +43,7 @@ export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): Se
 function handlerMapFileOf(service: PlacedService): GeneratedFile {
   const { handlerMap, readers } = service.project.layout;
   const stamps = deprecationStampsOf(service.snapshot);
-  const where = { file: handlerMap, readersFile: readers, rootFile: rootPlaces.service.file };
+  const where = { file: handlerMap, readersFile: readers, root: rootPlaces.service };
   const text = handlerMapTextOf(service.handlerPaths, stamps, where);
   return { path: handlerMap, text, written: 'always' };
 }

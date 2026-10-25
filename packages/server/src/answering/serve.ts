@@ -9,6 +9,7 @@ import {
   recordAnswered,
   reportServedFault,
   type ServedFault,
+  type ServeHook,
 } from './hooks.ts';
 import { sentOf } from './runs.ts';
 
@@ -27,7 +28,7 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
    * that broke the Contract, or the runtime's own bug; never the Caller's; with the Request it
    * came from. The console without it.
    */
-  readonly onServiceFault?: (fault: ServedFault, request: Request) => void | Promise<void>;
+  readonly onServiceFault?: ServeHook<ServedFault>;
   /**
    * Answers every request no declared Endpoint matches, such as a health check or CORS preflight,
    * its Response returned as is, and the internal Fault if it rejects; without it,
@@ -35,7 +36,7 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
    */
   readonly fallback?: Http;
   /** Receives one record per request answered, and the Request, for metrics and tracing; never one the fallback answered. */
-  readonly onAnswered?: (answered: AnsweredRequest, request: Request) => void | Promise<void>;
+  readonly onAnswered?: ServeHook<AnsweredRequest>;
 };
 
 /**
