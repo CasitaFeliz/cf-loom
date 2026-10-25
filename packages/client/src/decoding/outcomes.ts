@@ -79,16 +79,27 @@ export type ReceivedOutcome<D extends AnyDependency, Name extends ListedName<D>>
         | ReceivedFault
     : never;
 
-/** What broke the Contract in an answer, and whether the Provider had committed it. */
+/** What broke the Contract in an answer, the status it came with, and whether the Provider had committed it. */
 export type BrokenOutcome = {
+  readonly status: number;
   readonly committed: 'yes' | 'unknown';
   readonly issues: readonly Issue[];
 };
 
 /** The client's own `INVALID_OUTCOME`: never retryable, with the Issues, never the value. */
-export function invalidOutcomeOf({ committed, issues }: BrokenOutcome): ReceivedFault {
+export function invalidOutcomeOf({ status, committed, issues }: BrokenOutcome): ReceivedFault {
   const { message } = reservedFaults.INVALID_OUTCOME;
-  return { kind: 'fault', code: 'INVALID_OUTCOME', committed, retryable: false, message, issues };
+  const source = 'invalid-outcome';
+  return {
+    kind: 'fault',
+    source,
+    status,
+    code: 'INVALID_OUTCOME',
+    committed,
+    retryable: false,
+    message,
+    issues,
+  };
 }
 
 /** The Issues of a value read at a part of the answer; none when it was read. */

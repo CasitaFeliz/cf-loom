@@ -341,7 +341,14 @@ describe('fakeProvider: steps', () => {
       const outcome = await payments.client().getPayment({ params });
 
       expect(response.status).toBe(status);
-      expect(outcome).toMatchObject({ kind: 'fault', code, committed, retryable: false });
+      expect(outcome).toMatchObject({
+        kind: 'fault',
+        source: 'provider',
+        status,
+        code,
+        committed,
+        retryable: false,
+      });
     },
   );
 

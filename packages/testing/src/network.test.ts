@@ -66,6 +66,7 @@ describe('fakeProvider: what the client infers its Fault from', () => {
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'no-connection',
       committed: 'no',
       retryable: true,
       message: 'No connection to the Provider',
@@ -81,6 +82,7 @@ describe('fakeProvider: what the client infers its Fault from', () => {
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'connection-failed',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',
@@ -100,6 +102,8 @@ describe('fakeProvider: what the client infers its Fault from', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status,
       message: `The Provider answered ${status}`,
       ...fault,
     });

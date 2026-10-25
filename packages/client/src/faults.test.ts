@@ -92,46 +92,63 @@ function ordersOver(fetch: Http) {
 }
 
 describe('row 1: no connection is committed no and retryable', () => {
-  test.each([
-    'ECONNREFUSED',
-    'ENOTFOUND',
-    'EAI_AGAIN',
-    'ENETUNREACH',
-    'EHOSTUNREACH',
-    'ETIMEDOUT',
-    'UND_ERR_CONNECT_TIMEOUT',
-  ])('a TypeError caused by %s is no connection', async (code) => {
-    const orders = ordersOver(throwing(networkError(code)));
+  test.each(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'])(
+    'a TypeError caused by %s is no connection',
+    async (code) => {
+      const orders = ordersOver(throwing(networkError(code)));
 
-    const outcome = await orders.getOrder(input);
+      const outcome = await orders.getOrder(input);
 
-    expect(outcome).toMatchObject({
-      kind: 'fault',
-      committed: 'no',
-      retryable: true,
-      message: 'No connection to the Provider',
-    });
-  });
+      expect(outcome).toMatchObject({
+        kind: 'fault',
+        source: 'no-connection',
+        committed: 'no',
+        retryable: true,
+        message: 'No connection to the Provider',
+      });
+    },
+  );
 
-  test('an aborted signal sends nothing, and the Fault is committed no', async () => {
+  test('a call aborted before anything was sent is committed no, not retryable, with the signal’s reason as cause', async () => {
     let sent = 0;
     const orders = ordersOver(async () => {
       sent += 1;
       return Response.json({ id: 'o-1' });
     });
-    const aborted = AbortSignal.abort();
-    const timedOut = AbortSignal.abort(new DOMException('Timed out', 'TimeoutError'));
+    const reason = new Error('Navigated away');
 
-    const outcomes = [
-      await orders.getOrder(input, { signal: aborted }),
-      await orders.getOrder(input, { signal: timedOut }),
-    ];
+    const outcome = await orders.getOrder(input, { signal: AbortSignal.abort(reason) });
 
     expect(sent).toBe(0);
-    expect(outcomes).toEqual([
-      { kind: 'fault', committed: 'no', retryable: true, message: 'The request was aborted' },
-      { kind: 'fault', committed: 'no', retryable: true, message: 'The request timed out' },
-    ]);
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'aborted',
+      committed: 'no',
+      retryable: false,
+      message: 'The request was aborted',
+      cause: reason,
+    });
+  });
+
+  test('a call whose signal timed out before anything was sent is committed no and retryable', async () => {
+    let sent = 0;
+    const orders = ordersOver(async () => {
+      sent += 1;
+      return Response.json({ id: 'o-1' });
+    });
+    const reason = new DOMException('Timed out', 'TimeoutError');
+
+    const outcome = await orders.getOrder(input, { signal: AbortSignal.abort(reason) });
+
+    expect(sent).toBe(0);
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'timeout',
+      committed: 'no',
+      retryable: true,
+      message: 'The request timed out',
+      cause: reason,
+    });
   });
 
   test('429 is committed no and retryable', async () => {
@@ -141,6 +158,8 @@ describe('row 1: no connection is committed no and retryable', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 429,
       committed: 'no',
       retryable: true,
       message: 'The Provider answered 429',
@@ -148,7 +167,7 @@ describe('row 1: no connection is committed no and retryable', () => {
   });
 });
 
-describe('row 2: a timeout, a reset or an abort after sending is committed unknown and retryable', () => {
+describe('row 2: a timeout or a lost connection after sending is committed unknown and retryable', () => {
   test('a TimeoutError thrown by fetch is a timeout, an AbortError an abort', async () => {
     const timeout = new DOMException('The operation timed out', 'TimeoutError');
     const abort = new DOMException('The operation was aborted', 'AbortError');
@@ -159,23 +178,72 @@ describe('row 2: a timeout, a reset or an abort after sending is committed unkno
     ];
 
     expect(outcomes).toMatchObject([
-      { committed: 'unknown', retryable: true, message: 'The request timed out' },
-      { committed: 'unknown', retryable: true, message: 'The request was aborted' },
+      {
+        source: 'timeout',
+        committed: 'unknown',
+        retryable: true,
+        message: 'The request timed out',
+      },
+      {
+        source: 'aborted',
+        committed: 'unknown',
+        retryable: false,
+        message: 'The request was aborted',
+      },
     ]);
   });
 
-  test.each(['ECONNRESET', 'UND_ERR_SOCKET'])(
-    'a TypeError caused by %s is a reset',
+  test.each(['ECONNRESET', 'UND_ERR_SOCKET', 'ETIMEDOUT', 'ENETUNREACH', 'EHOSTUNREACH'])(
+    'a TypeError caused by %s is a lost connection, which may have carried the request',
     async (code) => {
-      const outcome = await ordersOver(throwing(networkError(code))).getOrder(input);
+      const error = networkError(code);
 
-      expect(outcome).toMatchObject({
+      const outcome = await ordersOver(throwing(error)).getOrder(input);
+
+      expect(outcome).toEqual({
+        kind: 'fault',
+        source: 'connection-failed',
         committed: 'unknown',
         retryable: true,
         message: 'The connection failed',
+        cause: error,
       });
     },
   );
+
+  test('UND_ERR_HEADERS_TIMEOUT thrown by fetch is a timeout', async () => {
+    const error = networkError('UND_ERR_HEADERS_TIMEOUT');
+
+    const outcome = await ordersOver(throwing(error)).getOrder(input);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'timeout',
+      committed: 'unknown',
+      retryable: true,
+      message: 'The request timed out',
+      cause: error,
+    });
+  });
+
+  test('a call its Caller aborts while fetch runs is not retryable, and its cause is the signal’s reason', async () => {
+    const controller = new AbortController();
+    const orders = ordersOver(async () => {
+      controller.abort();
+      throw controller.signal.reason;
+    });
+
+    const outcome = await orders.getOrder(input, { signal: controller.signal });
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'aborted',
+      committed: 'unknown',
+      retryable: false,
+      message: 'The request was aborted',
+      cause: controller.signal.reason,
+    });
+  });
 
   test('a signal aborted while fetch runs decides, whatever fetch throws', async () => {
     const controller = new AbortController();
@@ -187,6 +255,7 @@ describe('row 2: a timeout, a reset or an abort after sending is committed unkno
     const outcome = await orders.getOrder(input, { signal: controller.signal });
 
     expect(outcome).toMatchObject({
+      source: 'timeout',
       committed: 'unknown',
       retryable: true,
       message: 'The request timed out',
@@ -198,6 +267,8 @@ describe('row 2: a timeout, a reset or an abort after sending is committed unkno
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 503,
       committed: 'unknown',
       retryable: true,
       message: 'The Provider answered 503',
@@ -224,15 +295,38 @@ describe('row 2: a timeout, a reset or an abort after sending is committed unkno
       ).getOrder(input),
     ];
 
-    for (const outcome of outcomes) {
-      expect(outcome).toEqual({
+    expect(outcomes).toEqual(
+      [200, 500].map((status) => ({
         kind: 'fault',
+        source: 'unreadable-body',
+        status,
         committed: 'unknown',
         retryable: true,
         message: 'The connection failed',
         cause: failure,
-      });
-    }
+      })),
+    );
+  });
+
+  test('UND_ERR_BODY_TIMEOUT while the body is read is a timeout, with the status that had arrived', async () => {
+    const failure = networkError('UND_ERR_BODY_TIMEOUT');
+    const stalled = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(failure),
+    });
+    const json = { 'content-type': 'application/json' };
+    const orders = ordersOver(async () => new Response(stalled, { status: 200, headers: json }));
+
+    const outcome = await orders.getOrder(input);
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'timeout',
+      status: 200,
+      committed: 'unknown',
+      retryable: true,
+      message: 'The request timed out',
+      cause: failure,
+    });
   });
 });
 
@@ -252,12 +346,23 @@ describe('row 2, more', () => {
     ];
 
     expect(outcomes).toMatchObject([
-      { committed: 'unknown', retryable: true, message: 'The request was aborted' },
-      { committed: 'unknown', retryable: true, message: 'The request timed out' },
+      {
+        source: 'aborted',
+        committed: 'unknown',
+        retryable: false,
+        message: 'The request was aborted',
+        cause: 'stop',
+      },
+      {
+        source: 'timeout',
+        committed: 'unknown',
+        retryable: true,
+        message: 'The request timed out',
+      },
     ]);
   });
 
-  test('an abort while the body is read is an abort, after the request was sent', async () => {
+  test('an abort while the body is read is not retryable, with the status that had arrived', async () => {
     const controller = new AbortController();
     const stream = new ReadableStream<Uint8Array>(
       {
@@ -274,8 +379,10 @@ describe('row 2, more', () => {
     const outcome = await orders.getOrder(input, { signal: controller.signal });
 
     expect(outcome).toMatchObject({
+      source: 'aborted',
+      status: 200,
       committed: 'unknown',
-      retryable: true,
+      retryable: false,
       message: 'The request was aborted',
     });
   });
@@ -289,7 +396,12 @@ describe('row 2, more', () => {
 
     const outcome = await orders.getOrder(input);
 
-    expect(outcome).toMatchObject({ message: 'The connection failed', retryAfter: '30' });
+    expect(outcome).toMatchObject({
+      source: 'unreadable-body',
+      status: 503,
+      message: 'The connection failed',
+      retryAfter: '30',
+    });
   });
 });
 
@@ -297,7 +409,11 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
   test('a TypeError caused by another system error, EPIPE, is not retryable', async () => {
     const outcome = await ordersOver(throwing(networkError('EPIPE'))).getOrder(input);
 
-    expect(outcome).toMatchObject({ committed: 'unknown', retryable: false });
+    expect(outcome).toMatchObject({
+      source: 'connection-failed',
+      committed: 'unknown',
+      retryable: false,
+    });
   });
 
   test('a declared Success status of another kind, a 204 on a 200 Endpoint, is inferred', async () => {
@@ -305,6 +421,8 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 204,
       committed: 'unknown',
       retryable: false,
       message: 'The Provider answered 204',
@@ -318,7 +436,12 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
       answering(404, envelope, { 'content-type': 'text/plain' }),
     ).getOrder(input);
 
-    expect(outcome).toMatchObject({ kind: 'fault', message: 'The Provider answered 404' });
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'status',
+      status: 404,
+      message: 'The Provider answered 404',
+    });
   });
 
   test('a TypeError with no cause, as a browser throws for any network failure', async () => {
@@ -328,6 +451,7 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'connection-failed',
       committed: 'unknown',
       retryable: false,
       message: 'The connection failed',
@@ -340,6 +464,8 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status,
       committed: 'unknown',
       retryable: false,
       message: `The Provider answered ${status}`,
@@ -350,7 +476,12 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
     const json = { 'content-type': 'application/json' };
     const outcome = await ordersOver(answering(400, '{"error":"bad"}', json)).getOrder(input);
 
-    expect(outcome).toMatchObject({ committed: 'unknown', retryable: false });
+    expect(outcome).toMatchObject({
+      source: 'status',
+      status: 400,
+      committed: 'unknown',
+      retryable: false,
+    });
   });
 
   test('an HTML 502 from a gateway', async () => {
@@ -359,7 +490,10 @@ describe('row 3: any other failure is committed unknown and not retryable', () =
 
     const outcome = await ordersOver(answering(502, page, html)).getOrder(input);
 
-    expect(outcome).toMatchObject({
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'status',
+      status: 502,
       committed: 'unknown',
       retryable: false,
       message: 'The Provider answered 502',
@@ -409,6 +543,8 @@ describe('inferFault', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 502,
       committed: 'no',
       retryable: true,
       message: 'The Provider answered 502',
@@ -446,7 +582,24 @@ describe('inferFault', () => {
 
     const outcome = await orders.getOrder(input);
 
-    expect(outcome).toMatchObject({ committed: 'no', retryable: true });
+    expect(outcome).toMatchObject({ source: 'no-connection', committed: 'no', retryable: true });
+  });
+
+  test('is offered a refused connection as no-connection, with the error fetch threw', async () => {
+    const error = networkError('ECONNREFUSED');
+    const received: Happened[] = [];
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: throwing(error),
+      inferFault: (happened) => {
+        received.push(happened);
+        return undefined;
+      },
+    });
+
+    await orders.getOrder(input);
+
+    expect(received).toEqual([{ kind: 'no-connection', error }]);
   });
 
   test('is offered a thrown error and a failed body, but never what was not sent', async () => {
@@ -475,7 +628,7 @@ describe('inferFault', () => {
       signal: AbortSignal.abort(),
     });
 
-    expect(kinds).toEqual(['thrown', 'unreadable-body']);
+    expect(kinds).toEqual(['connection-failed', 'unreadable-body']);
   });
 });
 
@@ -488,6 +641,8 @@ describe('Faults the Provider sent', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'provider',
+      status: 500,
       committed: 'yes',
       retryable: false,
       message: 'Done, reply lost',
@@ -509,8 +664,8 @@ describe('Faults the Provider sent', () => {
     ];
 
     expect(outcomes).toEqual([
-      { kind: 'fault', ...fault },
-      { kind: 'fault', code: 'RETIRED', ...fault },
+      { kind: 'fault', source: 'provider', status: 500, ...fault },
+      { kind: 'fault', source: 'provider', status: 410, code: 'RETIRED', ...fault },
     ]);
   });
 
@@ -567,6 +722,7 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt(baseUrl).getOrder(input);
 
     expect(outcome).toMatchObject({
+      source: 'no-connection',
       committed: 'no',
       retryable: true,
       message: 'No connection to the Provider',
@@ -577,18 +733,20 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt('http://nowhere.invalid').getOrder(input);
 
     expect(outcome).toMatchObject({
+      source: 'no-connection',
       committed: 'no',
       retryable: true,
       message: 'No connection to the Provider',
     });
   });
 
-  test('AbortSignal.timeout against a server that never answers is a timeout', async () => {
+  test('AbortSignal.timeout against a server that never answers stays retryable', async () => {
     const baseUrl = await listening(() => undefined);
 
     const outcome = await ordersAt(baseUrl).getOrder(input, { signal: AbortSignal.timeout(50) });
 
     expect(outcome).toMatchObject({
+      source: 'timeout',
       committed: 'unknown',
       retryable: true,
       message: 'The request timed out',
@@ -602,8 +760,9 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt(baseUrl).getOrder(input, { signal: controller.signal });
 
     expect(outcome).toMatchObject({
+      source: 'aborted',
       committed: 'unknown',
-      retryable: true,
+      retryable: false,
       message: 'The request was aborted',
     });
   });
@@ -614,6 +773,7 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt(baseUrl).getOrder(input);
 
     expect(outcome).toMatchObject({
+      source: 'connection-failed',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',
@@ -630,6 +790,8 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt(baseUrl).getOrder(input);
 
     expect(outcome).toMatchObject({
+      source: 'unreadable-body',
+      status: 200,
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',
@@ -645,6 +807,7 @@ describe('the network rows against node:http', () => {
     socketServer.close();
 
     expect(outcome).toMatchObject({
+      source: 'connection-failed',
       committed: 'unknown',
       retryable: false,
       message: 'The connection failed',
@@ -673,6 +836,11 @@ describe('the network rows against node:http', () => {
     const outcome = await late.getOrder(input);
     socketServer.close();
 
-    expect(outcome).toMatchObject({ kind: 'fault', message: 'The Provider answered 502' });
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'status',
+      status: 502,
+      message: 'The Provider answered 502',
+    });
   });
 });

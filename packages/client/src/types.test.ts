@@ -15,7 +15,7 @@ import type { Http as ServerHttp } from '@cf-loom/server';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { type Client, client, type Http, type ReceivedOutcome } from './index.ts';
+import { type Client, client, type FaultSource, type Http, type ReceivedOutcome } from './index.ts';
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -235,5 +235,41 @@ describe('Http', () => {
     expectTypeOf<Http>().toEqualTypeOf<ServerHttp>();
     expectTypeOf<Http>().toEqualTypeOf<ContractHttp>();
     expectTypeOf<ContractHttp>().toEqualTypeOf<(request: Request) => Promise<Response>>();
+  });
+});
+
+describe('a Fault’s source', () => {
+  test('a switch on it is exhaustive over the eight sources', () => {
+    type Fault = Extract<ReceivedOutcome<typeof ordersDependency, 'getOrder'>, { kind: 'fault' }>;
+    const described = (source: Fault['source']): string => {
+      switch (source) {
+        case 'provider':
+        case 'invalid-outcome':
+          return 'the Provider answered';
+        case 'status':
+        case 'unreadable-body':
+          return 'a response arrived';
+        case 'aborted':
+        case 'timeout':
+        case 'no-connection':
+        case 'connection-failed':
+          return 'the client met';
+        default:
+          return source satisfies never;
+      }
+    };
+
+    expectTypeOf<FaultSource>().toEqualTypeOf<
+      | 'provider'
+      | 'aborted'
+      | 'timeout'
+      | 'no-connection'
+      | 'connection-failed'
+      | 'status'
+      | 'unreadable-body'
+      | 'invalid-outcome'
+    >();
+    expectTypeOf<Fault['source']>().toEqualTypeOf<FaultSource>();
+    expect(described('timeout')).toBe('the client met');
   });
 });

@@ -127,10 +127,36 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   expect(settlement.outcomes).toMatchObject([
     { kind: 'rejection', known: true, code: 'NOT_FOUND', message: 'Not found', body: undefined },
     { kind: 'rejection', known: false, code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: {} },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'No connection to the Provider' },
-    { kind: 'fault', committed: 'unknown', retryable: true, message: 'The connection failed' },
-    { kind: 'fault', committed: 'unknown', retryable: false, message: 'The Provider answered 502' },
+    {
+      kind: 'fault',
+      source: 'provider',
+      status: 503,
+      committed: 'no',
+      retryable: true,
+      message: 'Internal error',
+    },
+    {
+      kind: 'fault',
+      source: 'no-connection',
+      committed: 'no',
+      retryable: true,
+      message: 'No connection to the Provider',
+    },
+    {
+      kind: 'fault',
+      source: 'connection-failed',
+      committed: 'unknown',
+      retryable: true,
+      message: 'The connection failed',
+    },
+    {
+      kind: 'fault',
+      source: 'status',
+      status: 502,
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 502',
+    },
     { kind: 'success', value: { id: PAYMENT_ID, amount }, headers: {} },
   ]);
   const input = { params: { paymentId: PAYMENT_ID }, headers: { 'x-api-key': 'k' } };

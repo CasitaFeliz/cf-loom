@@ -12,6 +12,7 @@ import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
  */
 export function rejectionOf(
   envelope: RejectionEnvelope['rejection'],
+  status: number,
   called: CalledEndpoint,
 ): DecodedOutcome {
   const { code, message, body } = envelope;
@@ -25,7 +26,7 @@ export function rejectionOf(
   }
   const parsed = parseValue(schema, body);
   if (parsed.kind === 'issues') {
-    return invalidOutcomeOf({ committed: 'unknown', issues: issuesAt('body', parsed) });
+    return invalidOutcomeOf({ status, committed: 'unknown', issues: issuesAt('body', parsed) });
   }
   return { kind: 'rejection', known: true, code, message, body: parsed.value };
 }

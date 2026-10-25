@@ -9,4 +9,10 @@ export type {
 } from './calling/index.ts';
 export { client } from './calling/index.ts';
 export type { ReceivedOutcome, ReceivedRejection, ReceivedSuccess } from './decoding/index.ts';
-export type { Happened, InferFault, InferredFault, ReceivedFault } from './inference/index.ts';
+export type {
+  FaultSource,
+  Happened,
+  InferFault,
+  InferredFault,
+  ReceivedFault,
+} from './inference/index.ts';

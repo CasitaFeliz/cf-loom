@@ -23,7 +23,7 @@ switch (outcome.kind) {
     throw new Error(outcome.message);
   case 'fault':
     if (outcome.committed === 'no' && outcome.retryable) return retry();
-    throw new Error('payments-service failed');
+    throw new Error(`payments-service failed: ${outcome.source}`);
 }
 ```
 
@@ -51,11 +51,11 @@ Headers an Endpoint or its Guards demand are typed, with lower-case names. Those
 
 A Success Outcome carries `value`, the body, and `headers`, the declared Success headers, typed. The client validates a Success, its headers included, and a Rejection body against the Reader schemas of the Provider's Contract Package (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md): open objects, Unknown cases. A Success header is converted from its text by its node in the Contract Package's exported Snapshot, so an Open Enum header the Caller does not know arrives as `{ unknown: 'lost' }`. Undeclared response headers are not read, except as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) says.
 
-A Success that fails its Reader schemas, a body that is no JSON included, is a Fault with `INVALID_OUTCOME`, `committed: 'yes'` and `retryable: false`: the Service processed the request, but answered something its Contract does not describe. A Rejection body that fails them is the same Fault with `committed: 'unknown'`. Either carries `issues`, each with its part (`success.headers`, `success.body` or `body`), path, code and message, never the received value. A Success body whose stream fails while it is read is no answer the Provider finished: the client infers its Fault, as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) says for a body that fails.
+A Success whose JSON body or headers fail their Reader schemas is a Fault with `INVALID_OUTCOME`, `committed: 'yes'` and `retryable: false`: the Service processed the request, but answered something its Contract does not describe. A Rejection body that fails them is the same Fault with `committed: 'unknown'`. Either carries `issues`, each with its part (`success.headers`, `success.body` or `body`), path, code and message, never the received value. A Success-status answer whose body is no JSON, a gateway's page for one, is no answer the Provider is shown to have sent, and a Success body whose stream fails while it is read is none it finished: the client infers the Fault of each, as [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) says.
 
 A Rejection Outcome carries `known`, `code`, `message` and `body`: when `known` is `true`, `code` is one of the codes the Endpoint answers and `body` its declared type, or `undefined` for a code that declares none, whatever arrived; when `false`, the client did not know the code, and `code` is the raw string and `body` unvalidated. Checking `known` first lets TypeScript narrow by code. The invalid-input Rejection's body is read with the Reader of the Provider's Contract Package, the Rejection the client makes without sending included, with its `in` and `code` as Open Enums, so a part or issue code the Provider's cf-loom does not know arrives as `{ unknown }`.
 
-A Fault Outcome carries `committed`, `retryable`, `message`, the reserved `code` when there is one, `retryAfter`, the `Retry-After` header as received, on a Fault the Provider sent or the client inferred from a response that carried one, `cause`, the error `fetch` threw or the stream failed with, and `issues` on an `INVALID_OUTCOME` the client produced. A Fault code that is not reserved is dropped. A Caller may retry on its own only when `committed === 'no' && retryable`: nothing happened, and the same request could succeed later (see [Fault](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md). cf-loom requires no idempotency; the pattern for it is a Guard in a Definitions Package that demands an `idempotency-key` header, whose Service stores each key with its Success and replays it. A Caller of such an Endpoint may retry whenever `committed !== 'yes' && retryable`, with the same key.
+A Fault Outcome carries `source`, where it came from, `committed`, `retryable`, `message`, `status` whenever a response arrived, the reserved `code` when there is one, `retryAfter`, the `Retry-After` header as received, on a Fault the Provider sent or the client inferred from a response that carried one, `cause`, the error `fetch` threw, the stream failed with or the signal was aborted with, and `issues` on an `INVALID_OUTCOME` the client produced. `source` is `provider` for a Fault the Provider sent, `invalid-outcome` for an `INVALID_OUTCOME`, and else what the client met: `aborted`, `timeout`, `no-connection`, `connection-failed`, `status` or `unreadable-body` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). A Fault code that is not reserved is dropped. A Caller's own abort is never retryable, so this rule never retries a cancelled call. A Caller may retry on its own only when `committed === 'no' && retryable`: nothing happened, and the same request could succeed later (see [Fault](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md). cf-loom requires no idempotency; the pattern for it is a Guard in a Definitions Package that demands an `idempotency-key` header, whose Service stores each key with its Success and replays it. A Caller of such an Endpoint may retry whenever `committed !== 'yes' && retryable`, with the same key.
 
 ### fetch and inferFault
 
@@ -63,11 +63,12 @@ A Fault Outcome carries `committed`, `retryable`, `message`, the reserved `code`
 
 `client(dependency, { inferFault })` replaces that inference, so an organization that knows its network (a gateway that only answers 502 before forwarding, for one) can relax it. `inferFault(happened, inferred)` receives what happened and cf-loom's inference, and returns `{ committed, retryable }`, or `undefined` to keep cf-loom's; the message stays cf-loom's. What happened is one of:
 
-- `{ kind: 'thrown', error }`: `fetch` threw a network failure, an abort or a timeout;
-- `{ kind: 'status', status, headers }`: a response that was neither the Success nor an Envelope;
+- `{ kind: 'no-connection', error }` and `{ kind: 'connection-failed', error }`: `fetch` threw a network failure;
+- `{ kind: 'aborted', error }` and `{ kind: 'timeout', error }`: `fetch` threw an abort or a timeout, or the call's signal was aborted, `error` its reason; with the `status` and `headers` of the response when the body was being read;
+- `{ kind: 'status', status, headers }`: a response that was neither the Success nor an Envelope, or a Success-status response whose body is no JSON;
 - `{ kind: 'unreadable-body', status, headers, error }`: a response whose body failed while it was read.
 
-A call whose signal was aborted before anything was sent is never offered: its Fault is `committed: 'no'`, `retryable: true`. What `inferFault` throws reaches the calling code unchanged; a value it returns is not checked, so the Fault carries its `committed` and `retryable` as they are: either is the organization's bug.
+A call whose signal was aborted before anything was sent is never offered: its Fault is `committed: 'no'`, retryable only when its reason is a `TimeoutError`. What `inferFault` throws reaches the calling code unchanged; a value it returns is not checked, so the Fault carries its `committed` and `retryable` as they are: either is the organization's bug.
 
 ### Deprecation
 
@@ -79,4 +80,4 @@ A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [L
 - `Client<D, Configured>`, what `client()` returns: one method per listed Endpoint, `(input, { signal }?) => Promise<ReceivedOutcome<D, Name>>`. Code that calls another Service can depend on `Client<typeof paymentsDependency, 'x-api-key'>` rather than on `client()` itself; its second parameter names the headers given to `client()`, which its methods no longer require.
 - `CallInput<E, Configured>`, the Input a method takes, and `CallOptions`, `{ signal? }`.
 - `ReceivedOutcome<D, Name>`, what the method `Name` of a client of the Dependency `D` returns: one of `ReceivedSuccess<E>`, `ReceivedRejection<E, Standards>` and `ReceivedFault`, where `E` is its Endpoint and `Standards` the Provider's Standard Rejections, `D['provider']['standardRejections']`, which type the invalid-input body by its Reader.
-- `Happened`, `InferredFault` and `InferFault`, what `inferFault` receives and returns; `DeprecationNotice`, what `onDeprecation` receives.
+- `Happened`, `InferredFault` and `InferFault`, what `inferFault` receives and returns; `FaultSource`, the values of a Fault's `source`; `DeprecationNotice`, what `onDeprecation` receives.

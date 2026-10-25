@@ -89,7 +89,7 @@ async function readmeExample(answer: () => Response) {
       throw new Error(outcome.message);
     case 'fault':
       if (outcome.committed === 'no' && outcome.retryable) return retry();
-      throw new Error('payments-service failed');
+      throw new Error(`payments-service failed: ${outcome.source}`);
   }
 }
 
@@ -104,6 +104,26 @@ describe('the README', () => {
     ];
 
     expect(results).toEqual([120, null, 'retried']);
+  });
+
+  test('under the README’s retry rule a cancelled call is never retried', async () => {
+    const payments = client(paymentsDependency, {
+      baseUrl: 'https://payments.test',
+      headers: { 'x-api-key': settings.paymentsKey },
+      fetch: async () => Response.json({ amount: 120 }),
+    });
+    const cancelled = AbortSignal.abort();
+    let attempts = 0;
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      attempts += 1;
+      const outcome = await payments.getPayment({ params: { paymentId } }, { signal: cancelled });
+      if (outcome.kind !== 'fault' || outcome.committed !== 'no' || !outcome.retryable) {
+        break;
+      }
+    }
+
+    expect(attempts).toBe(1);
   });
 
   test('a fetch wrapper building another Request sends the call with a browser’s credentials', async () => {

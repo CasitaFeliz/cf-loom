@@ -13,7 +13,7 @@ import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contr
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { client } from './index.ts';
+import { client, type Happened } from './index.ts';
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -154,6 +154,8 @@ describe('a Success that breaks its Reader schemas', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'invalid-outcome',
+      status: 200,
       code: 'INVALID_OUTCOME',
       committed: 'yes',
       retryable: false,
@@ -174,43 +176,69 @@ describe('a Success that breaks its Reader schemas', () => {
 
     expect(outcomes).toMatchObject([
       {
+        source: 'invalid-outcome',
         code: 'INVALID_OUTCOME',
         committed: 'yes',
         issues: [{ part: 'success.headers', path: ['x-total'], code: 'invalid_type' }],
       },
       {
+        source: 'invalid-outcome',
         code: 'INVALID_OUTCOME',
         committed: 'yes',
         issues: [{ part: 'success.headers', path: ['x-total'], code: 'required' }],
       },
     ]);
   });
+});
 
-  test('a body that is no JSON, as a proxy’s page on the Success status, is INVALID_OUTCOME', async () => {
+describe('a Success status that carries no JSON', () => {
+  const statusFault = {
+    kind: 'fault',
+    source: 'status',
+    status: 200,
+    committed: 'unknown',
+    retryable: false,
+    message: 'The Provider answered 200',
+  };
+
+  test('an HTML body, as a proxy’s page, is the status Fault, offered to inferFault', async () => {
     const page = new Response('<html>OK</html>', {
       headers: { 'content-type': 'text/html', 'x-total': '1' },
     });
+    const received: Happened[] = [];
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => page,
+      inferFault: (happened) => {
+        received.push(happened);
+        return undefined;
+      },
+    });
+
+    const outcome = await orders.getOrder(params);
+
+    expect(outcome).toEqual(statusFault);
+    expect(received).toEqual([{ kind: 'status', status: 200, headers: page.headers }]);
+  });
+
+  test('bytes that are no JSON under a JSON content type are the same status Fault', async () => {
     const garbled = new Response('{"id":', {
       headers: { 'content-type': 'application/json', 'x-total': '1' },
     });
 
-    const outcomes = [
-      await ordersAnswering(() => page).getOrder(params),
-      await ordersAnswering(() => garbled).getOrder(params),
-    ];
+    const outcome = await ordersAnswering(() => garbled).getOrder(params);
 
-    expect(outcomes).toMatchObject([
-      {
-        code: 'INVALID_OUTCOME',
-        committed: 'yes',
-        issues: [{ part: 'success.body', code: 'malformed' }],
-      },
-      {
-        code: 'INVALID_OUTCOME',
-        committed: 'yes',
-        issues: [{ part: 'success.body', code: 'malformed' }],
-      },
-    ]);
+    expect(outcome).toEqual(statusFault);
+  });
+
+  test('an HTML body beside a Success header that fails its schema is still the status Fault', async () => {
+    const page = new Response('<html>OK</html>', {
+      headers: { 'content-type': 'text/html', 'x-total': 'many' },
+    });
+
+    const outcome = await ordersAnswering(() => page).getOrder(params);
+
+    expect(outcome).toEqual(statusFault);
   });
 });
 

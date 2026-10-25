@@ -26,9 +26,12 @@ export async function outcomeOf(
     case 'envelope': {
       const { envelope } = read;
       if ('rejection' in envelope) {
-        return rejectionOf(envelope.rejection, called);
+        return rejectionOf(envelope.rejection, status, called);
       }
-      return withRetryAfter({ kind: 'fault', ...envelope.fault }, headers);
+      return withRetryAfter(
+        { kind: 'fault', ...envelope.fault, source: 'provider', status },
+        headers,
+      );
     }
   }
 }

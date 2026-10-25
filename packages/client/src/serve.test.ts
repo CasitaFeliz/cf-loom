@@ -288,7 +288,14 @@ describe('end to end against serve through node:http and the global fetch', () =
           message: 'The order can no longer be changed',
           body: { lockedAt: '2026-10-18T10:00:00Z' },
         },
-        fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
+        fault: {
+          kind: 'fault',
+          source: 'provider',
+          status: 503,
+          committed: 'no',
+          retryable: true,
+          message: 'Internal error',
+        },
       })),
     );
   });
@@ -328,6 +335,8 @@ describe('end to end against serve through node:http and the global fetch', () =
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'provider',
+      status: 503,
       committed: 'no',
       retryable: true,
       message: 'Internal error',
@@ -349,10 +358,28 @@ describe('end to end against serve through node:http and the global fetch', () =
     ];
 
     expect(outcomes).toMatchObject([
-      { kind: 'fault', code: 'RETIRED', committed: 'no', retryable: false },
-      { kind: 'fault', code: 'NO_SUCH_ENDPOINT', committed: 'no', retryable: false },
-      { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown', retryable: false },
-      { kind: 'fault', code: 'BODY_TOO_LARGE', committed: 'no', retryable: false },
+      { source: 'provider', status: 410, code: 'RETIRED', committed: 'no', retryable: false },
+      {
+        source: 'provider',
+        status: 404,
+        code: 'NO_SUCH_ENDPOINT',
+        committed: 'no',
+        retryable: false,
+      },
+      {
+        source: 'provider',
+        status: 500,
+        code: 'INVALID_OUTCOME',
+        committed: 'unknown',
+        retryable: false,
+      },
+      {
+        source: 'provider',
+        status: 413,
+        code: 'BODY_TOO_LARGE',
+        committed: 'no',
+        retryable: false,
+      },
     ]);
   });
 
@@ -400,6 +427,8 @@ describe('a redirect', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 307,
       committed: 'unknown',
       retryable: false,
       message: 'The Provider answered 307',
@@ -416,6 +445,8 @@ describe('a redirect', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status: 303,
       committed: 'unknown',
       retryable: false,
       message: 'The Provider answered 303',

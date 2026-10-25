@@ -203,6 +203,7 @@ describe('headers given to client()', () => {
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'aborted',
       committed: 'no',
       message: 'The request was aborted',
     });

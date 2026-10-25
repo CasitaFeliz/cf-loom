@@ -181,6 +181,8 @@ describe('a Rejection', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'invalid-outcome',
+      status: 409,
       code: 'INVALID_OUTCOME',
       committed: 'unknown',
       retryable: false,
@@ -275,7 +277,7 @@ describe('Standard Rejections', () => {
 
     expect(outcomes).toMatchObject([
       { kind: 'rejection', known: true, code: 'BAD_REQUEST', body: { issues: [issue] } },
-      { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown' },
+      { kind: 'fault', source: 'invalid-outcome', status: 400, code: 'INVALID_OUTCOME' },
     ]);
   });
 
