@@ -1,5 +1,5 @@
 import type { AnyDependency } from '@cf-loom/client/internal';
-import type { ContractPackage, Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { ContractPackage, Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -21,7 +21,7 @@ export type ListedEndpoint = {
   readonly nodes: TextPartNodes;
   readonly deprecatedAt: string | undefined;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
-  readonly standards: StandardRejections;
+  readonly standards: ProvidedStandardRejections;
 };
 
 /** An Endpoint the Provider exports, matched as `serve` would, and the listed one it is, if any. */

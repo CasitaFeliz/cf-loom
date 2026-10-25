@@ -1,5 +1,5 @@
 import type { ReceivedFault, ReceivedRejection, ReceivedSuccess } from '@cf-loom/client';
-import type { Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
 import { internalError } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
@@ -22,10 +22,10 @@ type ScriptedHeadersAndBody<Target extends Endpoint> = Target['success'] extends
     }
   : { readonly headers: ReceivedSuccess<Target>['headers'] };
 
-type KnownRejection<Target extends Endpoint, Standards extends StandardRejections> = Extract<
-  ReceivedRejection<Target, Standards>,
-  { readonly known: true }
->;
+type KnownRejection<
+  Target extends Endpoint,
+  Standards extends ProvidedStandardRejections,
+> = Extract<ReceivedRejection<Target, Standards>, { readonly known: true }>;
 
 /** What `r.reject` takes for a code the Endpoint answers: the code, and its body when it has one. */
 type KnownRejectionArguments<Known> = Known extends {
@@ -54,7 +54,7 @@ export type ScriptedFault =
  * a Caller reads each Outcome: a Success, a Rejection, a Fault, or what the client infers its Fault
  * from, a network failure or a status.
  */
-export type StepBuilder<Target extends Endpoint, Standards extends StandardRejections> = {
+export type StepBuilder<Target extends Endpoint, Standards extends ProvidedStandardRejections> = {
   success(...success: SuccessArguments<Target>): ScriptedAnswer;
   reject(
     ...rejection:

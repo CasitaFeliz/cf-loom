@@ -1,9 +1,9 @@
-import type { Endpoint, InputOf, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, InputOf, ProvidedStandardRejections } from '@cf-loom/contract';
 import type { ScriptedAnswer } from './answers.ts';
 import type { StepBuilder } from './builder.ts';
 
 /** One answer to one request, built with its builder, `r`, from the parsed Input; it may be async. */
-export type Step<Target extends Endpoint, Standards extends StandardRejections> = (
+export type Step<Target extends Endpoint, Standards extends ProvidedStandardRejections> = (
   builder: StepBuilder<Target, Standards>,
   input: InputOf<Target>,
 ) => ScriptedAnswer | Promise<ScriptedAnswer>;
@@ -12,13 +12,13 @@ export type Step<Target extends Endpoint, Standards extends StandardRejections> 
  * How one Endpoint of a fake answers: each `once` step answers one request, in order, and then
  * the last `otherwise` answers every other.
  */
-export type Script<Target extends Endpoint, Standards extends StandardRejections> = {
+export type Script<Target extends Endpoint, Standards extends ProvidedStandardRejections> = {
   once(step: Step<Target, Standards>): Script<Target, Standards>;
   otherwise(step: Step<Target, Standards>): Script<Target, Standards>;
 };
 
 /** A step as the fake runs it, whatever its Endpoint. */
-export type AnyStep = Step<Endpoint, StandardRejections>;
+export type AnyStep = Step<Endpoint, ProvidedStandardRejections>;
 
 /**
  * A request's turn to take a step: after the requests that arrived before it took theirs, and
@@ -31,7 +31,7 @@ export type Turn = {
 
 /** One Endpoint's script, and the turns its requests take steps in, in the order they arrived. */
 export type Scripted = {
-  readonly script: Script<Endpoint, StandardRejections>;
+  readonly script: Script<Endpoint, ProvidedStandardRejections>;
   readonly turn: () => Turn;
   readonly wasScripted: () => boolean;
 };
@@ -42,7 +42,7 @@ export function scriptedOf(): Scripted {
   let otherwise: AnyStep | undefined;
   let scripted = false;
   let arrived: Promise<void> = Promise.resolve();
-  const script: Script<Endpoint, StandardRejections> = {
+  const script: Script<Endpoint, ProvidedStandardRejections> = {
     once: (step) => {
       scripted = true;
       onces.push(step);

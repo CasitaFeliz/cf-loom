@@ -23,6 +23,28 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type FakeCall, fakeEvent, fakeProvider, type ScriptedAnswer } from './index.ts';
 
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'A key per Caller',
@@ -98,7 +120,12 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: invalidInputBody,
+    },
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   } as const;
@@ -229,7 +256,12 @@ const settledPackage = {
   endpoints: {},
   events: { paymentSettledV1 },
   standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: invalidInputBody,
+    },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },

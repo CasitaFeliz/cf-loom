@@ -15,6 +15,28 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeProvider } from './index.ts';
 
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
+
 /**
  * The Endpoints of a payments Provider, declared with a schema for each Open Enum: as the
  * Provider writes them, or as its Contract Package rebuilds them, with Reader schemas.
@@ -103,7 +125,12 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: invalidInputBody,
+    },
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   } as const;
@@ -235,6 +262,34 @@ describe('fakeProvider: steps', () => {
       code: 'PAYMENT_LOCKED',
       message: 'The payment is locked',
       body,
+    });
+  });
+
+  test('reject on invalid input answers its issues as the Provider’s Reader writes them, an Unknown case as its text', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const issue = {
+      in: 'body' as const,
+      path: ['amount'],
+      code: { unknown: 'too_deep' },
+      message: 'Too deep',
+    };
+    payments.on('getPayment').otherwise((r) => r.reject('INVALID_INPUT', { issues: [issue] }));
+
+    const response = await payments.fetch(at, {});
+    const outcome = await payments.client().getPayment({ params });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      rejection: {
+        code: 'INVALID_INPUT',
+        message: 'Invalid input',
+        body: { issues: [{ ...issue, code: 'too_deep' }] },
+      },
+    });
+    expect(outcome).toMatchObject({
+      known: true,
+      code: 'INVALID_INPUT',
+      body: { issues: [issue] },
     });
   });
 

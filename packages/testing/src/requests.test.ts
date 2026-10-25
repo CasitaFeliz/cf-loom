@@ -7,11 +7,34 @@ import {
   defineGuard,
   type Endpoint,
   type ExportedSnapshot,
+  openEnumReader,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { FakeProviderError, fakeProvider } from './index.ts';
+
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -95,7 +118,12 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = {
-    invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
+    invalidInput: {
+      code: 'BAD_REQUEST',
+      status: 422,
+      message: 'The request is invalid',
+      body: invalidInputBody,
+    },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   } as const;
