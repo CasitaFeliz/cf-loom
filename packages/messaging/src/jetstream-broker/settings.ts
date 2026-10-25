@@ -1,5 +1,6 @@
 import type { BrokerPlan } from '@cf-loom/contract/internal';
-import type { ConsumerConfig, StreamConfig } from '@nats-io/jetstream';
+import type { StreamConfig } from '@nats-io/jetstream';
+import type { DurableSettings } from './durable-shape.ts';
 import { durableConfigOf, streamConfigOf } from './nats-config.ts';
 import {
   durableSettingNames,
@@ -22,7 +23,7 @@ export type PlannedStream = {
 export type PlannedDurable = {
   readonly name: string;
   readonly stream: string;
-  readonly settings: Partial<ConsumerConfig>;
+  readonly settings: DurableSettings;
 };
 
 /** Every stream and durable consumer of a plan with its settings. */

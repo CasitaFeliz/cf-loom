@@ -6,11 +6,12 @@ import { type Applier, applyPlan } from './applying.ts';
 import { drainOnce, jetStreamConnectionOf } from './connection.ts';
 import type { BrokerLimits } from './limits.ts';
 import {
+  checkedStreamOf,
   managerOf,
-  missingSubjectsOf,
   type PrefixedStream,
   planRemedy,
   prefixedStreamOf,
+  type StreamCheck,
 } from './stream-check.ts';
 
 /** What `jetstream()` takes: the Service's own way to open a NATS connection, the prefix of every name it uses on the Broker, and the options of nats.js's JetStream client, if any. */
@@ -58,14 +59,24 @@ async function checkStreamOrDrain(
 ): Promise<void> {
   try {
     const manager = await managerOf(natsConnection, options);
-    const missing = await missingSubjectsOf(manager, stream);
-    if (missing.length > 0) {
-      const subjects = missing.join(', ');
-      throw new Error(`The stream ${stream.name} does not hold ${subjects}: ${planRemedy}`);
+    const refusal = refusalOf(stream, await checkedStreamOf(manager, stream));
+    if (refusal !== undefined) {
+      throw new Error(refusal);
     }
   } catch (error) {
     await drainOnce(natsConnection);
     throw error;
+  }
+}
+
+function refusalOf(stream: PrefixedStream, check: StreamCheck): string | undefined {
+  switch (check.kind) {
+    case 'complete':
+      return undefined;
+    case 'absent':
+      return `The stream ${stream.name} does not exist: ${planRemedy}`;
+    case 'missing-subjects':
+      return `The stream ${stream.name} does not hold ${check.subjects.join(', ')}: ${planRemedy}`;
   }
 }
 
@@ -74,7 +85,9 @@ function checkedPrefixOf(prefix: string | undefined): string | null {
     return null;
   }
   if (!isBrokerPrefix(prefix)) {
-    throw new Error(`The broker prefix "${prefix}" is not kebab-case, such as staging`);
+    throw new Error(
+      `The broker prefix "${prefix}" is not kebab-case, such as staging: leave prefix undefined for none`,
+    );
   }
   return prefix;
 }
