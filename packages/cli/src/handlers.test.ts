@@ -987,7 +987,10 @@ describe('cf-loom generate: stubs', () => {
   });
 });
 
-describe('cf-loom generate: a configured layout', () => {
+/** Each test here runs cf-loom generate, some cf-loom package too, which take seconds on a CI runner with shared cores. */
+const layoutTimeout = 60_000;
+
+describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, () => {
   test('an empty layout writes exactly the files of no layout', () => {
     const plain = aProject(aService());
     const laidOut = aProject(withLayout(aService(), '{}'));

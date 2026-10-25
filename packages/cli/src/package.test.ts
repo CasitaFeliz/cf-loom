@@ -458,7 +458,10 @@ function aSubscriber(more: readonly string[]): string {
   return project;
 }
 
-describe('cf-loom package: the files', () => {
+/** Each test here runs cf-loom package, and tsc with it, which takes seconds on a CI runner with shared cores. */
+const packageTimeout = 60_000;
+
+describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
   test('package writes the Contract Package of the Public and Internal Endpoints and the Internal Events', () => {
     const project = aProject(service);
 
@@ -773,10 +776,7 @@ describe('cf-loom package: the files', () => {
   });
 });
 
-/** Each test here builds Contract Packages with tsc, which takes several seconds on a CI runner with shared cores. */
-const builtPackageTimeout = 60_000;
-
-describe('cf-loom package: the built package', { timeout: builtPackageTimeout }, () => {
+describe('cf-loom package: the built package', { timeout: packageTimeout }, () => {
   test('tsc builds it with only zod and @cf-loom/contract installed', () => {
     const out = builtPackage();
 
@@ -1234,7 +1234,7 @@ describe('cf-loom package: the built package', { timeout: builtPackageTimeout },
   });
 });
 
-describe('cf-loom package: where it writes', () => {
+describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => {
   test('a folder holding other files is refused, a tooling error, and kept as it was', () => {
     const project = aProject({ ...service, [`${defaultOut}/notes.txt`]: 'mine' });
 
