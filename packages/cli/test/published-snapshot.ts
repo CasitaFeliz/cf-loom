@@ -8,17 +8,39 @@ export type Declared = { readonly kind: Kind; readonly name: string };
 export const orders = { kind: 'service', name: 'orders-service' } as const satisfies Declared;
 export const ordersPackage = '@org/contract-orders-service';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
 const standardRejections: Extract<PublishedSnapshot, { kind: 'service' }>['standardRejections'] = {
-  invalidInput: {
+  invalidInput: invalidInputCode,
+  notFound: notFoundCode,
+  notImplemented: notImplementedCode,
+};
+
+const standardCodes = {
+  [invalidInputCode]: {
     origin: 'standard',
-    code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
     body: { type: 'object', fields: {} },
+    removed: false,
   },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
-};
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    body: null,
+    removed: false,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    body: null,
+    removed: false,
+  },
+} as const;
 
 const serviceBody = {
   kind: 'service',
@@ -29,7 +51,7 @@ const serviceBody = {
   events: {},
   commands: {},
   guards: {},
-  codes: {},
+  codes: standardCodes,
   subscriptions: {},
   dependencies: {},
 } as const;
@@ -42,7 +64,7 @@ const definitionsBody = {
   defs: {},
   schemas: {},
   guards: {},
-  codes: {},
+  codes: standardCodes,
 } as const;
 
 /** The Snapshot of a package that declares nothing, as a registry holds it for `version`. */
