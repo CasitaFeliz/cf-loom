@@ -360,12 +360,9 @@ describe('serve: a Fault', () => {
   ])(
     'a Fault built by hand with %s as retryAfter is INVALID_OUTCOME, with no retry-after',
     async (_, built) => {
-      const { http, faults } = serveWith(() => ({
-        kind: 'fault',
-        committed: 'no',
-        message: 'Down',
-        ...built,
-      }));
+      const { http, faults } = serveWith(
+        () => ({ kind: 'fault', committed: 'no', message: 'Down', ...built }) as never,
+      );
 
       const response = await http(getRequest.clone());
 

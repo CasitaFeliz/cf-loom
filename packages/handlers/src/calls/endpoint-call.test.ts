@@ -12,12 +12,14 @@ import {
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Fault,
   fault,
   handle,
   InvalidInputError,
   InvalidOutcomeError,
   type Issue,
   isRejectionOf,
+  type MessageFault,
   type ResolvedOutcome,
   reject,
   success,
@@ -631,14 +633,51 @@ describe('fault() retryAfter', () => {
     );
   });
 
-  test('a Fault built by hand whose retryAfter cannot be sent is an invalid Outcome', async () => {
-    const getOrderHandler = handle(getOrder, () => ({
-      kind: 'fault' as const,
-      committed: 'no' as const,
+  test('the Fault type gives retryAfter to a retryable Fault only', () => {
+    const given = { committed: 'no', retryable: false, retryAfter: 5 } as const;
+    const retryable: boolean = given.retryable;
+    const built: Fault = { kind: 'fault', committed: 'no', retryable, message: 'm' };
+    const plain: MessageFault = fault({ committed: 'no', retryable });
+
+    // @ts-expect-error a spread cannot make a Fault that says when to retry not retryable
+    const spread: Fault = {
+      ...fault({ committed: 'no', retryable: true, retryAfter: 5 }),
       retryable: false,
-      message: 'Down',
+    };
+    // @ts-expect-error a Fault built by hand that is not retryable takes no retryAfter
+    const byHand: Fault = {
+      kind: 'fault',
+      committed: 'no',
+      retryable: false,
+      message: 'm',
       retryAfter: 5,
-    }));
+    };
+    // @ts-expect-error fault() refuses retryAfter on a Fault that is not retryable, given as a value
+    const fromValue = () => fault(given);
+
+    expectTypeOf<Extract<Fault, { retryable: false }>['retryAfter']>().toEqualTypeOf<undefined>();
+    expectTypeOf<Fault['retryAfter']>().toEqualTypeOf<number | undefined>();
+    expect([built.retryable, plain.retryable, spread.retryable, byHand.retryAfter]).toEqual([
+      false,
+      false,
+      false,
+      5,
+    ]);
+    expect(fromValue).toThrow('fault(): retryAfter is given only to a retryable Fault');
+  });
+
+  test('a Fault built by hand whose retryAfter cannot be sent is an invalid Outcome', async () => {
+    const getOrderHandler = handle(
+      getOrder,
+      () =>
+        ({
+          kind: 'fault',
+          committed: 'no',
+          retryable: false,
+          message: 'Down',
+          retryAfter: 5,
+        }) as never,
+    );
 
     const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
 

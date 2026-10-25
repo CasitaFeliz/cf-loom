@@ -1,17 +1,21 @@
 import { type Committed, internalError } from '@cf-loom/contract/internal';
 
-/**
- * A technical failure no Endpoint, Guard or Message declares, as a Handler builds it and a direct
- * call returns it; a retryable one may say, in whole seconds, when to retry.
- */
-export type Fault = {
+/** What every Fault carries: whether the change was committed, its message and its `cause`. */
+type FaultBase = {
   readonly kind: 'fault';
   readonly committed: Committed;
-  readonly retryable: boolean;
   readonly message: string;
   readonly cause?: unknown;
-  readonly retryAfter?: number;
 };
+
+/**
+ * A technical failure no Endpoint, Guard or Message declares, as a Handler builds it and a direct
+ * call returns it; a retryable one may say, in whole seconds, when to retry, and one that is not
+ * takes no `retryAfter`.
+ */
+export type Fault =
+  | (FaultBase & { readonly retryable: true; readonly retryAfter?: number })
+  | (FaultBase & { readonly retryable: false; readonly retryAfter?: never });
 
 /** What every Fault a Handler builds is given: whether the change was committed and whether retrying is worth it. */
 type FaultGiven = {
@@ -24,12 +28,14 @@ type FaultGiven = {
 /** A retryable Fault that says, in whole seconds from 0, when to retry, which `serve` sends as `Retry-After`. */
 export function fault(
   given: FaultGiven & { readonly retryable: true; readonly retryAfter: number },
-): Fault & { readonly retryAfter: number };
+): Extract<Fault, { readonly retryable: true }> & { readonly retryAfter: number };
 /**
  * A Fault the Handler knows better than `Internal error`: whether the change was committed and
  * whether retrying is worth it.
  */
-export function fault(given: FaultGiven): Fault & { readonly retryAfter?: never };
+export function fault(
+  given: FaultGiven & { readonly retryAfter?: never },
+): Fault & { readonly retryAfter?: never };
 export function fault({
   committed,
   retryable,
@@ -43,7 +49,7 @@ export function fault({
   }
   const built: Fault = { kind: 'fault', committed, retryable, message: message ?? internalError };
   const caused = cause === undefined ? built : { ...built, cause };
-  return retryAfter === undefined ? caused : { ...caused, retryAfter };
+  return retryAfter === undefined || !caused.retryable ? caused : { ...caused, retryAfter };
 }
 
 /**
