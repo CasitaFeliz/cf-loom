@@ -67,7 +67,7 @@ src/
 └── contract-package/                      the Contract Package cf-loom package writes; built, never edited
 ```
 
-The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
+The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in an optional `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
 A Definitions Package is laid out the same way under `src/definitions/`: its root `index.ts` exports `definitions` and every declaration Services import, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services list.
 
@@ -75,7 +75,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Declare
 
-`cf-loom init service` creates the root under `src/contract/`, and `cf-loom add-endpoint`, `add-guard`, `add-rejection`, `add-event`, `add-command`, `add-subscription` and `add-dependency` create each declaration (see [Commands](packages/cli/README.md#commands)). What each declaration holds is in the [`@cf-loom/contract` README](packages/contract/README.md); the tools are configured in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
+`cf-loom init service` creates the root under `src/contract/`, and `cf-loom add-endpoint`, `add-guard`, `add-rejection`, `add-event`, `add-command`, `add-subscription` and `add-dependency` create each declaration (see [Commands](packages/cli/README.md#commands)). What each declaration holds is in the [`@cf-loom/contract` README](packages/contract/README.md); a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Generate
 
