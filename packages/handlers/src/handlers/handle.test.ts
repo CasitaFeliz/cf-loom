@@ -188,6 +188,41 @@ describe('handle', () => {
     expect(given.map(({ lastAttempt }) => lastAttempt)).toEqual([false, true]);
   });
 
+  test('a direct call without a signal gives the Handler a signal that is not aborted', async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, meta);
+
+    expect(given[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(given[0]?.signal.aborted).toBe(false);
+  });
+
+  test("a direct call's signal reaches the Handler as given", async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+    const signal = AbortSignal.abort(new Error('shutting down'));
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, { ...meta, signal });
+
+    expect(given[0]?.signal).toBe(signal);
+  });
+
+  test("MessageMeta's signal is an AbortSignal, and a direct call takes one or leaves it out", () => {
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
+
+    expectTypeOf<MessageMeta['signal']>().toEqualTypeOf<AbortSignal>();
+    expectTypeOf(notifyOnPaidHandler).toBeCallableWith({ orderId: ORDER_ID, status: 'paid' }, meta);
+    expectTypeOf(notifyOnPaidHandler).toBeCallableWith(
+      { orderId: ORDER_ID, status: 'paid' },
+      { ...meta, signal: new AbortController().signal },
+    );
+  });
+
   test("a Message Handler's direct call answers a Fault or nothing", () => {
     const chargeCardHandler = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
 

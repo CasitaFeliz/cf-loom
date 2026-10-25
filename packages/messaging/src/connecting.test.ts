@@ -7,12 +7,15 @@ import {
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
   type BrokerConsumer,
   type BrokerService,
+  type BrokerTrouble,
+  CloseAbortedError,
+  type ConsumeRun,
   type Delivery,
   MessageNotSentError,
   type Messaging,
@@ -77,13 +80,17 @@ const body = { orderId: ORDER_ID };
 
 type Opened = Messaging<typeof contract>;
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 /** A broker that records what messaging asks of it, built on the public `Broker` type. */
 function aBroker(failing: { readonly connect?: Error; readonly consumes?: number } = {}) {
   const recorded = {
     connectedWith: [] as BrokerService[],
     published: [] as OutgoingMessage[],
     consumers: [] as BrokerConsumer[],
-    closings: [] as AbortSignal[],
+    runs: [] as ConsumeRun[],
     consumes: 0,
     closes: 0,
   };
@@ -98,9 +105,9 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
           recorded.published.push(message);
           return { duplicate: false };
         },
-        consume: async (consumers, closing) => {
+        consume: async (consumers, run) => {
           recorded.consumes += 1;
-          recorded.closings.push(closing);
+          recorded.runs.push(run);
           if (recorded.consumes <= (failing.consumes ?? 0)) {
             throw new Error('no such durable consumer');
           }
@@ -112,12 +119,16 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
       };
     },
   };
-  const deliver = (subject: string, delivered: unknown): Promise<Settlement> => {
+  const deliver = (
+    subject: string,
+    delivered: unknown,
+    delivery: Partial<Delivery> = {},
+  ): Promise<Settlement> => {
     const consumer = recorded.consumers.find((candidate) => candidate.subject === subject);
     if (consumer === undefined) {
       throw new Error(`Nothing consumes ${subject}`);
     }
-    return consumer.receive(aDelivery(delivered));
+    return consumer.receive({ ...aDelivery(delivered), ...delivery });
   };
   return { broker, recorded, deliver };
 }
@@ -125,7 +136,7 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
 function aDelivery(delivered: unknown): Delivery {
   const bytes = new TextEncoder().encode(JSON.stringify(delivered));
   const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1, lastAttempt: false };
-  return { ...meta, headers: {}, body: bytes };
+  return { ...meta, waitMs: undefined, headers: {}, body: bytes };
 }
 
 /** A promise a test settles itself, to hold a Handler while it runs. */
@@ -424,10 +435,10 @@ describe('messaging() and close', () => {
     });
     const { recorded, deliver, close } = await consumingWith(notifying);
     const delivered = deliver('orders-service.event.OrderCreated.v1', body);
-    const abortedBeforeClose = recorded.closings.map((closing) => closing.aborted);
+    const abortedBeforeClose = recorded.runs.map(({ closing }) => closing.aborted);
 
     const closing = close();
-    const abortedWhileRunning = recorded.closings.map((signal) => signal.aborted);
+    const abortedWhileRunning = recorded.runs.map((run) => run.closing.aborted);
     gate.open();
     await Promise.all([delivered, closing]);
 
@@ -598,5 +609,348 @@ describe('messaging() and close', () => {
     expect(recorded.published).toHaveLength(2);
     expect(recorded.consumers).toHaveLength(2);
     expect(recorded.closes).toBe(1);
+  });
+});
+
+/** A messaging consuming with the hooks given, the broker's records, and the consumer of `notifyOnCreated` its adapter reports on. */
+async function consumingReported(options: Parameters<typeof messaging>[2] = {}) {
+  const recording = aBroker();
+  const opened = await messaging(contract, recording.broker, options);
+  await opened.consume(handlers);
+  const notifying = recording.recorded.consumers.find(
+    (consumer) => consumer.subject === 'orders-service.event.OrderCreated.v1',
+  ) as BrokerConsumer;
+  const troubled = (recording.recorded.runs[0] as ConsumeRun).troubled;
+  return { ...recording, ...opened, notifying, troubled };
+}
+
+describe('onBrokerTrouble', () => {
+  test('a consumer the adapter reports failing reaches onBrokerTrouble with its Element, identity, durable consumer, stream and cause', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    const cause = new Error('NATS answered a pull with 503');
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause });
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(1));
+    expect(troubles).toEqual([
+      {
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
+        durable: 'orders-service_notify-on-created',
+        stream: 'orders-service',
+        kind: 'pull-failed',
+        cause,
+      },
+    ]);
+  });
+
+  test('a recovery reaches onBrokerTrouble as recovered', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    troubled({ consumer: notifying, kind: 'recovered' });
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    expect(troubles[1]).toEqual({
+      element: notifyOnCreated,
+      identity: 'notifyOnCreated',
+      durable: 'orders-service_notify-on-created',
+      stream: 'orders-service',
+      kind: 'recovered',
+    });
+  });
+
+  test('without onBrokerTrouble, a failing consumer is one console line with its cause, and a recovery another', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { notifying, troubled, close } = await consumingReported();
+    const cause = new Error('NATS answered a pull with 503');
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause });
+    troubled({ consumer: notifying, kind: 'recovered' });
+    await close();
+
+    expect(logged.mock.calls).toEqual([
+      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing', cause],
+      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are answered again'],
+    ]);
+  });
+
+  test('an onBrokerTrouble that rejects is logged with its onBrokerTrouble threw line, and the next report still reaches it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = new Error('the alerting is down');
+    const kinds: string[] = [];
+    const { notifying, troubled, close } = await consumingReported({
+      onBrokerTrouble: async ({ kind }) => {
+        kinds.push(kind);
+        throw error;
+      },
+    });
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    troubled({ consumer: notifying, kind: 'recovered' });
+    await close();
+
+    expect(kinds).toEqual(['pull-failed', 'recovered']);
+    expect(logged).toHaveBeenCalledWith(
+      'notifyOnCreated orders-service_notify-on-created orders-service: onBrokerTrouble threw',
+      error,
+    );
+  });
+
+  test('close waits for an onBrokerTrouble in flight', async () => {
+    const gate = aGate();
+    const { notifying, troubled, close, recorded } = await consumingReported({
+      onBrokerTrouble: () => gate.opened,
+    });
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+
+    const closing = close();
+    await Promise.resolve();
+    const closesWhileReporting = recorded.closes;
+    gate.open();
+    await closing;
+
+    expect(closesWhileReporting).toBe(0);
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a report the adapter makes once close started never reaches onBrokerTrouble', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled, close } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+
+    const closing = close();
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    await closing;
+    troubled({ consumer: notifying, kind: 'recovered' });
+
+    expect(troubles).toEqual([]);
+  });
+
+  test('troubled given a consumer the core did not build throws, naming no adapter', async () => {
+    const { troubled } = await consumingReported({ onBrokerTrouble: () => undefined });
+    const stranger: BrokerConsumer = {
+      durable: 'orders-service_notify-on-created',
+      stream: 'orders-service',
+      subject: 'orders-service.event.OrderCreated.v1',
+      receive: async () => 'acked',
+    };
+
+    const reporting = () => troubled({ consumer: stranger, kind: 'recovered' });
+
+    expect(reporting).toThrow(
+      new Error('a BrokerConsumer the core did not build was reported to it'),
+    );
+  });
+});
+
+type ListenerSpy = { readonly mock: { readonly calls: unknown[][]; readonly contexts: unknown[] } };
+
+/** The most abort listeners any AbortSignal still holds, from the calls the spies on `addEventListener` and `removeEventListener` saw. */
+function abortListenersLeft(added: ListenerSpy, removed: ListenerSpy): number {
+  const listening = new Map<AbortSignal, number>();
+  for (const [spy, step] of [
+    [added, 1],
+    [removed, -1],
+  ] as const) {
+    spy.mock.calls.forEach(([type], call) => {
+      const target = spy.mock.contexts[call];
+      if (type === 'abort' && target instanceof AbortSignal) {
+        listening.set(target, (listening.get(target) ?? 0) + step);
+      }
+    });
+  }
+  return Math.max(0, ...listening.values());
+}
+
+describe('close and a Handler’s wait', () => {
+  const created = 'orders-service.event.OrderCreated.v1';
+
+  /** A Handler of `notifyOnCreated` that never answers. */
+  const neverAnswering = handle(
+    readers.subscriptions.notifyOnCreated,
+    () => new Promise(() => undefined),
+  );
+
+  test('close does not wait for a Handler past its wait', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body, { waitMs: 20 });
+
+    await close();
+
+    await expect(delivered).resolves.toBe('pending');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('close({ signal }) with a Handler that never settles hands its Message back, closes the connection and rejects with CloseAbortedError naming it', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+    const stopping = new AbortController();
+    const reason = new Error('the grace period is over');
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort(reason);
+
+    const error = await closing.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CloseAbortedError);
+    expect(error).toMatchObject({
+      name: 'CloseAbortedError',
+      message: `close stopped waiting and handed back 1 Message: notifyOnCreated ${created} m-1 f-1`,
+      handedBack: [
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
+      ],
+      cause: reason,
+    });
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('close({ signal }) with two Handlers that never settle hands back and names both', async () => {
+    const { deliver, close } = await consumingWith(neverAnswering);
+    const first = deliver(created, body);
+    const second = deliver(created, body, { messageId: 'm-2', factId: 'f-2' });
+
+    const error = await close({ signal: AbortSignal.abort() }).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      handedBack: [
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-2', factId: 'f-2' },
+      ],
+    });
+    expect(await Promise.all([first, second])).toEqual(['handed-back', 'handed-back']);
+  });
+
+  test('close({ signal }) names a delivery as handed back exactly when it settled handed-back, however close to its answer the signal aborts', async () => {
+    const rows: string[] = [];
+    for (let ticks = 0; ticks < 25; ticks += 1) {
+      const gate = aGate();
+      const answering = handle(readers.subscriptions.notifyOnCreated, () =>
+        gate.opened.then(() => undefined),
+      );
+      const { deliver, close } = await consumingWith(answering);
+      const delivered = deliver(created, body);
+      await Promise.resolve();
+      const stopping = new AbortController();
+      const closing = close({ signal: stopping.signal });
+      gate.open();
+      for (let tick = 0; tick < ticks; tick += 1) {
+        await Promise.resolve();
+      }
+      stopping.abort();
+      const named = await closing.then(
+        () => 0,
+        (e: unknown) => (e as CloseAbortedError).handedBack.length,
+      );
+      const settlement = await delivered;
+      rows.push(`${settlement}:${named}`);
+    }
+
+    const misnamed = rows.filter((row) => row === 'acked:1' || row === 'handed-back:0');
+    expect(misnamed).toEqual([]);
+  });
+
+  test('close({ signal }) with nothing running resolves as close does', async () => {
+    const { recorded, close } = await consumingWith(neverAnswering);
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+
+    await expect(closing).resolves.toBeUndefined();
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a signal already aborted makes close hand back at once', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+
+    const closing = close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a second close call’s signal bounds the closing the first started', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+    const stopping = new AbortController();
+    const first = close();
+
+    const second = close({ signal: stopping.signal });
+    stopping.abort();
+
+    expect(second).toBe(first);
+    await expect(first).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('deliveries that settled and a close that handed back leave no abort listener behind, on closing, the hand-back or close’s signal', async () => {
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    const removed = vi.spyOn(EventTarget.prototype, 'removeEventListener');
+    let calls = 0;
+    const answeringThrice = handle(readers.subscriptions.notifyOnCreated, () => {
+      calls += 1;
+      return calls <= 3 ? undefined : new Promise<undefined>(() => undefined);
+    });
+    const { deliver, close } = await consumingWith(answeringThrice);
+    for (const _call of [1, 2, 3]) {
+      await deliver(created, body, { waitMs: 30_000 });
+    }
+    const held = deliver(created, body, { waitMs: 30_000 });
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+    await closing.catch(() => undefined);
+    await held;
+
+    expect(abortListenersLeft(added, removed)).toBe(0);
+  });
+
+  test('a publish in flight when close’s signal aborts is not waited for', async () => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ publish: gate.opened });
+    const { publisher, close } = await messaging(contract, broker);
+    const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-15' });
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+    await closing;
+    const loggedAtClose = [...log];
+    gate.open();
+    await publishing;
+
+    expect(loggedAtClose).toEqual(['publish', 'close', 'closed']);
+  });
+
+  test('an onServiceFault in flight when close’s signal aborts is not waited for, and its delivery is handed back', async () => {
+    const throwing = handle(readers.subscriptions.notifyOnCreated, () => {
+      throw new Error('the database is down');
+    });
+    const recording = aBroker();
+    const { consume, close } = await messaging(contract, recording.broker, {
+      onServiceFault: () => new Promise(() => undefined),
+    });
+    await consume({ ...handlers, subscriptions: { notifyOnCreated: throwing } });
+    const delivered = recording.deliver(created, body);
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recording.recorded.closes).toBe(1);
   });
 });

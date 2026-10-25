@@ -180,12 +180,10 @@ function guardCallOf(written: Written<Guard>) {
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (
-    body: unknown,
-    { messageId, factId, deliveryCount, lastAttempt = false, headers = {} }: DirectMeta,
-    call?: MessageCall<object>,
-  ) => {
-    const meta = { messageId, factId, deliveryCount, lastAttempt, headers };
+  return async (body: unknown, given: DirectMeta, call?: MessageCall<object>) => {
+    const { messageId, factId, deliveryCount, lastAttempt = false, headers = {} } = given;
+    const signal = given.signal ?? new AbortController().signal;
+    const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
     const run = await messageRunOf(
       written,
       { body, meta, resources: call?.resources },

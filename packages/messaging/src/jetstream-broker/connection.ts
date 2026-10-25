@@ -20,7 +20,7 @@ export function jetStreamConnectionOf(
       const ack = await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
       return { duplicate: ack.duplicate };
     },
-    consume: async (consumers, closing) => {
+    consume: async (consumers, { closing, troubled }) => {
       const manager = await managerOf(natsConnection, options);
       const inboxPrefix = inboxPrefixOf(natsConnection);
       const search = { manager, prefix, apiPrefix: client.apiPrefix, inboxPrefix };
@@ -30,7 +30,7 @@ export function jetStreamConnectionOf(
       }
       const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
       for (const durable of found.durables) {
-        void pullFrom(durable, natsConnection, stopping);
+        void pullFrom(durable, natsConnection, { stopping, troubled });
       }
     },
     close: () => drainOnce(natsConnection),

@@ -4,6 +4,8 @@ export type {
   BrokerConnection,
   BrokerConsumer,
   BrokerService,
+  ConsumeRun,
+  ConsumerTrouble,
   Delivery,
   OutgoingMessage,
   Settlement,

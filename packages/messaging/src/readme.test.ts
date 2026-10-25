@@ -153,6 +153,7 @@ describe('the messaging README', () => {
     const settlement = await consumer?.receive({
       ...meta,
       lastAttempt: false,
+      waitMs: undefined,
       body: new TextEncoder().encode(JSON.stringify(body)),
     });
     await running.close();
