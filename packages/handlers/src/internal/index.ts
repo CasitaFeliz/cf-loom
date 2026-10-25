@@ -14,6 +14,7 @@ export {
   failureLineOf,
   faultLineOf,
   faultLogOf,
+  firstAttempt,
   hookFailureOf,
   logOf,
   notRunFaultOf,

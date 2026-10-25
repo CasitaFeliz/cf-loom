@@ -23,15 +23,36 @@ type KnownCodeOf<D extends AnyDependency, Name extends ListedName<D>> = Received
   Name
 >['code'];
 
-/** What `r.reject` takes after a code: its body when the code declares one. */
-type RejectionBodyArguments<D extends AnyDependency, Name extends ListedName<D>, Code> =
-  Extract<ReceivedRejection<D, Name>, { readonly code: Code }> extends {
-    readonly body: infer Body;
-  }
-    ? undefined extends Body
-      ? [body?: Body]
-      : [body: Body]
-    : [];
+/** Marks a code that declares no body, apart from any body type. */
+declare const noBody: unique symbol;
+
+type NoBody = typeof noBody;
+
+/** The body each code of `Code` declares, or `NoBody` for one that declares none. */
+type DeclaredBodyOf<
+  D extends AnyDependency,
+  Name extends ListedName<D>,
+  Code,
+> = Code extends unknown
+  ? Extract<ReceivedRejection<D, Name>, { readonly code: Code }> extends {
+      readonly body: infer Body;
+    }
+    ? Body
+    : NoBody
+  : never;
+
+/** What `r.reject` takes after a code: its body when the code, or any code it may be, declares one. */
+type RejectionBodyArguments<
+  D extends AnyDependency,
+  Name extends ListedName<D>,
+  Code,
+> = BodyArgumentsOf<Exclude<DeclaredBodyOf<D, Name, Code>, NoBody>>;
+
+type BodyArgumentsOf<Body> = [Body] extends [never]
+  ? []
+  : undefined extends Body
+    ? [body?: Body]
+    : [body: Body];
 
 /** What `r.unknownRejection` takes beside its code: the message its Envelope carries, and a body, none unless given. */
 type UnknownRejectionOptions = { readonly message?: string; readonly body?: unknown };
@@ -70,7 +91,7 @@ export const stepBuilder = {
   success: (success?: unknown) => scriptedAnswerOf({ kind: 'success', success }),
   reject: (code: string, body?: unknown) => scriptedAnswerOf({ kind: 'rejection', code, body }),
   unknownRejection: (code: string, options: UnknownRejectionOptions = {}) =>
-    scriptedAnswerOf({ kind: 'unknown-rejection', code, ...options }),
+    scriptedAnswerOf({ ...options, kind: 'unknown-rejection', code }),
   fault: (fault: ScriptedFault) => {
     if ('code' in fault) {
       return scriptedAnswerOf({ kind: 'reserved', code: fault.code });
@@ -83,6 +104,3 @@ export const stepBuilder = {
   status: (status: number, headers: Readonly<Record<string, string>> = {}) =>
     scriptedAnswerOf({ kind: 'status', status, headers }),
 };
-
-/** The builder as the fake hands it to any step, whatever its Endpoint. */
-export type AnyStepBuilder = typeof stepBuilder;

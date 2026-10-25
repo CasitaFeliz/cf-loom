@@ -65,6 +65,10 @@ export function declaredRejectionResponseOf(
   listed: ListedEndpoint,
 ): Response {
   const reader = rejectionBodyReaderOf(declared.rejection, listed.standards);
+  if (reader === undefined && declared.body !== undefined) {
+    const what = `the scripted ${declared.code} declares no body`;
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
   const body = writtenOf('body', reader, declared.body);
   if (body.issues.length > 0) {
     const what = `the scripted ${declared.code} body breaks its reader`;

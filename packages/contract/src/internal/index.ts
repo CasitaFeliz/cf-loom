@@ -244,6 +244,7 @@ export {
   commandsOf,
   contextProvidersOf,
   declarationsListedBy,
+  declaredByCodeOf,
   demandParts,
   endpointsOf,
   eventServiceOf,

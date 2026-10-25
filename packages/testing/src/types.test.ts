@@ -191,6 +191,19 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
+  test('reject given a code that may be one requiring a body requires the body', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const code = Math.random() > 0.5 ? ('NO_PAYMENT' as const) : ('PAYMENT_LOCKED' as const);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error PAYMENT_LOCKED declares a body, so a code that may be it takes one
+      .once((r) => r.reject(code))
+      .otherwise((r) => r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
   test('reject takes no body for a code that declares none', () => {
     const payments = fakeProvider(paymentsDependency);
 

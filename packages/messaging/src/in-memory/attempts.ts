@@ -6,7 +6,7 @@ import {
   messageIdentityOf,
 } from '@cf-loom/contract/internal';
 import { InvalidInputError } from '@cf-loom/handlers';
-import { defaultedMetaOf, writtenMessageBody } from '@cf-loom/handlers/internal';
+import { defaultedMetaOf, firstAttempt, writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
 import { consumerDetailsOf } from '../consuming/index.ts';
 import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
@@ -22,7 +22,7 @@ export function firstDeliveryOf({
   headers,
   body,
 }: Omit<Delivery, 'deliveryCount' | 'lastAttempt' | 'waitMs'>): Delivery {
-  const first = { deliveryCount: 1, lastAttempt: false, waitMs: undefined };
+  const first = { ...firstAttempt, waitMs: undefined };
   return { messageId, factId, ...first, headers, body };
 }
 

@@ -30,7 +30,9 @@ const lostCodes: ReadonlySet<unknown> = new Set([
 ]);
 
 /** What `fetch` throws for a refused connection (`ECONNREFUSED`) or one lost after sending (`ECONNRESET`), by a code the client infers that Fault from. */
-export function networkFailureOf(kind: 'no-connection' | 'connection-lost'): TypeError {
+export function networkFailureOf(
+  kind: Extract<ThrownKind, 'no-connection' | 'connection-lost'>,
+): TypeError {
   const code = kind === 'no-connection' ? refusedCode : resetCode;
   return new TypeError('fetch failed', { cause: { code } });
 }

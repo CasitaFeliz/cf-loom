@@ -1,5 +1,5 @@
 export type { DirectMeta } from './direct-meta.ts';
-export { defaultedMetaOf } from './direct-meta.ts';
+export { defaultedMetaOf, firstAttempt } from './direct-meta.ts';
 export type { HandledElement, MessageElement } from './elements.ts';
 export { isMessageElement } from './elements.ts';
 export {

@@ -359,6 +359,52 @@ describe('fakeProvider: steps', () => {
     );
   });
 
+  test('unknownRejection of a code an exported Endpoint the Dependency does not list declares answers it as declared', async () => {
+    const dependency = defineDependency({
+      provider: paymentsDependency.provider,
+      endpoints: [readers.capturePayment],
+    });
+    const payments = fakeProvider(dependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: 'fraud' };
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body }));
+
+    const response = await payments.fetch(
+      new Request(`${at}/capture`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"amount":1}',
+      }),
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  test('unknownRejection of a declared code with no body, given a body, is a mistake', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('NO_PAYMENT', { body: { x: 1 } }));
+
+    const calling = capture(payments, '{"amount":1}');
+
+    await expect(calling).rejects.toThrow(
+      'payments-service: capturePayment: the scripted NO_PAYMENT declares no body',
+    );
+  });
+
+  test('unknownRejection options cannot replace the kind or the code it scripts', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { kind: 'success', code: 'NO_PAYMENT' } as never;
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED', options));
+
+    const response = await payments.fetch(new Request(at));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED' },
+    });
+  });
+
   test('unknownRejection of the Provider’s not-found code, on an Endpoint that does not list it, answers 404 with its message and no body', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('capturePayment').otherwise((r) => r.unknownRejection('NO_PAYMENT'));

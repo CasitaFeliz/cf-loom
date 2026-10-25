@@ -1,9 +1,9 @@
 import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/internal';
 import type { InputOf } from '@cf-loom/contract';
 import type { ScriptedAnswer } from './answers.ts';
-import type { AnyStepBuilder, StepBuilder } from './builder.ts';
+import type { StepBuilder } from './builder.ts';
 
-/** One answer to one request of a listed Endpoint, built with its `r` from the parsed Input; it may be async. */
+/** One answer to one request of a listed Endpoint, built with its builder from the parsed Input; it may be async. */
 export type Step<D extends AnyDependency, Name extends ListedName<D>> = (
   builder: StepBuilder<D, Name>,
   input: InputOf<ListedEndpoint<D, Name>>,
@@ -19,16 +19,10 @@ export type Script<D extends AnyDependency, Name extends ListedName<D>> = {
 };
 
 /** A step as the fake runs it, whatever its Endpoint. */
-export type AnyStep = (
-  builder: AnyStepBuilder,
-  input: Readonly<Record<string, unknown>>,
-) => ScriptedAnswer | Promise<ScriptedAnswer>;
+export type AnyStep = Step<AnyDependency, ListedName<AnyDependency>>;
 
 /** A script as the fake keeps it, whatever its Endpoint; `on(name)` types it. */
-export type AnyScript = {
-  once(step: AnyStep): AnyScript;
-  otherwise(step: AnyStep): AnyScript;
-};
+export type AnyScript = Script<AnyDependency, ListedName<AnyDependency>>;
 
 /**
  * A request's turn to take a step: after the requests that arrived before it took theirs, and

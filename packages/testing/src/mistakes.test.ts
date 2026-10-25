@@ -128,7 +128,7 @@ describe('fakeProvider: a test’s mistakes', () => {
     );
   });
 
-  test('a Success that breaks its readers lists each Issue on its own line as handlers writes it, never the value', async () => {
+  test('a Success that breaks its readers lists each Issue on its own line as the contract writes it, never the value', async () => {
     const payments = fakeProvider(paymentsDependency);
     const secret = 'secret-id-12345';
     payments
@@ -252,6 +252,22 @@ describe('fakeProvider: a test’s mistakes', () => {
 
     expect(error).toBeInstanceOf(FakeProviderError);
     expect(firstLineOf(error)).toMatch(/^payments-service: getPayment: the scripted /);
+  });
+
+  test('a body given for a code that declares none is a mistake, never dropped', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    // @ts-expect-error NOT_FOUND declares no body
+    payments.on('getPayment').otherwise((r) => r.reject('NOT_FOUND', { x: 1 }));
+
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FakeProviderError);
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: the scripted NOT_FOUND declares no body',
+    );
   });
 
   test('what fails while a scripted answer is sent is kept as the mistake’s cause', async () => {

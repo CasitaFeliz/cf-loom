@@ -398,6 +398,20 @@ describe('fakeProvider: requests', () => {
     expect(taken.getPayment).toBe(0);
   });
 
+  test('unknownRejection of the Provider’s not-found code answers it as declared, though no exported Endpoint lists it', async () => {
+    const fake = fakeProvider(paymentsDependency);
+    fake.on('getPayment').otherwise((r) => r.unknownRejection('NOT_FOUND'));
+
+    const response = await fake.fetch(
+      new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NOT_FOUND', message: 'Not found' },
+    });
+  });
+
   test('calls and invalidCalls are frozen copies', async () => {
     const { fake } = countingFake();
     await fake.fetch(new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }));

@@ -2,6 +2,7 @@ export type { AnswerableRejection } from './answerable.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,
+  declaredByCodeOf,
   isSameRejection,
   resolutionOf,
 } from './answerable.ts';

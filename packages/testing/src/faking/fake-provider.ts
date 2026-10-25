@@ -51,7 +51,7 @@ export function fakeProvider<const D extends AnyDependency>(
   const fake: FakeProvider<D> = {
     fetch,
     client: (clientOptions) => client(dependency, { ...clientOptions, baseUrl: base, fetch }),
-    on: (name) => faking.scriptedByNameOf(name).script as unknown as Script<D, typeof name>,
+    on: (name) => faking.scriptedByNameOf(name).script as Script<D, typeof name>,
     calls: (name) =>
       faking.calls.callsOf(name) as readonly InputOf<ListedEndpoint<D, typeof name>>[],
     invalidCalls: (name) => faking.calls.invalidCallsOf(name),

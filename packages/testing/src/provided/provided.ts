@@ -1,14 +1,10 @@
 import type { AnyDependency } from '@cf-loom/client/internal';
-import {
-  type ContractPackage,
-  type Endpoint,
-  notFound,
-  type ProvidedStandardRejections,
-} from '@cf-loom/contract';
+import type { ContractPackage, Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
   checkExportedFormat,
+  declaredByCodeOf,
   type EndpointSnapshot,
   exportedEntryOf,
   type Matchable,
@@ -51,7 +47,8 @@ export type Provided = {
 export function providedOf(dependency: AnyDependency, base: URL): Provided {
   const { provider } = dependency;
   checkExportedFormat(provider);
-  const declaredByCode = declaredByCodeOf(provider);
+  const endpoints = Object.values(provider.endpoints);
+  const declaredByCode = declaredByCodeOf(endpoints, provider.standardRejections);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
   for (const endpoint of dependency.endpoints ?? []) {
     const { name } = endpoint;
@@ -74,19 +71,6 @@ type Listing = {
   readonly endpoint: Endpoint;
   readonly entry: EndpointSnapshot;
 };
-
-/**
- * Every code the Provider's Contract Package declares, by the code it resolves to: what each
- * exported Endpoint answers, its Guards' included, and the Provider's not-found code.
- */
-function declaredByCodeOf(provider: ContractPackage): ReadonlyMap<string, AnswerableRejection> {
-  const standards = provider.standardRejections;
-  const declared: [string, AnswerableRejection][] = [[standards.notFound.code, notFound]];
-  for (const endpoint of Object.values(provider.endpoints)) {
-    declared.push(...answerableByCodeOf(endpoint, standards));
-  }
-  return new Map(declared);
-}
 
 function listedEndpointOf(
   provider: ContractPackage,
