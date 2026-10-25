@@ -133,6 +133,44 @@ function captureInit(body: string, contentType = 'application/json'): RequestIni
   return { method: 'POST', headers: { 'content-type': contentType }, body };
 }
 
+const tagPayment = defineEndpoint({
+  name: 'tagPayment',
+  method: 'POST',
+  path: '/payments/:paymentId/tags',
+  visibility: 'internal',
+  description: 'Tags a payment',
+  input: {
+    params: z.object({ paymentId: z.string() }),
+    query: z.object({ expand: z.array(z.string()) }),
+    headers: z.object({ 'x-trace': z.string() }),
+    body: z.object({ labels: z.array(z.string()), detail: z.object({ note: z.string() }) }),
+  },
+  success: { status: 204 },
+});
+
+const taggingDependency = defineDependency({
+  provider: contractPackageOf({ tagPayment }),
+  endpoints: [tagPayment],
+});
+
+/** The Input of a tagPayment call, as a test that wrote to it would see it. */
+type Tagged = {
+  params: { paymentId: string };
+  query: { expand: string[] };
+  headers: { 'x-trace': string };
+  body: { labels: string[]; detail: { note: string } };
+};
+
+/** A fake of tagPayment that took one request, and the call it recorded. */
+async function taggedOnce() {
+  const fake = fakeProvider(taggingDependency);
+  fake.on('tagPayment').otherwise((builder) => builder.success());
+  const init = captureInit('{"labels":["a"],"detail":{"note":"n"}}');
+  const headers = { ...init.headers, 'x-trace': 't-1' };
+  await fake.fetch(new Request(`${at}/payments/pay-1/tags?expand=x`, { ...init, headers }));
+  return fake.calls('tagPayment')[0] as unknown as Tagged;
+}
+
 describe('fakeProvider: requests', () => {
   test('a param that breaks its schema answers the invalid-input Rejection, takes no step and is recorded', async () => {
     const { fake, taken } = countingFake();
@@ -205,6 +243,21 @@ describe('fakeProvider: requests', () => {
 
     expect(inputs).toEqual([{ params: { paymentId: 'pay-1' }, body: { amount: 5 } }]);
     expect(fake.calls('capturePayment')).toEqual([inputs[0]]);
+  });
+
+  test('a step that writes to its Input leaves the recorded call as received', async () => {
+    const fake = fakeProvider(paymentsDependency);
+    fake.on('capturePayment').otherwise((builder, input) => {
+      input.params.paymentId = 'rewritten';
+      input.body.amount = 999;
+      return builder.success({ id: input.params.paymentId, amount: input.body.amount });
+    });
+
+    await fake.fetch(new Request(`${at}/payments/pay-1/capture`, captureInit('{"amount":5}')));
+
+    expect(fake.calls('capturePayment')).toEqual([
+      { params: { paymentId: 'pay-1' }, body: { amount: 5 } },
+    ]);
   });
 
   test('text parts are converted by their nodes, a repeated query key as a list', async () => {
@@ -410,6 +463,26 @@ describe('fakeProvider: requests', () => {
     expect(await response.json()).toEqual({
       rejection: { code: 'NOT_FOUND', message: 'Not found' },
     });
+  });
+
+  test.each([
+    ['a param', (call: Tagged) => Object.assign(call.params, { paymentId: 'x' })],
+    ['a query list that grows', (call: Tagged) => call.query.expand.push('y')],
+    ['a query list item', (call: Tagged) => Object.assign(call.query.expand, ['y'])],
+    ['a header', (call: Tagged) => Object.assign(call.headers, { 'x-trace': 'x' })],
+    ['a body list', (call: Tagged) => Object.assign(call.body.labels, ['y'])],
+    [
+      'a nested object of the body',
+      (call: Tagged) => Object.assign(call.body.detail, { note: 'y' }),
+    ],
+    ['the body', (call: Tagged) => Object.assign(call.body, { detail: {} })],
+    ['the Input', (call: Tagged) => Object.assign(call, { params: {} })],
+  ])('a write to %s of a recorded call throws', async (_part, write) => {
+    const call = await taggedOnce();
+
+    const writing = () => write(call);
+
+    expect(writing).toThrow(TypeError);
   });
 
   test('calls and invalidCalls are frozen copies', async () => {

@@ -1,6 +1,7 @@
 import { FakeProviderError, fakeProvider } from '@cf-loom/testing';
 import { contract as orders } from '@org/contract-orders-service';
 import { describe, expect, test } from 'vitest';
+import createInvoiceHandler from '../src/billing/create-invoice.handler.ts';
 import { invoiceFor } from '../src/billing/invoice-for.ts';
 import { ordersDependency } from '../src/contract/dependencies/orders-service.dependency.ts';
 
@@ -202,6 +203,23 @@ describe('a client of the faked orders-service', () => {
     const invoicing = invoiceFor(client, ORDER_ID);
 
     await expect(invoicing).rejects.toBeInstanceOf(FakeProviderError);
+  });
+});
+
+describe('createInvoice called directly over the faked orders-service', () => {
+  test('a mistake the Handler answers as a Fault is still reported by verify()', async () => {
+    const { fake, client } = fakeOrders();
+
+    const outcome = await createInvoiceHandler(
+      { body: { orderId: ORDER_ID } },
+      {},
+      { resources: { orders: client } },
+    );
+
+    expect(outcome).toMatchObject({ kind: 'fault', cause: expect.any(FakeProviderError) });
+    expect(() => fake.verify()).toThrow(
+      "orders-service: getOrder: it was never scripted: on('getOrder') gives it steps",
+    );
   });
 });
 

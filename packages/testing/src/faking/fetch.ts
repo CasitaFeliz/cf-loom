@@ -8,7 +8,7 @@ import {
   withDeprecation,
 } from '@cf-loom/contract/internal';
 import { responseOf } from '../answering/index.ts';
-import { mistakeOf } from '../mistakes/index.ts';
+import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import {
   type ListedEndpoint,
   type Matched,
@@ -20,6 +20,7 @@ import {
   type AnyStep,
   answerOf,
   isScriptedAnswer,
+  onceStepsOf,
   type Scripted,
   type ScriptedAnswer,
   scriptedOf,
@@ -27,32 +28,45 @@ import {
 } from '../scripting/index.ts';
 import { type CallLog, callLogOf } from './calls.ts';
 
-/** One fake's state: its Provider, each listed Endpoint's script, and the calls it received. */
+/**
+ * One fake's state: its Provider, each Endpoint's script that a test or a request met, the calls it
+ * received, and every mistake its `fetch` threw.
+ */
 export type Faking = {
   readonly provided: Provided;
   readonly calls: CallLog;
+  readonly scripted: ReadonlyMap<string, Scripted>;
   readonly scriptedByNameOf: (name: string) => Scripted;
+  readonly mistakes: FakeProviderError[];
 };
 
 /** A fake with no script and no call yet. */
 export function fakingOf(provided: Provided): Faking {
-  const scriptedByName = new Map<string, Scripted>();
-  const scripted = (name: string): Scripted => {
-    const found = scriptedByName.get(name) ?? scriptedOf();
-    scriptedByName.set(name, found);
+  const scripted = new Map<string, Scripted>();
+  const scriptedByNameOf = (name: string): Scripted => {
+    const found = scripted.get(name) ?? scriptedOf();
+    scripted.set(name, found);
     return found;
   };
-  return { provided, calls: callLogOf(), scriptedByNameOf: scripted };
+  return { provided, calls: callLogOf(), scripted, scriptedByNameOf, mistakes: [] };
 }
 
 /**
  * The fake's `fetch`: each request answered as its Provider would, or aborted by its signal; one
- * already aborted is refused before anything is read, recorded or taken.
+ * already aborted is refused before anything is read, recorded or taken. A mistake it throws is
+ * kept, for `verify()` to throw wherever the code under test caught it.
  */
 export function fakeFetchOf(faking: Faking): Http {
   return async (request) => {
     request.signal.throwIfAborted();
-    return await abortableOf(fakeResponseOf(faking, request), request.signal);
+    try {
+      return await abortableOf(fakeResponseOf(faking, request), request.signal);
+    } catch (e) {
+      if (e instanceof FakeProviderError) {
+        faking.mistakes.push(e);
+      }
+      throw e;
+    }
   };
 }
 
@@ -130,7 +144,8 @@ function missingStepOf(scripted: Scripted, listed: ListedEndpoint): string {
   if (!scripted.wasScripted()) {
     return `it was never scripted: on('${listed.name}') gives it steps`;
   }
-  return 'no step is left and no otherwise answers';
+  const { requests, onces } = scripted.tally();
+  return `no step is left and no otherwise answers: request ${requests}, after ${onceStepsOf(onces)}`;
 }
 
 /** What a step answered, given the builder and the parsed Input; anything else is the test's mistake. */

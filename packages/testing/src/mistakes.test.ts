@@ -102,6 +102,31 @@ function circular(): unknown {
 const headers = { 'x-note': 'fine' };
 const body = { id: 'pay-1', amount: 5, stage: 'pending' } as const;
 
+const committedGiven = ['no', 'yes', 'unknown', 'maybe', undefined];
+const retryableGiven = [true, false, 'yes'];
+const messageGiven = ['A message', 1, undefined];
+
+/** Every Fault a test may script, a field the Caller reads or not; a message left out is the default. */
+const scriptedFaults = committedGiven.flatMap((committed) =>
+  retryableGiven.flatMap((retryable) =>
+    messageGiven.map((message) => ({
+      committed,
+      retryable,
+      ...(message === undefined ? {} : { message }),
+    })),
+  ),
+);
+
+/** Whether a Caller reads a scripted Fault as a Fault Envelope. */
+function isReadableFault(fault: (typeof scriptedFaults)[number]): boolean {
+  const message: unknown = 'message' in fault ? fault.message : 'Internal error';
+  return (
+    ['no', 'yes', 'unknown'].includes(String(fault.committed)) &&
+    typeof fault.retryable === 'boolean' &&
+    typeof message === 'string'
+  );
+}
+
 describe('fakeProvider: a test’s mistakes', () => {
   test('a mistake passes through the client as FakeProviderError, never as an Outcome', async () => {
     const payments = fakeProvider(paymentsDependency);
@@ -117,6 +142,74 @@ describe('fakeProvider: a test’s mistakes', () => {
       'payments-service: getPayment: no step is left and no otherwise answers',
     );
   });
+
+  test('the mistake of no step left names the request and the once steps scripted', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').once((r) => r.success({ headers, body }));
+    const client = payments.client();
+    await client.getPayment({ params });
+
+    const error = await client.getPayment({ params }).catch((e: unknown) => e);
+
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: no step is left and no otherwise answers: request 2, after 1 once step',
+    );
+  });
+
+  test.each(scriptedFaults.filter((fault) => !isReadableFault(fault)))(
+    'r.fault(%j) is a mistake, since no Caller would read it as a Fault',
+    async (scripted) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        "payments-service: getPayment: r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string",
+      );
+    },
+  );
+
+  test.each(scriptedFaults.filter(isReadableFault))(
+    'r.fault(%j) answers a Fault the Caller reads',
+    async (scripted) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const outcome = await payments.client().getPayment({ params });
+
+      expect(outcome).toMatchObject({
+        kind: 'fault',
+        source: 'provider',
+        committed: scripted.committed,
+        retryable: scripted.retryable,
+      });
+    },
+  );
+
+  test.each([1, null, ['x']])(
+    'r.unknownRejection with the message %j is a mistake, since no Caller would read it as a Rejection',
+    async (message) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments
+        .on('getPayment')
+        .otherwise((r) => r.unknownRejection('CARD_EXPIRED', { message } as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        'payments-service: getPayment: r.unknownRejection takes message a string',
+      );
+    },
+  );
 
   test('an Endpoint never scripted is a mistake', async () => {
     const payments = fakeProvider(paymentsDependency);

@@ -36,7 +36,13 @@ export {
   withDeprecation,
 } from './deprecation.ts';
 export type { Committed, RejectionEnvelope } from './envelopes.ts';
-export { committedValues, internalError, receivedEnvelopeOf, reservedFaults } from './envelopes.ts';
+export {
+  committedValues,
+  envelopeOf,
+  internalError,
+  receivedEnvelopeOf,
+  reservedFaults,
+} from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
 export type { Http } from './http.ts';
 export { kebabCaseOf } from './identifiers.ts';

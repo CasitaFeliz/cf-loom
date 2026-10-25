@@ -40,6 +40,7 @@ export type {
 export {
   codeNameOf,
   follows,
+  frozenCopyOf,
   isCommand,
   isContract,
   isDefinitions,
@@ -196,6 +197,7 @@ export {
   deprecationHeaderOf,
   discardBodyOf,
   durableNameOf,
+  envelopeOf,
   factIdHeader,
   faultResponseOf,
   faultStatusOf,

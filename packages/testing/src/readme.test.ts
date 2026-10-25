@@ -154,6 +154,19 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   expect(calls).toEqual(Array.from({ length: 7 }, () => input));
 });
 
+test('the README’s verify example runs: a fake all of whose steps were taken verifies, and one left a step does not', async () => {
+  const payments = fakeProvider(paymentsDependency);
+  payments.on('getPayment').once((r, { params }) => r.success({ id: params.paymentId, amount }));
+  const settlement = new SettlementService(payments.client({ headers: { 'x-api-key': 'k' } }));
+  const unsettled = fakeProvider(paymentsDependency);
+  unsettled.on('getPayment').once((r) => r.fault({ committed: 'no', retryable: true }));
+
+  await settlement.settle(PAYMENT_ID);
+
+  expect(() => payments.verify()).not.toThrow();
+  expect(() => unsettled.verify()).toThrow('payments-service: getPayment: 1 once step left unused');
+});
+
 test('the entry exports fakeProvider and FakeProviderError alone, as the README lists them', async () => {
   const entry = await import('./index.ts');
 

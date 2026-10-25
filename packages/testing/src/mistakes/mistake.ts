@@ -3,7 +3,8 @@ import { issueLineOf } from '@cf-loom/contract/internal';
 
 /**
  * A mistake in a test, never an Outcome: thrown out of a fake's `fetch` under its own name, which
- * the client passes through unchanged, so the code under test cannot take it for a Fault.
+ * the client passes through unchanged. The fake records it too, since the code under test may catch
+ * it; `verify()` throws it again.
  */
 export class FakeProviderError extends Error {
   override readonly name = 'FakeProviderError';
