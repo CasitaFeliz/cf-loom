@@ -75,7 +75,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Declare
 
-`cf-loom init service` creates the root under `src/contract/`; every other declaration is a file you write there, where the Layout puts it. What each declaration holds, with an example of each, is in the [`@cf-loom/contract` README](packages/contract/README.md), and the declarations of [`orders-service`](examples/orders-service) are complete ones; a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
+`cf-loom init service` creates the root under `src/contract/`; every other declaration is a file you write there, where [Layout](#layout) puts it, and a Group or the root lists it. What each declaration holds, with an example of each, is in the [`@cf-loom/contract` README](packages/contract/README.md), and the declarations in [`examples/`](examples) (`orders-service`, `billing-service`, `org-definitions`) are complete ones; a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Generate
 
