@@ -2,7 +2,7 @@ import { failureLineOf } from '@cf-loom/contract/internal';
 import {
   type BuiltProject,
   type Committed,
-  isCommittedCurrent,
+  committedLineEndingsOf,
   type ProjectFailure,
   snapshotFile,
 } from '../project/index.ts';
@@ -71,8 +71,17 @@ export function committedStopOf(built: BuiltProject): Exit | undefined {
   if (noJson !== undefined) {
     return noJson;
   }
-  if (isCommittedCurrent(built)) {
-    return undefined;
+  switch (committedLineEndingsOf(built)) {
+    case 'same':
+      return undefined;
+    case 'crlf':
+      return checkFailed([crlfLineOf(snapshotFile)]);
+    case 'different':
+      return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
   }
-  return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
+}
+
+/** The line for a generated file that differs from what `generate` writes only by CRLF line endings, which Git adds on a checkout. */
+export function crlfLineOf(path: string): string {
+  return `${path} has CRLF line endings: set eol=lf in .gitattributes`;
 }

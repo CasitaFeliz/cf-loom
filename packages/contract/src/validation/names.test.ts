@@ -12,7 +12,7 @@ import {
   type Endpoint,
   type Group,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { rootNameProblemOf, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown) {
@@ -483,3 +483,30 @@ describe('validateContract: the root is named as its package', () => {
 function ruleOf(failure: { readonly kind: string } & { readonly rule?: string }): string {
   return failure.rule ?? failure.kind;
 }
+
+describe('rootNameProblemOf', () => {
+  test.for([
+    ['service', 'orders-service', undefined],
+    ['service', 'orders_service', 'a Service name is kebab-case'],
+    ['service', 'OrdersService', 'a Service name is kebab-case'],
+    ['service', '', 'a Service name is kebab-case'],
+    ['application', 'web-admin', undefined],
+    ['application', 'web_admin', 'an Application name is kebab-case'],
+  ] as const)('a %s named %j has the problem %j', ([kind, name, problem]) => {
+    expect(rootNameProblemOf(kind, name)).toBe(problem);
+  });
+
+  test('the problem is the sentence validation fails a Service name with', () => {
+    const contract = defineContract({
+      name: 'orders_service',
+      groups: [aGroup('orders', [listOrders])],
+    });
+
+    const problem = rootNameProblemOf('service', 'orders_service');
+
+    expect(validateInPackage(contract)).toMatchObject({
+      failures: [{ message: expect.stringMatching(/^A Service name is kebab-case:/) }],
+    });
+    expect(problem).toBe('a Service name is kebab-case');
+  });
+});

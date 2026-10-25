@@ -60,13 +60,15 @@ type Ready = {
   readonly derived: DerivedVersion;
 };
 
+/** Prints what the Check found before the package is staged, built and put, so a run that fails or is killed meanwhile has said it. */
 async function putExit(run: Run, { prepared, checked, derived }: Ready): Promise<Exit> {
+  run.progress(comparedLinesOf(checked));
   const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived));
   if (put.kind === 'failed') {
     return { status: 3, stdout: [], stderr: [put.message, ...left] };
   }
   const published = `Published ${checked.packageName}@${derived.version}`;
-  return { status: 0, stdout: [...comparedLinesOf(checked), published], stderr: left };
+  return { status: 0, stdout: [published], stderr: left };
 }
 
 async function preparedOf(run: Run): Promise<Prepared | Stopped> {

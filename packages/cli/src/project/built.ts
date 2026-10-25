@@ -1,5 +1,4 @@
 import { Buffer } from 'node:buffer';
-import { readFileSync } from 'node:fs';
 import {
   canonicalSnapshotOf,
   canonicalTextOf,
@@ -14,8 +13,10 @@ import {
   validateContract,
 } from '@cf-loom/contract/internal';
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
+import { type LineEndings, lineEndingsOf } from '../writing/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
+import { runningGeneratorOf } from './generator.ts';
 import { type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
@@ -50,9 +51,15 @@ export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 /** A Service's project as built, the one kind of root that offers Elements. */
 export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
 
+/** How the committed `contract.snapshot.json` differs from what `generate` would write; a file that is missing or no JSON differs. */
+export function committedLineEndingsOf(built: BuiltProject): LineEndings {
+  const { committed } = built;
+  return committed.kind === 'json' ? lineEndingsOf(built.bytes, committed.bytes) : 'different';
+}
+
 /** Whether the committed `contract.snapshot.json` is what `generate` would write, its generator aside. */
 export function isCommittedCurrent(built: BuiltProject): boolean {
-  return built.committed.kind === 'json' && built.committed.bytes.equals(built.bytes);
+  return committedLineEndingsOf(built) === 'same';
 }
 
 /** Whether a built project is a Service's. */
@@ -158,18 +165,4 @@ function generatorOf(generator: Generator, committed: unknown): string {
     return written;
   }
   return runningGeneratorOf();
-}
-
-/** The CLI running, by its package's name and version. */
-function runningGeneratorOf(): string {
-  const manifest: unknown = JSON.parse(
-    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-  );
-  const name =
-    typeof manifest === 'object' && manifest !== null ? Reflect.get(manifest, 'name') : undefined;
-  const version =
-    typeof manifest === 'object' && manifest !== null
-      ? Reflect.get(manifest, 'version')
-      : undefined;
-  return `${String(name)}@${String(version)}`;
 }

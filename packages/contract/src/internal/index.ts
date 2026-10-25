@@ -117,6 +117,7 @@ export {
   ownRejectionsOf,
   semanticVersionPartsOf,
   snapshotFormatOf,
+  snapshotFormats,
   snapshotOf,
   textPartNodesOf,
 } from '../snapshot/index.ts';
@@ -144,6 +145,7 @@ export {
   packageLabelOf,
   problemLineOf,
   problemOf,
+  rootNameProblemOf,
   validateContract,
   walkedTextPartsOf,
 } from '../validation/index.ts';

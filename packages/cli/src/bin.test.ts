@@ -217,7 +217,7 @@ function sortedKeys(value: unknown): unknown {
 }
 
 describe('cf-loom init', () => {
-  test('init service writes only the root, named after package.json', () => {
+  test('init service writes the root, named after package.json, and no configuration', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'service');
@@ -244,7 +244,11 @@ describe('cf-loom init', () => {
     const ran = cfLoom(project, 'init', 'service');
     const generatedRan = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({ status: 0, stdout: 'Created src/contract/index.ts\n', stderr: '' });
+    expect(ran).toEqual({
+      status: 0,
+      stdout: 'Created src/contract/index.ts\nCreated .gitattributes\n',
+      stderr: '',
+    });
     expect(generatedRan).toMatchObject({ status: 0, stderr: '' });
   });
 
@@ -301,6 +305,7 @@ describe('cf-loom init', () => {
     expect(ran.stderr).toBe('src/contract/index.ts already exists\n');
     expect(read(project, 'src/contract/index.ts')).toBe(root);
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init of an unknown kind is a tooling error', () => {
@@ -327,6 +332,7 @@ describe('cf-loom init', () => {
     });
     expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init writes nothing when src/contract is a file', () => {
@@ -337,6 +343,7 @@ describe('cf-loom init', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toBe('src/contract is no folder: init cannot write src/contract/index.ts\n');
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init reports a root it cannot write in one line, and keeps what was there', () => {
@@ -4634,7 +4641,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${checkedAgainstOrders}\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
       stderr: `${ordersPackage} lists 1.2.0, published while publish ran: rerun publish, which reads the registry again\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4657,7 +4664,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${neverPublished(registry)}\n`,
       stderr: `${ordersPackage} lists 1.0.0, published while publish ran: rerun publish, which reads the registry again\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4833,7 +4840,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
       const refused = `@org/definitions's built files are not what contract.snapshot.json describes: build, then publish`;
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${refused}\n` });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },
@@ -4856,7 +4864,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
       expect(ran.status).toBe(3);
-      expect(ran.stdout).toBe('');
+      expect(ran.stdout).toBe(`${neverPublished(registry, '@org/definitions')}\n`);
       expect(ran.stderr).toMatch(
         /^@org\/definitions cannot be imported as installed: [^\n]+: build, then publish\n$/,
       );
@@ -4960,7 +4968,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${line}\n` });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },
@@ -4983,7 +4992,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toHaveLength(1);
   });
 
-  test('npm refusing the publish is a tooling error with the first line of its summary, and nothing is put or left behind', async ({
+  test('npm refusing the publish is a tooling error with the first line of its summary after the lines of the Check, and nothing is put or left behind', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aBuiltDefinitions({ private: true }));
@@ -4992,7 +5001,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const refused =
       'npm publish @org/definitions@1.0.0 failed (EPRIVATE: This package has been marked as private)';
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
+    const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+    expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${refused}\n` });
     expect(putRequestsOf(registry)).toEqual([]);
     expect(leftBehindIn(project)).toEqual([]);
   });
@@ -5007,7 +5017,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${neverPublished(registry)}\n`,
       stderr: 'typescript is not installed: publish builds the Contract Package with its tsc\n',
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -5053,11 +5063,22 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
       const label = `tsc on the Contract Package of ${ordersPackage}@1.0.0`;
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${label} ${ending}\n` });
+      const checked = `${neverPublished(registry)}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${label} ${ending}\n` });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },
   );
+
+  test('a publish killed while it builds has printed the lines of the Check', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    withTsc(project, "process.kill(process.ppid, 'SIGKILL');");
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({ status: null, stdout: `${neverPublished(registry)}\n`, stderr: '' });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
 
   test.skipIf(isRoot)(
     'a staging folder that cannot be removed leaves a published version published: publish names the folder',
@@ -5088,7 +5109,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
         const failure = `tsc on the Contract Package of ${ordersPackage}@1.0.0 failed: exit status 1`;
         const [first, second, ...more] = ran.stderr.split('\n');
-        expect([ran.status, ran.stdout, first, more]).toEqual([3, '', failure, ['']]);
+        const checked = `${neverPublished(registry)}\n`;
+        expect([ran.status, ran.stdout, first, more]).toEqual([3, checked, failure, ['']]);
         expect(`${second}\n`).toMatch(leftBehindLine);
         expect(putRequestsOf(registry)).toEqual([]);
       } finally {
@@ -5107,7 +5129,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
     expect(ran.status).toBe(3);
-    expect(ran.stdout).toBe('');
+    expect(ran.stdout).toBe(`${neverPublished(registry)}\n`);
     expect(ran.stderr).toMatch(/^node_modules\/\.cache\/cf-loom cannot be written: [^\n]+\n$/);
     expect(ran.stderr).not.toContain('was left behind');
     expect(putRequestsOf(registry)).toEqual([]);

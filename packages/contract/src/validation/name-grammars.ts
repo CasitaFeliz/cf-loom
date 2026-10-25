@@ -69,9 +69,15 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
   );
   return breaking.map(({ at, value, noun }) => {
     const text = textOf(value);
-    const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
-    return failure(at, 'name-grammar', `${noun} is ${rule}: ${text}${hintFor(grammar, text)}`);
+    const sentence = ruleSentenceOf(noun, grammar, text);
+    return failure(at, 'name-grammar', `${sentence}: ${text}${hintFor(grammar, text)}`);
   });
+}
+
+/** What a name that breaks a grammar is told: `A Group name is kebab-case`, or that and no reserved word. */
+function ruleSentenceOf(noun: string, grammar: Grammar, text: string): string {
+  const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
+  return `${noun} is ${rule}`;
 }
 
 /** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */
@@ -80,13 +86,31 @@ function hintFor(grammar: Grammar, text: string): string {
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
+/** What a Service's and an Application's name is called in a sentence, which both follow the grammar of a Group's. */
+const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
+
+/**
+ * Why a name cannot be a Service's or an Application's, as the clause validation fails it with,
+ * such as `a Service name is kebab-case`; nothing when the name follows the grammar.
+ */
+export function rootNameProblemOf(
+  kind: 'service' | 'application',
+  name: string,
+): string | undefined {
+  if (follows(kebabCase, name)) {
+    return undefined;
+  }
+  const sentence = ruleSentenceOf(rootNouns[kind], kebabCase, name);
+  return `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+}
+
 /** A Service's or Application's name; a Definitions Package has none but its package.json's. */
 function rootNamed(root: Declarations['root']): readonly Named[] {
   switch (root.kind) {
     case 'contract':
-      return [{ at: ['name'], value: root.name, noun: 'A Service name' }];
+      return [{ at: ['name'], value: root.name, noun: rootNouns.service }];
     case 'application':
-      return [{ at: ['name'], value: root.name, noun: 'An Application name' }];
+      return [{ at: ['name'], value: root.name, noun: rootNouns.application }];
     case 'definitions':
       return [];
   }

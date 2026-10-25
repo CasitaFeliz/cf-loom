@@ -2,6 +2,7 @@ export { oneOf } from './closed-values.ts';
 export { exportNamesOf } from './export-names.ts';
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';
+export { rootNameProblemOf } from './name-grammars.ts';
 export type { Problem } from './problem.ts';
 export { problemLineOf, problemOf } from './problem.ts';
 export type { Provenance } from './provenance.ts';
