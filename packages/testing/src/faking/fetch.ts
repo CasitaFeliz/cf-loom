@@ -59,7 +59,7 @@ export function fakeFetchOf(faking: Faking): Http {
   return async (request) => {
     request.signal.throwIfAborted();
     return await abortableOf(
-      recordedMistakesOf(faking, fakeResponseOf(faking, request)),
+      withMistakesRecorded(faking, fakeResponseOf(faking, request)),
       request.signal,
     );
   };
@@ -69,7 +69,10 @@ export function fakeFetchOf(faking: Faking): Http {
  * A request's answer, a mistake it throws kept for `verify()` to throw wherever the code under test
  * caught it, even one found after the request's signal was aborted.
  */
-async function recordedMistakesOf(faking: Faking, answering: Promise<Response>): Promise<Response> {
+async function withMistakesRecorded(
+  faking: Faking,
+  answering: Promise<Response>,
+): Promise<Response> {
   try {
     return await answering;
   } catch (e) {

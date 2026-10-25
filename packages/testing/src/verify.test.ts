@@ -181,6 +181,25 @@ describe('fake.verify()', () => {
     });
   });
 
+  test('an AggregateError summarises each mistake by its first line, though one lists Issues', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.success({ id: 1 } as never));
+    payments.on('getSummary').once((r) => r.success({ total: 1 }));
+    const broken = await caughtFrom(payments.fetch(new Request(requests.getPayment)));
+
+    const thrown = verifiedBy(() => payments.verify());
+
+    expect(String((broken as Error).message).split('\n').length).toBeGreaterThan(1);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as Error).message).toBe(
+      [
+        '2 mistakes:',
+        'payments-service: getPayment: the scripted Success breaks its readers',
+        'payments-service: getSummary: 1 once step left unused',
+      ].join('\n'),
+    );
+  });
+
   test('reports everything again on a second call, forgetting nothing', async () => {
     const payments = fakeProvider(paymentsDependency);
     await caughtFrom(payments.fetch(new Request(requests.getPayment)));

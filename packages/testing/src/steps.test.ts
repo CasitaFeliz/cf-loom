@@ -607,6 +607,27 @@ describe('fakeProvider: steps', () => {
     expect(payments.calls('capturePayment')).toHaveLength(2);
   });
 
+  test('a missing step is reported for the request counted without one aborted while it waited', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('capturePayment').once((r, { body }) => r.success({ amount: body.amount }));
+    const gated = gatedBodyOf(1);
+    const controller = new AbortController();
+    const reason = new Error('Gave up');
+
+    const first = capture(payments, gated.body);
+    const second = capture(payments, '{"amount":2}', controller.signal).catch((e: unknown) => e);
+    await settling();
+    controller.abort(reason);
+    gated.open();
+    const third = capture(payments, '{"amount":3}');
+
+    await first;
+    expect(await second).toBe(reason);
+    await expect(third).rejects.toThrow(
+      'no step is left and no otherwise answers: request 2, after 1 once step',
+    );
+  });
+
   test('a mistake gives up its turn, so the next request is answered once a step is added', async () => {
     const payments = fakeProvider(paymentsDependency);
 

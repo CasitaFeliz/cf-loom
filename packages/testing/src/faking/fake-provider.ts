@@ -11,7 +11,7 @@ import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
-import { throwMistakesOf } from './verify.ts';
+import { throwMistakes } from './verify.ts';
 
 /** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
@@ -40,7 +40,8 @@ export type FakeProvider<D extends AnyDependency> = {
   invalidCalls<Name extends ListedName<D>>(name: Name): readonly InvalidCall[];
   /**
    * Throws what the test got wrong so far, wherever the code under test caught it: every mistake
-   * `fetch` threw, then each Endpoint's `once` steps no request took; returns when there is none.
+   * `fetch` threw, and one a step made after its request was aborted, then each Endpoint's `once`
+   * steps no request took; returns when there is none.
    */
   verify(): void;
 };
@@ -63,7 +64,7 @@ export function fakeProvider<const D extends AnyDependency>(
     calls: (name) =>
       faking.calls.callsOf(name) as readonly Frozen<InputOf<ListedEndpoint<D, typeof name>>>[],
     invalidCalls: (name) => faking.calls.invalidCallsOf(name),
-    verify: () => throwMistakesOf(faking),
+    verify: () => throwMistakes(faking),
   };
   return Object.freeze(fake);
 }
