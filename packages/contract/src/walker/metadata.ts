@@ -23,7 +23,7 @@ const allowedKeys: ReadonlySet<string> = new Set(['description', 'examples', 'id
  * any key but `description`, `examples` and `id` fails.
  */
 export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
-  const meta: Readonly<Record<string, unknown>> = globalRegistry.get(schema) ?? {};
+  const meta = ownMetaOf(schema);
   const failures = metaFailures(meta, at);
   if (failures.length > 0) {
     return failed(failures);
@@ -36,6 +36,11 @@ export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
     },
     ...(typeof id === 'string' && { id }),
   });
+}
+
+/** Whether the schema's own `.meta()` holds an id, which names a schema on a cycle. */
+export function hasOwnId(schema: core.$ZodType): boolean {
+  return ownMetaOf(schema)['id'] !== undefined;
 }
 
 /** A node with annotations laid over it, so the outer schema's say wins over the inner one's. */
@@ -53,6 +58,10 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
     return failed(failuresOf([metadata, result]));
   }
   return annotated(result, metadata.value.annotations);
+}
+
+function ownMetaOf(schema: core.$ZodType): Readonly<Record<string, unknown>> {
+  return globalRegistry.get(schema) ?? {};
 }
 
 function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readonly NotAllowed[] {

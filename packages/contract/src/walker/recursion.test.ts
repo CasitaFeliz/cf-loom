@@ -33,6 +33,8 @@ const categoryDef = {
   },
 } as const;
 
+const wrapperIdInstead = '.meta({ id }) on the schema inside';
+
 describe('walkSchemas: recursion', () => {
   test('a cycle through a getter is written once under defs and referenced by ref', () => {
     const category = z
@@ -696,6 +698,53 @@ describe('walkSchemas: recursion', () => {
           },
         },
       },
+    });
+  });
+
+  describe('an id on a field wrapper', () => {
+    test('an id on .optional() fails, and nothing inside it is walked', () => {
+      const node: z.ZodType = z.object({
+        get next() {
+          return node.optional().meta({ id: 'node' });
+        },
+      });
+
+      const failure = {
+        at: ['body', 'fields', 'next'],
+        construct: '.meta({ id }) on .optional()',
+        instead: wrapperIdInstead,
+      };
+      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+    });
+
+    test('an id on .nonoptional() fails, and nothing inside it is walked', () => {
+      const node: z.ZodType = z.object({
+        get next() {
+          return node.optional().nonoptional().meta({ id: 'node' });
+        },
+      });
+
+      const failure = {
+        at: ['body', 'fields', 'next'],
+        construct: '.meta({ id }) on .nonoptional()',
+        instead: wrapperIdInstead,
+      };
+      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+    });
+
+    test('an id on the .optional() inside .nonoptional() fails the same', () => {
+      const node: z.ZodType = z.object({
+        get next() {
+          return node.optional().meta({ id: 'node' }).nonoptional();
+        },
+      });
+
+      const failure = {
+        at: ['body', 'fields', 'next'],
+        construct: '.meta({ id }) on .optional()',
+        instead: wrapperIdInstead,
+      };
+      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
     });
   });
 

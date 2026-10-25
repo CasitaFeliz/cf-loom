@@ -116,6 +116,14 @@ export function refusedId(id: string): Refused {
   return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
 }
 
+/** A recursion id on a field's `.optional()` or `.nonoptional()`, which names no cycle. */
+export function refusedWrapperId(wrapper: 'optional' | 'nonoptional'): Refused {
+  return {
+    construct: `.meta({ id }) on .${wrapper}()`,
+    instead: '.meta({ id }) on the schema inside',
+  };
+}
+
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {
   return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };
