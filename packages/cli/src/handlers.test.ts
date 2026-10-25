@@ -1731,6 +1731,84 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(existsSync(join(project, 'src/ok/create-order.handler.ts'))).toBe(false);
   });
 
+  test('after the Handler map, the readers and layout.endpoint all move, generate moves the Handlers and deletes the old files', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const text = implement(project, 'src/endpoints/orders/get-order.handler.ts', 'get');
+    const layout = lines([
+      '{',
+      "  endpoint: 'src/http/{group}/{name}.handler.ts',",
+      "  handlerMap: 'src/generated/handlers.generated.ts',",
+      "  readers: 'src/generated/readers.generated.ts',",
+      '}',
+    ]).trimEnd();
+    write(project, withLayout({}, layout));
+
+    const ran = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: lines([
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        movedLine(
+          'src/endpoints/orders/get-order.handler.ts',
+          'src/http/orders/get-order.handler.ts',
+        ),
+        'Wrote contract.snapshot.json',
+        'Wrote src/generated/handlers.generated.ts',
+        'Wrote src/generated/readers.generated.ts',
+        'Deleted src/handlers.generated.ts',
+        'Deleted src/readers.generated.ts',
+      ]),
+      stderr: '',
+    });
+    expect(read(project, 'src/http/orders/get-order.handler.ts')).toBe(text);
+    expect(existsSync(join(project, 'src/endpoints/orders/get-order.handler.ts'))).toBe(false);
+    expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(false);
+    expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
+    expect(read(project, 'src/generated/handlers.generated.ts')).toContain(
+      importOf('getOrderEndpointHandler', '../http/orders/get-order.handler.ts'),
+    );
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a stale Handler map waits while a Retired Handler stands: nothing is moved, written or deleted', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, retiredCreateOrder());
+    write(project, withLayout({}, "{ handlerMap: 'src/generated/handlers.generated.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${retiredCreateOrderLine}\n` });
+    expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(true);
+    expect(existsSync(join(project, 'src/generated/handlers.generated.ts'))).toBe(false);
+  });
+
+  test('a stale Handler map waits while a file stands at a Handler’s new path: nothing is moved, written or deleted', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const layout =
+      "{ endpoint: 'src/http/{group}/{name}.handler.ts', handlerMap: 'src/generated/handlers.generated.ts' }";
+    write(project, withLayout({}, layout));
+    write(project, { 'src/http/orders/get-order.handler.ts': "export default 'theirs';\n" });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${conflictLine('src/endpoints/orders/get-order.handler.ts', 'endpoints.getOrder', 'src/http/orders/get-order.handler.ts')}\n`,
+    });
+    expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(true);
+    expect(existsSync(join(project, 'src/generated/handlers.generated.ts'))).toBe(false);
+    expect(existsSync(join(project, 'src/http/orders/create-order.handler.ts'))).toBe(false);
+  });
+
   test('a Handler the author deleted after the layout changed is named by no line', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
@@ -1800,45 +1878,71 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
   test.each([
     ['handlerMap', 'src/generated/handlers.generated.ts', 'src/handlers.generated.ts'],
     ['readers', 'src/generated/readers.generated.ts', 'src/readers.generated.ts'],
-  ])('moving layout.%s to %s leaves the file at %s an orphan', (field, moved, old) => {
-    const project = aProject(aService());
-    cfLoom(project, 'generate');
-    write(project, withLayout({}, `{ ${field}: '${moved}' }`));
+  ])(
+    'moving layout.%s to %s makes generate write the file there and delete the one at %s',
+    (field, moved, old) => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      write(project, withLayout({}, `{ ${field}: '${moved}' }`));
+      const map = field === 'handlerMap' ? moved : 'src/handlers.generated.ts';
+      const readers = field === 'readers' ? moved : 'src/readers.generated.ts';
 
-    const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: `${old} is a file cf-loom generate wrote, at no path the layout names: delete it\n`,
-    });
-  });
+      expect(ran).toEqual({
+        status: 0,
+        stdout: lines([
+          'Wrote contract.snapshot.json',
+          `Wrote ${map}`,
+          `Wrote ${readers}`,
+          `Deleted ${old}`,
+        ]),
+        stderr: '',
+      });
+      expect(existsSync(join(project, old))).toBe(false);
+      expect(cfLoom(project, 'verify').status).toBe(0);
+    },
+  );
 
   test.each([
     ['a CRLF line end', `${header}\r\nexport {};\r\n`],
     ['a byte order mark', `\uFEFF${header}\nexport {};\n`],
   ])(
-    'a generated file an editor saved with %s, at no path the layout names, is an orphan',
+    'a generated file an editor saved with %s, at no path the layout names, is deleted',
     (_edit, text) => {
       const project = aProject({ ...aService(), 'src/old.generated.ts': text });
 
       const ran = cfLoom(project, 'generate');
 
-      expect(ran).toEqual({
-        status: 1,
-        stdout: '',
-        stderr:
-          'src/old.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it\n',
-      });
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(ran.stdout.trimEnd().split('\n').at(-1)).toBe('Deleted src/old.generated.ts');
+      expect(existsSync(join(project, 'src/old.generated.ts'))).toBe(false);
     },
   );
 
-  test('a .generated.ts file that does not start with the generated header is no orphan', () => {
+  test('the Handler map reached through a folder link is no stale file and is never deleted', () => {
+    const layout = "{ handlerMap: 'src/generated/handlers.generated.ts' }";
+    const project = aProject(withLayout(aService(), layout));
+    cfLoom(project, 'generate');
+    symlinkSync(join(project, 'src/generated'), join(project, 'src/zz'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(ran.stdout).not.toContain('Deleted');
+    expect(existsSync(join(project, 'src/generated/handlers.generated.ts'))).toBe(true);
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a .generated.ts file that does not start with the generated header is kept, and no orphan', () => {
     const project = aProject({ ...aService(), 'src/schema.generated.ts': 'export {};\n' });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(0);
+    expect(ran.stdout).not.toContain('Deleted');
+    expect(read(project, 'src/schema.generated.ts')).toBe('export {};\n');
   });
 
   test.skipIf(isRoot)(
@@ -3176,7 +3280,7 @@ describe('cf-loom verify: a configured layout', () => {
     ['handlerMap', 'src/generated/handlers.generated.ts', 'src/handlers.generated.ts'],
     ['readers', 'src/generated/readers.generated.ts', 'src/readers.generated.ts'],
   ])(
-    'after layout.%s moves to %s, verify exits 1 naming the file left at %s',
+    'after layout.%s moves to %s, verify exits 1 naming the file left at %s, and deletes nothing',
     (field, moved, old) => {
       const project = aProject(aService());
       cfLoom(project, 'generate');
@@ -3186,8 +3290,9 @@ describe('cf-loom verify: a configured layout', () => {
 
       expect(ran.status).toBe(1);
       expect(ran.stderr).toContain(
-        `${old} is a file cf-loom generate wrote, at no path the layout names: delete it\n`,
+        `${old} is a file cf-loom generate wrote, at no path the layout names: run cf-loom generate\n`,
       );
+      expect(existsSync(join(project, old))).toBe(true);
     },
   );
 });

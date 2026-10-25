@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
 import { generatedEnding, layoutFolder } from '../config/index.ts';
@@ -9,19 +9,21 @@ import {
   recordedHandlersOf,
 } from '../service-code/index.ts';
 import type { PlacedService } from './handler-files.ts';
-import { type Move, type PathLine, placementOf } from './placement.ts';
+import { type Move, placementOf } from './placement.ts';
 
 /**
- * What the files `generate` wrote come to: the lines for those at a path the layout does not
- * name and for the Handlers only the author can settle, the Handlers `generate` moves, and the
- * Handlers that lack a file; or the folder or file it could not read.
+ * The record `generate` wrote: the Handlers it moves, the lines for the Handlers only the author
+ * can settle, the Handlers that lack a file, and the files it wrote at a path the layout no
+ * longer names, which it deletes once their replacements are written; or the folder or file it
+ * could not read.
  */
-export type Orphans =
+export type RecordRead =
   | {
       readonly kind: 'read';
-      readonly lines: readonly string[];
       readonly moves: readonly Move[];
+      readonly lines: readonly string[];
       readonly lacking: readonly HandlerPath[];
+      readonly stale: readonly string[];
     }
   | { readonly kind: 'tooling'; readonly message: string };
 
@@ -34,11 +36,11 @@ type WrittenFiles =
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * Every file `generate` wrote at a path the layout does not name, and every Handler the Handler
- * map imports that the layout now places elsewhere, to move, or whose Element is Retired or
- * gone, to settle: after a layout changes or a Group is renamed, the map would import a fresh stub.
+ * Reads every file under `src/` that starts with the line `generate` writes first, and the
+ * Handlers the Handler maps among them import, against the layout and the disk. After a layout
+ * changes or a Group is renamed, the map would otherwise import a fresh stub.
  */
-export function orphansOf(service: PlacedService): Orphans {
+export function recordOf(service: PlacedService): RecordRead {
   const { directory } = service.project;
   const found = filesUnder(directory, layoutFolder, {
     keeps: (path) => path.endsWith(generatedEnding),
@@ -53,10 +55,14 @@ export function orphansOf(service: PlacedService): Orphans {
   }
   const recorded = written.files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
   const { moves, lines, lacking } = placementOf(service, recorded);
-  const sorted = [...generatedOrphansOf(service, written.files), ...lines].sort((left, right) =>
-    byCodePoint(left.path, right.path),
-  );
-  return { kind: 'read', lines: sorted.map(({ line }) => line), moves, lacking };
+  const sorted = [...lines].sort((left, right) => byCodePoint(left.path, right.path));
+  return {
+    kind: 'read',
+    moves,
+    lines: sorted.map(({ line }) => line),
+    lacking,
+    stale: staleOf(service, written.files),
+  };
 }
 
 /** The files among some files that start with the line `generate` writes first. */
@@ -75,14 +81,25 @@ function writtenFilesOf(directory: string, files: readonly string[]): WrittenFil
   return { kind: 'written', files: written };
 }
 
-/** The files `generate` wrote that the layout places neither the map nor the readers at. */
-function generatedOrphansOf(
-  service: PlacedService,
-  files: readonly WrittenFile[],
-): readonly PathLine[] {
-  const { layout } = service.project;
-  const rule = 'is a file cf-loom generate wrote, at no path the layout names';
+/**
+ * The files `generate` wrote that the layout places neither the map nor the readers at, never the
+ * one file the layout names reached through a link, since `generate` writes that one.
+ */
+function staleOf(service: PlacedService, files: readonly WrittenFile[]): readonly string[] {
+  const { directory, layout } = service.project;
+  const named = [layout.handlerMap, layout.readers].map((path) => realPathOf(directory, path));
   return files
-    .filter(({ path }) => path !== layout.handlerMap && path !== layout.readers)
-    .map(({ path }) => ({ path, line: `${path} ${rule}: delete it` }));
+    .map(({ path }) => path)
+    .filter((path) => !named.includes(realPathOf(directory, path)))
+    .sort(byCodePoint);
+}
+
+/** A path's real path, links followed, or the path itself where nothing resolves. */
+function realPathOf(directory: string, path: string): string {
+  const absolute = join(directory, path);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
 }

@@ -165,7 +165,7 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads, and the `deprecatedAt` of each Deprecated Endpoint. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, and drops one only once its file is gone.
+The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name, with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads, and the `deprecatedAt` of each Deprecated Endpoint. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, drops one only once its file is gone, and deletes the map and the readers it wrote at a path the layout no longer names once it has written them where it does.
 _Avoid_: registry, router
 
 **Resources**:
