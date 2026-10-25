@@ -9,8 +9,9 @@ export type Failures = readonly [NotAllowed, ...NotAllowed[]];
 
 /**
  * The node a failed walk was building, as far as it got: its type, and the constraints already
- * set on it, so its checks are judged as the node's would be. The walk of a refused construct, or
- * of a cycle no id names, was building none.
+ * set on it, so its checks are judged as the node's would be. A refused construct that holds no
+ * single schema (`z.set()`, `.pipe()`, a refused type), or a schema on a cycle no id names, builds
+ * none.
  */
 export type Outline = Partial<SchemaNode>;
 
