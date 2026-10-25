@@ -261,7 +261,7 @@ describe('fakeProvider: requests', () => {
     });
     const outside = fake.fetch(new Request('https://gateway.test/payments/pay-1'));
 
-    expect(outcome).toEqual({ kind: 'success', value: { id: 'pay-1' }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: 'pay-1' } });
     await expect(outside).rejects.toThrow(
       "payments-service: the path /payments/pay-1 is outside the base URL's path /payments-api/",
     );

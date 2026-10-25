@@ -95,7 +95,7 @@ function ordersAnswering(response: () => Response) {
 }
 
 describe('a Success', () => {
-  test('carries its body as value and its declared headers, read as their types', async () => {
+  test('carries its status, its body and its declared headers, read as their types', async () => {
     const headers = { 'x-total': '3', 'x-cached': 'true', 'x-other': 'passes through' };
     const orders = ordersAnswering(() => Response.json({ id: 'o-1', total: 3 }, { headers }));
 
@@ -103,11 +103,13 @@ describe('a Success', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', total: 3 },
+      status: 200,
       headers: { 'x-total': 3, 'x-cached': true },
+      body: { id: 'o-1', total: 3 },
     });
     if (outcome.kind === 'success') {
-      expectTypeOf(outcome.value).toEqualTypeOf<{ id: string; total: number }>();
+      expectTypeOf(outcome.status).toEqualTypeOf<200>();
+      expectTypeOf(outcome.body).toEqualTypeOf<{ id: string; total: number }>();
       expectTypeOf(outcome.headers['x-total']).toEqualTypeOf<number>();
       // @ts-expect-error: a header the Endpoint does not declare is not read, so it is not typed
       expectTypeOf(outcome.headers['x-undeclared']).toBeUnknown();
@@ -122,26 +124,27 @@ describe('a Success', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', total: 3 },
+      status: 200,
       headers: { 'x-total': 3 },
+      body: { id: 'o-1', total: 3 },
     });
   });
 
-  test('a 204 carries no value and no headers', async () => {
+  test('an Endpoint that declares no body and no headers has neither key', async () => {
     const orders = ordersAnswering(() => new Response(null, { status: 204 }));
 
     const outcome = await orders.cancelOrder(params);
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 
-  test('a headers-only Success carries its headers only', async () => {
+  test('an Endpoint that declares headers only has no body key', async () => {
     const headers = { 'x-total': '7' };
     const orders = ordersAnswering(() => new Response(null, { status: 204, headers }));
 
     const outcome = await orders.orderTotal(params);
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204, headers: { 'x-total': 7 } });
   });
 });
 
@@ -290,8 +293,8 @@ describe('an Open Enum Success header', () => {
     ];
 
     expect(outcomes).toEqual([
-      { kind: 'success', value: undefined, headers: { 'x-stage': 'shipped' } },
-      { kind: 'success', value: undefined, headers: { 'x-stage': { unknown: 'lost' } } },
+      { kind: 'success', status: 204, headers: { 'x-stage': 'shipped' } },
+      { kind: 'success', status: 204, headers: { 'x-stage': { unknown: 'lost' } } },
     ]);
   });
 
@@ -335,8 +338,8 @@ describe('an Open Enum Success header', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { stage: { unknown: 'lost' } },
-      headers: {},
+      status: 200,
+      body: { stage: { unknown: 'lost' } },
     });
   });
 });

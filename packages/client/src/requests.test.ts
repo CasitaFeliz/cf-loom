@@ -265,8 +265,8 @@ describe('what a call sends', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { amount: 1e21, ratio: 1.5e-7, scale: -2.5e-10, exact: true },
-      headers: {},
+      status: 200,
+      body: { amount: 1e21, ratio: 1.5e-7, scale: -2.5e-10, exact: true },
     });
   });
 });
@@ -285,15 +285,16 @@ describe('Input that cannot be sent', () => {
     return { orders, calls: () => calls };
   }
 
-  test('a broken constraint is the Provider’s invalid-input Rejection, and nothing is sent', async () => {
+  test('a broken constraint is the Provider’s invalid-input Rejection, marked source client, and nothing is sent', async () => {
     const { orders, calls } = unsent();
 
     const outcome = await orders.createOrder({ params: { shopId: 's' }, body: { quantity: 0 } });
 
     expect(outcome).toEqual({
       kind: 'rejection',
-      known: true,
+      source: 'client',
       code: 'INVALID_INPUT',
+      status: 400,
       message: 'Invalid input',
       body: {
         issues: [
@@ -380,7 +381,6 @@ describe('Input that cannot be sent', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
       code: 'INVALID_INPUT',
       body: { issues: [{ in: 'query', path: ['ids'], code: { unknown: 'required' } }] },
     });
@@ -423,7 +423,9 @@ describe('Input that cannot be sent', () => {
         ],
       },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
     expect(calls()).toBe(0);
   });
 
@@ -485,7 +487,7 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
       code: 'INVALID_INPUT',
       body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'too_small' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.known && outcome.body).toMatchObject({
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
       issues: { length: 1 },
     });
   });
@@ -524,7 +526,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
 
     const outcome = await echoes.echoLarge({ params: { size: 1e21 } });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-small': 1.5e-7 } });
+    expect(outcome).toEqual({ kind: 'success', status: 204, headers: { 'x-small': 1.5e-7 } });
   });
 });
 
@@ -580,7 +582,9 @@ describe('several Guards, checked in Attachment order', () => {
     expect(outcome).toMatchObject({
       body: { issues: [{ in: 'headers', path: ['x-region'], code: 'invalid_value' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
   });
 
   test('a demand in a Guard’s query failing beside the Input answers alone', async () => {
@@ -592,7 +596,9 @@ describe('several Guards, checked in Attachment order', () => {
     expect(outcome).toMatchObject({
       body: { issues: [{ in: 'query', path: ['zone'], code: 'too_small' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
   });
 
   test('an empty list in a Guard’s query is dropped before its demands are parsed', async () => {
@@ -601,7 +607,7 @@ describe('several Guards, checked in Attachment order', () => {
       query: { ...valid.query, tags: [] },
     });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 });
 

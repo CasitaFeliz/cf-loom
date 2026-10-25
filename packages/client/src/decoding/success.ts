@@ -1,13 +1,18 @@
+import type { Issue } from '@cf-loom/contract';
 import {
   discardBodyOf,
   headerValuesOf,
-  type Issue,
   parseValue,
   receivedBodyOf,
 } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type Answered, answeredFaultOf, type Inferring } from '../inference/index.ts';
-import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
+import {
+  type DecodedOutcome,
+  type DecodedSuccess,
+  invalidOutcomeOf,
+  issuesAt,
+} from './outcomes.ts';
 
 /** A Success body as read: its value with the Issues that keep it from being one, bytes that are no JSON, or a failed stream. */
 type SuccessBody =
@@ -50,7 +55,22 @@ export async function successOf(
   if (issues.length > 0) {
     return invalidOutcomeOf({ status, committed: 'yes', issues });
   }
-  return { kind: 'success', value: body.value, headers: headers.value };
+  return successFrom(called, status, { headers, body });
+}
+
+/** The Success with only the parts its Endpoint declares, so it is what a direct call of its Handler returns. */
+function successFrom(
+  called: CalledEndpoint,
+  status: number,
+  read: { readonly headers: SuccessHeaders; readonly body: { readonly value: unknown } },
+): DecodedSuccess {
+  const { headers, body } = called.endpoint.success;
+  return {
+    kind: 'success',
+    status,
+    ...(headers === undefined ? {} : { headers: read.headers.value }),
+    ...(body === undefined ? {} : { body: read.body.value }),
+  };
 }
 
 /** The declared Success headers, each text converted by its node, then read with its schema. */

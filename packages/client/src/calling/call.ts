@@ -60,7 +60,8 @@ export function methodOf(
 /** The invalid-input Rejection the Provider would answer, read as its response would be, never sent. */
 function invalidInputOf(called: CalledEndpoint, issues: readonly InputIssue[]): DecodedOutcome {
   const { code, status, message } = called.standards.invalidInput;
-  return rejectionOf({ code, message, body: invalidInputBodyOf(issues) }, status, called);
+  const decoded = rejectionOf({ code, message, body: invalidInputBodyOf(issues) }, status, called);
+  return decoded.kind === 'rejection' ? { ...decoded, source: 'client' } : decoded;
 }
 
 /** Whether a signal is aborted now: a header function awaited before may have aborted it. */

@@ -1,4 +1,4 @@
-import type { Committed, Issue, ReservedCode } from '@cf-loom/contract/internal';
+import type { Committed, Issue, ReservedCode } from '@cf-loom/contract';
 
 /**
  * What a call met instead of an Outcome of its own, as `inferFault` is offered it: a network

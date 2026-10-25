@@ -16,10 +16,10 @@ import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
 
 /** What `payments.client()` takes: a client's options, its `fetch` and base URL the fake's own. */
-export type FakeClientOptions<D extends AnyDependency, Configured extends string = never> = Omit<
-  ClientOptions<D, Configured>,
-  'baseUrl' | 'fetch'
->;
+export type FakeClientOptions<
+  D extends AnyDependency,
+  Configured extends ConfiguredName<D> = never,
+> = Omit<ClientOptions<D, Configured>, 'baseUrl' | 'fetch'>;
 
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed

@@ -166,7 +166,7 @@ describe('the Deprecation warning', () => {
 
     const outcome = await orders.listOrders();
 
-    expect(outcome).toEqual({ kind: 'success', value: { ids: ['o-1'] }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
     expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
   });
 
@@ -188,7 +188,7 @@ describe('fetch', () => {
 
     const outcome = await orders.ping();
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
     expect(global).toHaveBeenCalledOnce();
   });
 });

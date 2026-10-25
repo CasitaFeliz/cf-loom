@@ -119,6 +119,6 @@ describe('fakeProvider: what the client infers its Fault from', () => {
 
     const outcome = await own.getPayment({ params });
 
-    expect(outcome).toEqual({ kind: 'success', value: { id: 'pay-1' }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: 'pay-1' } });
   });
 });

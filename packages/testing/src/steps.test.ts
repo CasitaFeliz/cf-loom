@@ -151,7 +151,7 @@ describe('fakeProvider: steps', () => {
       'success',
       'success',
     ]);
-    expect(outcomes[3]).toMatchObject({ value: { amount: 9 } });
+    expect(outcomes[3]).toMatchObject({ body: { amount: 9 } });
   });
 
   test('a step may be async', async () => {
@@ -163,7 +163,7 @@ describe('fakeProvider: steps', () => {
 
     const outcome = await payments.client().cancelPayment({ params });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 
   test('a Success carries its headers as text, a number and an Open Enum Unknown case included', async () => {
@@ -185,8 +185,9 @@ describe('fakeProvider: steps', () => {
     ]);
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'pay-1', amount: 5, stage: lost },
+      status: 200,
       headers: { 'x-stage': lost, 'x-count': 2 },
+      body: { id: 'pay-1', amount: 5, stage: lost },
     });
   });
 
@@ -199,7 +200,7 @@ describe('fakeProvider: steps', () => {
     const checked = await payments.client().checkPayment({ params });
 
     expect([cancelled.status, await cancelled.text()]).toEqual([204, '']);
-    expect(checked).toEqual({ kind: 'success', value: undefined, headers: { 'x-count': 3 } });
+    expect(checked).toStrictEqual({ kind: 'success', status: 204, headers: { 'x-count': 3 } });
   });
 
   test('reject(code) answers a declared code with its status, a Standard one by the Provider’s code', async () => {
@@ -210,12 +211,12 @@ describe('fakeProvider: steps', () => {
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(404);
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'NO_PAYMENT',
+      status: 404,
       message: 'No such payment',
-      body: undefined,
     });
   });
 
@@ -230,8 +231,9 @@ describe('fakeProvider: steps', () => {
     expect(response.status).toBe(409);
     expect(outcome).toEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'PAYMENT_LOCKED',
+      status: 409,
       message: 'The payment is locked',
       body,
     });
@@ -277,13 +279,13 @@ describe('fakeProvider: steps', () => {
       rejection: { code: 'INVALID_INPUT', message: 'Invalid input', body: { issues: [issue] } },
     });
     expect(outcome).toMatchObject({
-      known: true,
+      kind: 'rejection',
       code: 'INVALID_INPUT',
       body: { issues: [issue] },
     });
   });
 
-  test('reject({ unknown }) answers 422, its message the code unless given, and the client does not know it', async () => {
+  test('reject({ unknown }) answers 422, its message the code unless given, and the client receives an unknown-rejection', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments
       .on('getPayment')
@@ -298,9 +300,10 @@ describe('fakeProvider: steps', () => {
       rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: { expiredAt: '2026-01' } },
     });
     expect(outcome).toEqual({
-      kind: 'rejection',
-      known: false,
+      kind: 'unknown-rejection',
+      source: 'provider',
       code: 'CARD_EXPIRED',
+      status: 422,
       message: 'The card expired',
       body: null,
     });

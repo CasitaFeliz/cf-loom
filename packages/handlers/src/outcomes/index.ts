@@ -1,4 +1,4 @@
-export type { Committed } from '@cf-loom/contract/internal';
+export type { Committed } from '@cf-loom/contract';
 export type { AnyRejection, BuiltAdmitted, BuiltRejection, BuiltSuccess } from './built.ts';
 export { admit, reject, success } from './built.ts';
 export type { Fault } from './fault.ts';

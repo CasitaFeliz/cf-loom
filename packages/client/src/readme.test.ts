@@ -83,10 +83,12 @@ async function readmeExample(answer: () => Response) {
 
   switch (outcome.kind) {
     case 'success':
-      return outcome.value.amount;
+      return outcome.body.amount;
     case 'rejection':
-      if (outcome.known && outcome.code === 'NOT_FOUND') return null; // getPayment lists notFound
+      if (outcome.code === 'NOT_FOUND') return null; // getPayment lists notFound
       throw new Error(outcome.message);
+    case 'unknown-rejection':
+      throw new Error(`${outcome.code}: ${outcome.message}`);
     case 'fault':
       if (outcome.committed === 'no' && outcome.retryable) return retry();
       throw new Error(`payments-service failed: ${outcome.source}`);
