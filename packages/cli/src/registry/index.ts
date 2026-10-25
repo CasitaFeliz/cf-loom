@@ -1,3 +1,4 @@
+export type { ChosenVersion } from './against.ts';
 export type { BaselineQuery, NoBaseline, ReadBaseline } from './baseline.ts';
 export { baselineOf } from './baseline.ts';
 export type { NpmPlace } from './npm.ts';

@@ -188,6 +188,40 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(baselineIn(read).snapshot.version).toBe('1.10.0');
   });
 
+  test('prereleases order as semver.org orders them, and below the version that is not one', async ({
+    lab,
+  }) => {
+    const ascending = [
+      '1.0.0-alpha',
+      '1.0.0-alpha.1',
+      '1.0.0-alpha.beta',
+      '1.0.0-beta',
+      '1.0.0-beta.2',
+      '1.0.0-beta.11',
+      '1.0.0-rc.1',
+      '1.0.0',
+    ];
+    const served = ordersWith(...[...ascending].reverse().map((version) => aVersion(version)));
+
+    const { read } = await readOrders(lab, served);
+
+    expect(baselineIn(read).versions).toEqual(ascending);
+  });
+
+  test.for([
+    ['1.0.0-123', '1.0.0-1a'],
+    ['1.0.0-111', '1.0.0-a1'],
+  ] as const)(
+    'a numeric prerelease identifier comes before one with a letter in it: %s before %s',
+    async ([lower, higher], { lab }) => {
+      const served = ordersWith(aVersion(higher), aVersion(lower));
+
+      const { read } = await readOrders(lab, served);
+
+      expect(baselineIn(read).versions).toEqual([lower, higher]);
+    },
+  );
+
   test('a prerelease above the highest stable version is the Baseline', async ({ lab }) => {
     const served = ordersWith(aVersion('1.0.0'), aVersion('2.0.0-rc.1'));
 

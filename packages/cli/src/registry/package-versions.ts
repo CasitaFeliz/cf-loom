@@ -41,8 +41,8 @@ export async function unchangedSince(
     case 'not-found':
       return { kind: 'unchanged' };
     case 'versions':
-      return isHigher(listed.baseline, highest)
-        ? failed(publishedMeanwhile(packageName, listed.baseline))
+      return isHigher(listed.highest, highest)
+        ? failed(publishedMeanwhile(packageName, listed.highest))
         : { kind: 'unchanged' };
   }
 }

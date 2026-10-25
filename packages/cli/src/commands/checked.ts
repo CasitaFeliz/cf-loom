@@ -1,5 +1,5 @@
 import { type Change, type ChangeSite, locationOf, type Path } from '@cf-loom/contract/internal';
-import type { NoBaseline } from '../registry/index.ts';
+import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import type { ExitStatus } from './exit.ts';
 
 /** What `check` compared a Snapshot with: its Baseline's version, how it was chosen and the highest stable version, or the reason it has none. */
@@ -8,7 +8,7 @@ type Against =
       readonly kind: 'baseline';
       readonly version: string;
       readonly stable: string | undefined;
-      readonly chosen: 'highest' | 'against';
+      readonly chosen: ChosenVersion['chosen'];
     }
   | { readonly kind: 'none'; readonly why: NoBaseline };
 

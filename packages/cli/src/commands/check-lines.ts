@@ -1,5 +1,5 @@
 import type { Change } from '@cf-loom/contract/internal';
-import { firstVersion } from '../versioning/index.ts';
+import { firstStableOf } from '../versioning/index.ts';
 import { type Checked, type Ending, partsOf, reasonOf, tokenOf } from './checked.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
@@ -67,7 +67,7 @@ function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }
     return '';
   }
   return against.stable === undefined
-    ? ` (no stable version: the first is ${firstVersion})`
+    ? ` (no stable version: the first is ${firstStableOf(against.version)})`
     : ` (version from ${against.stable})`;
 }
 

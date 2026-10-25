@@ -1990,6 +1990,20 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     });
   });
 
+  test('--against on a package npm cannot find is a tooling error, as for any version the package does not list', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--against', '1.0.0');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists no version or dist-tag 1.0.0: --against takes one of them\n`,
+    });
+  });
+
   test('a package with only prereleases is checked against the highest one, and the line says there is no stable version', async ({
     lab,
   }) => {
@@ -2948,15 +2962,71 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   test('with --prerelease above a Baseline the counter is one above the highest prerelease listed of the version it derives', async ({
     lab,
   }) => {
-    const listed = ['1.1.0-0', '1.1.0-rc.1', '1.0.1-3'];
+    const listed = ['1.1.0-0', '1.1.0-3', '1.0.1-7'];
     const changed = await aChangedProject(lab, addedSuccessField, listed);
 
     const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
 
     expect(ran.status).toBe(0);
-    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-1`);
-    const distTags = { next: '1.1.0-1' };
-    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-1', distTags }]);
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-4`);
+    const distTags = { next: '1.1.0-4' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-4', distTags }]);
+  });
+
+  test('a prerelease that would not be above a hand-numbered prerelease Baseline fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(changed.project)).toEqual([]);
+  });
+
+  test('a prerelease that would move latest below hand-numbered prereleases fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const versions = ['1.0.0-rc.1', '1.0.0-rc.2'].map((version) => publishedAs(project, version));
+
+    const { ran, registry } = await publishedAgainst(
+      lab,
+      { project, served: servedAs(ordersPackage, ...versions) },
+      '--prerelease',
+      '--force',
+    );
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage}@1.0.0-0 would not be above the Baseline 1.0.0-rc.2: publish a version above it by hand\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a package whose only prerelease is 2.0.0-rc.1 publishes 2.0.0, and the line names it as the first version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '2.0.0-rc.1'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const checked = `Checked against ${ordersPackage}@2.0.0-rc.1 (no stable version: the first is 2.0.0)`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\nPublished ${ordersPackage}@2.0.0\n`,
+      stderr: '',
+    });
+    expect(putsOf(registry)).toEqual([
+      { name: ordersPackage, version: '2.0.0', distTags: { latest: '2.0.0' } },
+    ]);
   });
 
   test('--force on a package never published publishes 1.0.0 with the latest dist-tag, as without it', async ({

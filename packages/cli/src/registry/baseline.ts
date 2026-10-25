@@ -8,7 +8,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { isRootKind, publishedNameOf } from '../loading/index.ts';
-import { type ChosenVersion, chosenVersionOf } from './against.ts';
+import { type ChosenVersion, chosenVersionOf, unlistedAgainstOf } from './against.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import { versionsOf } from './package-versions.ts';
 import { snapshotTextOf } from './tarball.ts';
@@ -77,7 +77,9 @@ export async function baselineOf(
     case 'failed':
       return listed;
     case 'not-found':
-      return await baselineOfMissing(npm, packageName, scope);
+      return against === undefined
+        ? await baselineOfMissing(npm, packageName, scope)
+        : unlistedAgainstOf(packageName, against);
     case 'versions':
       return await baselineAmong(npm, { packageName, listed }, { declared, against });
   }

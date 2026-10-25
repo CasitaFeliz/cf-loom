@@ -1,4 +1,4 @@
-import { isSemanticVersion } from '@cf-loom/contract/internal';
+import { isSemanticVersion, ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import type { Versions } from './versions.ts';
@@ -20,8 +20,18 @@ type Named =
   | Failed;
 
 /**
- * The version of the Baseline: the highest listed, or the one `--against` names, itself or the
- * version a dist-tag points at; a name the package lists neither way is a failure.
+ * The failure of an `--against` that names no version or dist-tag of the package, which a
+ * package npm cannot find lists none of.
+ */
+export function unlistedAgainstOf(packageName: string, against: string): Failed {
+  return failed(
+    `${packageName} lists no version or dist-tag ${against}: --against takes one of them`,
+  );
+}
+
+/**
+ * The version the Check compares with: the highest listed, or the one `--against` names, itself
+ * or the version a dist-tag points at; a name the package lists neither way is a failure.
  */
 export async function chosenVersionOf(
   npm: NpmPlace,
@@ -29,16 +39,14 @@ export async function chosenVersionOf(
   { packageName, against }: AgainstQuery,
 ): Promise<ChosenVersion | Failed> {
   if (against === undefined) {
-    return { kind: 'chosen', version: listed.baseline, chosen: 'highest' };
+    return { kind: 'chosen', version: listed.highest, chosen: 'highest' };
   }
   const named = await namedVersionOf(npm, listed, { packageName, against });
   switch (named.kind) {
     case 'named':
       return { kind: 'chosen', version: named.version, chosen: 'against' };
     case 'unlisted':
-      return failed(
-        `${packageName} lists no version or dist-tag ${against}: --against takes one of them`,
-      );
+      return unlistedAgainstOf(packageName, against);
     case 'failed':
       return named;
   }
@@ -55,24 +63,11 @@ async function namedVersionOf(
   if (isSemanticVersion(against)) {
     return { kind: 'unlisted' };
   }
-  const tags = await distTagsOf(npm, packageName);
-  if (tags.kind === 'failed') {
-    return tags;
-  }
-  const tagged = tags.tags[against];
-  const isListed = typeof tagged === 'string' && versions.includes(tagged);
-  return isListed ? { kind: 'named', version: tagged } : { kind: 'unlisted' };
-}
-
-async function distTagsOf(
-  npm: NpmPlace,
-  packageName: string,
-): Promise<{ readonly kind: 'tags'; readonly tags: Readonly<Record<string, unknown>> } | Failed> {
   const label = `npm view ${packageName} dist-tags`;
   const run = await jsonFromNpm(npm, { label, args: ['view', packageName, 'dist-tags'] });
   switch (run.kind) {
     case 'json':
-      return { kind: 'tags', tags: tagsFrom(run.value) };
+      return namedByTag(versions, ownOf(run.value, against));
     case 'refused':
       return failed(run.message);
     case 'failed':
@@ -80,7 +75,7 @@ async function distTagsOf(
   }
 }
 
-function tagsFrom(printed: unknown): Readonly<Record<string, unknown>> {
-  const isMap = typeof printed === 'object' && printed !== null && !Array.isArray(printed);
-  return isMap ? Object.fromEntries(Object.entries(printed)) : {};
+function namedByTag(versions: readonly string[], tagged: unknown): Named {
+  const isListed = typeof tagged === 'string' && versions.includes(tagged);
+  return isListed ? { kind: 'named', version: tagged } : { kind: 'unlisted' };
 }

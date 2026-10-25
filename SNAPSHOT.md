@@ -159,7 +159,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
+- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones

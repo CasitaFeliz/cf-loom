@@ -8,7 +8,7 @@ import {
   type PublishOptions,
 } from '../versioning/index.ts';
 import { comparedLinesOf } from './check-lines.ts';
-import { endingOf } from './checked.ts';
+import { type Checked, endingOf } from './checked.ts';
 import { type Comparison, checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
 import { done, type Exit, type Stopped, toolingError } from './exit.ts';
 import { builtPeersOf } from './peers.ts';
@@ -38,17 +38,35 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
     return { status, stdout: opening, stderr };
   }
   const derived = derivedVersionOf(derivingOf(prepared, options));
-  if (derived.kind === 'unchanged') {
-    const same = `${checked.packageName}@${derived.baseline}`;
-    const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${same}`;
-    return done([...opening, `${nothing}; --force publishes anyway`]);
+  switch (derived.kind) {
+    case 'unchanged': {
+      const same = `${checked.packageName}@${derived.baseline}`;
+      const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${same}`;
+      return done([...opening, `${nothing}; --force publishes anyway`]);
+    }
+    case 'not-above': {
+      const would = `${checked.packageName}@${derived.version} would not be above the Baseline`;
+      return toolingError(`${would} ${derived.baseline}: publish a version above it by hand`);
+    }
+    case 'version':
+      return await putExit(run, { prepared, checked, derived });
   }
+}
+
+/** A publish that goes on: the comparison it was prepared from, what `check` reported of it, and the version it derived. */
+type Ready = {
+  readonly prepared: Prepared;
+  readonly checked: Checked;
+  readonly derived: DerivedVersion;
+};
+
+async function putExit(run: Run, { prepared, checked, derived }: Ready): Promise<Exit> {
   const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived));
   if (put.kind === 'failed') {
     return { status: 3, stdout: [], stderr: [put.message, ...left] };
   }
   const published = `Published ${checked.packageName}@${derived.version}`;
-  return { status: 0, stdout: [...opening, published], stderr: left };
+  return { status: 0, stdout: [...comparedLinesOf(checked), published], stderr: left };
 }
 
 async function preparedOf(run: Run): Promise<Prepared | Stopped> {
@@ -75,7 +93,7 @@ function derivingOf({ comparison, peers }: Prepared, options: PublishOptions): D
     case 'baseline': {
       const { read, report } = comparison;
       const bump = versionBumpOf(report, { baseline: read.peers, proposed: peerRangesOf(peers) });
-      const baseline = { version: read.snapshot.version, bump };
+      const baseline = { version: read.snapshot.version, stable: read.stable, bump };
       return { baseline, versions: read.versions, ...options };
     }
   }
