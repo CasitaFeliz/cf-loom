@@ -55,12 +55,15 @@ const reservedWords = [
 ] as const;
 
 /**
- * The names every object already has, and the two JavaScript calls on any object, so a client
- * method or a Handler under one is called by plain JavaScript.
+ * The names every plain object already has, `Object.prototype`'s own: no Contract name or object
+ * field takes one, since zod reads a field an object lacks from its prototype.
  */
-const objectNames = [
-  'then',
-  'toJSON',
+export const prototypeNames = [
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  '__proto__',
   'constructor',
   'hasOwnProperty',
   'isPrototypeOf',
@@ -69,6 +72,12 @@ const objectNames = [
   'toString',
   'valueOf',
 ] as const;
+
+/**
+ * The names every object already has, and the two JavaScript calls on any object, so a client
+ * method or a Handler under one is called by plain JavaScript.
+ */
+const objectNames = ['then', 'toJSON', ...prototypeNames] as const;
 
 /** The names an Endpoint, Guard or Subscription may not take. */
 export const reservedNames = [...reservedWords, ...objectNames] as const;

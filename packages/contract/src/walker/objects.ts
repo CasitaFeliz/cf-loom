@@ -1,7 +1,8 @@
 import type * as core from 'zod/v4/core';
+import { prototypeNames } from '../declarations/index.ts';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
 import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
-import { notAllowed, type Refused, refused } from './not-allowed.ts';
+import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
 import {
   allWalked,
   failed,
@@ -16,15 +17,19 @@ import {
 /** The key zod drops when it parses, since assigning it sets the prototype instead. */
 const protoKey = '__proto__';
 
+const inheritedKeys: ReadonlySet<string> = new Set(prototypeNames);
+
 /** An object: a Contract declares no strict object, and a catchall is refused. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
-  const fieldEntries = Object.entries(def.shape).map(([key, schema]) =>
-    key === protoKey
-      ? protoFieldFailure({ at: [...at, 'fields', key], schema }, walker)
-      : walkedEntry(key, walker.field(schema, [...at, 'fields', key])),
-  );
+  const fieldEntries = Object.entries(def.shape).map(([key, schema]) => {
+    const field = { at: [...at, 'fields', key], schema };
+    const refusal = fieldNameRefusalOf(key);
+    return refusal === undefined
+      ? walkedEntry(key, walker.field(schema, field.at))
+      : refusedNameFailure(refusal, field, walker);
+  });
   const fields = allWalked(fieldEntries);
   if (refusals.length > 0 || fields.kind === 'not-allowed') {
     return failed(failuresOf([...refusals, fields]), { type: 'object' });
@@ -32,9 +37,21 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
 }
 
-/** A field named `__proto__`, refused beside what lies inside its schema. */
-function protoFieldFailure({ at, schema }: LocatedSchema, walker: Walker): Walked<never> {
-  return failed(failuresOf([notAllowed(at, refused.protoField), walker.field(schema, at)]));
+/** Why zod cannot read a field of this name, or undefined when it can. */
+function fieldNameRefusalOf(key: string): Refused | undefined {
+  if (key === protoKey) {
+    return refused.protoField;
+  }
+  return inheritedKeys.has(key) ? refusedObjectNameField(key) : undefined;
+}
+
+/** A field zod cannot read by its name, refused beside what lies inside its schema. */
+function refusedNameFailure(
+  refusal: Refused,
+  { at, schema }: LocatedSchema,
+  walker: Walker,
+): Walked<never> {
+  return failed(failuresOf([notAllowed(at, refusal), walker.field(schema, at)]));
 }
 
 /**

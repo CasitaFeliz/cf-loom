@@ -66,6 +66,7 @@ export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
 export { isReservedCode } from './reserved-codes.ts';
+export { prototypeNames } from './reserved-names.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
 export type { IsOneLiteral, Refusal } from './rules.ts';
