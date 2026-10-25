@@ -1,9 +1,7 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
+import type { DistTag } from '../versioning/index.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
-
-/** The dist-tag a version is published under. */
-export type DistTag = 'latest' | 'next';
 
 /** A staged folder to publish as a package's version, and the dist-tag it takes. */
 export type Publishing = {

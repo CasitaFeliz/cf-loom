@@ -1,3 +1,4 @@
+import { firstStableOf } from '../versioning/index.ts';
 import { tokenOf } from './author-path.ts';
 import { type Checked, type Ending, reasonOf, siteOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
@@ -77,7 +78,21 @@ export function comparedLinesOf({ packageName, against, changes }: Checked): rea
   if (against.kind === 'none') {
     return [`${packageName} has no Baseline: ${reasonOf(against.why)}`];
   }
-  return [`Checked against ${packageName}@${against.version}`, ...changes.map(changeLineOf)];
+  const opening = `Checked against ${packageName}@${against.version}${versionNoteOf(against)}`;
+  return [opening, ...changes.map(changeLineOf)];
+}
+
+/** What the opening line says of the Baseline beyond its version: that `--against` named it, or where a version derives from. */
+function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }>): string {
+  if (against.chosen === 'against') {
+    return ' (--against)';
+  }
+  if (against.stable === against.version) {
+    return '';
+  }
+  return against.stable === undefined
+    ? ` (no stable version: the first is ${firstStableOf(against.version)})`
+    : ` (version from ${against.stable})`;
 }
 
 /** The lines `check` prints on stdout: the Baseline it used, every Change, and how it closes. */

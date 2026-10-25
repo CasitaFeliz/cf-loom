@@ -1,12 +1,11 @@
 import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
-import type { MessageMeta } from '../calls/index.ts';
+import type { MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
-import type { WithReader } from './reader.ts';
 import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
-type ReadBodyOf<Target extends WithReader> = core.output<Target['reader']>;
+type ReadBodyOf<Target extends Pairing> = core.output<Target['reader']>;
 
 /** The meta a direct call takes: `headers` left out is `{}`. */
 export type DirectMeta = Omit<MessageMeta, 'headers'> & {
@@ -18,7 +17,7 @@ type Answered = undefined | Fault;
 
 /** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a Fault; may be async. */
 export type CommandImplementation<
-  Target extends WithReader<Command>,
+  Target extends Pairing<Command>,
   Resources extends object = NoResources,
 > = (
   body: ReadBodyOf<Target>,
@@ -28,7 +27,7 @@ export type CommandImplementation<
 
 /** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a Fault; may be async. */
 export type EventImplementation<
-  Target extends WithReader<Subscription>,
+  Target extends Pairing<Subscription>,
   Resources extends object = NoResources,
 > = (
   body: ReadBodyOf<Target>,
@@ -41,7 +40,7 @@ export type MessageCall<Resources extends object = NoResources> = ResourcesField
 
 /** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type CommandHandler<
-  Target extends WithReader<Command>,
+  Target extends Pairing<Command>,
   Resources extends object = NoResources,
 > = {
   (
@@ -54,7 +53,7 @@ export type CommandHandler<
 
 /** The Handler of a Subscription: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type EventHandler<
-  Target extends WithReader<Subscription>,
+  Target extends Pairing<Subscription>,
   Resources extends object = NoResources,
 > = {
   (

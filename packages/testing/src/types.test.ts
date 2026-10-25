@@ -18,7 +18,7 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type FakeCall, fakeEvent, fakeProvider, type ScriptedAnswer } from './index.ts';
@@ -238,7 +238,11 @@ describe('fakeEvent: types', () => {
       description: 'Notify on settled',
       event: settledEvent,
     });
-    const handler = handle(withReader(subscription, settledEvent.body), () => undefined);
+    const { subscriptions } = readersOf({
+      commands: {},
+      subscriptions: { notifyOnSettled: { element: subscription, reader: settledEvent.body } },
+    });
+    const handler = handle(subscriptions.notifyOnSettled, () => undefined);
     type Read = Parameters<typeof handler>[0];
 
     const faked = fakeEvent(settledEvent, {

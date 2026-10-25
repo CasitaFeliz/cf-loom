@@ -9,7 +9,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | Package | Used by | Provides |
 | --- | --- | --- |
 | [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `withReader`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`), `WithReader`, `CommandImplementation`, `EventImplementation` and `MessageMeta`; `WithResources`, `ResourcesOf`, and `DirectCall`, `GuardCall` and `MessageCall`, the last argument of a direct call; `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
+| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `readersOf`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`), `Pairing`, `Readers`, `CommandImplementation`, `EventImplementation` and `MessageMeta`; `WithResources`, `ResourcesOf`, and `DirectCall`, `GuardCall` and `MessageCall`, the last argument of a direct call; `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
 | [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
@@ -55,7 +55,7 @@ src/
 ├── guards/api-key.handler.ts
 ├── commands/charge-card.v1.handler.ts
 ├── subscriptions/notify-on-settled.handler.ts
-├── handlers.generated.ts                  the Handler map; regenerated, never edited
+├── handlers.generated.ts                  the Handler map, carrying the `readers`; regenerated, never edited
 ├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes

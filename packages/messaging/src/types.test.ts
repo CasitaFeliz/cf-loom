@@ -1,5 +1,5 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { type HandlerMap, handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { type HandlerMap, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -81,6 +81,11 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated],
 });
 
+const readers = readersOf({
+  commands: {},
+  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV3.body } },
+});
+
 const broker: Broker = {
   connect: async () => ({
     publish: async () => undefined,
@@ -155,13 +160,13 @@ describe('publish and send types', () => {
   });
 
   test('consume takes the Handler map; onServiceFault receives a ConsumedFault', () => {
-    const notifying = handle(withReader(notifyOnCreated, orderCreatedV3.body), () => undefined);
+    const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
     const consuming = () =>
-      consume({ commands: {}, subscriptions: { notifyOnCreated: notifying } });
+      consume({ commands: {}, subscriptions: { notifyOnCreated: notifying }, readers });
 
     expectTypeOf(consume)
       .parameter(0)
-      .toEqualTypeOf<Pick<HandlerMap, 'commands' | 'subscriptions'>>();
+      .toEqualTypeOf<Pick<HandlerMap, 'commands' | 'subscriptions' | 'readers'>>();
     expectTypeOf<
       Parameters<NonNullable<MessagingOptions['onServiceFault']>>[0]
     >().toEqualTypeOf<ConsumedFault>();
@@ -171,12 +176,12 @@ describe('publish and send types', () => {
   test('consume without the Resources its Message Handlers take is a type error', () => {
     type Notifications = { readonly notifications: { readonly send: () => void } };
     const notifying = handle(
-      withReader(notifyOnCreated, orderCreatedV3.body),
+      readers.subscriptions.notifyOnCreated,
       (_body, _meta, { resources }: WithResources<Notifications>) => {
         resources.notifications.send();
       },
     );
-    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying } };
+    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying }, readers };
     const resources: Notifications = { notifications: { send: () => undefined } };
 
     const consuming = () => [
@@ -191,13 +196,13 @@ describe('publish and send types', () => {
   });
 
   test('consume takes no options when no Message Handler takes Resources', () => {
-    const notifying = handle(withReader(notifyOnCreated, orderCreatedV3.body), () => undefined);
-    const stubbed = handle.stub(withReader(notifyOnCreated, orderCreatedV3.body));
-    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying } };
+    const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
+    const stubbed = handle.stub(readers.subscriptions.notifyOnCreated);
+    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying }, readers };
 
     const consuming = () => [
       consume(handlers),
-      consume({ commands: {}, subscriptions: { notifyOnCreated: stubbed } }),
+      consume({ commands: {}, subscriptions: { notifyOnCreated: stubbed }, readers }),
     ];
 
     expect(consuming).toBeTypeOf('function');

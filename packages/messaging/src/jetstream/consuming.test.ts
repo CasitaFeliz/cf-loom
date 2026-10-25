@@ -9,7 +9,7 @@ import {
   defineEvent,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
+import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -57,6 +57,11 @@ const contract = defineContract({
   events: [orderCreatedV1],
   commands: [chargeCardV1],
   subscriptions: [notifyOnCreated],
+});
+
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
 });
 
 let server: NatsServer;
@@ -126,16 +131,17 @@ function handlersOf(
   return {
     commands: {
       chargeCardV1: handle(
-        withReader(chargeCardV1, orderBody),
+        readers.commands.chargeCardV1,
         recording('ChargeCard@1', behaviors.charge),
       ),
     },
     subscriptions: {
       notifyOnCreated: handle(
-        withReader(notifyOnCreated, orderBody),
+        readers.subscriptions.notifyOnCreated,
         recording('notifyOnCreated', behaviors.notify),
       ),
     },
+    readers,
   };
 }
 
@@ -466,7 +472,7 @@ describe('consuming over jetstream()', () => {
     const messagingOfOrders = await aMessaging(prefix);
     const handlers = {
       ...handlersOf(received),
-      commands: { chargeCardV1: handle.stub(withReader(chargeCardV1, orderBody)) },
+      commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
     };
 
     await messagingOfOrders.consume(handlers);
@@ -538,14 +544,18 @@ describe('consuming over jetstream()', () => {
     });
     const opened = await messaging(billing, broker, { onServiceFault: () => undefined });
     onTestFinished(() => opened.close());
+    const billingReaders = readersOf({
+      commands: {},
+      subscriptions: {
+        notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+      },
+    });
     const handlers = {
       commands: {},
       subscriptions: {
-        notifyOnSettled: handle(
-          withReader(notifyOnSettled, paymentSettledV1.body),
-          () => undefined,
-        ),
+        notifyOnSettled: handle(billingReaders.subscriptions.notifyOnSettled, () => undefined),
       },
+      readers: billingReaders,
     };
 
     const consuming = opened.consume(handlers);

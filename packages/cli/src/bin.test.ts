@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
-import type { Registry, RegistryOptions } from '../test/fake-registry.ts';
+import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
@@ -1777,17 +1777,39 @@ function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
   return ranAgainst(lab, changed, 'check', ...args);
 }
 
-/** A project whose root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */
-async function aChangedProject(
+/** A project whose root `before` was published as the versions given, then became `after` and was generated. */
+async function aChangedProjectListing(
   lab: Lab,
   { before, after }: { before: Files; after: Files },
-  alsoListed: readonly string[] = [],
+  versions: readonly string[],
 ) {
   const project = await aGeneratedProject(lab, before);
-  const listed = ['1.0.0', ...alsoListed].map((version) => publishedAs(project, version));
-  const served = servedAs(ordersPackage, ...listed);
+  const served = servedAs(
+    ordersPackage,
+    ...versions.map((version) => publishedAs(project, version)),
+  );
   write(project, after);
   await generateIn(lab, project);
+  return { project, served };
+}
+
+/** A project whose root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */
+function aChangedProject(
+  lab: Lab,
+  roots: { before: Files; after: Files },
+  alsoListed: readonly string[] = [],
+) {
+  return aChangedProjectListing(lab, roots, ['1.0.0', ...alsoListed]);
+}
+
+/** A project that was published as 1.0.0 with a Success field, then as 1.1.0 without it, and has not changed since. */
+async function aProjectPublishedTwice(lab: Lab, distTags?: Readonly<Record<string, string>>) {
+  const project = await aGeneratedProject(lab, removedSuccessField.before);
+  const first = publishedAs(project, '1.0.0');
+  write(project, removedSuccessField.after);
+  await generateIn(lab, project);
+  const versions = [first, publishedAs(project, '1.1.0')];
+  const served = { packages: { [ordersPackage]: { versions, ...(distTags ? { distTags } : {}) } } };
   return { project, served };
 }
 
@@ -1971,7 +1993,21 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     });
   });
 
-  test('a package with only prereleases has no Baseline: check names the highest prerelease, and exits 0', async ({
+  test('--against on a package npm cannot find is a tooling error, as for any version the package does not list', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--against', '1.0.0');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists no version or dist-tag 1.0.0: --against takes one of them\n`,
+    });
+  });
+
+  test('a package with only prereleases is checked against the highest one, and the line says there is no stable version', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
@@ -1983,12 +2019,168 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
     const { ran } = await checkedAgainst(lab, { project, served });
 
-    const why = 'it has only prereleases, the highest 1.0.0-rc.2';
+    const checked = `${ordersPackage}@1.0.0-rc.2`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `${ordersPackage} has no Baseline: ${why}\n`,
+      stdout: `Checked against ${checked} (no stable version: the first is 1.0.0)\nNo Change against ${checked}\n`,
       stderr: '',
     });
+  });
+
+  test('a Breaking Change against a package with only prereleases needs an Approval, as against any version', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProjectListing(lab, removedSuccessField, ['1.0.0-0', '1.0.0-1']);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 2,
+      stdout: [
+        `Checked against ${ordersPackage}@1.0.0-1 (no stable version: the first is 1.0.0)`,
+        'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr: `${approvalNeededLine}\n`,
+    });
+  });
+
+  test('retiring an Endpoint that was never Deprecated is Not allowed against a prerelease', async ({
+    lab,
+  }) => {
+    const roots = {
+      before: aRoot({ lifecycle: 'active' }),
+      after: aRoot({ lifecycle: 'retired' }),
+    };
+    const changed = await aChangedProjectListing(lab, roots, ['1.0.0-0']);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.status).toBe(1);
+    expect(ran.stdout).toContain('retired-before-deprecated');
+    expect(ran.stderr).toBe(`${refusedLine}\n`);
+  });
+
+  test('a prerelease above the highest stable version is the Baseline, and the line says which version it derives from', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const checked = `${ordersPackage}@1.1.0-0`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `Checked against ${checked} (version from 1.0.0)\nNo Change against ${checked}\n`,
+      stderr: '',
+    });
+  });
+
+  test('a prerelease below the highest stable version is not the Baseline', async ({ lab }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['0.9.0-rc.1']);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.stdout.split('\n')[0]).toBe(checkedAgainstOrders);
+  });
+
+  test('--against compares with the version named, and the line says so', async ({ lab }) => {
+    const changed = await aProjectPublishedTwice(lab);
+
+    const { ran } = await checkedAgainst(lab, changed, '--against', '1.0.0');
+
+    expect(ran).toEqual({
+      status: 2,
+      stdout: [
+        `Checked against ${ordersPackage}@1.0.0 (--against)`,
+        'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr: `${approvalNeededLine}\n`,
+    });
+  });
+
+  test('without --against the same project is compared with its highest version', async ({
+    lab,
+  }) => {
+    const changed = await aProjectPublishedTwice(lab);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    const checked = `${ordersPackage}@1.1.0`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `Checked against ${checked}\nNo Change against ${checked}\n`,
+      stderr: '',
+    });
+  });
+
+  test('--against compares with the version a dist-tag points at', async ({ lab }) => {
+    const changed = await aProjectPublishedTwice(lab, { latest: '1.1.0', next: '1.0.0' });
+
+    const { ran } = await checkedAgainst(lab, changed, '--against', 'next');
+
+    expect(ran.status).toBe(2);
+    expect(ran.stdout.split('\n')[0]).toBe(`Checked against ${ordersPackage}@1.0.0 (--against)`);
+  });
+
+  test.for([
+    ['a version it does not list', '9.9.9'],
+    ['a dist-tag it does not have', 'beta'],
+  ] as const)('--against %s is a tooling error naming it', async ([, name], { lab }) => {
+    const changed = await aProjectPublishedTwice(lab, { latest: '1.1.0' });
+
+    const { ran } = await checkedAgainst(lab, changed, '--against', name);
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists no version or dist-tag ${name}: --against takes one of them\n`,
+    });
+  });
+
+  test('--against a dist-tag that points at a version the package does not list is a tooling error', async ({
+    lab,
+  }) => {
+    const changed = await aProjectPublishedTwice(lab, { latest: '1.1.0', next: '3.0.0' });
+
+    const { ran } = await checkedAgainst(lab, changed, '--against', 'next');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists no version or dist-tag next: --against takes one of them\n`,
+    });
+  });
+
+  test('check --json names the Baseline and the highest stable version', async ({ lab }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: '1.1.0-0', stable: '1.0.0' });
+  });
+
+  test('check --json has no highest stable version when only prereleases are listed', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProjectListing(lab, { before: aRoot(), after: aRoot() }, [
+      '1.0.0-0',
+    ]);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: '1.0.0-0', stable: null });
+  });
+
+  test('check --json of a package never published has no Baseline and no stable version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: null, stable: null });
   });
 
   test('a registry check cannot read is a tooling error with its one line', async ({ lab }) => {
@@ -2307,6 +2499,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 2,
       package: ordersPackage,
       baseline: '1.0.0',
+      stable: '1.0.0',
       reason: null,
       changes: [
         {
@@ -2355,6 +2548,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 0,
       package: ordersPackage,
       baseline: null,
+      stable: null,
       reason,
       changes: [],
     });
@@ -2966,20 +3160,27 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(leftBehindIn(project)).toEqual([]);
   });
 
-  test('with --prerelease a package never published publishes 1.0.0-0, and the next publish 1.0.0-1, both tagged latest', async ({
+  test('with --prerelease a package never published publishes 1.0.0-0, and a changed one after it 1.0.0-1, both tagged latest', async ({
     lab,
   }) => {
-    const project = await aGeneratedProject(lab, aRoot());
+    const project = await aGeneratedProject(lab, addedSuccessField.before);
     const first = await publishedAgainst(lab, { project, served: {} }, '--prerelease');
+    write(project, addedSuccessField.after);
+    await generateIn(lab, project);
 
     const second = await cfLoomWith(project, first.env, 'publish', '--prerelease');
 
     expect(first.ran.status).toBe(0);
     expect(first.ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0-0`);
-    const why = 'it has only prereleases, the highest 1.0.0-0';
+    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version: the first is 1.0.0)`;
     expect(second).toEqual({
       status: 0,
-      stdout: `${ordersPackage} has no Baseline: ${why}\nPublished ${ordersPackage}@1.0.0-1\n`,
+      stdout: [
+        checked,
+        'endpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive',
+        `Published ${ordersPackage}@1.0.0-1`,
+        '',
+      ].join('\n'),
       stderr: '',
     });
     expect(putsOf(first.registry)).toEqual([
@@ -2988,20 +3189,111 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ]);
   });
 
-  test('a package with only prereleases publishes 1.0.0, comparing nothing', async ({ lab }) => {
+  test('an unchanged package with only prereleases publishes nothing with --prerelease', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0-rc.1'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served }, '--prerelease');
+
+    const same = `${ordersPackage}@1.0.0-rc.1`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        `Checked against ${same} (no stable version: the first is 1.0.0)`,
+        `Nothing to publish: the Snapshot and peer ranges are those of ${same}; --force publishes anyway`,
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('--force publishes the next prerelease of an unchanged package with only prereleases', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const versions = ['1.0.0-0', '1.0.0-1'].map((version) => publishedAs(project, version));
+    const served = servedAs(ordersPackage, ...versions);
+
+    const { registry } = await publishedAgainst(
+      lab,
+      { project, served },
+      '--prerelease',
+      '--force',
+    );
+
+    const distTags = { latest: '1.0.0-2' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0-2', distTags }]);
+  });
+
+  test('an unchanged package whose highest version is a prerelease publishes that version’s numbers, promoting it', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const versions = ['1.0.0', '1.1.0-0'].map((version) => publishedAs(project, version));
+    const served = servedAs(ordersPackage, ...versions);
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        `Checked against ${ordersPackage}@1.1.0-0 (version from 1.0.0)`,
+        `Published ${ordersPackage}@1.1.0`,
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    expect(putsOf(registry)).toEqual([
+      { name: ordersPackage, version: '1.1.0', distTags: { latest: '1.1.0' } },
+    ]);
+  });
+
+  test('a package with only prereleases publishes 1.0.0, checked against the highest one', async ({
+    lab,
+  }) => {
     const project = await aGeneratedProject(lab, aRoot());
     const served = servedAs(ordersPackage, publishedAs(project, '1.0.0-rc.1'));
 
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
-    const why = 'it has only prereleases, the highest 1.0.0-rc.1';
+    const checked = `Checked against ${ordersPackage}@1.0.0-rc.1 (no stable version: the first is 1.0.0)`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `${ordersPackage} has no Baseline: ${why}\nPublished ${ordersPackage}@1.0.0\n`,
+      stdout: `${checked}\nPublished ${ordersPackage}@1.0.0\n`,
       stderr: '',
     });
     const distTags = { latest: '1.0.0' };
     expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0', distTags }]);
+  });
+
+  test('a Breaking Change against a package with only prereleases still publishes 1.0.0, the first version that is not a prerelease', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProjectListing(lab, removedSuccessField, ['1.0.0-0']);
+
+    const { ran } = await publishedAgainst(lab, changed);
+
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0`);
+  });
+
+  test('a Not allowed Change against a package with only prereleases exits 1, and nothing is put', async ({
+    lab,
+  }) => {
+    const roots = {
+      before: aRoot({ lifecycle: 'active' }),
+      after: aRoot({ lifecycle: 'retired' }),
+    };
+    const changed = await aChangedProjectListing(lab, roots, ['1.0.0-0']);
+
+    const { ran, registry } = await publishedAgainst(lab, changed);
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toBe(`${refusedLine}\n`);
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('an Additive Change on a Public Endpoint publishes a minor above the Baseline', async ({
@@ -3065,7 +3357,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     });
   });
 
-  test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check still compares with the Baseline', async ({
+  test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check then compares with it', async ({
     lab,
   }) => {
     const changed = await aChangedProject(lab, addedSuccessField);
@@ -3077,21 +3369,78 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const distTags = { next: '1.1.0-0' };
     expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-0', distTags }]);
     const checked = await cfLoomWith(changed.project, env, 'check');
-    expect(checked.stdout.split('\n')[0]).toBe(checkedAgainstOrders);
+    const checkedAgainstPrerelease = `Checked against ${ordersPackage}@1.1.0-0 (version from 1.0.0)`;
+    expect(checked.stdout.split('\n')[0]).toBe(checkedAgainstPrerelease);
   });
 
   test('with --prerelease above a Baseline the counter is one above the highest prerelease listed of the version it derives', async ({
     lab,
   }) => {
-    const listed = ['1.1.0-0', '1.1.0-rc.1', '2.0.0-3'];
+    const listed = ['1.1.0-0', '1.1.0-3', '1.0.1-7'];
     const changed = await aChangedProject(lab, addedSuccessField, listed);
 
     const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
 
     expect(ran.status).toBe(0);
-    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-1`);
-    const distTags = { next: '1.1.0-1' };
-    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-1', distTags }]);
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.1.0-4`);
+    const distTags = { next: '1.1.0-4' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-4', distTags }]);
+  });
+
+  test('a prerelease that would not be above a hand-numbered prerelease Baseline fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(changed.project)).toEqual([]);
+  });
+
+  test('a prerelease that would move latest below hand-numbered prereleases fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const versions = ['1.0.0-rc.1', '1.0.0-rc.2'].map((version) => publishedAs(project, version));
+
+    const { ran, registry } = await publishedAgainst(
+      lab,
+      { project, served: servedAs(ordersPackage, ...versions) },
+      '--prerelease',
+      '--force',
+    );
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage}@1.0.0-0 would not be above the Baseline 1.0.0-rc.2: publish a version above it by hand\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a package whose only prerelease is 2.0.0-rc.1 publishes 2.0.0, and the line names it as the first version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, publishedAs(project, '2.0.0-rc.1'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const checked = `Checked against ${ordersPackage}@2.0.0-rc.1 (no stable version: the first is 2.0.0)`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\nPublished ${ordersPackage}@2.0.0\n`,
+      stderr: '',
+    });
+    expect(putsOf(registry)).toEqual([
+      { name: ordersPackage, version: '2.0.0', distTags: { latest: '2.0.0' } },
+    ]);
   });
 
   test('--force on a package never published publishes 1.0.0 with the latest dist-tag, as without it', async ({
@@ -3187,6 +3536,73 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(published.endpoints).toEqual({
       'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0' },
     });
+  });
+
+  test('publish --prerelease over a prerelease Baseline merges its history: a deleted Retired Endpoint stays as a tombstone that keeps its retiredIn', async ({
+    lab,
+  }) => {
+    const retired = await aGeneratedProject(lab, aRoot({ lifecycle: 'retired' }));
+    const ping = JSON.parse(read(retired, 'contract.snapshot.json')).endpoints['GET /ping'];
+    const endpoints = { 'GET /ping': { ...ping, retiredIn: '1.0.0-0' } };
+    const baseline = publishedAs(retired, '1.0.0-0', { endpoints });
+    const project = await aGeneratedProject(lab, aRootWithoutEndpoints);
+
+    const { registry } = await publishedAgainst(
+      lab,
+      { project, served: servedAs(ordersPackage, baseline) },
+      '--prerelease',
+    );
+
+    const published = JSON.parse(publishedFilesOf(registry)['snapshot.json']!);
+    expect(published.version).toBe('1.0.0-1');
+    expect(published.endpoints).toEqual({
+      'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0-0' },
+    });
+  });
+
+  test('a version published between the Baseline read and npm publish fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+    const meanwhile = {
+      afterRequestFor: tarballPathOf(ordersPackage, '1.0.0'),
+      packages: { [ordersPackage]: { versions: [publishedAs(changed.project, '1.2.0')] } },
+    };
+
+    const { ran, registry } = await publishedAgainst(lab, {
+      project: changed.project,
+      served: { ...changed.served, later: meanwhile },
+    });
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists 1.2.0, published while publish ran: rerun publish, which reads the registry again\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(changed.project)).toEqual([]);
+  });
+
+  test('a package npm could not find before the Check and lists after it fails publish with exit 3, and nothing is put', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const meanwhile = {
+      afterRequestFor: '/-/whoami',
+      packages: { [ordersPackage]: { versions: [publishedAs(project, '1.0.0')] } },
+    };
+
+    const { ran, registry } = await publishedAgainst(lab, {
+      project,
+      served: { later: meanwhile },
+    });
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${ordersPackage} lists 1.0.0, published while publish ran: rerun publish, which reads the registry again\n`,
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('the published package.json carries the version, the peers as carets and cfLoom with the hash of the published Snapshot, and the built entry carries the version', async ({
@@ -3294,6 +3710,21 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       },
     });
     expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package’s publishConfig.tag is left out of what is published, and the rest of publishConfig is kept', async ({
+    lab,
+  }) => {
+    const publishConfig = { tag: 'beta', access: 'restricted' };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ publishConfig }));
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(JSON.parse(publishedFilesOf(registry)['package.json']!).publishConfig).toEqual({
+      access: 'restricted',
+    });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: '@org/definitions', version: '1.0.0', distTags }]);
   });
 
   test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
@@ -3570,6 +4001,33 @@ describe('cf-loom', () => {
       stderr: `Only check and broker-plan take --json. ${usage}\n`,
     });
   });
+
+  test('only check takes --against', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'publish', '--against', '1.0.0');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Only check takes --against. ${usage}\n`,
+    });
+  });
+
+  test.for([['--against'], ['--against=']] as const)(
+    '--against takes a version or a dist-tag: check %s',
+    (flags) => {
+      const project = aProject();
+
+      const ran = cfLoom(project, 'check', ...flags);
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `--against takes a version or a dist-tag. ${usage}\n`,
+      });
+    },
+  );
 
   test('check takes no argument', () => {
     const project = aProject();

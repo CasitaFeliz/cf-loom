@@ -11,10 +11,10 @@ import {
   admit,
   type GuardCall,
   handle,
+  readersOf,
   reject,
   success,
   type WithResources,
-  withReader,
 } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -110,8 +110,13 @@ const apiKeyHandler = handle(
   },
 );
 
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+  subscriptions: {},
+});
+
 const chargeCardHandler = handle(
-  withReader(chargeCardV1, chargeCardV1.body),
+  readers.commands.chargeCardV1,
   (_body, _meta, { resources: taken }: Needs<'charges'>) => {
     taken.charges.chargeOnce(ORDER_ID);
   },
@@ -124,6 +129,7 @@ const handlers = {
   guards: { apiKey: apiKeyHandler },
   commands: { chargeCardV1: chargeCardHandler },
   subscriptions: {},
+  readers,
   deprecatedAt: {},
 };
 

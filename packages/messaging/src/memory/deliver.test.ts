@@ -14,7 +14,7 @@ import {
   handle,
   InvalidInputError,
   type MessageMeta,
-  withReader,
+  readersOf,
 } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
@@ -112,15 +112,17 @@ const contract = defineContract({
 
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });
 
-const pairings = {
-  chargeCard: withReader(chargeCardV1, orderBody),
-  notifyOnCreated: withReader(notifyOnCreated, readerV2),
-  auditCreated: withReader(
-    auditCreated,
-    z.object({ orderId: z.uuid(), status: readerV2.shape.status }),
-  ),
-  notifyOnSettled: withReader(notifyOnSettled, paymentSettledV1.body),
-};
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: {
+    notifyOnCreated: { element: notifyOnCreated, reader: readerV2 },
+    auditCreated: {
+      element: auditCreated,
+      reader: z.object({ orderId: z.uuid(), status: readerV2.shape.status }),
+    },
+    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+  },
+});
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
 
@@ -170,24 +172,25 @@ async function running(
   await started.consume({
     commands: {
       chargeCardV1: handle(
-        pairings.chargeCard,
+        readers.commands.chargeCardV1,
         recording(received, 'ChargeCard@1', answers.charge),
       ),
     },
     subscriptions: {
       notifyOnCreated: handle(
-        pairings.notifyOnCreated,
+        readers.subscriptions.notifyOnCreated,
         recording(received, 'notifyOnCreated', answers.notify),
       ),
       auditCreated: handle(
-        pairings.auditCreated,
+        readers.subscriptions.auditCreated,
         recording(received, 'auditCreated', answers.audit),
       ),
       notifyOnSettled: handle(
-        pairings.notifyOnSettled,
+        readers.subscriptions.notifyOnSettled,
         recording(received, 'notifyOnSettled', answers.settled),
       ),
     },
+    readers,
   });
   return connection;
 }
@@ -507,12 +510,13 @@ describe('deliver()', () => {
       const broker = memory();
       const { consume } = await messaging(contract, broker);
       await consume({
-        commands: { chargeCardV1: handle.stub(pairings.chargeCard) },
+        commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
         subscriptions: {
-          notifyOnCreated: handle.stub(pairings.notifyOnCreated),
-          auditCreated: handle.stub(pairings.auditCreated),
-          notifyOnSettled: handle.stub(pairings.notifyOnSettled),
+          notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated),
+          auditCreated: handle.stub(readers.subscriptions.auditCreated),
+          notifyOnSettled: handle.stub(readers.subscriptions.notifyOnSettled),
         },
+        readers,
       });
 
       const delivering = broker.deliver(element, {});

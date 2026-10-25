@@ -48,11 +48,11 @@ type Pairing = {
   readonly reader: string;
 };
 
-/** `withReader`, which pairs a declaration with its Reader, and the package it is imported from. */
-const withReaderImport = { name: 'withReader', specifier: '@cf-loom/handlers' } as const;
+/** `readersOf`, which the table of pairings is built by, and the package it is imported from. */
+const readersOfImport = { name: 'readersOf', specifier: '@cf-loom/handlers' } as const;
 
-/** The name the readers file exports its table of pairings under. */
-const readersTable = 'readers';
+/** The name the readers file exports its table of pairings under, which the Handler map imports and lists. */
+export const readersTable = 'readers';
 
 /** The tables of the `readers` object, in the order they are written. */
 const tableKeys = ['commands', 'subscriptions'] as const;
@@ -78,8 +78,9 @@ export function pairingTargetOf(handled: MessageHandled, readersFile: string): S
 
 /**
  * The text of the readers file written at `readersFile`: the Reader schemas of the Service's own
- * Events and Commands, and a table pairing each Command's Message Version and Subscription,
- * imported from where it is exported, with the Reader its Handler reads.
+ * Events and Commands, and a table, empty while the Service has no Message, pairing each
+ * Command's Message Version and Subscription, imported from where it is exported, with the Reader
+ * its Handler reads.
  */
 export function readersTextOf(
   snapshot: ServiceSnapshot,
@@ -139,18 +140,15 @@ function subscriptionPairingOf(
   return { handled, at: atOf(handled), local, reader };
 }
 
-/** The table of pairings, one member per table key; none while there is no pairing. */
+/** The table of pairings, built by `readersOf`, one member per table key. */
 function tableLinesOf(pairings: readonly Pairing[]): readonly string[] {
-  if (pairings.length === 0) {
-    return [];
-  }
   const members = tableKeys.map((key) =>
     memberLinesOf(
       key,
       pairings.filter(({ handled }) => tableMemberOf(handled).key === key),
     ),
   );
-  return [`export const ${readersTable} = {`, ...members.flat(), '};'];
+  return [`export const ${readersTable} = ${readersOfImport.name}({`, ...members.flat(), '});'];
 }
 
 function memberLinesOf(key: TableKey, pairings: readonly Pairing[]): readonly string[] {
@@ -158,24 +156,23 @@ function memberLinesOf(key: TableKey, pairings: readonly Pairing[]): readonly st
     return [`  ${key}: {},`];
   }
   const entries = pairings.map(({ handled, local, reader }) => {
-    const pairing = `${withReaderImport.name}(${local}, ${reader})`;
-    return `    ${tableMemberOf(handled).name}: ${pairing},`;
+    return `    ${tableMemberOf(handled).name}: { element: ${local}, reader: ${reader} },`;
   });
   return [`  ${key}: {`, ...entries, '  },'];
 }
 
 /**
- * The imports the file needs, in code point order of their specifiers: each pairing's file and
- * `withReader`, with any pairing, and the modules its schemas call.
+ * The imports the file needs, in code point order of their specifiers: each pairing's file,
+ * `readersOf` and the modules its schemas call.
  */
 function importsOf(
   needs: Needs,
   pairings: readonly Pairing[],
   readersFile: string,
 ): readonly string[] {
-  const { name, specifier } = withReaderImport;
-  const withReader = { specifier, line: namedImportOf([name], specifier) };
-  const paired = pairings.length > 0 ? [withReader, ...pairedImportsOf(pairings, readersFile)] : [];
+  const { name, specifier } = readersOfImport;
+  const readersOf = { specifier, line: namedImportOf([name], specifier) };
+  const paired = [readersOf, ...pairedImportsOf(pairings, readersFile)];
   return sortedImportLinesOf([...paired, ...schemaImportsOf(needs)]);
 }
 
@@ -194,12 +191,8 @@ function pairedImportsOf(pairings: readonly Pairing[], readersFile: string): rea
   }));
 }
 
-/** The groups of the body, a blank line between two, or an empty module when none holds a line. */
+/** The groups of the body that hold a line, a blank line between two. */
 function bodyOf(groups: readonly (readonly string[])[]): readonly string[] {
-  const written = groups.filter((group) => group.length > 0);
-  if (written.length === 0) {
-    return ['export {};'];
-  }
-  const [first = [], ...rest] = written;
+  const [first = [], ...rest] = groups.filter((group) => group.length > 0);
   return [...first, ...rest.flatMap((group) => ['', ...group])];
 }

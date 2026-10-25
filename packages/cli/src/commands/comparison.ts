@@ -40,11 +40,15 @@ export async function committedBuiltOf(run: Run): Promise<BuiltProject | Stopped
   return stop === undefined ? built : { kind: 'stopped', exit: stop };
 }
 
-/** Reads the package's Baseline and runs the Compatibility Check of the Snapshot against it. */
-export async function comparisonOf(built: BuiltProject, run: Run): Promise<Comparison | Stopped> {
+/** Reads the package's Baseline, the highest version or the one `against` names, and runs the Compatibility Check of the Snapshot against it. */
+export async function comparisonOf(
+  built: BuiltProject,
+  run: Run,
+  against: string | undefined,
+): Promise<Comparison | Stopped> {
   const { project, snapshot } = built;
   const npm = { directory: project.directory, env: run.env };
-  const read = await baselineOf(npm, snapshot, project.scope);
+  const read = await baselineOf(npm, { declared: snapshot, scope: project.scope, against });
   switch (read.kind) {
     case 'failed':
       return { kind: 'stopped', exit: toolingError(read.message) };
@@ -65,8 +69,8 @@ export function checkedFrom(comparison: Comparison): Checked {
       return { kind: 'checked', packageName, against: { kind: 'none', why }, changes: [] };
     }
     case 'baseline': {
-      const { packageName, snapshot } = comparison.read;
-      const against = { kind: 'baseline', version: snapshot.version } as const;
+      const { packageName, snapshot, stable, chosen } = comparison.read;
+      const against = { kind: 'baseline', version: snapshot.version, stable, chosen } as const;
       const changes = comparison.report.changes.map(checkedChangeOf);
       return { kind: 'checked', packageName, against, changes };
     }

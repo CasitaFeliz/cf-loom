@@ -8,7 +8,7 @@ export type {
   GuardImplementation,
   HandlerMap,
 } from './handler.ts';
-export { mappedHandlerOf } from './mapped.ts';
+export { mappedHandlerOf, mappedMessageHandlerOf } from './mapped.ts';
 export type {
   CommandHandler,
   CommandImplementation,
@@ -16,8 +16,8 @@ export type {
   EventImplementation,
   MessageCall,
 } from './message-handler.ts';
-export type { WithReader } from './reader.ts';
-export { withReader } from './reader.ts';
+export type { Readers } from './reader.ts';
+export { readersOf } from './reader.ts';
 export type {
   CallArgument,
   NoResources,
@@ -25,4 +25,4 @@ export type {
   ResourcesOf,
   WithResources,
 } from './resources.ts';
-export { isStub, readerOf, runEndpoint, runGuard, runMessage } from './runs.ts';
+export { isStub, runEndpoint, runGuard, runMessage } from './runs.ts';

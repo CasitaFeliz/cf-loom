@@ -22,10 +22,10 @@ import {
   handle,
   type MessageMeta,
   type ResourcesOf,
+  readersOf,
   reject,
   success,
   type WithResources,
-  withReader,
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -67,9 +67,6 @@ const refundCardV1 = aCommand('RefundCard');
 
 const statusReader = z.object({ orderId: z.uuid(), status: openEnumReader(['pending', 'paid']) });
 
-const chargeCard = withReader(chargeCardV1, statusReader);
-const refundCard = withReader(refundCardV1, statusReader);
-
 const orderPaidV1 = defineEvent({
   name: 'OrderPaid',
   version: 1,
@@ -84,9 +81,22 @@ const notifyOnPaidV1 = defineSubscription({
   event: orderPaidV1,
 });
 
-const notifyOnPaid = withReader(notifyOnPaidV1, statusReader);
+const readers = readersOf({
+  commands: {
+    chargeCardV1: { element: chargeCardV1, reader: statusReader },
+    refundCardV1: { element: refundCardV1, reader: statusReader },
+  },
+  subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: statusReader } },
+});
+
+const chargeCard = readers.commands.chargeCardV1;
+const refundCard = readers.commands.refundCardV1;
+const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 
 const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+
+const handleRefusal =
+  'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
 
 describe('handle', () => {
   test('a Handler returned by handle() is a function that carries its Element', () => {
@@ -101,9 +111,7 @@ describe('handle', () => {
 
     const write = () => handle(notAnElement, () => success({ id: ORDER_ID }));
 
-    expect(write).toThrow(
-      'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader by withReader()',
-    );
+    expect(write).toThrow(handleRefusal);
   });
 
   test("a Message Handler carries the root's own Command or Subscription as its element", () => {
@@ -119,14 +127,14 @@ describe('handle', () => {
 
   test('handle() given a bare Command or Subscription is a type error and throws', () => {
     const writes = [
-      // @ts-expect-error a Command is handled only paired with its Reader
+      // @ts-expect-error a Command is handled only as the readers file pairs it
       () => handle(chargeCardV1, () => undefined),
-      // @ts-expect-error a Subscription is handled only paired with its Reader
+      // @ts-expect-error a Subscription is handled only as the readers file pairs it
       () => handle.stub(notifyOnPaidV1),
     ];
 
     for (const write of writes) {
-      expect(write).toThrow('paired with its Reader by withReader()');
+      expect(write).toThrow(handleRefusal);
     }
   });
 
@@ -489,25 +497,68 @@ describe('ResourcesOf', () => {
   });
 });
 
-describe('withReader', () => {
-  test('withReader returns a frozen pairing', () => {
-    const pairing = withReader(chargeCardV1, statusReader);
+describe('readersOf', () => {
+  test('readersOf returns the table and each of its pairings frozen', () => {
+    const table = readersOf({
+      commands: { chargeCardV1: { element: chargeCardV1, reader: statusReader } },
+      subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: statusReader } },
+    });
 
-    const frozen = Object.isFrozen(pairing);
+    const frozen = [
+      table,
+      table.commands,
+      table.subscriptions,
+      table.commands.chargeCardV1,
+      table.subscriptions.notifyOnPaid,
+    ].map(Object.isFrozen);
 
-    expect(frozen).toBe(true);
+    expect(frozen).toEqual([true, true, true, true, true]);
   });
 
-  test('withReader given something that is no Command or Subscription, or no zod schema, throws', () => {
-    const pairs = [
-      () => withReader(getOrder as never, statusReader),
-      () => withReader({ ...chargeCardV1 }, statusReader),
-      () => withReader(chargeCardV1, { _zod: {} } as never),
-    ];
+  test('readersOf keeps each pairing as written, typed by its Reader', () => {
+    const table = readersOf({
+      commands: { chargeCardV1: { element: chargeCardV1, reader: statusReader } },
+      subscriptions: {},
+    });
 
-    for (const pair of pairs) {
-      expect(pair).toThrow('withReader() takes');
-    }
+    expectTypeOf(table.commands.chargeCardV1.reader).toEqualTypeOf<typeof statusReader>();
+    expect(table.commands.chargeCardV1.element).toBe(chargeCardV1);
+  });
+
+  test.each([
+    ['an Endpoint', 'commands.x', { commands: { x: { element: getOrder, reader: statusReader } } }],
+    [
+      'a copy of a Command',
+      'commands.x',
+      { commands: { x: { element: { ...chargeCardV1 }, reader: statusReader } } },
+    ],
+    [
+      'a Command with no zod schema',
+      'commands.x',
+      { commands: { x: { element: chargeCardV1, reader: { _zod: {} } } } },
+    ],
+    [
+      'a Subscription with no Reader',
+      'subscriptions.x',
+      { subscriptions: { x: { element: notifyOnPaidV1 } } },
+    ],
+  ])('readersOf given %s names the key it refuses', (_what, key, pairing) => {
+    const pair = () => readersOf({ commands: {}, subscriptions: {}, ...pairing } as never);
+
+    expect(pair).toThrow(
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,
+    );
+  });
+
+  test.each([
+    ['commands', { subscriptions: {} }],
+    ['subscriptions', { commands: {} }],
+  ])('readersOf given a table without %s names it', (key, tables) => {
+    const pair = () => readersOf(tables as never);
+
+    expect(pair).toThrow(
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,
+    );
   });
 });
 
@@ -518,6 +569,7 @@ describe('HandlerMap', () => {
       guards: {},
       commands: { chargeCardV1: handle.stub(chargeCard) },
       subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
+      readers,
       deprecatedAt: {},
     };
 
@@ -534,6 +586,7 @@ describe('HandlerMap', () => {
       guards: {},
       commands: { chargeCardV1: handle.stub(getOrder) },
       subscriptions: {},
+      readers,
       deprecatedAt: {},
     };
 
@@ -547,6 +600,7 @@ describe('HandlerMap', () => {
       guards: { apiKey: handle.stub(apiKey) },
       commands: {},
       subscriptions: {},
+      readers: readersOf({ commands: {}, subscriptions: {} }),
       deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
     };
 
@@ -562,10 +616,41 @@ describe('HandlerMap', () => {
       guards: {},
       commands: {},
       subscriptions: {},
+      readers,
       deprecatedAt: {},
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
     expect(generated.endpoints.getOrder()).toBeUndefined();
+  });
+
+  test('refuses a map without the readers the readers file exports', () => {
+    const generated = {
+      endpoints: {},
+      guards: {},
+      commands: {},
+      subscriptions: {},
+      deprecatedAt: {},
+    };
+
+    expectTypeOf(generated).not.toExtend<HandlerMap>();
+    expect(generated.commands).toEqual({});
+  });
+
+  test('refuses a map whose readers are no pairings of Commands and Subscriptions', () => {
+    const generated = {
+      endpoints: {},
+      guards: {},
+      commands: {},
+      subscriptions: {},
+      readers: {
+        commands: { chargeCardV1: { element: getOrder, reader: statusReader } },
+        subscriptions: {},
+      },
+      deprecatedAt: {},
+    };
+
+    expectTypeOf(generated).not.toExtend<HandlerMap>();
+    expect(generated.readers.commands.chargeCardV1.element).toBe(getOrder);
   });
 });

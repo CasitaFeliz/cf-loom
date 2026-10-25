@@ -13,6 +13,7 @@ export function checkedJsonOf(checked: Checked, status: Ending['status']): strin
     status,
     package: packageName,
     baseline: against.kind === 'baseline' ? against.version : null,
+    stable: against.kind === 'baseline' ? (against.stable ?? null) : null,
     reason: against.kind === 'none' ? reasonOf(against.why) : null,
     changes,
   });

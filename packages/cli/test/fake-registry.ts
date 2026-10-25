@@ -24,10 +24,17 @@ export function jsonAnswer(status: number, value: unknown): Answer {
   return { status, body: JSON.stringify(value), contentType: 'application/json' };
 }
 
+/** The packages a registry holds once it has answered a request for a path, as when someone else publishes meanwhile. */
+type Later = {
+  readonly afterRequestFor: string;
+  readonly packages: Readonly<Record<string, FakePackage>>;
+};
+
 export type RegistryOptions = {
   readonly packages?: Readonly<Record<string, FakePackage>>;
   readonly whoami?: Answer;
   readonly answers?: Readonly<Record<string, Answer>>;
+  readonly later?: Later;
 };
 
 type Recorded = {
@@ -178,6 +185,9 @@ export async function aRegistry(options: RegistryOptions = {}): Promise<Registry
       const body = Buffer.concat(chunks).toString('utf8');
       const url = `http://${request.headers.host}`;
       const answer = answerOf({ method, path, accept, body }, state, url);
+      if (options.later?.afterRequestFor === path) {
+        Object.assign(state.packages, options.later.packages);
+      }
       if (answer === 'hang') {
         return;
       }
