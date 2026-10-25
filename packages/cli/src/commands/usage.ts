@@ -1,4 +1,4 @@
-import { snapshotFormats } from '@cf-loom/contract/internal';
+import { writtenSnapshotFormat } from '@cf-loom/contract/internal';
 import { runningCliOf } from '../project/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
 
@@ -45,6 +45,5 @@ export function helpExitOf(topic: readonly string[]): Exit {
 /** What `--version` prints: the CLI's version and the Snapshot format it writes. */
 export function versionExit(): Exit {
   const { name, version } = runningCliOf();
-  const format = snapshotFormats.at(-1);
-  return done([`${name} ${version} (Snapshot format ${format})`]);
+  return done([`${name} ${version} (Snapshot format ${writtenSnapshotFormat})`]);
 }

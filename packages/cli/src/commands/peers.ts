@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import type { Peers } from '../contract-package/index.ts';
+import type { PeerRanges } from '@cf-loom/contract/internal';
+import { type Peers, peerRangesOf, publishedPeersOf } from '../contract-package/index.ts';
 import { installedVersionOf } from '../loading/index.ts';
 import type { BuiltProject } from '../project/index.ts';
 
@@ -20,4 +21,19 @@ export function builtPeersOf(
     return { kind: 'failed', message: `${zod.message}: ${takenFrom}` };
   }
   return { kind: 'found', peers: { contract: contract.version, zod: zod.version } };
+}
+
+/**
+ * The peer ranges a package of a kind is published with, which its package.json declares and the
+ * version derivation compares with the Baseline's: the two peers for a Contract Package, and for
+ * a Definitions Package those its package.json lists too.
+ */
+export function publishedRangesOf(built: BuiltProject, peers: Peers): PeerRanges {
+  switch (built.snapshot.kind) {
+    case 'service':
+    case 'application':
+      return peerRangesOf(peers);
+    case 'definitions':
+      return publishedPeersOf(built.project.manifest, peers);
+  }
 }

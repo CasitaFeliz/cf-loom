@@ -1,12 +1,18 @@
 import type { Built } from '../building/index.ts';
 import { failed } from '../child-process/index.ts';
-import { installedRootOf, publishedNameOf, resolvePackages } from '../loading/index.ts';
-import { type BuiltProject, declaredOf, type Project, snapshotFile } from '../project/index.ts';
+import { type InstalledPackage, installedRootOf } from '../loading/index.ts';
+import {
+  type BuiltProject,
+  declaredOf,
+  declaredRootOf,
+  type Project,
+  snapshotFile,
+} from '../project/index.ts';
 
-/** A Definitions Package staged under `staging`, and the declared Snapshot its built entry must have. */
+/** A Definitions Package staged as an installed one, and the declared Snapshot its built entry must have. */
 export type EntryToCheck = {
-  readonly project: Project;
-  readonly staging: string;
+  readonly project: Pick<Project, 'packageName'>;
+  readonly staged: InstalledPackage;
   readonly declared: Pick<BuiltProject, 'text' | 'context'>;
 };
 
@@ -15,27 +21,25 @@ export type EntryToCheck = {
  * the Snapshot its built entry declares to be the committed one, so a build that is stale, or
  * that no Service could import, is never published.
  */
-export async function checkedEntryOf({ project, staging, declared }: EntryToCheck): Promise<Built> {
-  const name = publishedNameOf(project.packageName, 'definitions');
-  const loaded = await installedRootOf(staging, name);
+export async function checkedEntryOf({ project, staged, declared }: EntryToCheck): Promise<Built> {
+  const { packageName } = staged;
+  const loaded = await installedRootOf(staged);
   if (loaded.kind === 'failed') {
-    return notImportable(name, loaded.message);
+    return notImportable(packageName, loaded.message);
   }
-  const resolved = resolvePackages(loaded.root, loaded.imported);
-  if (resolved.kind === 'failed') {
-    return notImportable(name, resolved.message);
+  const directory = staged.staging;
+  const root = declaredRootOf(loaded, { directory, packageName: project.packageName });
+  if (root.kind === 'tooling') {
+    return notImportable(packageName, root.message);
   }
-  const { root, file: rootFile, exports: rootExports } = loaded;
-  const { packageName } = project;
-  const entry = { directory: staging, packageName, root, rootExports, rootFile };
-  const staged = declaredOf({ ...entry, packages: resolved.packages }, declared.context);
-  switch (staged.kind) {
+  const entry = declaredOf(root.declared, declared.context);
+  switch (entry.kind) {
     case 'tooling':
-      return notImportable(name, staged.message);
+      return notImportable(packageName, entry.message);
     case 'invalid':
-      return stale(name);
+      return stale(packageName);
     case 'declared':
-      return staged.text === declared.text ? { kind: 'built' } : stale(name);
+      return entry.text === declared.text ? { kind: 'built' } : stale(packageName);
   }
 }
 

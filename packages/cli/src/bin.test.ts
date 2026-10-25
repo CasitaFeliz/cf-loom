@@ -4038,7 +4038,8 @@ const aRootWithoutEndpoints: Files = {
 
 /** The root file of a Definitions Package, which exports what is given besides `definitions`. */
 function aDefinitionsModule(exported: readonly string[] = []): string {
-  const imports = "import { defineDefinitions, defineGuard } from '@cf-loom/contract';";
+  const imports =
+    "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';";
   return [imports, ...exported, 'export const definitions = defineDefinitions({});', ''].join('\n');
 }
 
@@ -4047,6 +4048,10 @@ const aMoney = [
   'export const money = z.object({ amount: z.number() });',
 ].join('\n');
 const anApiKey = "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });";
+const aGone =
+  "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });";
+const aGuardNamedWithAnUnderscore =
+  "export const apiKey = defineGuard({ name: 'api_key', description: 'A key' });";
 
 /**
  * The Definitions Package `@org/definitions` as its author left it once built: its `dist` is the
@@ -4481,7 +4486,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `Checked against ${ordersPackage}@1.1.0-rc.1 (version from 1.0.0)\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
       stderr: `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4503,7 +4508,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `Checked against ${ordersPackage}@1.0.0-rc.2 (no stable version: the first is 1.0.0)\n`,
       stderr: `${ordersPackage}@1.0.0-0 would not be above the Baseline 1.0.0-rc.2: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4852,6 +4857,17 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       'lacks a Guard added to src',
       { source: aDefinitionsModule([anApiKey]), built: aDefinitionsModule() },
     ],
+    [
+      'still exports a Rejection removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([aGone]) },
+    ],
+    [
+      'declares a Guard that breaks a rule of the Contract',
+      {
+        source: aDefinitionsModule([anApiKey]),
+        built: aDefinitionsModule([aGuardNamedWithAnUnderscore]),
+      },
+    ],
   ] as const)(
     'a Definitions Package whose dist %s is refused, and nothing is put or left behind',
     async ([, sources], { lab }) => {
@@ -4868,18 +4884,20 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   );
 
   test.for([
-    ['has no dist', {}, 'Cannot find module'],
+    ['has no dist', {}, false, 'Cannot find module'],
     [
       'exports its TypeScript source',
       { exports: './src/definitions/index.ts', files: ['src'] },
+      true,
       'files under node_modules',
     ],
+    ['has no entry Node can resolve', { exports: undefined }, true, 'Cannot find package'],
   ] as const)(
     'a Definitions Package that %s cannot be imported as installed, and nothing is put or left behind',
-    async ([, manifest, reason], { lab }) => {
+    async ([, manifest, hasDist, reason], { lab }) => {
       const built = aBuiltDefinitions(manifest);
       const { 'dist/index.js': _js, 'dist/index.d.ts': _declarations, ...files } = built;
-      const project = await aGeneratedProject(lab, 'files' in manifest ? built : files);
+      const project = await aGeneratedProject(lab, hasDist ? built : files);
 
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
@@ -4893,6 +4911,18 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       expect(leftBehindIn(project)).toEqual([]);
     },
   );
+
+  test('a Definitions Package with a main and no exports is imported as installed and publishes', async ({
+    lab,
+  }) => {
+    const manifest = { exports: undefined, main: './dist/index.js' };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(manifest));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(registry)).toHaveLength(1);
+  });
 
   test('a Definitions Package’s publishConfig.tag is left out of what is published, and the rest of publishConfig is kept', async ({
     lab,

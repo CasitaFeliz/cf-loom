@@ -27,10 +27,10 @@ const flags = Object.entries(optionTypes)
   .map(([name]) => name);
 
 /** The usage line of a string option given no value, an empty one, or another option as its value. */
-const valueLines = {
+const valueLines: Readonly<Record<string, string>> = {
   out: '--out takes a folder',
   against: '--against takes a version or a dist-tag',
-} as const;
+};
 
 /** The command the arguments name, or the usage error they are. */
 type Parsed =
@@ -72,28 +72,30 @@ function calledOf(args: readonly string[]): Parsed {
 }
 
 /** What is wrong with the options given, in one line, if anything is. */
-function optionProblemIn({ tokens, values }: ParsedArgs): string | undefined {
+function optionProblemIn({ tokens }: ParsedArgs): string | undefined {
   const unknown = tokens.find(
     (token) => token.kind === 'option' && !knownOptions.includes(token.name),
   );
   if (unknown !== undefined && unknown.kind === 'option') {
     return `Unknown option: ${unknown.rawName}`;
   }
-  for (const name of ['out', 'against'] as const) {
-    const value = values[name];
-    const token = tokens.findLast(
-      (candidate) => candidate.kind === 'option' && candidate.name === name,
-    );
-    const isOption =
-      token?.kind === 'option' && token.inlineValue === false && String(value).startsWith('-');
-    if (value !== undefined && (typeof value !== 'string' || value === '' || isOption)) {
-      return valueLines[name];
-    }
+  const lacking = tokens.find(isLackingItsValue);
+  if (lacking?.kind === 'option') {
+    return valueLines[lacking.name];
   }
   const valued = tokens.find(
     (token) => token.kind === 'option' && flags.includes(token.name) && token.value !== undefined,
   );
   return valued?.kind === 'option' ? `--${valued.name} takes no value` : undefined;
+}
+
+/** Whether a token is an option that takes a value and was given none, an empty one, or another option as it. */
+function isLackingItsValue(token: ParsedArgs['tokens'][number]): boolean {
+  if (token.kind !== 'option' || valueLines[token.name] === undefined) {
+    return false;
+  }
+  const { value, inlineValue } = token;
+  return value === undefined || value === '' || (inlineValue === false && value.startsWith('-'));
 }
 
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */

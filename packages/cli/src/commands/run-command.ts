@@ -81,11 +81,8 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
 /** The answer to `--help`, `help` and `--version`, which come before any command runs. */
 function askedAboutOf({ help, version, positionals }: Called): Exit | undefined {
   const [command, ...rest] = positionals;
-  if (help) {
-    return helpExitOf(positionals.slice(0, 1));
-  }
-  if (command === 'help') {
-    return helpExitOf(rest);
+  if (help || command === 'help') {
+    return helpExitOf(command === 'help' ? rest : positionals);
   }
   return version ? versionExit() : undefined;
 }

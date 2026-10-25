@@ -117,9 +117,9 @@ export {
   ownRejectionsOf,
   semanticVersionPartsOf,
   snapshotFormatOf,
-  snapshotFormats,
   snapshotOf,
   textPartNodesOf,
+  writtenSnapshotFormat,
 } from '../snapshot/index.ts';
 export type {
   Failure,

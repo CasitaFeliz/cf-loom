@@ -19,10 +19,7 @@ type Named = { readonly at: Path; readonly value: unknown; readonly noun: string
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, groups, endpoints, guards, rejections, standardRejections } = declarations;
   const { events, commands, subscriptions } = declarations;
-  const kebab = [
-    ...rootNamed(root),
-    ...named(groups, (listed) => listed.group.name, 'A Group name'),
-  ];
+  const kebab = named(groups, (listed) => listed.group.name, 'A Group name');
   const camel = [
     ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
     ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
@@ -37,6 +34,7 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
     ...codes(standardRejections, (listed) => listed.declaration.code),
   ];
   return [
+    ...rootNameFailures(root),
     ...grammarFailures(kebab, kebabCase),
     ...grammarFailures(camel, elementName),
     ...grammarFailures(pascal, pascalCase),
@@ -86,32 +84,47 @@ function hintFor(grammar: Grammar, text: string): string {
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
-/** What a Service's and an Application's name is called in a sentence, which both follow the grammar of a Group's. */
+/** The grammar of a Service's and an Application's name, the one place it is named. */
+const rootNameGrammar = kebabCase;
+
+/** What a Service's and an Application's name is called in a sentence. */
 const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
 
+/** The kinds of root, as `init` names them. */
+type RootNameKind = 'service' | 'application' | 'definitions';
+
 /**
- * Why a name cannot be a Service's or an Application's, as the clause validation fails it with,
- * such as `a Service name is kebab-case`; nothing when the name follows the grammar.
+ * Why a name cannot be a root's, as the clause validation fails it with, such as `a Service name
+ * is kebab-case`; nothing when it follows the grammar of its kind, and for a Definitions Package,
+ * which has no name but its package.json's.
  */
-export function rootNameProblemOf(
-  kind: 'service' | 'application',
-  name: string,
-): string | undefined {
-  if (follows(kebabCase, name)) {
-    return undefined;
+export function rootNameProblemOf(kind: RootNameKind, name: string): string | undefined {
+  switch (kind) {
+    case 'service':
+    case 'application': {
+      if (follows(rootNameGrammar, name)) {
+        return undefined;
+      }
+      const sentence = ruleSentenceOf(rootNouns[kind], rootNameGrammar, name);
+      return `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+    }
+    case 'definitions':
+      return undefined;
   }
-  const sentence = ruleSentenceOf(rootNouns[kind], kebabCase, name);
-  return `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
 }
 
-/** A Service's or Application's name; a Definitions Package has none but its package.json's. */
-function rootNamed(root: Declarations['root']): readonly Named[] {
+/** A Service's or Application's name follows its grammar; a Definitions Package has none. */
+function rootNameFailures(root: Declarations['root']): readonly DeclarationFailure[] {
   switch (root.kind) {
     case 'contract':
-      return [{ at: ['name'], value: root.name, noun: rootNouns.service }];
+      return grammarFailures(rootNamed('service', root.name), rootNameGrammar);
     case 'application':
-      return [{ at: ['name'], value: root.name, noun: rootNouns.application }];
+      return grammarFailures(rootNamed('application', root.name), rootNameGrammar);
     case 'definitions':
       return [];
   }
+}
+
+function rootNamed(kind: 'service' | 'application', value: unknown): readonly Named[] {
+  return [{ at: ['name'], value, noun: rootNouns[kind] }];
 }

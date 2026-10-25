@@ -4,8 +4,7 @@ import {
   publishedSnapshotOf,
   versionBumpOf,
 } from '@cf-loom/contract/internal';
-import { type Peers, peerRangesOf, publishedPeersOf } from '../contract-package/index.ts';
-import type { BuiltProject, Run } from '../project/index.ts';
+import type { Run } from '../project/index.ts';
 import {
   type DerivedVersion,
   type Deriving,
@@ -16,14 +15,14 @@ import { comparedLinesOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
 import { type Comparison, checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
 import { done, type Exit, type Stopped, toolingError } from './exit.ts';
-import { builtPeersOf } from './peers.ts';
+import { builtPeersOf, publishedRangesOf } from './peers.ts';
 import { publishedPackageOf, type ToPublish } from './published-package.ts';
 
-/** What a publish goes on with once the Snapshot is compared: the comparison and the peers the package is built with. */
+/** What a publish goes on with once the Snapshot is compared: the comparison and the peer ranges the package is published with. */
 type Prepared = {
   readonly kind: 'prepared';
   readonly comparison: Comparison;
-  readonly peers: Peers;
+  readonly peerRanges: PeerRanges;
 };
 
 /**
@@ -37,17 +36,17 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
     return prepared.exit;
   }
   const checked = checkedFrom(prepared.comparison);
+  run.progress(comparedLinesOf(checked));
   const { status, stderr } = endingOf(checked.changes);
-  const opening = comparedLinesOf(checked);
   if (status === 1) {
-    return { status, stdout: opening, stderr };
+    return { status, stdout: [], stderr };
   }
   const derived = derivedVersionOf(derivingOf(prepared, options));
   switch (derived.kind) {
     case 'unchanged': {
       const same = `${checked.packageName}@${derived.baseline}`;
       const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${same}`;
-      return done([...opening, `${nothing}; --force publishes anyway`]);
+      return done([`${nothing}; --force publishes anyway`]);
     }
     case 'not-above': {
       const would = `${checked.packageName}@${derived.version} would not be above the Baseline`;
@@ -65,9 +64,7 @@ type Ready = {
   readonly derived: DerivedVersion;
 };
 
-/** Prints what the Check found before the package is staged, built and put, so a run that fails or is killed meanwhile has said it. */
 async function putExit(run: Run, { prepared, checked, derived }: Ready): Promise<Exit> {
-  run.progress(comparedLinesOf(checked));
   const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived));
   if (put.kind === 'failed') {
     return { status: 3, stdout: [], stderr: [put.message, ...left] };
@@ -85,41 +82,37 @@ async function preparedOf(run: Run): Promise<Prepared | Stopped> {
   if (peers.kind === 'failed') {
     return { kind: 'stopped', exit: toolingError(peers.message) };
   }
+  const peerRanges = publishedRangesOf(built, peers.peers);
   const comparison = await comparisonOf(built, run, undefined);
   if (comparison.kind === 'stopped') {
     return comparison;
   }
-  return { kind: 'prepared', comparison, peers: peers.peers };
+  return { kind: 'prepared', comparison, peerRanges };
 }
 
 /** What the version is derived from: the Baseline and how far the Changes and peers move from it, and every listed version. */
-function derivingOf({ comparison, peers }: Prepared, options: PublishOptions): Deriving {
+function derivingOf({ comparison, peerRanges }: Prepared, options: PublishOptions): Deriving {
   switch (comparison.kind) {
     case 'no-baseline':
       return { baseline: undefined, versions: [], ...options };
     case 'baseline': {
       const { read, report } = comparison;
-      const proposed = proposedPeersOf(comparison.built, peers);
-      const bump = versionBumpOf(report, { baseline: read.peers, proposed });
+      const bump = versionBumpOf(report, { baseline: read.peers, proposed: peerRanges });
       const baseline = { version: read.snapshot.version, stable: read.stable, bump };
       return { baseline, versions: read.versions, ...options };
     }
   }
 }
 
-/** The peer ranges the package is published with, which the Baseline's are compared with. */
-function proposedPeersOf(built: BuiltProject, peers: Peers): PeerRanges {
-  return built.snapshot.kind === 'definitions'
-    ? publishedPeersOf(built.project.manifest, peers)
-    : peerRangesOf(peers);
-}
-
 /** The Snapshot as published at the derived version, with the Baseline's history merged in. */
-function toPublishOf({ comparison, peers }: Prepared, { version, tag }: DerivedVersion): ToPublish {
+function toPublishOf(
+  { comparison, peerRanges }: Prepared,
+  { version, tag }: DerivedVersion,
+): ToPublish {
   const { project, snapshot } = comparison.built;
   const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
   const published = publishedSnapshotOf(baseline, snapshot, version);
   const highest = baseline?.version;
   const text = canonicalTextOf(published);
-  return { project, declared: comparison.built, published, text, peers, tag, highest };
+  return { project, declared: comparison.built, published, text, peerRanges, tag, highest };
 }

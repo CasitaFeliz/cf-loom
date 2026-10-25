@@ -19,8 +19,12 @@ import { builtFolder, packagePaths } from './paths.ts';
 /** The versions of the two peers the package is built with, as installed beside the root. */
 export type Peers = { readonly contract: string; readonly zod: string };
 
-/** Who the package is published as, at which version, and what it is built with. */
-export type Packaging = { readonly name: string; readonly version: string; readonly peers: Peers };
+/** Who the package is published as, at which version, and the peer ranges it declares. */
+export type Packaging = {
+  readonly name: string;
+  readonly version: string;
+  readonly peerRanges: PeerRanges;
+};
 
 /** The Snapshot a Contract Package is generated from: declared by `package`, published by `publish`. */
 export type ContractSnapshot =
@@ -36,7 +40,7 @@ export type ContractSnapshot =
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
-  { name, version, peers }: Packaging,
+  { name, version, peerRanges }: Packaging,
 ): PackageFile {
   const manifest = {
     name,
@@ -47,7 +51,7 @@ export function manifestOf(
     },
     files: [builtFolder, packagePaths.snapshot],
     sideEffects: false,
-    peerDependencies: peerRangesOf(peers),
+    peerDependencies: peerRanges,
     cfLoom: cfLoomOf(snapshot),
   };
   return manifestFileOf(manifest);

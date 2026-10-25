@@ -77,7 +77,7 @@ function plannedOf(cwd: string, kind: RootKind, packageName: PackageName): Plann
   if (blocking !== undefined) {
     return refused(`${blocking} is no folder: init cannot write ${file}`);
   }
-  const problem = kind === 'definitions' ? undefined : rootNameProblemOf(kind, packageName.name);
+  const problem = rootNameProblemOf(kind, packageName.name);
   if (problem !== undefined) {
     return refused(`package.json names "${packageName.name}", but ${problem}: rename the package`);
   }

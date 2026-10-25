@@ -83,10 +83,10 @@ function writeOnce(path: string, file: GeneratedFile): FileWrite {
 }
 
 /** How the bytes of a file on disk differ from those expected: not at all, only by CRLF line endings, or otherwise. */
-export type LineEndings = 'same' | 'crlf' | 'different';
+export type FileComparison = 'same' | 'crlf' | 'different';
 
 /** Compares a file on disk with the bytes expected; a CRLF checkout of the expected text is told apart, never accepted. */
-export function lineEndingsOf(expected: Uint8Array, onDisk: Uint8Array): LineEndings {
+export function fileComparisonOf(expected: Uint8Array, onDisk: Uint8Array): FileComparison {
   const wanted = Buffer.from(expected);
   const found = Buffer.from(onDisk);
   if (wanted.equals(found)) {
@@ -98,7 +98,7 @@ export function lineEndingsOf(expected: Uint8Array, onDisk: Uint8Array): LineEnd
 
 /** A generated file on disk compared with what would be generated, or why it cannot be read. */
 export type Compared =
-  | { readonly kind: LineEndings }
+  | { readonly kind: FileComparison }
   | { readonly kind: 'failed'; readonly message: string };
 
 /** Whether a generated file on disk holds exactly what would be generated, in one line if unreadable. */
@@ -108,7 +108,7 @@ export function comparedOf(directory: string, file: GeneratedFile): Compared {
     if (!existsSync(path) || !statSync(path).isFile()) {
       return { kind: 'different' };
     }
-    return { kind: lineEndingsOf(Buffer.from(file.text), readFileSync(path)) };
+    return { kind: fileComparisonOf(Buffer.from(file.text), readFileSync(path)) };
   } catch (e) {
     return { kind: 'failed', message: `${file.path} cannot be read: ${oneLineOf(e, directory)}` };
   }

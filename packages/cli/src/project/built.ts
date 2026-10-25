@@ -13,11 +13,11 @@ import {
   validateContract,
 } from '@cf-loom/contract/internal';
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
-import { type LineEndings, lineEndingsOf } from '../writing/index.ts';
+import { type FileComparison, fileComparisonOf } from '../writing/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { runningGeneratorOf } from './generator.ts';
-import { type Project, projectOf } from './project.ts';
+import { type DeclaredRoot, type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
 /**
@@ -52,14 +52,9 @@ export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
 
 /** How the committed `contract.snapshot.json` differs from what `generate` would write; a file that is missing or no JSON differs. */
-export function committedLineEndingsOf(built: BuiltProject): LineEndings {
+export function committedComparisonOf(built: BuiltProject): FileComparison {
   const { committed } = built;
-  return committed.kind === 'json' ? lineEndingsOf(built.bytes, committed.bytes) : 'different';
-}
-
-/** Whether the committed `contract.snapshot.json` is what `generate` would write, its generator aside. */
-export function isCommittedCurrent(built: BuiltProject): boolean {
-  return committedLineEndingsOf(built) === 'same';
+  return committed.kind === 'json' ? fileComparisonOf(built.bytes, committed.bytes) : 'different';
 }
 
 /** Whether a built project is a Service's. */
@@ -94,12 +89,6 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const { validated, snapshot, text, bytes } = declared;
   return { kind: 'built', project, validated, snapshot, text, bytes, committed, context };
 }
-
-/** The root a Snapshot is declared from: what a project's root file exports, and the packages its import reached. */
-export type DeclaredRoot = Pick<
-  Project,
-  'directory' | 'packageName' | 'root' | 'rootExports' | 'rootFile' | 'packages'
->;
 
 /** A root's declared Snapshot in canonical order with its text and bytes, or why the root declares none. */
 export type Declared =

@@ -89,6 +89,10 @@ const readerCases = commands.flatMap((command) =>
   closings.map((closing) => ({ command, closing })),
 );
 
+const readCases = readerCases.filter(
+  ({ command, closing }) => closing.when === 'never' || closing.stream !== command.prints,
+);
+
 describe('cf-loom: when the reader of its output goes away', () => {
   test.each(readerCases)(
     '$command.name, with a reader that closes $closing.stream $closing.when: its exit status is the command’s, with no stack trace',
@@ -99,10 +103,17 @@ describe('cf-loom: when the reader of its output goes away', () => {
 
       expect(ran.status).toBe(command.status);
       expect(ran.stderr).not.toMatch(/^\s+at |Unhandled|EPIPE/m);
-      const isRead = closing.when === 'never' || closing.stream !== command.prints;
-      if (isRead) {
-        expect(ran[command.prints]).not.toBe('');
-      }
+    },
+  );
+
+  test.each(readCases)(
+    '$command.name, with a reader that closes $closing.stream $closing.when: what is read is what the command prints',
+    async ({ command, closing }) => {
+      const project = command.project();
+
+      const ran = await cfLoomClosing(project, closing, ...command.args);
+
+      expect(ran[command.prints]).not.toBe('');
     },
   );
 
@@ -281,6 +292,24 @@ describe('cf-loom init: .gitattributes', () => {
     expect(readFileSync(join(project, '.gitattributes'), 'utf8')).toBe(`${another}\n`);
   });
 
+  test.skipIf(spawnSync('prlimit', ['--version']).error !== undefined)(
+    'init whose append writes part of its text and fails puts back the bytes .gitattributes held, and removes the root',
+    () => {
+      const held = `#${'a'.repeat(998)}\n`;
+      const project = aProject({ ...aBarePackage, '.gitattributes': held });
+
+      const ran = spawnSync('prlimit', ['--fsize=1024', process.execPath, bin, 'init'], {
+        cwd: project,
+        encoding: 'utf8',
+      });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^init cannot write: EFBIG[^\n]*\n$/);
+      expect(readFileSync(join(project, '.gitattributes'), 'utf8')).toBe(held);
+      expect(existsSync(join(project, 'src'))).toBe(false);
+    },
+  );
+
   test('init refuses a .gitattributes it cannot read, writing nothing', () => {
     const project = aProject(aBarePackage);
     mkdirSync(join(project, '.gitattributes'));
@@ -354,6 +383,27 @@ describe('cf-loom: an option whose value is another option', () => {
     });
   });
 
+  test('check --against --json --against 1.0.0 is a usage error, since the first --against has another option for its value', async () => {
+    const project = aGeneratedProject(aService);
+
+    const ran = await cfLoomOffline(project, 'check', '--against', '--json', '--against', '1.0.0');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `--against takes a version or a dist-tag. ${usage}\n`,
+    });
+  });
+
+  test('package --out --json --out folder is a usage error, and writes no folder', () => {
+    const project = aGeneratedProject(aService);
+
+    const ran = cfLoom(project, 'package', '--out', '--json', '--out', 'folder');
+
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--out takes a folder. ${usage}\n` });
+    expect(existsSync(join(project, 'folder'))).toBe(false);
+  });
+
   test('broker-plan --prefix --json is a usage error', () => {
     const project = aGeneratedProject(aService);
 
@@ -397,6 +447,34 @@ describe('cf-loom: help and version', () => {
     expect(asked).toEqual(expected);
   });
 
+  test.for([
+    ['publish', '-h', 'extra'],
+    ['help', 'publish', 'extra'],
+    ['--help', 'publish', 'extra'],
+  ] as const)('%s given more than one command is a usage error', (args) => {
+    const project = aProject({});
+
+    const ran = cfLoom(project, ...args);
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `help takes one command. ${usage}\n`,
+    });
+  });
+
+  test.for([['--help'], ['--version']] as const)('%s=x is a usage error', ([option]) => {
+    const project = aProject({});
+
+    const ran = cfLoom(project, `${option}=x`);
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `${option} takes no value. ${usage}\n`,
+    });
+  });
+
   test('help of an unknown command is a usage error', () => {
     const project = aProject({});
 
@@ -410,13 +488,14 @@ describe('cf-loom: help and version', () => {
   });
 
   test('--version prints the version of the CLI and the Snapshot format it writes, and ends 0', () => {
-    const project = aProject({});
+    const project = aGeneratedProject(aService);
+    const written = JSON.parse(readFileSync(join(project, 'contract.snapshot.json'), 'utf8'));
 
     const ran = cfLoom(project, '--version');
 
     expect(ran).toEqual({
       status: 0,
-      stdout: `@cf-loom/cli ${cliVersion} (Snapshot format 1)\n`,
+      stdout: `@cf-loom/cli ${cliVersion} (Snapshot format ${written.format})\n`,
       stderr: '',
     });
   });

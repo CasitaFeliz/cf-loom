@@ -22,7 +22,12 @@ export type StagedContent = {
  * a `node_modules`, so Node finds it as it finds an installed package.
  */
 export type Staged =
-  | { readonly kind: 'staged'; readonly staging: string; readonly folder: string }
+  | {
+      readonly kind: 'staged';
+      readonly staging: string;
+      readonly folder: string;
+      readonly packageName: string;
+    }
   | { readonly kind: 'failed'; readonly message: string; readonly left: readonly string[] };
 
 /**
@@ -40,7 +45,7 @@ export function stagedIn(directory: string, packageName: string, content: Staged
     mkdirSync(folder, { recursive: true });
     copyAll(folder, content.copied);
     writeAll(folder, content.files);
-    return { kind: 'staged', staging, folder };
+    return { kind: 'staged', staging, folder, packageName };
   } catch (e) {
     const message = `${stagingParent} cannot be written: ${oneLineOf(e, directory)}`;
     const left = staging === undefined ? [] : removeStaged(staging, directory);

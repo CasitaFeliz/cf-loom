@@ -7,7 +7,13 @@ import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
 import { guardSnapshotsOf } from './guards.ts';
 import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
-import type { DefinitionsSnapshot, ExportSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
+import {
+  type DefinitionsSnapshot,
+  type ExportSnapshot,
+  type ServiceSnapshot,
+  type Snapshot,
+  writtenSnapshotFormat,
+} from './types.ts';
 
 /**
  * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
@@ -20,7 +26,7 @@ export function snapshotOf(validated: ValidContract, context: SnapshotContext): 
       return serviceSnapshotOf(validated, root, context);
     case 'application':
       return {
-        format: 1,
+        format: writtenSnapshotFormat,
         kind: 'application',
         name: root.name,
         generator: context.generator,
@@ -40,7 +46,7 @@ function serviceSnapshotOf(
   const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
   return {
-    format: 1,
+    format: writtenSnapshotFormat,
     kind: 'service',
     name: root.name,
     generator: context.generator,
@@ -71,7 +77,7 @@ function definitionsSnapshotOf(
     }
   }
   return {
-    format: 1,
+    format: writtenSnapshotFormat,
     kind: 'definitions',
     name: declarations.packageName,
     generator: context.generator,

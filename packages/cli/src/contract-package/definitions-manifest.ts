@@ -26,14 +26,14 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
   published: PublishedDefinitionsSnapshot,
-  { peers }: Pick<Packaging, 'peers'>,
+  { peerRanges }: Pick<Packaging, 'peerRanges'>,
 ): DefinitionsManifest {
   const manifest = {
     ...source,
     version: published.version,
     ...publishConfigWithoutTagOf(source['publishConfig']),
     ...filesWithSnapshotOf(source['files']),
-    peerDependencies: publishedPeersOf(source, peers),
+    peerDependencies: peerRanges,
     cfLoom: cfLoomOf(published),
   };
   const uninstallable = uninstallableDependencyOf(manifest);

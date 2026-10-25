@@ -2,7 +2,7 @@ import { contractExportsOf } from '../loading/index.ts';
 import {
   type BuiltProject,
   builtOf,
-  committedLineEndingsOf,
+  committedComparisonOf,
   isBuiltService,
   type Run,
   snapshotFile,
@@ -77,14 +77,19 @@ async function verifyService(
 function comparedFailuresOf(
   compared: readonly { readonly file: GeneratedFile; readonly compared: Compared }[],
 ): readonly string[] {
-  const different = compared.filter(({ compared: { kind } }) => kind === 'different');
-  const crlf = compared.filter(({ compared: { kind } }) => kind === 'crlf');
-  return [
-    ...different.map(
-      ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
-    ),
-    ...crlf.map(({ file }) => crlfLineOf(file.path)),
-  ];
+  return compared.flatMap(({ file, compared: result }) => comparedFailureLinesOf(file, result));
+}
+
+function comparedFailureLinesOf(file: GeneratedFile, compared: Compared): readonly string[] {
+  switch (compared.kind) {
+    case 'same':
+    case 'failed':
+      return [];
+    case 'different':
+      return [`${file.path} was edited or is out of date: run cf-loom generate`];
+    case 'crlf':
+      return [crlfLineOf(file.path)];
+  }
 }
 
 /** What the record leaves for `generate` to do or for the author to settle, as `verify` says it. */
@@ -131,7 +136,7 @@ function snapshotFailureOf(built: BuiltProject): string | undefined {
 }
 
 function jsonFailureOf(built: BuiltProject): string | undefined {
-  switch (committedLineEndingsOf(built)) {
+  switch (committedComparisonOf(built)) {
     case 'same':
       return undefined;
     case 'crlf':

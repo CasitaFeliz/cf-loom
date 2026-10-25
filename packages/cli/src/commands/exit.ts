@@ -2,7 +2,7 @@ import { failureLineOf } from '@cf-loom/contract/internal';
 import {
   type BuiltProject,
   type Committed,
-  committedLineEndingsOf,
+  committedComparisonOf,
   type ProjectFailure,
   snapshotFile,
 } from '../project/index.ts';
@@ -71,7 +71,7 @@ export function committedStopOf(built: BuiltProject): Exit | undefined {
   if (noJson !== undefined) {
     return noJson;
   }
-  switch (committedLineEndingsOf(built)) {
+  switch (committedComparisonOf(built)) {
     case 'same':
       return undefined;
     case 'crlf':

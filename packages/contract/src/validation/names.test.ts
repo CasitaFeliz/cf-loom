@@ -492,6 +492,8 @@ describe('rootNameProblemOf', () => {
     ['service', '', 'a Service name is kebab-case'],
     ['application', 'web-admin', undefined],
     ['application', 'web_admin', 'an Application name is kebab-case'],
+    ['definitions', 'any_name', undefined],
+    ['definitions', '', undefined],
   ] as const)('a %s named %j has the problem %j', ([kind, name, problem]) => {
     expect(rootNameProblemOf(kind, name)).toBe(problem);
   });

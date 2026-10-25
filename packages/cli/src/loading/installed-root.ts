@@ -2,15 +2,25 @@ import { join } from 'node:path';
 import { importedRootOf } from './imported-packages.ts';
 import { type LoadedRoot, splitRoot } from './root.ts';
 
+/** A package installed in the `node_modules` of `staging`, in `folder`; what its other imports resolve upward from starts at `staging`. */
+export type InstalledPackage = {
+  readonly staging: string;
+  readonly folder: string;
+  readonly packageName: string;
+};
+
 /**
  * Imports a package as a Service that installed it does: by its name, from the `node_modules` of
- * `staging`, through its `exports`, with its own modules the root's, never another package's.
- * `staging` is where the files of any other package it imports resolve upward from.
+ * `staging`, through the entry Node resolves, with its own modules the root's, never another
+ * package's.
  */
-export async function installedRootOf(staging: string, packageName: string): Promise<LoadedRoot> {
+export async function installedRootOf({
+  staging,
+  folder,
+  packageName,
+}: InstalledPackage): Promise<LoadedRoot> {
   const target = { specifier: packageName, from: join(staging, 'installed.js') };
-  const manifest = join(staging, 'node_modules', packageName, 'package.json');
-  const imported = await importedRootOf(target, manifest, staging);
+  const imported = await importedRootOf(target, join(folder, 'package.json'), staging);
   if (imported.kind === 'failed') {
     return { kind: 'failed', message: imported.message };
   }
