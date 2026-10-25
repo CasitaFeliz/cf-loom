@@ -10,13 +10,7 @@
       "path": "../contract/tsconfig.build.json"
     },
     {
-      "path": "../handlers/tsconfig.build.json"
-    },
-    {
       "path": "../client/tsconfig.build.json"
-    },
-    {
-      "path": "../messaging/tsconfig.build.json"
     }
   ]
 }

@@ -8,5 +8,6 @@ export type {
   ReceivedFault,
 } from './faults.ts';
 export { withRetryAfter } from './faults.ts';
+export { networkFailureOf } from './happened.ts';
 export type { Inferring } from './infer.ts';
 export { answeredFaultOf, notSentFaultOf, thrownFaultOf } from './infer.ts';

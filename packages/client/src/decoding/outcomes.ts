@@ -54,7 +54,7 @@ export type DecodedOutcome =
   | ReceivedFault;
 
 /** A Success as a Caller receives it from an Endpoint: what a direct call of its EndpointHandler returns. */
-export type EndpointSuccess<Target extends Endpoint> = {
+type EndpointSuccess<Target extends Endpoint> = {
   readonly kind: 'success';
 } & SuccessOf<Target>;
 
@@ -96,7 +96,7 @@ type KnownRejectionOf<
     : never;
 
 /** The Rejections an Endpoint answers as a Caller receives them, each with the body its code declares. */
-export type EndpointRejection<
+type EndpointRejection<
   Target extends Endpoint,
   Standards extends ProvidedStandardRejections,
 > = KnownRejectionOf<RejectionsOf<Target>, Standards>;

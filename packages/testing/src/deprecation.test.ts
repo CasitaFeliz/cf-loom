@@ -65,10 +65,7 @@ const paymentsDependency = defineDependency({
   endpoints: [getPayment, listPayments],
 });
 
-type Builder = StepBuilder<
-  typeof getPayment,
-  (typeof paymentsDependency)['provider']['standardRejections']
->;
+type Builder = StepBuilder<typeof paymentsDependency, 'getPayment'>;
 
 const deprecation = `@${Date.parse('2026-10-17T09:30:00Z') / 1000}`;
 
@@ -76,10 +73,7 @@ describe('fakeProvider: Deprecation', () => {
   test.each([
     ['a Success', (r: Builder) => r.success({ id: 'pay-1' })],
     ['a Rejection', (r: Builder) => r.reject('NOT_FOUND')],
-    [
-      'a code the Provider does not declare',
-      (r: Builder) => r.reject({ unknown: 'CARD_EXPIRED' }, {}),
-    ],
+    ['a code the Provider does not declare', (r: Builder) => r.unknownRejection('CARD_EXPIRED')],
     ['a Fault', (r: Builder) => r.fault({ committed: 'no', retryable: true })],
     ['a reserved code', (r: Builder) => r.fault({ code: 'INVALID_OUTCOME' })],
     ['a bare status', (r: Builder) => r.status(502)],

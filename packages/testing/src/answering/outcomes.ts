@@ -1,15 +1,15 @@
 import type { Issue } from '@cf-loom/contract';
 import {
-  encodedValueOf,
+  type AnswerableRejection,
+  type Checked,
   headerTextsOf,
-  type IssuePart,
-  type Parsed,
   rejectionBodyReaderOf,
   rejectionResponseOf,
   resolutionOf,
+  successFieldsOf,
   successResponseOf,
+  writtenPartOf,
 } from '@cf-loom/contract/internal';
-import type * as core from 'zod/v4/core';
 import { mistakeOf } from '../mistakes/index.ts';
 import { type ListedEndpoint, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
@@ -19,52 +19,74 @@ import type { Answer } from '../scripting/index.ts';
  * then its headers as text; what breaks the readers, or cannot travel, is the test's mistake.
  */
 export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpoint): Response {
-  const { success } = listed.endpoint;
-  const given = success.headers === undefined ? { body: scripted } : fieldsOf(scripted);
-  const headers = writtenOf('success.headers', success.headers, given['headers']);
-  const body = writtenOf('success.body', success.body, given['body']);
-  const texts = headerTextsOf('success.headers', fieldsOf(headers.value));
+  const { endpoint } = listed;
+  const given = successFieldsOf(endpoint, scripted);
+  const headers = writtenPartOf('success.headers', endpoint.success.headers, {
+    value: given['headers'],
+  });
+  const body = writtenPartOf('success.body', endpoint.success.body, { value: given['body'] });
+  const sentHeaders = fieldsOf(checkedValueOf(headers));
+  const texts = headerTextsOf('success.headers', sentHeaders);
   const textIssues = texts.kind === 'issues' ? texts.issues : [];
-  const issues = [...headers.issues, ...body.issues, ...textIssues];
+  const issues = [...issuesOf(headers), ...issuesOf(body), ...textIssues];
   if (issues.length > 0) {
     const what = 'the scripted Success breaks its readers';
     throw mistakeOf({ ...whoOf(listed), what, issues });
   }
-  const sent = { status: success.status, headers: fieldsOf(headers.value), body: body.value };
+  const sent = {
+    status: endpoint.success.status,
+    headers: sentHeaders,
+    body: checkedValueOf(body),
+  };
   return successResponseOf(sent);
 }
 
 type KnownRejection = Extract<Answer, { readonly kind: 'rejection' }>;
 
-/** A Rejection by a code the Endpoint answers, its body written as its readers read it. */
+/** A Rejection by a code the Endpoint answers, as `serve` sends it. */
 export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedEndpoint): Response {
   const rejection = listed.rejectionsByCode.get(answer.code);
   if (rejection === undefined) {
-    const what = `the Endpoint answers no code ${answer.code}; r.reject({ unknown }) sends one`;
+    const sends = "r.unknownRejection sends a code the Provider's Contract does not declare";
+    const what = `the Endpoint answers no code ${answer.code}; ${sends}`;
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  const reader = rejectionBodyReaderOf(rejection, listed.standards);
-  const body = writtenOf('body', reader, answer.body);
-  if (body.issues.length > 0) {
-    const what = `the scripted ${answer.code} body breaks its reader`;
-    throw mistakeOf({ ...whoOf(listed), what, issues: body.issues });
-  }
-  const resolved = resolutionOf(rejection, listed.standards);
-  return rejectionResponseOf({ ...resolved, body: body.value });
+  return declaredRejectionResponseOf({ ...answer, rejection }, listed);
 }
 
-/** A part as written for its reader, or every Issue at that part; nothing where none is declared. */
-type Written = { readonly value: unknown; readonly issues: readonly Issue[] };
+/** A Rejection the Provider declares, as scripted: its message, when one replaces the declared one, and its body. */
+export type DeclaredAnswer = {
+  readonly code: string;
+  readonly rejection: AnswerableRejection;
+  readonly message?: string;
+  readonly body?: unknown;
+};
 
-function writtenOf(part: IssuePart, reader: core.$ZodType | undefined, given: unknown): Written {
-  if (reader === undefined) {
-    return { value: undefined, issues: [] };
+/**
+ * A Rejection the Provider declares, as `serve` sends it: its resolved code and status, its
+ * message unless one is given, and its body written as its reader reads it.
+ */
+export function declaredRejectionResponseOf(
+  declared: DeclaredAnswer,
+  listed: ListedEndpoint,
+): Response {
+  const reader = rejectionBodyReaderOf(declared.rejection, listed.standards);
+  const body = writtenPartOf('body', reader, { value: declared.body });
+  if (body.kind === 'issues') {
+    const what = `the scripted ${declared.code} body breaks its reader`;
+    throw mistakeOf({ ...whoOf(listed), what, issues: body.issues });
   }
-  const encoded: Parsed = encodedValueOf(reader, given);
-  if (encoded.kind === 'issues') {
-    return { value: undefined, issues: encoded.issues.map((issue) => ({ part, ...issue })) };
-  }
-  return { value: encoded.value, issues: [] };
+  const resolved = resolutionOf(declared.rejection, listed.standards);
+  const message = declared.message ?? resolved.message;
+  return rejectionResponseOf({ ...resolved, message, body: body.value });
+}
+
+function checkedValueOf(checked: Checked): unknown {
+  return checked.kind === 'value' ? checked.value : undefined;
+}
+
+function issuesOf(checked: Checked): readonly Issue[] {
+  return checked.kind === 'issues' ? checked.issues : [];
 }
 
 function fieldsOf(value: unknown): Readonly<Record<string, unknown>> {

@@ -1,39 +1,38 @@
-import type { ReceivedFault } from '@cf-loom/client';
-import type { EndpointRejection, EndpointSuccess } from '@cf-loom/client/internal';
-import type { Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
-import { internalError } from '@cf-loom/contract/internal';
-import type * as core from 'zod/v4/core';
+import type { ReceivedFault, ReceivedRejection } from '@cf-loom/client';
+import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/internal';
+import { internalError, type SuccessValueOf } from '@cf-loom/contract/internal';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
 
-/** What `r.success` takes: the body, or its headers and body when the Endpoint declares headers. */
-type SuccessArguments<Target extends Endpoint> = Target['success'] extends {
-  readonly headers: core.$ZodType;
-}
-  ? [success: ScriptedHeadersAndBody<Target>]
-  : Target['success'] extends { readonly body: core.$ZodType }
-    ? [body: EndpointSuccess<Target>['body']]
-    : [];
+/**
+ * What `r.success` takes: what a Success of the Endpoint is built from, as a Caller reads it; nothing
+ * where it declares neither headers nor a body.
+ */
+type SuccessArguments<D extends AnyDependency, Name extends ListedName<D>> =
+  SuccessValueOf<ListedEndpoint<D, Name>> extends infer Value
+    ? [Value] extends [undefined]
+      ? []
+      : [success: Value]
+    : never;
 
-type ScriptedHeadersAndBody<Target extends Endpoint> = Target['success'] extends {
-  readonly body: core.$ZodType;
-}
-  ? {
-      readonly headers: EndpointSuccess<Target>['headers'];
-      readonly body: EndpointSuccess<Target>['body'];
-    }
-  : { readonly headers: EndpointSuccess<Target>['headers'] };
+/**
+ * What `r.reject` takes: each code the Endpoint answers paired with the body that code declares,
+ * so a code not narrowed to one is refused.
+ */
+type RejectionArguments<D extends AnyDependency, Name extends ListedName<D>> =
+  ReceivedRejection<D, Name> extends infer Received
+    ? Received extends { readonly code: infer Code }
+      ? [code: Code, ...BodyArgumentsOf<Received>]
+      : never
+    : never;
 
-/** What `r.reject` takes for a code the Endpoint answers: the code, and its body when it declares one. */
-type KnownRejectionArguments<Known> = Known extends { readonly code: infer Code }
-  ? Known extends { readonly body: infer Body }
-    ? undefined extends Body
-      ? [code: Code, body?: Body]
-      : [code: Code, body: Body]
-    : [code: Code]
-  : never;
+type BodyArgumentsOf<Received> = Received extends { readonly body: infer Body }
+  ? undefined extends Body
+    ? [body?: Body]
+    : [body: Body]
+  : [];
 
-/** A code the Provider does not declare, with the message its Envelope carries, its code by default. */
-export type UnknownCode = { readonly unknown: string; readonly message?: string };
+/** What `r.unknownRejection` takes beside its code: the message its Envelope carries, and a body, none unless given. */
+type UnknownRejectionOptions = { readonly message?: string; readonly body?: unknown };
 
 /** What `r.fault` takes: a Fault as the Provider sends it, or a reserved code alone. */
 export type ScriptedFault =
@@ -45,17 +44,16 @@ export type ScriptedFault =
   | { readonly code: NonNullable<ReceivedFault['code']> };
 
 /**
- * What a step builds its answer with, typed by its Endpoint and the Provider's Standard Rejections,
- * which type the invalid-input body by its Reader, as a Caller reads each Outcome: a Success, a
- * Rejection, a Fault, or what the client infers its Fault from, a network failure or a status.
+ * What a step builds its answer with, typed by what a Caller of the Endpoint `Name` receives
+ * (`ReceivedOutcome<D, Name>`): a Success, a Rejection, a Fault, or what the client infers its
+ * Fault from, a network failure or a status.
  */
-export type StepBuilder<Target extends Endpoint, Standards extends ProvidedStandardRejections> = {
-  success(...success: SuccessArguments<Target>): ScriptedAnswer;
-  reject(
-    ...rejection:
-      | KnownRejectionArguments<EndpointRejection<Target, Standards>>
-      | [unknown: UnknownCode, body: unknown]
-  ): ScriptedAnswer;
+export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
+  success(...success: SuccessArguments<D, Name>): ScriptedAnswer;
+  /** A code the Endpoint answers, with its body when it declares one. */
+  reject(...rejection: RejectionArguments<D, Name>): ScriptedAnswer;
+  /** A code the Endpoint does not answer, as a later Provider might send it. */
+  unknownRejection(code: string, options?: UnknownRejectionOptions): ScriptedAnswer;
   fault(fault: ScriptedFault): ScriptedAnswer;
   noConnection(): ScriptedAnswer;
   reset(): ScriptedAnswer;
@@ -65,13 +63,9 @@ export type StepBuilder<Target extends Endpoint, Standards extends ProvidedStand
 /** The one builder every step receives; its Endpoint's types are laid over it where it is given. */
 export const stepBuilder = {
   success: (success?: unknown) => scriptedAnswerOf({ kind: 'success', success }),
-  reject: (code: string | UnknownCode, body?: unknown) => {
-    if (typeof code === 'string') {
-      return scriptedAnswerOf({ kind: 'rejection', code, body });
-    }
-    const message = code.message ?? code.unknown;
-    return scriptedAnswerOf({ kind: 'unknown-rejection', code: code.unknown, message, body });
-  },
+  reject: (code: string, body?: unknown) => scriptedAnswerOf({ kind: 'rejection', code, body }),
+  unknownRejection: (code: string, options: UnknownRejectionOptions = {}) =>
+    scriptedAnswerOf({ ...options, kind: 'unknown-rejection', code }),
   fault: (fault: ScriptedFault) => {
     if ('code' in fault) {
       return scriptedAnswerOf({ kind: 'reserved', code: fault.code });

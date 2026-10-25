@@ -399,9 +399,6 @@ importers:
       '@cf-loom/handlers':
         specifier: workspace:^
         version: link:../handlers
-      '@cf-loom/messaging':
-        specifier: workspace:^
-        version: link:../messaging
       '@cf-loom/server':
         specifier: workspace:^
         version: link:../server

@@ -2,6 +2,7 @@ export type { AnswerableRejection } from './answerable.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,
+  declaredByCodeOf,
   isSameRejection,
   resolutionOf,
 } from './answerable.ts';
@@ -41,6 +42,7 @@ export {
   segmentsOf,
   subjectVersionOf,
 } from './identity.ts';
+export { issueLineOf } from './issue-line.ts';
 export type {
   LocatedCode,
   LocatedCommand,
@@ -73,6 +75,7 @@ export {
   partFieldOf,
   schemaOf,
   slotAt,
+  successFieldsOf,
   successParts,
   writtenAt,
 } from './parts.ts';

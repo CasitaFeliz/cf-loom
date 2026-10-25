@@ -1,6 +1,9 @@
-import { maxBrokerHeaderBytes, type TransportHeaderFit } from '@cf-loom/contract/internal';
+import {
+  issueLineOf,
+  maxBrokerHeaderBytes,
+  type TransportHeaderFit,
+} from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
-import { issueLineOf } from '@cf-loom/handlers/internal';
 
 /** What of a `publish`, `send` or `deliver` call was refused before anything was sent. */
 export type InvalidPart =

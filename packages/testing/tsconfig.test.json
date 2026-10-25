@@ -18,9 +18,6 @@
       "path": "../client/tsconfig.build.json"
     },
     {
-      "path": "../messaging/tsconfig.build.json"
-    },
-    {
       "path": "../server/tsconfig.build.json"
     }
   ]

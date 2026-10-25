@@ -1,5 +1,12 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
-import { headerTextsOf, partFieldOf, schemaOf, successParts } from '@cf-loom/contract/internal';
+import {
+  headerTextsOf,
+  parsedPartOf,
+  partFieldOf,
+  schemaOf,
+  successFieldsOf,
+  successParts,
+} from '@cf-loom/contract/internal';
 import {
   type AnyAdmission,
   type AnyOutcome,
@@ -9,7 +16,7 @@ import {
   type Fault,
   retryAfterProblemOf,
 } from '../outcomes/index.ts';
-import { type Checked, checkedAll, checkedPart, fieldOf, mapValue } from './checked.ts';
+import { type Checked, checkedAll, fieldOf, mapValue } from './checked.ts';
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
 
 /**
@@ -41,7 +48,7 @@ export function checkedAdmission(
 ): Checked<CheckedAdmission<Guard>> {
   switch (built.kind) {
     case 'admitted': {
-      const context = checkedPart('context', schemaOf(guard, 'context'), { value: built.context });
+      const context = parsedPartOf('context', schemaOf(guard, 'context'), { value: built.context });
       return mapValue(context, (parsed) => ({ kind: 'admitted', context: parsed }));
     }
     case 'rejection':
@@ -88,14 +95,14 @@ function parsedSuccessOf(
   endpoint: Endpoint,
   { value }: BuiltSuccess<unknown>,
 ): Checked<CheckedSuccess> {
-  const given = schemaOf(endpoint, 'success.headers') === undefined ? { body: value } : value;
+  const given = successFieldsOf(endpoint, value);
   const parts = successParts.map((part) => ({
     part,
     field: partFieldOf(part),
     schema: schemaOf(endpoint, part),
   }));
   const checks = parts.map(({ part, field, schema }) => {
-    return [field, checkedPart(part, schema, { value: fieldOf(given, field) })] as const;
+    return [field, parsedPartOf(part, schema, { value: fieldOf(given, field) })] as const;
   });
   const declared = parts.filter(({ schema }) => schema !== undefined);
   return mapValue(checkedAll(Object.fromEntries(checks)), (parsed) => {
