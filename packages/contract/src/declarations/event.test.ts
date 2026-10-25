@@ -110,6 +110,35 @@ describe('defineEvent', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a version written in exponent form past the whole numbers is a type error', () => {
+    const declare = () =>
+      defineEvent({
+        name: 'OrderCreated',
+        // @ts-expect-error a version is written without an exponent
+        version: 1e21,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body,
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a version that is a union of two literals is a type error', () => {
+    const oneOfTwo: 1 | 2 = 1 as 1 | 2;
+    const declare = () =>
+      defineEvent({
+        name: 'OrderCreated',
+        // @ts-expect-error a union of two versions is not one literal
+        version: oneOfTwo,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body,
+      });
+
+    expect(declare).not.toThrow();
+  });
+
   test('an Event’s name, version and lifecycle stay literal in its type', () => {
     const orderCreatedV1 = defineEvent({
       name: 'OrderCreated',

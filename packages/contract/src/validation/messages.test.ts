@@ -8,7 +8,7 @@ import {
   defineGroup,
   type Event,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { messageIdentityOf, nameAndVersionOf, validateContract } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -360,6 +360,63 @@ function rulesOf(result: ReturnType<typeof validateMessages>): readonly unknown[
     broken.kind === 'declaration' ? broken.rule : broken.kind,
   );
 }
+
+/** A seeded generator of the same sequence every run, so a failing version can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** Versions from 1 below `2 ** 53`: the boundaries, then pseudo-random ones. */
+function safeVersions(): readonly number[] {
+  const next = seededNext(190);
+  const random = Array.from({ length: 1000 }, () => {
+    const high = Math.floor(next() * 2 ** 21);
+    const low = Math.floor(next() * 2 ** 32);
+    return Math.max(1, high * 2 ** 32 + low);
+  });
+  return [1, 2, 2 ** 53 - 1, ...random];
+}
+
+describe('validateContract: a Message Version’s version keeps its text and its predecessor exact', () => {
+  test('every whole number from 1 to the largest safe integer validates, reads back from its identity and differs from its predecessor', () => {
+    const versions = safeVersions();
+
+    const results = versions.map((version) => ({
+      version,
+      validated: validateMessages([anEvent({ version })], [aCommand({ version })]).kind,
+      readBack: nameAndVersionOf(messageIdentityOf('OrderCreated', version)).version,
+      isAfterPredecessor: version - 1 !== version,
+    }));
+
+    expect(results).toEqual(
+      versions.map((version) => ({
+        version,
+        validated: 'valid',
+        readBack: version,
+        isAfterPredecessor: true,
+      })),
+    );
+  });
+
+  test.each([2 ** 53, 1e16, 1e21, 0, 1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'the version %s fails, for an Event and for a Command',
+    (version) => {
+      const validated = validateMessages([anEvent({ version })], [aCommand({ version })]);
+
+      expect(validated).toMatchObject({
+        kind: 'invalid',
+        failures: [
+          { rule: 'message-version', at: expect.arrayContaining(['events']) },
+          { rule: 'message-version', at: expect.arrayContaining(['commands']) },
+        ],
+      });
+    },
+  );
+});
 
 describe('validateContract: Message Versions that fail only as fields', () => {
   test.each([
