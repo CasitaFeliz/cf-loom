@@ -1,11 +1,11 @@
 import { defineContract } from '@cf-loom/contract';
 import { definitions as orgDefinitions } from '@org/definitions';
-import { ordersDeps } from './dependencies/orders-service.dependencies.ts';
+import { ordersDependency } from './dependencies/orders-service.dependency.ts';
 import { billingGroup } from './groups/billing.group.ts';
 
 export const contract = defineContract({
   name: 'billing-service',
   groups: [billingGroup],
-  dependencies: [ordersDeps],
+  dependencies: [ordersDependency],
   definitions: [orgDefinitions],
 });

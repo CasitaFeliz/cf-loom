@@ -3,7 +3,7 @@ import { client } from '@cf-loom/client';
 import { type Http, serve } from '@cf-loom/server';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
-import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
+import { ordersDependency } from '../src/contract/dependencies/orders-service.dependency.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/generated/handlers.generated.ts';
 import { ordersClientOf } from '../src/orders-client/orders-client.ts';
@@ -83,7 +83,7 @@ describe('billing-service calling orders-service over HTTP', () => {
 
 describe('a client of orders-service over HTTP', () => {
   test('it receives ORDER_LOCKED with the instant the order was locked', async () => {
-    const ordersClient = client(ordersDeps, {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
     });
@@ -99,7 +99,7 @@ describe('a client of orders-service over HTTP', () => {
   });
 
   test('it receives RESOURCE_NOT_FOUND for an order nobody placed, known, with orders-service’s message', async () => {
-    const ordersClient = client(ordersDeps, {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
     });
@@ -115,7 +115,7 @@ describe('a client of orders-service over HTTP', () => {
   });
 
   test('with an unknown key it receives UNAUTHENTICATED', async () => {
-    const ordersClient = client(ordersDeps, {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'stolen-key' },
     });

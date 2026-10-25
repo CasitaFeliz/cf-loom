@@ -2,7 +2,7 @@ import { FakeProviderError, fakeProvider } from '@cf-loom/testing';
 import { contract as orders } from '@org/contract-orders-service';
 import { describe, expect, test } from 'vitest';
 import { invoiceFor } from '../src/billing/invoice-for.ts';
-import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
+import { ordersDependency } from '../src/contract/dependencies/orders-service.dependency.ts';
 
 const ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const total = { amount: 4200, currency: 'EUR' };
@@ -16,7 +16,7 @@ const paidOrder = {
 
 /** orders-service faked, and a client over it holding billing's key. */
 function fakeOrders() {
-  const fake = fakeProvider(ordersDeps);
+  const fake = fakeProvider(ordersDependency);
   const client = fake.client({ headers: { 'x-api-key': 'billing-key' } });
   return { fake, client };
 }
