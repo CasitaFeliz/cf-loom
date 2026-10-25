@@ -18,7 +18,7 @@ export type MessageFault = Fault & { readonly retryAfter?: never };
 /** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a MessageFault. */
 type Answered = undefined | MessageFault;
 
-/** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a Fault; may be async. */
+/** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a `MessageFault`; may be async. */
 export type CommandImplementation<
   Target extends Pairing<Command>,
   Resources extends object = NoResources,
@@ -28,7 +28,7 @@ export type CommandImplementation<
   call: MessageCall<Resources>,
 ) => Answered | Promise<Answered>;
 
-/** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a Fault; may be async. */
+/** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a `MessageFault`; may be async. */
 export type EventImplementation<
   Target extends Pairing<Subscription>,
   Resources extends object = NoResources,
