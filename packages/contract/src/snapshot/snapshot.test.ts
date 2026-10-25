@@ -609,7 +609,7 @@ describe('snapshotOf: a Service', () => {
           required: true,
           schema: {
             type: 'array',
-            items: { type: 'union', options: [{ type: 'number' }, { type: 'string' }] },
+            items: { type: 'union', options: [{ type: 'string' }, { type: 'number' }] },
           },
         },
         code: {

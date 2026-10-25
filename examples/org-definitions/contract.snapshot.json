@@ -51,10 +51,10 @@
                       "items": {
                         "options": [
                           {
-                            "type": "number"
+                            "type": "string"
                           },
                           {
-                            "type": "string"
+                            "type": "number"
                           }
                         ],
                         "type": "union"
@@ -221,10 +221,10 @@
                       "items": {
                         "options": [
                           {
-                            "type": "number"
+                            "type": "string"
                           },
                           {
-                            "type": "string"
+                            "type": "number"
                           }
                         ],
                         "type": "union"

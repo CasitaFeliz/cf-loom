@@ -478,8 +478,8 @@ describe('walkSchemas: recursion', () => {
           listing: {
             type: 'union',
             options: [
-              { type: 'array', items: { type: 'ref', name: 'listing' } },
               { type: 'string' },
+              { type: 'array', items: { type: 'ref', name: 'listing' } },
             ],
           },
         },
