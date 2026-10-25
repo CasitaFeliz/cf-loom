@@ -29,7 +29,7 @@ export function thrownHappenedOf(
   signal: AbortSignal | undefined,
 ): Happened | undefined {
   if (signal?.aborted === true) {
-    return { kind: abortKindOf(signal.reason), error: signal.reason };
+    return abortedHappenedOf(signal);
   }
   const kind = thrownKindOf(error);
   return kind === undefined ? undefined : { kind, error };
@@ -42,49 +42,60 @@ export function answeredHappenedOf(answered: Answered, signal: AbortSignal | und
   }
   const { status, headers, error } = answered;
   if (signal?.aborted === true) {
-    return { kind: abortKindOf(signal.reason), error: signal.reason, status, headers };
+    return { ...abortedHappenedOf(signal), status, headers };
   }
-  return bodyFailureKindOf(error) === 'timeout'
-    ? { kind: 'timeout', error, status, headers }
-    : answered;
+  const kind = bodyFailureKindOf(error);
+  return kind === 'unreadable-body' ? answered : { kind, error, status, headers };
 }
 
-/** An aborted call, told a timeout or an abort by its reason's name, never by its class. */
-export function abortKindOf(reason: unknown): 'aborted' | 'timeout' {
-  return nameOf(reason) === 'TimeoutError' ? 'timeout' : 'aborted';
-}
-
-/** Whether a network failure lost a connection that may have carried the request, so a retry may succeed. */
-export function isConnectionLost(error: unknown): boolean {
-  return lostCodes.has(codeOf(error));
+/** A call whose signal was aborted, a timeout or an abort by its reason; its error is the reason. */
+export function abortedHappenedOf(
+  signal: AbortSignal,
+): Extract<Happened, { readonly kind: 'aborted' | 'timeout' }> {
+  const { reason } = signal;
+  return { kind: abortKindOf(reason), error: reason };
 }
 
 /** What `fetch` threw, told by its error: the kinds of a call that sent nothing back. */
-type ThrownKind = 'aborted' | 'timeout' | 'no-connection' | 'connection-failed';
+type ThrownKind = 'aborted' | 'timeout' | 'no-connection' | 'connection-lost' | 'connection-failed';
 
 function thrownKindOf(error: unknown): ThrownKind | undefined {
-  switch (nameOf(error)) {
-    case 'TimeoutError':
-      return 'timeout';
-    case 'AbortError':
-      return 'aborted';
-    case 'TypeError':
-      return networkKindOf(codeOf(error));
-    default:
-      return undefined;
+  const aborted = abortKindByNameOf(error);
+  if (aborted !== undefined) {
+    return aborted;
   }
+  return nameOf(error) === 'TypeError' ? networkKindOf(codeOf(error)) : undefined;
 }
 
 /** A network failure by its system error code; one with none, as browsers throw, is any other. */
-function networkKindOf(code: unknown): 'no-connection' | 'timeout' | 'connection-failed' {
+function networkKindOf(code: unknown): ThrownKind {
   if (noConnectionCodes.has(code)) {
     return 'no-connection';
+  }
+  if (lostCodes.has(code)) {
+    return 'connection-lost';
   }
   return timeoutCodes.has(code) ? 'timeout' : 'connection-failed';
 }
 
-function bodyFailureKindOf(error: unknown): 'timeout' | 'unreadable-body' {
+/** What failed a body while it was read: told by name, as a throw is, then by undici's timeout codes. */
+function bodyFailureKindOf(error: unknown): 'aborted' | 'timeout' | 'unreadable-body' {
+  const aborted = abortKindByNameOf(error);
+  if (aborted !== undefined) {
+    return aborted;
+  }
   return timeoutCodes.has(codeOf(error)) ? 'timeout' : 'unreadable-body';
+}
+
+/** An error named for an abort or a timeout, told one from the other; none for any other. */
+function abortKindByNameOf(error: unknown): 'aborted' | 'timeout' | undefined {
+  const name = nameOf(error);
+  return name === 'TimeoutError' || name === 'AbortError' ? abortKindOf(error) : undefined;
+}
+
+/** An aborted call, told a timeout or an abort by its reason's name, never by its class. */
+function abortKindOf(reason: unknown): 'aborted' | 'timeout' {
+  return nameOf(reason) === 'TimeoutError' ? 'timeout' : 'aborted';
 }
 
 function codeOf(error: unknown): unknown {

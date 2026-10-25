@@ -114,19 +114,11 @@ type Method<
   Configured extends ConfiguredName<D>,
   D extends AnyDependency,
   Name extends ListedName<D>,
+  Input = CallInput<Target, Extract<Configured, InputHeaderName<Target>>>,
 > =
-  Readonly<Record<never, never>> extends CallInput<
-    Target,
-    Extract<Configured, InputHeaderName<Target>>
-  >
-    ? (
-        input?: CallInput<Target, Extract<Configured, InputHeaderName<Target>>>,
-        call?: CallOptions,
-      ) => Promise<ReceivedOutcome<D, Name>>
-    : (
-        input: CallInput<Target, Extract<Configured, InputHeaderName<Target>>>,
-        call?: CallOptions,
-      ) => Promise<ReceivedOutcome<D, Name>>;
+  Readonly<Record<never, never>> extends Input
+    ? (input?: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>
+    : (input: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>;
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
 export type Client<D extends AnyDependency, Configured extends ConfiguredName<D> = never> = {

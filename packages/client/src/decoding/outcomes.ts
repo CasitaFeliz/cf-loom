@@ -23,6 +23,9 @@ export type DecodedSuccess = {
 /** Who answered a Rejection: the Provider, or the client alone when it refused the Input unsent. */
 export type RejectionSource = 'provider' | 'client';
 
+/** How a Rejection reached the Caller: the status it came with, and who answered it. */
+export type Arrival = { readonly status: number; readonly source: RejectionSource };
+
 /** A Rejection as decoded, before its Endpoint types it: one it answers, its body where its code declares one. */
 export type DecodedRejection = {
   readonly kind: 'rejection';
@@ -129,10 +132,9 @@ export type BrokenOutcome = {
 /** The client's own `INVALID_OUTCOME`: never retryable, with the Issues, never the value. */
 export function invalidOutcomeOf({ status, committed, issues }: BrokenOutcome): ReceivedFault {
   const { message } = reservedFaults.INVALID_OUTCOME;
-  const source = 'invalid-outcome';
   return {
     kind: 'fault',
-    source,
+    source: 'invalid-outcome',
     status,
     code: 'INVALID_OUTCOME',
     committed,

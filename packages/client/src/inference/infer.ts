@@ -6,7 +6,7 @@ import {
   type ReceivedFault,
   withRetryAfter,
 } from './faults.ts';
-import { abortKindOf, answeredHappenedOf, isConnectionLost, thrownHappenedOf } from './happened.ts';
+import { abortedHappenedOf, answeredHappenedOf, thrownHappenedOf } from './happened.ts';
 
 /** How the client infers Faults: the call's signal, and the organization's own inference. */
 export type Inferring = {
@@ -33,8 +33,8 @@ export function answeredFaultOf(answered: Answered, inferring: Inferring): Recei
 
 /** The Fault of a call whose signal was aborted before anything was sent: committed `no`. */
 export function notSentFaultOf(signal: AbortSignal): ReceivedFault {
-  const happened: Happened = { kind: abortKindOf(signal.reason), error: signal.reason };
-  return faultFrom(happened, { ...inferenceOf(happened), committed: 'no' });
+  const happened = abortedHappenedOf(signal);
+  return faultWith(happened, { ...inferenceOf(happened), committed: 'no' });
 }
 
 /** A Fault with cf-loom's inference of what happened, or the organization's when it gives one. */
@@ -45,11 +45,11 @@ function faultOf(happened: Happened, inferring: Inferring): ReceivedFault {
       committed: inferred.committed,
       retryable: inferred.retryable,
     }) ?? inferred;
-  return faultFrom(happened, { committed, retryable, message: inferred.message });
+  return faultWith(happened, { committed, retryable, message: inferred.message });
 }
 
 /** The Fault of what happened, with cf-loom's message and the details a Caller reads it by. */
-function faultFrom(happened: Happened, inference: Inference): ReceivedFault {
+function faultWith(happened: Happened, inference: Inference): ReceivedFault {
   const fault: ReceivedFault = {
     kind: 'fault',
     source: happened.kind,
@@ -65,6 +65,7 @@ function faultFrom(happened: Happened, inference: Inference): ReceivedFault {
 function detailsOf(happened: Happened): Pick<ReceivedFault, 'status' | 'cause'> {
   switch (happened.kind) {
     case 'no-connection':
+    case 'connection-lost':
     case 'connection-failed':
       return { cause: happened.error };
     case 'aborted':
@@ -88,10 +89,10 @@ function inferenceOf(happened: Happened): Inference {
       return { committed: 'unknown', retryable: false, message: 'The request was aborted' };
     case 'timeout':
       return { committed: 'unknown', retryable: true, message: 'The request timed out' };
-    case 'connection-failed': {
-      const retryable = isConnectionLost(happened.error);
-      return { committed: 'unknown', retryable, message: 'The connection failed' };
-    }
+    case 'connection-lost':
+      return { committed: 'unknown', retryable: true, message: 'The connection failed' };
+    case 'connection-failed':
+      return { committed: 'unknown', retryable: false, message: 'The connection failed' };
     case 'unreadable-body':
       return { committed: 'unknown', retryable: true, message: 'The connection failed' };
     case 'status':

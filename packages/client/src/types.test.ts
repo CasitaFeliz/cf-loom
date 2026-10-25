@@ -316,7 +316,7 @@ describe('Http', () => {
 });
 
 describe('a Fault’s source', () => {
-  test('a switch on it is exhaustive over the eight sources', () => {
+  test('a switch on it is exhaustive over the nine sources', () => {
     type Fault = Extract<ReceivedOutcome<typeof ordersDependency, 'getOrder'>, { kind: 'fault' }>;
     const described = (source: Fault['source']): string => {
       switch (source) {
@@ -329,6 +329,7 @@ describe('a Fault’s source', () => {
         case 'aborted':
         case 'timeout':
         case 'no-connection':
+        case 'connection-lost':
         case 'connection-failed':
           return 'the client met';
         default:
@@ -341,6 +342,7 @@ describe('a Fault’s source', () => {
       | 'aborted'
       | 'timeout'
       | 'no-connection'
+      | 'connection-lost'
       | 'connection-failed'
       | 'status'
       | 'unreadable-body'

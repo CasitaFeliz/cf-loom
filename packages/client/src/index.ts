@@ -1,10 +1,10 @@
-export type { Committed, Http, Issue, ReservedCode } from '@cf-loom/contract';
 export type {
   CallInput,
   CallOptions,
   Client,
   ClientOptions,
   DeprecationNotice,
+  Http,
   OnDeprecation,
 } from './calling/index.ts';
 export { client } from './calling/index.ts';
@@ -15,9 +15,12 @@ export type {
   ReceivedUnknownRejection,
 } from './decoding/index.ts';
 export type {
+  Committed,
   FaultSource,
   Happened,
   InferFault,
   InferredFault,
+  Issue,
   ReceivedFault,
+  ReservedCode,
 } from './inference/index.ts';

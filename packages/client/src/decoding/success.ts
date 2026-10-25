@@ -26,11 +26,7 @@ type SuccessHeaders = {
   readonly issues: readonly Issue[];
 };
 
-/**
- * A response with the declared Success status: its headers and body read with their Reader
- * schemas; one that breaks them is the Provider's committed answer the Contract does not describe,
- * unless its body is no JSON, which nothing shows the Provider sent.
- */
+/** The Outcome a Caller receives for a response with the declared Success status. */
 export async function successOf(
   response: Response,
   called: CalledEndpoint,
@@ -55,11 +51,11 @@ export async function successOf(
   if (issues.length > 0) {
     return invalidOutcomeOf({ status, committed: 'yes', issues });
   }
-  return successFrom(called, status, { headers, body });
+  return declaredSuccessOf(called, status, { headers, body });
 }
 
 /** The Success with only the parts its Endpoint declares, so it is what a direct call of its Handler returns. */
-function successFrom(
+function declaredSuccessOf(
   called: CalledEndpoint,
   status: number,
   read: { readonly headers: SuccessHeaders; readonly body: { readonly value: unknown } },

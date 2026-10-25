@@ -1,3 +1,4 @@
+export type { Committed, Issue, ReservedCode } from '@cf-loom/contract';
 export type {
   Answered,
   FaultSource,

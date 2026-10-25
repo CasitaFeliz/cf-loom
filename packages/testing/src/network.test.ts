@@ -82,7 +82,7 @@ describe('fakeProvider: what the client infers its Fault from', () => {
 
     expect(outcome).toMatchObject({
       kind: 'fault',
-      source: 'connection-failed',
+      source: 'connection-lost',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',

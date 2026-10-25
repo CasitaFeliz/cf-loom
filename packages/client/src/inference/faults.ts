@@ -1,12 +1,11 @@
 import type { Committed, Issue, ReservedCode } from '@cf-loom/contract';
 
-/**
- * What a call met instead of an Outcome of its own, as `inferFault` is offered it: a network
- * failure, an abort or a timeout, with what `fetch` threw or the body failed with, and the status
- * and headers when a response had arrived; a status with no Outcome; or a body that failed.
- */
+/** What a call met instead of an Outcome of its own, as `inferFault` is offered it. */
 export type Happened =
-  | { readonly kind: 'no-connection' | 'connection-failed'; readonly error: unknown }
+  | {
+      readonly kind: 'no-connection' | 'connection-lost' | 'connection-failed';
+      readonly error: unknown;
+    }
   | {
       readonly kind: 'aborted' | 'timeout';
       readonly error: unknown;
@@ -33,12 +32,7 @@ export type InferredFault = { readonly committed: Committed; readonly retryable:
 /** An organization's inference, given cf-loom's; `undefined` keeps cf-loom's. */
 export type InferFault = (happened: Happened, inferred: InferredFault) => InferredFault | undefined;
 
-/**
- * A Fault as a Caller receives it: where it came from, what the Provider sent or the client
- * inferred or found, the status when a response arrived, the error `fetch` threw, the stream
- * failed with or the signal was aborted with, and the Issues of an Outcome that broke the
- * Contract, never its value.
- */
+/** A Fault as a Caller receives it: the Provider's, or one the client inferred or found. */
 export type ReceivedFault = {
   readonly kind: 'fault';
   readonly source: FaultSource;

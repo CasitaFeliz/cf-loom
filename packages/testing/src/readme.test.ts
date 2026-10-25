@@ -151,7 +151,7 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
     },
     {
       kind: 'fault',
-      source: 'connection-failed',
+      source: 'connection-lost',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',

@@ -4,7 +4,7 @@ import {
   rejectionBodyReaderOf,
 } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
-import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
+import { type Arrival, type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
 
 /**
  * A Rejection Envelope as the Caller receives it: a code the Endpoint answers, with its body read
@@ -12,9 +12,10 @@ import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
  */
 export function rejectionOf(
   envelope: RejectionEnvelope['rejection'],
-  status: number,
+  arrival: Arrival,
   called: CalledEndpoint,
 ): DecodedOutcome {
+  const { status, source } = arrival;
   const { code, message, body } = envelope;
   const rejection = called.rejectionsByCode.get(code);
   if (rejection === undefined) {
@@ -27,7 +28,7 @@ export function rejectionOf(
     } as const;
     return body === undefined ? unknown : { ...unknown, body };
   }
-  const known = { kind: 'rejection', source: 'provider', code, status, message } as const;
+  const known = { kind: 'rejection', source, code, status, message } as const;
   const schema = rejectionBodyReaderOf(rejection, called.standards);
   if (schema === undefined) {
     return known;

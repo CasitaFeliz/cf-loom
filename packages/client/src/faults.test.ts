@@ -202,7 +202,7 @@ describe('row 2: a timeout or a lost connection after sending is committed unkno
 
       expect(outcome).toEqual({
         kind: 'fault',
-        source: 'connection-failed',
+        source: 'connection-lost',
         committed: 'unknown',
         retryable: true,
         message: 'The connection failed',
@@ -230,7 +230,7 @@ describe('row 2: a timeout or a lost connection after sending is committed unkno
     const controller = new AbortController();
     const orders = ordersOver(async () => {
       controller.abort();
-      throw controller.signal.reason;
+      throw new TypeError('fetch failed');
     });
 
     const outcome = await orders.getOrder(input, { signal: controller.signal });
@@ -362,6 +362,33 @@ describe('row 2, more', () => {
     ]);
   });
 
+  test.each([
+    { name: 'TimeoutError', source: 'timeout', retryable: true, message: 'The request timed out' },
+    { name: 'AbortError', source: 'aborted', retryable: false, message: 'The request was aborted' },
+  ] as const)(
+    'a $name raised while the body is read is told by its name, with the status that had arrived',
+    async ({ name, source, retryable, message }) => {
+      const failure = new DOMException('raised by a wrapper', name);
+      const stream = new ReadableStream<Uint8Array>({
+        start: (controller) => controller.error(failure),
+      });
+      const json = { 'content-type': 'application/json' };
+      const orders = ordersOver(async () => new Response(stream, { status: 200, headers: json }));
+
+      const outcome = await orders.getOrder(input);
+
+      expect(outcome).toEqual({
+        kind: 'fault',
+        source,
+        status: 200,
+        committed: 'unknown',
+        retryable,
+        message,
+        cause: failure,
+      });
+    },
+  );
+
   test('an abort while the body is read is not retryable, with the status that had arrived', async () => {
     const controller = new AbortController();
     const stream = new ReadableStream<Uint8Array>(
@@ -385,6 +412,25 @@ describe('row 2, more', () => {
       retryable: false,
       message: 'The request was aborted',
     });
+  });
+
+  test('Retry-After is kept on a Fault whose call was aborted while the body was read', async () => {
+    const controller = new AbortController();
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull: (streamController) => {
+          controller.abort();
+          streamController.error(new DOMException('Aborted', 'AbortError'));
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const headers = { 'content-type': 'application/json', 'retry-after': '5' };
+    const orders = ordersOver(async () => new Response(stream, { status: 503, headers }));
+
+    const outcome = await orders.getOrder(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ source: 'aborted', status: 503, retryAfter: '5' });
   });
 
   test('Retry-After is kept on a Fault whose body failed while it was read', async () => {
@@ -602,6 +648,25 @@ describe('inferFault', () => {
     expect(received).toEqual([{ kind: 'no-connection', error }]);
   });
 
+  test('is offered a lost connection as connection-lost and any other TypeError as connection-failed', async () => {
+    const lost = networkError('ECONNRESET');
+    const other = networkError('EPIPE');
+    const received: Happened[] = [];
+    const inferFault = (happened: Happened) => {
+      received.push(happened);
+      return undefined;
+    };
+    const baseUrl = 'http://orders.test';
+
+    await client(ordersDependency, { baseUrl, fetch: throwing(lost), inferFault }).getOrder(input);
+    await client(ordersDependency, { baseUrl, fetch: throwing(other), inferFault }).getOrder(input);
+
+    expect(received).toEqual([
+      { kind: 'connection-lost', error: lost },
+      { kind: 'connection-failed', error: other },
+    ]);
+  });
+
   test('is offered a thrown error and a failed body, but never what was not sent', async () => {
     const kinds: Happened['kind'][] = [];
     const inferFault = (happened: Happened) => {
@@ -773,7 +838,7 @@ describe('the network rows against node:http', () => {
     const outcome = await ordersAt(baseUrl).getOrder(input);
 
     expect(outcome).toMatchObject({
-      source: 'connection-failed',
+      source: 'connection-lost',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',
