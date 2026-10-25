@@ -9,11 +9,12 @@ import {
   type Field,
   type GuardSnapshot,
   type ObjectNode,
-  type Path,
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
   type ShapeDifference,
+  type Step,
+  snapshotPathOf,
 } from '../internal/index.ts';
 
 type Visibility = EndpointSnapshot['visibility'];
@@ -133,21 +134,39 @@ function changesOf(from: EndpointSnapshot, to: EndpointSnapshot): readonly Chang
   return reportOf(aBaseline(from), aProposed(to)).changes;
 }
 
-const site: ChangeSite = { kind: 'endpoint', identity, visibility: 'public' };
+const site: ChangeSite = { kind: 'endpoint', identity, name: 'updateOrder', visibility: 'public' };
 
 function breaking(difference: Difference): Change {
-  return { site, difference, class: 'breaking', approval: 'needed' };
+  return { site, difference, class: 'breaking', verdict: 'approval-needed' };
 }
 
 function additive(difference: Difference): Change {
-  return { site, difference, class: 'additive' };
+  return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
-function schemaChange(at: Path, shape: ShapeDifference, position: 'input' | 'success' = 'input') {
+type Part = Extract<Step, { readonly kind: 'part' }>['name'];
+
+function partsAt(...names: readonly Part[]): readonly Step[] {
+  return names.map((name) => ({ kind: 'part', name }));
+}
+
+function fieldAt(parts: readonly Part[], name: string): readonly Step[] {
+  return [...partsAt(...parts), { kind: 'field', name }];
+}
+
+function schemaChange(
+  at: readonly Step[],
+  shape: ShapeDifference,
+  position: 'input' | 'success' = 'input',
+) {
   return { kind: 'schema', position, at, shape } as const;
 }
 
-function fieldAdded(at: Path, isRequired: boolean, position: 'input' | 'success' = 'input') {
+function fieldAdded(
+  at: readonly Step[],
+  isRequired: boolean,
+  position: 'input' | 'success' = 'input',
+) {
   return schemaChange(at, { kind: 'field-added', required: isRequired }, position);
 }
 
@@ -169,9 +188,10 @@ describe('compatibilityReportOf, path params', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity, visibility },
+          site: { ...site, visibility },
           difference: { kind: 'param-renamed', from: 'orderId', to: 'id' },
           class: 'additive',
+          verdict: 'allowed',
         },
       ]);
     },
@@ -183,7 +203,7 @@ describe('compatibilityReportOf, path params', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), typeChange)),
     ]);
   });
 
@@ -197,7 +217,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'id'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'id'), typeChange)),
     ]);
   });
 
@@ -215,10 +235,10 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'a', to: 'b' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'b'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'b'), typeChange)),
       additive({ kind: 'param-renamed', from: 'b', to: 'a' }),
       breaking(
-        schemaChange(['input', 'params', 'fields', 'a'], {
+        schemaChange(fieldAt(['input', 'params'], 'a'), {
           kind: 'type-changed',
           from: 'number',
           to: 'string',
@@ -237,7 +257,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       breaking(
-        schemaChange(['input', 'params', 'fields', 'orderId'], {
+        schemaChange(fieldAt(['input', 'params'], 'orderId'), {
           kind: 'constraint-tightened',
           constraint: 'lower-bound',
         }),
@@ -254,7 +274,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive(
-        schemaChange(['input', 'params', 'fields', 'orderId'], {
+        schemaChange(fieldAt(['input', 'params'], 'orderId'), {
           kind: 'constraint-relaxed',
           constraint: 'lower-bound',
         }),
@@ -268,7 +288,7 @@ describe('compatibilityReportOf, path params', () => {
     const changes = changesOf(corrupted, anEndpoint());
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), unprovenParam)),
     ]);
   });
 
@@ -278,7 +298,7 @@ describe('compatibilityReportOf, path params', () => {
     const changes = changesOf(corrupted, anEndpoint());
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), unprovenParam)),
     ]);
   });
 
@@ -295,7 +315,7 @@ describe('compatibilityReportOf, path params', () => {
     const changes = changesOf(corrupted, named);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'constructor'], unprovenParam)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'constructor'), unprovenParam)),
     ]);
   });
 
@@ -309,7 +329,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'id'], unprovenParam)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'id'), unprovenParam)),
     ]);
   });
 
@@ -335,7 +355,7 @@ describe('compatibilityReportOf, path params', () => {
 describe('compatibilityReportOf, query', () => {
   const queryOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ input: anInput({ query: anOpenObject(fields) }) });
-  const pageAt = ['input', 'query', 'fields', 'page'];
+  const pageAt = fieldAt(['input', 'query'], 'page');
 
   test('adding an optional query param is Additive', () => {
     const changes = changesOf(queryOf({}), queryOf({ page: optional(aNumber) }));
@@ -401,7 +421,7 @@ describe('compatibilityReportOf, query', () => {
     );
 
     expect(report.changes).toEqual([
-      breaking(fieldAdded(['input', 'query', 'fields', 'token'], true)),
+      breaking(fieldAdded(fieldAt(['input', 'query'], 'token'), true)),
     ]);
   });
 });
@@ -409,7 +429,7 @@ describe('compatibilityReportOf, query', () => {
 describe('compatibilityReportOf, Input headers', () => {
   const headersOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ input: anInput({ headers: anOpenObject(fields) }) });
-  const traceAt = ['input', 'headers', 'fields', 'x-trace'];
+  const traceAt = fieldAt(['input', 'headers'], 'x-trace');
   const refusesText = { kind: 'header-refuses-text', at: traceAt } as const;
 
   const accepting: readonly (readonly [string, SchemaNode])[] = [
@@ -436,11 +456,11 @@ describe('compatibilityReportOf, Input headers', () => {
   ];
 
   test.each(refusing)(
-    'adding an optional header with %s is Additive by the field rules and Breaking by the header text rule',
+    'adding an optional header with %s is one Breaking Change, by the header text rule alone',
     (_name, schema) => {
       const changes = changesOf(headersOf({}), headersOf({ 'x-trace': optional(schema) }));
 
-      expect(changes).toEqual([additive(fieldAdded(traceAt, false)), breaking(refusesText)]);
+      expect(changes).toEqual([breaking(refusesText)]);
     },
   );
 
@@ -463,7 +483,7 @@ describe('compatibilityReportOf, Input headers', () => {
     ]);
   });
 
-  test('attaching a Guard that demands an optional header with an enum is Breaking', () => {
+  test('attaching a Guard that demands an optional header with an enum is one Breaking Change', () => {
     const closedEnum: SchemaNode = { type: 'enum', values: ['a', 'b'], open: false };
     const attached = anEndpoint({
       guards: [{ guard: 'traced', qualifier: null }],
@@ -478,7 +498,7 @@ describe('compatibilityReportOf, Input headers', () => {
       aProposed(attached, { guards: { traced: demanding } }),
     );
 
-    expect(report.changes).toEqual([additive(fieldAdded(traceAt, false)), breaking(refusesText)]);
+    expect(report.changes).toEqual([breaking(refusesText)]);
   });
 
   test('attaching a Guard that demands a required header is Breaking', () => {
@@ -490,7 +510,7 @@ describe('compatibilityReportOf, Input headers', () => {
     const report = reportOf(aBaseline(anEndpoint()), aProposed(attached));
 
     expect(report.changes).toEqual([
-      breaking(fieldAdded(['input', 'headers', 'fields', 'authorization'], true)),
+      breaking(fieldAdded(fieldAt(['input', 'headers'], 'authorization'), true)),
     ]);
   });
 
@@ -504,7 +524,7 @@ describe('compatibilityReportOf, Input headers', () => {
 
     expect(changes).toEqual([
       additive(
-        schemaChange(['input', 'headers', 'fields', 'authorization'], { kind: 'field-removed' }),
+        schemaChange(fieldAt(['input', 'headers'], 'authorization'), { kind: 'field-removed' }),
       ),
     ]);
   });
@@ -547,7 +567,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, to);
 
     expect(changes).toEqual([
-      breaking({ kind: `body-${change}`, at: ['success', 'body'], position: 'success' }),
+      breaking({ kind: `body-${change}`, at: partsAt('success', 'body'), position: 'success' }),
     ]);
   });
 
@@ -557,7 +577,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking({ kind: 'body-added', at: ['input', 'body'], position: 'input' }),
+      breaking({ kind: 'body-added', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -568,7 +588,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking({ kind: 'body-added', at: ['input', 'body'], position: 'input' }),
+      breaking({ kind: 'body-added', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -578,7 +598,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, anEndpoint());
 
     expect(changes).toEqual([
-      additive({ kind: 'body-removed', at: ['input', 'body'], position: 'input' }),
+      additive({ kind: 'body-removed', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -589,7 +609,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, to);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'body', 'fields', 'note'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'body'], 'note'), typeChange)),
     ]);
   });
 
@@ -601,13 +621,13 @@ describe('compatibilityReportOf, bodies and Success', () => {
 
     expect(changes).toEqual([
       breaking({ kind: 'status-changed', from: 204, to: 200 }),
-      breaking({ kind: 'body-added', at: ['success', 'body'], position: 'success' }),
+      breaking({ kind: 'body-added', at: partsAt('success', 'body'), position: 'success' }),
     ]);
   });
 
   const headersOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ success: aSuccess({ headers: anOpenObject(fields) }) });
-  const locationAt = ['success', 'headers', 'fields', 'location'];
+  const locationAt = fieldAt(['success', 'headers'], 'location');
 
   test('adding a Success header is Additive, even with a format', () => {
     const withFormat: SchemaNode = { type: 'string', format: 'uuid' };
@@ -706,7 +726,7 @@ function endpointsOf(endpoint: EndpointSnapshot, other: string) {
 }
 
 function auditSite(other: string): ChangeSite {
-  return { kind: 'endpoint', identity: other, visibility: 'public' };
+  return { kind: 'endpoint', identity: other, name: 'auditOrder', visibility: 'public' };
 }
 
 describe('compatibilityReportOf, Neutral', () => {
@@ -788,7 +808,6 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
       'renamed',
       'param-renamed',
       'input.query.fields.page',
-      'input.headers.fields.x-trace',
       'header-refuses-text',
       'body-added input.body',
       'status-changed',
@@ -814,10 +833,10 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
 function describedAs(difference: Difference): string {
   switch (difference.kind) {
     case 'schema':
-      return difference.at.join('.');
+      return snapshotPathOf(difference.at).join('.');
     case 'body-added':
     case 'body-removed':
-      return `${difference.kind} ${difference.at.join('.')}`;
+      return `${difference.kind} ${snapshotPathOf(difference.at).join('.')}`;
     default:
       return difference.kind;
   }

@@ -207,11 +207,11 @@ A shape a Service writes for any reader, another Release of its own included, to
 _Avoid_: output, response, payload
 
 **Position**:
-Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it.
+Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it, so the Compatibility Check judges it as a Message, which is the strongest.
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:
-The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change.
+The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change and gives it a Verdict.
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
@@ -225,6 +225,10 @@ _Avoid_: non-breaking change, safe change
 **Neutral Change**:
 A difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
 _Avoid_: patch change, cosmetic change
+
+**Verdict**:
+What the Compatibility Check does with a Change: allows it, needs a Breaking Change Approval for it, or refuses it, which fails the check whatever Approval is given.
+_Avoid_: not allowed (a construct `generate` refuses), outcome (an Endpoint's), severity, level
 
 **Breaking Change Approval** (an Approval, for short):
 An explicit approval by an Approver, given under the organization's own review process, that lets a Breaking Change merge.

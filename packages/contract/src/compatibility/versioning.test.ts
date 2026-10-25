@@ -4,6 +4,7 @@ import {
   type Change,
   type ChangeSite,
   type CodeSnapshot,
+  type CommandSnapshot,
   type ComparedReport,
   compatibilityReportOf,
   type DefinitionsSnapshot,
@@ -15,12 +16,14 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
+  type Verdict,
   versionBumpOf,
 } from '../internal/index.ts';
 
 const publicEndpoint: ChangeSite = {
   kind: 'endpoint',
   identity: 'GET /orders/{}',
+  name: 'getOrder',
   visibility: 'public',
 };
 const internalEvent: ChangeSite = {
@@ -31,6 +34,7 @@ const internalEvent: ChangeSite = {
 const privateEndpoint: ChangeSite = {
   kind: 'endpoint',
   identity: 'POST /orders/purge',
+  name: 'purgeOrders',
   visibility: 'private',
 };
 const privateEvent: ChangeSite = {
@@ -38,24 +42,28 @@ const privateEvent: ChangeSite = {
   identity: 'OrderAudited@1',
   visibility: 'private',
 };
-const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
-const subscription: ChangeSite = { kind: 'subscription', name: 'notifyOnPlaced' };
-const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
+const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' };
+const subscription: ChangeSite = {
+  kind: 'subscription',
+  name: 'notifyOnPlaced',
+  visibility: 'private',
+};
+const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money', visibility: 'public' };
 
-function aBreakingChange(site: ChangeSite, approval: 'needed' | 'not-needed' = 'needed'): Change {
-  return { site, difference: { kind: 'retired' }, class: 'breaking', approval };
+function aBreakingChange(site: ChangeSite, verdict: Verdict = 'approval-needed'): Change {
+  return { site, difference: { kind: 'retired' }, class: 'breaking', verdict };
 }
 
 function anAdditiveChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'added' }, class: 'additive' };
+  return { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' };
 }
 
 function aNeutralChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'tombstoned' }, class: 'neutral' };
+  return { site, difference: { kind: 'tombstoned' }, class: 'neutral', verdict: 'allowed' };
 }
 
-function aNotAllowedChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'deleted' }, class: 'not-allowed' };
+function aRefusedChange(site: ChangeSite): Change {
+  return { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' };
 }
 
 function aReport(changes: readonly Change[], hashChanged = true): ComparedReport {
@@ -266,11 +274,61 @@ describe('versionBumpOf', () => {
   });
 
   test('a Command’s Breaking Change bumps patch: a Command is always Private', () => {
-    const report = aReport([aBreakingChange(command, 'not-needed'), anAdditiveChange(command)]);
+    const report = aReport([aBreakingChange(command, 'allowed'), anAdditiveChange(command)]);
 
     const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('patch');
+  });
+
+  test('adding a Command bumps patch: no Consumer reads a Command', () => {
+    const added: CommandSnapshot = {
+      lifecycle: 'active',
+      description: 'Charge a card',
+      body: { type: 'object', mode: 'strict', fields: {} },
+    };
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      endpoints: {},
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: {},
+      commands: { 'ChargeCard@1': added },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(versionBumpOf(report, unmoved)).toBe('patch');
+  });
+
+  test('a Breaking change to a Public Event’s body is refused, so it bumps patch', () => {
+    const event = (fields: Record<string, { required: boolean; schema: { type: 'string' } }>) =>
+      ({
+        visibility: 'public',
+        lifecycle: 'active',
+        description: 'An order was placed',
+        body: { type: 'object', mode: 'strict', fields },
+      }) as const;
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      endpoints: {},
+      events: { 'OrderPlaced@1': event({}) },
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: {},
+      events: { 'OrderPlaced@1': event({ note: { required: true, schema: { type: 'string' } } }) },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(report.changes.map(({ class: changeClass, verdict }) => [changeClass, verdict])).toEqual(
+      [['breaking', 'refused']],
+    );
+    expect(versionBumpOf(report, unmoved)).toBe('patch');
   });
 
   test('a Change on a Subscription never bumps past patch: a Subscription is the Service’s own', () => {
@@ -303,7 +361,7 @@ describe('versionBumpOf', () => {
       site: sharedSchema,
       difference: { kind: 'removed' },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([removed]), unmoved);
@@ -356,11 +414,15 @@ describe('versionBumpOf', () => {
       difference: {
         kind: 'schema',
         position: 'input',
-        at: ['input', 'body', 'fields', 'amount'],
+        at: [
+          { kind: 'part', name: 'input' },
+          { kind: 'part', name: 'body' },
+          { kind: 'field', name: 'amount' },
+        ],
         shape: { kind: 'field-added', required: true },
       },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([bodyChange]), unmoved);
@@ -413,7 +475,7 @@ describe('versionBumpOf', () => {
       site: publicEndpoint,
       difference: { kind: 'visibility-narrowed', from: 'public', to: 'private' },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([narrowed]), unmoved);
@@ -458,8 +520,21 @@ describe('versionBumpOf', () => {
     expect(bump).toBe('unchanged');
   });
 
-  test('a Not allowed Change does not bump past patch', () => {
-    const report = aReport([aNotAllowedChange(publicEndpoint)]);
+  test('a refused Additive Change on a Public Endpoint bumps patch, not minor', () => {
+    const broughtBack: Change = {
+      site: publicEndpoint,
+      difference: { kind: 'retired-brought-back', lifecycle: 'active' },
+      class: 'additive',
+      verdict: 'refused',
+    };
+
+    const bump = versionBumpOf(aReport([broughtBack]), unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a refused Change on a Public Endpoint does not bump past patch', () => {
+    const report = aReport([aRefusedChange(publicEndpoint)]);
 
     const bump = versionBumpOf(report, unmoved);
 

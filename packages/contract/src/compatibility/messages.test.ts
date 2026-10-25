@@ -9,6 +9,8 @@ import {
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
+  type Step,
+  type Verdict,
 } from '../internal/index.ts';
 
 type Lifecycle = EventSnapshot['lifecycle'];
@@ -116,13 +118,13 @@ type Kind = {
   readonly held: (entries: Entries<Held>, body?: ObjectNode) => Partial<PublishedServiceSnapshot>;
   readonly declared: (entries: Entries<Lifecycle>, body?: ObjectNode) => Partial<ServiceSnapshot>;
   readonly named: 'event' | 'command';
-  readonly retiring: 'needed' | 'not-needed';
+  readonly retiring: Verdict;
 };
 
 const event: Kind = {
   name: 'Event',
   named: 'event',
-  retiring: 'needed',
+  retiring: 'approval-needed',
   site: (identity) => ({ kind: 'event', identity, visibility: 'internal' }),
   held: (entries, body = plain) => ({
     events: byIdentity(entries, (held) => publishedEvent(held, body)),
@@ -134,8 +136,8 @@ const event: Kind = {
 const command: Kind = {
   name: 'Command',
   named: 'command',
-  retiring: 'not-needed',
-  site: (identity) => ({ kind: 'command', identity }),
+  retiring: 'allowed',
+  site: (identity) => ({ kind: 'command', identity, visibility: 'private' }),
   held: (entries, body = plain) => ({
     commands: byIdentity(entries, (held) => publishedCommand(held, body)),
   }),
@@ -157,23 +159,32 @@ function changesOf(
 }
 
 function added(site: ChangeSite): Change {
-  return { site, difference: { kind: 'added' }, class: 'additive' };
+  return { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' };
 }
 
 function bodyChange(isRequired: boolean) {
   const shape = { kind: 'field-added', required: isRequired } as const;
-  return { kind: 'schema', position: 'message', at: ['body', 'fields', 'note'], shape } as const;
+  const at: readonly Step[] = [
+    { kind: 'part', name: 'body' },
+    { kind: 'field', name: 'note' },
+  ];
+  return { kind: 'schema', position: 'message', at, shape } as const;
 }
 
 describe('compatibilityReportOf, a Message Version takes no Breaking Change', () => {
-  test.each(kinds)('a Breaking change to a $name’s body is not allowed', (kind) => {
+  test.each(kinds)('a Breaking change to a $name’s body is refused', (kind) => {
     const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'active' }, plain));
     const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'active' }, withRequiredNote));
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      { site: kind.site('OrderPlaced@1'), difference: bodyChange(true), class: 'not-allowed' },
+      {
+        site: kind.site('OrderPlaced@1'),
+        difference: bodyChange(true),
+        class: 'breaking',
+        verdict: 'refused',
+      },
     ]);
   });
 
@@ -184,12 +195,17 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      { site: kind.site('OrderPlaced@1'), difference: bodyChange(false), class: 'additive' },
+      {
+        site: kind.site('OrderPlaced@1'),
+        difference: bodyChange(false),
+        class: 'additive',
+        verdict: 'allowed',
+      },
     ]);
   });
 
   test.each(kinds)(
-    'changing a $name’s body while retiring it is not allowed beside a Breaking retirement',
+    'changing a $name’s body while retiring it is refused beside a Breaking retirement',
     (kind) => {
       const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }, plain));
       const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'retired' }, withRequiredNote));
@@ -202,9 +218,9 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
           site,
           difference: { kind: 'retired' },
           class: 'breaking',
-          approval: kind.retiring,
+          verdict: kind.retiring,
         },
-        { site, difference: bodyChange(true), class: 'not-allowed' },
+        { site, difference: bodyChange(true), class: 'breaking', verdict: 'refused' },
       ]);
     },
   );
@@ -222,7 +238,7 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
           site: kind.site('OrderPlaced@1'),
           difference: { kind: 'retired' },
           class: 'breaking',
-          approval: kind.retiring,
+          verdict: kind.retiring,
         },
       ]);
     },
@@ -243,12 +259,12 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
         site: event.site('OrderPlaced@1'),
         difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
     ]);
   });
 
-  test('narrowing an Event and making a Breaking change to its body gives a Breaking narrowing that needs an Approval, and a body change that is not allowed', () => {
+  test('narrowing an Event and making a Breaking change to its body gives a Breaking narrowing that needs an Approval, and a body change that is refused', () => {
     const baseline = aBaseline({
       events: { 'OrderPlaced@1': publishedEvent('active', plain, 'internal') },
     });
@@ -264,9 +280,9 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
         site,
         difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
-      { site, difference: bodyChange(true), class: 'not-allowed' },
+      { site, difference: bodyChange(true), class: 'breaking', verdict: 'refused' },
     ]);
   });
 });
@@ -302,7 +318,7 @@ describe('compatibilityReportOf, gaps', () => {
   });
 
   test.each(kinds)(
-    'adding a $name version whose previous one neither side holds is not allowed, naming the missing version',
+    'adding a $name version whose previous one neither side holds is refused, naming the missing version',
     (kind) => {
       const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'active' }));
       const proposed = aProposed(
@@ -317,13 +333,14 @@ describe('compatibilityReportOf, gaps', () => {
         {
           site,
           difference: { kind: 'version-gap', missing: 'OrderPlaced@2' },
-          class: 'not-allowed',
+          class: 'additive',
+          verdict: 'refused',
         },
       ]);
     },
   );
 
-  test.each(kinds)('a new $name starting past version 1 is not allowed', (kind) => {
+  test.each(kinds)('a new $name starting past version 1 is refused', (kind) => {
     const baseline = aBaseline();
     const proposed = aProposed(kind.declared({ 'OrderPlaced@2': 'active' }));
 
@@ -332,7 +349,12 @@ describe('compatibilityReportOf, gaps', () => {
     const site = kind.site('OrderPlaced@2');
     expect(changes).toEqual([
       added(site),
-      { site, difference: { kind: 'version-gap', missing: 'OrderPlaced@1' }, class: 'not-allowed' },
+      {
+        site,
+        difference: { kind: 'version-gap', missing: 'OrderPlaced@1' },
+        class: 'additive',
+        verdict: 'refused',
+      },
     ]);
   });
 
@@ -367,7 +389,8 @@ describe('compatibilityReportOf, gaps', () => {
         {
           site: second,
           difference: { kind: 'version-gap', missing: 'OrderPlaced@1' },
-          class: 'not-allowed',
+          class: 'additive',
+          verdict: 'refused',
         },
         added(kind.site('OrderPlaced@3')),
       ]);
@@ -425,16 +448,17 @@ const crossings: readonly Crossing[] = [
   { name: 'an Event under a Command’s name', declared: event, held: command },
 ];
 
-function notAllowedKind(crossing: Crossing, identity: string): Change {
+function refusedKind(crossing: Crossing, identity: string): Change {
   return {
     site: crossing.declared.site(identity),
     difference: { kind: 'name-kind-changed', from: crossing.held.named },
-    class: 'not-allowed',
+    class: 'breaking',
+    verdict: 'refused',
   };
 }
 
 describe('compatibilityReportOf, a name’s kind across history', () => {
-  test.each(crossings)('declaring $name the Baseline declares is not allowed', (crossing) => {
+  test.each(crossings)('declaring $name the Baseline declares is refused', (crossing) => {
     const baseline = aBaseline(crossing.held.held({ 'OrderPlaced@1': 'active' }));
     const proposed = aProposed({
       ...crossing.held.declared({ 'OrderPlaced@1': 'active' }),
@@ -445,12 +469,12 @@ describe('compatibilityReportOf, a name’s kind across history', () => {
 
     expect(changes).toEqual([
       added(crossing.declared.site('OrderPlaced@2')),
-      notAllowedKind(crossing, 'OrderPlaced@2'),
+      refusedKind(crossing, 'OrderPlaced@2'),
     ]);
   });
 
   test.each(crossings)(
-    'declaring $name at an identity the other kind holds only as a tombstone is not allowed',
+    'declaring $name at an identity the other kind holds only as a tombstone is refused',
     (crossing) => {
       const baseline = aBaseline(crossing.held.held({ 'OrderPlaced@1': 'tombstone' }));
       const proposed = aProposed(crossing.declared.declared({ 'OrderPlaced@1': 'active' }));
@@ -459,7 +483,7 @@ describe('compatibilityReportOf, a name’s kind across history', () => {
 
       expect(changes).toEqual([
         added(crossing.declared.site('OrderPlaced@1')),
-        notAllowedKind(crossing, 'OrderPlaced@1'),
+        refusedKind(crossing, 'OrderPlaced@1'),
       ]);
     },
   );
@@ -474,7 +498,7 @@ describe('compatibilityReportOf, a name’s kind across history', () => {
 
       expect(changes).toEqual([
         added(crossing.declared.site('OrderPlaced@2')),
-        notAllowedKind(crossing, 'OrderPlaced@2'),
+        refusedKind(crossing, 'OrderPlaced@2'),
       ]);
     },
   );

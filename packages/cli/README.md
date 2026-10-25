@@ -68,10 +68,10 @@ Two Elements at one Handler path fail `generate` and `verify` (exit 3), naming b
 | `cf-loom asyncapi [--prefix <p>]` | Prints an AsyncAPI 3.1 document of every Event of a Service that is not Retired as JSON, from the committed `contract.snapshot.json`, which must be what `generate` would write, apart from `generator`, as for `package`; it reads neither the registry nor the Broker, and writes no file: redirect it, `cf-loom asyncapi > asyncapi.json`. `--prefix` puts the prefix in front of every address, as for `broker-plan`. See [asyncapi](#asyncapi) for what it writes of each Event, and [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md for its schemas. An Application or a Definitions Package has none |
 | `cf-loom verify` | Fails if `contract.snapshot.json`, the Handler map or the readers was edited or is out of date, if a Handler file the Handler map imports is missing or is no file, if a Handler file under `src/` names no declared Endpoint, Guard, Command's Message Version or Subscription, or if a generated file is left at a path the layout no longer names. It also fails on two Elements at one Handler path and on a name the readers cannot write (see the exit 3 lines below). It imports every file under `src/contract/`, as `generate` does, and fails on the same exports; it writes nothing |
 | `cf-loom package [--out <dir>]` | Writes the Contract Package of a Service or an Application to `<dir>`, `.cf-loom/contract-package/` next to `cf-loom.config.ts` by default (it creates `.cf-loom/`, which holds only output, so keep it out of version control), ready for `tsc -p <dir>` (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in the root ARCHITECTURE.md, which also says how `publish` generates it). It is generated from the committed `contract.snapshot.json`, which must be what `generate` would write, apart from `generator`, as `verify` compares it (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). The folder must be missing, empty, or a previous output, which holds only what `package` writes (`package.json` with `cfLoom`, `snapshot.json`, `tsconfig.json`, `src/`), beside a build's `dist/` or an install's `node_modules/`, which are kept while the rest is replaced; anything else, a symbolic link included, is refused and left as it was; these rules apply to that folder alone, never to the rest of `.cf-loom/`. A Definitions Package has no Contract Package: `publish` publishes it from its own package.json and built files |
-| `cf-loom check [--json] [--against <version\|dist-tag>]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, as for `package`, against the Baseline (the highest version the package lists, a prerelease included; `--against` names another version it lists, or a dist-tag whose version it lists, instead), and prints every Change with its class; it exits 2 when a Change needs a Breaking Change Approval, which your review process enforces (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md). `--json` prints one JSON line instead of the lines on stdout (see [check --json](#check---json)) |
-| `cf-loom publish [--force] [--prerelease]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, against the Baseline, and fails on a Change that is Not allowed; it never waits on a Breaking Change Approval. It derives the version (see [Versioning](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#versioning) in COMPATIBILITY.md), merges the Baseline's history into the Snapshot, and publishes through your npm. A Contract Package is generated as `package` writes it, in a temporary folder under `node_modules/.cache/cf-loom` of the project, built with the `typescript` installed there (TypeScript 7, whose `bin.tsc` `publish` runs), and published. A Definitions Package must be built first: its files as `npm pack` lists them are published with `snapshot.json` and `cfLoom` written in, its `version` set and its `peerDependencies` replaced by carets on the installed `zod` and `@cf-loom/contract`, as for a Contract Package; a `workspace:`, `catalog:`, `file:` or `link:` range in its `dependencies` or `optionalDependencies` fails, since npm publishes it unchanged and no registry can install it. `--prerelease` publishes `<version>-<n>` of the version it derives. When nothing changed, `--force` publishes a patch, and `--prerelease` publishes nothing unless `--force` is given. Over a Baseline that is a prerelease, `publish` promotes it instead, with or without `--force`, by publishing its numbers as a version that is not a prerelease, and `--prerelease --force` publishes the next prerelease of those numbers. A version that would not be above the Baseline, as `--prerelease` derives over a Baseline named by hand such as `1.1.0-rc.1`, exits 3: publish a version above it by hand. Until cf-loom 1.0.0 the Snapshot format is not frozen, so publish only prereleases, a Definitions Package included. It exits 3 when, right before `npm publish`, the package lists a version higher than its Baseline, and two publishes that derive the same version cannot both succeed: rerun the one that failed, which reads the registry again. |
+| `cf-loom check [--json] [--against <version\|dist-tag>]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, as for `package`, against the Baseline (the highest version the package lists, a prerelease included; `--against` names another version it lists, or a dist-tag whose version it lists, instead), and prints every Change with its class and Verdict; it exits 2 when a Change needs a Breaking Change Approval, which your review process enforces (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md). `--json` prints one JSON line instead of the lines on stdout (see [check --json](#check---json)) |
+| `cf-loom publish [--force] [--prerelease]` | Runs the Compatibility Check of the committed `contract.snapshot.json`, which must be what `generate` would write, against the Baseline, and fails on a Change that is refused; it never waits on a Breaking Change Approval. It derives the version (see [Versioning](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#versioning) in COMPATIBILITY.md), merges the Baseline's history into the Snapshot, and publishes through your npm. A Contract Package is generated as `package` writes it, in a temporary folder under `node_modules/.cache/cf-loom` of the project, built with the `typescript` installed there (TypeScript 7, whose `bin.tsc` `publish` runs), and published. A Definitions Package must be built first: its files as `npm pack` lists them are published with `snapshot.json` and `cfLoom` written in, its `version` set and its `peerDependencies` replaced by carets on the installed `zod` and `@cf-loom/contract`, as for a Contract Package; a `workspace:`, `catalog:`, `file:` or `link:` range in its `dependencies` or `optionalDependencies` fails, since npm publishes it unchanged and no registry can install it. `--prerelease` publishes `<version>-<n>` of the version it derives. When nothing changed, `--force` publishes a patch, and `--prerelease` publishes nothing unless `--force` is given. Over a Baseline that is a prerelease, `publish` promotes it instead, with or without `--force`, by publishing its numbers as a version that is not a prerelease, and `--prerelease --force` publishes the next prerelease of those numbers. A version that would not be above the Baseline, as `--prerelease` derives over a Baseline named by hand such as `1.1.0-rc.1`, exits 3: publish a version above it by hand. Until cf-loom 1.0.0 the Snapshot format is not frozen, so publish only prereleases, a Definitions Package included. It exits 3 when, right before `npm publish`, the package lists a version higher than its Baseline, and two publishes that derive the same version cannot both succeed: rerun the one that failed, which reads the registry again. |
 
-Exit status: 0, done; 1, the check failed (something Not allowed, or a root, or a Snapshot, generated file or Handler file that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). Of what a command finds, 3 comes before 1, and 1 before 2; but a command stops at its first failure, so `check` with a stale Snapshot ends with 1 before it reads the registry. `publish`, `broker-plan`, `openapi` and `asyncapi` never exit 2.
+Exit status: 0, done; 1, the check failed (a Change refused, or a root, or a Snapshot, generated file or Handler file that `generate` must fix); 2, a Change needs a Breaking Change Approval; 3, a tooling error (configuration, registry). Of what a command finds, 3 comes before 1, and 1 before 2; but a command stops at its first failure, so `check` with a stale Snapshot ends with 1 before it reads the registry. `publish`, `broker-plan`, `openapi` and `asyncapi` never exit 2.
 
 ## What the commands print and write
 
@@ -83,7 +83,7 @@ Each command prints one line per thing it did or found, never a stack trace; `op
 | `generate` | `Wrote <path>` for each file it wrote, `contract.snapshot.json` first, then the Handler map, the readers and each new stub |
 | `verify` | `<path> is up to date` for each file it compared |
 | `package` | `Wrote <dir>` |
-| `check` | `Checked against <package>@<version>`, followed by `(version from <stable>)` when the Baseline is a prerelease above the highest version that is not one, `(no stable version: the first is <first>)` when the package lists only prereleases, `<first>` being 1.0.0 or, when higher, the numbers of the highest prerelease, or `(--against)` when `--against` named the version; then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is Not allowed or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it` |
+| `check` | `Checked against <package>@<version>`, followed by `(version from <stable>)` when the Baseline is a prerelease above the highest version that is not one, `(no stable version: the first is <first>)` when the package lists only prereleases, `<first>` being 1.0.0 or, when higher, the numbers of the highest prerelease, or `(--against)` when `--against` named the version; then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is refused or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it` |
 | `broker-plan` | `Stream <stream>: <subject> …`, each subject separated by a space, then `Durable consumer <durable> on <stream>: <subject>` for each durable consumer, each in code point order, or `<service> needs no stream and no durable consumer` |
 | `openapi` | the OpenAPI document as JSON indented by two spaces (see [openapi](#openapi)) |
 | `asyncapi` | the AsyncAPI document as JSON indented by two spaces (see [asyncapi](#asyncapi)) |
@@ -91,15 +91,30 @@ Each command prints one line per thing it did or found, never a stack trace; `op
 
 Every line on stdout or stderr, the `--json` document included, is written with each line break inside it (`\r`, `\n`, U+0085, U+2028 and U+2029) replaced by the visible text `\r`, `\n`, `\u0085`, `\u2028` and `\u2029`, so no reader splits a line there.
 
-A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, from the tables below; the path and Position of a Difference that has them; and every other field of the Difference and of its shape, in the order of the tables, as `name=value`. A `value` is written as JSON, so `1` and `"1"` differ. Any other path segment or text that is not made of ASCII letters, digits and `_ @ / { } $ -` is written as JSON too (`"two words"`, `"two\nlines"`), so a key with a space or a line break never splits the line. `<site>` is one of `endpoints.<identity>`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`, and `<class>` is one of `Breaking, needs a Breaking Change Approval`, `Breaking, needs no Approval`, `Additive`, `Neutral` or `Not allowed`:
+A Change is one line, `<site> <difference>[ <shape>][ at <path>][ (<position>)][ <field>=<value>…]: <class>[, <verdict>][; <hint>]`, in the order of the report: the kinds of the Difference and, for a schema, of its shape, from the tables below; its path, when it has one; its Position, when the path does not start with it; and every other field of the Difference and of its shape, in the order of the tables, as `name=value`. A `value` is written as JSON, so `1` and `"1"` differ. Any other path segment or text that is not made of ASCII letters, digits and `_ @ / $ -` is written as JSON too (`"two words"`, `"two\nlines"`), so a key with a space or a line break never splits the line. `<site>` is one of `endpoints.<identity> (<name>)`, `events.<Name@n>`, `commands.<Name@n>`, `codes.<CODE>`, `subscriptions.<name>`, `schemas.<name>` or `guards.<name>`. `<class>` is `Breaking`, `Additive` or `Neutral`, and the Verdict (see [Breaking Change Approval](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md) adds to it `needs a Breaking Change Approval`, or `refused`; a Breaking Change that is allowed says `needs no Approval`, and an Additive or Neutral one that is allowed adds nothing:
 
 ```
-endpoints.GET /orders/{} schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval
-endpoints.GET /orders/{} renamed from=getOrder to=fetchOrder visibility=public: Breaking, needs a Breaking Change Approval
+endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval
+endpoints.GET /orders/{} (fetchOrder) renamed from=getOrder to=fetchOrder baselineVisibility=public: Breaking, needs a Breaking Change Approval
+events.OrderCreated@1 schema field-removed at body.total (message): Breaking, refused; make the change in a new Message Version
 commands.ChargeCard@1 retired: Breaking, needs no Approval
 ```
 
-The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success`, `message` or `every` (a shared schema, judged in all three), and the kind of its shape; a `body-added` or `body-removed` carries `at` and a `position` of `input` or `success`; a `header-refuses-text` carries `at`:
+The path is where the Difference is, in the author's terms: the part of the Endpoint it sits in (`input`, `success`; `params`, `query`, `headers`, `body`), a Rejection's `body`, or a Guard's `demands`; then `.field` for an object's field, `[]` for an array's items, `{}` for a record's value, `{key}` for its key, `[...]` for a tuple's `rest`, and `<discriminator=value>` for a variant of a discriminated union: `success.body.orders[].lines[].kind<type="a">.x`. A Change at the root of a shared schema has no path. The Position, `input`, `success` or `message`, is written after the path when the path does not start with it (`at body.total (message)`, `at demands.query.token (input)`).
+
+The hint says how to avoid a Change, from a closed table; the first row that fits decides:
+
+| When | Hint |
+| --- | --- |
+| `deleted` | `retire it instead, deprecating it first if it is not, and delete it once the Baseline has it Retired` |
+| `retired-before-deprecated` | `deprecate it in one publish and retire it in a later one` |
+| `header-refuses-text` | `accept any text` |
+| `name-kind-changed` | `declare it under a new name` |
+| a Breaking `field-added` that is required | `make it optional` |
+| a Breaking `value-added` to a closed enum, when the Verdict needs an Approval | `declare it with openEnum, so readers take values added later` |
+| a Breaking change to an Event's or a Command's body, or `identity-reused` on one | `make the change in a new Message Version` |
+
+The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success` or `message` (a shared schema is judged as a Message), and the kind of its shape; a `body-added` or `body-removed` carries `at` and a `position` of `input` or `success`; a `header-refuses-text` carries `at`:
 
 | Kind | Fields | COMPATIBILITY.md |
 | --- | --- | --- |
@@ -115,7 +130,7 @@ The kinds of a Difference, and the fields it carries besides the ones the line h
 | `version-gap` | `missing` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added whose previous version neither the Baseline nor the declared Snapshot holds |
 | `name-kind-changed` | `from` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added under a name the Baseline holds as the other kind |
 | `event-changed` | `from`, `to` | [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions): a Subscription's Event never changes |
-| `renamed` | `from`, `to`, `visibility` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): rename an Endpoint |
+| `renamed` | `from`, `to`, `baselineVisibility` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): rename an Endpoint |
 | `shadowed` | `by` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): add an Endpoint that takes a URL routing sent to an existing Endpoint |
 | `visibility-widened` | `from`, `to` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): widen Visibility |
 | `visibility-narrowed` | `from`, `to` | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): narrow Visibility |
@@ -176,7 +191,7 @@ Exit 1, the check failed:
 | `<path> was edited or is out of date: run cf-loom generate` | `verify` |
 | `<path> is missing: run cf-loom generate` | `verify` |
 | `contract.snapshot.json was edited: it is no JSON (<reason>)` | `verify` |
-| `The check failed: <n> Change(s) not allowed` | `check`, `publish` |
+| `The check failed: <n> Change(s) refused` | `check`, `publish` |
 
 Exit 2, a Change needs a Breaking Change Approval, from `check` only: `publish`, `broker-plan`, `openapi` and `asyncapi` never exit 2.
 
@@ -230,7 +245,7 @@ Exit 3, a tooling error:
 | `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `<element> and <element> are both <path>: give each its own path in the layout of cf-loom.config.ts`, where `<element>` is `endpoints.<name>`, `guards.<name>`, `commands.<Name>@<version>` or `subscriptions.<name>` | `generate`, `verify` |
-| `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
+| `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"format":1,"status":3,"errors":[…]}` | every command |
 
 Exit 3, a usage error, each followed on the same line by the usage:
 
@@ -254,34 +269,40 @@ Every file `generate` regenerates starts with `// Generated by cf-loom generate.
 
 ### check --json
 
-With `--json`, stdout holds exactly one line, this document, and stderr keeps its lines. A usage error is the one exception: it stays one line on stderr, with nothing on stdout (see the usage errors above). `at` is the path as the line writes it:
+With `--json`, stdout holds exactly one line, this document, and stderr keeps its lines. A usage error is the one exception: it stays one line on stderr, with nothing on stdout (see the usage errors above). `path` is the path as the line writes it, and `hint` the hint it ends with:
 
 ```ts
 type CheckJson =
-  | { status: 1 | 3; errors: string[] }   // the root's rules, a stale Snapshot (1); a tooling error (3)
+  | { format: 1; status: 1 | 3; errors: string[] }   // the root's rules, a stale Snapshot (1); a tooling error (3)
   | {
+      format: 1;
       status: 0 | 1 | 2;
       package: string;
       baseline: string | null;            // the version compared with: the Baseline, or the one --against names
       stable: string | null;              // the highest version the package lists that is not a prerelease
       reason: string | null;              // why there is no Baseline, as the line says it
       changes: {
-        site: string;                     // as in the line, e.g. "endpoints.GET /orders/{}"
-        difference: string;               // the Difference kind
-        shape: string | null;             // the ShapeDifference kind of a schema difference
-        at: string | null;                // the path of a Difference that has one: schema, body-added, body-removed, header-refuses-text
-        position: string | null;          // the Position of a Difference that has one: schema, body-added, body-removed
-        class: 'breaking' | 'additive' | 'neutral' | 'not-allowed';
-        approval: 'needed' | 'not-needed' | null;
+        site:                             // where the Change is, with the Visibility that decides its bump
+          | { kind: 'endpoint'; identity: string; name: string; visibility: Visibility }
+          | { kind: 'event' | 'command'; identity: string; visibility: Visibility }
+          | { kind: 'code'; code: string; visibility: Visibility }
+          | { kind: 'subscription' | 'shared-schema' | 'guard'; name: string; visibility: Visibility };
+        difference: { kind: string; /* … */ }; // the Difference, with the fields the tables above list; a schema Difference's `shape` is the object { kind: string; /* … */ } of its shape's fields, and `at` is the Snapshot's own path, ["success", "body", "fields", "total"]
+        path: string | null;              // in the author's terms; none when the Difference has no `at`, or its `at` is the root of a shared schema
+        class: 'breaking' | 'additive' | 'neutral';
+        verdict: 'allowed' | 'approval-needed' | 'refused';
+        hint: string | null;
       }[];
     };
+
+type Visibility = 'public' | 'internal' | 'private';
 ```
 
 A package that npm cannot find has no Baseline, and `check` still exits 0 without `--against`. To fail a pipeline when nothing was compared, test `baseline`, keeping `check`'s own status: `set -o pipefail; cf-loom check --json | jq -e '.baseline != null'`.
 
 ### broker-plan --json
 
-With `--json`, stdout holds exactly one line: the plan, in the shape [The broker plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#the-broker-plan) in the messaging README shows, or, when `broker-plan` stops, `{ status: 1 | 3, errors: string[] }`, as for `check --json`; stderr keeps its lines, and a usage error stays one line on stderr with nothing on stdout.
+With `--json`, stdout holds exactly one line: the plan, in the shape [The broker plan](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#the-broker-plan) in the messaging README shows, or, when `broker-plan` stops, `{ format: 1, status: 1 | 3, errors: string[] }`, as for `check --json`; stderr keeps its lines, and a usage error stays one line on stderr with nothing on stdout.
 
 ### openapi
 

@@ -28,7 +28,7 @@ export function done(lines: readonly string[]): Exit {
   return { status: 0, stdout: lines, stderr: [] };
 }
 
-/** A command whose check failed: something not allowed, or a generated file that differs. */
+/** A command whose check failed: a Change refused, a broken rule, or a generated file that differs. */
 export function checkFailed(lines: readonly string[]): Exit {
   return { status: 1, stdout: [], stderr: lines };
 }

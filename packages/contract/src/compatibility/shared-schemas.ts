@@ -7,7 +7,7 @@ import { schemaDifferencesOf } from './schemas.ts';
 
 /**
  * A Definitions Package's shared schemas paired by name, in code point order: added, removed, or
- * compared in every Position, since no Element uses a shared schema yet.
+ * compared as a Message, the strongest Position, since no Element uses a shared schema yet.
  */
 export function sharedSchemaDifferencesOf(
   baseline: PublishedDefinitionsSnapshot,
@@ -15,7 +15,7 @@ export function sharedSchemaDifferencesOf(
 ): readonly SiteDifferences[] {
   const defs = bothDefsOf(baseline, proposed);
   return counterpartsOf(baseline.schemas, proposed.schemas).map((schema) => ({
-    site: { kind: 'shared-schema', name: schema.key },
+    site: { kind: 'shared-schema', name: schema.key, visibility: 'public' },
     differences: differencesOf(schema, defs),
   }));
 }
@@ -28,7 +28,7 @@ function differencesOf(schema: Counterpart<SchemaNode>, defs: BothDefs): readonl
       return [{ kind: 'removed' }];
     case 'kept':
       return schemaDifferencesOf({ baseline: schema.baseline, proposed: schema.proposed }, defs, {
-        position: 'every',
+        position: 'message',
         at: [],
       });
   }

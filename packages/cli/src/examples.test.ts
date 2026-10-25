@@ -135,7 +135,7 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
       status: 2,
       stdout: [
         'Checked against @org/contract-orders-service@1.0.0',
-        'endpoints.GET /orders/{} schema field-removed at success.body.fields.placedAt (success): Breaking, needs a Breaking Change Approval',
+        'endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.placedAt: Breaking, needs a Breaking Change Approval',
         '',
       ].join('\n'),
       stderr:

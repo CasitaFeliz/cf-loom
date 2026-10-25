@@ -130,7 +130,7 @@ function codeSite(code: string, visibility: Visibility): ChangeSite {
 }
 
 function endpointSite(visibility: Visibility, at = identity): ChangeSite {
-  return { kind: 'endpoint', identity: at, visibility };
+  return { kind: 'endpoint', identity: at, name: 'getOrder', visibility };
 }
 
 function placeOf(site: ChangeSite): string {
@@ -149,11 +149,11 @@ function placeOf(site: ChangeSite): string {
 }
 
 function breaking(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'breaking', approval: 'needed' };
+  return { site, difference, class: 'breaking', verdict: 'approval-needed' };
 }
 
 function additive(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'additive' };
+  return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
 function statusChanged(from: number, to: number): Difference {
@@ -165,7 +165,10 @@ function bodyField(name: string, shape: 'field-added' | 'field-removed', isRequi
   return {
     kind: 'schema',
     position: 'success',
-    at: ['body', 'fields', name],
+    at: [
+      { kind: 'part', name: 'body' },
+      { kind: 'field', name },
+    ],
     shape: kind,
   } as const;
 }
@@ -251,7 +254,11 @@ describe('compatibilityReportOf, a Service’s codes', () => {
     const changes = codeChangesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      breaking(codeSite(orderLocked, 'public'), { kind, at: ['body'], position: 'success' }),
+      breaking(codeSite(orderLocked, 'public'), {
+        kind,
+        at: [{ kind: 'part', name: 'body' }],
+        position: 'success',
+      }),
     ]);
   });
 

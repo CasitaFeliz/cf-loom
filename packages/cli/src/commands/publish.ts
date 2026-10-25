@@ -23,8 +23,8 @@ type Prepared = {
 
 /**
  * Publishes the package of the committed Snapshot through the organization's npm: checked against
- * its Baseline, refused when a Change is Not allowed, at the version its Changes and peer ranges
- * derive, with the Baseline's history merged in; it never waits on a Breaking Change Approval.
+ * its Baseline, failing on a refused Change, at the version its Changes and peer ranges derive,
+ * with the Baseline's history merged in; it never waits on a Breaking Change Approval.
  */
 export async function publish(run: Run, options: PublishOptions): Promise<Exit> {
   const prepared = await preparedOf(run);
