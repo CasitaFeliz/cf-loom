@@ -129,7 +129,7 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 /** A project around a Contract root file named `orders-service`, with the CLI's configuration. */

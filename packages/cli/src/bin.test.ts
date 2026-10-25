@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect } from 'vitest';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
-import { loginTo, token } from '../test/npm-environment.ts';
+import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
 import { payments } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
@@ -115,7 +115,7 @@ const isRoot = process.getuid?.() === 0;
 const config = [
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
   '',
 ].join('\n');
 
@@ -215,7 +215,7 @@ function sortedKeys(value: unknown): unknown {
 }
 
 describe('cf-loom init', () => {
-  test('init service writes the root and the config, with the scope and name of package.json', () => {
+  test('init service writes only the root, named after package.json', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'service');
@@ -231,7 +231,19 @@ describe('cf-loom init', () => {
         '',
       ].join('\n'),
     );
-    expect(read(project, 'cf-loom.config.ts')).toBe(config);
+    expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+  });
+
+  test('init service in an unscoped package writes the root, and generate then passes', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: 'orders-service', type: 'module' }),
+    });
+
+    const ran = cfLoom(project, 'init', 'service');
+    const generatedRan = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({ status: 0, stdout: 'Created src/contract/index.ts\n', stderr: '' });
+    expect(generatedRan).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('init with no kind initializes a Service', () => {
@@ -277,16 +289,6 @@ describe('cf-loom init', () => {
         '',
       ].join('\n'),
     );
-  });
-
-  test('init keeps a config that already exists', () => {
-    const kept = config.replace('@org', '@kept');
-    const project = aProject({ 'cf-loom.config.ts': kept });
-
-    const ran = cfLoom(project, 'init');
-
-    expect(ran.status).toBe(0);
-    expect(read(project, 'cf-loom.config.ts')).toBe(kept);
   });
 
   test('init refuses to overwrite a root, a tooling error', () => {
@@ -337,25 +339,15 @@ describe('cf-loom init', () => {
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
   });
 
-  test('init writes nothing when cf-loom.config.ts is no file', () => {
-    const project = aProject({ 'cf-loom.config.ts/kept.txt': '' });
-
-    const ran = cfLoom(project, 'init');
-
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toBe('cf-loom.config.ts is no file\n');
-    expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
-  });
-
-  test('init removes what it wrote, folders included, when a write fails', () => {
-    const project = aProject();
-    symlinkSync('missing/config.ts', join(project, 'cf-loom.config.ts'));
+  test('init reports a root it cannot write in one line, and keeps what was there', () => {
+    const project = aProject({ 'src/contract/kept.ts': '' });
+    symlinkSync('missing/index.ts', join(project, 'src/contract/index.ts'));
 
     const ran = cfLoom(project, 'init');
 
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(/^init cannot write: EEXIST[^\n]*\n$/);
-    expect(existsSync(join(project, 'src'))).toBe(false);
+    expect(existsSync(join(project, 'src/contract/kept.ts'))).toBe(true);
   });
 
   test('init refuses a package.json whose type is not module', () => {
@@ -532,25 +524,32 @@ describe('cf-loom generate', () => {
     expect(ran.stderr).toMatch(/^name name-grammar: .+\nname package-name: .+\n$/);
   });
 
-  test('a missing config is a tooling error', () => {
+  test('a project without cf-loom.config.ts generates with the default layout', () => {
     const project = aProject(aRoot());
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toBe('cf-loom.config.ts not found: run cf-loom init\n');
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'src/endpoints/health/ping.handler.ts'))).toBe(true);
   });
 
-  test('a config without a scope is a tooling error', () => {
+  test.each([
+    ['a misspelled field', 'layuot: {}'],
+    ['scope', "scope: '@org'"],
+  ])('a config with %s is a tooling error naming it', (_, field) => {
     const project = aProject({
-      'cf-loom.config.ts': 'export const config = {};\n',
+      'cf-loom.config.ts': `export const config = { ${field} };\n`,
       ...aRoot(),
     });
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toContain('scope');
+    const key = field.split(':')[0];
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `cf-loom.config.ts: ${key} is no field of the configuration: it takes layout\n`,
+    });
   });
 
   test('a root that fails to load is a tooling error', () => {
@@ -653,7 +652,7 @@ function aConfigWith(layout: string): string {
   return [
     "import { defineConfig } from '@cf-loom/cli';",
     '',
-    `export const config = defineConfig({ scope: '@org', layout: ${layout} });`,
+    `export const config = defineConfig({ layout: ${layout} });`,
     '',
   ].join('\n');
 }
@@ -1059,7 +1058,7 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test('a config that throws while it is read is a tooling error naming it', () => {
-    const throwing = "export const config = { get scope() { throw new Error('not yet'); } };\n";
+    const throwing = "export const config = { get layout() { throw new Error('not yet'); } };\n";
     const project = aProject({ 'cf-loom.config.ts': throwing, ...aRoot() });
 
     const ran = cfLoom(project, 'generate');
@@ -2303,7 +2302,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(ran.stdout).toContain(`No Change against ${ordersPackage}@1.1.0`);
   });
 
-  test('a Definitions Package is checked against its own package, <scope>/<name>', async ({
+  test('a Definitions Package is checked against the package its package.json names', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aDefinitionsRoot);
@@ -2352,6 +2351,26 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(ran).toEqual({
       status: 0,
       stdout: `${ordersPackage} has no Baseline: ${why}\n`,
+      stderr: '',
+    });
+  });
+
+  test('an unscoped Contract Package npm cannot find is read from npm’s registry, and has no Baseline', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, {
+      ...aRoot(),
+      'package.json': JSON.stringify({ name: 'orders-service', type: 'module' }),
+    });
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'check');
+
+    const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `contract-orders-service has no Baseline: ${why}\n`,
       stderr: '',
     });
   });
@@ -4115,6 +4134,20 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toEqual([{ name: '@org/definitions', version: '1.0.0', distTags }]);
   });
 
+  test('a Definitions Package publishes under the name its package.json gives, whatever its scope', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ name: '@other/definitions' }));
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
+  });
+
   test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
     lab,
   }) => {
@@ -4127,11 +4160,6 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   });
 
   test.for([
-    [
-      'names another scope than the configuration’s',
-      { name: '@other/definitions' },
-      'package.json names @other/definitions, but a Definitions Package of scope @org publishes as @org/definitions',
-    ],
     [
       'lists a workspace: range in dependencies',
       { dependencies: { '@org/shared': 'workspace:*' } },

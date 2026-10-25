@@ -3,6 +3,7 @@ import {
   compatibilityReportOf,
   type Snapshot,
 } from '@cf-loom/contract/internal';
+import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
 import type { Checked } from './checked.ts';
@@ -48,7 +49,8 @@ export async function comparisonOf(
 ): Promise<Comparison | Stopped> {
   const { project, snapshot } = built;
   const npm = { directory: project.directory, env: run.env };
-  const read = await baselineOf(npm, { declared: snapshot, scope: project.scope, against });
+  const packageName = publishedNameOf(project.packageName, snapshot.kind);
+  const read = await baselineOf(npm, { packageName, declared: snapshot, against });
   switch (read.kind) {
     case 'failed':
       return { kind: 'stopped', exit: toolingError(read.message) };

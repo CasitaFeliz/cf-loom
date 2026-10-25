@@ -1,10 +1,11 @@
 import { contractPackageFilesOf } from '../contract-package/index.ts';
+import { publishedNameOf } from '../loading/index.ts';
 import { builtOf, type Run } from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
 import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 import { builtPeersOf } from './peers.ts';
 
-/** Where `package` writes when no `--out` is given, next to `cf-loom.config.ts`, in the folder that holds only cf-loom's output. */
+/** Where `package` writes when no `--out` is given, next to package.json, in the folder that holds only cf-loom's output. */
 export const defaultPackageFolder = '.cf-loom/contract-package';
 
 /** The version a Contract Package `package` writes carries, and a document `openapi` or `asyncapi` prints, until `publish` derives one. */
@@ -34,7 +35,8 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
   if (peers.kind === 'failed') {
     return toolingError(peers.message);
   }
-  const packaging = { scope: project.scope, version: localVersion, peers: peers.peers };
+  const name = publishedNameOf(project.packageName, snapshot.kind);
+  const packaging = { name, version: localVersion, peers: peers.peers };
   const files = contractPackageFilesOf({ snapshot, text }, packaging);
   const written = writeContractPackageTo(run.cwd, out, files);
   switch (written.kind) {

@@ -12,15 +12,6 @@ export function rootTemplateOf(kind: RootKind, name: string): string {
   ]);
 }
 
-/** The configuration `init` writes, with the scope of the project's package.json. */
-export function configTemplateOf(scope: string): string {
-  return lines([
-    "import { defineConfig } from '@cf-loom/cli';",
-    '',
-    `export const config = defineConfig({ scope: '${scope}' });`,
-  ]);
-}
-
 function lines(written: readonly string[]): string {
   return `${written.join('\n')}\n`;
 }

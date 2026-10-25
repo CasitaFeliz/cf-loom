@@ -18,8 +18,6 @@ export type Project = {
   readonly packageName: PackageName;
   /** The project's package.json as read, which a Definitions Package is published from. */
   readonly manifest: Readonly<Record<string, unknown>>;
-  /** The npm scope of the configuration, which the Contract Package is published under. */
-  readonly scope: string;
   /**
    * Where the Service's Handlers and generated files live; for an Application or a Definitions
    * Package it holds the defaults, which are unused.
@@ -64,13 +62,12 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   }
   const { packageName, manifest } = projectPackage;
   const { root, file: rootFile, exports: rootExports, imported } = loaded;
-  const { scope, layout = defaultLayout } = config.config;
+  const { layout = defaultLayout } = config.config;
   const { packages } = resolved;
   const project = {
     directory,
     packageName,
     manifest,
-    scope,
     layout,
     root,
     rootExports,

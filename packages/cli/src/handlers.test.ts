@@ -106,7 +106,7 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 /** A `cf-loom.config.ts` setting `layout` to the source text given, as its author wrote it. */
@@ -114,7 +114,7 @@ function configWith(layout: string): string {
   return lines([
     "import { defineConfig } from '@cf-loom/cli';",
     '',
-    `export const config = defineConfig({ scope: '@org', layout: ${layout} });`,
+    `export const config = defineConfig({ layout: ${layout} });`,
   ]);
 }
 

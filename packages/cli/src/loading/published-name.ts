@@ -1,20 +1,16 @@
-import type { Snapshot } from '@cf-loom/contract/internal';
+import type { PackageName } from './project-package.ts';
+import type { RootKind } from './roots.ts';
 
 /**
- * The npm name a project publishes as: `<scope>/contract-<name>` for a Service or an Application,
- * `<scope>/<name>` for a Definitions Package.
+ * The npm name a project publishes as: `<scope>/contract-<name>`, or `contract-<name>` unscoped,
+ * for a Service or an Application; its package.json's name for a Definitions Package.
  */
-export function publishedNameOf(
-  scope: string,
-  { kind, name }: Pick<Snapshot, 'kind' | 'name'>,
-): string {
+export function publishedNameOf({ scope, name }: PackageName, kind: RootKind): string {
   switch (kind) {
     case 'service':
     case 'application':
-      return `${scope}/contract-${name}`;
+      return scope === undefined ? `contract-${name}` : `${scope}/contract-${name}`;
     case 'definitions':
-      return `${scope}/${name}`;
-    default:
-      throw new Error(`no package is published for a Snapshot of kind ${String(kind)}`);
+      return scope === undefined ? name : `${scope}/${name}`;
   }
 }

@@ -120,7 +120,7 @@ function sortedKeys(value: unknown): unknown {
 
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 /** `@org/definitions`, installed as built JavaScript: a Guard with a Qualifier and a shared schema. */
@@ -520,7 +520,78 @@ function aSubscriber(more: readonly string[]): string {
 /** Each test here runs cf-loom package, and tsc with it, which takes seconds on a CI runner with shared cores. */
 const packageTimeout = 60_000;
 
+/** A seeded generator of the same sequence every run, so a failing name can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** A kebab-case word of `length` characters, from the generator. */
+function wordOf(next: () => number, length: number): string {
+  const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from({ length }, () => characters[Math.floor(next() * characters.length)]).join('');
+}
+
+/**
+ * package.json names both a package.json and a root name accept, scoped and not: the longest one
+ * whose Contract Package's name npm still takes, then pseudo-random ones.
+ */
+function projectNames(): readonly string[] {
+  const next = seededNext(180);
+  const random = Array.from({ length: 6 }, (_, index) => {
+    const name = `${wordOf(next, 1 + Math.floor(next() * 12))}-${wordOf(next, 3)}`;
+    return index % 2 === 0 ? `@${wordOf(next, 1 + Math.floor(next() * 8))}/${name}` : name;
+  });
+  return [`@s/${'n'.repeat(214 - '@s/contract-'.length)}`, ...random];
+}
+
+/** A Service project named `packageName` whose root declares nothing. */
+function aServiceNamed(packageName: string): Readonly<Record<string, string>> {
+  const name = packageName.split('/').at(-1);
+  return {
+    'package.json': JSON.stringify({ name: packageName, type: 'module' }),
+    'src/contract/index.ts': lines([
+      "import { defineContract } from '@cf-loom/contract';",
+      `export const contract = defineContract({ name: '${name}' });`,
+    ]),
+  };
+}
+
+/** What npm accepts as a package's name. */
+const npmName = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+
 describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
+  test.each([
+    ['@payments/orders-service', '@payments/contract-orders-service'],
+    ['orders-service', 'contract-orders-service'],
+  ])('a Service whose package.json names %s is packaged as %s', (packageName, published) => {
+    const project = aProject(aServiceNamed(packageName));
+
+    const ran = packageIn(project);
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(JSON.parse(read(project, `${defaultOut}/package.json`)).name).toBe(published);
+  });
+
+  test('every Contract Package is named as npm accepts, and distinct project names give distinct names', () => {
+    const names = projectNames();
+
+    const published = names.map((packageName) => {
+      const project = aProject(aServiceNamed(packageName));
+      packageIn(project);
+      return JSON.parse(read(project, `${defaultOut}/package.json`)).name;
+    });
+
+    for (const name of published) {
+      expect(name).toMatch(npmName);
+      expect(name.length).toBeLessThanOrEqual(214);
+    }
+    expect(new Set(published).size).toBe(new Set(names).size);
+  });
+
   test('package writes the Contract Package of the Public and Internal Endpoints and the Internal Events', () => {
     const project = aProject(service);
 
