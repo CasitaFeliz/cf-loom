@@ -15,7 +15,7 @@ export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Pat
   if (values.kind === 'not-allowed') {
     return values;
   }
-  return walked(enumOf(values.value));
+  return enumOf(values.value, at);
 }
 
 /**

@@ -41,7 +41,7 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
   const read = incomingOf(incoming);
   const response = read.kind === 'request' ? await http(read.request) : read.response;
   try {
-    await written(response, incoming, outgoing);
+    await written(response, outgoing);
   } catch {
     outgoing.destroy();
   }
@@ -112,13 +112,13 @@ function newRequestOf(incoming: IncomingMessage, url: URL): Request {
   return new Request(url, { method, headers, body, duplex: 'half' } as RequestInit);
 }
 
-/** Writes a `Response` to the outgoing message: its status, headers and body, none for `HEAD`. */
-async function written(response: Response, incoming: IncomingMessage, outgoing: ServerResponse) {
+/** Writes a `Response` to the outgoing message: its status, headers and body. */
+async function written(response: Response, outgoing: ServerResponse) {
   outgoing.statusCode = response.status;
   for (const [name, value] of response.headers) {
     outgoing.appendHeader(name, value);
   }
-  if (response.body === null || incoming.method === 'HEAD') {
+  if (response.body === null) {
     outgoing.end();
     return;
   }

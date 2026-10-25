@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vit
 import { z } from 'zod';
 import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, dropStream } from '../../test/streams.ts';
+import { arrangePlanOf, arrangeStream, dropStream } from '../../test/streams.ts';
 import { messaging, PublishError } from '../index.ts';
 import { jetstream } from './index.ts';
 
@@ -163,7 +163,7 @@ describe('publishing over jetstream()', () => {
     await expect(storedOn(stream, subject(1))).resolves.toEqual({
       body: '{"orderId":"o-1"}',
       headers: {
-        'Nats-Msg-Id': 'OrderCreated.v1:o-1:created',
+        'Nats-Msg-Id': 'event.OrderCreated.v1:o-1:created',
         'Cf-Loom-Fact-Id': 'o-1:created',
         traceparent: '00-abc-def-01',
       },
@@ -171,7 +171,7 @@ describe('publishing over jetstream()', () => {
     await expect(storedOn(stream, subject(2))).resolves.toEqual({
       body: '{"orderId":"o-1","total":12}',
       headers: {
-        'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
+        'Nats-Msg-Id': 'event.OrderCreated.v2:o-1:created',
         'Cf-Loom-Fact-Id': 'o-1:created',
         traceparent: '00-abc-def-01',
       },
@@ -187,13 +187,16 @@ describe('publishing over jetstream()', () => {
       storedOn(stream, `${prefix}.orders-service.command.ChargeCard.v1`),
     ).resolves.toEqual({
       body: '{"orderId":"o-1"}',
-      headers: { 'Nats-Msg-Id': 'ChargeCard.v1:o-1:charge', 'Cf-Loom-Fact-Id': 'o-1:charge' },
+      headers: {
+        'Nats-Msg-Id': 'command.ChargeCard.v1:o-1:charge',
+        'Cf-Loom-Fact-Id': 'o-1:charge',
+      },
     });
   });
 
   test('a publish whose broker headers take exactly the bytes JetStream stores stores each version with its Fact id and transport headers as given', async () => {
     const { publisher, prefix, stream } = await aMessaging();
-    const pad = 'p'.repeat(65_458);
+    const pad = 'p'.repeat(65_452);
 
     await publisher.publish(
       'OrderCreated',
@@ -205,7 +208,7 @@ describe('publishing over jetstream()', () => {
       return storedOn(stream, `${prefix}.orders-service.event.OrderCreated.v${version}`);
     };
     const expected = (version: number) => ({
-      'Nats-Msg-Id': `OrderCreated.v${version}:o-1`,
+      'Nats-Msg-Id': `event.OrderCreated.v${version}:o-1`,
       'Cf-Loom-Fact-Id': 'o-1',
       'x-pad': pad,
     });
@@ -216,7 +219,7 @@ describe('publishing over jetstream()', () => {
   test('a publish with broker headers one byte over rejects with cf-loom’s error, not a PublishError, and the stream stores nothing', async () => {
     const { publisher, stream } = await aMessaging();
     const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
-    const padded = { 'x-pad': 'p'.repeat(65_459) };
+    const padded = { 'x-pad': 'p'.repeat(65_453) };
 
     const error = await rejectionOf(
       publisher.publish('OrderCreated', bodies, { factId: 'o-1', headers: padded }),
@@ -252,6 +255,60 @@ describe('publishing over jetstream()', () => {
       message: expect.stringContaining('header size exceeds maximum allowed of 64k'),
     });
     await expect(messagesIn(stream)).resolves.toBe(1);
+  });
+
+  test('an Event and a Command with one name and version, published and sent with one Fact id, are both stored in the stream', async () => {
+    const chargeEvent = defineEvent({
+      name: 'Charge',
+      version: 1,
+      visibility: 'internal',
+      description: 'A charge was made',
+      body: z.object({ orderId: z.string() }),
+    });
+    const chargeCommand = defineCommand({
+      name: 'Charge',
+      version: 1,
+      description: 'Makes a charge',
+      body: z.object({ orderId: z.string() }),
+    });
+    const sameName = defineContract({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'charges',
+          description: 'Charges',
+          events: [chargeEvent],
+          commands: [chargeCommand],
+        }),
+      ],
+    });
+    const prefix = aPrefix();
+    const stream = `${prefix}_orders-service`;
+    await arrangeStream(server.url, {
+      name: stream,
+      subjects: [
+        `${prefix}.orders-service.event.Charge.v1`,
+        `${prefix}.orders-service.command.Charge.v1`,
+      ],
+    });
+    const { publisher, sender } = await messaging(
+      sameName,
+      jetstream({ connect: aConnection, prefix }),
+    );
+    const body = { orderId: 'o-1' };
+
+    await publisher.publish('Charge', { v1: body }, { factId: 'o-1' });
+    await sender.send('Charge', body, { factId: 'o-1' });
+
+    await expect(messagesIn(stream)).resolves.toBe(2);
+    await expect(
+      storedOn(stream, `${prefix}.orders-service.event.Charge.v1`),
+    ).resolves.toMatchObject({
+      headers: { 'Nats-Msg-Id': 'event.Charge.v1:o-1' },
+    });
+    await expect(
+      storedOn(stream, `${prefix}.orders-service.command.Charge.v1`),
+    ).resolves.toMatchObject({ headers: { 'Nats-Msg-Id': 'command.Charge.v1:o-1' } });
   });
 
   test('publishing the same fact again resolves, and the stream keeps one Message per version', async () => {

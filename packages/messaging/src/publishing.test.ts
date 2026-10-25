@@ -14,6 +14,7 @@ import {
   type OutgoingMessage,
   PublishError,
 } from './index.ts';
+import { memory } from './memory/index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -198,14 +199,14 @@ describe('publisher.publish', () => {
     expect(published.map((message) => message.factId)).toEqual(['o-1:created', 'o-1:created']);
   });
 
-  test('each broker message id is <Name>.v<n>:<factId>', async () => {
+  test('each broker message id is event.<Name>.v<n>:<factId>', async () => {
     const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
 
     expect(published.map((message) => message.messageId)).toEqual([
-      'OrderCreated.v2:o-1:created',
-      'OrderCreated.v3:o-1:created',
+      'event.OrderCreated.v2:o-1:created',
+      'event.OrderCreated.v3:o-1:created',
     ]);
   });
 
@@ -351,7 +352,7 @@ describe('publisher.publish', () => {
     );
 
     await expect(publishing).rejects.toThrow(
-      'The broker headers of OrderCreated@2 would take 66062 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+      'The broker headers of OrderCreated@2 would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(published).toEqual([]);
   });
@@ -367,14 +368,14 @@ describe('publisher.publish', () => {
     const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1', headers });
 
     await expect(publishing).rejects.toThrow(
-      /^The broker headers of OrderCreated@2 would take 90089 bytes, over the 65535 JetStream stores/,
+      /^The broker headers of OrderCreated@2 would take 90095 bytes, over the 65535 JetStream stores/,
     );
     expect(published).toEqual([]);
   });
 
   test('broker headers of exactly the bytes JetStream stores reach the broker as given', async () => {
     const { publisher, published } = await opened();
-    const headers = { 'x-pad': 'p'.repeat(65_458) };
+    const headers = { 'x-pad': 'p'.repeat(65_452) };
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1', headers });
 
@@ -386,7 +387,7 @@ describe('publisher.publish', () => {
 
   test('each Message Version’s broker headers are measured with its own broker message id, so one that does not fit refuses the whole publish', async () => {
     const { publisher, published } = await opened();
-    const factId = 'g'.repeat(32_740);
+    const factId = 'g'.repeat(32_737);
     const bodies = { v9: { treeId: 't-1' }, v10: { treeId: 't-1' } };
 
     const publishing = publisher.publish('Grown', bodies, { factId });
@@ -483,9 +484,9 @@ describe('publisher.publish', () => {
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' });
 
     expect(published.map((message) => message.messageId)).toEqual([
-      'OrderCreated.v2:o-1',
-      'OrderCreated.v2:o-1',
-      'OrderCreated.v3:o-1',
+      'event.OrderCreated.v2:o-1',
+      'event.OrderCreated.v2:o-1',
+      'event.OrderCreated.v3:o-1',
     ]);
   });
 
@@ -528,7 +529,7 @@ describe('sender.send', () => {
     await sender.send('ChargeCard', charge, { factId: 'o-1:charge' });
 
     expect(published).toMatchObject([
-      { factId: 'o-1:charge', messageId: 'ChargeCard.v2:o-1:charge', headers: {} },
+      { factId: 'o-1:charge', messageId: 'command.ChargeCard.v2:o-1:charge', headers: {} },
     ]);
     expect(decoded(published[0])).toEqual(charge);
   });
@@ -558,7 +559,7 @@ describe('sender.send', () => {
     const sending = sender.send('ChargeCard', charge, { factId: 'o'.repeat(33_000) });
 
     await expect(sending).rejects.toThrow(
-      'The broker headers of ChargeCard@2 would take 66060 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+      'The broker headers of ChargeCard@2 would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(published).toEqual([]);
   });
@@ -579,5 +580,45 @@ describe('sender.send', () => {
     const sending = sender.send('ChargeCard', charge);
 
     await expect(sending).rejects.toBe(error);
+  });
+});
+
+describe('messaging() over memory(): publish and send', () => {
+  test('an Event and a Command with one name and version, published and sent with one Fact id, both reach the Broker', async () => {
+    const chargeEvent = defineEvent({
+      name: 'Charge',
+      version: 1,
+      visibility: 'internal',
+      description: 'A charge was made',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const chargeCommand = defineCommand({
+      name: 'Charge',
+      version: 1,
+      description: 'Makes a charge',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const sameName = defineContract({
+      name: 'probe-service',
+      groups: [
+        defineGroup({
+          name: 'charges',
+          description: 'Charges',
+          events: [chargeEvent],
+          commands: [chargeCommand],
+        }),
+      ],
+    });
+    const broker = memory();
+    const { publisher, sender } = await messaging(sameName, broker);
+    const body = { orderId: ORDER_ID };
+
+    await publisher.publish('Charge', { v1: body }, { factId: 'o-1' });
+    await sender.send('Charge', body, { factId: 'o-1' });
+
+    expect(broker.messages.map(({ messageId }) => messageId)).toEqual([
+      'event.Charge.v1:o-1',
+      'command.Charge.v1:o-1',
+    ]);
   });
 });

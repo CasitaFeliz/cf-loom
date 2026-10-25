@@ -79,7 +79,7 @@ function pathsOf(endpoints: readonly ServedEndpoint[]): OpenApiDocument['paths']
   const operationsByPath = new Map<string, Record<string, OpenApiObject>>();
   for (const { method, path, endpoint, served } of endpoints) {
     const operations = operationsByPath.get(path) ?? {};
-    operations[method.toLowerCase()] = operationOf(method, endpoint, served);
+    operations[method.toLowerCase()] = operationOf(endpoint, served);
     operationsByPath.set(path, operations);
   }
   const items = [...operationsByPath].map(([path, operations]) => [path, byName(operations)]);
