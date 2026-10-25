@@ -89,4 +89,4 @@ export {
   standardRejectionNames,
 } from './standard-rejections.ts';
 export type { Subscription } from './subscription.ts';
-export { defineSubscription } from './subscription.ts';
+export { commandSubscribedRefusal, defineSubscription } from './subscription.ts';

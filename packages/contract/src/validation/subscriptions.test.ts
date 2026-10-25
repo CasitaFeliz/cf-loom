@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
   type ContractPackage,
+  defineCommand,
   defineContract,
   defineDependency,
   defineEvent,
@@ -250,6 +251,26 @@ describe('validateContract: Subscriptions', () => {
         ['groups', 'orders', 'subscriptions', 'onSomething', 'event'],
         'not-a-declaration',
         'event is not an Event',
+      ),
+    );
+  });
+
+  test('a Subscription whose event is a Command fails, saying a Command has its CommandHandler', () => {
+    const chargeCardV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const subscribedToCommand = aSubscription('onCharge', chargeCardV1);
+
+    const result = validateSubscriptions([notifyOnSettled, subscribedToCommand]);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onCharge', 'event'],
+        'not-a-declaration',
+        'A Subscription receives an Event; a Command is handled by its CommandHandler',
       ),
     );
   });
