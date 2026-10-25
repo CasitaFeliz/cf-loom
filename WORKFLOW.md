@@ -7,15 +7,15 @@ to run on the session's. The main session spawns an agent by name and passes wha
 
 ## The unit of work
 
-Each issue has its own plan. Issues that change the same code, or that depend on each other, may share one branch
-and one PR, implemented together, while the PR stays one a reviewer can read whole; the others get a branch and a PR
-each. A shared PR applies every rule below that names an issue to all its issues together: they are made ready,
-counted for the Root-cause cap, held, reviewed, done and merged as one, and an issue they depend on among themselves
-needs no merge first. An issue, or a group, too large for one reviewable PR is split into issues before it is planned.
-A branch is named `<type>/<issues>-<slug>`, the numbers of the issues it closes joined by hyphens
-(`feat/6-zod-walker`, `feat/178-179-180-definitions`); its PR title is a Conventional Commit, typed by its weightiest
-change (`feat` over `fix` over `refactor`), and its body says `Closes #<issue>` for each issue, links the plans and
-says what changed.
+Each issue has its own plan. Issues that change the same code, or that depend on each other, may share one branch and
+one PR, implemented together, while the PR stays one a reviewer can read whole; the others get a branch and a PR each. A
+shared PR applies every rule below that names an issue to all its issues together: they are made ready, counted for the
+Root-cause cap, held, reviewed, done and merged as one, and an issue they depend on among themselves needs no merge
+first. An issue too large for one reviewable PR is split into issues before it is planned. A branch is named
+`<type>/<issues>-<slug>`, the numbers of the issues it closes joined by hyphens (`feat/6-zod-walker`,
+`feat/178-179-180-definitions`); its PR title is a Conventional Commit, typed by its weightiest change (`feat` over
+`fix` over `refactor`) with `!` when any issue breaks, and its body says `Closes #<issue>` for each issue, links the
+plans and says what changed.
 
 ## Required reading
 
@@ -25,7 +25,7 @@ Every session and agent working on an issue reads these before it starts:
 | --- | --- |
 | Every role | [CLAUDE.md](CLAUDE.md), [CONTEXT.md](CONTEXT.md), [CODING_STANDARDS.md](CODING_STANDARDS.md), [Rules for every agent](#rules-for-every-agent) |
 | Planner | The issue and every document it implements |
-| Implementer | This document, the plan, and every document the plan links |
+| Implementer | This document, the plans, and every document they link |
 | Reviewer | The plans, the PR, and the documents its lens checks ([Review](#3-review), [Documentation and chore issues](#documentation-and-chore-issues)) |
 
 ## Decisions
@@ -109,11 +109,12 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] its new terms are in the plan's CONTEXT.md changes;
 - [ ] what the documents already settle is listed apart from what is new;
 - [ ] no design question is open;
-- [ ] every issue it depends on is merged to `main`.
+- [ ] every issue it depends on is merged to `main`, or shares its PR.
 
 ## 2. Implement
 
-A `cf-implementer` agent implements the plan in its own git worktree, test first. For each test in the plan it writes
+A `cf-implementer` agent implements the plan, or the plans of a shared PR one issue after another in dependency
+order, in its own git worktree, test first. For each test in its plans it writes
 the test and sees it fail, writes the least code that passes, refactors to the standards, and commits. Its report
 quotes each test's failing run. The documents change in the same PR as the code that makes them true (C22).
 

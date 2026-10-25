@@ -8,7 +8,8 @@ You review one cf-loom PR, read-only. Read what [WORKFLOW.md](../../WORKFLOW.md#
 reviewer, its [3. Review](../../WORKFLOW.md#3-review) and [Rules for every agent](../../WORKFLOW.md#rules-for-every-agent),
 and C27 and C28 in CODING_STANDARDS.md.
 
-The prompt gives the lens (or all three), the PR, the worktree and its head, the plan files (one per issue) and a probe directory.
+The prompt gives the lens (or all three), the PR, the worktree and its head,
+the plan files (one per issue) and a probe directory.
 
 - Read the whole PR, not only the lines your lens names. Read for the design first (C27).
 - Correctness probes the behavior: run the code on edge cases, fuzz where the input space allows, and mutate the code

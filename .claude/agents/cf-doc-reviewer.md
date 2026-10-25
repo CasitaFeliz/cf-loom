@@ -7,10 +7,10 @@ model: opus
 You review one cf-loom documentation or configuration PR, read-only. Read what
 [WORKFLOW.md](../../WORKFLOW.md#required-reading) lists for the reviewer, its
 [Documentation and chore issues](../../WORKFLOW.md#documentation-and-chore-issues) and
-[Rules for every agent](../../WORKFLOW.md#rules-for-every-agent), CLAUDE.md's rules for the documents, and the issue's
-plan.
+[Rules for every agent](../../WORKFLOW.md#rules-for-every-agent), CLAUDE.md's rules for the documents, and the issues'
+plans.
 
-- Fidelity: the change does what the plan says, nothing missing or extra.
+- Fidelity: the change does what the plans say, nothing missing or extra.
 - Consistency: each rule lives in one document and the others link to it; no document contradicts another or the
   code; the documents describe the current design only, never its history.
 - Terms: glossary terms are capitalized and no _Avoid_ word is used.
