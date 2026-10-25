@@ -455,7 +455,7 @@ describe('cf-loom generate', () => {
     [
       'a record keyed by an enum in a Success',
       "z.object({ totals: z.record(z.enum(['eur']), z.number()) })",
-      'fields.totals not allowed: a record keyed by an enum or literal in a Read shape (use z.object() or a string-keyed z.record())',
+      'fields.totals not allowed: a z.record() or z.partialRecord() keyed by an enum or literal (use z.object() with the keys as fields)',
     ],
   ])('%s exits 1 in one line naming what to use', (_construct, body, line) => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
@@ -466,25 +466,6 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr: `groups.health.endpoints.GET /ping.success.body.${line}\n`,
-    });
-  });
-
-  test('a record keyed by an enum as Success headers exits 1 in one line naming z.object()', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
-      text.replace(
-        'success: { status: 200,',
-        "success: { status: 200, headers: z.record(z.enum(['etag']), z.string()),",
-      ),
-    );
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'groups.health.endpoints.GET /ping.success.headers not allowed: a record keyed by an enum or literal as query or headers (use z.object())\n',
     });
   });
 
@@ -503,6 +484,23 @@ describe('cf-loom generate', () => {
       stdout: '',
       stderr:
         'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() (use .extend())\n',
+    });
+  });
+
+  test('a union reaching an Open Enum exits 1 in one line, since no reader can tell its Unknown case from another option', () => {
+    const body = "z.union([openEnum(['a']), z.literal('b')])";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openEnum }'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)\n',
     });
   });
 
@@ -1448,6 +1446,30 @@ describe('cf-loom generate: a Definitions Package root', () => {
       stdout: '',
       stderr:
         'guards definitions-unlisted: A Definitions Package lists every Guard it exports or its Guards reach: apiKey\n',
+    });
+  });
+
+  test('a shared schema with an id on no cycle fails generate', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'cf-loom.config.ts': config,
+      'src/definitions/index.ts': [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        "export const money = z.object({ amount: z.int() }).meta({ id: 'money' });",
+        "export const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });",
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'schemas.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
     });
   });
 });
@@ -2811,7 +2833,6 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     const token = {
       type: 'object',
-      mode: 'open',
       fields: { token: { required: true, schema: { type: 'string' } } },
     };
     const guards = {

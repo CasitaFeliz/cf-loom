@@ -14,7 +14,7 @@ const standardRejections: Extract<PublishedSnapshot, { kind: 'service' }>['stand
     code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    body: { type: 'object', fields: {} },
   },
   notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
   notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },

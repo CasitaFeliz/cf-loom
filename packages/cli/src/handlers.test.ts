@@ -786,13 +786,13 @@ describe('cf-loom generate: readers.generated.ts', () => {
         "import { readersOf } from '@cf-loom/handlers';",
         "import { z } from 'zod';",
         '',
-        'export type TreeReaderDef = { children: Array<TreeReaderDef>; label: string };',
-        'export const treeReaderDef: z.ZodType<TreeReaderDef> & z.core.$ZodTypeDiscriminable = z.lazy(() => z.object({ children: z.array(treeReaderDef), label: z.string() }));',
+        'export type TreeDefReader = { children: Array<TreeDefReader>; label: string };',
+        'export const treeDefReader: z.ZodType<TreeDefReader> & z.core.$ZodTypeDiscriminable = z.lazy(() => z.object({ children: z.array(treeDefReader), label: z.string() }));',
         '',
         'export const chargeCardV1Reader = z.object({ orderId: z.uuid() });',
         'export const chargeCardV2Reader = z.object({ cents: z.int(), orderId: z.uuid() });',
         'export const orderCreatedV1Reader = z.object({ orderId: z.uuid() });',
-        "export const orderCreatedV2Reader = z.object({ items: treeReaderDef, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
+        "export const orderCreatedV2Reader = z.object({ items: treeDefReader, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
         'export const refundCardV1Reader = z.object({ orderId: z.uuid() });',
         '',
         'export const readers = readersOf({',
@@ -969,8 +969,10 @@ describe('cf-loom generate: readers.generated.ts', () => {
     cfLoom(project, 'generate');
 
     const text = read(project, 'src/readers.generated.ts');
-    expect(text.match(/^export type \w+/gm)).toEqual(['export type TreeReaderDef']);
-    expect(text.match(/^export const \w+Def\b/gm)).toEqual(['export const treeReaderDef']);
+    expect(text.match(/^export type \w+/gm)).toEqual(['export type TreeDefReader']);
+    expect(text.match(/^export const \w+Def(?:Reader)?\b/gm)).toEqual([
+      'export const treeDefReader',
+    ]);
   });
 
   test('a recursive def an own Message reaches imports what it calls, though no Reader calls it itself', () => {
@@ -2755,7 +2757,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a recursion id an own Message reaches that is no name in code exits 3 in one line', () => {
+  test('a recursion id an own Message reaches that is no camelCase name exits 1 at the Message', () => {
     const project = aProject(aMessagingService());
     edit(project, 'src/contract/messages.ts', (text) =>
       text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
@@ -2764,33 +2766,14 @@ describe('cf-loom generate: what it refuses', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toEqual({
-      status: 3,
+      status: 1,
       stdout: '',
-      stderr: 'The recursion id 2-tree is no name in code: rename it\n',
+      stderr: lines([
+        'groups.orders.events.OrderCreated@2.body.fields.items not allowed: .meta({ id: "2-tree" }) (use a camelCase name)',
+        'groups.orders.events.OrderCreated@2.body.fields.items.fields.children.items not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
+      ]),
     });
   });
-
-  test.each(['generate', 'verify'])(
-    'a recursion id that is no name in code exits 3 of %s before a Subscription exported by no file exits 1',
-    (command) => {
-      const project = aProject(
-        aMessagingService({
-          subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
-        }),
-      );
-      edit(project, 'src/contract/messages.ts', (text) =>
-        text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
-      );
-
-      const ran = cfLoom(project, command);
-
-      expect(ran).toEqual({
-        status: 3,
-        stdout: '',
-        stderr: 'The recursion id 2-tree is no name in code: rename it\n',
-      });
-    },
-  );
 });
 
 describe('cf-loom generate: roots that offer no Elements', () => {
@@ -3001,7 +2984,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
-  test.each(['chargeCardV1', 'readersOf', 'z', 'readers', 'orderCreatedV2Reader', 'treeReaderDef'])(
+  test.each(['chargeCardV1', 'readersOf', 'z', 'readers', 'orderCreatedV2Reader', 'treeDefReader'])(
     'a Subscription named %s generates a Service that passes tsc',
     (name) => {
       const service = aMessagingService({
@@ -3296,22 +3279,6 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr: 'src/readers.generated.ts was edited or is out of date: run cf-loom generate\n',
-    });
-  });
-
-  test('verify exits 3 on a recursion id an own Message reaches that is no name in code', () => {
-    const project = aProject(aMessagingService());
-    cfLoom(project, 'generate');
-    edit(project, 'src/contract/messages.ts', (text) =>
-      text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
-    );
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion id 2-tree is no name in code: rename it\n',
     });
   });
 

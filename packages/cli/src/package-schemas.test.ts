@@ -82,6 +82,24 @@ const richEndpoint = [
   '});',
 ];
 
+/** An Endpoint answering a union whose first option keeps a key the second one would drop. */
+const overlappingUnionEndpoint = [
+  'export const overlap = defineEndpoint({',
+  "  name: 'overlap',",
+  "  method: 'GET',",
+  "  path: '/overlap',",
+  "  visibility: 'public',",
+  "  description: 'Overlap',",
+  '  success: {',
+  '    status: 200,',
+  '    body: z.union([',
+  '      z.object({ b: z.string(), c: z.number() }),',
+  '      z.object({ b: z.string(), a: z.string().optional() }),',
+  '    ]),',
+  '  },',
+  '});',
+];
+
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
@@ -107,10 +125,11 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/echo',",
     "  visibility: 'public',",
     "  description: 'Answers what it is sent',",
-    '  input: { body: everythingIn },',
+    '  input: { body: everything },',
     '  success: { status: 200, body: everything },',
     '});',
     ...richEndpoint,
+    ...overlappingUnionEndpoint,
     'export const proto = defineEndpoint({',
     "  name: 'proto',",
     "  method: 'POST',",
@@ -121,7 +140,7 @@ const service: Readonly<Record<string, string>> = {
     '  success: { status: 204 },',
     '});',
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
-    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto], events: [shaped] });",
+    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, overlap, proto], events: [shaped] });",
     "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
@@ -136,6 +155,8 @@ const sample = {
   digest: 'a'.repeat(64),
   digest2: `${'a'.repeat(22)}==`,
   scores: { ab: 1 },
+  partialScores: { any: 1 },
+  optionals: {},
   rooted: { tree: { label: 'root', children: [] } },
   forest: {
     inner: { a: 'x' },
@@ -213,6 +234,7 @@ let echo: Endpoint;
 let entrySnapshot: unknown;
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
+let overlap: { readonly success: { readonly body: Reader } };
 let shaped: Shaped;
 let snapshot: {
   readonly defs: Readonly<Record<string, unknown>>;
@@ -245,6 +267,7 @@ beforeAll(async () => {
   entrySnapshot = entry.snapshot;
   rich = entry.contract.endpoints.rich;
   proto = entry.contract.endpoints.proto;
+  overlap = entry.contract.endpoints.overlap;
   shaped = entry.contract.events.shapedV1;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
@@ -278,6 +301,12 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.data?.['tree']).toEqual(sample.tree);
+  });
+
+  test('the Reader of a union reads with the first option that parses, as the Provider’s schema does', () => {
+    const parsed = overlap.success.body.safeParse({ b: 'x', c: 1 });
+
+    expect(parsed.data).toEqual({ b: 'x', c: 1 });
   });
 
   test('the Success reader strips keys it does not know, a nested object’s included', () => {
@@ -328,6 +357,13 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(written.filter((text) => text.includes('.transform('))).toEqual([]);
     expect(written.filter((text) => text.includes('loom.openEnumReader(['))).not.toEqual([]);
+  });
+
+  test('a one-value Open Enum is written as an Open Enum reader, not as a literal', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src')).join('\n');
+
+    expect(written).toContain("loom.openEnumReader(['ok'])");
+    expect(written).not.toContain("z.literal('ok')");
   });
 
   test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {
@@ -385,16 +421,6 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(plain === undefined ? undefined : z.globalRegistry.get(plain)).toEqual({
       description: "It's a text",
-    });
-  });
-
-  test('the Input schema refuses a key outside an enum-keyed record’s keys, as the Service does', () => {
-    const records = { keyed: { a: 1, b: 2, c: 3 }, partial: { a: 1 }, single: { a: 1 } };
-
-    const parsed = echo.input.body['~standard'].validate({ ...sample, ...records });
-
-    expect(parsed).toMatchObject({
-      issues: [{ code: 'unrecognized_keys', keys: ['c'], path: ['keyed'] }],
     });
   });
 

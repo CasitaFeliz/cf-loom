@@ -1,4 +1,4 @@
-import { follows, kebabCase } from '../validation/index.ts';
+import { follows, kebabCase } from '../declarations/index.ts';
 import { subjectVersionOf } from '../written/index.ts';
 import { kebabCaseOf } from './identifiers.ts';
 

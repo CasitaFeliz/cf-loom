@@ -64,8 +64,6 @@ export {
   inputParts,
   isInputPart,
   isObjectPart,
-  isQueryOrHeadersPart,
-  isReadShapePart,
   isSchema,
   partFieldOf,
   schemaOf,

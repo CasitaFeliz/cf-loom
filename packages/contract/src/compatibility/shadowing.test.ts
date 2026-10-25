@@ -48,7 +48,7 @@ function paramsNodeOf(names: readonly string[], schema: SchemaNode = aString): O
     return null;
   }
   const fields = names.map((name) => [name, { required: true, schema }] as const);
-  return { type: 'object', mode: 'strict', fields: Object.fromEntries(fields) };
+  return { type: 'object', fields: Object.fromEntries(fields) };
 }
 
 function anEndpoint(identity: string, fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {

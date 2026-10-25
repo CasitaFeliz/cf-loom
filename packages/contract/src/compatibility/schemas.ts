@@ -1,7 +1,7 @@
 import type { SchemaNode } from '../walker/index.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
-import { enumFindingsOf, isEnumLike } from './enums.ts';
+import { enumFindingsOf } from './enums.ts';
 import { objectFindingsOf } from './fields.ts';
 import {
   type BothDefs,
@@ -98,7 +98,7 @@ function nullabilityFindingsOf({ baseline, proposed }: NodePair): readonly Findi
 }
 
 function typeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
-  if (isEnumLike(pair.baseline) || isEnumLike(pair.proposed)) {
+  if (pair.baseline.type === 'enum' || pair.proposed.type === 'enum') {
     return enumFindingsOf(pair);
   }
   return pair.baseline.type === pair.proposed.type

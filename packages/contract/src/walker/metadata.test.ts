@@ -12,8 +12,8 @@ function walkedTo(node: SchemaNode) {
   return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
 }
 
-function refusedAt(at: readonly (string | number)[], construct: string) {
-  const failure = { kind: 'not-allowed', at, construct };
+function refusedAt(at: readonly (string | number)[], construct: string, instead?: string) {
+  const failure = { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
   return {
     located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
     defs: {},
@@ -53,7 +53,6 @@ describe('walkSchemas: metadata', () => {
     expect(walkBody(order)).toEqual(
       walkedTo({
         type: 'object',
-        mode: 'open',
         fields: { note: { required: false, schema: { type: 'string', description: 'A note' } } },
       }),
     );
@@ -74,6 +73,39 @@ describe('walkSchemas: metadata', () => {
       refusedAt(['body'], '.meta({ title })'),
     );
   });
+
+  test.each(['123', '__proto__', 'tree-node', 'ñandú', 'Tree', ''])(
+    'the id %j, which is no camelCase name, fails',
+    (id) => {
+      const order = z.object({ money: z.string().meta({ id }) });
+
+      expect(walkBody(order)).toEqual(
+        refusedAt(
+          ['body', 'fields', 'money'],
+          `.meta({ id: ${JSON.stringify(id)} })`,
+          'a camelCase name',
+        ),
+      );
+    },
+  );
+
+  test('an id that is not a string fails', () => {
+    // @ts-expect-error zod types an id as a string
+    const order = z.object({ money: z.string().meta({ id: 42 }) });
+
+    expect(walkBody(order)).toEqual(
+      refusedAt(['body', 'fields', 'money'], '.meta({ id }) that is not a string'),
+    );
+  });
+
+  test('a description that is not a string fails', () => {
+    // @ts-expect-error zod types a description as a string
+    const order = z.object({ note: z.string().meta({ description: 42 }) });
+
+    expect(walkBody(order)).toEqual(
+      refusedAt(['body', 'fields', 'note'], '.meta({ description }) that is not a string'),
+    );
+  });
 });
 
 describe('walkSchemas: origin', () => {
@@ -89,7 +121,6 @@ describe('walkSchemas: origin', () => {
         type: 'array',
         items: {
           type: 'object',
-          mode: 'open',
           fields: { amount: { required: true, schema: { type: 'number', int: true } } },
           origin: '@org/definitions@4.2.0#money',
         },

@@ -6,10 +6,10 @@ import { walkArray, walkTuple } from './collections.ts';
 import { innerOfOneLazy } from './lazy.ts';
 import { annotated } from './metadata.ts';
 import type { Path, SchemaNode } from './nodes.ts';
-import { notAllowed, refused, refusedName } from './not-allowed.ts';
+import { notAllowed, type Refused, refused, refusedName } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
-import { type Walked, type Walker, walked } from './walked.ts';
+import { failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
 export type Def = core.$ZodTypes['_zod']['def'];
@@ -36,7 +36,6 @@ export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], 
     case 'array':
       return constrainArray(node, checks, at);
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'object':
     case 'record':
@@ -89,13 +88,26 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'nullable':
       return annotated(walker.schema(def.innerType, at), { nullable: true });
     case 'pipe':
-      return notAllowed(at, pipeRefusal(def));
+      return refusedAround({ refusal: pipeRefusal(def), inside: pipeSchemasOf(def) }, at, walker);
     case 'optional':
     case 'default':
     case 'prefault':
     case 'catch':
     case 'readonly':
     case 'nonoptional':
+    case 'promise':
+    case 'success':
+      return refusedAround({ refusal: refused[def.type], inside: [def.innerType] }, at, walker);
+    case 'map':
+      return refusedMap(def, at, walker);
+    case 'set':
+      return refusedAround({ refusal: refused.set, inside: [def.valueType] }, at, walker);
+    case 'function':
+      return refusedAround(
+        { refusal: refused.function, inside: [def.input, def.output] },
+        at,
+        walker,
+      );
     case 'transform':
     case 'custom':
     case 'date':
@@ -108,12 +120,7 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'void':
     case 'never':
     case 'nan':
-    case 'map':
-    case 'set':
     case 'file':
-    case 'promise':
-    case 'function':
-    case 'success':
       return notAllowed(at, refused[def.type]);
     case 'template_literal':
       return notAllowed(at, refused.templateLiteral);
@@ -130,6 +137,30 @@ function unionNodeOf(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
     return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
   }
   return walkUnion(schema, at, walker);
+}
+
+/** A construct the walker refuses and the schemas it holds. */
+type Around = { readonly refusal: Refused; readonly inside: readonly core.$ZodType[] };
+
+/**
+ * A refused construct reported beside what lies inside it: nothing inside is hidden, and a cycle
+ * through it still closes, so the recursion sees every schema that lies on one.
+ */
+function refusedAround({ refusal, inside }: Around, at: Path, walker: Walker): Walked {
+  const walkedInside = inside.map((schema) => walker.schema(schema, at));
+  return failed(failuresOf([notAllowed(at, refusal), ...walkedInside]));
+}
+
+/** A refused map, reported beside its key and its value, each at its own place as a record's are. */
+function refusedMap(def: core.$ZodMapDef, at: Path, walker: Walker): Walked {
+  const key = walker.schema(def.keyType, [...at, 'key']);
+  const value = walker.schema(def.valueType, [...at, 'value']);
+  return failed(failuresOf([notAllowed(at, refused.map), key, value]));
+}
+
+/** The schemas of a pipe other than its transform, which the pipe's own refusal already names. */
+function pipeSchemasOf(def: core.$ZodPipeDef): readonly core.$ZodType[] {
+  return [def.in, def.out].filter((schema) => schema._zod.def.type !== 'transform');
 }
 
 function pipeRefusal(def: core.$ZodPipeDef) {

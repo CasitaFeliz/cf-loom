@@ -192,10 +192,33 @@ describe('walkSchemas: booleans, literals and JSON', () => {
     expect(walkBody(z.boolean())).toEqual(walkedTo({ type: 'boolean' }));
   });
 
-  test('a literal keeps its value with its JSON type', () => {
-    expect(walkBody(z.literal(true))).toEqual(walkedTo({ type: 'literal', value: true }));
-    expect(walkBody(z.literal('true'))).toEqual(walkedTo({ type: 'literal', value: 'true' }));
-    expect(walkBody(z.literal(2))).toEqual(walkedTo({ type: 'literal', value: 2 }));
+  test('a literal is a closed enum of its one value', () => {
+    expect(walkBody(z.literal('a'))).toEqual(
+      walkedTo({ type: 'enum', values: ['a'], open: false }),
+    );
+  });
+
+  test.each([
+    ['a string', 'a'],
+    ['an integer', 2],
+    ['a non-integer', 1.5],
+    ['true', true],
+    ['false', false],
+  ])(
+    'a literal of %s, alone, as a list of one or as a union of one, is one closed enum',
+    (_kind, value) => {
+      const one = walkBody(z.literal(value));
+      const listed = walkBody(z.literal([value]));
+      const union = walkBody(z.union([z.literal(value)]));
+
+      expect(one).toEqual(walkedTo({ type: 'enum', values: [value], open: false }));
+      expect(listed).toEqual(one);
+      expect(union).toEqual(one);
+    },
+  );
+
+  test('a literal and an enum of the same string walk to the same node', () => {
+    expect(walkBody(z.enum(['a']))).toEqual(walkBody(z.literal('a')));
   });
 
   test('a literal of several values is an enum of them', () => {

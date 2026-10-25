@@ -24,7 +24,6 @@ const dateRefused = { construct: 'z.date()', instead: 'z.iso.datetime()' };
 
 const categoryDef = {
   type: 'object',
-  mode: 'open',
   fields: {
     name: { required: true, schema: { type: 'string' } },
     children: {
@@ -33,6 +32,8 @@ const categoryDef = {
     },
   },
 } as const;
+
+const wrapperIdInstead = '.meta({ id }) on the schema inside';
 
 describe('walkSchemas: recursion', () => {
   test('a cycle through a getter is written once under defs and referenced by ref', () => {
@@ -101,7 +102,6 @@ describe('walkSchemas: recursion', () => {
       defs: {
         inner: {
           type: 'object',
-          mode: 'open',
           fields: {
             c: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'outer' } } },
           },
@@ -225,6 +225,7 @@ describe('walkSchemas: recursion', () => {
                 at: ['body', 'variants', 0],
                 construct: 'a discriminated union variant that is not an object',
               },
+              { at: ['body', 'variants', 0], ...unnamedCycle },
             ],
           ),
         ],
@@ -478,8 +479,8 @@ describe('walkSchemas: recursion', () => {
           listing: {
             type: 'union',
             options: [
-              { type: 'array', items: { type: 'ref', name: 'listing' } },
               { type: 'string' },
+              { type: 'array', items: { type: 'ref', name: 'listing' } },
             ],
           },
         },
@@ -492,7 +493,6 @@ describe('walkSchemas: recursion', () => {
         defs: {
           itself: {
             type: 'object',
-            mode: 'open',
             fields: { self: { required: true, schema: { type: 'ref', name: 'itself' } } },
           },
         },
@@ -691,7 +691,6 @@ describe('walkSchemas: recursion', () => {
       defs: {
         node: {
           type: 'object',
-          mode: 'open',
           fields: {
             children: {
               required: true,
@@ -703,44 +702,328 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  test('an id named __proto__ is a def like any other', () => {
-    const node = z
-      .object({
-        get children() {
-          return z.array(node);
-        },
-      })
-      .meta({ id: '__proto__' });
-
-    expect(walkBody(node)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: '__proto__' })],
-      defs: {
-        ['__proto__']: {
-          type: 'object',
-          mode: 'open',
-          fields: {
-            children: {
-              required: true,
-              schema: { type: 'array', items: { type: 'ref', name: '__proto__' } },
+  describe('a refusal never stops the walk', () => {
+    test.each([
+      ['.default()', (tree: z.ZodType) => z.array(tree).default([]), '.default()'],
+      ['.prefault()', (tree: z.ZodType) => z.array(tree).prefault([]), '.prefault()'],
+      ['.catch()', (tree: z.ZodType) => z.array(tree).catch([]), '.catch()'],
+      ['.readonly()', (tree: z.ZodType) => z.array(tree).readonly(), '.readonly()'],
+      [
+        'z.preprocess()',
+        (tree: z.ZodType) => z.preprocess((value) => value, tree),
+        '.preprocess()',
+      ],
+      ['z.looseRecord()', (tree: z.ZodType) => z.looseRecord(z.string(), tree), 'z.looseRecord()'],
+      ['z.xor()', (tree: z.ZodType) => z.xor([tree, z.string()]), 'z.xor()'],
+      ['z.map()', (tree: z.ZodType) => z.map(z.string(), tree), 'z.map()'],
+      ['z.set()', (tree: z.ZodType) => z.set(tree), 'z.set()'],
+      ['z.promise()', (tree: z.ZodType) => z.promise(tree), 'z.promise()'],
+      ['z.success()', (tree: z.ZodType) => z.success(tree), 'z.success()'],
+      [
+        'z.function()',
+        (tree: z.ZodType) => z.function({ input: [tree], output: z.string() }),
+        'z.function()',
+      ],
+    ])(
+      'a recursive schema with %s on its cycle fails with that construct alone',
+      (_name, through, construct) => {
+        const tree: z.ZodType = z
+          .object({
+            get children() {
+              return through(tree);
             },
-          },
-        },
+          })
+          .meta({ id: 'tree' });
+
+        expect(walkBody(tree)).toEqual({
+          located: [refusedAt(['body'], [{ at: ['body', 'fields', 'children'], construct }])],
+          defs: {},
+        });
       },
+    );
+
+    test('a recursive schema with a __proto__ field on its cycle fails with that field alone', () => {
+      const tree: z.ZodType = z
+        .object({
+          ['__proto__']: z.lazy(() => tree),
+        })
+        .meta({ id: 'tree' });
+
+      const failure = {
+        at: ['body', 'fields', '__proto__'],
+        construct: 'a field named __proto__ (zod drops it when parsing)',
+      };
+      expect(walkBody(tree)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+    });
+
+    test('a two-member cycle broken by .catch() reports .catch() alone', () => {
+      const parent: z.ZodType = z
+        .object({
+          get child() {
+            return child;
+          },
+        })
+        .meta({ id: 'parent' });
+      const child: z.ZodType = z
+        .object({
+          get parent() {
+            return parent.catch(undefined as never);
+          },
+        })
+        .meta({ id: 'child' });
+
+      const failure = {
+        at: ['body', 'fields', 'child', 'fields', 'parent'],
+        construct: '.catch()',
+      };
+      expect(walkBody(parent)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
     });
   });
 
-  test('an id on a schema that closes no cycle is ignored', () => {
-    const money = z.object({ amount: z.int() }).meta({ id: 'Money' });
+  describe('an id on a field wrapper', () => {
+    const leaf: z.ZodType = z
+      .object({
+        get up() {
+          return z.array(leaf);
+        },
+      })
+      .meta({ id: 'leaf' });
+    const leafDef = {
+      type: 'object',
+      fields: {
+        up: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'leaf' } } },
+      },
+    };
 
-    expect(walkBody(money)).toEqual({
-      located: [
-        walkedAt(['body'], {
-          type: 'object',
-          mode: 'open',
-          fields: { amount: { required: true, schema: { type: 'number', int: true } } },
-        }),
-      ],
-      defs: {},
+    function wrapperFailure(construct: string) {
+      return { at: ['body', 'fields', 'next'], construct, instead: wrapperIdInstead };
+    }
+
+    test('an id on .optional() fails, and the schema inside is walked', () => {
+      const order = z.object({ next: leaf.optional().meta({ id: 'next' }) });
+
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        defs: { leaf: leafDef },
+      });
+    });
+
+    test('an id on .nonoptional() fails, and the schema inside is walked', () => {
+      const order = z.object({ next: leaf.optional().nonoptional().meta({ id: 'next' }) });
+
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .nonoptional()')])],
+        defs: { leaf: leafDef },
+      });
+    });
+
+    test('an id on the .optional() inside .nonoptional() fails the same', () => {
+      const order = z.object({ next: leaf.optional().meta({ id: 'next' }).nonoptional() });
+
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        defs: { leaf: leafDef },
+      });
+    });
+
+    test('the wrapper’s other .meta() keys fail beside its id', () => {
+      const order = z.object({ next: leaf.optional().meta({ id: 'next', title: 'Next' }) });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              { at: ['body', 'fields', 'next'], construct: '.meta({ title })' },
+              wrapperFailure('.meta({ id }) on .optional()'),
+            ],
+          ),
+        ],
+        defs: { leaf: leafDef },
+      });
+    });
+
+    test('the wrapper id and the unnamed cycle inside are both reported', () => {
+      const node: z.ZodType = z.object({
+        get next() {
+          return node.optional().meta({ id: 'node' });
+        },
+      });
+
+      expect(walkBody(node)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              wrapperFailure('.meta({ id }) on .optional()'),
+              { at: ['body', 'fields', 'next'], ...unnamedCycle },
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+  });
+
+  describe('the grammar of an id', () => {
+    function recursiveWith(id: string): z.ZodType {
+      const node: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(node);
+          },
+        })
+        .meta({ id });
+      return node;
+    }
+
+    test.each(['123', '__proto__', 'tree-node', 'ñandú', 'Tree', ''])(
+      'the id %j on a recursive schema fails, and no def is written',
+      (id) => {
+        const walked = walkBody(recursiveWith(id));
+
+        const [location] = walked.located;
+        expect(location?.walked).toMatchObject({
+          kind: 'not-allowed',
+          failures: expect.arrayContaining([
+            {
+              kind: 'not-allowed',
+              at: ['body'],
+              construct: `.meta({ id: ${JSON.stringify(id)} })`,
+              instead: 'a camelCase name',
+            },
+          ]),
+        });
+        expect(walked.defs).toEqual({});
+      },
+    );
+
+    test('a recursive schema walks to a def exactly when its id is camelCase', () => {
+      const alphabet = ['a', 'Z', '1', '-', '_', 'ñ'];
+      const ones = alphabet;
+      const twos = ones.flatMap((first) => alphabet.map((last) => first + last));
+      const threes = twos.flatMap((first) => alphabet.map((last) => first + last));
+      const ids = [...ones, ...twos, ...threes];
+
+      const defined = ids.filter((id) => Object.hasOwn(walkBody(recursiveWith(id)).defs, id));
+
+      expect(ids).toHaveLength(258);
+      expect(defined).toEqual(ids.filter((id) => /^[a-z][a-zA-Z0-9]*$/.test(id)));
+    });
+  });
+
+  describe('an id on a schema that lies on no cycle', () => {
+    function acyclicAt(at: readonly (string | number)[], id: string) {
+      return {
+        at,
+        construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
+        instead: '.meta({ id }) only on a recursive schema',
+      };
+    }
+
+    const money = z.object({ amount: z.int() }).meta({ id: 'money' });
+
+    test('two schemas with one id each fail as acyclic, and none as a duplicate', () => {
+      const order = z.object({
+        paid: z.object({ amount: z.int() }).meta({ id: 'money' }),
+        due: z.object({ amount: z.int() }).meta({ id: 'money' }),
+      });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              acyclicAt(['body', 'fields', 'paid'], 'money'),
+              acyclicAt(['body', 'fields', 'due'], 'money'),
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+
+    test('one schema used at two fields fails at both', () => {
+      const order = z.object({ paid: money, due: money });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              acyclicAt(['body', 'fields', 'paid'], 'money'),
+              acyclicAt(['body', 'fields', 'due'], 'money'),
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+
+    test('it fails with what else is not allowed in the schema', () => {
+      const dated = z.object({ at: z.date() }).meta({ id: 'dated' });
+
+      const failures = [
+        acyclicAt(['body'], 'dated'),
+        { at: ['body', 'fields', 'at'], ...dateRefused },
+      ];
+      expect(walkBody(dated)).toEqual({ located: [refusedAt(['body'], failures)], defs: {} });
+    });
+
+    test('it fails beside a recursive schema that has the same id', () => {
+      const node: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(node);
+          },
+        })
+        .meta({ id: 'node' });
+
+      const walked = walkSchemas(
+        [
+          { at: ['body'], schema: node },
+          { at: ['success'], schema: z.string().meta({ id: 'node' }) },
+        ],
+        () => undefined,
+      );
+
+      expect(walked.located).toEqual([
+        walkedAt(['body'], { type: 'ref', name: 'node' }),
+        refusedAt(['success'], [acyclicAt(['success'], 'node')]),
+      ]);
+      expect(Object.keys(walked.defs)).toEqual(['node']);
+    });
+
+    test('it fails on a leaf inside a recursive schema', () => {
+      const tree: z.ZodType = z
+        .object({
+          label: z.string().meta({ id: 'label' }),
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id: 'tree' });
+
+      const walked = walkBody(tree);
+
+      const failure = acyclicAt(['body', 'fields', 'label'], 'label');
+      expect(walked.located).toEqual([refusedAt(['body'], [failure])]);
+    });
+
+    test('it fails on an alias outside the cycle it points at, and the cycle is still a def', () => {
+      const tree: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id: 'tree' });
+      const alias = z.lazy(() => tree).meta({ id: 'alias' });
+
+      const walked = walkSchemas([{ at: ['body'], schema: alias }], () => undefined);
+
+      expect(walked.located).toEqual([refusedAt(['body'], [acyclicAt(['body'], 'alias')])]);
+      expect(Object.keys(walked.defs)).toEqual(['tree']);
     });
   });
 
@@ -760,12 +1043,10 @@ describe('walkSchemas: recursion', () => {
 
     const teamNode = {
       type: 'object',
-      mode: 'open',
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     } as const;
     const departmentDef = {
       type: 'object',
-      mode: 'open',
       fields: { teams: { required: true, schema: { type: 'array', items: teamNode } } },
     } as const;
     const expected = {
@@ -845,14 +1126,12 @@ describe('walkSchemas: recursion', () => {
 
     const departmentDef = {
       type: 'object',
-      mode: 'open',
       fields: {
         teams: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'team' } } },
       },
     };
     const teamDef = {
       type: 'object',
-      mode: 'open',
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     };
     const defs = { department: departmentDef, team: teamDef };
@@ -903,9 +1182,8 @@ describe('walkSchemas: recursion', () => {
 
     const leafNode = {
       type: 'object',
-      mode: 'open',
       fields: {
-        type: { required: true, schema: { type: 'literal', value: 'leaf' } },
+        type: { required: true, schema: { type: 'enum', values: ['leaf'], open: false } },
         value: { required: true, schema: { type: 'number' } },
       },
     } as const;
@@ -916,9 +1194,8 @@ describe('walkSchemas: recursion', () => {
     } as const;
     const branchDef = {
       type: 'object',
-      mode: 'open',
       fields: {
-        type: { required: true, schema: { type: 'literal', value: 'branch' } },
+        type: { required: true, schema: { type: 'enum', values: ['branch'], open: false } },
         children: { required: true, schema: { type: 'array', items: treeNode } },
       },
     } as const;

@@ -44,7 +44,8 @@ function variantFindingOf(
 /**
  * The plain-union rule: any change to two nodes' options or items, or to a def their `ref`s reach,
  * is the one `difference`, Breaking in every Position, since none can be proven compatible. Their
- * options compare in shape order, which a Neutral annotation cannot change.
+ * options compare in declared order, and an `allOf`'s items in shape order; a Neutral annotation
+ * changes neither.
  */
 export function plainUnionFindingsOf(
   pair: NodePair,

@@ -5,7 +5,6 @@ import { innerOfLazy } from './lazy.ts';
 import type {
   EnumNode,
   JsonPrimitive,
-  LiteralNode,
   ObjectNode,
   Path,
   RefNode,
@@ -13,7 +12,7 @@ import type {
   TaggedNode,
 } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
-import { allWalked, type Walked, type Walker, walked } from './walked.ts';
+import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` returned this very schema. */
 export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
@@ -25,15 +24,15 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   return walked({ ...enumOf(strings), open: isOpen(schema) });
 }
 
-/** An `enum` for a union of literals, else a `union` of its options in canonical order. */
+/** An `enum` for a union of literals, else a `union` of its options in declared order. */
 export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
-  if (def.inclusive === false) {
-    return notAllowed(at, refused.xor);
-  }
   const options = allWalked(
     def.options.map((option, index) => walker.schema(option, [...at, 'options', index])),
   );
+  if (def.inclusive === false) {
+    return failed(failuresOf([notAllowed(at, refused.xor), options]));
+  }
   if (options.kind === 'not-allowed') {
     return options;
   }
@@ -46,12 +45,13 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
+      const variant = walker.schema(option, variantAt);
       const refusal = variantRefusalOf(option, def.discriminator);
       if (refusal !== undefined) {
-        return notAllowed(variantAt, refusal);
+        return failed(failuresOf([notAllowed(variantAt, refusal), variant]));
       }
       const values = option._zod.propValues?.[def.discriminator];
-      return taggedVariant(walker.schema(option, variantAt), values, variantAt);
+      return taggedVariant(variant, values, variantAt);
     }),
   );
   if (variants.kind === 'not-allowed') {
@@ -111,34 +111,31 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
 }
 
 /**
- * A union of literals is always an enum: it carries only its own annotations, like a merged
- * intersection, and is nullable when any of its literals is.
+ * A union of closed literals is one enum: it carries only its own annotations, like a merged
+ * intersection, and is nullable when any of its literals is. Any other union keeps its options in
+ * declared order, since zod's union returns the first option that parses.
  */
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
-  const literals = options.filter(isLiterals);
+  const literals = options.filter(isClosedEnum);
   if (literals.length !== options.length) {
-    return { type: 'union', options: [...options].sort(byCanonicalJson) };
+    return { type: 'union', options: [...options] };
   }
-  const values = enumOf(literals.flatMap(valuesOf));
+  const values = enumOf(literals.flatMap((literal) => literal.values));
   return literals.some((literal) => literal.nullable === true)
     ? { ...values, nullable: true }
     : values;
 }
 
-function valuesOf(literals: LiteralNode | EnumNode): readonly JsonPrimitive[] {
-  return literals.type === 'literal' ? [literals.value] : literals.values;
-}
-
-/** An enum of several literal values, each once, in canonical order. */
+/** A closed enum of literal values, each once, in canonical order. */
 export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
   const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
   const distinct = [...valueByJson.values()];
   return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
 }
 
-/** A literal of one value, or a closed enum, which is how a literal of several values walks. */
-function isLiterals(node: SchemaNode): node is LiteralNode | EnumNode {
-  return node.type === 'literal' || (node.type === 'enum' && !node.open);
+/** A closed enum, which is how a literal walks. */
+function isClosedEnum(node: SchemaNode): node is EnumNode {
+  return node.type === 'enum' && !node.open;
 }
 
 function isString(value: unknown): value is string {

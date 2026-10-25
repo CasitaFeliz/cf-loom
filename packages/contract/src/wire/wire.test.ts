@@ -46,7 +46,6 @@ function queryValueOf(node: SchemaNode, texts: readonly string[]): unknown {
   const nodes: TextPartNodes = {
     'input.query': {
       type: 'object',
-      mode: 'open',
       fields: { v: { required: true, schema: node } },
     },
   };
@@ -95,7 +94,7 @@ describe('textPartsOf, a text as its node reads it', () => {
   });
 
   test('a literal and an enum take their declared value by its text, a numeric one included', () => {
-    const literal: SchemaNode = { type: 'literal', value: 5 };
+    const literal: SchemaNode = { type: 'enum', values: [5], open: false };
     const choices: SchemaNode = { type: 'enum', values: ['web', 'phone'], open: false };
 
     const values = [
@@ -620,8 +619,8 @@ describe('the invalid-input body as a Caller reads it', () => {
 
 describe('a number literal in exponent form', () => {
   test('is read back from the plain decimal text it travels in', () => {
-    const large: SchemaNode = { type: 'literal', value: 1e21 };
-    const small: SchemaNode = { type: 'literal', value: 1.5e-7 };
+    const large: SchemaNode = { type: 'enum', values: [1e21], open: false };
+    const small: SchemaNode = { type: 'enum', values: [1.5e-7], open: false };
 
     const values = [
       queryValueOf(large, [textOfValue(1e21)]),
@@ -672,7 +671,6 @@ describe('headerValuesOf', () => {
   test('each declared header present is converted by its node, others left out', () => {
     const node: SchemaNode = {
       type: 'object',
-      mode: 'open',
       fields: {
         'x-count': { required: true, schema: number },
         'x-ok': { required: false, schema: boolean },

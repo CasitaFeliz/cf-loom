@@ -71,7 +71,6 @@ Readers of a Read shape (a Success, a Rejection body or a Message body) ignore f
 | Optional → required | Breaking | Additive | Breaking |
 | Required → optional | Additive | Breaking | Breaking |
 | Remove a field | Additive | Breaking | Breaking |
-| Remove a key from a record keyed by an enum or literal | Breaking | Breaking | Breaking |
 | Rename a field | A removal plus an addition | | |
 | Change a type (object ↔ record and array ↔ tuple included) | Breaking | Breaking | Breaking |
 | Add nullability | Additive | Breaking | Breaking |
@@ -98,7 +97,7 @@ An Open Enum gives its readers a type with an Unknown case, so they must handle 
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is compared as a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
+A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible. Reordering a plain union's options is a change, since the first option that parses wins.
 
 ### Constraints
 
@@ -112,7 +111,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Records, arrays, tuples, intersections, recursion, opaque data
 
-- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules. A `z.record()` keyed by an enum or literal is compared as the strict object it is stored as, every key a required field, and `z.partialRecord()` as one whose keys are optional (see [Schemas](SNAPSHOT.md#schemas)); removing a key is Breaking in every Position (see [Fields](#fields)).
+- A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules.
 - A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
 - An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
 - A recursive schema is compared by following its `ref`s into each Snapshot's `defs`, as if written inline (see [Recursion](SNAPSHOT.md#recursion)): a def's name is not part of its shape, and a pair of schemas met again within the same schema compares no further. Under the plain-union rule, renaming a def or pointing a `ref` at another def is a change.
@@ -126,7 +125,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 ### Headers, path and query
 
-- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, and the merged query are always open (a record keyed by an enum or literal is Not allowed as either). A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
+- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, and the merged query are always open. A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
 - Adding an Input header, optional on the Endpoint or demanded by a newly attached Guard, is Additive only when its schema accepts every text value: a string with no format, regex, min, max or enum. With any other schema it is Breaking, because header names are shared with proxies, gateways and browsers, which may already send one with a value the schema refuses. A required header follows the field rules.
 - A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Additive on every Visibility: the URL is the same, params are matched by position, and Dependencies do not record param names. Its type and constraints follow the rules above.
 - Path params, query params and headers, a Success's included, travel as text (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.
@@ -158,7 +157,7 @@ A Contract describes shapes, not behavior. Only the nodes and checks listed in [
 
 Codes:
 
-- A code has one HTTP status and one body shape across the whole Contract, Guards and imported Definitions Packages included; two declarations with different shapes (see [Neutral](#neutral)) fail `generate`.
+- A code has one HTTP status and one body shape across the whole Contract, Guards and imported Definitions Packages included; two declarations with different shapes (see [Neutral](#neutral)), a union's options in another order included, fail `generate`.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status and body it last had, as a kept code is: another status is Breaking, and its body follows the rules of a Success.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new reserved code only comes with a cf-loom major.

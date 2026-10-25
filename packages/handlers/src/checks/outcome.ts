@@ -32,8 +32,7 @@ export function checkedOutcome(
 
 /**
  * What a GuardHandler built, checked against its Guard and resolved: parsed with its schema as
- * written: unknown keys are stripped, except inside a record keyed by an enum or literal, which a
- * Context may hold and which refuses them.
+ * written, so unknown keys are stripped.
  */
 export function checkedAdmission(
   guard: Guard,

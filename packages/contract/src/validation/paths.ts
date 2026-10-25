@@ -1,3 +1,4 @@
+import { camelCase, follows } from '../declarations/index.ts';
 import type { ObjectNode, Path } from '../walker/index.ts';
 import {
   isPlainObject,
@@ -8,7 +9,6 @@ import {
   slotAt,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { camelCase, follows } from './grammars.ts';
 import type { Nodes } from './schemas.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;

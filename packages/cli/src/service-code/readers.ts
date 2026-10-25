@@ -2,7 +2,6 @@ import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { byCodePoint, readEventReference } from '@cf-loom/contract/internal';
 import type { FileExport } from '../loading/index.ts';
 import {
-  defNamesLineOf,
   type ImportLine,
   type Needs,
   schemaImportsOf,
@@ -31,13 +30,11 @@ export type MessageExports =
   | { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 /**
- * The text of the readers file; the line saying which name cannot be written as code, which comes
- * before the lines naming each Command's Message Version or Subscription not exported under its
- * name in code.
+ * The text of the readers file, or the lines naming each Command's Message Version or Subscription
+ * not exported under its name in code.
  */
 export type ReadersText =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'unnamed'; readonly line: string }
   | { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 /** A Command's Message Version or a Subscription, imported under a local name, with its Reader. */
@@ -88,10 +85,6 @@ export function readersTextOf(
   messages: MessageExports,
 ): ReadersText {
   const schemas = readerSchemasOf(snapshot);
-  const unnamed = defNamesLineOf(schemas.defUses);
-  if (unnamed !== undefined) {
-    return { kind: 'unnamed', line: unnamed };
-  }
   if (messages.kind === 'refused') {
     return messages;
   }

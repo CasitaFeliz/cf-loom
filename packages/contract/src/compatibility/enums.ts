@@ -14,20 +14,13 @@ import {
 } from './findings.ts';
 import type { BaseType } from './report.ts';
 
-/** Whether a schema is an enum or a literal, which is compared as an enum. */
-export function isEnumLike(node: SchemaNode): boolean {
-  return node.type === 'enum' || node.type === 'literal';
-}
-
 /**
- * How two schemas differ when either is an enum or a literal, which compares as a closed enum of
- * its one value: its openness and values, or widened to and narrowed from a base type with no
- * constraint.
+ * How two schemas differ when either is an enum: its openness and values, or widened to and
+ * narrowed from a base type with no constraint.
  */
 export function enumFindingsOf(pair: NodePair): readonly Finding[] {
-  const baseline = enumOf(pair.baseline);
-  const proposed = enumOf(pair.proposed);
-  if (baseline !== undefined && proposed !== undefined) {
+  const { baseline, proposed } = pair;
+  if (baseline.type === 'enum' && proposed.type === 'enum') {
     return [...opennessFindingsOf(baseline, proposed), ...valueFindingsOf(baseline, proposed)];
   }
   const to = widenedTo(pair);
@@ -36,13 +29,6 @@ export function enumFindingsOf(pair: NodePair): readonly Finding[] {
   }
   const from = narrowedFrom(pair);
   return from === undefined ? [typeChanged(pair)] : [found({ kind: 'enum-narrowed', from })];
-}
-
-function enumOf(node: SchemaNode): EnumNode | undefined {
-  if (node.type === 'enum') {
-    return node;
-  }
-  return node.type === 'literal' ? { type: 'enum', values: [node.value], open: false } : undefined;
 }
 
 function opennessFindingsOf(baseline: EnumNode, proposed: EnumNode): readonly Finding[] {
@@ -77,15 +63,13 @@ function valuesByJson(node: EnumNode): Readonly<Record<string, JsonPrimitive>> {
 }
 
 function widenedTo(pair: NodePair): BaseType | undefined {
-  const values = enumOf(pair.baseline);
   const base = unconstrainedTypeOf(pair.proposed);
-  return values !== undefined && commonTypeOf(values) === base ? base : undefined;
+  return pair.baseline.type === 'enum' && commonTypeOf(pair.baseline) === base ? base : undefined;
 }
 
 function narrowedFrom(pair: NodePair): BaseType | undefined {
-  const values = enumOf(pair.proposed);
   const base = unconstrainedTypeOf(pair.baseline);
-  return values !== undefined && commonTypeOf(values) === base ? base : undefined;
+  return pair.proposed.type === 'enum' && commonTypeOf(pair.proposed) === base ? base : undefined;
 }
 
 /**

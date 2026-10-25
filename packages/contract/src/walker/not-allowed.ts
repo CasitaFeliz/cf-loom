@@ -34,15 +34,11 @@ export const refused = {
     instead: 'z.record(z.string(), …)',
   },
   looseRecord: { construct: 'z.looseRecord()' },
-  keyedRecordAsQueryOrHeaders: {
-    construct: 'a record keyed by an enum or literal as query or headers',
-    instead: 'z.object()',
+  keyedRecord: {
+    construct: 'a z.record() or z.partialRecord() keyed by an enum or literal',
+    instead: 'z.object() with the keys as fields',
   },
-  keyedRecordInReadShape: {
-    construct: 'a record keyed by an enum or literal in a Read shape',
-    instead: 'z.object() or a string-keyed z.record()',
-  },
-  recordKey: { construct: 'a z.record() key that is not a string, an enum or a literal' },
+  recordKey: { construct: 'a z.record() key that is not a string' },
   mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
   startsWith: { construct: '.startsWith()' },
   endsWith: { construct: '.endsWith()' },
@@ -61,6 +57,8 @@ export const refused = {
   literalNull: { construct: 'z.literal(null)', instead: nullableInstead },
   literalUndefined: { construct: 'z.literal(undefined)', instead: nullableInstead },
   nonJsonExamples: { construct: 'examples that are not JSON values' },
+  nonStringId: { construct: '.meta({ id }) that is not a string' },
+  nonStringDescription: { construct: '.meta({ description }) that is not a string' },
   nonFinite: { construct: 'a number that is not finite (NaN or Infinity)' },
   literalBigint: { construct: 'a bigint z.literal()' },
   xor: { construct: 'z.xor()' },
@@ -75,10 +73,6 @@ export const refused = {
   },
   objectlessVariant: { construct: 'a discriminated union variant that is not an object' },
   nestedDiscriminatedUnion: { construct: 'a discriminated union as a variant of another' },
-  keyedRecordIntersection: {
-    construct: 'an intersection with a record keyed by an enum or literal',
-    instead: 'z.object() with the keys as fields, then .extend()',
-  },
   differingIntersection: {
     construct: 'an intersection of objects whose shared keys differ',
     instead: '.extend()',
@@ -86,6 +80,10 @@ export const refused = {
   openIntersection: {
     construct: 'an intersection that is not of open objects reaching an openEnum()',
     instead: '.extend()',
+  },
+  openUnion: {
+    construct: 'a z.union() reaching an openEnum()',
+    instead: 'z.discriminatedUnion(), or one openEnum() of all the values',
   },
   protoField: { construct: 'a field named __proto__ (zod drops it when parsing)' },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
@@ -112,6 +110,27 @@ export function refusedMetaKey(key: string): Refused {
 
 /** Examples that are not a list, which no JSON Schema reader could take. */
 export const refusedExamples: Refused = { construct: '.meta({ examples }) that is not a list' };
+
+/** A recursion id that is no camelCase name, so code could not name its def. */
+export function refusedNonCamelCaseId(id: string): Refused {
+  return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
+}
+
+/** A recursion id on a field's `.optional()` or `.nonoptional()`, which names no cycle. */
+export function refusedWrapperId(wrapper: 'optional' | 'nonoptional'): Refused {
+  return {
+    construct: `.meta({ id }) on .${wrapper}()`,
+    instead: '.meta({ id }) on the schema inside',
+  };
+}
+
+/** A recursion id on a schema that lies on no cycle, though an id names a cycle. */
+export function refusedAcyclicId(id: string): Refused {
+  return {
+    construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
+    instead: '.meta({ id }) only on a recursive schema',
+  };
+}
 
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {

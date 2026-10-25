@@ -4,8 +4,8 @@ import { type Field, neutralAnnotations, type SchemaNode } from './nodes.ts';
 /**
  * A node's shape alone: what two declarations of one header, query param or code must agree on.
  * `description`, `examples` and `origin` are Neutral, so they are left out at every depth, and
- * the options of a union and the items of an `allOf` are in the order of their shapes, which a
- * Neutral annotation cannot change.
+ * the items of an `allOf` are in the order of their shapes, which a Neutral annotation cannot
+ * change; a union's options stay in declared order, which is part of its shape.
  */
 export function shapeOf(node: SchemaNode): SchemaNode {
   const own = withoutNeutral(node);
@@ -13,7 +13,7 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'object':
       return { ...own, fields: fieldShapes(own.fields) };
     case 'record':
-      return { ...own, key: shapeOf(own.key), value: shapeOf(own.value) };
+      return { ...own, key: withoutNeutral(own.key), value: shapeOf(own.value) };
     case 'array':
       return { ...own, items: shapeOf(own.items) };
     case 'tuple':
@@ -21,7 +21,7 @@ export function shapeOf(node: SchemaNode): SchemaNode {
         ? { ...own, items: own.items.map(shapeOf) }
         : { ...own, items: own.items.map(shapeOf), rest: shapeOf(own.rest) };
     case 'union':
-      return { ...own, options: inShapeOrder(own.options) };
+      return { ...own, options: own.options.map(shapeOf) };
     case 'allOf':
       return { ...own, items: inShapeOrder(own.items) };
     case 'tagged':
@@ -29,7 +29,6 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'json':
     case 'ref':
@@ -38,10 +37,10 @@ export function shapeOf(node: SchemaNode): SchemaNode {
 }
 
 /** A node without its Neutral annotations; what remains is its shape and its children. */
-function withoutNeutral(node: SchemaNode): SchemaNode {
+function withoutNeutral<Node extends SchemaNode>(node: Node): Node {
   const neutral: readonly string[] = neutralAnnotations;
   const kept = Object.entries(node).filter(([key]) => !neutral.includes(key));
-  return Object.fromEntries(kept) as SchemaNode;
+  return Object.fromEntries(kept) as Node;
 }
 
 /** The canonical JSON of a node's shape, so two shapes compare as text. */

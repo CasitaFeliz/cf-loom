@@ -37,7 +37,7 @@ const standardRejections: PublishedServiceSnapshot['standardRejections'] = {
     code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    body: { type: 'object', fields: {} },
   },
   notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
   notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
@@ -114,7 +114,7 @@ const anEvent = {
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',
-  body: { type: 'object', mode: 'strict', fields: {} },
+  body: { type: 'object', fields: {} },
 } as const satisfies EventSnapshot;
 
 const aCommand = {
@@ -155,7 +155,7 @@ function aRef(name: string): RefNode {
 }
 
 function anObjectOf(schema: SchemaNode): ObjectNode {
-  return { type: 'object', mode: 'open', fields: { name: { required: true, schema } } };
+  return { type: 'object', fields: { name: { required: true, schema } } };
 }
 
 /** A Snapshot's text as the registry holds it, whatever is wrong with it. */
@@ -195,7 +195,6 @@ function elementOf(result: DecodedSnapshot): readonly (string | number)[] | unde
 
 const everyNode: SchemaNode = {
   type: 'object',
-  mode: 'open',
   fields: {
     text: {
       required: true,
@@ -225,7 +224,7 @@ const everyNode: SchemaNode = {
       },
     },
     flag: { required: true, schema: { type: 'boolean' } },
-    one: { required: true, schema: { type: 'literal', value: 'a' } },
+    one: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
     color: { required: true, schema: { type: 'enum', values: ['red', 2, true], open: true } },
     lookup: {
       required: true,
@@ -248,8 +247,9 @@ const everyNode: SchemaNode = {
         variants: {
           '"a"': {
             type: 'object',
-            mode: 'strict',
-            fields: { kind: { required: true, schema: { type: 'literal', value: 'a' } } },
+            fields: {
+              kind: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
+            },
           },
           '"b"': aRef('tree'),
         },
@@ -264,7 +264,6 @@ const everyNode: SchemaNode = {
 
 const treeDef: SchemaNode = {
   type: 'object',
-  mode: 'open',
   fields: { children: { required: true, schema: { type: 'array', items: aRef('tree') } } },
 };
 
@@ -348,7 +347,7 @@ describe('decodeSnapshot', () => {
 
     test('a Definitions Package’s published Snapshot decodes, its shared schemas and removed codes included', () => {
       const published = aDefinitions({
-        schemas: { money: { type: 'object', mode: 'open', fields: {} } },
+        schemas: { money: { type: 'object', fields: {} } },
         guards: { apiKey: { ...aGuard, rejections: ['UNAUTHENTICATED'] } },
         codes: {
           [unauthenticated]: { ...aCode, status: 401 },
@@ -405,7 +404,7 @@ describe('decodeSnapshot', () => {
     });
 
     test('a removed code decodes with removed true and the status and body it last had', () => {
-      const body: SchemaNode = { type: 'object', mode: 'strict', fields: {} };
+      const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
         codes: { [gone]: { ...aCode, status: 410, body, removed: true } },
       });
@@ -637,7 +636,6 @@ describe('decodeSnapshot', () => {
           defs: {
             tree: {
               type: 'object',
-              mode: 'open',
               fields: protoKeyed({ required: true, schema: { type: 'string' } }),
             },
           },
@@ -742,9 +740,40 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'format'],
       ],
       [
-        'an object mode',
-        { defs: { tree: { type: 'object', mode: 'loose', fields: {} } } },
+        'a literal node',
+        { defs: { tree: { type: 'literal', value: 'a' } } },
+        ['defs', 'tree', 'type'],
+      ],
+      [
+        'a mode on an object',
+        { defs: { tree: { type: 'object', mode: 'open', fields: {} } } },
         ['defs', 'tree', 'mode'],
+      ],
+      [
+        'a record keyed by an enum',
+        {
+          defs: {
+            tree: {
+              type: 'record',
+              key: { type: 'enum', values: ['a'], open: false },
+              value: { type: 'string' },
+            },
+          },
+        },
+        ['defs', 'tree', 'key', 'type'],
+      ],
+      [
+        'a nullable record key',
+        {
+          defs: {
+            tree: {
+              type: 'record',
+              key: { type: 'string', nullable: true },
+              value: { type: 'string' },
+            },
+          },
+        },
+        ['defs', 'tree', 'key', 'nullable'],
       ],
       [
         'a Standard Rejection',
@@ -772,7 +801,6 @@ describe('decodeSnapshot', () => {
         'a field with a key of its own',
         {
           type: 'object',
-          mode: 'open',
           fields: { name: { required: true, schema: { type: 'string' }, extra: 1 } },
         },
         ['defs', 'tree', 'fields', 'name', 'extra'],
@@ -1372,7 +1400,7 @@ const formatOneFixture = `{
   "codes": {
     "GONE": { "body": null, "message": "Gone", "origin": "local", "removed": true, "status": 410 },
     "INVALID_INPUT": {
-      "body": { "fields": {}, "mode": "strict", "type": "object" },
+      "body": { "fields": {}, "type": "object" },
       "message": "Invalid",
       "origin": "standard",
       "removed": false,
@@ -1399,8 +1427,8 @@ const formatOneFixture = `{
       "guards": [{ "guard": "apiKey", "qualifier": null }],
       "input": {
         "body": null,
-        "headers": { "fields": {}, "mode": "open", "type": "object" },
-        "params": { "fields": {}, "mode": "strict", "type": "object" },
+        "headers": { "fields": {}, "type": "object" },
+        "params": { "fields": {}, "type": "object" },
         "query": null
       },
       "lifecycle": "deprecated",
@@ -1413,7 +1441,7 @@ const formatOneFixture = `{
   },
   "events": {
     "OrderPlaced@1": {
-      "body": { "fields": {}, "mode": "open", "type": "object" },
+      "body": { "fields": {}, "type": "object" },
       "description": "An order was placed",
       "group": "orders",
       "lifecycle": "active",
@@ -1425,7 +1453,7 @@ const formatOneFixture = `{
   "guards": {
     "apiKey": {
       "context": null,
-      "demands": { "headers": { "fields": {}, "mode": "open", "type": "object" }, "query": null },
+      "demands": { "headers": { "fields": {}, "type": "object" }, "query": null },
       "description": "An API key",
       "guards": [],
       "origin": "local",
@@ -1437,7 +1465,7 @@ const formatOneFixture = `{
   "name": "orders-service",
   "standardRejections": {
     "invalidInput": {
-      "body": { "fields": {}, "mode": "strict", "type": "object" },
+      "body": { "fields": {}, "type": "object" },
       "code": "INVALID_INPUT",
       "message": "Invalid",
       "origin": "standard",

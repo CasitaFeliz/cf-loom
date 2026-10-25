@@ -1,5 +1,5 @@
 import type { Visibility } from '../declarations/index.ts';
-import type { JsonPrimitive, ObjectNode, SchemaNode } from '../walker/index.ts';
+import type { JsonPrimitive, SchemaNode } from '../walker/index.ts';
 import type { Step } from './steps.ts';
 
 /**
@@ -59,13 +59,11 @@ export type Constraint = 'lower-bound' | 'upper-bound' | 'int' | 'multipleOf' | 
 export type ShapeDifference =
   | { readonly kind: 'field-added'; readonly required: boolean }
   | { readonly kind: 'field-removed' }
-  /** A key gone from a record keyed by an enum or literal, which refuses it from then on. */
-  | { readonly kind: 'key-removed' }
   | { readonly kind: 'field-made-required' }
   | { readonly kind: 'field-made-optional' }
   | { readonly kind: 'nullability-added' }
   | { readonly kind: 'nullability-removed' }
-  /** A value added to an enum or literal, with the Baseline's openness, which its deployed readers hold. */
+  /** A value added to an enum, with the Baseline's openness, which its deployed readers hold. */
   | {
       readonly kind: 'value-added';
       readonly value: JsonPrimitive;
@@ -74,19 +72,14 @@ export type ShapeDifference =
   | { readonly kind: 'value-removed'; readonly value: JsonPrimitive }
   | { readonly kind: 'enum-opened' }
   | { readonly kind: 'enum-closed' }
-  /** An enum or literal widened to the base type every value shares, with no constraint. */
+  /** An enum widened to the base type every value shares, with no constraint. */
   | { readonly kind: 'enum-widened'; readonly to: BaseType }
-  /** An unconstrained base type narrowed to an enum or literal of its values. */
+  /** An unconstrained base type narrowed to an enum of its values. */
   | { readonly kind: 'enum-narrowed'; readonly from: BaseType }
   | { readonly kind: 'variant-added' }
   | { readonly kind: 'variant-removed' }
   | { readonly kind: 'discriminator-changed'; readonly from: string; readonly to: string }
   | { readonly kind: 'union-changed' }
-  | {
-      readonly kind: 'mode-changed';
-      readonly from: ObjectNode['mode'];
-      readonly to: ObjectNode['mode'];
-    }
   | {
       readonly kind: 'type-changed';
       readonly from: SchemaNode['type'];

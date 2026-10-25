@@ -7,17 +7,13 @@ import { notAllowed, refused } from './not-allowed.ts';
 import { allWalked, type Walked, walked } from './walked.ts';
 
 /**
- * A `literal` of one JSON value, or an `enum` of several, since a literal of several values is a
- * union of literals; `null`, `undefined` and bigints have no JSON value of their own.
+ * A closed `enum` of the literal's JSON values; `null`, `undefined` and bigints have no JSON value
+ * of their own.
  */
 export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Path): Walked {
   const values = allWalked(def.values.map((value) => jsonValueOf(value, at)));
   if (values.kind === 'not-allowed') {
     return values;
-  }
-  const [only, ...others] = values.value;
-  if (only !== undefined && others.length === 0) {
-    return walked({ type: 'literal', value: only });
   }
   return walked(enumOf(values.value));
 }

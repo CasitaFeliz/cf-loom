@@ -60,7 +60,7 @@ const orderPlaced = {
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',
-  body: { type: 'object', mode: 'strict', fields: {} },
+  body: { type: 'object', fields: {} },
 } as const satisfies EventSnapshot;
 
 const retiredGetOrder = { ...getOrder, lifecycle: 'retired', retiredIn: '3.0.0' } as const;

@@ -51,10 +51,10 @@
                       "items": {
                         "options": [
                           {
-                            "type": "number"
+                            "type": "string"
                           },
                           {
-                            "type": "string"
+                            "type": "number"
                           }
                         ],
                         "type": "union"
@@ -63,14 +63,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "The request is invalid",
@@ -114,7 +112,6 @@
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "demands": {
@@ -127,7 +124,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "query": null
@@ -165,7 +161,6 @@
           }
         }
       },
-      "mode": "open",
       "type": "object"
     }
   },
@@ -221,10 +216,10 @@
                       "items": {
                         "options": [
                           {
-                            "type": "number"
+                            "type": "string"
                           },
                           {
-                            "type": "string"
+                            "type": "number"
                           }
                         ],
                         "type": "union"
@@ -233,14 +228,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "code": "BAD_REQUEST",

@@ -82,7 +82,6 @@ describe('walkSchemas', () => {
 
     const moneyNode = {
       type: 'object',
-      mode: 'open',
       fields: {
         amount: { required: true, schema: { type: 'number', int: true } },
         currency: { required: true, schema: { type: 'enum', values: ['eur', 'usd'], open: false } },
@@ -94,15 +93,13 @@ describe('walkSchemas', () => {
     });
   });
 
-  test('enum values, union options and allOf items are in canonical order', () => {
+  test('enum values and allOf items are in canonical order', () => {
     const status = z.enum(['shipped', 'paid', 'pending']);
-    const reference = z.union([z.uuid(), z.int(), z.email()]);
     const code = z.intersection(z.string().regex(/^[A-Z]/), z.string().max(8));
 
     const walked = walkSchemas(
       [
         { at: ['status'], schema: status },
-        { at: ['reference'], schema: reference },
         { at: ['code'], schema: code },
       ],
       noOrigin,
@@ -111,14 +108,6 @@ describe('walkSchemas', () => {
     expect(walked).toEqual({
       located: [
         walkedAt(['status'], { type: 'enum', values: ['paid', 'pending', 'shipped'], open: false }),
-        walkedAt(['reference'], {
-          type: 'union',
-          options: [
-            { type: 'string', format: 'email' },
-            { type: 'string', format: 'uuid' },
-            { type: 'number', int: true },
-          ],
-        }),
         walkedAt(['code'], {
           type: 'allOf',
           items: [

@@ -1,12 +1,7 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import {
-  keyedRecordsOf,
-  type OriginOf,
-  openIntersectionsOf,
-  walkSchemas,
-} from '../walker/index.ts';
-import { type Declarations, declarationsOf, isReadShapePart, type Root } from '../written/index.ts';
+import { type OriginOf, openCompositionsOf, walkSchemas } from '../walker/index.ts';
+import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
 import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
@@ -89,8 +84,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
-    ...openIntersectionsOf(nodes.slots, nodes.defs),
-    ...keyedRecordsOf({ queryOrHeaders: [], readShapes: readShapeSlotsOf(nodes) }, nodes.defs),
+    ...openCompositionsOf(nodes.slots, nodes.defs),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
   if (failures.length > 0) {
@@ -145,9 +139,4 @@ function invalid(failures: readonly Failure[]): ValidatedContract {
     throw new Error('An invalid root must name at least one failure.');
   }
   return { kind: 'invalid', failures: [first, ...others] };
-}
-
-/** The slots of Read shapes' bodies, where a record keyed by an enum or literal is refused at any depth. */
-function readShapeSlotsOf(nodes: Nodes): Nodes['slots'] {
-  return nodes.slots.filter((slot) => isReadShapePart(slot.part));
 }

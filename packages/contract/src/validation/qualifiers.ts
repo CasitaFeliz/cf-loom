@@ -41,7 +41,6 @@ function undeclaredKeys(value: unknown, node: SchemaNode, within: Within): reado
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'json':
       return [];

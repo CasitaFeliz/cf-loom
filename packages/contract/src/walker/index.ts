@@ -11,7 +11,6 @@ export { decimalDigitsOf } from './decimal-digits.ts';
 export { formatOptionKeysOf } from './format-options.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
-export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';
 export type {
   EnumNode,
   Field,
@@ -28,7 +27,7 @@ export type {
   TupleNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
-export { openIntersectionsOf } from './open-intersections.ts';
+export { openCompositionsOf } from './open-compositions.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
 export type { StringFormat } from './string-formats.ts';
 export { isStringFormat } from './string-formats.ts';

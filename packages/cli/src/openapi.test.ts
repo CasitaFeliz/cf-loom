@@ -76,11 +76,6 @@ function echoed(field: string): unknown {
   return valueAt(responseBodyOf('/echo', 'post', '200'), 'properties', field);
 }
 
-/** A property of the body `POST /echo` takes, with the records keyed by an enum or literal. */
-function echoedIn(field: string): unknown {
-  return valueAt(inputBodyOf('/echo', 'post'), 'properties', field);
-}
-
 /** A property of the body `POST /extra` takes. */
 function extra(field: string): unknown {
   return valueAt(inputBodyOf('/extra', 'post'), 'properties', field);
@@ -256,7 +251,7 @@ const shapes = [
   "  visibility: 'public',",
   "  description: 'Answers what it is sent',",
   '  guards: [optionalBearer, bearer],',
-  '  input: { body: everythingIn },',
+  '  input: { body: everything },',
   '  success: { status: 200, body: everything },',
   '});',
   'export const extra = defineEndpoint({',
@@ -484,7 +479,7 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     expect(echoed('flag')).toEqual({ type: 'boolean' });
   });
 
-  test('a literal is a const of the type of its value', () => {
+  test('a one-value closed enum is a const of the type of its value', () => {
     expect([echoed('kind'), extra('meaning')]).toEqual([
       { type: 'string', const: 'order' },
       { type: 'number', const: 42 },
@@ -518,16 +513,19 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('an object with no required field has no required keyword', () => {
-    expect(echoedIn('partial')).not.toHaveProperty('required');
+    expect(echoed('optionals')).not.toHaveProperty('required');
   });
 
-  test('a strict object, such as an enum-keyed record in the Input, admits no other key', () => {
-    expect(echoedIn('keyed')).toEqual({
-      type: 'object',
-      properties: { a: { type: 'number' }, b: { type: 'number' } },
-      required: ['a', 'b'],
-      additionalProperties: false,
-    });
+  test('an object admits other keys, the Input body’s included', () => {
+    const bodies = [
+      inputBodyOf('/echo', 'post'),
+      valueAt(inputBodyOf('/echo', 'post'), 'properties', 'payment'),
+    ];
+
+    expect(bodies.map((body) => valueAt(body, 'type'))).toEqual(['object', 'object']);
+    expect(bodies.filter((body) => Object.hasOwn(body as object, 'additionalProperties'))).toEqual(
+      [],
+    );
   });
 
   test('a record is additionalProperties of its value with propertyNames of its key', () => {
@@ -585,7 +583,7 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('a union is anyOf its options', () => {
-    expect(echoed('union')).toEqual({ anyOf: [{ type: 'number' }, { type: 'string' }] });
+    expect(echoed('union')).toEqual({ anyOf: [{ type: 'string' }, { type: 'number' }] });
   });
 
   test('an intersection that is not of open objects is allOf its items', () => {
@@ -709,7 +707,6 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
       'RefusalDef',
       'TreeNodeDef',
       'TwigDef',
-      'TwinDef',
     ]);
   });
 
@@ -1423,31 +1420,6 @@ describe('cf-loom openapi: what it refuses', () => {
     const written = cfLoom(project, 'openapi');
 
     expect(written.status).toBe(0);
-  });
-
-  test('a recursion id that is no name in code is a tooling error', () => {
-    const project = aGeneratedProject(aServiceWithBodies(['1tree']));
-
-    const refused = cfLoom(project, 'openapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion id 1tree is no name in code: rename it\n',
-    });
-  });
-
-  test('two recursion ids that are one name in code are a tooling error', () => {
-    const project = aGeneratedProject(aServiceWithBodies(['tree-node', 'tree_node']));
-
-    const refused = cfLoom(project, 'openapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr:
-        'The recursion ids tree-node and tree_node are one name in code: rename one of them\n',
-    });
   });
 
   test('openapi takes no argument', () => {

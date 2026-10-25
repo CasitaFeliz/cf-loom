@@ -17,16 +17,11 @@ export function inputOf(
     guards.map((guard) => nodeOf(guard, part));
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
-    params: strictParamsOf(nodeOf(endpoint, 'input.params')),
+    params: nodeOf(endpoint, 'input.params') ?? null,
     query: mergedOf([own('input.query'), ...demanded('demands.query')]) ?? null,
     headers: headers ?? null,
     body: nodeOf(endpoint, 'input.body') ?? null,
   };
-}
-
-/** The params as the Snapshot stores them: `strict`, exactly the path's params. */
-function strictParamsOf(params: ObjectNode | undefined): ObjectNode | null {
-  return params === undefined ? null : { ...params, mode: 'strict' };
 }
 
 /**

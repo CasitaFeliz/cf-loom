@@ -147,22 +147,6 @@ describe('validateContract: Events and Commands', () => {
     );
   });
 
-  test('an Event body holding a record keyed by an enum fails, as in any Read shape', () => {
-    const totals = z.record(z.enum(['eur', 'usd']), z.int());
-    const result = validateMessages([anEvent({ body: z.object({ totals }) })]);
-
-    expect(result).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'not-allowed',
-          at: ['groups', 'orders', 'events', 'OrderCreated@1', 'body', 'fields', 'totals'],
-          construct: 'a record keyed by an enum or literal in a Read shape',
-        },
-      ],
-    });
-  });
-
   test('something listed under events that is not an Event fails', () => {
     const result = validateMessages([{ kind: 'event', name: 'OrderCreated', version: 1 }]);
 

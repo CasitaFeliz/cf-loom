@@ -44,7 +44,6 @@ describe('walkedTextPartsOf', () => {
     const nodes = walked.kind === 'valid' ? walked.nodes.get(getOrder) : undefined;
     expect(nodes?.['input.query']).toEqual({
       type: 'object',
-      mode: 'open',
       fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
     });
     expect(nodes?.['input.headers']).toBeUndefined();
@@ -84,30 +83,6 @@ describe('walkedTextPartsOf', () => {
     expect(walked).toMatchObject({
       kind: 'invalid',
       failures: [{ rule: 'not-text', message: expect.stringContaining('filter') }],
-    });
-  });
-
-  test('a query that is a record keyed by an enum is a failure, as generate words it', () => {
-    const filtered = defineEndpoint({
-      name: 'filtered',
-      method: 'GET',
-      path: '/filtered',
-      visibility: 'public',
-      description: 'Filters',
-      input: { query: z.record(z.enum(['a', 'b']), z.string()) as never },
-      success: { status: 204 },
-    });
-
-    const walked = walkedTextPartsOf(contractOf(filtered));
-
-    expect(walked).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'not-allowed',
-          at: ['groups', 'orders', 'endpoints', 'GET /filtered', 'input', 'query'],
-        },
-      ],
     });
   });
 

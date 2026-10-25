@@ -342,36 +342,17 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.params).toEqual(['orderId', 'lineId']);
   });
 
-  test('params are stored strict and every headers object open', () => {
+  test('params hold exactly the path’s params', () => {
     const snapshot = serviceSnapshot();
-    const getOrderSnapshot = snapshot.endpoints['GET /orders/{}'];
-    const editOrderSnapshot = snapshot.endpoints['PATCH /orders/{}/lines/{}'];
 
-    expect(getOrderSnapshot?.input.params?.mode).toBe('strict');
-    expect(getOrderSnapshot?.input.headers?.mode).toBe('open');
-    expect(editOrderSnapshot?.success.headers?.mode).toBe('open');
-    expect(snapshot.guards['apiKey']?.demands.headers?.mode).toBe('open');
-  });
+    const params = snapshot.endpoints['PATCH /orders/{}/lines/{}']?.input.params;
 
-  test('params written as a record keyed by an enum are stored strict, a field per key', () => {
-    const lookup = defineEndpoint({
-      name: 'lookup',
-      method: 'GET',
-      path: '/lookup/:id',
-      visibility: 'public',
-      description: 'Lookup',
-      input: { params: z.record(z.enum(['id']), z.string()) },
-      success: { status: 204 },
-    } as never);
-    const group = defineGroup({ name: 'lookup', description: 'Lookup', endpoints: [lookup] });
-    const root = defineContract({ name: 'lookup-service', groups: [group] });
-
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
-
-    expect(snapshot.endpoints['GET /lookup/{}']?.input.params).toEqual({
+    expect(params).toEqual({
       type: 'object',
-      mode: 'strict',
-      fields: { id: { required: true, schema: { type: 'string' } } },
+      fields: {
+        orderId: { required: true, schema: { type: 'string', format: 'uuid' } },
+        lineId: { required: true, schema: { type: 'string', format: 'uuid' } },
+      },
     });
   });
 
@@ -414,7 +395,6 @@ describe('snapshotOf: a Service', () => {
 
     expect(query).toEqual({
       type: 'object',
-      mode: 'open',
       fields: {
         text: { required: true, schema: { type: 'string' } },
         tenant: { required: true, schema: { type: 'string' } },
@@ -461,14 +441,12 @@ describe('snapshotOf: a Service', () => {
         demands: {
           headers: {
             type: 'object',
-            mode: 'open',
             fields: { 'x-api-key': { required: true, schema: { type: 'string' } } },
           },
           query: null,
         },
         context: {
           type: 'object',
-          mode: 'open',
           fields: { callerId: { required: true, schema: { type: 'string' } } },
         },
         rejections: ['UNAUTHENTICATED'],
@@ -526,7 +504,6 @@ describe('snapshotOf: a Service', () => {
       message: 'The order can no longer be changed',
       body: {
         type: 'object',
-        mode: 'open',
         fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
       },
       removed: false,
@@ -599,7 +576,6 @@ describe('snapshotOf: a Service', () => {
     const snapshot = serviceSnapshot();
     const issue = {
       type: 'object',
-      mode: 'open',
       fields: {
         in: {
           required: true,
@@ -609,7 +585,7 @@ describe('snapshotOf: a Service', () => {
           required: true,
           schema: {
             type: 'array',
-            items: { type: 'union', options: [{ type: 'number' }, { type: 'string' }] },
+            items: { type: 'union', options: [{ type: 'string' }, { type: 'number' }] },
           },
         },
         code: {
@@ -636,7 +612,6 @@ describe('snapshotOf: a Service', () => {
 
     expect(snapshot.standardRejections.invalidInput.body).toEqual({
       type: 'object',
-      mode: 'open',
       fields: { issues: { required: true, schema: { type: 'array', items: issue } } },
     });
     expect(snapshot.codes['BAD_REQUEST']?.body).toEqual(
@@ -679,7 +654,7 @@ describe('snapshotOf: a Service', () => {
           return z.array(category);
         },
       })
-      .meta({ id: 'Category' });
+      .meta({ id: 'category' });
     const tree = defineEndpoint({
       name: 'tree',
       method: 'GET',
@@ -695,9 +670,9 @@ describe('snapshotOf: a Service', () => {
 
     expect(snapshot.endpoints['GET /tree']?.success.body).toEqual({
       type: 'ref',
-      name: 'Category',
+      name: 'category',
     });
-    expect(Object.keys(snapshot.defs)).toEqual(['Category']);
+    expect(Object.keys(snapshot.defs)).toEqual(['category']);
   });
 });
 
@@ -757,7 +732,6 @@ function messagingSnapshot(declared: {
 
 const orderIdBody = {
   type: 'object',
-  mode: 'open',
   fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
 };
 
@@ -1004,7 +978,6 @@ describe('snapshotOf: a Definitions Package', () => {
       schemas: {
         money: {
           type: 'object',
-          mode: 'open',
           fields: {
             amount: { required: true, schema: { type: 'number', int: true } },
             currency: { required: true, schema: { type: 'string' } },
