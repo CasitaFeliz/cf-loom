@@ -97,7 +97,7 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
 function validatedOf(project: Project): ValidatedContract | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
   const exportsByDefinitions = new Map(
-    packages.map((installed) => [installed.definitions, Object.values(installed.exports)]),
+    packages.map((resolved) => [resolved.definitions, Object.values(resolved.exports)]),
   );
   const rootPackage: RootPackage = {
     originOf: schemaOriginsOf(packages),

@@ -1,5 +1,5 @@
 import { byCodePoint, isLive } from '@cf-loom/contract/internal';
-import { type ExportsOf, exportNamesOf } from '../loading/index.ts';
+import { type ExportsOf, exportNamesOf, type ImportedPackage } from '../loading/index.ts';
 import {
   type DeclarationHandled,
   elementLabelOf,
@@ -91,41 +91,55 @@ function declarationLocatedOf(
 }
 
 /**
- * A Definitions Package's Guard, imported from the package's `.` entry under its name, from the
- * first export of the entry, in code point order, that holds it.
+ * A Definitions Package's Guard, imported as the project imports the first module of the package,
+ * in code point order of its specifier, that exports it, under its first such export.
  */
 function packageExportOf(
   handled: DeclarationHandled,
-  { packageName, exports, guard }: PackagedGuard,
+  { packageName, modules, guard }: PackagedGuard,
 ): StubLocated {
-  const [exportName] = exportNamesOf(exports, guard);
-  if (exportName === undefined) {
-    return { kind: 'refused', line: `guards.${handled.name} is not exported by ${packageName}` };
+  for (const { specifier, exports } of modules) {
+    const [exportName] = exportNamesOf(exports, guard);
+    if (exportName !== undefined) {
+      const imported = { kind: 'package', specifier, name: exportName } as const;
+      return { kind: 'exported', target: exportedTargetOf(imported, handled.name) };
+    }
   }
-  const imported = { kind: 'package', packageName, name: exportName } as const;
-  return { kind: 'exported', target: exportedTargetOf(imported, handled.name) };
+  return { kind: 'refused', line: `guards.${handled.name} is not exported by ${packageName}` };
 }
 
-/** A Guard as a listed Definitions Package declares it, with what the package exports. */
+/** A Guard as a Definitions Package declares it, with the package's modules the project imports. */
 type PackagedGuard = {
   readonly packageName: string;
-  readonly exports: Readonly<Record<string, unknown>>;
+  readonly modules: readonly ImportedModule[];
   readonly guard: unknown;
 };
 
-/** The listed Definitions Package a handled Guard comes from; none for the Service's own. */
+/** A module of a package, with the specifier the project's own files import it by. */
+type ImportedModule = ImportedPackage & { readonly specifier: string };
+
+/** The Definitions Package a handled Guard comes from; none for the Service's own. */
 function packageOf(service: PlacedService, handled: DeclarationHandled): PackagedGuard | undefined {
   if (handled.kind !== 'guard') {
     return undefined;
   }
-  const guards = service.validated.declarations.guards;
-  const located = guards.find(({ guard }) => guard.name === handled.name);
+  const { project, validated } = service;
+  const located = validated.declarations.guards.find(({ guard }) => guard.name === handled.name);
   const listedIn = located?.listedIn?.definitions;
-  const installed = service.project.packages.find(({ definitions }) => definitions === listedIn);
-  if (located === undefined || installed === undefined) {
+  const resolved = project.definitionsPackages.find(({ definitions }) => definitions === listedIn);
+  if (located === undefined || resolved === undefined) {
     return undefined;
   }
-  return { packageName: installed.packageName, exports: installed.exports, guard: located.guard };
+  const { packageName } = resolved;
+  const modules = project.imported
+    .filter(isImportedByProject)
+    .filter((module) => module.packageName === packageName)
+    .sort((left, right) => byCodePoint(left.specifier, right.specifier));
+  return { packageName, modules, guard: located.guard };
+}
+
+function isImportedByProject(module: ImportedPackage): module is ImportedModule {
+  return module.specifier !== undefined;
 }
 
 /** The declaration a handled Element is, as the root holds it: a Retired Endpoint is never one. */

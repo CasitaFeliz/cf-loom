@@ -27,11 +27,11 @@ export function insideContractOf(directory: string): (realFolder: string) => boo
 
 /**
  * Where a declaration is exported, under the name it is exported as: a file by its path relative
- * to the project, or a package by its name.
+ * to the project, or a package by the specifier the project imports it by.
  */
 export type ExportedAt =
   | { readonly kind: 'file'; readonly path: string; readonly name: string }
-  | { readonly kind: 'package'; readonly packageName: string; readonly name: string };
+  | { readonly kind: 'package'; readonly specifier: string; readonly name: string };
 
 /** A file of the Contract exporting a declaration. */
 export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;

@@ -38,6 +38,7 @@ export {
   follows,
   isCommand,
   isContract,
+  isDefinitions,
   isEndpoint,
   isEvent,
   isGroup,

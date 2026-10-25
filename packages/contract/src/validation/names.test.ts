@@ -432,7 +432,7 @@ describe('validateContract: listed Definitions Packages', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['definitions', 'definitions', 'name'],
+        ['definitions', 1, 'name'],
         'duplicate-definitions-name',
         'A Contract lists each Definitions Package once, under a name of its own: definitions',
       ),
@@ -451,7 +451,7 @@ describe('validateContract: listed Definitions Packages', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['definitions', 'definitions', 'name'],
+        ['definitions', 1, 'name'],
         'duplicate-definitions-name',
         'A Contract lists each Definitions Package once, under a name of its own: definitions',
       ),
@@ -465,7 +465,7 @@ describe('validateContract: listed Definitions Packages', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['definitions', 'definitions', 'name'],
+        ['definitions', 1, 'name'],
         'duplicate-definitions-name',
         'A Contract lists each Definitions Package once, under a name of its own: definitions',
       ),

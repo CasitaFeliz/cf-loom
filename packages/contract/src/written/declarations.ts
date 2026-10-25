@@ -1,4 +1,4 @@
-import type { Definitions, Dependency } from '../declarations/index.ts';
+import type { Dependency } from '../declarations/index.ts';
 import { isContract, isDefinitions, isDependency } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { groupedOf, groupsOf } from './grouped.ts';
@@ -17,7 +17,7 @@ import type {
   Root,
 } from './located.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
-import { entriesOf, isPlainObject, listOf, partOf, textOf } from './written.ts';
+import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
 
 /**
  * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
@@ -45,7 +45,7 @@ export type Declarations = {
 
 /** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
 export function declarationsOf(root: Root): Declarations {
-  const listedDefinitions = definitionsOf(root);
+  const listedDefinitions = listedDefinitionsOf(root);
   const groups = groupsOf(root);
   const { endpoints, events, commands, subscriptions } = groupedOf(groups);
   const allPackages =
@@ -96,18 +96,26 @@ function isLocatedStandardRejection(
 }
 
 /**
- * The Definitions Packages a Contract lists, whatever a root file exported: the CLI resolves them
- * before validating; what else sits there is the structure rules' to report.
+ * The Definitions Packages a Contract lists, by their place in its list, whatever a root file
+ * exported: the CLI resolves them before validating; what else sits there is the structure rules'
+ * to report.
  */
-export function listedDefinitionsOf(root: unknown): readonly Definitions[] {
-  return isContract(root) ? listOf(root.definitions).filter(isDefinitions) : [];
+export function listedDefinitionsOf(root: unknown): readonly LocatedDefinitions[] {
+  if (!isContract(root)) {
+    return [];
+  }
+  const located = listOf(root.definitions).map((definitions: unknown, index) => {
+    const at: Path = ['definitions', index];
+    return { at, definitions };
+  });
+  return located.filter(isLocatedDefinitions);
 }
 
-function definitionsOf(root: Root): readonly LocatedDefinitions[] {
-  return listedDefinitionsOf(root).map((definitions) => ({
-    at: ['definitions', textOf(definitions.name)],
-    definitions,
-  }));
+function isLocatedDefinitions(located: {
+  readonly at: Path;
+  readonly definitions: unknown;
+}): located is LocatedDefinitions {
+  return isDefinitions(located.definitions);
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependency[] {

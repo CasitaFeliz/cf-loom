@@ -1,7 +1,8 @@
-import { join } from 'node:path';
+import type { ResolvedDefinitions } from '@cf-loom/contract/internal';
 import { configFile, defaultLayout, loadConfig, type ServiceLayout } from '../config/index.ts';
 import {
-  type InstalledDefinitions,
+  definitionsPackagesOf,
+  type ImportedPackage,
   type LoadedRoot,
   loadRoot,
   type PackageName,
@@ -29,7 +30,12 @@ export type Project = {
   readonly rootExports: readonly unknown[];
   /** Where the root file sits, relative to the project, as messages name it. */
   readonly rootFile: string;
-  readonly packages: readonly InstalledDefinitions[];
+  /** The Definitions Packages the root lists, each the one imported package that exports it. */
+  readonly packages: readonly ResolvedDefinitions[];
+  /** Every imported module that exports a Definitions object, as Node resolved it. */
+  readonly definitionsPackages: readonly ResolvedDefinitions[];
+  /** Every module of a package the root's import reached, as Node resolved it. */
+  readonly imported: readonly ImportedPackage[];
 };
 
 /** A project read, or the tooling error that stopped reading it. */
@@ -52,14 +58,12 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   if (loaded.kind === 'failed') {
     return tooling(loaded.message);
   }
-  const rootPath = join(directory, loaded.file);
-  const resolving = { rootPath, directory, scope: config.config.scope };
-  const resolved = await resolvePackages(loaded.root, resolving);
+  const resolved = resolvePackages(loaded.root, loaded.imported);
   if (resolved.kind === 'failed') {
     return tooling(resolved.message);
   }
   const { packageName, manifest } = projectPackage;
-  const { root, file: rootFile, exports: rootExports } = loaded;
+  const { root, file: rootFile, exports: rootExports, imported } = loaded;
   const { scope, layout = defaultLayout } = config.config;
   const { packages } = resolved;
   const project = {
@@ -72,6 +76,8 @@ export async function projectOf(directory: string): Promise<ReadProject> {
     rootExports,
     rootFile,
     packages,
+    definitionsPackages: definitionsPackagesOf(imported),
+    imported,
   };
   return { kind: 'read', project };
 }

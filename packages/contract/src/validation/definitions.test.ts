@@ -129,9 +129,9 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
     const failures = failuresOf(contract);
 
     expect(failures.map(({ at }) => at)).toEqual([
-      ['definitions', 'definitions', 'guards'],
-      ['definitions', 'definitions', 'rejections'],
-      ['definitions', 'definitions', 'rejections'],
+      ['definitions', 0, 'guards'],
+      ['definitions', 0, 'rejections'],
+      ['definitions', 0, 'rejections'],
     ]);
   });
 });
@@ -178,14 +178,14 @@ describe('validateContract: a listed Definitions Package lists what it exports',
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['definitions', 'definitions', 'guards'],
+        at: ['definitions', 0, 'guards'],
         rule: 'definitions-unlisted',
         message:
           'A Definitions Package lists every Guard it exports or its Guards reach: permission',
       },
       {
         kind: 'declaration',
-        at: ['definitions', 'definitions', 'rejections'],
+        at: ['definitions', 0, 'rejections'],
         rule: 'definitions-unlisted',
         message:
           'A Definitions Package lists every Rejection it exports or its Guards reach: FORBIDDEN',

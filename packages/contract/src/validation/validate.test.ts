@@ -149,7 +149,7 @@ describe('validateContract', () => {
 
     const validated = validateInPackage(contract, noOrigin);
 
-    const listedIn = { at: ['definitions', 'definitions'], definitions };
+    const listedIn = { at: ['definitions', 0], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
       groups: [{ at: ['groups', 'orders'], group: ordersGroup }],
@@ -190,7 +190,7 @@ describe('validateContract', () => {
       standardRejections: [
         {
           name: 'invalidInput',
-          at: ['definitions', 'definitions', 'standardRejections', 'invalidInput'],
+          at: ['definitions', 0, 'standardRejections', 'invalidInput'],
           code: 'INVALID_INPUT',
           status: 400,
           message: 'Invalid input',
@@ -198,12 +198,12 @@ describe('validateContract', () => {
         },
         {
           name: 'notFound',
-          at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
+          at: ['definitions', 0, 'standardRejections', 'notFound'],
           code: 'MISSING',
           status: 404,
           message: 'Missing',
           declared: {
-            at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
+            at: ['definitions', 0, 'standardRejections', 'notFound'],
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
             listedIn,
@@ -211,7 +211,7 @@ describe('validateContract', () => {
         },
         {
           name: 'notImplemented',
-          at: ['definitions', 'definitions', 'standardRejections', 'notImplemented'],
+          at: ['definitions', 0, 'standardRejections', 'notImplemented'],
           code: 'NOT_IMPLEMENTED',
           status: 501,
           message: 'Not implemented',

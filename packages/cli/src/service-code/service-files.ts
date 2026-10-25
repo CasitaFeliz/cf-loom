@@ -83,13 +83,13 @@ export function stubTextOf(path: string, { imported, local, members }: StubTarge
   });
 }
 
-/** How a file imports an export: a file by its relative path, a package by its name. */
+/** How a file imports an export: a file by its relative path, a package as the project does. */
 function specifierOf(importer: string, exported: ExportedAt): string {
   switch (exported.kind) {
     case 'file':
       return relativeSpecifierOf(importer, exported.path);
     case 'package':
-      return exported.packageName;
+      return exported.specifier;
   }
 }
 

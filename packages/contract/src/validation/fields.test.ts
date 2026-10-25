@@ -117,7 +117,7 @@ describe('validateContract: undeclared fields', () => {
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
-      undeclared(['definitions', 'definitions', 'endpoints']),
+      undeclared(['definitions', 0, 'endpoints']),
     );
   });
 

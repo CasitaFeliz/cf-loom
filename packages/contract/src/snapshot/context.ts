@@ -3,13 +3,15 @@ import type { ValidatedSchemas } from '../validation/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 
 /**
- * A Definitions Package a Contract lists, as installed where its Snapshot is built: the package
- * it is published as and the exact version resolved, which the Snapshot records.
+ * A Definitions Package installed where the root is validated: its Definitions object, the
+ * package.json name and exact version, which the Snapshot records, and what its module exports,
+ * by name.
  */
 export type ResolvedDefinitions = {
   readonly definitions: Definitions;
   readonly packageName: string;
   readonly version: string;
+  readonly exports: Readonly<Record<string, unknown>>;
 };
 
 /**

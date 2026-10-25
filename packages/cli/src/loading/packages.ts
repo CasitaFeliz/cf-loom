@@ -1,45 +1,48 @@
-import {
-  follows,
-  kebabCase,
-  listedDefinitionsOf,
-  type ResolvedDefinitions,
-} from '@cf-loom/contract/internal';
-import { installedPackageOf, type LookedUp } from './installed-package.ts';
-import { publishedNameOf } from './published-name.ts';
+import { listedDefinitionsOf, type ResolvedDefinitions } from '@cf-loom/contract/internal';
+import { type ImportedPackage, packagesExporting } from './imported-packages.ts';
 
-/** A listed Definitions Package as installed, with what its module exports, by name. */
-export type InstalledDefinitions = ResolvedDefinitions & {
-  readonly exports: Readonly<Record<string, unknown>>;
-};
-
-/** The Definitions Packages a root lists as installed, or the first that is not. */
+/** The Definitions Packages a root lists as installed, or the first that is not one package. */
 export type ResolvedPackages =
-  | { readonly kind: 'resolved'; readonly packages: readonly InstalledDefinitions[] }
+  | { readonly kind: 'resolved'; readonly packages: readonly ResolvedDefinitions[] }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** What a listed Definitions Package is resolved from: where it is looked up and the scope. */
-export type Resolving = LookedUp & { readonly scope: string };
-
 /**
- * Resolves each Definitions Package a root lists to the package `<scope>/<name>` as the root
- * file imports it, at its exact version, with what its module exports; a name that breaks the
- * grammar names no package and is left to the validation.
+ * Resolves each Definitions object a root lists to the one imported package that exports it, by
+ * identity, at its exact version, with what its module exports.
  */
-export async function resolvePackages(
+export function resolvePackages(
   root: unknown,
-  resolving: Resolving,
-): Promise<ResolvedPackages> {
-  const packages: InstalledDefinitions[] = [];
-  const named = listedDefinitionsOf(root).filter(({ name }) => follows(kebabCase, name));
-  for (const definitions of named) {
-    const { name } = definitions;
-    const packageName = publishedNameOf(resolving.scope, { kind: 'definitions', name });
-    const installed = await installedPackageOf(packageName, resolving);
-    if (installed.kind === 'failed') {
-      return installed;
+  imported: readonly ImportedPackage[],
+): ResolvedPackages {
+  const packages: ResolvedDefinitions[] = [];
+  for (const { at, definitions } of listedDefinitionsOf(root)) {
+    const listed = `${String(at[0])}[${String(at[1])}]`;
+    const exporting = packagesExporting(imported, definitions);
+    const [found, ...others] = exporting;
+    if (found === undefined) {
+      const none = "is exported by no package the Contract's files import";
+      return failed(`${listed} ${none}: list the definitions a Definitions Package exports`);
     }
-    const { version, exports } = installed;
+    if (others.length > 0) {
+      const names = exporting.map(({ packageName }) => packageName);
+      return failed(`${listed} is exported by ${bothOf(names)}: import it from one package`);
+    }
+    const { packageName, version, exports } = found;
+    if (version === undefined) {
+      return failed(`${packageName} has no version in its package.json`);
+    }
     packages.push({ definitions, packageName, version, exports });
   }
   return { kind: 'resolved', packages };
+}
+
+/** Two names as `both a and b`, more as `a, b and c`. */
+function bothOf(names: readonly string[]): string {
+  const last = names.at(-1);
+  const leading = names.slice(0, -1).join(', ');
+  return names.length === 2 ? `both ${leading} and ${last}` : `${leading} and ${last}`;
+}
+
+function failed(message: string): ResolvedPackages {
+  return { kind: 'failed', message };
 }

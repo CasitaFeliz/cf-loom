@@ -559,7 +559,7 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['definitions', 'definitions', 'standardRejections', 'notImplemented', 'code'],
+        ['definitions', 0, 'standardRejections', 'notImplemented', 'code'],
         'standard-codes-distinct',
         'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
       ),
@@ -616,7 +616,7 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['definitions', 'second', 'standardRejections'],
+        ['definitions', 1, 'standardRejections'],
         'standard-rejections-once',
         'At most one listed Definitions Package declares Standard Rejections: first already does',
       ),

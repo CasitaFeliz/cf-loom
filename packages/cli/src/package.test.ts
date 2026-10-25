@@ -1636,28 +1636,6 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
     expect(ran.stderr).toMatch(/^contract\.snapshot\.json cannot be read: EISDIR[^\n]*\n$/);
   });
 
-  test('a listed Definitions Package that cannot be loaded stops package in one line', () => {
-    const project = aProject({
-      ...service,
-      'node_modules/@org/definitions/package.json': JSON.stringify({
-        name: '@org/definitions',
-        version: '4.2.0',
-        type: 'module',
-        exports: { '.': './broken.js', './all': './index.js' },
-      }),
-      'node_modules/@org/definitions/broken.js': 'export const = ;\n',
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
-        "from '@org/definitions';",
-        "from '@org/definitions/all';",
-      ),
-    });
-
-    const ran = cfLoom(project, 'package');
-
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^@org\/definitions cannot be loaded: [^\n]+\n$/);
-  });
-
   test('a previous output holding a file package does not write is refused and kept', () => {
     const project = aProject(service);
     packageIn(project);
