@@ -22,15 +22,13 @@ import { type Readable, readableOf } from './fields.ts';
 
 /**
  * A field that holds a list of declarations: where it sits, what it holds, and what belongs in it;
- * a list whose items another rule judges one by one names no `fits`, and a required list left
- * `null` is the required-field rule's.
+ * a list whose items another rule judges one by one names no `fits`.
  */
 type Listing = {
   readonly at: Path;
   readonly list: unknown;
   readonly noun: string;
   readonly fits?: (item: unknown) => boolean;
-  readonly required?: true;
 };
 
 /** A field that holds an object: where it sits, what it holds, and whether its kind requires it. */
@@ -120,7 +118,6 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           list: root.dependencies,
           noun: 'a Dependency',
           fits: isDependency,
-          required: true,
         },
       ];
     case 'definitions':
@@ -145,14 +142,8 @@ function objectPartFailures({ at, value, required }: ObjectPart): readonly Decla
   return [failure(at, 'not-an-object', `${textOf(at.at(-1))} is an object`)];
 }
 
-function listingFailures({
-  at,
-  list,
-  noun,
-  fits,
-  required,
-}: Listing): readonly DeclarationFailure[] {
-  if (list === undefined || (list === null && required === true)) {
+function listingFailures({ at, list, noun, fits }: Listing): readonly DeclarationFailure[] {
+  if (list === undefined) {
     return [];
   }
   const field = textOf(at.at(-1));

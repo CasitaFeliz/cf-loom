@@ -60,7 +60,12 @@ const payments = {
   endpoints: { getPayment, refundPayment },
   events: { paymentSettledV1 },
   standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: z.object({ issues: z.array(z.unknown()) }),
+    },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
@@ -126,11 +131,24 @@ describe('defineApplication', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Application without dependencies is a type error', () => {
-    // @ts-expect-error an Application lists its Dependencies
-    const declare = () => defineApplication({ name: 'web-admin' });
+  test('an Application depending on an Internal Endpoint is refused with the Endpoint’s name', () => {
+    const internalDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
+    type Written = Parameters<
+      typeof defineApplication<{
+        readonly name: 'web-admin';
+        readonly dependencies: readonly [typeof internalDependency];
+      }>
+    >[0];
 
-    expect(declare).not.toThrow();
+    expectTypeOf<
+      Written['dependencies']
+    >().toExtend<'An Application depends on Public Endpoints only: refundPayment is internal'>();
+  });
+
+  test('an Application may list no Dependencies, which means it depends on nothing', () => {
+    const application = defineApplication({ name: 'web-admin' });
+
+    expect(application).toEqual({ kind: 'application', name: 'web-admin' });
   });
 });
 

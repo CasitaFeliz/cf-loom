@@ -6,6 +6,7 @@ import {
   kebabCase,
   pascalCase,
   upperSnakeCase,
+  wordsOf,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { type Declarations, textOf } from '../written/index.ts';
@@ -71,8 +72,14 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
   return breaking.map(({ at, value, noun }) => {
     const text = textOf(value);
     const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
-    return failure(at, 'name-grammar', `${noun} is ${rule}: ${text}`);
+    return failure(at, 'name-grammar', `${noun} is ${rule}: ${text}${hintFor(grammar, text)}`);
   });
+}
+
+/** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */
+function hintFor(grammar: Grammar, text: string): string {
+  const words = wordsOf(text);
+  return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
 function rootNoun(kind: Declarations['root']['kind']): string {

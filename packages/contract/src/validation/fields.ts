@@ -38,12 +38,13 @@ export type Written = { readonly at: Path; readonly value: unknown; readonly fie
 /** A written object the rules can read field by field. */
 export type Readable = Written & { readonly value: WrittenObject };
 
-/** Every object an author writes holds only the fields its kind declares, every one it requires, and strings where typed so. */
+/** Every object an author writes holds only the fields its kind declares, every one it requires, strings where typed so, and no blank `description` or `message`. */
 export function fieldFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return readableOf(declarations).flatMap((written) => [
     ...undeclaredFailures(written),
     ...requiredFailures(written),
     ...stringFailures(written),
+    ...blankFailures(written),
   ]);
 }
 
@@ -150,6 +151,15 @@ function stringFailures({ at, value, fields }: Readable): readonly DeclarationFa
     return !isRequiredWithoutValue && !isMissing(value[field]) && typeof value[field] !== 'string';
   });
   return notStrings.map((field) => failure([...at, field], 'not-a-string', `${field} is a string`));
+}
+
+/** A `description` or a `message` says something: a string of spaces says nothing. */
+function blankFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
+  const blank = Object.keys(fields.nonBlank).filter((field) => {
+    const text = value[field];
+    return typeof text === 'string' && text.trim() === '';
+  });
+  return blank.map((field) => failure([...at, field], 'blank-text', `A ${field} is never blank`));
 }
 
 /** What is written as no object is the structure rule's finding. */

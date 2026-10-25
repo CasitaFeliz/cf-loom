@@ -2,6 +2,7 @@ import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapsho
 import type { Problem } from '../validation/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
+import { standardBodyProblemsOf } from './standard-bodies.ts';
 import { usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
@@ -9,13 +10,15 @@ type Located = { readonly at: Path; readonly text: string };
 
 /**
  * The first identity a Snapshot holds that is none, a name it uses and does not hold (a `ref`'s
- * def, a code an Endpoint or Guard lists, or a Guard), or a def that leads back to itself with no
- * node between; `undefined` when there is none.
+ * def, a code an Endpoint or Guard lists or a Standard Rejection names, or a Guard), a Standard
+ * Rejection's code with a body it does not have, or a def that leads back to itself with no node
+ * between; `undefined` when there is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
     ...identityProblemsOf(snapshot),
     ...unheldProblemsOf(snapshot),
+    ...standardBodyProblemsOf(snapshot),
     ...nodelessCycleProblemsOf(snapshot),
   ][0];
 }
@@ -87,6 +90,7 @@ function dependencyProblems(
 const unheld = {
   def: 'names a def the Snapshot does not hold',
   code: 'lists a code the Snapshot does not hold',
+  'standard-code': 'names a code the Snapshot does not hold',
   guard: 'names a Guard the Snapshot does not hold',
 } as const;
 
@@ -111,7 +115,12 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
-  const held = { def: snapshot.defs, code: snapshot.codes, guard: snapshot.guards };
+  const held = {
+    def: snapshot.defs,
+    code: snapshot.codes,
+    'standard-code': snapshot.codes,
+    guard: snapshot.guards,
+  };
   const missing = usesOf(snapshot).filter((use) => !Object.hasOwn(held[use.kind], use.name));
   return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));
 }

@@ -8,11 +8,12 @@ import {
   defineRejection,
   type Endpoint,
   notFound,
-  type StandardRejections,
+  type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
 
 const orderLocked = defineRejection({
@@ -67,7 +68,7 @@ const getOrder = defineEndpoint({
  */
 function contractPackageOf<
   const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
@@ -92,11 +93,14 @@ function contractPackageOf<
 }
 
 /** A Provider whose Definitions Package resolved its Standard Rejections to codes of its own. */
-const orders = contractPackageOf({ editOrder, getOrder }, {
-  invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
-  notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
-  notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
-} as const);
+const orders = contractPackageOf(
+  { editOrder, getOrder },
+  providedStandardRejections({
+    invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
+    notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
+    notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
+  }),
+);
 
 const ordersDependency = defineDependency({ provider: orders, endpoints: [editOrder, getOrder] });
 
@@ -276,7 +280,7 @@ describe('Standard Rejections', () => {
   });
 
   test('an issue code or part a later cf-loom adds arrives as its Unknown case', async () => {
-    const issue = { in: 'cookies', path: [], code: 'too_late', message: 'Too late' };
+    const issue = { in: 'cookies', path: [], code: 'too_deep', message: 'Too deep' };
     const orders = rejecting(400, {
       code: 'BAD_REQUEST',
       message: 'The request is invalid',
@@ -288,7 +292,7 @@ describe('Standard Rejections', () => {
     expect(outcome).toMatchObject({
       known: true,
       code: 'BAD_REQUEST',
-      body: { issues: [{ in: { unknown: 'cookies' }, code: { unknown: 'too_late' } }] },
+      body: { issues: [{ in: { unknown: 'cookies' }, code: { unknown: 'too_deep' } }] },
     });
   });
 });

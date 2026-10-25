@@ -35,7 +35,7 @@ function messageOf({ identity, name, event }: PublishedVersion): AsyncApiObject 
   return definedOf({
     name,
     title: identity,
-    description: event.description === '' ? undefined : event.description,
+    description: event.description,
     headers: brokerHeadersRef,
     payload: payloadOf(event),
   });

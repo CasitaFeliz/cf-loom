@@ -13,16 +13,24 @@ export type Grammar = {
 /** The grammar of a Service, Application, Definitions Package or Group name. */
 export const kebabCase: Grammar = { name: 'kebab-case', pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ };
 
-/**
- * The grammar of an Endpoint, Guard or Subscription name, a path param's name and a recursion id.
- */
+/** The grammar of a path param's name and a recursion id. */
 export const camelCase: Grammar = { name: 'camelCase', pattern: /^[a-z][a-zA-Z0-9]*$/ };
 
-/** The grammar of an Endpoint, Guard or Subscription name: camelCase, and no reserved name. */
-export const elementName: Grammar = { ...camelCase, reserved: new Set<string>(reservedNames) };
+/**
+ * The grammar of an Endpoint, Guard or Subscription name: camelCase words, each capital starting
+ * a word of lower-case letters and digits, and no reserved name.
+ */
+export const elementName: Grammar = {
+  name: 'camelCase words',
+  pattern: /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$/,
+  reserved: new Set<string>(reservedNames),
+};
 
-/** The grammar of a Message name. */
-export const pascalCase: Grammar = { name: 'PascalCase', pattern: /^[A-Z][a-zA-Z0-9]*$/ };
+/** The grammar of a Message name: PascalCase words, each capital starting a word. */
+export const pascalCase: Grammar = {
+  name: 'PascalCase words',
+  pattern: /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)*$/,
+};
 
 /** The grammar of a Rejection code. */
 export const upperSnakeCase: Grammar = {
@@ -38,4 +46,15 @@ export function follows(grammar: Grammar, value: unknown): value is string {
 /** Whether a name the grammar's pattern matches is a word it refuses. */
 export function isReserved(grammar: Grammar, value: string): boolean {
   return grammar.reserved?.has(value) ?? false;
+}
+
+/** A name re-spelled so each run of capitals is one word, `getURL` as `getUrl`. */
+export function wordsOf(name: string): string {
+  return name.replace(/([A-Z]{2,})([a-z]?)/g, (_, run: string, next: string) =>
+    next === '' ? titled(run) : `${titled(run.slice(0, -1))}${run.slice(-1)}${next}`,
+  );
+}
+
+function titled(capitals: string): string {
+  return `${capitals.charAt(0)}${capitals.slice(1).toLowerCase()}`;
 }

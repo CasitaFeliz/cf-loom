@@ -9,6 +9,7 @@ import {
 } from '../schema-code/index.ts';
 import {
   headerOf,
+  importSpecifierOf,
   moduleTextOf,
   namedImportOf,
   relativeSpecifierOf,
@@ -18,12 +19,12 @@ import type { MessageHandled } from './handled.ts';
 import { type Readable, readerSchemasOf } from './reader-schemas.ts';
 import type { StubTarget } from './service-files.ts';
 
-/** Where a Command's Message Version or a Subscription is exported under its name in code. */
+/** Where a Command's Message Version or a Subscription is exported. */
 type MessageAt = (message: MessageHandled) => FileExport;
 
 /**
- * Where each Command's Message Version and Subscription of a Service is exported under its name
- * in code, or a line for every one that is not.
+ * Where each Command's Message Version and Subscription of a Service is exported, or a line for
+ * every one that nothing exports.
  */
 export type MessageExports =
   | { readonly kind: 'located'; readonly atOf: MessageAt }
@@ -31,7 +32,7 @@ export type MessageExports =
 
 /**
  * The text of the readers file, or the lines naming each Command's Message Version or Subscription
- * not exported under its name in code.
+ * that nothing exports.
  */
 export type ReadersText =
   | { readonly kind: 'text'; readonly text: string }
@@ -70,7 +71,7 @@ function tableMemberOf(handled: MessageHandled): { readonly key: TableKey; reado
 export function pairingTargetOf(handled: MessageHandled, readersFile: string): StubTarget {
   const imported = { kind: 'file', path: readersFile, name: readersTable } as const;
   const { key, name } = tableMemberOf(handled);
-  return { imported, expression: `${readersTable}.${key}.${name}` };
+  return { imported, local: readersTable, members: [key, name] };
 }
 
 /**
@@ -175,7 +176,7 @@ function pairedImportsOf(pairings: readonly Pairing[], readersFile: string): rea
   for (const { at, local } of pairings) {
     const specifier = relativeSpecifierOf(readersFile, at.path);
     const names = namesBySpecifier.get(specifier) ?? [];
-    names.push(`${at.name} as ${local}`);
+    names.push(importSpecifierOf(at.name, local));
     namesBySpecifier.set(specifier, names);
   }
   return [...namesBySpecifier].map(([specifier, names]) => ({

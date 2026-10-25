@@ -12,6 +12,7 @@ import { messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { FakeProviderError, fakeEvent } from './index.ts';
 
 const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
@@ -34,11 +35,7 @@ const payments = {
   version: '5.1.0',
   endpoints: {},
   events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
+  standardRejections: providedStandardRejections(),
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 

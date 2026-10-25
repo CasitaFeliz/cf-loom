@@ -30,6 +30,7 @@ export type {
   GroupedField,
   GroupedOf,
   ProvidedEvent,
+  Refusal,
   ReservedCode,
 } from '../declarations/index.ts';
 export {
@@ -154,7 +155,6 @@ export type {
   InvalidInputBody,
   Matchable,
   ReceivedHeaders,
-  ReceivedInvalidInputBody,
   RejectionEnvelope,
   SentRejection,
   SentSuccess,
@@ -180,7 +180,6 @@ export {
   headerValuesOf,
   internalError,
   invalidInputBodyOf,
-  invalidInputRejectionOf,
   invalidInputResponseOf,
   isBrokerPrefix,
   isIdHeaderValue,

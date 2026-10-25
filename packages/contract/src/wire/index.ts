@@ -39,10 +39,9 @@ export type { Committed, RejectionEnvelope } from './envelopes.ts';
 export { committedValues, internalError, receivedEnvelopeOf, reservedFaults } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
 export { kebabCaseOf } from './identifiers.ts';
-export type { InputIssue, InvalidInputBody, ReceivedInvalidInputBody } from './invalid-input.ts';
+export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
 export {
   invalidInputBodyOf,
-  invalidInputRejectionOf,
   invalidInputResponseOf,
   rejectionBodyReaderOf,
 } from './invalid-input.ts';

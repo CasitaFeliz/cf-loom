@@ -9,7 +9,7 @@ import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { groupFailures } from './groups.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
-import { messageFailures } from './messages.ts';
+import { messageBodyFailures, messageFailures } from './messages.ts';
 import { nameFailures } from './name-grammars.ts';
 import { packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
@@ -125,6 +125,7 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
     ...rejectionBodyFailures(declarations, nodes),
+    ...messageBodyFailures(declarations, nodes),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];
 }

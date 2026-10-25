@@ -7,7 +7,7 @@ import {
   type MessageHandled,
   pairingNameOf,
 } from '../service-code/index.ts';
-import { type Located, locatedUnderOf } from './exported-declarations.ts';
+import { exportedAtOf, type Located } from './exported-declarations.ts';
 
 /** A Command's Message Version or a Subscription, and where it is exported. */
 type LocatedMessage = Located<FileExport> & { readonly handled: MessageHandled };
@@ -17,8 +17,7 @@ type RefusedMessage = Extract<LocatedMessage, { readonly kind: 'refused' }>;
 
 /**
  * Where the valid root's Commands' Message Versions, Retired ones included, and Subscriptions are
- * exported, each under the name it has in code: Commands, then Subscriptions, each in code point
- * order of that name.
+ * exported: Commands, then Subscriptions, each in code point order of its name in code.
  */
 export function messageExportsOf(
   { validated }: BuiltService,
@@ -50,7 +49,7 @@ function locatedMessageOf(
   exportsOf: ExportsOf,
 ): LocatedMessage {
   const label = elementLabelOf(handled);
-  const located = locatedUnderOf(label, pairingNameOf(handled), exportsOf(declaration));
+  const located = exportedAtOf(label, exportsOf(declaration));
   return { ...located, handled };
 }
 

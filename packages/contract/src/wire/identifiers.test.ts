@@ -6,8 +6,8 @@ describe('kebabCaseOf', () => {
     ['getOrder', 'get-order'],
     ['chargeOnCreated', 'charge-on-created'],
     ['chargeCardV1', 'charge-card-v1'],
-    ['settle2x', 'settle2x'],
-    ['settle2X', 'settle2-x'],
+    ['settle2xy', 'settle2xy'],
+    ['settle2Xy', 'settle2-xy'],
     ['order', 'order'],
   ])('%s is %s in kebab-case', (name, kebab) => {
     const written = kebabCaseOf(name);

@@ -33,9 +33,9 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
     generator: 'test',
     definitions: {},
     standardRejections: {
-      invalidInput: { origin: 'cf-loom', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-      notFound: { origin: 'cf-loom', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { origin: 'cf-loom', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+      invalidInput: 'INVALID_INPUT',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
     },
     defs: {},
     endpoints: {},

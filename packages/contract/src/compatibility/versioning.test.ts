@@ -102,9 +102,9 @@ const serviceHeading = {
   generator: '@cf-loom/cli@2.1.0',
   definitions: {},
   standardRejections: {
-    invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-    notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+    invalidInput: 'INVALID_INPUT',
+    notFound: 'NOT_FOUND',
+    notImplemented: 'NOT_IMPLEMENTED',
   },
   defs: {},
   guards: {},

@@ -28,6 +28,7 @@ export {
   kebabCase,
   pascalCase,
   upperSnakeCase,
+  wordsOf,
 } from './grammars.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';
@@ -67,9 +68,12 @@ export type { ReservedCode } from './reserved-codes.ts';
 export { isReservedCode } from './reserved-codes.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
+export type { Refusal } from './rules.ts';
+export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,
+  ProvidedStandardRejections,
   StandardRejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,
@@ -88,4 +92,4 @@ export {
   standardRejectionNames,
 } from './standard-rejections.ts';
 export type { Subscription } from './subscription.ts';
-export { defineSubscription } from './subscription.ts';
+export { commandSubscribedRefusal, defineSubscription } from './subscription.ts';

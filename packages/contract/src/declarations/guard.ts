@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { HeaderNamesRule } from './http.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule, ReservedNameRule } from './rules.ts';
+import type { DeclaredFieldsRule, RejectionsOnceRule, ReservedNameRule } from './rules.ts';
 
 type GuardDemandsRefusal = 'A Guard demands only headers and query';
 
@@ -45,6 +45,10 @@ type DemandedHeadersRule<Declaration extends GuardDeclaration> = {
   };
 };
 
+type RejectionsRule<Declaration extends GuardDeclaration> = {
+  readonly rejections?: RejectionsOnceRule<Declaration['rejections']>;
+};
+
 type DemandsFieldsRule<Declaration extends GuardDeclaration> = {
   readonly demands?: DeclaredFieldsRule<NonNullable<Declaration['demands']>, Demands>;
 };
@@ -53,6 +57,7 @@ type DemandsFieldsRule<Declaration extends GuardDeclaration> = {
 export function defineGuard<const Declaration extends GuardDeclaration>(
   declaration: Declaration &
     DemandedHeadersRule<Declaration> &
+    RejectionsRule<Declaration> &
     NoInfer<
       ReservedNameRule<Declaration> &
         DeclaredFieldsRule<Declaration, GuardDeclaration> &

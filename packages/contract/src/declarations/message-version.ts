@@ -1,6 +1,6 @@
-/** Whether a value is a Message Version's version: a whole number from 1. */
+/** Whether a value is a Message Version's version: a safe integer from 1, so its text and `version - 1` are exact. */
 export function isMessageVersion(version: unknown): boolean {
-  return typeof version === 'number' && Number.isInteger(version) && version >= 1;
+  return typeof version === 'number' && Number.isSafeInteger(version) && version >= 1;
 }
 
 /** A Message Version's name in code, `orderCreatedV2`, which a Contract Package keys it by. */

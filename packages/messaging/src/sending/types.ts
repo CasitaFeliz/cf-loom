@@ -1,5 +1,5 @@
 import type { Command, Contract, Event } from '@cf-loom/contract';
-import type { GroupedOf } from '@cf-loom/contract/internal';
+import type { GroupedOf, Refusal } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 
 /** What a `publish` or `send` call may add: the Fact id its Messages share, random when left out, and transport headers. */
@@ -20,18 +20,26 @@ type LiveOf<M> = Exclude<M, { readonly lifecycle: 'retired' }>;
 /** The names of the Events a root publishes: those with a version not Retired. */
 type PublishedNameOf<C extends Contract> = LiveOf<OwnEventOf<C>>['name'];
 
-/** One body per live version of an Event, `v<n>`, required; a Retired version's key is `never`, so passing one is a type error even outside an object literal. */
-type PublishedBodiesOf<C extends Contract, Name> = {
+/** Every version of the named Event, Retired included. */
+type VersionsOf<C extends Contract, Name> = Extract<OwnEventOf<C>, { readonly name: Name }>;
+
+/** One required body per live version of the named Event, keyed `v<n>`. */
+type LiveBodiesOf<C extends Contract, Name> = {
+  readonly [E in LiveOf<VersionsOf<C, Name>> as `v${E['version']}`]: core.output<E['body']>;
+};
+
+/** A Retired version's key, `never`, so passing one is a type error even outside an object literal. */
+type RetiredKeysOf<C extends Contract, Name> = {
   readonly [E in Extract<
-    LiveOf<OwnEventOf<C>>,
-    { readonly name: Name }
-  > as `v${E['version']}`]: core.output<E['body']>;
-} & {
-  readonly [E in Extract<
-    OwnEventOf<C>,
-    { readonly name: Name; readonly lifecycle: 'retired' }
+    VersionsOf<C, Name>,
+    { readonly lifecycle: 'retired' }
   > as `v${E['version']}`]?: never;
 };
+
+/** What `publish` takes for an Event: its live versions' bodies, unless a version is typed `number`. */
+type PublishedBodiesOf<C extends Contract, Name> = number extends VersionsOf<C, Name>['version']
+  ? Refusal<'An Event version typed number keys no body: declare the version as one literal'>
+  : LiveBodiesOf<C, Name> & RetiredKeysOf<C, Name>;
 
 /** The Message Versions that are Active: neither Deprecated nor Retired. */
 type ActiveOf<M> = Exclude<M, { readonly lifecycle: 'deprecated' | 'retired' }>;

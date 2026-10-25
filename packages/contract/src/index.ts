@@ -17,6 +17,7 @@ export type {
   Lifecycle,
   Method,
   ProvidedContextOf,
+  ProvidedStandardRejections,
   QualifiedAttachment,
   QualifierOf,
   Rejection,

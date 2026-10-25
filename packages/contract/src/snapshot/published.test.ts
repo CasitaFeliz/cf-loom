@@ -15,6 +15,34 @@ import {
   type SubscriptionSnapshot,
 } from '../internal/index.ts';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
+const standardCodes = {
+  [invalidInputCode]: {
+    origin: 'standard',
+    status: 400,
+    message: 'Invalid',
+    body: { type: 'object', fields: {} },
+    removed: false,
+  },
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    body: null,
+    removed: false,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    body: null,
+    removed: false,
+  },
+} as const;
+
 function aPublishedService(
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
@@ -26,16 +54,16 @@ function aPublishedService(
     generator: '@cf-loom/cli@2.1.0',
     definitions: {},
     standardRejections: {
-      invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-      notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+      invalidInput: invalidInputCode,
+      notFound: notFoundCode,
+      notImplemented: notImplementedCode,
     },
     defs: {},
     endpoints: {},
     events: {},
     commands: {},
     guards: {},
-    codes: {},
+    codes: standardCodes,
     subscriptions: {},
     dependencies: {},
     ...fields,

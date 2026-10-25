@@ -91,7 +91,7 @@ describe('validateContract: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        'An Endpoint name is camelCase: list_orders',
+        'An Endpoint name is camelCase words: list_orders',
       ),
     );
   });
@@ -101,8 +101,79 @@ describe('validateContract: name grammars', () => {
     const endpoint = defineEndpoint({ ...listing, guards: [apiKey] });
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
-      failed(['guards', 'ApiKey', 'name'], 'name-grammar', 'A Guard name is camelCase: ApiKey'),
+      failed(
+        ['guards', 'ApiKey', 'name'],
+        'name-grammar',
+        'A Guard name is camelCase words: ApiKey',
+      ),
     );
+  });
+
+  test.each([
+    ['getURL', 'getUrl'],
+    ['getURLs', 'getUrLs'],
+    ['URLs', undefined],
+    ['listIDs', undefined],
+    ['getX', undefined],
+    ['settle2X', undefined],
+  ])('an Endpoint named %s, with a capital that starts no word, fails', (name, written) => {
+    const endpoint = defineEndpoint({ ...listing, name });
+    const hint = written === undefined ? '' : ` (write ${written})`;
+
+    expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        'name-grammar',
+        `An Endpoint name is camelCase words: ${name}${hint}`,
+      ),
+    );
+  });
+
+  test('a Guard named useAPI, whose last capital starts no word, fails with the name to write', () => {
+    const apiKey = defineGuard({ name: 'useAPI', description: 'A key' });
+    const endpoint = defineEndpoint({ ...listing, guards: [apiKey] });
+
+    expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
+      failed(
+        ['guards', 'useAPI', 'name'],
+        'name-grammar',
+        'A Guard name is camelCase words: useAPI (write useApi)',
+      ),
+    );
+  });
+
+  test.each(['getUrl', 'getOrderById', 'createOrderV2', 'settle2', 'settle2Xy', 'a'])(
+    'an Endpoint named %s, whose every capital starts a word, validates',
+    (name) => {
+      const endpoint = defineEndpoint({ ...listing, name });
+
+      expect(validateGroups([aGroup('orders', [endpoint])]).kind).toBe('valid');
+    },
+  );
+
+  test('a path param written :orderID, which is never re-spelled, validates', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:orderID',
+      // biome-ignore lint/style/useNamingConvention: the param under test ends in a capital
+      input: { params: z.object({ orderID: z.string() }) },
+    });
+
+    expect(validateGroups([aGroup('orders', [endpoint])]).kind).toBe('valid');
+  });
+
+  test('a recursion id written nodeID, which is never re-spelled, validates', () => {
+    const node = z
+      .object({
+        value: z.string(),
+        get children() {
+          return z.array(node);
+        },
+      })
+      .meta({ id: 'nodeID' });
+    const endpoint = defineEndpoint({ ...listing, success: { status: 200, body: node } });
+
+    expect(validateGroups([aGroup('orders', [endpoint])]).kind).toBe('valid');
   });
 
   test.each(['delete', 'yield', 'await', 'eval', 'default', 'handle'])(
@@ -114,7 +185,7 @@ describe('validateContract: name grammars', () => {
         failed(
           ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
           'name-grammar',
-          `An Endpoint name is camelCase and no reserved word: ${name}`,
+          `An Endpoint name is camelCase words and no reserved word: ${name}`,
         ),
       );
     },
@@ -122,7 +193,6 @@ describe('validateContract: name grammars', () => {
 
   test.each([
     'then',
-    'toJSON',
     'constructor',
     'hasOwnProperty',
     'isPrototypeOf',
@@ -137,7 +207,20 @@ describe('validateContract: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        `An Endpoint name is camelCase and no reserved word: ${name}`,
+        `An Endpoint name is camelCase words and no reserved word: ${name}`,
+      ),
+    );
+  });
+
+  test('an Endpoint named toJSON, which breaks the words and is a name JavaScript calls, reads both', () => {
+    // @ts-expect-error a literal reserved name is a type error
+    const endpoint = defineEndpoint({ ...listing, name: 'toJSON' });
+
+    expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
+      failed(
+        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        'name-grammar',
+        'An Endpoint name is camelCase words and no reserved word: toJSON (write toJson)',
       ),
     );
   });
@@ -175,7 +258,7 @@ describe('validateContract: name grammars', () => {
         failed(
           ['guards', name, 'name'],
           'name-grammar',
-          `A Guard name is camelCase and no reserved word: ${name}`,
+          `A Guard name is camelCase words and no reserved word: ${name}`,
         ),
       );
     },

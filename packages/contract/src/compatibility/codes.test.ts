@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { defineContract, defineEndpoint, defineGroup } from '../index.ts';
 import {
   type Change,
   type ChangeSite,
@@ -15,6 +17,9 @@ import {
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
+  schemaOriginsOf,
+  snapshotOf,
+  validateContract,
   versionBumpOf,
 } from '../internal/index.ts';
 
@@ -24,9 +29,9 @@ const identity = 'GET /orders/{}';
 const orderLocked = 'ORDER_LOCKED';
 const orderGone = 'ORDER_GONE';
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 const heading = {
   format: 1,
@@ -490,10 +495,6 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     });
     const proposed = aProposed({
       ...answering(notFound),
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, status: 410 },
-      },
       codes: { [notFound]: aCode({ origin: 'standard', status: 410 }) },
     });
 
@@ -509,10 +510,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     });
     const proposed = aProposed({
       ...answering(orderGone),
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
@@ -572,10 +570,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     });
     const proposed = aProposed({
       ...answering(orderGone),
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
@@ -584,6 +579,70 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     expect(changes).toEqual([breaking(codeSite(orderGone, 'public'), statusChanged(409, 404))]);
   });
 });
+
+describe('compatibilityReportOf, the invalid-input body a Service generates', () => {
+  test('a later cf-loom adding an issue code to it is Additive: Callers read the code as an Open Enum', () => {
+    const invalidInput = 'INVALID_INPUT';
+    const generated = generatedCodeOf(invalidInput);
+    const baseline = aBaseline({
+      ...publishedAnswering(invalidInput),
+      codes: { [invalidInput]: generated },
+    });
+    const proposed = aProposed({
+      ...answering(invalidInput),
+      codes: { [invalidInput]: withIssueCode(generated, 'too_deep') },
+    });
+
+    const changes = reportOf(baseline, proposed).changes;
+
+    expect(changes).toEqual([
+      expect.objectContaining({
+        site: codeSite(invalidInput, 'public'),
+        difference: expect.objectContaining({
+          shape: { kind: 'value-added', value: 'too_deep', enum: 'open' },
+        }),
+        class: 'additive',
+        verdict: 'allowed',
+      }),
+    ]);
+  });
+});
+
+function generatedCodeOf(code: string): CodeSnapshot {
+  const ping = defineEndpoint({
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Ping',
+    success: { status: 200, body: z.object({ ok: z.boolean() }) },
+  });
+  const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
+  const root = defineContract({ name: 'ping-service', groups: [group] });
+  const validated = validateContract(root, {
+    originOf: schemaOriginsOf([]),
+    packageName: 'ping-service',
+    exportsOf: () => [],
+  });
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const context = { generator: '@cf-loom/cli@2.1.0', packages: [], committed: undefined, now: 0 };
+  const snapshot = snapshotOf(validated, context);
+  const generated = snapshot.kind === 'service' ? snapshot.codes[code] : undefined;
+  if (generated === undefined) {
+    throw new Error(`The fixture holds no ${code}`);
+  }
+  return generated;
+}
+
+function withIssueCode(code: CodeSnapshot, added: string): CodeSnapshot {
+  const holdsIssueCodes = (value: unknown) =>
+    Array.isArray(value) && value.includes('unrecognized_key');
+  return JSON.parse(JSON.stringify(code), (key, value) =>
+    key === 'values' && holdsIssueCodes(value) ? [...value, added].sort() : value,
+  );
+}
 
 describe('compatibilityReportOf, the order of a Service’s Changes', () => {
   test('codes come after Endpoints, Events and Commands, by code in code point order, status before body', () => {

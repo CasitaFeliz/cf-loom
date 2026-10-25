@@ -1,4 +1,9 @@
-import { isRejectionStatus, isReservedCode } from '../declarations/index.ts';
+import {
+  isRejection,
+  isRejectionStatus,
+  isReservedCode,
+  isStandardRejection,
+} from '../declarations/index.ts';
 import { type Path, type SchemaNode, shapeKey } from '../walker/index.ts';
 import {
   type Declarations,
@@ -6,12 +11,14 @@ import {
   isWithoutValue,
   type LocatedCode,
   type LocatedRejection,
+  listOf,
   type ResolvedStandard,
   resolvedStandards,
   slotAt,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { repeated } from './names.ts';
 import type { Nodes } from './schemas.ts';
 import {
   distinctCodeFailures,
@@ -35,6 +42,8 @@ export function rejectionFailures(declarations: Declarations): readonly Declarat
     ),
     ...endpoints.flatMap(listedStandardFailures),
     ...guards.flatMap(guardStandardFailures),
+    ...endpoints.flatMap(({ at, endpoint }) => listedOnceFailures(at, endpoint.rejections)),
+    ...guards.flatMap(({ at, guard }) => listedOnceFailures(at, guard.rejections)),
     ...distinctCodeFailures(resolved),
     ...redefinitionFailures(rejections, resolved),
     ...onceFailures(declarations),
@@ -64,6 +73,27 @@ function statusFailures({ at, rejection }: LocatedRejection): readonly Declarati
   }
   const message = `A Rejection's status is 4xx: ${textOf(rejection.status)}`;
   return [failure([...at, 'status'], 'rejection-status', message)];
+}
+
+/** A list of Rejections names each once: a declared one by its code, a Standard one by its name. */
+function listedOnceFailures(at: Path, rejections: unknown): readonly DeclarationFailure[] {
+  const listed = listOf(rejections).map((rejection, index) => ({
+    index,
+    key: listedKeyOf(rejection),
+  }));
+  const named = listed.filter(
+    (entry): entry is { index: number; key: string } => entry.key !== undefined,
+  );
+  return repeated(named, ({ key }) => key).map(({ index, key }) =>
+    failure([...at, 'rejections', index], 'rejection-once', `${key} is listed twice`),
+  );
+}
+
+function listedKeyOf(rejection: unknown): string | undefined {
+  if (isStandardRejection(rejection)) {
+    return textOf(rejection.name);
+  }
+  return isRejection(rejection) && typeof rejection.code === 'string' ? rejection.code : undefined;
 }
 
 function reservedFailures(at: Path, code: unknown): readonly DeclarationFailure[] {

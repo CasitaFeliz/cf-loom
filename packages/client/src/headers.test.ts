@@ -5,11 +5,12 @@ import {
   defineEndpoint,
   defineGroup,
   type Endpoint,
-  type StandardRejections,
+  type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
 
 const getOrder = defineEndpoint({
@@ -40,7 +41,7 @@ const ping = defineEndpoint({
  */
 function contractPackageOf<
   const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
@@ -64,11 +65,7 @@ function contractPackageOf<
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const;
+const defaultStandards = providedStandardRejections();
 
 const orders = contractPackageOf({ getOrder, ping }, defaultStandards);
 
