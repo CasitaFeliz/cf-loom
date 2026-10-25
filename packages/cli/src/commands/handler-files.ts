@@ -24,13 +24,12 @@ export function mappedPathsOf({
   return handlerPaths.filter(({ isMapped }) => isMapped);
 }
 
-/** The Handler paths the Handler map imports where nothing is, not even a link. */
-export function missingHandlerPathsOf(
+/** The Handlers the Handler map imports whose paths hold nothing, not even a link. */
+export function missingHandlersOf(
   service: Pick<PlacedService, 'project' | 'handlerPaths'>,
-): readonly string[] {
+): readonly HandlerPath[] {
   const { directory } = service.project;
-  const paths = mappedPathsOf(service).map(({ path }) => path);
-  return paths.filter((path) => isNothingAt(join(directory, path)));
+  return mappedPathsOf(service).filter(({ path }) => isNothingAt(join(directory, path)));
 }
 
 /** A line for every Handler path that something other than a file holds. */

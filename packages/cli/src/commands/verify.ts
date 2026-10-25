@@ -9,12 +9,7 @@ import {
 } from '../project/index.ts';
 import { comparedOf } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
-import {
-  missingHandlerPathsOf,
-  noFileLinesOf,
-  type PlacedService,
-  placedOf,
-} from './handler-files.ts';
+import { missingHandlersOf, noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts';
 import { orphanLinesOf } from './orphans.ts';
 import { serviceFilesOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
@@ -93,7 +88,7 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
 /** What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them. */
 function serviceFailuresOf(service: PlacedService): readonly string[] {
   return [
-    ...missingHandlerPathsOf(service).map((path) => `${path} is missing: run cf-loom generate`),
+    ...missingHandlersOf(service).map(({ path }) => `${path} is missing: run cf-loom generate`),
     ...noFileLinesOf(service),
   ];
 }

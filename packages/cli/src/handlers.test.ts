@@ -154,6 +154,21 @@ function orphanLine(path: string): string {
   return `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it`;
 }
 
+/** The files of `aService()` changed so its Endpoint `getOrder` is named `fetchOrder`. */
+function getOrderRenamed(): Readonly<Record<string, string>> {
+  const service = aService();
+  const endpoint = 'src/contract/endpoints/orders/get-order.endpoint.ts';
+  const root = 'src/contract/index.ts';
+  return {
+    [endpoint]: (service[endpoint] ?? '').replaceAll('getOrder', 'fetchOrder'),
+    [root]: (service[root] ?? '').replaceAll('getOrder', 'fetchOrder'),
+  };
+}
+
+/** The line for the Handler `getOrder` left behind when it is renamed `fetchOrder`. */
+const movedGetOrderLine =
+  'src/endpoints/orders/get-order.handler.ts names no declared Endpoint: move it to src/endpoints/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else list its declaration in a Group or delete it';
+
 const apiKeyGuard = lines([
   "import { defineGuard } from '@cf-loom/contract';",
   "import { z } from 'zod';",
@@ -1637,7 +1652,21 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Handler file no declared Endpoint or Guard names exits 1 naming it', () => {
+  test('a Guard’s Handler that no Guard names ends its line with delete it', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, { 'src/guards/old-key.handler.ts': "export default 'old';\n" });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/guards/old-key.handler.ts names no declared Guard: delete it\n',
+    });
+  });
+
+  test('a Guard’s Handler that no Guard names offers the Guard that lacks its Handler', () => {
     const project = aProject({
       ...aService(),
       'src/guards/old-key.handler.ts': "export default 'old';\n",
@@ -1649,7 +1678,75 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        "src/guards/old-key.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        'src/guards/old-key.handler.ts names no declared Guard: move it to src/guards/api-key.handler.ts if guards.apiKey replaces it, else delete it\n',
+    });
+  });
+
+  test('a Handler of an Endpoint renamed is an orphan that the line says to move', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, getOrderRenamed());
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${movedGetOrderLine}\n`,
+    });
+  });
+
+  test('a Handler file that two Endpoints lack theirs for lists both as where to move it', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    rmSync(join(project, 'src/endpoints/orders/create-order.handler.ts'));
+    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
+    write(project, { 'src/endpoints/orders/old-order.handler.ts': "export default 'old';\n" });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/endpoints/orders/old-order.handler.ts names no declared Endpoint: move it to the Handler path of the Element that replaces it, endpoints.createOrder (src/endpoints/orders/create-order.handler.ts) or endpoints.getOrder (src/endpoints/orders/get-order.handler.ts), else list its declaration in a Group or delete it\n',
+    });
+  });
+
+  test('a Handler file that fits the templates of two kinds names both', () => {
+    const layout = lines([
+      '{',
+      "  endpoint: 'src/{group}/{name}.handler.ts',",
+      "  subscription: 'src/{group}/{name}.handler.ts',",
+      '}',
+    ]).trimEnd();
+    const project = aProject(withLayout(aMessagingService(), layout));
+    cfLoom(project, 'generate');
+    write(project, { 'src/payments/old.handler.ts': "export default 'old';\n" });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/payments/old.handler.ts names no declared Endpoint or Subscription: list its declaration in a Group or delete it\n',
+    });
+  });
+
+  test('a Handler file beside the Endpoints under a variable first folder is claimed', () => {
+    const layout = "{ endpoint: 'src/{group}/{name}.handler.ts' }";
+    const project = aProject(withLayout(aService(), layout));
+    cfLoom(project, 'generate');
+    write(project, { 'src/lib/error.handler.ts': 'export const onError = () => {};\n' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/lib/error.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
     });
   });
 
@@ -1666,17 +1763,19 @@ describe('cf-loom generate: what it refuses', () => {
     expect(read(project, 'src/handlers.generated.ts')).not.toContain('listOrders');
   });
   test.each([
-    'src/commands/payments/capture-card.v1.handler.ts',
-    'src/subscriptions/payments/old-audit.handler.ts',
-  ])('a Handler file %s that nothing declared names exits 1 naming it', (path) => {
-    const project = aProject({ ...aMessagingService(), [path]: "export default 'old';\n" });
+    ['src/commands/payments/capture-card.v1.handler.ts', "Command's Message Version"],
+    ['src/subscriptions/payments/old-audit.handler.ts', 'Subscription'],
+  ])('a Handler file %s that nothing declared names exits 1 naming it', (path, kind) => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    write(project, { [path]: "export default 'old';\n" });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n`,
+      stderr: `${path} names no declared ${kind}: list its declaration in a Group or delete it\n`,
     });
   });
 
@@ -2199,7 +2298,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr:
-        "src/endpoints/orders/old-order.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        'src/endpoints/orders/old-order.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
     });
   });
 
@@ -2399,7 +2498,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr:
-        "src/subscriptions/payments/old-audit.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        'src/subscriptions/payments/old-audit.handler.ts names no declared Subscription: list its declaration in a Group or delete it\n',
     });
   });
 });
@@ -2535,7 +2634,7 @@ describe('cf-loom generate: linked folders and other runs', () => {
       ...aService(),
       'elsewhere/old.handler.ts': "export default 'old';\n",
     });
-    mkdirSync(join(project, 'src/endpoints'), { recursive: true });
+    cfLoom(project, 'generate');
     symlinkSync(join(project, 'elsewhere'), join(project, 'src/endpoints/other'), 'dir');
 
     const ran = cfLoom(project, 'generate');
@@ -2544,7 +2643,7 @@ describe('cf-loom generate: linked folders and other runs', () => {
       status: 1,
       stdout: '',
       stderr:
-        "src/endpoints/other/old.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        'src/endpoints/other/old.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
     });
   });
 
@@ -2897,7 +2996,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
       status: 1,
       stdout: '',
       stderr:
-        "src/commands/payments/charge-card.v2.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        "src/commands/payments/charge-card.v2.handler.ts names no declared Command's Message Version: move it to src/commands/orders/charge-card.v2.handler.ts if commands.ChargeCard@2 replaces it, else list its declaration in a Group or delete it\n",
     });
   });
 
@@ -2909,18 +3008,17 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     const ran = cfLoom(project, 'generate');
 
+    const moveCommand =
+      'move it to the Handler path of the Element that replaces it, commands.ChargeCard@1 (src/commands/billing/charge-card.v1.handler.ts) or commands.ChargeCard@2 (src/commands/billing/charge-card.v2.handler.ts), else list its declaration in a Group or delete it';
+    const moveSubscription =
+      'move it to the Handler path of the Element that replaces it, subscriptions.auditCreated (src/subscriptions/billing/audit-created.handler.ts) or subscriptions.notifyOnSettled (src/subscriptions/billing/notify-on-settled.handler.ts), else list its declaration in a Group or delete it';
     expect(ran.status).toBe(1);
-    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual(
-      [
-        'src/commands/payments/charge-card.v1.handler.ts',
-        'src/commands/payments/charge-card.v2.handler.ts',
-        'src/subscriptions/payments/audit-created.handler.ts',
-        'src/subscriptions/payments/notify-on-settled.handler.ts',
-      ].map(
-        (path) =>
-          `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it`,
-      ),
-    );
+    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual([
+      `src/commands/payments/charge-card.v1.handler.ts names no declared Command's Message Version: ${moveCommand}`,
+      `src/commands/payments/charge-card.v2.handler.ts names no declared Command's Message Version: ${moveCommand}`,
+      `src/subscriptions/payments/audit-created.handler.ts names no declared Subscription: ${moveSubscription}`,
+      `src/subscriptions/payments/notify-on-settled.handler.ts names no declared Subscription: ${moveSubscription}`,
+    ]);
   });
 
   test('verify exits 0 when Message Handlers sit under their Groups', () => {
@@ -2961,7 +3059,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toContain(
-      "src/subscriptions/payments/audit-created.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+      'src/subscriptions/payments/audit-created.handler.ts names no declared Subscription: move it to src/subscriptions/orders/audit-created.handler.ts if subscriptions.auditCreated replaces it, else list its declaration in a Group or delete it\n',
     );
   });
 });
