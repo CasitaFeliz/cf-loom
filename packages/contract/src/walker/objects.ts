@@ -1,8 +1,9 @@
 import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
-import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
+import { byCanonicalJson } from './canonical-json.ts';
 import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
+import { shapeKey } from './shapes.ts';
 import {
   allWalked,
   failed,
@@ -136,13 +137,19 @@ function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]>
 
 function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
   const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
-  const differs = shared.some(
-    (key) => canonicalJson(left.fields[key]) !== canonicalJson(right.fields[key]),
-  );
+  const differs = shared.some((key) => !isSameField(left.fields[key], right.fields[key]));
   if (differs) {
     return notAllowed(at, refused.differingIntersection, { type: 'object' });
   }
-  const fields = { ...left.fields, ...right.fields };
+  const fields = { ...right.fields, ...left.fields };
   const nullable = left.nullable === true && right.nullable === true;
   return walked({ type: 'object', fields, ...(nullable && { nullable }) });
+}
+
+/** Two declarations of one field agree on whether it is required and on its shape alone. */
+function isSameField(left: Field | undefined, right: Field | undefined): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+  return left.required === right.required && shapeKey(left.schema) === shapeKey(right.schema);
 }

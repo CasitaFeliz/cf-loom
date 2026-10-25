@@ -1,3 +1,4 @@
+import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
 import { type DeclaredCheck, isConditional, refusedCheck } from './check-defs.ts';
 import type { NotAllowed, NumberNode, Path, Regex, SchemaNode, StringNode } from './nodes.ts';
@@ -22,14 +23,24 @@ export function constrain(
 ): Walked {
   const outline = outlineOf(walkedSchema);
   const constraints = constraintsOf(constraintOfType(outline.type), checks, at);
-  const failures = failuresOfConstraints(constraints, Object.keys(outline), at);
+  const constrainedOutline = constrained(outline, constraints);
+  const failures = [
+    ...failuresOfConstraints(constraints, Object.keys(outline), at),
+    ...emptinessFailuresOf(constrainedOutline, at),
+  ];
   if (walkedSchema.kind === 'not-allowed') {
-    return failed([...walkedSchema.failures, ...failures], constrained(outline, constraints));
+    return failed([...walkedSchema.failures, ...failures], constrainedOutline);
   }
   if (failures.length > 0) {
-    return failed(failures, constrained(outline, constraints));
+    return failed(failures, constrainedOutline);
   }
   return walked(constrained(walkedSchema.value, constraints));
+}
+
+/** Why the constrained node admits no value, as its bounds alone say. */
+function emptinessFailuresOf(outline: Outline, at: Path): readonly NotAllowed[] {
+  const refusal = emptyConstraintOf(outline);
+  return refusal === undefined ? [] : [{ kind: 'not-allowed', at, ...refusal }];
 }
 
 /** The constraint a check sets on a node of each type; one that takes no check refuses them all. */

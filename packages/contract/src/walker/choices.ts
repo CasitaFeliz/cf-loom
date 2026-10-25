@@ -39,6 +39,9 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
 export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
+  if (def.options.length === 0) {
+    return notAllowed(at, refused.emptyUnion, { type: 'union' });
+  }
   const options = allWalked(
     def.options.map((option, index) => walker.schema(option, [...at, 'options', index])),
   );
@@ -54,6 +57,10 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
 export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
+  const tagged: Outline = { type: 'tagged' };
+  if (def.options.length === 0) {
+    return notAllowed(at, refused.emptyDiscriminatedUnion, tagged);
+  }
   const variants = allWalked(
     def.options.map((option, index) => {
       const variantAt = [...at, 'variants', index];
@@ -66,7 +73,6 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
       return taggedVariant(variant, values, variantAt);
     }),
   );
-  const tagged: Outline = { type: 'tagged' };
   if (variants.kind === 'not-allowed') {
     return failed(variants.failures, tagged);
   }

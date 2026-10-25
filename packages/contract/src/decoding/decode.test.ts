@@ -30,6 +30,7 @@ import {
   type SchemaNode,
   snapshotOf,
   validateContract,
+  walkSchemas,
 } from '../internal/index.ts';
 
 const invalidInputCode = 'INVALID_INPUT';
@@ -1350,6 +1351,40 @@ describe('decodeSnapshot', () => {
       });
     });
 
+    test.each<[string, SchemaNode]>([
+      ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
+      ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
+      ['a number whose min passes its max', { type: 'number', min: 5, max: 3 }],
+      ['a number bounded exclusively at one value', { type: 'number', exclusiveMin: 5, max: 5 }],
+      ['a multipleOf of 0', { type: 'number', multipleOf: 0 }],
+      ['a negative string length', { type: 'string', min: -1 }],
+      ['a fractional array length', { type: 'array', items: stringNode, max: 1.5 }],
+    ])('%s is malformed at the node', (_name, node) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a']));
+    });
+
+    test('a node bounded at one value decodes', () => {
+      const result = serviceWith({ defs: { a: { type: 'number', min: 5, max: 5 } } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each<[string, object, string]>([
+      ['an enum without values', { type: 'enum', values: [], open: false }, 'values'],
+      ['a union without options', { type: 'union', options: [] }, 'options'],
+      [
+        'a tagged node without variants',
+        { type: 'tagged', discriminator: 'k', variants: {} },
+        'variants',
+      ],
+    ])('%s is malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
     test('only the first problem is reported, with its path', () => {
       const result = serviceWith({
         version: 'latest',
@@ -1543,3 +1578,133 @@ const formatOneFixture = `{
   "version": "3.4.0"
 }
 `;
+
+describe('walkSchemas and decodeSnapshot agree on bounds', () => {
+  type Drawn = { readonly schema: z.ZodType; readonly node: SchemaNode; readonly empty: boolean };
+
+  test('a node is refused by both exactly when its bounds admit no value', () => {
+    const next = seededNext(222);
+    for (let draw = 0; draw < 500; draw += 1) {
+      const { schema, node, empty } = aBoundedDraw(next);
+
+      const [walked] = walkSchemas([{ at: ['body'], schema }], () => undefined).located;
+      const decoded = serviceWith({ defs: { a: node } });
+
+      const label = `draw ${draw}: ${JSON.stringify(node)}`;
+      expect(walked?.walked.kind, label).toBe(empty ? 'not-allowed' : 'walked');
+      expect(decoded.kind, label).toBe(empty ? 'malformed' : 'decoded');
+    }
+  });
+
+  /** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+  function seededNext(seed: number): () => number {
+    let state = seed;
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 2 ** 32;
+    };
+  }
+
+  function pick<Value>(next: () => number, values: readonly Value[]): Value {
+    return values[Math.floor(next() * values.length)] as Value;
+  }
+
+  function aBoundedDraw(next: () => number): Drawn {
+    const kind = pick(next, ['number', 'string', 'array'] as const);
+    return kind === 'number' ? aNumberDraw(next) : aLengthDraw(next, kind);
+  }
+
+  /** A number's drawn bounds: each side inclusive, exclusive or absent, and a step or none. */
+  type NumberBounds = {
+    readonly lower: { readonly key: 'min' | 'exclusiveMin'; readonly value: number } | undefined;
+    readonly upper: { readonly key: 'max' | 'exclusiveMax'; readonly value: number } | undefined;
+    readonly step: number | undefined;
+  };
+
+  function aNumberDraw(next: () => number): Drawn {
+    const values = [-2, 0, 0.5, 3, 5, 5.5];
+    const lowerKey = pick(next, [undefined, 'min', 'exclusiveMin'] as const);
+    const upperKey = pick(next, [undefined, 'max', 'exclusiveMax'] as const);
+    const lowerValue = pick(next, values);
+    const upperValue = pick(next, values);
+    const bounds: NumberBounds = {
+      lower: lowerKey === undefined ? undefined : { key: lowerKey, value: lowerValue },
+      upper: upperKey === undefined ? undefined : { key: upperKey, value: upperValue },
+      step: pick(next, [undefined, -2, 0, 0.5, 3]),
+    };
+    return {
+      schema: numberSchemaOf(bounds),
+      node: numberNodeOf(bounds),
+      empty: admitsNone(bounds),
+    };
+  }
+
+  function numberSchemaOf({ lower, upper, step }: NumberBounds): z.ZodType {
+    let schema = z.number();
+    if (lower !== undefined) {
+      schema = lower.key === 'min' ? schema.gte(lower.value) : schema.gt(lower.value);
+    }
+    if (upper !== undefined) {
+      schema = upper.key === 'max' ? schema.lte(upper.value) : schema.lt(upper.value);
+    }
+    return step === undefined ? schema : schema.multipleOf(step);
+  }
+
+  function numberNodeOf({ lower, upper, step }: NumberBounds): SchemaNode {
+    return {
+      type: 'number',
+      ...(lower !== undefined && { [lower.key]: lower.value }),
+      ...(upper !== undefined && { [upper.key]: upper.value }),
+      ...(step !== undefined && { multipleOf: step }),
+    };
+  }
+
+  function admitsNone({ lower, upper, step }: NumberBounds): boolean {
+    if (step !== undefined && step <= 0) {
+      return true;
+    }
+    const low = lower && { value: lower.value, open: lower.key === 'exclusiveMin' };
+    const high = upper && { value: upper.value, open: upper.key === 'exclusiveMax' };
+    return !someNumberBetween(low, high);
+  }
+
+  /** Whether some number lies between two bounds, found by trying values around them. */
+  function someNumberBetween(
+    lower: { readonly value: number; readonly open: boolean } | undefined,
+    upper: { readonly value: number; readonly open: boolean } | undefined,
+  ): boolean {
+    const around = [lower?.value, upper?.value].filter((value) => value !== undefined);
+    const candidates = [0, ...around.flatMap((value) => [value - 0.1, value, value + 0.1])];
+    return candidates.some(
+      (candidate) =>
+        (lower === undefined ||
+          (lower.open ? candidate > lower.value : candidate >= lower.value)) &&
+        (upper === undefined || (upper.open ? candidate < upper.value : candidate <= upper.value)),
+    );
+  }
+
+  function aLengthDraw(next: () => number, kind: 'string' | 'array'): Drawn {
+    const lengths = [undefined, -1, 0, 1, 2.5, 3, 5];
+    const min = pick(next, lengths);
+    const max = pick(next, lengths);
+    let schema: z.ZodString | z.ZodArray<z.ZodString> =
+      kind === 'string' ? z.string() : z.array(z.string());
+    if (min !== undefined) {
+      schema = schema.min(min);
+    }
+    if (max !== undefined) {
+      schema = schema.max(max);
+    }
+    const node = {
+      ...(kind === 'string' ? { type: 'string' } : { type: 'array', items: stringNode }),
+      ...(min !== undefined && { min }),
+      ...(max !== undefined && { max }),
+    } as SchemaNode;
+    const declared = [min, max].filter((length) => length !== undefined);
+    const badLength = declared.some((length) => !Number.isInteger(length) || length < 0);
+    const lengthsBetween = Array.from({ length: 7 }, (_, length) => length).filter(
+      (length) => (min === undefined || length >= min) && (max === undefined || length <= max),
+    );
+    return { schema, node, empty: badLength || lengthsBetween.length === 0 };
+  }
+});

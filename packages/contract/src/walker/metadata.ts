@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { globalRegistry } from 'zod/v4/core';
+import { globalRegistry, safeParse } from 'zod/v4/core';
 import { camelCase, follows } from '../declarations/index.ts';
 import { isJsonValue } from './canonical-json.ts';
 import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
@@ -7,6 +7,7 @@ import {
   notAllowed,
   type Refused,
   refused,
+  refusedExample,
   refusedExamples,
   refusedMetaKey,
   refusedNonCamelCaseId,
@@ -58,6 +59,22 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
     return refusedBeside(metadata, result);
   }
   return annotated(result, metadata.value.annotations);
+}
+
+/**
+ * A walked node whose examples its own schema accepts, each parsed by that schema; a schema that
+ * failed to walk is never parsed, so no function of the author's runs.
+ */
+export function withExamplesParsed(schema: core.$ZodType, result: Walked, at: Path): Walked {
+  if (result.kind === 'not-allowed') {
+    return result;
+  }
+  const examples = result.value.examples ?? [];
+  const refusals = examples
+    .map((example, index) => ({ example, index }))
+    .filter(({ example }) => !safeParse(schema, example).success)
+    .map(({ index }) => notAllowed(at, refusedExample(index)));
+  return refusals.length === 0 ? result : failed(failuresOf(refusals), result.value);
 }
 
 function ownMetaOf(schema: core.$ZodType): Readonly<Record<string, unknown>> {

@@ -136,7 +136,7 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/proto',",
     "  visibility: 'public',",
     "  description: 'Proto',",
-    '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
+    '  input: { body: z.object({ b: z.json().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
     '  success: { status: 204 },',
     '});',
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",

@@ -1,3 +1,4 @@
+export { emptyConstraintOf } from './bounds.ts';
 export {
   byCodePoint,
   canonicalJson,

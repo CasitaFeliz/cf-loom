@@ -247,6 +247,30 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
+  test('an intersection whose shared field differs by its description alone keeps the left one', () => {
+    const left = z.object({ id: z.string().describe('A') });
+    const right = z.object({ id: z.string().describe('B'), total: z.number() });
+
+    expect(walkBody(z.intersection(left, right))).toEqual(
+      walkedTo({
+        type: 'object',
+        fields: {
+          id: { required: true, schema: { type: 'string', description: 'A' } },
+          total: { required: true, schema: amount },
+        },
+      }),
+    );
+  });
+
+  test('an intersection whose shared field is required on one side only fails', () => {
+    const left = z.object({ id: z.string() });
+    const right = z.object({ id: z.string().optional() });
+
+    expect(walkBody(z.intersection(left, right))).toEqual(
+      refusedAt(['body'], 'an intersection of objects whose shared keys differ', '.extend()'),
+    );
+  });
+
   const named = z.object({ name: z.string() });
   const hasToString = z.object({ toString: z.string() });
   test.each([

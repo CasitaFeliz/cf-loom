@@ -13,6 +13,14 @@ function walkedTo(node: SchemaNode) {
   return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
 }
 
+function refusedAt(at: readonly (string | number)[], construct: string) {
+  const failure = { kind: 'not-allowed', at, construct };
+  return {
+    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
+    defs: {},
+  };
+}
+
 describe('walkSchemas: strings', () => {
   test('a string is a string node', () => {
     expect(walkBody(z.string())).toEqual(walkedTo({ type: 'string' }));
@@ -105,11 +113,18 @@ describe('walkSchemas: strings', () => {
     expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
   });
 
-  test('a regex-built format is judged by its pattern alone, whatever function checks it', () => {
+  test('a regex-built format whose check is a function of the author fails, whatever its pattern', () => {
     const zodPattern = { pattern: z.regexes.hex } as object;
-    const hex = z.stringFormat('hex', (value) => z.regexes.hex.test(value), zodPattern);
+    const hex = z.stringFormat('hex', () => true, zodPattern);
 
-    expect(walkBody(hex)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
+    expect(walkBody(hex)).toEqual(refusedAt(['body'], 'z.stringFormat("hex")'));
+  });
+
+  test.each<[string, core.$ZodType]>([
+    ['z.stringFormat() with zod’s own regex', z.stringFormat('hex', z.regexes.hex)],
+    ['a zod/mini z.stringFormat() with zod’s own regex', zm.stringFormat('hex', z.regexes.hex)],
+  ])('%s is the hex format', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
   });
 
   test('the built package walks a format like the source', () => {

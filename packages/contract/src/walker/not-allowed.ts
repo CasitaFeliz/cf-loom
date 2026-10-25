@@ -51,6 +51,8 @@ export const refused = {
   readonly: { construct: '.readonly()' },
   numericEnum: { construct: 'numeric z.enum() values' },
   emptyEnum: { construct: 'a z.enum() or z.literal() without values' },
+  emptyUnion: { construct: 'a z.union() without options' },
+  emptyDiscriminatedUnion: { construct: 'a z.discriminatedUnion() without options' },
   optional: { construct: '.optional()' },
   nonoptional: { construct: '.nonoptional()' },
   null: { construct: 'z.null()', instead: nullableInstead },
@@ -61,6 +63,9 @@ export const refused = {
   nonStringId: { construct: '.meta({ id }) that is not a string' },
   nonStringDescription: { construct: '.meta({ description }) that is not a string' },
   nonFinite: { construct: 'a number that is not finite (NaN or Infinity)' },
+  nonPositiveMultipleOf: { construct: 'a multipleOf of 0 or less' },
+  lengthBound: { construct: 'a length bound that is not a non-negative integer' },
+  crossedBounds: { construct: 'bounds that admit no value' },
   literalBigint: { construct: 'a bigint z.literal()' },
   xor: { construct: 'z.xor()' },
   severalDiscriminatorValues: {
@@ -143,6 +148,11 @@ export function refusedAcyclicId(id: string): Refused {
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {
   return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };
+}
+
+/** An example its own schema refuses, by its place among the schema's examples. */
+export function refusedExample(index: number): Refused {
+  return { construct: `an example the schema refuses (examples[${index}])` };
 }
 
 /** A check, or a zod type, the walker has no node or constraint for, by its zod name. */

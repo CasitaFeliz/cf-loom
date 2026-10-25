@@ -141,15 +141,16 @@ function builtFormatOf(
 }
 
 /**
- * A format zod builds from a regex is judged by its pattern alone: zod's own regex for that
- * format, by source and flags, whatever function checks it, so any copy of zod compares alike;
- * one checked by a function alone is the author's `z.stringFormat()`.
+ * A format zod builds from a regex is judged by its pattern, zod's own regex for that format by
+ * source and flags, and by its check, whose source text must be zod's own test of a regex; one
+ * checked by another function is the author's `z.stringFormat()`.
  */
 function regexFormatOf(def: KnownFormatDef, at: Path): Walked<Partial<StringNode>> {
-  if (def.pattern === undefined) {
+  const reference = referenceOf(def.format);
+  if (def.pattern === undefined || String(def.fn) !== String(reference?.fn)) {
     return notAllowed(at, refusedStringFormat(def.format));
   }
-  const zodPattern = referenceOf(def.format)?.pattern;
+  const zodPattern = reference?.pattern;
   const samePattern =
     zodPattern !== undefined &&
     def.pattern?.source === zodPattern.source &&
