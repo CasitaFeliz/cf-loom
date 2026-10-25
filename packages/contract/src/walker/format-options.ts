@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { canonicalJson } from './canonical-json.ts';
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
 
@@ -16,8 +17,29 @@ type DeclaredFormat = {
   readonly defaults: BuiltDef;
 };
 
+const regexOption = z.strictObject({ source: z.string(), flags: z.string() });
+
+/** The value each format option takes as a Snapshot holds it, a regex as its source and flags. */
+const formatOptionValues = {
+  version: z.string(),
+  alg: z.string(),
+  delimiter: z.string(),
+  offset: z.boolean(),
+  local: z.boolean(),
+  normalize: z.boolean(),
+  precision: z.int(),
+  protocol: regexOption,
+  hostname: regexOption,
+} as const;
+
+/** An option a format's constructor reads. */
+type FormatOptionKey = keyof typeof formatOptionValues;
+
 /** The options each format's constructor reads; any other key changes nothing zod checks. */
-const optionKeysByFormat: ReadonlyMap<string, readonly string[]> = new Map([
+const optionKeysByFormat: ReadonlyMap<string, readonly FormatOptionKey[]> = new Map<
+  string,
+  readonly FormatOptionKey[]
+>([
   ['uuid', ['version']],
   ['url', ['protocol', 'hostname', 'normalize']],
   ['datetime', ['offset', 'local', 'precision']],
@@ -35,6 +57,15 @@ const optionKeysByFormat: ReadonlyMap<string, readonly string[]> = new Map([
 export function formatOptionKeysOf(format: string | undefined): readonly string[] {
   const keys = format === undefined ? undefined : optionKeysByFormat.get(format);
   return (keys ?? []).filter((key) => key !== 'normalize');
+}
+
+/** Whether a value is one a format option takes, as the walker writes it into a Snapshot. */
+export function isFormatOptionValue(option: string, value: unknown): boolean {
+  return isFormatOptionKey(option) && formatOptionValues[option].safeParse(value).success;
+}
+
+function isFormatOptionKey(option: string): option is FormatOptionKey {
+  return Object.hasOwn(formatOptionValues, option);
 }
 
 /**

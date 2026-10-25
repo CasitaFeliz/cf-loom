@@ -1,11 +1,12 @@
-import type { ByKey, PublishedServiceSnapshot, ServiceSnapshot } from '../snapshot/index.ts';
+import type { ByKey, ServiceSnapshot } from '../snapshot/index.ts';
 import { messageIdentityOf, nameAndVersionOf } from '../written/index.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 type MessageKind = 'event' | 'command';
 
-type Messages = { readonly events: ByKey<unknown>; readonly commands: ByKey<unknown> };
+/** The Message Versions a Snapshot holds by kind, tombstones included. */
+export type Messages = { readonly events: ByKey<unknown>; readonly commands: ByKey<unknown> };
 
 /** What a Message Version added is judged against: its kind's identities on either side, and the names the Baseline holds as the other kind. */
 export type MessageHistory = {
@@ -14,19 +15,15 @@ export type MessageHistory = {
   readonly otherNames: ReadonlySet<string>;
 };
 
-/**
- * One kind of Message's history across the Baseline, tombstones included, and the proposed
- * Snapshot; with no Baseline, the proposed Snapshot is the whole history.
- */
+/** One kind of Message's history across the Baseline, tombstones included, and the proposed Snapshot. */
 export function messageHistoryOf(
-  baseline: PublishedServiceSnapshot | undefined,
+  baseline: Messages,
   proposed: ServiceSnapshot,
   kind: MessageKind,
 ): MessageHistory {
-  const before: Messages = baseline ?? { events: {}, commands: {} };
   const otherKind = kind === 'event' ? 'command' : 'event';
-  const identities = [...identitiesOf(before, kind), ...identitiesOf(proposed, kind)];
-  const otherNames = identitiesOf(before, otherKind).map((identity) => {
+  const identities = [...identitiesOf(baseline, kind), ...identitiesOf(proposed, kind)];
+  const otherNames = identitiesOf(baseline, otherKind).map((identity) => {
     return nameAndVersionOf(identity).name;
   });
   return { identities: new Set(identities), otherKind, otherNames: new Set(otherNames) };

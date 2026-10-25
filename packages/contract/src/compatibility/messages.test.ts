@@ -5,6 +5,7 @@ import {
   compatibilityReportOf,
   type EventSnapshot,
   type Field,
+  firstPublishChangesOf,
   type ObjectNode,
   type PublishedServiceSnapshot,
   type SchemaNode,
@@ -547,13 +548,9 @@ describe('compatibilityReportOf, a name’s kind across history', () => {
   });
 });
 
-describe('compatibilityReportOf, gaps with no Baseline', () => {
+describe('firstPublishChangesOf, gaps with no Baseline', () => {
   function noBaselineChangesOf(proposed: ServiceSnapshot): readonly Change[] {
-    const report = compatibilityReportOf(undefined, proposed);
-    if (report.kind !== 'no-baseline') {
-      throw new Error('no Baseline was given, so the report must say so');
-    }
-    return report.changes;
+    return firstPublishChangesOf(proposed);
   }
 
   function gap(site: ChangeSite, missing: string): Change {
@@ -610,13 +607,13 @@ describe('compatibilityReportOf, a gap is refused with or without a Baseline', (
       const baseline = aBaseline(event.held(entriesOf(held, heldAs)));
       const proposed = aProposed(event.declared(entriesOf(declared, 'active')));
 
-      const report = withBaseline
-        ? compatibilityReportOf(baseline, proposed)
-        : compatibilityReportOf(undefined, proposed);
+      const changes = withBaseline
+        ? compatibilityReportOf(baseline, proposed).changes
+        : firstPublishChangesOf(proposed);
 
       const all = [...held, ...declared];
       const added = declared.filter((version) => !held.includes(version));
-      const gaps = report.changes.filter(({ difference }) => difference.kind === 'version-gap');
+      const gaps = changes.filter(({ difference }) => difference.kind === 'version-gap');
       const label = `draw ${draw}: held ${held} declared ${declared}`;
       expect(gaps.length > 0, label).toBe(!isGaplessAfter(all, added));
     }

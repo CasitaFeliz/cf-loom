@@ -1371,6 +1371,14 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(malformedAt(['defs', 'a']));
     });
 
+    test('a record key whose min passes its max is malformed at the key', () => {
+      const node = { type: 'record', key: { type: 'string', min: 5, max: 3 }, value: stringNode };
+
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', 'key']));
+    });
+
     test('a node bounded at one value decodes', () => {
       const result = serviceWith({ defs: { a: { type: 'number', min: 5, max: 5 } } });
 
@@ -1924,6 +1932,18 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     }
     return value as readonly unknown[];
   }
+
+  test('an intersection of a schema with itself, as generate writes it, decodes', () => {
+    const schema = z.intersection(z.string(), z.string());
+    const [located] = walkSchemas([{ at: ['defs', 'a'], schema }], () => undefined).located;
+    const node = located?.walked.kind === 'walked' ? located.walked.value : undefined;
+    const published = aService({ defs: { a: node ?? { type: 'json' } } });
+
+    const result = roundTrip(published);
+
+    expect(node?.type).toBe('allOf');
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
 
   test.each(publishedSnapshots())('%s decodes as it was published', (_name, published) => {
     const result = decodeSnapshot(canonicalTextOf(published));

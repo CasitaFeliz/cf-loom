@@ -7,7 +7,7 @@ import {
 import { byCodePoint } from '../walker/index.ts';
 import { type Matchable, matchedOf, textAcceptanceOf } from '../wire/index.ts';
 import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
-import type { Pair } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 /** A declared Endpoint as routing reads it: its identity, method and path segments. */
@@ -48,10 +48,12 @@ export function shadowingDifferencesOf(
   pair: Pair<EndpointSnapshot>,
   paths: EndpointPaths,
 ): readonly Difference[] {
-  if (pair.kind !== 'kept' || pair.proposed.lifecycle === 'retired') {
+  const compared = comparedShapesOf(pair);
+  if (compared === undefined) {
     return [];
   }
-  const kept: KeptPath = { ...pathOf(pair.identity), sides: [pair.baseline, pair.proposed] };
+  const sides = [compared.baseline, compared.proposed] as const;
+  const kept: KeptPath = { ...pathOf(pair.identity), sides };
   const takers = new Set<string>();
   for (const added of paths.added) {
     const taker = takerOf(kept, added, paths);

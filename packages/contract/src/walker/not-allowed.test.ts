@@ -840,6 +840,17 @@ describe('walkSchemas: constraints that admit no value', () => {
     expect(walkBody(schema.check(z.maxLength(3)))).toEqual(refused(noValue));
   });
 
+  test('crossed bounds are reported beside items that fail', () => {
+    const schema = z.array(z.date()).min(5).max(3);
+
+    expect(walkBody(schema)).toEqual(
+      refusedAll([
+        failureAt(['body', 'items'], 'z.date()', 'z.iso.datetime()'),
+        failureAt(['body'], noValue),
+      ]),
+    );
+  });
+
   test('crossed bounds are reported beside a .refine() on the same schema', () => {
     const schema = z
       .string()

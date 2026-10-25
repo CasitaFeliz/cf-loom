@@ -2,6 +2,7 @@ import {
   addedStandardRejectionNames,
   isRejectionStatus,
   isStandardRejection,
+  notImplementedStatus,
 } from '../declarations/index.ts';
 import {
   isWithoutValue,
@@ -24,8 +25,10 @@ export function standardStatusFailures({
     return [];
   }
   if (name === 'notImplemented') {
-    const message = `The not-implemented Rejection's status is 501: ${textOf(status)}`;
-    return status === 501 ? [] : [failure([...at, 'status'], 'rejection-status', message)];
+    const message = `The not-implemented Rejection's status is ${notImplementedStatus}: ${textOf(status)}`;
+    return status === notImplementedStatus
+      ? []
+      : [failure([...at, 'status'], 'rejection-status', message)];
   }
   const message = `A Rejection's status is 4xx: ${textOf(status)}`;
   return isRejectionStatus(status) ? [] : [failure([...at, 'status'], 'rejection-status', message)];

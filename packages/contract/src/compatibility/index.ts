@@ -1,4 +1,4 @@
-export { compatibilityReportOf } from './check.ts';
+export { compatibilityReportOf, firstPublishChangesOf } from './check.ts';
 export { publishedSnapshotOf } from './merge.ts';
 export type { PeerMove, PeerRanges } from './peers.ts';
 export type {
@@ -6,7 +6,6 @@ export type {
   ChangeClass,
   ChangeSite,
   ComparedReport,
-  CompatibilityReport,
   Difference,
   Position,
   ShapeDifference,

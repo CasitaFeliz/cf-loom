@@ -2,23 +2,22 @@ import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { snapshotFormatOf } from '@cf-loom/contract/internal';
-import { oneLineOf } from '../loading/index.ts';
+import { newerFormatTextOf, oneLineOf } from '../loading/index.ts';
 import { type Tooling, tooling } from './failures.ts';
 
 /** The file `generate` writes the declared Snapshot to, next to `cf-loom.config.ts`. */
 export const snapshotFile = 'contract.snapshot.json';
 
-/**
- * The committed `contract.snapshot.json` as read: none, its bytes and their JSON, no JSON, or a
- * format newer than this cf-loom reads.
- */
+/** The committed `contract.snapshot.json` as read: none, its bytes and their JSON, or no JSON. */
 export type Committed =
   | { readonly kind: 'none' }
   | { readonly kind: 'json'; readonly bytes: Buffer; readonly parsed: unknown }
-  | { readonly kind: 'no-json'; readonly reason: string }
-  | { readonly kind: 'newer-format'; readonly format: number };
+  | { readonly kind: 'no-json'; readonly reason: string };
 
-/** The committed `contract.snapshot.json` as read, or the tooling error of a file that cannot be. */
+/**
+ * The committed `contract.snapshot.json` as read, or the tooling error of a file that cannot be,
+ * a format newer than this cf-loom reads included.
+ */
 export function committedOf(directory: string): Committed | Tooling {
   const path = join(directory, snapshotFile);
   if (!existsSync(path)) {
@@ -36,10 +35,10 @@ export function committedOf(directory: string): Committed | Tooling {
 }
 
 /** The committed JSON, unless it names a format newer than this cf-loom reads. */
-function jsonOf(bytes: Buffer, parsed: unknown): Committed {
+function jsonOf(bytes: Buffer, parsed: unknown): Committed | Tooling {
   const format = snapshotFormatOf(parsed);
   if (format.kind === 'newer-format') {
-    return { kind: 'newer-format', format: format.format };
+    return tooling(newerFormatTextOf(snapshotFile, format.format));
   }
   return { kind: 'json', bytes, parsed };
 }

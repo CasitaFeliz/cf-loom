@@ -285,6 +285,12 @@ describe('walkSchemas: intersections', () => {
     },
   );
 
+  test('an intersection of a schema with itself is an allOf holding it once', () => {
+    expect(walkBody(z.intersection(z.string(), z.string()))).toEqual(
+      walkedTo({ type: 'allOf', items: [text] }),
+    );
+  });
+
   test('any other intersection is allOf', () => {
     const bounded = z.intersection(z.string().min(1), z.string().max(10));
 

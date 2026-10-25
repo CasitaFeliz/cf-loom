@@ -1,8 +1,10 @@
+import { z } from 'zod';
 import { safeParse } from 'zod/v4/core';
 import {
   formatSchemaOf,
   type NumberNode,
   type SchemaNode,
+  type StringFormat,
   type StringNode,
 } from '../walker/index.ts';
 import { valueOfText } from './text.ts';
@@ -54,12 +56,9 @@ function numberAcceptanceOf(node: NumberNode, value: number): TextAcceptance {
   return node.multipleOf === undefined ? 'accepted' : stepAcceptanceOf(value, node.multipleOf);
 }
 
-/** A multiple judged on whole numbers alone, where no rounding can turn an accepted value away. */
+/** A multiple judged by zod's own check, whose tolerance no remainder written here would match. */
 function stepAcceptanceOf(value: number, step: number): TextAcceptance {
-  if (!Number.isInteger(value) || !Number.isInteger(step)) {
-    return 'unknown';
-  }
-  return value % step === 0 ? 'accepted' : 'refused';
+  return safeParse(z.number().multipleOf(step), value).success ? 'accepted' : 'refused';
 }
 
 function stringAcceptanceOf(node: StringNode, text: string): TextAcceptance {
@@ -69,7 +68,7 @@ function stringAcceptanceOf(node: StringNode, text: string): TextAcceptance {
   const checks = [
     outside ? 'refused' : 'accepted',
     node.regex === undefined ? 'accepted' : regexAcceptanceOf(node.regex, text),
-    node.format === undefined ? 'accepted' : formatAcceptanceOf(node, text),
+    node.format === undefined ? 'accepted' : formatAcceptanceOf(node.format, node, text),
   ];
   if (checks.includes('refused')) {
     return 'refused';
@@ -85,9 +84,8 @@ function regexAcceptanceOf(regex: NonNullable<StringNode['regex']>, text: string
   }
 }
 
-function formatAcceptanceOf(node: StringNode, text: string): TextAcceptance {
-  const schema =
-    node.format === undefined ? undefined : formatSchemaOf(node.format, node.formatOptions ?? {});
+function formatAcceptanceOf(format: StringFormat, node: StringNode, text: string): TextAcceptance {
+  const schema = formatSchemaOf(format, node.formatOptions ?? {});
   if (schema === undefined) {
     return 'unknown';
   }

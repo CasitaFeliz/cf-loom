@@ -10,8 +10,9 @@ export type { LocatedNode } from './children.ts';
 export { leadsBackWithNoNode, nodesWithin, reachedDefsOf } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
-export { formatOptionKeysOf } from './format-options.ts';
-export { formatSchemaOf } from './format-schemas.ts';
+export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
+export type { StringFormat } from './format-schemas.ts';
+export { formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export type {
@@ -32,8 +33,7 @@ export type {
 export { neutralAnnotations } from './nodes.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
-export type { StringFormat } from './string-formats.ts';
-export { isStringFormat } from './string-formats.ts';
+
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema } from './walked.ts';

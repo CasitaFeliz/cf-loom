@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
-import { byCanonicalJson } from './canonical-json.ts';
+import { inCanonicalJsonOrder } from './canonical-json.ts';
 import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
 import { shapeKey } from './shapes.ts';
@@ -95,7 +95,7 @@ export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker
   if (left?.type === 'object' && right?.type === 'object') {
     return mergedObjects(left, right, at);
   }
-  return walked({ type: 'allOf', items: [...items.value].sort(byCanonicalJson) });
+  return walked({ type: 'allOf', items: inCanonicalJsonOrder(items.value) });
 }
 
 /** What a catchall declares, which a Contract never does: a strict, loose or other catchall. */

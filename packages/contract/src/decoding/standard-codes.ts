@@ -1,4 +1,8 @@
-import { isRejectionStatus, standardRejectionNames } from '../declarations/index.ts';
+import {
+  isRejectionStatus,
+  notImplementedStatus,
+  standardRejectionNames,
+} from '../declarations/index.ts';
 import type { PublishedSnapshot } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 
@@ -26,9 +30,6 @@ export function standardBodyProblemsOf(snapshot: PublishedSnapshot): readonly Pr
   }
   return problems;
 }
-
-/** The status of the not-implemented Rejection, the one Rejection that is no 4xx. */
-const notImplementedStatus = 501;
 
 /**
  * The codes whose status no Rejection has: a 4xx, or 501 on the code the not-implemented Standard

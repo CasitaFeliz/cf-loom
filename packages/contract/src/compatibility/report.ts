@@ -209,12 +209,3 @@ export type ComparedReport = {
   readonly changes: readonly Change[];
   readonly hashChanged: boolean;
 };
-
-/**
- * What the Compatibility Check found: without a Baseline, only the Changes the declared Snapshot
- * breaks alone as the whole history, a Message Version numbered after a gap; or every Change
- * against the Baseline.
- */
-export type CompatibilityReport =
-  | { readonly kind: 'no-baseline'; readonly changes: readonly Change[] }
-  | ComparedReport;

@@ -293,6 +293,78 @@ describe('compatibilityReportOf, shadowing reads the param’s schema on both si
   });
 });
 
+describe('compatibilityReportOf, shadowing, each rule a param refuses a literal by', () => {
+  test.each<{ name: string; schema: SchemaNode; text: string; shadows: boolean }>([
+    {
+      name: 'an int param, a fraction',
+      schema: { type: 'number', int: true },
+      text: '7.5',
+      shadows: false,
+    },
+    {
+      name: 'a multipleOf(4) param, 6',
+      schema: { type: 'number', multipleOf: 4 },
+      text: '6',
+      shadows: false,
+    },
+    {
+      name: 'a multipleOf(4) param, 8',
+      schema: { type: 'number', multipleOf: 4 },
+      text: '8',
+      shadows: true,
+    },
+    {
+      name: 'a multipleOf(3) param, a large multiple',
+      schema: { type: 'number', multipleOf: 3 },
+      text: '4111111111111111',
+      shadows: true,
+    },
+    {
+      name: 'a .gt(5) param, 5',
+      schema: { type: 'number', exclusiveMin: 5 },
+      text: '5',
+      shadows: false,
+    },
+    {
+      name: 'a .lt(5) param, 5',
+      schema: { type: 'number', exclusiveMax: 5 },
+      text: '5',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a shorter text',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'ab',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a longer text',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'abcdef',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a text within',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'abcd',
+      shadows: true,
+    },
+    {
+      name: 'an open enum param, a value it does not list',
+      schema: { type: 'enum', values: ['open'], open: true },
+      text: 'latest',
+      shadows: true,
+    },
+  ])('$name: the literal is taken: $shadows', ({ schema, text, shadows }) => {
+    const added = `GET /orders/${text}`;
+    const baseline = { [orderById]: byParam(schema) };
+    const proposed = { ...baseline, [added]: {} };
+
+    const expected = shadows ? [shadowing(orderById, added)] : [];
+    expect(shadowedOf(baseline, proposed)).toEqual(expected);
+  });
+});
+
 describe('compatibilityReportOf, shadowing agrees with what the author’s schemas accept', () => {
   const schemas: readonly z.ZodType[] = [
     z.string(),
@@ -305,11 +377,23 @@ describe('compatibilityReportOf, shadowing agrees with what the author’s schem
     z.int().min(0).max(100),
     z.number().gt(5),
     z.number().multipleOf(4),
+    z.number().multipleOf(3),
     z.boolean(),
     z.enum(['open', 'paid']),
     z.literal('stats'),
   ];
-  const texts = ['stats', 'open', '12', '7.5', '-3', 'true', 'abcd', '2026-01-02', 'a@b.co'];
+  const texts = [
+    'stats',
+    'open',
+    '12',
+    '7.5',
+    '-3',
+    'true',
+    'abcd',
+    '2026-01-02',
+    'a@b.co',
+    '4111111111111111',
+  ];
 
   function nodeOf(schema: z.ZodType): SchemaNode {
     const [located] = walkSchemas([{ at: ['param'], schema }], () => undefined).located;

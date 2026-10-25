@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open/index.ts';
-import { byCanonicalJson, canonicalJson, isJsonPrimitive } from './canonical-json.ts';
+import { canonicalJson, inCanonicalJsonOrder, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
 import type {
   EnumNode,
@@ -155,9 +155,7 @@ export function enumOf(values: readonly JsonPrimitive[], at: Path): Walked<EnumN
   if (values.length === 0) {
     return notAllowed(at, refused.emptyEnum, { type: 'enum' });
   }
-  const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
-  const distinct = [...valueByJson.values()];
-  return walked({ type: 'enum', values: distinct.sort(byCanonicalJson), open: false });
+  return walked({ type: 'enum', values: inCanonicalJsonOrder(values), open: false });
 }
 
 /** A closed enum, which is how a literal walks. */

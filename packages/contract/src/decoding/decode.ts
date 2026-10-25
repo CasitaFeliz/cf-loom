@@ -1,12 +1,12 @@
 import type { z } from 'zod';
 import {
   canonicalSnapshotOf,
-  deepestPathOf,
   type NamedFormat,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormatOf,
   snapshotNestingLimit,
+  tooDeepPathOf,
 } from '../snapshot/index.ts';
 import { problemOf } from '../validation/index.ts';
 import { heldProblemOf } from './references.ts';
@@ -38,7 +38,7 @@ export function decodeSnapshot(text: string): DecodedSnapshot {
   if (format.kind !== 'known') {
     return format;
   }
-  const tooDeep = deepestPathOf(parsed.json, snapshotNestingLimit);
+  const tooDeep = tooDeepPathOf(parsed.json);
   if (tooDeep !== undefined) {
     const reason = `nests deeper than ${snapshotNestingLimit} levels`;
     return { kind: 'malformed', at: tooDeep, reason };

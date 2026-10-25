@@ -49,6 +49,9 @@ type NumberOf<Text> = Text extends `${infer Value extends number}` ? Value : nev
 /** The statuses a declared Rejection may have: a business decision is always the Caller's 4xx. */
 export type RejectionStatus = NumberOf<`4${Digit}${Digit}`>;
 
+/** The status of the not-implemented Rejection, the one Rejection that is no Caller's 4xx. */
+export const notImplementedStatus = 501;
+
 /** Whether a value is a status a declared Rejection may have, as the runtime repeats the type. */
 export function isRejectionStatus(status: unknown): status is RejectionStatus {
   return Number.isInteger(status) && typeof status === 'number' && status >= 400 && status <= 499;

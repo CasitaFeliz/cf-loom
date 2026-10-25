@@ -22,25 +22,16 @@ import { historyDifferencesOf, type MessageHistory, messageHistoryOf } from './m
 import { type Pair, pairsOf } from './pairs.ts';
 import { presenceDifferenceOf } from './presence.ts';
 import { renameDifferenceOf } from './renames.ts';
-import type {
-  Change,
-  ChangeSite,
-  CompatibilityReport,
-  Difference,
-  SiteDifferences,
-} from './report.ts';
+import type { Change, ChangeSite, ComparedReport, Difference, SiteDifferences } from './report.ts';
 import { type EndpointPaths, endpointPathsOf, shadowingDifferencesOf } from './shadowing.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
 /** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified. */
 export function compatibilityReportOf(
-  baseline: PublishedSnapshot | undefined,
+  baseline: PublishedSnapshot,
   proposed: Snapshot,
-): CompatibilityReport {
-  if (baseline === undefined) {
-    return { kind: 'no-baseline', changes: firstPublishChangesOf(proposed) };
-  }
+): ComparedReport {
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
   return {
     kind: 'compared',
@@ -50,15 +41,16 @@ export function compatibilityReportOf(
 }
 
 /**
- * With no Baseline the declared Snapshot is the whole history, so only the numbering of its
- * Message Versions is judged: a version after one it does not hold.
+ * The Compatibility Check of a package with no Baseline: its declared Snapshot is the whole
+ * history, so only the numbering of its Message Versions is judged, a version after one it does
+ * not hold.
  */
-function firstPublishChangesOf(proposed: Snapshot): readonly Change[] {
+export function firstPublishChangesOf(proposed: Snapshot): readonly Change[] {
   if (proposed.kind !== 'service') {
     return [];
   }
-  const events = messageHistoryOf(undefined, proposed, 'event');
-  const commands = messageHistoryOf(undefined, proposed, 'command');
+  const events = messageHistoryOf(noMessages, proposed, 'event');
+  const commands = messageHistoryOf(noMessages, proposed, 'command');
   return [
     ...pairsOf({}, proposed.events).flatMap((pair) =>
       changesAt(eventSiteOf(pair), historyDifferencesOf(pair, events)),
@@ -68,6 +60,9 @@ function firstPublishChangesOf(proposed: Snapshot): readonly Change[] {
     ),
   ];
 }
+
+/** The Messages of a package never published: none. */
+const noMessages = { events: {}, commands: {} } as const;
 
 /** An Application holds only Dependencies, so it has no Change to judge. */
 function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {

@@ -3,6 +3,7 @@ import {
   byCanonicalJson,
   emptyConstraintOf,
   formatOptionKeysOf,
+  isFormatOptionValue,
   type SchemaNode,
   type StringNode,
 } from '../walker/index.ts';
@@ -33,24 +34,10 @@ export const objectNode = node('object', {
 });
 const refNode = node('ref', { name: z.string() });
 
-const regex = z.strictObject({ source: z.string(), flags: z.string() });
-
-/** The value each string format option takes, as the walker writes it. */
-const formatOptionValues: Readonly<Record<string, z.ZodType>> = {
-  version: z.string(),
-  alg: z.string(),
-  delimiter: z.string(),
-  offset: z.boolean(),
-  local: z.boolean(),
-  precision: z.int(),
-  protocol: regex,
-  hostname: regex,
-};
-
 const stringOptions = {
   format: stringFormatText.exactOptional(),
   formatOptions: byKey(z.unknown()).exactOptional(),
-  regex: regex.exactOptional(),
+  regex: z.strictObject({ source: z.string(), flags: z.string() }).exactOptional(),
   min: bound,
   max: bound,
 };
@@ -65,7 +52,7 @@ function checkedFormatOptions(
     const path = ['formatOptions', option];
     if (!taken.includes(option)) {
       ctx.addIssue({ code: 'custom', message: 'is no option of the string format', path });
-    } else if (formatOptionValues[option]?.safeParse(value).success !== true) {
+    } else if (!isFormatOptionValue(option, value)) {
       ctx.addIssue({ code: 'custom', message: 'is not a value that option takes', path });
     }
   }

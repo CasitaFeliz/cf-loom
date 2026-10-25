@@ -3,12 +3,11 @@ import { readFileSync } from 'node:fs';
 import {
   canonicalSnapshotOf,
   canonicalTextOf,
-  deepestPathOf,
+  nestingFailureOf,
   type RootPackage,
   type ServiceSnapshot,
   type Snapshot,
   type SnapshotContext,
-  snapshotNestingLimit,
   snapshotOf,
   type ValidatedContract,
   type ValidContract,
@@ -100,12 +99,8 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
 
 /** A Snapshot nested deeper than the decoder reads back, as a broken rule at its deepest path. */
 function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
-  const at = deepestPathOf(snapshot, snapshotNestingLimit);
-  if (at === undefined) {
-    return undefined;
-  }
-  const construct = `JSON nested deeper than the ${snapshotNestingLimit} levels a Snapshot holds`;
-  return { kind: 'invalid', failures: [{ kind: 'not-allowed', at, construct }] };
+  const failure = nestingFailureOf(snapshot);
+  return failure === undefined ? undefined : { kind: 'invalid', failures: [failure] };
 }
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */

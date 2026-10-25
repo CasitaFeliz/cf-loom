@@ -1,5 +1,4 @@
 import { failureLineOf } from '@cf-loom/contract/internal';
-import { newerFormatTextOf } from '../loading/index.ts';
 import {
   type BuiltProject,
   type Committed,
@@ -50,33 +49,27 @@ export function failureExitOf(failure: ProjectFailure): Exit {
 }
 
 /**
- * The stop of a command when the committed file cannot be read as a Snapshot: no JSON, which its
- * author restores or deletes, since its `deprecatedAt` stamps would be lost, or a newer format.
+ * The stop of a command that writes from the Snapshot when the committed file is no JSON: its
+ * author restores or deletes it, since its `deprecatedAt` stamps would be lost.
  */
-export function unreadableCommittedExitOf(committed: Committed): Exit | undefined {
-  switch (committed.kind) {
-    case 'none':
-    case 'json':
-      return undefined;
-    case 'no-json': {
-      const { reason } = committed;
-      return toolingError(
-        `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
-      );
-    }
-    case 'newer-format':
-      return toolingError(newerFormatTextOf(snapshotFile, committed.format));
+export function noJsonExitOf(committed: Committed): Exit | undefined {
+  if (committed.kind !== 'no-json') {
+    return undefined;
   }
+  const { reason } = committed;
+  return toolingError(
+    `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
+  );
 }
 
 /**
- * The stop of a command that works from the committed Snapshot when it cannot be read, or is not
+ * The stop of a command that works from the committed Snapshot when it is no JSON, or is not
  * what `generate` would write, so the command acts on the file that was reviewed.
  */
 export function committedStopOf(built: BuiltProject): Exit | undefined {
-  const unreadable = unreadableCommittedExitOf(built.committed);
-  if (unreadable !== undefined) {
-    return unreadable;
+  const noJson = noJsonExitOf(built.committed);
+  if (noJson !== undefined) {
+    return noJson;
   }
   if (isCommittedCurrent(built)) {
     return undefined;

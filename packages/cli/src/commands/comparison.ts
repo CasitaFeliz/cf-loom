@@ -2,7 +2,7 @@ import {
   type Change,
   type ComparedReport,
   compatibilityReportOf,
-  type Snapshot,
+  firstPublishChangesOf,
 } from '@cf-loom/contract/internal';
 import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
@@ -58,10 +58,21 @@ export async function comparisonOf(
       return { kind: 'stopped', exit: toolingError(read.message) };
     case 'no-baseline': {
       const { packageName, why } = read;
-      return { kind: 'no-baseline', built, packageName, why, changes: firstPublishOf(snapshot) };
+      return {
+        kind: 'no-baseline',
+        built,
+        packageName,
+        why,
+        changes: firstPublishChangesOf(snapshot),
+      };
     }
     case 'baseline':
-      return { kind: 'baseline', built, read, report: reportOf(read, snapshot) };
+      return {
+        kind: 'baseline',
+        built,
+        read,
+        report: compatibilityReportOf(read.snapshot, snapshot),
+      };
   }
 }
 
@@ -80,23 +91,4 @@ export function checkedFrom(comparison: Comparison): Checked {
       return { kind: 'checked', packageName, against, changes };
     }
   }
-}
-
-/** The Changes a first publish is refused for, its Snapshot being the whole history. */
-function firstPublishOf(snapshot: Snapshot): readonly Change[] {
-  const report = compatibilityReportOf(undefined, snapshot);
-  if (report.kind !== 'no-baseline') {
-    throw new Error('The Compatibility Check compared a Snapshot given no Baseline: a bug.');
-  }
-  return report.changes;
-}
-
-function reportOf(read: BaselineRead, snapshot: Snapshot): ComparedReport {
-  const report = compatibilityReportOf(read.snapshot, snapshot);
-  if (report.kind === 'no-baseline') {
-    throw new Error(
-      'The Compatibility Check found no Baseline for a Baseline it was given: a bug.',
-    );
-  }
-  return report;
 }

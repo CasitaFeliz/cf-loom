@@ -1,4 +1,4 @@
-import type { StringFormat } from './string-formats.ts';
+import type { StringFormat } from './format-schemas.ts';
 
 /** Where a schema sits in the Snapshot, so a failure points at what the author wrote. */
 export type Path = readonly (string | number)[];

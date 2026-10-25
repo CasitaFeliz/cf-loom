@@ -1,7 +1,7 @@
-import { contractExportsOf, newerFormatTextOf } from '../loading/index.ts';
+import { contractExportsOf } from '../loading/index.ts';
 import {
+  type BuiltProject,
   builtOf,
-  type Committed,
   isBuiltService,
   isCommittedCurrent,
   type Run,
@@ -26,11 +26,7 @@ export async function verify(run: Run): Promise<Exit> {
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }
-  const { committed } = built;
-  if (committed.kind === 'newer-format') {
-    return toolingError(newerFormatTextOf(snapshotFile, committed.format));
-  }
-  const snapshotLine = snapshotFailureOf(committed, isCommittedCurrent(built));
+  const snapshotLine = snapshotFailureOf(built);
   const snapshotLines = snapshotLine === undefined ? [] : [snapshotLine];
   if (!isBuiltService(built)) {
     return verifiedExit(snapshotLines, [snapshotFile]);
@@ -111,17 +107,15 @@ function serviceFailuresOf(
   ];
 }
 
-/** What `verify` says of the committed file, given whether it is current; a newer format stopped it before. */
-function snapshotFailureOf(committed: Committed, isCurrent: boolean): string | undefined {
+function snapshotFailureOf(built: BuiltProject): string | undefined {
+  const { committed } = built;
   switch (committed.kind) {
-    case 'newer-format':
-      throw new Error('verify compared a committed file in a newer format: a bug.');
     case 'none':
       return `${snapshotFile} is missing: run cf-loom generate`;
     case 'no-json':
       return `${snapshotFile} was edited: it is no JSON (${committed.reason})`;
     case 'json':
-      return isCurrent
+      return isCommittedCurrent(built)
         ? undefined
         : `${snapshotFile} was edited or is out of date: run cf-loom generate`;
   }

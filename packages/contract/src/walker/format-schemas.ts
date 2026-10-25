@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { type BuiltFormat, regexFormatSchemaOf, type StringFormat } from './string-formats.ts';
+import { type HashFormat, hashFormats, hashPartsOf, isHashFormat } from './hash-formats.ts';
 
 /** A format's options as a Snapshot holds them, a regex as its source and flags. */
 type FormatOptions = Readonly<Record<string, unknown>>;
@@ -37,7 +37,49 @@ const builtFormatSchemas = {
   credit_card: (options) => z.creditCard(options),
   iban: (options) => z.iban(options),
   jwt: (options) => z.jwt(options),
-} as const satisfies Readonly<Record<BuiltFormat, (options: ZodOptions) => core.$ZodType>>;
+} as const satisfies Readonly<Record<string, (options: ZodOptions) => core.$ZodType>>;
+
+/** The formats zod builds from a regex alone, each with the zod that builds it. */
+const regexFormatBuilders = {
+  hex: () => z.hex(),
+  hostname: () => z.hostname(),
+  // biome-ignore lint/style/useNamingConvention: SNAPSHOT.md's name of the format
+  currency_code: () => z.currencyCode(),
+} as const satisfies Readonly<Record<string, () => core.$ZodType>>;
+
+/** A format zod builds itself from its options, a regex-built one's aside. */
+type BuiltFormat = keyof typeof builtFormatSchemas;
+
+/** A format zod builds from a regex alone, a hash's aside. */
+type RegexFormat = keyof typeof regexFormatBuilders;
+
+/** A known string format, as SNAPSHOT.md names them: the ones zod builds itself. */
+export type StringFormat = BuiltFormat | RegexFormat | HashFormat;
+
+const knownFormats: ReadonlySet<string> = new Set([
+  ...Object.keys(builtFormatSchemas),
+  ...Object.keys(regexFormatBuilders),
+  ...hashFormats,
+]);
+
+/** Whether a value names a string format SNAPSHOT.md knows. */
+export function isStringFormat(value: unknown): value is StringFormat {
+  return typeof value === 'string' && knownFormats.has(value);
+}
+
+/** Whether a format is one zod builds from a regex alone, a hash's aside. */
+export function isRegexFormat(format: string): format is RegexFormat {
+  return Object.hasOwn(regexFormatBuilders, format);
+}
+
+/** The schema zod builds for a format it builds from a regex alone, or `undefined` for any other. */
+export function regexFormatSchemaOf(format: StringFormat): core.$ZodType | undefined {
+  if (isHashFormat(format)) {
+    const { algorithm, encoding } = hashPartsOf(format);
+    return z.hash(algorithm, { enc: encoding });
+  }
+  return isRegexFormat(format) ? regexFormatBuilders[format]() : undefined;
+}
 
 /**
  * The schema zod builds for a known format with the options a Snapshot holds for it, so a text
