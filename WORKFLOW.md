@@ -7,9 +7,11 @@ to run on the session's. The main session spawns an agent by name and passes wha
 
 ## The unit of work
 
-One issue is one branch and one PR. An issue too large for one reviewable PR is split into issues before it is
-planned. A branch is named `<type>/<issue>-<slug>` (`feat/6-zod-walker`), its PR title is a Conventional Commit, and
-its body says `Closes #<issue>`, links the plan and says what changed.
+Each issue has its own plan. Issues that change the same code, or that depend on each other, may share one branch
+and one PR, implemented together; the others get one each. An issue too large for one reviewable PR is split into
+issues before it is planned. A branch is named `<type>/<issue>-<slug>` (`feat/6-zod-walker`), with every issue it
+closes (`feat/178-179-180-definitions`), its PR title is a Conventional Commit, and its body says `Closes #<issue>` for
+each, links the plans and says what changed.
 
 ## Required reading
 
