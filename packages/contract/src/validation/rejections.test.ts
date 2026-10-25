@@ -389,20 +389,23 @@ describe('validateContract: an Endpoint or a Guard lists each Rejection once', (
 });
 
 describe('validateContract: reserved codes', () => {
-  test.each(['RETIRED', 'NO_SUCH_ENDPOINT', 'BODY_TOO_LARGE', 'INVALID_OUTCOME'])(
-    'a Rejection with the reserved code %s fails',
-    (code) => {
-      const reserved = defineRejection({ code, status: 410, message: 'Reserved' });
+  test.each([
+    'RETIRED',
+    'NO_SUCH_ENDPOINT',
+    'METHOD_NOT_ALLOWED',
+    'BODY_TOO_LARGE',
+    'INVALID_OUTCOME',
+  ])('a Rejection with the reserved code %s fails', (code) => {
+    const reserved = defineRejection({ code, status: 410, message: 'Reserved' });
 
-      expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [reserved] })])).toEqual(
-        failed(
-          ['rejections', code, 'code'],
-          'reserved-code',
-          `A code cf-loom answers as a Fault is reserved: ${code}`,
-        ),
-      );
-    },
-  );
+    expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [reserved] })])).toEqual(
+      failed(
+        ['rejections', code, 'code'],
+        'reserved-code',
+        `A code cf-loom answers as a Fault is reserved: ${code}`,
+      ),
+    );
+  });
 
   test('a Standard Rejection declared with a reserved code fails', () => {
     const definitions = defineDefinitions({

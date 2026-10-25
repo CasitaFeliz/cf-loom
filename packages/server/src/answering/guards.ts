@@ -29,7 +29,7 @@ export function guardRunsOf(
     const context = contextOf(attachment.guard, contexts);
     const given = { demands, context, qualifier: attachment.qualifier, resources };
     const run = await runGuard(attachment.handler, given, standards);
-    const faultedBy = { endpoint: endpoint.name, guard: attachment.guard.name };
+    const faultedBy = { element: endpoint, identity: endpoint.name, guard: attachment.guard };
     if (run.kind !== 'answered') {
       return { kind: 'stopped', answer: answeredOfFailedRun(run, faultedBy, standards) };
     }

@@ -1,5 +1,9 @@
 import {
+  type Committed as ContractCommitted,
+  type Http as ContractHttp,
+  type Issue as ContractIssue,
   type ContractPackage,
+  type ReservedCode as ContractReservedCode,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -10,11 +14,25 @@ import {
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import type { Http as ServerHttp } from '@cf-loom/server';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { type Client, client, type ReceivedOutcome } from './index.ts';
+import {
+  type CallInput,
+  type Client,
+  type ClientOptions,
+  type Committed,
+  client,
+  type FaultSource,
+  type Http,
+  type Issue,
+  type ReceivedOutcome,
+  type ReceivedRejection,
+  type ReceivedSuccess,
+  type ReservedCode,
+} from './index.ts';
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -181,24 +199,85 @@ describe('the client’s types', () => {
     expect(configured).toBeDefined();
   });
 
-  test('checking known narrows a Rejection by code, the Provider’s Standard codes included', () => {
-    type Outcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
-    type Known = Extract<Outcome, { readonly kind: 'rejection'; readonly known: true }>;
+  test('inside a Rejection a switch on code narrows its body and is exhaustive, the Provider’s Standard codes included', () => {
+    type Rejection = Extract<
+      ReceivedOutcome<typeof ordersDependency, 'getOrder'>,
+      { kind: 'rejection' }
+    >;
+    const described = (rejection: Rejection): string | number | undefined => {
+      switch (rejection.code) {
+        case 'ORDER_LOCKED':
+          expectTypeOf(rejection.body).toEqualTypeOf<{ lockedAt: string }>();
+          return rejection.body.lockedAt;
+        case 'BAD_REQUEST':
+          return rejection.body.issues.length;
+        case 'MISSING':
+        case 'NOT_YET':
+          expectTypeOf(rejection).not.toHaveProperty('body');
+          return undefined;
+        default:
+          return rejection satisfies never;
+      }
+    };
 
-    expectTypeOf<Known['code']>().toEqualTypeOf<
+    const locked = { lockedAt: '2026-10-18T10:00:00Z' };
+    expect(
+      described({
+        kind: 'rejection',
+        source: 'provider',
+        code: 'ORDER_LOCKED',
+        status: 409,
+        message: 'Locked',
+        body: locked,
+      }),
+    ).toBe(locked.lockedAt);
+  });
+
+  test('a code the Endpoint does not answer is no Rejection of it', () => {
+    type Outcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
+
+    expectTypeOf<Extract<Outcome, { kind: 'rejection' }>['code']>().toEqualTypeOf<
       'MISSING' | 'ORDER_LOCKED' | 'BAD_REQUEST' | 'NOT_YET'
     >();
-    expectTypeOf<Extract<Known, { readonly code: 'ORDER_LOCKED' }>['body']>().toEqualTypeOf<{
-      lockedAt: string;
-    }>();
-    expectTypeOf<Extract<Known, { readonly code: 'MISSING' }>['body']>().toEqualTypeOf<undefined>();
+    expectTypeOf<Extract<Outcome, { kind: 'unknown-rejection' }>['code']>().toEqualTypeOf<string>();
+    expect(standards.notFound.code).toBe('MISSING');
+  });
+
+  test('a Success body is typed by what its Endpoint declares, and the invalid-input source by who answered', () => {
+    type Success = ReceivedSuccess<typeof ordersDependency, 'getOrder'>;
+    type Invalid = Extract<
+      ReceivedRejection<typeof ordersDependency, 'getOrder'>,
+      { code: 'BAD_REQUEST' }
+    >;
+
+    expectTypeOf<Success['body']>().toEqualTypeOf<{ id: string }>();
+    expectTypeOf<Invalid['source']>().toEqualTypeOf<'provider' | 'client'>();
+    expect(standards.invalidInput.code).toBe('BAD_REQUEST');
+  });
+
+  test('a Configured name no Input declares is refused, in Client, ClientOptions and CallInput', () => {
+    // @ts-expect-error: no listed Endpoint's Input declares x-api-kee
+    expectTypeOf<Client<typeof ordersDependency, 'x-api-kee'>>().toBeObject();
+    // @ts-expect-error: no listed Endpoint's Input declares x-api-kee
+    expectTypeOf<ClientOptions<typeof ordersDependency, 'x-api-kee'>>().toBeObject();
+    // @ts-expect-error: getOrder's Input declares no x-api-kee
+    expectTypeOf<CallInput<typeof getOrder, 'x-api-kee'>>().toBeObject();
+    expectTypeOf<Client<typeof ordersDependency, 'x-api-key'>>().toBeObject();
+    expect(standards.notFound.code).toBe('MISSING');
+  });
+
+  test('Committed, Issue and ReservedCode import from the client and from the contract alike', () => {
+    expectTypeOf<Committed>().toEqualTypeOf<ContractCommitted>();
+    expectTypeOf<Issue>().toEqualTypeOf<ContractIssue>();
+    expectTypeOf<ReservedCode>().toEqualTypeOf<ContractReservedCode>();
+    expectTypeOf<Committed>().toEqualTypeOf<'no' | 'yes' | 'unknown'>();
     expect(standards.notFound.code).toBe('MISSING');
   });
 
   test('the invalid-input body’s in and code admit a value a later cf-loom adds, as { unknown }', () => {
     type Outcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
-    type Known = Extract<Outcome, { readonly kind: 'rejection'; readonly known: true }>;
-    type Body = Extract<Known, { readonly code: 'BAD_REQUEST' }>['body'];
+    type Rejection = Extract<Outcome, { readonly kind: 'rejection' }>;
+    type Body = Extract<Rejection, { readonly code: 'BAD_REQUEST' }>['body'];
     type Issue = Body['issues'][number];
 
     expectTypeOf<{ unknown: string }>().toExtend<Issue['code']>();
@@ -216,5 +295,57 @@ describe('the client’s types', () => {
     // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
     expectTypeOf<ReceivedOutcome<typeof ordersDependency, 'ping'>>().toBeObject();
     expect(ordersDependency.endpoints.map(({ name }) => name)).toContain('listOrders');
+  });
+});
+
+describe('Http', () => {
+  test('the global fetch is an Http, and a function of a URL and an init is not', () => {
+    expectTypeOf<typeof globalThis.fetch>().toExtend<Http>();
+    expectTypeOf<(url: string, init: RequestInit) => Promise<Response>>().not.toExtend<Http>();
+    expect(typeof globalThis.fetch).toBe('function');
+  });
+
+  test('the client, the server and the contract export one Http', () => {
+    expectTypeOf<Http>().toEqualTypeOf<ServerHttp>();
+    expectTypeOf<Http>().toEqualTypeOf<ContractHttp>();
+    expectTypeOf<ContractHttp>().toEqualTypeOf<(request: Request) => Promise<Response>>();
+  });
+});
+
+describe('a Fault’s source', () => {
+  test('a switch on it is exhaustive over the nine sources', () => {
+    type Fault = Extract<ReceivedOutcome<typeof ordersDependency, 'getOrder'>, { kind: 'fault' }>;
+    const described = (source: Fault['source']): string => {
+      switch (source) {
+        case 'provider':
+        case 'invalid-outcome':
+          return 'the Provider answered';
+        case 'status':
+        case 'unreadable-body':
+          return 'a response arrived';
+        case 'aborted':
+        case 'timeout':
+        case 'no-connection':
+        case 'connection-lost':
+        case 'connection-failed':
+          return 'the client met';
+        default:
+          return source satisfies never;
+      }
+    };
+
+    expectTypeOf<FaultSource>().toEqualTypeOf<
+      | 'provider'
+      | 'aborted'
+      | 'timeout'
+      | 'no-connection'
+      | 'connection-lost'
+      | 'connection-failed'
+      | 'status'
+      | 'unreadable-body'
+      | 'invalid-outcome'
+    >();
+    expectTypeOf<Fault['source']>().toEqualTypeOf<FaultSource>();
+    expect(described('timeout')).toBe('the client met');
   });
 });

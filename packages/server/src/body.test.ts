@@ -2,7 +2,7 @@ import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type ServedFault, serve } from './index.ts';
+import { type ServedFault, type ServeOptions, serve } from './index.ts';
 
 const node: z.ZodType = z.object({
   get next() {
@@ -241,6 +241,47 @@ describe('serve: maxBodyBytes', () => {
     expect(response.status).toBe(201);
   });
 
+  test.each([
+    [Number.NaN, 'NaN'],
+    [-1, '-1'],
+    [1.5, '1.5'],
+    [Number.POSITIVE_INFINITY, 'Infinity'],
+    ['10', '"10"'],
+    [null, 'null'],
+  ])('serve refuses a maxBodyBytes of %s at startup, naming it', (maxBodyBytes, named) => {
+    const starting = () => serve(contract, handlers, { maxBodyBytes: maxBodyBytes as number });
+
+    expect(starting).toThrow(
+      `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+    );
+  });
+
+  test('a maxBodyBytes of unlimited reads a body of 2 MB', async () => {
+    const unlimited = serve(contract, handlers, { maxBodyBytes: 'unlimited' });
+
+    const response = await unlimited(
+      post(JSON.stringify({ ...order, note: 'x'.repeat(2_000_000) })),
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test('a maxBodyBytes of 0 answers BODY_TOO_LARGE to any body that is not empty', async () => {
+    const none = serve(contract, handlers, { maxBodyBytes: 0 });
+
+    const response = await none(post(JSON.stringify(order)));
+
+    expect(response.status).toBe(413);
+  });
+
+  test('maxBodyBytes takes a number or unlimited, and no other text', () => {
+    const unlimited: ServeOptions = { maxBodyBytes: 'unlimited' };
+    // @ts-expect-error a number of bytes as text is not a limit
+    const text: ServeOptions = { maxBodyBytes: '10' };
+
+    expect([unlimited.maxBodyBytes, text.maxBodyBytes]).toEqual(['unlimited', '10']);
+  });
+
   test('without maxBodyBytes a large body is read', async () => {
     const response = await http(post(JSON.stringify({ ...order, note: 'x'.repeat(1_000_000) })));
 
@@ -249,7 +290,11 @@ describe('serve: maxBodyBytes', () => {
 
   test('a body nested past the stack answers the Fault 500, which onServiceFault receives as thrown', async () => {
     const faults: ServedFault[] = [];
-    const watched = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const watched = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 
     const response = await watched(
@@ -261,7 +306,7 @@ describe('serve: maxBodyBytes', () => {
       fault: { committed: 'no', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'nest', fault: { cause: expect.any(RangeError) } },
+      { kind: 'thrown', element: nest, identity: 'nest', cause: expect.any(RangeError) },
     ]);
   });
 });

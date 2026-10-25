@@ -92,13 +92,14 @@ describe('a client of orders-service over HTTP', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'ORDER_LOCKED',
+      status: 409,
       body: { lockedAt: '2026-01-15T09:30:00Z' },
     });
   });
 
-  test('it receives RESOURCE_NOT_FOUND for an order nobody placed, known, with orders-service’s message', async () => {
+  test('it receives RESOURCE_NOT_FOUND for an order nobody placed, with orders-service’s message', async () => {
     const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
@@ -108,8 +109,9 @@ describe('a client of orders-service over HTTP', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'RESOURCE_NOT_FOUND',
+      status: 404,
       message: 'The resource does not exist',
     });
   });
@@ -122,6 +124,6 @@ describe('a client of orders-service over HTTP', () => {
 
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', known: true, code: 'UNAUTHENTICATED' });
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'UNAUTHENTICATED' });
   });
 });

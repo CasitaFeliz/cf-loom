@@ -127,7 +127,9 @@ async function connected() {
   const broker = memory();
   const faults: ConsumedFault[] = [];
   const started = await messaging(contract, broker, {
-    onServiceFault: (fault) => faults.push(fault),
+    onServiceFault: (fault) => {
+      faults.push(fault);
+    },
   });
   return { broker, faults, started };
 }
@@ -411,7 +413,9 @@ describe('memory(): what the Service publishes and sends', () => {
 
     await expect(settling).rejects.toThrow('onAudited');
     expect(received).toEqual([]);
-    expect(faults).toMatchObject([{ kind: 'invalid-body', element: 'onAudited' }]);
+    expect(faults).toMatchObject([
+      { kind: 'invalid-body', element: onAudited, identity: 'onAudited' },
+    ]);
     expect(broker.pending).toEqual([]);
   });
 });

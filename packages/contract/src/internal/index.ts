@@ -31,7 +31,6 @@ export type {
   GroupedOf,
   ProvidedEvent,
   Refusal,
-  ReservedCode,
 } from '../declarations/index.ts';
 export {
   codeNameOf,
@@ -152,10 +151,10 @@ export {
   walkSchemas,
 } from '../walker/index.ts';
 export type {
-  Committed,
   DurableConsumed,
   InputIssue,
   InvalidInputBody,
+  Match,
   Matchable,
   ReceivedHeaders,
   RejectionEnvelope,
@@ -165,6 +164,7 @@ export type {
   TransportHeaderFit,
 } from '../wire/index.ts';
 export {
+  allowedMethodsOf,
   bodyOf,
   brokerHeaderBytesOf,
   brokerHeadersOf,
@@ -199,6 +199,7 @@ export {
   malformedBodyIssueOf,
   matchOf,
   maxBrokerHeaderBytes,
+  methodNotAllowedResponseOf,
   notJsonContentType,
   prefixedNameOf,
   prefixedSubjectOf,
@@ -218,13 +219,7 @@ export {
   transportHeaderFitOf,
   withDeprecation,
 } from '../wire/index.ts';
-export type {
-  AnswerableRejection,
-  Issue,
-  IssuePart,
-  Part,
-  PathSegment,
-} from '../written/index.ts';
+export type { AnswerableRejection, IssuePart, Part, PathSegment } from '../written/index.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,

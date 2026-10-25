@@ -80,13 +80,15 @@ async function readmeExample(answer: () => Response) {
 
   switch (outcome.kind) {
     case 'success':
-      return outcome.value.amount;
+      return outcome.body.amount;
     case 'rejection':
-      if (outcome.known && outcome.code === 'NOT_FOUND') return null; // getPayment lists notFound
+      if (outcome.code === 'NOT_FOUND') return null; // getPayment lists notFound
       throw new Error(outcome.message);
+    case 'unknown-rejection':
+      throw new Error(`${outcome.code}: ${outcome.message}`);
     case 'fault':
       if (outcome.committed === 'no' && outcome.retryable) return retry();
-      throw new Error('payments-service failed');
+      throw new Error(`payments-service failed: ${outcome.source}`);
   }
 }
 
@@ -103,16 +105,44 @@ describe('the README', () => {
     expect(results).toEqual([120, null, 'retried']);
   });
 
-  test('a fetch wrapper adding a browser’s credentials type-checks, and Client names the headers', () => {
+  test('under the README’s retry rule a cancelled call is never retried', async () => {
+    const payments = client(paymentsDependency, {
+      baseUrl: 'https://payments.test',
+      headers: { 'x-api-key': settings.paymentsKey },
+      fetch: async () => Response.json({ amount: 120 }),
+    });
+    const cancelled = AbortSignal.abort();
+    let attempts = 0;
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      attempts += 1;
+      const outcome = await payments.getPayment({ params: { paymentId } }, { signal: cancelled });
+      if (outcome.kind !== 'fault' || outcome.committed !== 'no' || !outcome.retryable) {
+        break;
+      }
+    }
+
+    expect(attempts).toBe(1);
+  });
+
+  test('a fetch wrapper building another Request sends the call with a browser’s credentials', async () => {
+    const sent: Request[] = [];
+    const answering = async (request: Request) => {
+      sent.push(request);
+      return Response.json({ amount: 120 });
+    };
     const credentialed: Client<typeof paymentsDependency, 'x-api-key'> = client(
       paymentsDependency,
       {
         baseUrl: 'https://payments.test',
         headers: { 'x-api-key': 'k' },
-        fetch: (url, init) => fetch(url, { ...init, credentials: 'include' }),
+        fetch: (request) => answering(new Request(request, { credentials: 'include' })),
       },
     );
 
-    expect(Object.keys(credentialed)).toEqual(['getPayment']);
+    await credentialed.getPayment({ params: { paymentId } });
+
+    expect(sent[0]?.credentials).toBe('include');
+    expect(sent[0]?.headers.get('x-api-key')).toBe('k');
   });
 });

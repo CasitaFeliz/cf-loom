@@ -96,7 +96,11 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
       guards: {},
       deprecatedAt: {},
     },
-    { onServiceFault: (serviceFault) => faults.push(serviceFault) },
+    {
+      onServiceFault: (serviceFault) => {
+        faults.push(serviceFault);
+      },
+    },
   );
   return { http, faults };
 }
@@ -168,7 +172,8 @@ describe('serve: a Success', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         issues: [
           {
             part: 'success.headers',
@@ -233,7 +238,9 @@ describe('a direct call and serve agree', () => {
       const response = await http(getRequest.clone());
 
       expect(response.status).toBe(500);
-      expect(faults).toEqual([{ kind: 'invalid-outcome', endpoint: 'getOrder', issues: thrown }]);
+      expect(faults).toEqual([
+        { kind: 'invalid-outcome', element: getOrder, identity: 'getOrder', issues: thrown },
+      ]);
     },
   );
 
@@ -335,6 +342,38 @@ describe('serve: a Rejection', () => {
 });
 
 describe('serve: a Fault', () => {
+  test('a retryable Fault with retryAfter is sent with retry-after, and one without it with none', async () => {
+    const later = serveWith(() => fault({ committed: 'no', retryable: true, retryAfter: 5 }));
+    const now = serveWith(() => fault({ committed: 'no', retryable: true }));
+
+    const responses = [await later.http(getRequest.clone()), await now.http(getRequest.clone())];
+
+    expect(responses.map(({ status }) => status)).toEqual([503, 503]);
+    expect(responses.map(({ headers }) => headers.get('retry-after'))).toEqual(['5', null]);
+  });
+
+  test.each([
+    ['a negative one', { retryable: true, retryAfter: -1 }],
+    ['one that is no number', { retryable: true, retryAfter: 'a\nb' as never }],
+    ['one on a Fault that is not retryable', { retryable: false, retryAfter: 5 }],
+  ])(
+    'a Fault built by hand with %s as retryAfter is INVALID_OUTCOME, with no retry-after',
+    async (_, built) => {
+      const { http, faults } = serveWith(
+        () => ({ kind: 'fault', committed: 'no', message: 'Down', ...built }) as never,
+      );
+
+      const response = await http(getRequest.clone());
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('retry-after')).toBeNull();
+      expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+      expect(faults).toMatchObject([
+        { kind: 'invalid-outcome', issues: [{ part: 'fault', path: ['retryAfter'] }] },
+      ]);
+    },
+  );
+
   test('a Fault the Handler returns travels with 503 when retryable, its cause kept from the Caller', async () => {
     const cause = new Error('the database is down');
     const { http, faults } = serveWith(() =>
@@ -350,7 +389,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'returned',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Try again', cause },
       },
     ]);
@@ -398,7 +438,7 @@ describe('serve: a Fault', () => {
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'getOrder', fault: { cause: broken } },
+      { kind: 'thrown', element: getOrder, identity: 'getOrder', cause: broken },
     ]);
   });
 
@@ -408,7 +448,7 @@ describe('serve: a Fault', () => {
     const response = await http(getRequest.clone());
 
     expect(response.status).toBe(500);
-    expect(faults).toMatchObject([{ kind: 'thrown', fault: { cause: expect.any(TypeError) } }]);
+    expect(faults).toMatchObject([{ kind: 'thrown', cause: expect.any(TypeError) }]);
   });
 
   test('an Outcome that breaks a constraint is INVALID_OUTCOME, its issues to the Service only', async () => {
@@ -430,7 +470,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         issues: [
           { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
         ],

@@ -5,7 +5,7 @@ import {
   defineGuard,
   defineRejection,
 } from '@cf-loom/contract';
-import { admit, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type ServedFault, serve } from './index.ts';
@@ -192,6 +192,18 @@ describe('serve: Guards', () => {
     ]);
   });
 
+  test('a GuardHandler’s retryable Fault with retryAfter is sent with retry-after', async () => {
+    const busy = handle(userToken, () =>
+      fault({ committed: 'no', retryable: true, retryAfter: 30 }),
+    );
+    const http = serve(contract, { ...handlers, guards: { ...handlers.guards, userToken: busy } });
+
+    const response = await http(put(ORDER_ID));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('30');
+  });
+
   test('a GuardHandler’s Rejection stops the request with its declared status', async () => {
     calls.length = 0;
 
@@ -272,7 +284,11 @@ describe('serve: Guards', () => {
     const http = serve(
       contract,
       { ...handlers, guards: { ...handlers.guards, userToken: broken } },
-      { onServiceFault: (fault) => faults.push(fault) },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
     );
 
     const response = await http(put(ORDER_ID));
@@ -289,8 +305,9 @@ describe('serve: Guards', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'updateOrder',
-        guard: 'userToken',
+        element: updateOrder,
+        identity: 'updateOrder',
+        guard: userToken,
         issues: [
           { part: 'context', path: ['userId'], code: 'invalid_type', message: expect.any(String) },
         ],
@@ -300,7 +317,11 @@ describe('serve: Guards', () => {
 
   test('a Qualifier serve hands a Guard that breaks its schema is the runtime’s own bug', async () => {
     const faults: ServedFault[] = [];
-    const http = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const http = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
 
     const response = await http(
       new Request('http://test/misattached', { headers: { authorization: 'Bearer u-1' } }),
@@ -313,8 +334,9 @@ describe('serve: Guards', () => {
     expect(faults).toMatchObject([
       {
         kind: 'runtime-bug',
-        endpoint: 'misattached',
-        guard: 'permission',
+        element: misattached,
+        identity: 'misattached',
+        guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },
     ]);

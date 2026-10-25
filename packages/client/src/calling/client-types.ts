@@ -1,4 +1,4 @@
-import type { Endpoint, InputOf } from '@cf-loom/contract';
+import type { Endpoint, Http, InputOf } from '@cf-loom/contract';
 import type { ReceivedOutcome } from '../decoding/index.ts';
 import type {
   AnyDependency,
@@ -15,11 +15,14 @@ type HeadersOf<Target extends Endpoint> =
     ? Headers
     : Readonly<Record<never, never>>;
 
+/** A header name an Endpoint declares in its Input. */
+export type InputHeaderName<Target extends Endpoint> = keyof HeadersOf<Target> & string;
+
 /** A header name some Endpoint a Dependency lists declares in its Input, as `client()` may give it. */
 export type ConfiguredName<D extends AnyDependency> =
   EndpointOf<D> extends infer Listed
     ? Listed extends Endpoint
-      ? keyof HeadersOf<Listed> & string
+      ? InputHeaderName<Listed>
       : never
     : never;
 
@@ -46,19 +49,19 @@ export type DeprecationNotice = {
   readonly deprecatedAt: string;
 };
 
-/** How a client reaches a Provider: its URL, headers given once, its `fetch` and its inference. */
-export type ClientOptions<D extends AnyDependency, Configured extends string = never> = {
+/**
+ * How a client reaches a Provider: its URL, headers given once, its `fetch`, called with the
+ * Request each call sends, and its inference.
+ */
+export type ClientOptions<D extends AnyDependency, Configured extends ConfiguredName<D> = never> = {
   readonly baseUrl: string | URL;
   readonly headers?: {
     readonly [Name in Configured]: ConfiguredHeader<ConfiguredValueOf<D, Name>>;
   };
-  readonly fetch?: Fetch;
+  readonly fetch?: Http;
   readonly inferFault?: InferFault;
   readonly onDeprecation?: OnDeprecation;
 };
-
-/** A `fetch`: the global one, or the one given to `client()`. */
-export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
 /** Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console. */
 export type OnDeprecation = (notice: DeprecationNotice) => void;
@@ -86,7 +89,10 @@ type OptionalPart<Parts> = {
 type Flattened<Value> = { readonly [Key in keyof Value]: Value[Key] };
 
 /** What a Caller passes to an Endpoint's method: its Input, the configured headers optional. */
-export type CallInput<Target extends Endpoint, Configured extends string = never> = Flattened<
+export type CallInput<
+  Target extends Endpoint,
+  Configured extends InputHeaderName<Target> = never,
+> = Flattened<
   {
     readonly [Part in Exclude<
       keyof CallParts<Target, Configured>,
@@ -105,21 +111,16 @@ export type CallOptions = { readonly signal?: AbortSignal };
 
 type Method<
   Target extends Endpoint,
-  Configured extends string,
+  Configured extends ConfiguredName<D>,
   D extends AnyDependency,
   Name extends ListedName<D>,
+  Input = CallInput<Target, Extract<Configured, InputHeaderName<Target>>>,
 > =
-  Readonly<Record<never, never>> extends CallInput<Target, Configured>
-    ? (
-        input?: CallInput<Target, Configured>,
-        call?: CallOptions,
-      ) => Promise<ReceivedOutcome<D, Name>>
-    : (
-        input: CallInput<Target, Configured>,
-        call?: CallOptions,
-      ) => Promise<ReceivedOutcome<D, Name>>;
+  Readonly<Record<never, never>> extends Input
+    ? (input?: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>
+    : (input: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>;
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
-export type Client<D extends AnyDependency, Configured extends string = never> = {
+export type Client<D extends AnyDependency, Configured extends ConfiguredName<D> = never> = {
   readonly [Name in ListedName<D>]: Method<ListedEndpoint<D, Name>, Configured, D, Name>;
 };

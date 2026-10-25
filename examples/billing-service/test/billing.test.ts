@@ -186,8 +186,9 @@ describe('a client of the faked orders-service', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'client',
       code: 'BAD_REQUEST',
+      status: 400,
       message: 'The request is invalid',
     });
     expect(fake.calls('getOrder')).toHaveLength(0);

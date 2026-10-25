@@ -148,7 +148,7 @@ describe('fakeProvider: steps', () => {
       'success',
       'success',
     ]);
-    expect(outcomes[3]).toMatchObject({ value: { amount: 9 } });
+    expect(outcomes[3]).toMatchObject({ body: { amount: 9 } });
   });
 
   test('a step may be async', async () => {
@@ -160,7 +160,7 @@ describe('fakeProvider: steps', () => {
 
     const outcome = await payments.client().cancelPayment({ params });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 
   test('a Success carries its headers as text, a number and an Open Enum Unknown case included', async () => {
@@ -173,7 +173,7 @@ describe('fakeProvider: steps', () => {
       }),
     );
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect([response.headers.get('x-stage'), response.headers.get('x-count')]).toEqual([
@@ -182,8 +182,9 @@ describe('fakeProvider: steps', () => {
     ]);
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'pay-1', amount: 5, stage: lost },
+      status: 200,
       headers: { 'x-stage': lost, 'x-count': 2 },
+      body: { id: 'pay-1', amount: 5, stage: lost },
     });
   });
 
@@ -192,27 +193,27 @@ describe('fakeProvider: steps', () => {
     payments.on('cancelPayment').otherwise((r) => r.success());
     payments.on('checkPayment').otherwise((r) => r.success({ headers: { 'x-count': 3 } }));
 
-    const cancelled = await payments.fetch(at, { method: 'DELETE' });
+    const cancelled = await payments.fetch(new Request(at, { method: 'DELETE' }));
     const checked = await payments.client().checkPayment({ params });
 
     expect([cancelled.status, await cancelled.text()]).toEqual([204, '']);
-    expect(checked).toEqual({ kind: 'success', value: undefined, headers: { 'x-count': 3 } });
+    expect(checked).toStrictEqual({ kind: 'success', status: 204, headers: { 'x-count': 3 } });
   });
 
   test('reject(code) answers a declared code with its status, a Standard one by the Provider’s code', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.reject('NO_PAYMENT'));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(404);
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'NO_PAYMENT',
+      status: 404,
       message: 'No such payment',
-      body: undefined,
     });
   });
 
@@ -221,14 +222,15 @@ describe('fakeProvider: steps', () => {
     const body = { lockedAt: '2026-10-19T10:00:00Z', reason: { unknown: 'chargeback' } };
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOCKED', body));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(409);
     expect(outcome).toEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'PAYMENT_LOCKED',
+      status: 409,
       message: 'The payment is locked',
       body,
     });
@@ -266,7 +268,7 @@ describe('fakeProvider: steps', () => {
     };
     payments.on('getPayment').otherwise((r) => r.reject('INVALID_INPUT', { issues: [issue] }));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(400);
@@ -274,20 +276,20 @@ describe('fakeProvider: steps', () => {
       rejection: { code: 'INVALID_INPUT', message: 'Invalid input', body: { issues: [issue] } },
     });
     expect(outcome).toMatchObject({
-      known: true,
+      kind: 'rejection',
       code: 'INVALID_INPUT',
       body: { issues: [issue] },
     });
   });
 
-  test('reject({ unknown }) answers 422, its message the code unless given, and the client does not know it', async () => {
+  test('reject({ unknown }) answers 422, its message the code unless given, and the client receives an unknown-rejection', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments
       .on('getPayment')
       .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { expiredAt: '2026-01' }))
       .once((r) => r.reject({ unknown: 'CARD_EXPIRED', message: 'The card expired' }, null));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(422);
@@ -295,9 +297,10 @@ describe('fakeProvider: steps', () => {
       rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: { expiredAt: '2026-01' } },
     });
     expect(outcome).toEqual({
-      kind: 'rejection',
-      known: false,
+      kind: 'unknown-rejection',
+      source: 'provider',
       code: 'CARD_EXPIRED',
+      status: 422,
       message: 'The card expired',
       body: null,
     });
@@ -310,7 +313,10 @@ describe('fakeProvider: steps', () => {
       .once((r) => r.fault({ committed: 'unknown', retryable: true }))
       .once((r) => r.fault({ committed: 'yes', retryable: false, message: 'Done, but lost' }));
 
-    const responses = [await payments.fetch(at, {}), await payments.fetch(at, {})];
+    const responses = [
+      await payments.fetch(new Request(at)),
+      await payments.fetch(new Request(at)),
+    ];
     const bodies = await Promise.all(responses.map((response) => response.json()));
 
     expect(responses.map((response) => response.status)).toEqual([503, 500]);
@@ -323,6 +329,7 @@ describe('fakeProvider: steps', () => {
   test.each([
     ['RETIRED', 410, 'no'],
     ['NO_SUCH_ENDPOINT', 404, 'no'],
+    ['METHOD_NOT_ALLOWED', 405, 'no'],
     ['BODY_TOO_LARGE', 413, 'no'],
     ['INVALID_OUTCOME', 500, 'unknown'],
   ] as const)(
@@ -331,13 +338,38 @@ describe('fakeProvider: steps', () => {
       const payments = fakeProvider(paymentsDependency);
       payments.on('getPayment').otherwise((r) => r.fault({ code }));
 
-      const response = await payments.fetch(at, {});
+      const response = await payments.fetch(new Request(at));
       const outcome = await payments.client().getPayment({ params });
 
       expect(response.status).toBe(status);
-      expect(outcome).toMatchObject({ kind: 'fault', code, committed, retryable: false });
+      expect(outcome).toMatchObject({
+        kind: 'fault',
+        source: 'provider',
+        status,
+        code,
+        committed,
+        retryable: false,
+      });
     },
   );
+
+  test('fault({ code: METHOD_NOT_ALLOWED }) carries Allow with the other methods the Provider takes on that path', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+    payments.on('capturePayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+
+    const shared = await payments.fetch(new Request(at));
+    const alone = await payments.fetch(
+      new Request(`${at}/capture`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ amount: 1 }),
+      }),
+    );
+
+    expect(shared.headers.get('allow')).toBe('DELETE');
+    expect(alone.headers.get('allow')).toBe('');
+  });
 
   test('an abort while a step waits rejects fetch with the signal’s reason', async () => {
     const payments = fakeProvider(paymentsDependency);
@@ -349,7 +381,7 @@ describe('fakeProvider: steps', () => {
     const controller = new AbortController();
     const reason = new Error('Gave up');
 
-    const answering = payments.fetch(at, { signal: controller.signal });
+    const answering = payments.fetch(new Request(at, { signal: controller.signal }));
     controller.abort(reason);
 
     await expect(answering).rejects.toBe(reason);
@@ -464,7 +496,9 @@ function capture(
 ): Promise<Response> {
   const headers = { 'content-type': 'application/json' };
   const init: RequestInit = { method: 'POST', headers, body, duplex: 'half' };
-  return payments.fetch(`${at}/capture`, signal === undefined ? init : { ...init, signal });
+  return payments.fetch(
+    new Request(`${at}/capture`, signal === undefined ? init : { ...init, signal }),
+  );
 }
 
 /** Lets every request sent so far read what it can. */

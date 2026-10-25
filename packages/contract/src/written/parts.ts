@@ -79,8 +79,8 @@ export function partFieldOf<Named extends Exclude<Part, 'schema'>>(part: Named):
 /** A part of what a request carries: the Endpoint's Input, or what a Guard demands. */
 export type InputPart = (typeof inputParts)[number] | (typeof demandParts)[number];
 
-/** The slot an Issue sits in: a part of an Endpoint, a Guard or a Rejection, or the Rejections. */
-export type IssuePart = Exclude<Part, 'schema'> | 'rejections';
+/** The slot an Issue sits in: a part of an Endpoint, a Guard or a Rejection, the Rejections, or a Fault a Handler built. */
+export type IssuePart = Exclude<Part, 'schema'> | 'rejections' | 'fault';
 
 /** One way a value broke its part of the Contract: the part and path, cf-loom's code and a message; never the value. */
 export type Issue = {

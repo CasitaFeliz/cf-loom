@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineRejection, invalidInput, notFound } from '../index.ts';
+import { defineRejection, invalidInput, notFound, type ReservedCode } from '../index.ts';
 import {
+  allowedMethodsOf,
   bodyOf,
   committedValues,
   deprecatedAtOfHeader,
@@ -19,7 +20,7 @@ import {
   jsonMediaType,
   jsonOfBytes,
   malformedBodyIssueOf,
-  type ReservedCode,
+  pathSegmentsOf,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionBodyReaderOf,
@@ -66,7 +67,7 @@ async function bodyKindOf(contentType: string | null): Promise<string> {
     body: new TextEncoder().encode('{}'),
   });
 
-  return (await bodyOf(request, undefined)).kind;
+  return (await bodyOf(request, Number.POSITIVE_INFINITY)).kind;
 }
 
 /** Whether a header value can travel: `texts` when it can, `issues` when it cannot. */
@@ -317,6 +318,25 @@ describe('the Envelopes as they travel', () => {
   });
 });
 
+describe('allowedMethodsOf', () => {
+  test('lists the methods declared Endpoints take on a request’s path, literal and param, once each in code point order', () => {
+    const declared = [
+      ['POST', '/orders/:orderId'],
+      ['GET', '/orders/summary'],
+      ['GET', '/orders/:orderId'],
+      ['DELETE', '/orders/:orderId'],
+      ['PUT', '/items/:itemId'],
+    ].map(([method = '', path = '']) => ({ method, segments: pathSegmentsOf(path) }));
+
+    const allowed = [
+      allowedMethodsOf(declared, new Request('http://test/orders/summary', { method: 'PATCH' })),
+      allowedMethodsOf(declared, new Request('http://test/customers')),
+    ];
+
+    expect(allowed).toEqual([['DELETE', 'GET', 'POST'], []]);
+  });
+});
+
 describe('the reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
     expect(Object.entries(reservedFaults)).toEqual([
@@ -324,6 +344,10 @@ describe('the reserved codes and statuses', () => {
       [
         'NO_SUCH_ENDPOINT',
         { status: 404, committed: 'no', message: 'No Endpoint has this method and path' },
+      ],
+      [
+        'METHOD_NOT_ALLOWED',
+        { status: 405, committed: 'no', message: 'No Endpoint has this method on this path' },
       ],
       ['BODY_TOO_LARGE', { status: 413, committed: 'no', message: 'The body is too large' }],
       [
@@ -333,7 +357,7 @@ describe('the reserved codes and statuses', () => {
     ]);
   });
 
-  test('a reserved code is one of the four, any other value is none', () => {
+  test('a reserved code is one of the five, any other value is none', () => {
     const values = ['RETIRED', 'INVALID_OUTCOME', 'NOT_FOUND', 'retired', 1, undefined];
 
     expect(values.map(isReservedCode)).toEqual([true, true, false, false, false, false]);
@@ -404,7 +428,7 @@ describe('bodyOf', () => {
       body: '{}',
     });
 
-    const body = await bodyOf(request, undefined);
+    const body = await bodyOf(request, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({
       kind: 'malformed',
@@ -419,7 +443,7 @@ describe('bodyOf', () => {
       body: '{',
     });
 
-    const body = await bodyOf(request, undefined);
+    const body = await bodyOf(request, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({ kind: 'malformed', message: 'The body is not JSON' });
   });
@@ -429,7 +453,7 @@ describe('bodyOf, reading a Response', () => {
   test('a JSON Response body is read as its value', async () => {
     const response = Response.json({ id: 'o-1' });
 
-    const body = await bodyOf(response, undefined);
+    const body = await bodyOf(response, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({ kind: 'value', value: { id: 'o-1' } });
   });
@@ -444,7 +468,7 @@ describe('bodyOf, reading a Response', () => {
     });
     const response = new Response(stream, { headers: { 'content-type': 'application/json' } });
 
-    const body = await bodyOf(response, undefined);
+    const body = await bodyOf(response, Number.POSITIVE_INFINITY);
 
     expect(body).toMatchObject({
       kind: 'unreadable',

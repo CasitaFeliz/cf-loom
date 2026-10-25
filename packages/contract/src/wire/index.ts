@@ -38,6 +38,7 @@ export {
 export type { Committed, RejectionEnvelope } from './envelopes.ts';
 export { committedValues, internalError, receivedEnvelopeOf, reservedFaults } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
+export type { Http } from './http.ts';
 export { kebabCaseOf } from './identifiers.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
 export {
@@ -45,12 +46,13 @@ export {
   invalidInputResponseOf,
   rejectionBodyReaderOf,
 } from './invalid-input.ts';
-export type { Matchable } from './match.ts';
-export { matchedOf, matchOf } from './match.ts';
+export type { Match, Matchable } from './match.ts';
+export { allowedMethodsOf, matchedOf, matchOf } from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,
   faultStatusOf,
+  methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
   successResponseOf,

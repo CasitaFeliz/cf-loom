@@ -174,7 +174,9 @@ async function consuming(
   const faults: ConsumedFault[] = [];
   const recording = aBroker();
   const { consume } = await messaging(contract, recording.broker, {
-    onServiceFault: (consumedFault) => faults.push(consumedFault),
+    onServiceFault: (consumedFault) => {
+      faults.push(consumedFault);
+    },
   });
   await consume({
     commands: { ...handlers.commands, ...replaced.commands },
@@ -460,7 +462,8 @@ describe('a Message delivered', () => {
     expect(settlement.kind).toBe('ended');
     expect(faults).toEqual([
       {
-        element: 'notifyOnCreated',
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -483,7 +486,8 @@ describe('a Message delivered', () => {
     expect(settlement.kind).toBe('pending');
     expect(faults).toEqual([
       {
-        element: 'notifyOnCreated',
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -513,7 +517,8 @@ describe('a Message delivered', () => {
     expect(received).toEqual([]);
     expect(faults).toEqual([
       {
-        element: 'notifyOnCreated',
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -542,15 +547,15 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('onServiceFault names a Subscription by name and a Command by its identity', async () => {
+  test('onServiceFault receives the declaration as element, and names a Subscription by name and a Command by its identity', async () => {
     const { deliver, faults } = await consuming();
 
     await deliver(created, {});
     await deliver(chargeCard, {});
 
-    expect(faults.map((consumedFault) => consumedFault.element)).toEqual([
-      'notifyOnCreated',
-      'ChargeCard@2',
+    expect(faults.map(({ element, identity }) => [element, identity])).toEqual([
+      [notifyOnCreated, 'notifyOnCreated'],
+      [chargeCardV2, 'ChargeCard@2'],
     ]);
   });
 

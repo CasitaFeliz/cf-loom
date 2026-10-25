@@ -1,14 +1,16 @@
+import type { ReservedCode } from '@cf-loom/contract';
 import {
   faultResponseOf,
   follows,
   isJsonValue,
   isReservedCode,
+  methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
   upperSnakeCase,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
-import { type ListedEndpoint, whoOf } from '../provided/index.ts';
+import { type ListedEndpoint, type Matched, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
 import { knownRejectionResponseOf, scriptedSuccessResponseOf } from './outcomes.ts';
 
@@ -22,7 +24,7 @@ const unsendable = 'the scripted answer cannot be sent';
  * A scripted answer as the Provider would send it, a network failure thrown as `fetch` throws it;
  * whatever throws while an answer is read is the test's mistake.
  */
-export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
+export function responseOf(answer: Answer, { listed, otherMethods }: Matched): Response {
   switch (answer.kind) {
     case 'success':
       return builtOf(listed, unsendable, () => scriptedSuccessResponseOf(answer.success, listed));
@@ -33,7 +35,7 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
     case 'fault':
       return builtOf(listed, unsendable, () => faultResponseOf(answer));
     case 'reserved':
-      return builtOf(listed, unsendable, () => reservedResponseOf(answer.code));
+      return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, otherMethods));
     case 'no-connection':
       throw networkFailureOf('ECONNREFUSED');
     case 'reset':
@@ -41,6 +43,13 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
     case 'status':
       return builtOf(listed, unsendable, () => bareStatusResponseOf(answer, listed));
   }
+}
+
+/** A reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path takes. */
+function reservedAnswerOf(code: ReservedCode, otherMethods: readonly string[]): Response {
+  return code === 'METHOD_NOT_ALLOWED'
+    ? methodNotAllowedResponseOf(otherMethods)
+    : reservedResponseOf(code);
 }
 
 /** What `fetch` throws when the connection is refused or reset, as Node's reports it. */

@@ -1,4 +1,5 @@
-import type { ReceivedFault, ReceivedRejection, ReceivedSuccess } from '@cf-loom/client';
+import type { ReceivedFault } from '@cf-loom/client';
+import type { EndpointRejection, EndpointSuccess } from '@cf-loom/client/internal';
 import type { Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
 import { internalError } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
@@ -10,31 +11,25 @@ type SuccessArguments<Target extends Endpoint> = Target['success'] extends {
 }
   ? [success: ScriptedHeadersAndBody<Target>]
   : Target['success'] extends { readonly body: core.$ZodType }
-    ? [body: ReceivedSuccess<Target>['value']]
+    ? [body: EndpointSuccess<Target>['body']]
     : [];
 
 type ScriptedHeadersAndBody<Target extends Endpoint> = Target['success'] extends {
   readonly body: core.$ZodType;
 }
   ? {
-      readonly headers: ReceivedSuccess<Target>['headers'];
-      readonly body: ReceivedSuccess<Target>['value'];
+      readonly headers: EndpointSuccess<Target>['headers'];
+      readonly body: EndpointSuccess<Target>['body'];
     }
-  : { readonly headers: ReceivedSuccess<Target>['headers'] };
+  : { readonly headers: EndpointSuccess<Target>['headers'] };
 
-type KnownRejection<
-  Target extends Endpoint,
-  Standards extends ProvidedStandardRejections,
-> = Extract<ReceivedRejection<Target, Standards>, { readonly known: true }>;
-
-/** What `r.reject` takes for a code the Endpoint answers: the code, and its body when it has one. */
-type KnownRejectionArguments<Known> = Known extends {
-  readonly code: infer Code;
-  readonly body: infer Body;
-}
-  ? undefined extends Body
-    ? [code: Code, body?: Body]
-    : [code: Code, body: Body]
+/** What `r.reject` takes for a code the Endpoint answers: the code, and its body when it declares one. */
+type KnownRejectionArguments<Known> = Known extends { readonly code: infer Code }
+  ? Known extends { readonly body: infer Body }
+    ? undefined extends Body
+      ? [code: Code, body?: Body]
+      : [code: Code, body: Body]
+    : [code: Code]
   : never;
 
 /** A code the Provider does not declare, with the message its Envelope carries, its code by default. */
@@ -58,7 +53,7 @@ export type StepBuilder<Target extends Endpoint, Standards extends ProvidedStand
   success(...success: SuccessArguments<Target>): ScriptedAnswer;
   reject(
     ...rejection:
-      | KnownRejectionArguments<KnownRejection<Target, Standards>>
+      | KnownRejectionArguments<EndpointRejection<Target, Standards>>
       | [unknown: UnknownCode, body: unknown]
   ): ScriptedAnswer;
   fault(fault: ScriptedFault): ScriptedAnswer;

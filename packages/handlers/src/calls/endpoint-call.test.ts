@@ -12,12 +12,14 @@ import {
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Fault,
   fault,
   handle,
   InvalidInputError,
   InvalidOutcomeError,
   type Issue,
   isRejectionOf,
+  type MessageFault,
   type ResolvedOutcome,
   reject,
   success,
@@ -600,6 +602,91 @@ describe('an EndpointHandler’s Faults', () => {
       retryable: true,
       message: 'Internal error',
     });
+  });
+});
+
+describe('fault() retryAfter', () => {
+  test('retryAfter is given only to a retryable Fault', () => {
+    const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
+
+    expectTypeOf(later.retryAfter).toEqualTypeOf<number>();
+    // @ts-expect-error a Fault not worth retrying says no time to retry
+    expect(() => fault({ committed: 'no', retryable: false, retryAfter: 5 })).toThrow(
+      'fault(): retryAfter is given only to a retryable Fault',
+    );
+  });
+
+  test.each([
+    [1.5, '1.5'],
+    [-1, '-1'],
+    [Number.NaN, 'NaN'],
+    [Number.POSITIVE_INFINITY, 'Infinity'],
+    ['5', '"5"'],
+  ])('fault() refuses a retryAfter of %s, naming it', (retryAfter, named) => {
+    const building = () =>
+      fault({ committed: 'no', retryable: true, retryAfter: retryAfter as number });
+
+    expect(building).toThrow(
+      `fault(): retryAfter is no whole number of seconds from 0: got ${named}`,
+    );
+  });
+
+  test('the Fault type gives retryAfter to a retryable Fault only', () => {
+    const given = { committed: 'no', retryable: false, retryAfter: 5 } as const;
+    const retryable: boolean = given.retryable;
+    const built: Fault = { kind: 'fault', committed: 'no', retryable, message: 'm' };
+    const plain: MessageFault = fault({ committed: 'no', retryable });
+
+    // @ts-expect-error a spread cannot make a Fault that says when to retry not retryable
+    const spread: Fault = {
+      ...fault({ committed: 'no', retryable: true, retryAfter: 5 }),
+      retryable: false,
+    };
+    // @ts-expect-error a Fault built by hand that is not retryable takes no retryAfter
+    const byHand: Fault = {
+      kind: 'fault',
+      committed: 'no',
+      retryable: false,
+      message: 'm',
+      retryAfter: 5,
+    };
+    // @ts-expect-error fault() refuses retryAfter on a Fault that is not retryable, given as a value
+    const fromValue = () => fault(given);
+
+    expectTypeOf<Extract<Fault, { retryable: false }>['retryAfter']>().toEqualTypeOf<undefined>();
+    expectTypeOf<Fault['retryAfter']>().toEqualTypeOf<number | undefined>();
+    expect([built.retryable, plain.retryable, spread.retryable, byHand.retryAfter]).toEqual([
+      false,
+      false,
+      false,
+      5,
+    ]);
+    expect(fromValue).toThrow('fault(): retryAfter is given only to a retryable Fault');
+  });
+
+  test('a Fault built by hand whose retryAfter cannot be sent is an invalid Outcome', async () => {
+    const getOrderHandler = handle(
+      getOrder,
+      () =>
+        ({
+          kind: 'fault',
+          committed: 'no',
+          retryable: false,
+          message: 'Down',
+          retryAfter: 5,
+        }) as never,
+    );
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues).toEqual([
+      {
+        part: 'fault',
+        path: ['retryAfter'],
+        code: 'invalid_value',
+        message: 'retryAfter is given only to a retryable Fault',
+      },
+    ]);
   });
 });
 

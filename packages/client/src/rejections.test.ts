@@ -115,7 +115,7 @@ function rejecting(status: number, rejection: Record<string, unknown>) {
 }
 
 describe('a Rejection', () => {
-  test('a declared code is known, with its body read by its Reader schema', async () => {
+  test('a declared code arrives with its body read by its Reader schema', async () => {
     const body = { lockedAt: '2026-10-18T10:00:00Z', addedLater: 1 };
     const orders = rejecting(409, { code: 'ORDER_LOCKED', message: 'Locked', body });
 
@@ -123,15 +123,16 @@ describe('a Rejection', () => {
 
     expect(outcome).toEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'ORDER_LOCKED',
+      status: 409,
       message: 'Locked',
       body: { lockedAt: '2026-10-18T10:00:00Z' },
     });
   });
 
-  test('checking known narrows by code to the declared body', async () => {
-    const orders = rejecting(409, {
+  test('a known Rejection carries the status it arrived with', async () => {
+    const orders = rejecting(418, {
       code: 'ORDER_LOCKED',
       message: 'Locked',
       body: { lockedAt: '2026-10-18T10:00:00Z' },
@@ -139,27 +140,39 @@ describe('a Rejection', () => {
 
     const outcome = await orders.editOrder(edit);
 
-    if (outcome.kind === 'rejection' && outcome.known && outcome.code === 'ORDER_LOCKED') {
-      expectTypeOf(outcome.body).toEqualTypeOf<{ lockedAt: string }>();
-    }
-    expect(outcome.kind).toBe('rejection');
+    expect(outcome).toMatchObject({ kind: 'rejection', code: 'ORDER_LOCKED', status: 418 });
   });
 
-  test('an unknown code is known false, with its code and body as received', async () => {
+  test('an unknown code arrives as unknown-rejection, with its code, status, message and body as received', async () => {
     const orders = rejecting(422, { code: 'CARD_EXPIRED', message: 'Expired', body: { at: 1 } });
 
     const outcome = await orders.editOrder(edit);
 
     expect(outcome).toEqual({
-      kind: 'rejection',
-      known: false,
+      kind: 'unknown-rejection',
+      source: 'provider',
       code: 'CARD_EXPIRED',
+      status: 422,
       message: 'Expired',
       body: { at: 1 },
     });
   });
 
-  test('a code the Endpoint does not answer is known false, even one the Provider declares', async () => {
+  test('an unknown code arrives with no body key when none was sent', async () => {
+    const orders = rejecting(422, { code: 'CARD_EXPIRED', message: 'Expired' });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).toStrictEqual({
+      kind: 'unknown-rejection',
+      source: 'provider',
+      code: 'CARD_EXPIRED',
+      status: 422,
+      message: 'Expired',
+    });
+  });
+
+  test('a code the Endpoint does not answer is unknown, even one the Provider declares', async () => {
     const orders = rejecting(409, {
       code: 'ORDER_LOCKED',
       message: 'Locked',
@@ -168,7 +181,7 @@ describe('a Rejection', () => {
 
     const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', known: false, code: 'ORDER_LOCKED' });
+    expect(outcome).toMatchObject({ kind: 'unknown-rejection', code: 'ORDER_LOCKED' });
   });
 
   test('a known code whose body fails its Reader schema is INVALID_OUTCOME, committed unknown', async () => {
@@ -178,6 +191,8 @@ describe('a Rejection', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'invalid-outcome',
+      status: 409,
       code: 'INVALID_OUTCOME',
       committed: 'unknown',
       retryable: false,
@@ -186,23 +201,23 @@ describe('a Rejection', () => {
     });
   });
 
-  test('a body on a code that declares none is dropped', async () => {
+  test('a code that declares no body has no body key, whatever arrived', async () => {
     const orders = rejecting(401, { code: 'UNAUTHENTICATED', message: 'No', body: { why: 'x' } });
 
     const outcome = await orders.editOrder(edit);
 
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'UNAUTHENTICATED',
+      status: 401,
       message: 'No',
-      body: undefined,
     });
   });
 });
 
 describe('telling a Rejection', () => {
-  test('a code is known only as written, case included', async () => {
+  test('a code is told only as written, case included', async () => {
     const orders = rejecting(409, {
       code: 'order_locked',
       message: 'Locked',
@@ -211,7 +226,7 @@ describe('telling a Rejection', () => {
 
     const outcome = await orders.editOrder(edit);
 
-    expect(outcome).toMatchObject({ kind: 'rejection', known: false, code: 'order_locked' });
+    expect(outcome).toMatchObject({ kind: 'unknown-rejection', code: 'order_locked' });
   });
 
   test('a body that is both a Rejection and a Fault Envelope is the Rejection', async () => {
@@ -243,12 +258,12 @@ describe('Standard Rejections', () => {
     ];
 
     expect(outcomes).toMatchObject([
-      { known: true, code: 'MISSING' },
-      { known: true, code: 'NOT_YET' },
-      { known: false, code: 'NOT_FOUND' },
+      { kind: 'rejection', code: 'MISSING' },
+      { kind: 'rejection', code: 'NOT_YET' },
+      { kind: 'unknown-rejection', code: 'NOT_FOUND' },
     ]);
     const [first] = outcomes;
-    if (first?.kind === 'rejection' && first.known) {
+    if (first?.kind === 'rejection') {
       expectTypeOf(first.code).toEqualTypeOf<
         'ORDER_LOCKED' | 'UNAUTHENTICATED' | 'MISSING' | 'BAD_REQUEST' | 'NOT_YET'
       >();
@@ -271,8 +286,8 @@ describe('Standard Rejections', () => {
     const outcomes = [await valid.editOrder(edit), await broken.editOrder(edit)];
 
     expect(outcomes).toMatchObject([
-      { kind: 'rejection', known: true, code: 'BAD_REQUEST', body: { issues: [issue] } },
-      { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown' },
+      { kind: 'rejection', code: 'BAD_REQUEST', body: { issues: [issue] } },
+      { kind: 'fault', source: 'invalid-outcome', status: 400, code: 'INVALID_OUTCOME' },
     ]);
   });
 
@@ -287,7 +302,7 @@ describe('Standard Rejections', () => {
     const outcome = await orders.editOrder(edit);
 
     expect(outcome).toMatchObject({
-      known: true,
+      kind: 'rejection',
       code: 'BAD_REQUEST',
       body: { issues: [{ in: { unknown: 'cookies' }, code: { unknown: 'too_deep' } }] },
     });

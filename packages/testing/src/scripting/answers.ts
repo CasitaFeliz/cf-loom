@@ -1,4 +1,4 @@
-import type { Committed, ReservedCode } from '@cf-loom/contract/internal';
+import type { Committed, ReservedCode } from '@cf-loom/contract';
 
 /**
  * What a step scripted, as written, before its Endpoint checks it: a Success, a Rejection by a

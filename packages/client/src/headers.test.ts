@@ -27,6 +27,19 @@ const getOrder = defineEndpoint({
   success: { status: 204 },
 });
 
+const createOrder = defineEndpoint({
+  name: 'createOrder',
+  method: 'POST',
+  path: '/orders',
+  visibility: 'public',
+  description: 'A new order',
+  input: {
+    headers: z.object({ 'x-api-key': z.string() }),
+    body: z.object({ quantity: z.int() }),
+  },
+  success: { status: 204 },
+});
+
 const ping = defineEndpoint({
   name: 'ping',
   method: 'GET',
@@ -64,15 +77,18 @@ function contractPackageOf<
 
 const defaultStandards = providedStandardRejections();
 
-const orders = contractPackageOf({ getOrder, ping }, defaultStandards);
+const orders = contractPackageOf({ getOrder, createOrder, ping }, defaultStandards);
 
-const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder, ping] });
+const ordersDependency = defineDependency({
+  provider: orders,
+  endpoints: [getOrder, createOrder, ping],
+});
 
 /** Every request a client sent, as its `fetch` received it. */
 function recorded() {
   const sent: Request[] = [];
-  const fetch = async (url: string, init: RequestInit) => {
-    sent.push(new Request(url, init));
+  const fetch = async (request: Request) => {
+    sent.push(request);
     return new Response(null, { status: 204 });
   };
   return { sent, fetch };
@@ -184,6 +200,7 @@ describe('headers given to client()', () => {
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'aborted',
       committed: 'no',
       message: 'The request was aborted',
     });
@@ -223,5 +240,27 @@ describe('headers given to client()', () => {
     const called = orders.getOrder(params);
 
     await expect(called).rejects.toBe(error);
+  });
+});
+
+describe('a fetch wrapper', () => {
+  test('setting a header on the Request keeps every header the client set', async () => {
+    const { sent, fetch: recording } = recorded();
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      headers: { 'x-api-key': 'key-1' },
+      fetch: (request) => {
+        request.headers.set('traceparent', '00-trace');
+        return recording(request);
+      },
+    });
+
+    await orders.createOrder({ body: { quantity: 2 } });
+
+    expect(Object.fromEntries(sent[0]?.headers ?? [])).toEqual({
+      'content-type': 'application/json; charset=utf-8',
+      'x-api-key': 'key-1',
+      traceparent: '00-trace',
+    });
   });
 });

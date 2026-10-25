@@ -5,7 +5,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
+import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Messaging, type MessagingOptions, messaging } from '../index.ts';
@@ -72,7 +72,7 @@ const readers = readersOf({
 type Implementation = (
   body: { readonly orderId: string },
   meta: MessageMeta,
-) => Fault | undefined | Promise<Fault | undefined>;
+) => MessageFault | undefined | Promise<MessageFault | undefined>;
 
 type Handlers = {
   readonly charge?: Implementation;
@@ -167,7 +167,8 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.cause).toEqual({
-      element: 'notifyOnCreated',
+      element: notifyOnCreated,
+      identity: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
       messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
@@ -240,7 +241,7 @@ describe('settled()', () => {
 
     const rejection = await rejectionOf(broker.settled());
 
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
   });
 
   test('a failure is reported once: the next settled() resolves', async () => {
@@ -266,7 +267,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(settlement).toBe('pending');
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
   });
 
   test('an onServiceFault that throws leaves the Message pending and makes settled() reject', async () => {
@@ -292,6 +293,44 @@ describe('settled()', () => {
     );
     expect(rejection?.cause).toBe(hook);
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+  });
+
+  test('an onServiceFault that rejects leaves pending a Message it would have ended, and makes settled() reject', async () => {
+    const { broker, publisher } = await running(
+      () => ({ notify: () => fault({ committed: 'no', retryable: false }) }),
+      { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
+    );
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+
+    const rejection = await rejectionOf(broker.settled());
+
+    expect(rejection?.message).toBe(
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+    );
+    expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+  });
+
+  test('an onServiceFault that rejects causes no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    const { broker, publisher } = await running(
+      () => ({
+        notify: () => {
+          throw new Error('gateway down');
+        },
+      }),
+      { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
+    );
+
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    await rejectionOf(broker.settled());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    process.off('unhandledRejection', listener);
+
+    expect(unhandled).toEqual([]);
   });
 });
 

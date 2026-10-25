@@ -137,7 +137,9 @@ describe('fakeProvider: requests', () => {
   test('a param that breaks its schema answers the invalid-input Rejection, takes no step and is recorded', async () => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } });
+    const response = await fake.fetch(
+      new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
@@ -165,7 +167,7 @@ describe('fakeProvider: requests', () => {
   test('a missing demanded header answers alone, before the Input is read', async () => {
     const { fake } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab`, {});
+    const response = await fake.fetch(new Request(`${at}/payments/ab`));
 
     expect(await response.json()).toMatchObject({
       rejection: { body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'required' }] } },
@@ -182,7 +184,7 @@ describe('fakeProvider: requests', () => {
   ])('%s answers malformed alone', async (_name, init, message) => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab/capture`, init);
+    const response = await fake.fetch(new Request(`${at}/payments/ab/capture`, init));
 
     expect(await response.json()).toMatchObject({
       rejection: { body: { issues: [{ in: 'body', path: [], code: 'malformed', message }] } },
@@ -198,7 +200,9 @@ describe('fakeProvider: requests', () => {
       return builder.success({ id: input.params.paymentId, amount: input.body.amount });
     });
 
-    await fake.fetch(`${at}/payments/pay-1/capture`, captureInit('{"amount":5,"note":"x"}'));
+    await fake.fetch(
+      new Request(`${at}/payments/pay-1/capture`, captureInit('{"amount":5,"note":"x"}')),
+    );
 
     expect(inputs).toEqual([{ params: { paymentId: 'pay-1' }, body: { amount: 5 } }]);
     expect(fake.calls('capturePayment')).toEqual([{ kind: 'valid', input: inputs[0] }]);
@@ -208,7 +212,9 @@ describe('fakeProvider: requests', () => {
     const fake = fakeProvider(paymentsDependency);
     fake.on('getPayment').otherwise((r, { params }) => r.success({ id: params.paymentId }));
 
-    await fake.fetch(`${at}/payments/pay-1?expand=a&expand=b`, { headers: { 'x-api-key': 'k' } });
+    await fake.fetch(
+      new Request(`${at}/payments/pay-1?expand=a&expand=b`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     expect(fake.calls('getPayment')).toEqual([
       {
@@ -222,12 +228,23 @@ describe('fakeProvider: requests', () => {
     ]);
   });
 
+  test('a Request is answered whole, with nothing given beside it', async () => {
+    const { fake } = countingFake();
+    const request = new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } });
+
+    const response = await fake.fetch(request);
+
+    expect(await response.json()).toEqual({ id: 'pay-1' });
+  });
+
   test('a request to another origin still reaches the fake', async () => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch('http://elsewhere.example/payments/pay-1', {
-      headers: { 'x-api-key': 'k' },
-    });
+    const response = await fake.fetch(
+      new Request('http://elsewhere.example/payments/pay-1', {
+        headers: { 'x-api-key': 'k' },
+      }),
+    );
 
     expect(response.status).toBe(200);
     expect(taken.getPayment).toBe(1);
@@ -239,9 +256,9 @@ describe('fakeProvider: requests', () => {
     const outcome = await fake.client({ headers: { 'x-api-key': 'k' } }).getPayment({
       params: { paymentId: 'pay-1' },
     });
-    const outside = fake.fetch('https://gateway.test/payments/pay-1', {});
+    const outside = fake.fetch(new Request('https://gateway.test/payments/pay-1'));
 
-    expect(outcome).toEqual({ kind: 'success', value: { id: 'pay-1' }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: 'pay-1' } });
     await expect(outside).rejects.toThrow(
       "payments-service: the path /payments/pay-1 is outside the base URL's path /payments-api/",
     );
@@ -250,7 +267,9 @@ describe('fakeProvider: requests', () => {
   test('an unlisted Endpoint whose literal beats a listed param is a mistake, not that param', async () => {
     const { fake, taken } = countingFake();
 
-    const answering = fake.fetch(`${at}/payments/summary`, { headers: { 'x-api-key': 'k' } });
+    const answering = fake.fetch(
+      new Request(`${at}/payments/summary`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     await expect(answering).rejects.toThrow(FakeProviderError);
     await expect(answering).rejects.toThrow('does not list GET /payments/summary');
@@ -271,7 +290,9 @@ describe('fakeProvider: requests', () => {
         .on('getPayment')
         .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
 
-      const response = await fake.fetch(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } });
+      const response = await fake.fetch(
+        new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+      );
 
       expect(await response.json()).toEqual({ id: 'latest' });
     },
@@ -304,7 +325,7 @@ describe('fakeProvider: requests', () => {
   test('a path that only begins like the base URL’s path lies outside it', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/api' });
 
-    const answering = fake.fetch('https://gateway.test/apix/payments/pay-1', {});
+    const answering = fake.fetch(new Request('https://gateway.test/apix/payments/pay-1'));
 
     await expect(answering).rejects.toThrow(
       "the path /apix/payments/pay-1 is outside the base URL's path /api/",
@@ -314,9 +335,11 @@ describe('fakeProvider: requests', () => {
   test('a path that begins with an empty segment is matched as a path, never as a host', async () => {
     const { fake, taken } = countingFake();
 
-    const answering = fake.fetch(`${at}//elsewhere/payments/pay-1`, {
-      headers: { 'x-api-key': 'k' },
-    });
+    const answering = fake.fetch(
+      new Request(`${at}//elsewhere/payments/pay-1`, {
+        headers: { 'x-api-key': 'k' },
+      }),
+    );
 
     await expect(answering).rejects.toThrow(FakeProviderError);
     expect(taken.getPayment).toBe(0);
@@ -326,10 +349,12 @@ describe('fakeProvider: requests', () => {
     const { fake, taken } = countingFake();
     const reason = new Error('Gave up');
 
-    const answering = fake.fetch(`${at}/payments/pay-1`, {
-      headers: { 'x-api-key': 'k' },
-      signal: AbortSignal.abort(reason),
-    });
+    const answering = fake.fetch(
+      new Request(`${at}/payments/pay-1`, {
+        headers: { 'x-api-key': 'k' },
+        signal: AbortSignal.abort(reason),
+      }),
+    );
 
     await expect(answering).rejects.toBe(reason);
     expect(fake.calls('getPayment')).toEqual([]);
@@ -338,7 +363,7 @@ describe('fakeProvider: requests', () => {
 
   test('calls are a frozen copy', async () => {
     const { fake } = countingFake();
-    await fake.fetch(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } });
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }));
 
     const calls = fake.calls('getPayment');
 
@@ -349,10 +374,24 @@ describe('fakeProvider: requests', () => {
   test('a path no exported Endpoint matches is a mistake naming the path and the base URL', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
 
-    const answering = fake.fetch('https://gateway.test/payments-api/refunds/r-1', {});
+    const answering = fake.fetch(new Request('https://gateway.test/payments-api/refunds/r-1'));
 
     await expect(answering).rejects.toThrow(
       'payments-service: no Endpoint it exports is GET /refunds/r-1 under /payments-api/',
+    );
+  });
+
+  test('a method the exported path does not take is a mistake naming the path’s methods', async () => {
+    const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
+
+    const answering = fake.fetch(
+      new Request('https://gateway.test/payments-api/payments/pay-1', {
+        method: 'DELETE',
+      }),
+    );
+
+    await expect(answering).rejects.toThrow(
+      'payments-service: no Endpoint it exports is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
     );
   });
 });
