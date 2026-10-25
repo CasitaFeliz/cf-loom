@@ -17,14 +17,6 @@ export function placedOf(service: BuiltService): PlacedService | Tooling {
   }
 }
 
-/** The Handlers the Handler map imports whose paths hold nothing, not even a link. */
-export function missingHandlersOf(
-  service: Pick<PlacedService, 'project' | 'handlerPaths'>,
-): readonly HandlerPath[] {
-  const { directory } = service.project;
-  return service.handlerPaths.filter(({ path }) => isNothingAt(join(directory, path)));
-}
-
 /** A line for every Handler path that something other than a file holds. */
 export function noFileLinesOf(
   service: Pick<PlacedService, 'project' | 'handlerPaths'>,

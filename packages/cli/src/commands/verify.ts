@@ -7,10 +7,12 @@ import {
   type Run,
   snapshotFile,
 } from '../project/index.ts';
+import type { HandlerPath } from '../service-code/index.ts';
 import { comparedOf } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
-import { missingHandlersOf, noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts';
-import { orphanLinesOf } from './orphans.ts';
+import { noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts';
+import { orphansOf } from './orphans.ts';
+import { pendingLineOf } from './placement.ts';
 import { serviceFilesOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
 import { unreachedLinesOf } from './unreached.ts';
@@ -58,7 +60,7 @@ async function verifyService(
   if (unreadable?.kind === 'failed') {
     return toolingError(unreadable.message);
   }
-  const orphans = orphanLinesOf(service);
+  const orphans = orphansOf(service);
   if (orphans.kind === 'tooling') {
     return toolingError(orphans.message);
   }
@@ -68,11 +70,12 @@ async function verifyService(
     ...outdated.map(
       ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
     ),
-    ...stubsOf(service, exports.exportsOf).failureLines,
+    ...stubsOf(service, exports.exportsOf, orphans.lacking).failureLines,
     ...regenerated.failureLines,
     ...unreachedLinesOf(service, exports.exports),
-    ...serviceFailuresOf(service),
+    ...serviceFailuresOf(service, orphans.lacking),
     ...orphans.lines,
+    ...orphans.moves.map(pendingLineOf),
   ];
   return verifiedExit(failures, [snapshotFile, ...regenerated.files.map(({ path }) => path)]);
 }
@@ -86,9 +89,12 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
 }
 
 /** What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them. */
-function serviceFailuresOf(service: PlacedService): readonly string[] {
+function serviceFailuresOf(
+  service: PlacedService,
+  lacking: readonly HandlerPath[],
+): readonly string[] {
   return [
-    ...missingHandlersOf(service).map(({ path }) => `${path} is missing: run cf-loom generate`),
+    ...lacking.map(({ path }) => `${path} is missing: run cf-loom generate`),
     ...noFileLinesOf(service),
   ];
 }

@@ -138,6 +138,16 @@ const movedLayout = lines([
   '}',
 ]).trimEnd();
 
+/** A layout that moves every Handler and leaves both generated files. */
+const movedHandlersLayout = lines([
+  '{',
+  "  endpoint: 'src/http/{group}/{name}.handler.ts',",
+  "  guard: 'src/security/{name}.handler.ts',",
+  "  command: 'src/billing/{name}.v{version}.handler.ts',",
+  "  subscription: 'src/reactions/{name}.handler.ts',",
+  '}',
+]).trimEnd();
+
 /** Every file a command left under `src/` outside the Contract, and the Snapshot, with its text. */
 function writtenBy(project: string): Readonly<Record<string, string>> {
   const entries = readdirSync(join(project, 'src'), { recursive: true, withFileTypes: true });
@@ -150,14 +160,26 @@ function writtenBy(project: string): Readonly<Record<string, string>> {
   );
 }
 
-/** The line `generate` and `verify` print for a Handler left at a path its Element no longer has. */
-function movedLine(old: string, element: string, now: string): string {
-  return `${old} is the Handler of ${element}, which is now ${now}: move it`;
+/** What `generate` prints for a Handler it moved. */
+function movedLine(from: string, to: string): string {
+  return `Moved ${from} to ${to}`;
 }
 
-/** The same line when the Element's new path already holds a file. */
-function heldLine(old: string, element: string, now: string): string {
-  return movedLine(old, element, now).replace(/move it$/, 'delete it');
+/** What `verify` prints for a Handler `generate` would move. */
+function pendingLine(from: string, element: string, to: string): string {
+  return `${from} is the Handler of ${element}, which is now ${to}: run cf-loom generate`;
+}
+
+/** What `generate` and `verify` print for a Handler whose Element's new path holds a file. */
+function conflictLine(from: string, element: string, to: string): string {
+  return `${from} is the Handler of ${element}, which is now ${to}, where a file already is: delete the one that is not its Handler`;
+}
+
+/** Writes a Handler as its author would, over the stub, and returns its text. */
+function implement(project: string, path: string, name: string): string {
+  const text = `export default '${name}';\n`;
+  write(project, { [path]: text });
+  return text;
 }
 
 /** The files of a Service changed so its Endpoint `getOrder` is named `fetchOrder`. */
@@ -167,6 +189,29 @@ function getOrderRenamed(service = aService()): Readonly<Record<string, string>>
   return {
     [endpoint]: (service[endpoint] ?? '').replaceAll('getOrder', 'fetchOrder'),
     [root]: (service[root] ?? '').replaceAll('getOrder', 'fetchOrder'),
+  };
+}
+
+/** `aService()` with an Endpoint `apiKey` beside its Guard `apiKey`: live, Retired, or not listed. */
+function withApiKeyEndpoint(state: 'live' | 'retired' | 'gone'): Readonly<Record<string, string>> {
+  const listed = {
+    getOrder: './endpoints/orders/get-order.endpoint.ts',
+    createOrder: './endpoints/orders/create-order.endpoint.ts',
+    listOrders: './endpoints/orders/list-orders.endpoint.ts',
+  };
+  const apiKey = './endpoints/orders/api-key.endpoint.ts';
+  const lifecycle = state === 'retired' ? 'retired' : 'active';
+  const endpoint = {
+    'src/contract/endpoints/orders/api-key.endpoint.ts': anEndpoint({
+      name: 'apiKey',
+      path: '/api-key',
+      lifecycle,
+    }),
+  };
+  return {
+    ...aService(),
+    ...(state === 'gone' ? {} : endpoint),
+    'src/contract/index.ts': aRoot(state === 'gone' ? listed : { ...listed, apiKey }),
   };
 }
 
@@ -986,7 +1031,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
     ]);
   });
 
-  test('a Retired Command’s Message Version is still imported and paired, so its Handler keeps compiling', () => {
+  test('a Retired Command’s Message Version is still paired, so its Handler compiles until it is deleted', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
 
@@ -1414,147 +1459,220 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
-  test('after layout.endpoint changes, the Handlers left at the old paths are named with where they go', () => {
+  test('after layout.endpoint changes, generate moves the Handlers to the new paths and rewrites the map', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
+    const created = implement(project, 'src/endpoints/orders/create-order.handler.ts', 'create');
+    const fetched = implement(project, 'src/endpoints/orders/get-order.handler.ts', 'get');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
 
     const ran = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
 
     expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: lines([
+      status: 0,
+      stdout: lines([
         movedLine(
           'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
           'src/http/orders/create-order.handler.ts',
         ),
         movedLine(
           'src/endpoints/orders/get-order.handler.ts',
-          'endpoints.getOrder',
           'src/http/orders/get-order.handler.ts',
         ),
+        'Wrote contract.snapshot.json',
+        'Wrote src/handlers.generated.ts',
+        'Wrote src/readers.generated.ts',
       ]),
+      stderr: '',
     });
+    expect(read(project, 'src/http/orders/create-order.handler.ts')).toBe(created);
+    expect(read(project, 'src/http/orders/get-order.handler.ts')).toBe(fetched);
+    expect(existsSync(join(project, 'src/endpoints/orders/get-order.handler.ts'))).toBe(false);
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      importOf('getOrderEndpointHandler', './http/orders/get-order.handler.ts'),
+    );
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
   });
 
-  test('after the layout moves from one custom path to another, the Handlers are named with where they go', () => {
+  test('after the layout moves from one custom path to another, generate moves the Handlers again', () => {
     const project = aProject(
       withLayout(aService(), "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
     );
     cfLoom(project, 'generate');
+    const created = implement(project, 'src/http/orders/create-order.handler.ts', 'create');
     write(project, withLayout({}, "{ endpoint: 'src/api/{group}/{name}.handler.ts' }"));
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: lines([
-        movedLine(
-          'src/http/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/api/orders/create-order.handler.ts',
-        ),
-        movedLine(
-          'src/http/orders/get-order.handler.ts',
-          'endpoints.getOrder',
-          'src/api/orders/get-order.handler.ts',
-        ),
-      ]),
-    });
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toContain(
+      `${movedLine('src/http/orders/create-order.handler.ts', 'src/api/orders/create-order.handler.ts')}\n`,
+    );
+    expect(read(project, 'src/api/orders/create-order.handler.ts')).toBe(created);
   });
 
-  test('after every field of the layout moves, each Handler and each generated file left behind is named', () => {
+  test('after every Handler field of the layout moves, generate moves each kind of Handler', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
-    write(project, withLayout({}, movedLayout));
+    const commands = implement(project, 'src/commands/payments/charge-card.v2.handler.ts', 'cmd');
+    const guard = implement(project, 'src/guards/api-key.handler.ts', 'guard');
+    const subscription = implement(
+      project,
+      'src/subscriptions/payments/audit-created.handler.ts',
+      'sub',
+    );
+    write(project, withLayout({}, movedHandlersLayout));
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(1);
-    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual([
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n').filter((line) => line.startsWith('Moved'))).toEqual([
       movedLine(
         'src/commands/payments/charge-card.v1.handler.ts',
-        'commands.ChargeCard@1',
         'src/billing/charge-card.v1.handler.ts',
       ),
       movedLine(
         'src/commands/payments/charge-card.v2.handler.ts',
-        'commands.ChargeCard@2',
         'src/billing/charge-card.v2.handler.ts',
       ),
       movedLine(
         'src/endpoints/orders/create-order.handler.ts',
-        'endpoints.createOrder',
         'src/http/orders/create-order.handler.ts',
       ),
       movedLine(
         'src/endpoints/orders/get-order.handler.ts',
-        'endpoints.getOrder',
         'src/http/orders/get-order.handler.ts',
       ),
-      movedLine(
-        'src/guards/api-key.handler.ts',
-        'guards.apiKey',
-        'src/security/api-key.handler.ts',
-      ),
-      movedLine(
-        'src/guards/legacy-key.handler.ts',
-        'guards.legacyKey',
-        'src/security/legacy-key.handler.ts',
-      ),
-      'src/handlers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
-      'src/readers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
+      movedLine('src/guards/api-key.handler.ts', 'src/security/api-key.handler.ts'),
+      movedLine('src/guards/legacy-key.handler.ts', 'src/security/legacy-key.handler.ts'),
       movedLine(
         'src/subscriptions/payments/audit-created.handler.ts',
-        'subscriptions.auditCreated',
         'src/reactions/audit-created.handler.ts',
       ),
       movedLine(
         'src/subscriptions/payments/notify-on-settled.handler.ts',
-        'subscriptions.notifyOnSettled',
         'src/reactions/notify-on-settled.handler.ts',
       ),
     ]);
+    expect(read(project, 'src/billing/charge-card.v2.handler.ts')).toBe(commands);
+    expect(read(project, 'src/security/api-key.handler.ts')).toBe(guard);
+    expect(read(project, 'src/reactions/audit-created.handler.ts')).toBe(subscription);
   });
 
-  test('after layout.endpoint changes with the Handler map in a folder of its own, the Handlers left behind are named with where they go', () => {
+  test('after layout.endpoint changes with the Handler map in a folder of its own, generate moves the Handlers', () => {
     const generatedFolder =
       "handlerMap: 'src/generated/handlers.generated.ts', readers: 'src/generated/readers.generated.ts'";
     const project = aProject(withLayout(aService(), `{ ${generatedFolder} }`));
     cfLoom(project, 'generate');
+    const created = implement(project, 'src/endpoints/orders/create-order.handler.ts', 'create');
     const layout = `{ endpoint: 'src/http/{group}/{name}.handler.ts', ${generatedFolder} }`;
     write(project, withLayout({}, layout));
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: lines([
-        movedLine(
-          'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/http/orders/create-order.handler.ts',
-        ),
-        movedLine(
-          'src/endpoints/orders/get-order.handler.ts',
-          'endpoints.getOrder',
-          'src/http/orders/get-order.handler.ts',
-        ),
-      ]),
-    });
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toContain(
+      `${movedLine('src/endpoints/orders/create-order.handler.ts', 'src/http/orders/create-order.handler.ts')}\n`,
+    );
+    expect(read(project, 'src/http/orders/create-order.handler.ts')).toBe(created);
   });
 
-  test('a Handler left at the old path and written at the new one is named to delete', () => {
+  test('a Handler whose new path holds a file the map never imported is named, and nothing is moved', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+    write(project, { 'src/http/orders/get-order.handler.ts': "export default 'theirs';\n" });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${conflictLine('src/endpoints/orders/get-order.handler.ts', 'endpoints.getOrder', 'src/http/orders/get-order.handler.ts')}\n`,
+    });
+    expect(handlerFiles(project)).toContain('endpoints/orders/create-order.handler.ts');
+    expect(existsSync(join(project, 'src/http/orders/create-order.handler.ts'))).toBe(false);
+  });
+
+  test('an Endpoint that moves onto the old path of a Guard that moves away takes it in the same run', () => {
+    const project = aProject(withApiKeyEndpoint('live'));
+    cfLoom(project, 'generate');
+    const endpoint = implement(project, 'src/endpoints/orders/api-key.handler.ts', 'endpoint');
+    const guard = implement(project, 'src/guards/api-key.handler.ts', 'guard');
+    const layout =
+      "{ endpoint: 'src/guards/{name}.handler.ts', guard: 'src/security/{name}.handler.ts' }";
+    write(project, withLayout({}, layout));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    expect(read(project, 'src/guards/api-key.handler.ts')).toBe(endpoint);
+    expect(read(project, 'src/security/api-key.handler.ts')).toBe(guard);
+  });
+
+  test('two Handlers that swap paths keep their implementations', () => {
+    const before = "{ endpoint: 'src/a/{name}.handler.ts', guard: 'src/b/{name}.handler.ts' }";
+    const swapped = "{ endpoint: 'src/b/{name}.handler.ts', guard: 'src/a/{name}.handler.ts' }";
+    const project = aProject(withLayout(withApiKeyEndpoint('live'), before));
+    cfLoom(project, 'generate');
+    const endpoint = implement(project, 'src/a/api-key.handler.ts', 'endpoint');
+    const guard = implement(project, 'src/b/api-key.handler.ts', 'guard');
+    write(project, withLayout({}, swapped));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    expect(read(project, 'src/b/api-key.handler.ts')).toBe(endpoint);
+    expect(read(project, 'src/a/api-key.handler.ts')).toBe(guard);
+  });
+
+  test.each([
+    ['retired', 'Retired'],
+    ['gone', 'no longer declared'],
+  ] as const)(
+    'a %s Endpoint’s Handler at the new path of a Guard’s is named, then the Guard’s moves there',
+    (state, reason) => {
+      const project = aProject(withApiKeyEndpoint('live'));
+      cfLoom(project, 'generate');
+      implement(project, 'src/endpoints/orders/api-key.handler.ts', 'endpoint');
+      const guard = implement(project, 'src/guards/api-key.handler.ts', 'guard');
+      if (state === 'gone') {
+        rmSync(join(project, 'src/contract/endpoints/orders/api-key.endpoint.ts'));
+      }
+      write(project, withApiKeyEndpoint(state));
+      write(project, withLayout({}, "{ guard: 'src/endpoints/orders/{name}.handler.ts' }"));
+
+      const named = cfLoom(project, 'generate');
+      rmSync(join(project, 'src/endpoints/orders/api-key.handler.ts'));
+      const moved = cfLoom(project, 'generate');
+
+      expect(named).toEqual({
+        status: 1,
+        stdout: '',
+        stderr: `src/endpoints/orders/api-key.handler.ts is the Handler of endpoints.apiKey, which is ${reason}: delete it\n`,
+      });
+      expect(moved.status).toBe(0);
+      expect(read(project, 'src/endpoints/orders/api-key.handler.ts')).toBe(guard);
+    },
+  );
+
+  test('the Endpoints a gone Handler may move to include one whose path a leaving Handler holds', () => {
+    const service = aService();
+    const createOrder = 'src/contract/endpoints/orders/create-order.endpoint.ts';
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    implement(project, 'src/guards/api-key.handler.ts', 'guard');
     write(project, {
-      'src/http/orders/create-order.handler.ts': "export default 'new';\n",
-      'src/http/orders/get-order.handler.ts': "export default 'new';\n",
+      [createOrder]: (service[createOrder] ?? '').replaceAll('createOrder', 'apiKey'),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replaceAll(
+        'createOrder',
+        'apiKey',
+      ),
+      ...withLayout(
+        {},
+        "{ endpoint: 'src/guards/{name}.handler.ts', guard: 'src/security/{name}.handler.ts' }",
+      ),
     });
 
     const ran = cfLoom(project, 'generate');
@@ -1562,19 +1680,55 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: lines([
-        heldLine(
-          'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/http/orders/create-order.handler.ts',
-        ),
-        heldLine(
-          'src/endpoints/orders/get-order.handler.ts',
-          'endpoints.getOrder',
-          'src/http/orders/get-order.handler.ts',
-        ),
-      ]),
+      stderr:
+        'src/endpoints/orders/create-order.handler.ts is the Handler of endpoints.createOrder, which is no longer declared: move it to src/guards/api-key.handler.ts if endpoints.apiKey replaces it, else delete it\n',
     });
+  });
+
+  test('a Handler the author moved to its new path by hand is kept and imported', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const created = implement(project, 'src/endpoints/orders/create-order.handler.ts', 'create');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+    mkdirSync(join(project, 'src/http/orders'), { recursive: true });
+    renameSync(
+      join(project, 'src/endpoints/orders/create-order.handler.ts'),
+      join(project, 'src/http/orders/create-order.handler.ts'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).not.toContain('create-order');
+    expect(read(project, 'src/http/orders/create-order.handler.ts')).toBe(created);
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      importOf('createOrderEndpointHandler', './http/orders/create-order.handler.ts'),
+    );
+  });
+
+  test('a move that fails leaves every Handler where it was', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const created = implement(project, 'src/endpoints/orders/create-order.handler.ts', 'create');
+    const guard = implement(project, 'src/guards/api-key.handler.ts', 'guard');
+    write(project, { 'src/blocked': 'a file, not a folder' });
+    write(
+      project,
+      withLayout(
+        {},
+        "{ endpoint: 'src/ok/{name}.handler.ts', guard: 'src/blocked/x/{name}.handler.ts' }",
+      ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(
+      /^src\/guards\/api-key\.handler\.ts cannot be moved to src\/blocked\/x\/api-key\.handler\.ts: [^\n]+\n$/,
+    );
+    expect(read(project, 'src/endpoints/orders/create-order.handler.ts')).toBe(created);
+    expect(read(project, 'src/guards/api-key.handler.ts')).toBe(guard);
+    expect(existsSync(join(project, 'src/ok/create-order.handler.ts'))).toBe(false);
   });
 
   test('a Handler the author deleted after the layout changed is named by no line', () => {
@@ -1920,15 +2074,10 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: lines([
-        movedLine(
-          'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/endpoints/sales/create-order.handler.ts',
-        ),
-        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/endpoints/sales/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it',
-      ]),
+      stderr:
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/endpoints/sales/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it\n',
     });
+    expect(existsSync(join(project, 'src/endpoints/sales'))).toBe(false);
   });
 
   test('a Handler of an Endpoint no longer declared is offered no path another Handler moves to after the layout changes', () => {
@@ -1944,15 +2093,10 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: lines([
-        movedLine(
-          'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/http/orders/create-order.handler.ts',
-        ),
-        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/http/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it',
-      ]),
+      stderr:
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/http/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it\n',
     });
+    expect(handlerFiles(project)).toContain('endpoints/orders/create-order.handler.ts');
   });
 
   test('a Handler of an Endpoint no longer declared is offered Endpoints only, though a Guard and a Subscription lack their files', () => {
@@ -2078,19 +2222,8 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: lines([
-        movedLine(
-          'src/endpoints/orders/create-order.handler.ts',
-          'endpoints.createOrder',
-          'src/http/orders/create-order.handler.ts',
-        ),
-        movedLine(
-          'src/endpoints/orders/get-order.handler.ts',
-          'endpoints.getOrder',
-          'src/http/orders/get-order.handler.ts',
-        ),
-        'src/endpoints/orders/list-orders.handler.ts is the Handler of endpoints.listOrders, which is Retired: delete it',
-      ]),
+      stderr:
+        'src/endpoints/orders/list-orders.handler.ts is the Handler of endpoints.listOrders, which is Retired: delete it\n',
     });
   });
 
@@ -3015,7 +3148,7 @@ describe('cf-loom verify: a configured layout', () => {
     });
   });
 
-  test('after layout.endpoint changes, verify exits 1 naming where the Handlers left at the old paths go', () => {
+  test('after layout.endpoint changes, verify exits 1 naming the Handlers generate would move, and moves nothing', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
@@ -3023,21 +3156,20 @@ describe('cf-loom verify: a configured layout', () => {
     const ran = cfLoom(project, 'verify');
 
     expect(ran.status).toBe(1);
-    const createOrder = movedLine(
+    const createOrder = pendingLine(
       'src/endpoints/orders/create-order.handler.ts',
       'endpoints.createOrder',
       'src/http/orders/create-order.handler.ts',
     );
-    const getOrder = movedLine(
+    const getOrder = pendingLine(
       'src/endpoints/orders/get-order.handler.ts',
       'endpoints.getOrder',
       'src/http/orders/get-order.handler.ts',
     );
     expect(ran.stderr).toContain(`${createOrder}\n`);
     expect(ran.stderr).toContain(`${getOrder}\n`);
-    expect(ran.stderr).toContain(
-      'src/http/orders/get-order.handler.ts is missing: run cf-loom generate\n',
-    );
+    expect(ran.stderr).not.toContain('src/http/orders/get-order.handler.ts is missing');
+    expect(handlerFiles(project)).toContain('endpoints/orders/get-order.handler.ts');
   });
 
   test.each([
@@ -3090,19 +3222,21 @@ describe('cf-loom generate: linked folders and other runs', () => {
     );
   });
 
-  test('a Handler behind a linked folder is named by the path the map imported it from', () => {
+  test('a Handler behind a linked folder is moved from the path the map imported it from', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
+    const text = implement(project, 'src/endpoints/orders/get-order.handler.ts', 'get');
     renameSync(join(project, 'src/endpoints/orders'), join(project, 'elsewhere-orders'));
     symlinkSync(join(project, 'elsewhere-orders'), join(project, 'src/endpoints/orders'), 'dir');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(1);
-    expect(ran.stderr).toContain(
-      `${movedLine('src/endpoints/orders/get-order.handler.ts', 'endpoints.getOrder', 'src/http/orders/get-order.handler.ts')}\n`,
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toContain(
+      `${movedLine('src/endpoints/orders/get-order.handler.ts', 'src/http/orders/get-order.handler.ts')}\n`,
     );
+    expect(read(project, 'src/http/orders/get-order.handler.ts')).toBe(text);
   });
 
   test.each(['aa', 'zz'])('a folder link src/%s to src/endpoints gives no orphan', (name) => {
@@ -3431,9 +3565,10 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
     });
   });
 
-  test('after a Command’s Message Version moves to another Group, its Handler left in the old folder is named with where it goes', () => {
+  test('after a Command’s Message Version moves to another Group, generate moves its Handler to the new folder', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
+    const text = implement(project, 'src/commands/payments/charge-card.v2.handler.ts', 'cmd');
     const moved = withRoot(
       aMessagingService({ commands: '[chargeCardV1, refundCardV1]' }),
       ordersAlsoListing('  commands: [chargeCardV2],'),
@@ -3442,44 +3577,49 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: `${movedLine('src/commands/payments/charge-card.v2.handler.ts', 'commands.ChargeCard@2', 'src/commands/orders/charge-card.v2.handler.ts')}\n`,
-    });
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n')[0]).toBe(
+      movedLine(
+        'src/commands/payments/charge-card.v2.handler.ts',
+        'src/commands/orders/charge-card.v2.handler.ts',
+      ),
+    );
+    expect(read(project, 'src/commands/orders/charge-card.v2.handler.ts')).toBe(text);
   });
 
-  test('after a Group is renamed, its Message Handlers left in the old folder are named with where they go', () => {
+  test('after a Group is renamed, generate moves its Message Handlers to the new folder', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
+    const text = implement(
+      project,
+      'src/subscriptions/payments/notify-on-settled.handler.ts',
+      'sub',
+    );
     const renamed = withRoot(aMessagingService(), paymentsNamed('billing'));
     write(project, { 'src/contract/index.ts': renamed['src/contract/index.ts'] ?? '' });
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(1);
-    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual([
+    expect(ran.status).toBe(0);
+    expect(ran.stdout.split('\n').filter((line) => line.startsWith('Moved'))).toEqual([
       movedLine(
         'src/commands/payments/charge-card.v1.handler.ts',
-        'commands.ChargeCard@1',
         'src/commands/billing/charge-card.v1.handler.ts',
       ),
       movedLine(
         'src/commands/payments/charge-card.v2.handler.ts',
-        'commands.ChargeCard@2',
         'src/commands/billing/charge-card.v2.handler.ts',
       ),
       movedLine(
         'src/subscriptions/payments/audit-created.handler.ts',
-        'subscriptions.auditCreated',
         'src/subscriptions/billing/audit-created.handler.ts',
       ),
       movedLine(
         'src/subscriptions/payments/notify-on-settled.handler.ts',
-        'subscriptions.notifyOnSettled',
         'src/subscriptions/billing/notify-on-settled.handler.ts',
       ),
     ]);
+    expect(read(project, 'src/subscriptions/billing/notify-on-settled.handler.ts')).toBe(text);
   });
 
   test('verify exits 0 when Message Handlers sit under their Groups', () => {
@@ -3507,7 +3647,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
     });
   });
 
-  test('after a Subscription moves to another Group, verify exits 1 naming the Handler left behind', () => {
+  test('after a Subscription moves to another Group, verify exits 1 naming the Handler generate would move', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     const moved = withRoot(
@@ -3520,7 +3660,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toContain(
-      `${movedLine('src/subscriptions/payments/audit-created.handler.ts', 'subscriptions.auditCreated', 'src/subscriptions/orders/audit-created.handler.ts')}\n`,
+      `${pendingLine('src/subscriptions/payments/audit-created.handler.ts', 'subscriptions.auditCreated', 'src/subscriptions/orders/audit-created.handler.ts')}\n`,
     );
   });
 });
@@ -3892,4 +4032,147 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
 
     expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
+});
+
+/** A Guard `name` demanding nothing. */
+function aGuardNamed(name: string): string {
+  return lines([
+    "import { defineGuard } from '@cf-loom/contract';",
+    '',
+    `export const ${name} = defineGuard({ name: '${name}', description: '${name}' });`,
+  ]);
+}
+
+/** What happens to the Endpoint `a`, and whether the Endpoint `b` still attaches the Guard `a`. */
+type Change = {
+  readonly endpoint: 'keep' | 'rename' | 'retire' | 'delete';
+  readonly guard: 'keep' | 'detach';
+};
+
+const fileOfA = 'src/contract/endpoints/orders/a.endpoint.ts';
+const fileOfB = 'src/contract/endpoints/orders/b.endpoint.ts';
+
+/** The Service before: Endpoints `a` and `b`, which attaches the Guard `a`. */
+function aServiceOfTwoEndpoints(): Readonly<Record<string, string>> {
+  return {
+    'package.json': manifest,
+    'cf-loom.config.ts': config,
+    'src/contract/guards/a.guard.ts': aGuardNamed('a'),
+    [fileOfA]: anEndpoint({ name: 'a', path: '/a' }),
+    [fileOfB]: anEndpoint({
+      name: 'b',
+      path: '/b',
+      guards: '[a]',
+      imports: ["import { a } from '../../guards/a.guard.ts';"],
+    }),
+    'src/contract/index.ts': aRoot({
+      a: './endpoints/orders/a.endpoint.ts',
+      b: './endpoints/orders/b.endpoint.ts',
+    }),
+  };
+}
+
+/** The files the Service changes into, and the files it deletes. */
+function changedTwoEndpoints({ endpoint, guard }: Change) {
+  const kept = guard === 'keep';
+  const endpointB = anEndpoint({
+    name: 'b',
+    path: '/b',
+    guards: kept ? '[a]' : '[]',
+    imports: kept ? ["import { a } from '../../guards/a.guard.ts';"] : [],
+  });
+  const listed: Record<string, string> = { b: './endpoints/orders/b.endpoint.ts' };
+  const files: Record<string, string> = { [fileOfB]: endpointB };
+  const removed: string[] = [];
+  if (endpoint === 'keep' || endpoint === 'retire') {
+    files[fileOfA] = anEndpoint({
+      name: 'a',
+      path: '/a',
+      lifecycle: endpoint === 'keep' ? 'active' : 'retired',
+    });
+    listed['a'] = './endpoints/orders/a.endpoint.ts';
+  } else {
+    removed.push(fileOfA);
+  }
+  if (endpoint === 'rename') {
+    files['src/contract/endpoints/orders/c.endpoint.ts'] = anEndpoint({ name: 'c', path: '/a' });
+    listed['c'] = './endpoints/orders/c.endpoint.ts';
+  }
+  return { files: { ...files, 'src/contract/index.ts': aRoot(listed) }, removed };
+}
+
+/** The replacement a decision line names for the renamed Endpoint `c`, in either of its two forms. */
+function replacementOf(line: string): string | undefined {
+  const single = /move it to (\S+) if endpoints\.c replaces it/.exec(line);
+  const listed = /endpoints\.c \((\S+)\)/.exec(line);
+  return single?.[1] ?? listed?.[1];
+}
+
+/** Follows the decision lines as an author does: moves the renamed Endpoint's Handler, deletes the rest. */
+function followed(project: string, stderr: string): void {
+  for (const line of stderr.split('\n').filter((text) => text !== '')) {
+    const path = line.split(' ', 1)[0] ?? '';
+    const replacement = replacementOf(line);
+    if (replacement === undefined) {
+      rmSync(join(project, path));
+    } else {
+      mkdirSync(dirname(join(project, replacement)), { recursive: true });
+      renameSync(join(project, path), join(project, replacement));
+    }
+  }
+}
+
+const twoLayouts = [
+  {
+    text: "{ endpoint: 'src/guards/{name}.handler.ts', guard: 'src/x/{name}.handler.ts' }",
+    endpoints: 'src/guards',
+    guards: 'src/x',
+  },
+  {
+    text: "{ endpoint: 'src/x/{name}.handler.ts', guard: 'src/endpoints/orders/{name}.handler.ts' }",
+    endpoints: 'src/x',
+    guards: 'src/endpoints/orders',
+  },
+];
+
+const everyChange = (['keep', 'rename', 'retire', 'delete'] as const).flatMap((endpoint) =>
+  (['keep', 'detach'] as const).flatMap((guard) =>
+    twoLayouts.map((layout) => ({ endpoint, guard, layout })),
+  ),
+);
+
+describe('cf-loom generate: the Handlers it moves, whatever happens to the Elements', () => {
+  test.each(everyChange)(
+    'Endpoint a $endpoint, Guard a $guard, layout $layout.text: following the lines ends with every implementation imported',
+    ({ endpoint, guard, layout }) => {
+      const project = aProject(aServiceOfTwoEndpoints());
+      cfLoom(project, 'generate');
+      implement(project, 'src/endpoints/orders/a.handler.ts', 'IMPL a');
+      implement(project, 'src/endpoints/orders/b.handler.ts', 'IMPL b');
+      implement(project, 'src/guards/a.handler.ts', 'IMPL guard');
+      const changed = changedTwoEndpoints({ endpoint, guard });
+      for (const path of changed.removed) {
+        rmSync(join(project, path));
+      }
+      write(project, { ...changed.files, ...withLayout({}, layout.text) });
+
+      const first = cfLoom(project, 'generate');
+      followed(project, first.stderr);
+      const last = first.status === 0 ? first : cfLoom(project, 'generate');
+
+      expect(last).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, `${layout.endpoints}/b.handler.ts`)).toBe("export default 'IMPL b';\n");
+      const movedA = endpoint === 'rename' ? 'c' : 'a';
+      if (endpoint === 'keep' || endpoint === 'rename') {
+        expect(read(project, `${layout.endpoints}/${movedA}.handler.ts`)).toBe(
+          "export default 'IMPL a';\n",
+        );
+      }
+      if (guard === 'keep') {
+        expect(read(project, `${layout.guards}/a.handler.ts`)).toBe(
+          "export default 'IMPL guard';\n",
+        );
+      }
+    },
+  );
 });
