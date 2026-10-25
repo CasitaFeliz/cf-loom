@@ -70,7 +70,7 @@ const definitions = defineDefinitions({
 
 const contract = defineContract({
   name: 'orders-service',
-  definitions: [definitions],
+  standardRejections: definitions,
   groups: [
     defineGroup({
       name: 'orders',

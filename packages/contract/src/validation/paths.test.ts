@@ -2,11 +2,11 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '../index.ts';
-import { type RootPackage, validateContract } from '../internal/index.ts';
+import { validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  return validateContract(root, aRootPackage(root, { originOf }));
+function validateInPackage(root: unknown) {
+  return validateContract(root, aRootPackage(root));
 }
 
 const listOrders = {
@@ -21,10 +21,7 @@ const listOrders = {
 /** The result of validating one Endpoint, written with a cast where the types refuse it. */
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(
-    defineContract({ name: 'orders-service', groups: [orders] }),
-    () => undefined,
-  );
+  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
 }
 
 /** A path failure of the Endpoint of that identity: a path that is not canonical still has one. */

@@ -291,7 +291,7 @@ const service: Readonly<Record<string, string>> = {
     '});',
     'export const contract = defineContract({',
     "  name: 'orders-service',",
-    '  definitions: [definitions],',
+    '  standardRejections: definitions,',
     '  groups: [orders, messages],',
     '});',
   ]),

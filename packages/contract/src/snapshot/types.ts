@@ -101,7 +101,6 @@ export type ByKey<Value> = Readonly<Record<string, Value>>;
 
 /** The declared Snapshot of a Service's Contract. */
 export type ServiceSnapshot = Heading<'service'> & {
-  readonly definitions: ByKey<string>;
   readonly standardRejections: StandardRejectionsSnapshot;
   readonly defs: ByKey<SchemaNode>;
   readonly endpoints: ByKey<EndpointSnapshot>;

@@ -3,13 +3,13 @@ import { defineContract, defineDefinitions } from '../index.ts';
 import { standardRejectionsOf } from '../internal/index.ts';
 
 describe('standardRejectionsOf', () => {
-  test('a listed Definitions Package’s declarations take the place of cf-loom’s defaults', () => {
+  test('the declarations of the Definitions Package a Contract names as standardRejections take the place of cf-loom’s defaults', () => {
     const definitions = defineDefinitions({
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
       },
     });
-    const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
+    const contract = defineContract({ name: 'orders-service', standardRejections: definitions });
 
     const standards = standardRejectionsOf(contract);
 

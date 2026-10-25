@@ -4,10 +4,15 @@ import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { DeclaredFieldsRule, JoinedNames } from './rules.ts';
 
-/** What a Service's root lists: its Definitions Packages, its Groups, which list its Elements and Subscriptions, and its Dependencies; an absent list is empty. */
+/**
+ * What a Service's root lists: its Groups, which list its Elements and Subscriptions, and its
+ * Dependencies, and the Definitions Package whose Standard Rejections it takes, if any; without one
+ * it takes cf-loom's defaults. The Definitions Packages it uses are the ones whose Guards,
+ * Rejections and schemas it reaches. An absent list is empty.
+ */
 type ContractDeclaration = {
   readonly name: string;
-  readonly definitions?: readonly Definitions[];
+  readonly standardRejections?: Definitions;
   readonly groups?: readonly Group[];
   readonly dependencies?: readonly Dependency[];
 };

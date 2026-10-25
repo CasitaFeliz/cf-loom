@@ -1,4 +1,4 @@
-import { type Definitions, isLive } from '../declarations/index.ts';
+import { isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   identityOf,
@@ -10,7 +10,6 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { isCanonicalPath } from './paths.ts';
-import type { ResolvedDefinitions } from './validate.ts';
 
 /**
  * A Service or an Application is named as its package.json without the scope, so its Contract
@@ -27,33 +26,6 @@ export function packageNameFailures(
   }
   const message = `A root is named as its package.json, without the scope: ${unscoped}`;
   return [failure(['name'], 'package-name', message)];
-}
-
-/** A Contract lists each Definitions Package once, named by the package that exports it. */
-export function listedOnceFailures(
-  { listedDefinitions }: Declarations,
-  packages: readonly ResolvedDefinitions[],
-): readonly DeclarationFailure[] {
-  const seen = new Set<Definitions>();
-  const failures: DeclarationFailure[] = [];
-  for (const { at, definitions } of listedDefinitions) {
-    if (seen.has(definitions)) {
-      const packageName = listedPackageNameOf(packages, definitions);
-      const named = packageName === undefined ? '' : `: ${packageName}`;
-      const message = `A Contract lists each Definitions Package once${named}`;
-      failures.push(failure(at, 'duplicate-definitions', message));
-    }
-    seen.add(definitions);
-  }
-  return failures;
-}
-
-/** The package.json name of the installed package a listed Definitions object comes from. */
-export function listedPackageNameOf(
-  packages: readonly ResolvedDefinitions[],
-  definitions: Definitions,
-): string | undefined {
-  return packages.find((resolved) => resolved.definitions === definitions)?.packageName;
 }
 
 /** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */

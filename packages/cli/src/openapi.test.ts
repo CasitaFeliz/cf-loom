@@ -294,7 +294,7 @@ const theService = aRootProject([
   'export const contract = defineContract({',
   "  name: 'orders-service',",
   '  groups: [ordersGroup, shapesGroup, infrastructureGroup],',
-  '  definitions: [definitions],',
+  '  standardRejections: definitions,',
   '});',
 ]);
 

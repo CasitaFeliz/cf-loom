@@ -73,6 +73,13 @@ const payments = {
 } as const satisfies ContractPackage;
 
 describe('defineContract', () => {
+  test('definitions is a type error: what a Contract reaches says which Definitions Packages it uses', () => {
+    // @ts-expect-error: definitions is not a declared field
+    const contract = defineContract({ name: 'orders-service', definitions: [] });
+
+    expect(contract.kind).toBe('contract');
+  });
+
   test('a Contract keeps what its root lists by identity', () => {
     const definitions = defineDefinitions({});
     const paymentsGroup = defineGroup({
@@ -84,13 +91,13 @@ describe('defineContract', () => {
 
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [paymentsGroup],
       dependencies: [paymentsDependency],
     });
 
     expect(contract.groups[0]).toBe(paymentsGroup);
-    expect(contract.definitions[0]).toBe(definitions);
+    expect(contract.standardRejections).toBe(definitions);
     expect(contract.dependencies[0]).toBe(paymentsDependency);
     expect(contract.kind).toBe('contract');
   });
@@ -195,12 +202,11 @@ describe('a declared root’s containers', () => {
       defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] }),
     ];
 
-    const contract = defineContract({ name: 'payments-service', groups, definitions: [] });
+    const contract = defineContract({ name: 'payments-service', groups });
     groups.pop();
 
     expect(contract.groups).toHaveLength(1);
     expect(Object.isFrozen(contract.groups)).toBe(true);
-    expect(Object.isFrozen(contract.definitions)).toBe(true);
   });
 
   test('an Application freezes its list of Dependencies', () => {

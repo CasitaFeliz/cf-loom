@@ -18,7 +18,6 @@ import {
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
   versionBumpOf,
@@ -39,7 +38,6 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
   defs: {},
   guards: {},
@@ -620,14 +618,11 @@ function generatedCodeOf(code: string): CodeSnapshot {
   });
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
   const root = defineContract({ name: 'ping-service', groups: [group] });
-  const validated = validateContract(
-    root,
-    aRootPackage(root, { originOf: schemaOriginsOf([]), packageName: 'ping-service' }),
-  );
+  const validated = validateContract(root, aRootPackage(root, { packageName: 'ping-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: '@cf-loom/cli@2.1.0', packages: [], committed: undefined, now: 0 };
+  const context = { generator: '@cf-loom/cli@2.1.0', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   const generated = snapshot.kind === 'service' ? snapshot.codes[code] : undefined;
   if (generated === undefined) {

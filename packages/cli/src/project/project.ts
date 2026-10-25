@@ -1,7 +1,6 @@
 import type { ResolvedDefinitions } from '@cf-loom/contract/internal';
 import { configFile, defaultLayout, loadConfig, type ServiceLayout } from '../config/index.ts';
 import {
-  definitionsPackagesOf,
   type ImportedPackage,
   type LoadedRoot,
   loadRoot,
@@ -28,10 +27,8 @@ export type Project = {
   readonly rootExports: Readonly<Record<string, unknown>>;
   /** Where the root file sits, relative to the project, as messages name it. */
   readonly rootFile: string;
-  /** The Definitions Packages the root lists, each the one imported package that exports it. */
+  /** Every Definitions Package the root's import reached, as Node resolved it. */
   readonly packages: readonly ResolvedDefinitions[];
-  /** Every imported module that exports a Definitions object, as Node resolved it. */
-  readonly definitionsPackages: readonly ResolvedDefinitions[];
   /** Every module of a package the root's import reached, as Node resolved it. */
   readonly imported: readonly ImportedPackage[];
 };
@@ -41,7 +38,7 @@ export type ReadProject = { readonly kind: 'read'; readonly project: Project } |
 
 /**
  * Reads the project in `directory`: its package.json, its configuration, its root and the
- * Definitions Packages the root lists, as installed; each failure is a tooling error.
+ * Definitions Packages its import reached, as installed; each failure is a tooling error.
  */
 export async function projectOf(directory: string): Promise<ReadProject> {
   const projectPackage = projectPackageOf(directory);
@@ -73,7 +70,6 @@ export async function projectOf(directory: string): Promise<ReadProject> {
     rootExports,
     rootFile,
     packages,
-    definitionsPackages: definitionsPackagesOf(imported),
     imported,
   };
   return { kind: 'read', project };

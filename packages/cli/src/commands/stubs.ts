@@ -91,8 +91,8 @@ function declarationLocatedOf(
 }
 
 /**
- * A Definitions Package's Guard, imported as the project imports the first module of the package,
- * in code point order of its specifier, that exports it, under its first such export.
+ * A Definitions Package's Guard, imported as the project imports a module that exports it, under
+ * its first such export: one of the package's own when the project imports one, else any.
  */
 function packageExportOf(
   handled: DeclarationHandled,
@@ -105,10 +105,14 @@ function packageExportOf(
       return { kind: 'exported', target: exportedTargetOf(imported, handled.name) };
     }
   }
-  return { kind: 'refused', line: `guards.${handled.name} is not exported by ${packageName}` };
+  const nowhere = "is exported by no package the Contract's files import";
+  return {
+    kind: 'refused',
+    line: `guards.${handled.name} ${nowhere}: import it from ${packageName}`,
+  };
 }
 
-/** A Guard as a Definitions Package declares it, with the package's modules the project imports. */
+/** A Guard a Definitions Package declares, with the modules the project imports, its package's first. */
 type PackagedGuard = {
   readonly packageName: string;
   readonly modules: readonly ImportedModule[];
@@ -118,24 +122,24 @@ type PackagedGuard = {
 /** A module of a package, with the specifier the project's own files import it by. */
 type ImportedModule = ImportedPackage & { readonly specifier: string };
 
-/** The Definitions Package a handled Guard comes from; none for the Service's own. */
+/** The Definitions Package a handled Guard belongs to; none for the Service's own. */
 function packageOf(service: PlacedService, handled: DeclarationHandled): PackagedGuard | undefined {
   if (handled.kind !== 'guard') {
     return undefined;
   }
   const { project, validated } = service;
   const located = validated.declarations.guards.find(({ guard }) => guard.name === handled.name);
-  const listedIn = located?.listedIn?.definitions;
-  const resolved = project.definitionsPackages.find(({ definitions }) => definitions === listedIn);
-  if (located === undefined || resolved === undefined) {
+  const from = located?.from;
+  if (located === undefined || from === undefined) {
     return undefined;
   }
-  const { packageName } = resolved;
-  const modules = project.imported
+  const origin = project.imported.find(({ exports }) => exports === from.exports)?.manifestPath;
+  const byProject = project.imported
     .filter(isImportedByProject)
-    .filter((module) => module.packageName === packageName)
     .sort((left, right) => byCodePoint(left.specifier, right.specifier));
-  return { packageName, modules, guard: located.guard };
+  const own = byProject.filter(({ manifestPath }) => manifestPath === origin);
+  const others = byProject.filter(({ manifestPath }) => manifestPath !== origin);
+  return { packageName: from.packageName, modules: [...own, ...others], guard: located.guard };
 }
 
 function isImportedByProject(module: ImportedPackage): module is ImportedModule {

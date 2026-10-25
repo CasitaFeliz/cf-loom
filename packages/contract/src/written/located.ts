@@ -33,25 +33,23 @@ export type LocatedEndpoint = {
 };
 
 /**
- * A Guard, where it sits by name, since Endpoints and other Guards only reference it, and whether
- * the root reaches it: an Endpoint attaches it, directly or through a Guard's `guards`, or the
- * root is a Definitions Package, which reaches all of its own.
+ * A Guard the root reaches, where it sits by name, since Endpoints and other Guards only
+ * reference it: an Endpoint attaches it, directly or through a Guard's `guards`, or a Definitions
+ * root exports it.
  */
-export type LocatedGuard = { readonly at: Path; readonly guard: Guard; readonly reached: boolean };
+export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
 
 /** A Rejection and where it sits, by code, since Endpoints and Guards only reference it. */
 export type LocatedRejection = { readonly at: Path; readonly rejection: Rejection };
 
 /**
- * A code and every declaration of it, the first met first, in the root's order: a listed
- * Definitions Package's, then the Guards', then the Endpoints'; reached when an Endpoint or a
- * reached Guard answers it, or the root is a Definitions Package.
+ * A code the root reaches and every declaration of it, the first met first, in the root's order:
+ * a Definitions root's exports, then the Guards', then the Endpoints'.
  */
 export type LocatedCode = {
   readonly code: string;
   readonly at: Path;
   readonly rejections: readonly [LocatedRejection, ...LocatedRejection[]];
-  readonly reached: boolean;
 };
 
 /** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
@@ -59,9 +57,6 @@ export type ListedDefinitions = { readonly at: Path; readonly definitions: Defin
 
 /** A Definitions Package where it sits, with what its root file exports that it shares. */
 export type LocatedDefinitions = ListedDefinitions & { readonly members: Members };
-
-/** What a Definitions Package's root file exports, by export name, as the tooling imported it: nothing when unknown. */
-export type ExportsOf = (definitions: Definitions) => Readonly<Record<string, unknown>>;
 
 /**
  * A Dependency and where it sits in its root, by its Provider's name, or by its position when its
@@ -74,7 +69,8 @@ export type LocatedStandardRejection = {
   readonly at: Path;
   readonly name: string;
   readonly declaration: StandardRejectionDeclaration<number>;
-  readonly listedIn: LocatedDefinitions;
+  /** The Definitions Package declaring it. */
+  readonly listedIn: ListedDefinitions;
 };
 
 /**

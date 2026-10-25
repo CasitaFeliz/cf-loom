@@ -12,7 +12,6 @@ export type Rule =
   | 'blank-text'
   | 'name-grammar'
   | 'duplicate-group-name'
-  | 'duplicate-definitions'
   | 'duplicate-endpoint-name'
   | 'duplicate-endpoint-identity'
   | 'duplicate-guard-name'
@@ -52,7 +51,6 @@ export type Rule =
   | 'standard-rejection-on-guard'
   | 'standard-code-redefined'
   | 'standard-codes-distinct'
-  | 'standard-rejections-once'
   | 'dependency-selection'
   | 'application-dependency'
   | 'dependency-provider'
@@ -66,6 +64,7 @@ export type Rule =
   | 'duplicate-subscription-name'
   | 'definitions-export'
   | 'definitions-unexported'
+  | 'definitions-ambiguous'
   | 'package-name';
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */

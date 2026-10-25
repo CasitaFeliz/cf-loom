@@ -7,7 +7,7 @@ import type { ResolvedDefinitions, ValidatedCode } from '../validation/index.ts'
 import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 import type { SnapshotSources } from './context.ts';
-import { listedOriginOf, standardOriginOf } from './origins.ts';
+import { packageOriginOf, standardOriginOf } from './origins.ts';
 import type { CodeSnapshot, StandardRejectionsSnapshot } from './types.ts';
 
 /** Codes once each, by code point, as the Snapshot lists an Endpoint's or a Guard's codes. */
@@ -41,8 +41,10 @@ export function codeSnapshotsOf(
   codes: readonly ValidatedCode[],
   sources: SnapshotSources,
 ): Readonly<Record<string, CodeSnapshot>> {
-  const declared = codes.filter(({ reached }) => reached).map((code) => codeOf(code, sources));
-  const standard = sources.standards.map((resolved) => standardCodeOf(resolved, sources.packages));
+  const declared = codes.map((code) => codeOf(code, sources));
+  const standard = sources.standards.map((resolved) =>
+    standardCodeOf(resolved, sources.standardsFrom),
+  );
   return Object.fromEntries([...declared, ...standard]);
 }
 
@@ -58,10 +60,10 @@ function standardNamed(
 }
 
 function codeOf(
-  { code, rejection, listedIn }: ValidatedCode,
-  { nodeOf, packages }: SnapshotSources,
+  { code, rejection, from }: ValidatedCode,
+  { nodeOf }: SnapshotSources,
 ): readonly [string, CodeSnapshot] {
-  const origin = listedOriginOf(listedIn, packages);
+  const origin = packageOriginOf(from);
   const { status, message } = rejection;
   const body = nodeOf(rejection, 'body') ?? null;
   return [code, { origin, status, message, body, removed: false }];
@@ -69,10 +71,10 @@ function codeOf(
 
 function standardCodeOf(
   standard: ResolvedStandard,
-  packages: readonly ResolvedDefinitions[],
+  standardsFrom: ResolvedDefinitions | undefined,
 ): readonly [string, CodeSnapshot] {
   const { name, code, status, message } = standard;
-  const origin = standardOriginOf(standard, packages);
+  const origin = standardOriginOf(standard, standardsFrom);
   const body = name === 'invalidInput' ? invalidInputNode(code) : null;
   return [code, { origin, status, message, body, removed: false }];
 }

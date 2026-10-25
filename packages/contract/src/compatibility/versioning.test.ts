@@ -101,7 +101,6 @@ const serviceHeading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections: {
     invalidInput: 'INVALID_INPUT',
     notFound: 'NOT_FOUND',

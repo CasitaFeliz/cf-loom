@@ -127,9 +127,6 @@
     }
   },
   "commands": {},
-  "definitions": {
-    "@org/definitions": "0.0.0"
-  },
   "defs": {},
   "dependencies": {
     "orders-service": {

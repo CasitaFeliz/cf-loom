@@ -1,15 +1,17 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { findPackageJSON, registerHooks } from 'node:module';
 import { join } from 'node:path';
-import { byCodePoint, isDefinitions, type ResolvedDefinitions } from '@cf-loom/contract/internal';
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { type Imported, importedModuleOf } from './imported.ts';
 
 /** A module of a package the root's import reached, as Node resolved it: the instance the root holds. */
 export type ImportedPackage = {
   /** The file URL Node resolved it to; specifiers resolving to one URL are one module. */
   readonly url: string;
-  /** The name in its package.json. */
+  /** The name in its package.json, or the package.json's path when it names none. */
   readonly packageName: string;
+  /** Its package.json's path: two installed copies of one name are two packages. */
+  readonly manifestPath: string;
   /** The version in its package.json, which a package used for development only may lack. */
   readonly version: string | undefined;
   /**
@@ -17,7 +19,7 @@ export type ImportedPackage = {
    * which a stub imports from; none when only other packages import it.
    */
   readonly specifier: string | undefined;
-  /** The package.json names of the packages whose files import it, `project` for the project's own. */
+  /** The package.json paths of the packages whose files import it, `project` for the project's own. */
   readonly importedBy: readonly string[];
   readonly exports: Readonly<Record<string, unknown>>;
 };
@@ -69,37 +71,6 @@ export async function importedRootOf(path: string, directory: string): Promise<I
   return { kind: 'imported', exports: root.exports, imported };
 }
 
-/** Every imported module that exports a Definitions object, with that object: the Definitions Packages. */
-export function definitionsPackagesOf(
-  imported: readonly ImportedPackage[],
-): readonly ResolvedDefinitions[] {
-  const packages: ResolvedDefinitions[] = [];
-  for (const { packageName, version, exports } of imported.filter(hasVersion)) {
-    for (const definitions of new Set(Object.values(exports).filter(isDefinitions))) {
-      packages.push({ definitions, packageName, version, exports });
-    }
-  }
-  return packages;
-}
-
-/**
- * The imported modules that export `value`, by identity, one per package.json name in code point
- * order: one package, however many specifiers or entries reach it.
- */
-export function packagesExporting(
-  imported: readonly ImportedPackage[],
-  value: unknown,
-): readonly ImportedPackage[] {
-  const exporting = imported.filter(({ exports }) => Object.values(exports).includes(value));
-  const byName = new Map<string, ImportedPackage>();
-  for (const module of exporting) {
-    byName.set(module.packageName, byName.get(module.packageName) ?? module);
-  }
-  return [...byName.values()].sort((left, right) =>
-    byCodePoint(left.packageName, right.packageName),
-  );
-}
-
 /** Whether a specifier names a package, not a file, a URL or one of the package's own imports. */
 function isBare(specifier: string): boolean {
   return !/^[./#]/.test(specifier) && !specifier.includes(':');
@@ -127,31 +98,28 @@ async function importedPackagesOf(
   return packages;
 }
 
-/** The name and version of the package.json a file sits under, when it names a package. */
+/** The package.json a file sits under: its path, name and version. */
 function manifestOf(
   url: string,
-): { readonly packageName: string; readonly version: string | undefined } | undefined {
-  const path = findPackageJSON(url);
-  const manifest = path === undefined ? undefined : parsedOf(path);
-  const name = manifest?.['name'];
-  if (typeof name !== 'string') {
+): Pick<ImportedPackage, 'packageName' | 'manifestPath' | 'version'> | undefined {
+  const manifestPath = findPackageJSON(url);
+  if (manifestPath === undefined) {
     return undefined;
   }
+  const manifest = parsedOf(manifestPath);
+  const name = manifest?.['name'];
   const version = manifest?.['version'];
-  return { packageName: name, version: typeof version === 'string' ? version : undefined };
+  return {
+    packageName: typeof name === 'string' ? name : manifestPath,
+    manifestPath,
+    version: typeof version === 'string' ? version : undefined,
+  };
 }
 
-/** Who imports a module: the project's own files, or a package by its package.json name. */
+/** Who imports a module: the project's own files, or a package by its package.json's path. */
 function importerOf(parentUrl: string | undefined, projectManifest: string): string | undefined {
   const path = parentUrl === undefined ? undefined : findPackageJSON(parentUrl);
-  if (path === undefined) {
-    return undefined;
-  }
-  if (path === projectManifest) {
-    return projectImporter;
-  }
-  const name = parsedOf(path)?.['name'];
-  return typeof name === 'string' ? name : undefined;
+  return path === projectManifest ? projectImporter : path;
 }
 
 /** What a module Node already imported exports, the cached instance; nothing for one `import` cannot read. */
@@ -170,12 +138,6 @@ function parsedOf(path: string): Readonly<Record<string, unknown>> | undefined {
   } catch {
     return undefined;
   }
-}
-
-function hasVersion(
-  module: ImportedPackage,
-): module is ImportedPackage & { readonly version: string } {
-  return module.version !== undefined;
 }
 
 function isText(value: string | undefined): value is string {

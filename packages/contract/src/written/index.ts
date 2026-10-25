@@ -8,10 +8,9 @@ export {
 export type { Declarations } from './declarations.ts';
 export {
   declarationsOf,
-  listedDefinitionsOf,
-  noExports,
   providerExportsOf,
   providerNameOf,
+  standardRejectionsSourceOf,
 } from './declarations.ts';
 export type { Listed } from './grouped.ts';
 export {
@@ -42,7 +41,6 @@ export {
   subjectVersionOf,
 } from './identity.ts';
 export type {
-  ExportsOf,
   ListedDefinitions,
   LocatedCode,
   LocatedCommand,

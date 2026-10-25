@@ -4,7 +4,6 @@ export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exporte
 export { exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
-export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {

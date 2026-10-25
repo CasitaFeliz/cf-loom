@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { aRootPackage, exporting } from '../../test/root-package.ts';
+import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -16,7 +16,6 @@ import {
   decodeSnapshot,
   type ResolvedDefinitions,
   type Snapshot,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -40,14 +39,13 @@ function nameOf(next: () => number): string {
 /** The Snapshot of a Definitions root whose file exports what is given beside it. */
 function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
-  const rootPackage = aRootPackage(root, { exportsOf: exporting([root, exported]) });
+  const rootPackage = aRootPackage(root, { rootExports: { definitions: root, ...exported } });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
   const snapshot = snapshotOf(validated, {
     generator: 'test',
-    packages: [],
     committed: undefined,
     now: 0,
   });
@@ -57,17 +55,16 @@ function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   return snapshot;
 }
 
-/** The Snapshot of a Service that lists the packages given and has one Endpoint. */
+/** The Snapshot of a Service beside the packages given, with one Endpoint. */
 function serviceSnapshotOf(packages: readonly ResolvedDefinitions[], endpoint = aPing()) {
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [endpoint] });
-  const definitions = packages.map((resolved) => resolved.definitions);
-  const root = defineContract({ name: 'ping-service', definitions, groups: [group] });
-  const rootPackage = aRootPackage(root, { packages, originOf: schemaOriginsOf(packages) });
+  const root = defineContract({ name: 'ping-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packages });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages, committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
@@ -92,7 +89,7 @@ function aPackage(
   exported: Readonly<Record<string, unknown>>,
 ): ResolvedDefinitions {
   const definitions = defineDefinitions({});
-  return { definitions, packageName, version: '1.0.0', exports: { definitions, ...exported } };
+  return anInstalledPackage(definitions, exported, { packageName, version: '1.0.0' });
 }
 
 const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });

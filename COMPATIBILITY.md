@@ -164,7 +164,7 @@ Codes:
 
 Standard Rejections:
 
-- The invalid-input and not-implemented Rejections are implicit on every Endpoint, since cf-loom's runtime produces them. The not-found Rejection is listed in an Endpoint's `rejections` like any Rejection, so adding it later is Additive. Neither a Contract nor a Definitions Package may declare a Rejection with the code a Standard Rejection resolves to, from the listed Definitions Package or cf-loom's defaults; each Standard Rejection resolves to a code of its own, and the resolved codes count among the codes for the one-status rule above.
+- The invalid-input and not-implemented Rejections are implicit on every Endpoint, since cf-loom's runtime produces them. The not-found Rejection is listed in an Endpoint's `rejections` like any Rejection, so adding it later is Additive. Neither a Contract nor a Definitions Package may declare a Rejection with the code a Standard Rejection resolves to, from the Definitions Package the Contract names as `standardRejections`, or cf-loom's defaults; each Standard Rejection resolves to a code of its own, and the resolved codes count among the codes for the one-status rule above.
 - A Definitions Package may declare the code, HTTP status and message of each Standard Rejection; without one, cf-loom's defaults apply, and the body of the invalid-input Rejection is always cf-loom's (see [Rejections](packages/contract/README.md#rejections) in the contract README). The Snapshot carries them resolved, so changing the Definitions Package or upgrading cf-loom shows up in the Compatibility Check.
 
 ### Messages

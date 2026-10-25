@@ -17,7 +17,6 @@ export { filesUnder } from './files-under.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
 export type { ImportedPackage } from './imported-packages.ts';
-export { definitionsPackagesOf, packagesExporting } from './imported-packages.ts';
 export type { InstalledManifest, InstalledVersion } from './installed-package.ts';
 export { installedManifestOf, installedVersionOf } from './installed-package.ts';
 export type { ResolvedPackages } from './packages.ts';

@@ -365,8 +365,8 @@ function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) 
 }
 
 function failuresIn(root: unknown) {
-  const exportsOf = (definitions: unknown) => exportedBy.get(definitions) ?? {};
-  const validated = validateContract(root, aRootPackage(root, { exportsOf }));
+  const rootExports = exportedBy.get(root) ?? {};
+  const validated = validateContract(root, aRootPackage(root, { rootExports }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 

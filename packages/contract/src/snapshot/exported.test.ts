@@ -50,7 +50,7 @@ function declaredSnapshotOf() {
   if (validated.kind !== 'valid') {
     throw new Error('The fixture is invalid');
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');

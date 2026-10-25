@@ -7,7 +7,6 @@ import {
   type ServiceSnapshot,
   type Snapshot,
   type SnapshotContext,
-  schemaOriginsOf,
   snapshotOf,
   type ValidatedContract,
   type ValidContract,
@@ -75,7 +74,6 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
   const context: SnapshotContext = {
     generator: generatorOf(generator, parsed),
-    packages: project.packages,
     committed: parsed,
     now: run.now,
   };
@@ -96,15 +94,10 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
 function validatedOf(project: Project): ValidatedContract | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
-  const exportsByDefinitions = new Map(
-    packages.map((resolved) => [resolved.definitions, resolved.exports]),
-  );
   const rootPackage: RootPackage = {
-    originOf: schemaOriginsOf(packages),
     packageName: packageJsonNameOf(packageName),
-    packages: project.definitionsPackages,
-    exportsOf: (definitions) =>
-      definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? {}),
+    packages,
+    rootExports,
   };
   try {
     return validateContract(root, rootPackage);

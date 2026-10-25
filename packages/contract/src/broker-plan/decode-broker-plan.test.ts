@@ -6,7 +6,6 @@ import {
   type BrokerPlan,
   brokerPlanOf,
   decodeBrokerPlan,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -38,14 +37,11 @@ function aServicePlan(prefix: string | null): BrokerPlan {
       }),
     ],
   });
-  const validated = validateContract(
-    root,
-    aRootPackage(root, { originOf: schemaOriginsOf([]), packageName: 'orders-service' }),
-  );
+  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');

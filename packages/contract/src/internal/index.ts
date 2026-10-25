@@ -104,7 +104,6 @@ export {
   isSemanticVersion,
   isSubscriptionTombstone,
   ownRejectionsOf,
-  schemaOriginsOf,
   semanticVersionPartsOf,
   snapshotOf,
   textPartNodesOf,
@@ -112,6 +111,7 @@ export {
 export type {
   Failure,
   Problem,
+  Provenance,
   ResolvedDefinitions,
   RootPackage,
   TextPartNodes,
@@ -119,6 +119,7 @@ export type {
   ValidContract,
 } from '../validation/index.ts';
 export {
+  definitionsPackageOf,
   failureLineOf,
   locationOf,
   oneOf,
@@ -219,7 +220,6 @@ export {
 } from '../wire/index.ts';
 export type {
   AnswerableRejection,
-  ExportsOf,
   Issue,
   IssuePart,
   Part,
@@ -242,7 +242,6 @@ export {
   isPlainObject,
   isSameRejection,
   isSchema,
-  listedDefinitionsOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,
@@ -255,6 +254,7 @@ export {
   resolutionOf,
   schemaOf,
   standardRejectionsOf,
+  standardRejectionsSourceOf,
   subscriptionsOf,
   successParts,
 } from '../written/index.ts';

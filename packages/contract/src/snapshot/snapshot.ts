@@ -37,15 +37,13 @@ function serviceSnapshotOf(
   context: SnapshotContext,
 ): ServiceSnapshot {
   const { schemas, declarations } = validated;
-  const sources = sourcesOf(validated, context);
+  const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
-  const definitions = context.packages.map(({ packageName, version }) => [packageName, version]);
   return {
     format: 1,
     kind: 'service',
     name: root.name,
     generator: context.generator,
-    definitions: Object.fromEntries(definitions),
     standardRejections,
     defs: schemas.defs,
     endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
@@ -64,7 +62,7 @@ function definitionsSnapshotOf(
   context: SnapshotContext,
 ): DefinitionsSnapshot {
   const { schemas, declarations } = validated;
-  const sources = sourcesOf(validated, context);
+  const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
   const exported = Object.entries(declarations.exports).filter(([, value]) => value !== root);
   const exports = exported.map(([name, value]) => [name, exportSnapshotOf(value, sources)]);
@@ -96,13 +94,10 @@ function exportSnapshotOf(value: unknown, sources: SnapshotSources): ExportSnaps
   throw new Error('A valid Definitions root exported what it does not share: a bug.');
 }
 
-function sourcesOf(
-  { schemas, declarations }: ValidContract,
-  context: SnapshotContext,
-): SnapshotSources {
+function sourcesOf({ schemas, declarations }: ValidContract): SnapshotSources {
   return {
     nodeOf: schemas.nodeOf,
     standards: declarations.standardRejections,
-    packages: context.packages,
+    standardsFrom: declarations.standardsFrom,
   };
 }

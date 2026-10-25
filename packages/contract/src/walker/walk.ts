@@ -15,8 +15,8 @@ import {
 } from './walked.ts';
 import { constrained, type Def, walkDefinition } from './zod-types.ts';
 
-/** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
-export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
+/** Where a schema came from, as the caller knows it from the Definitions Packages installed, asked where the walk meets it. */
+export type OriginOf = (schema: core.$ZodType, at: Path) => Origin | undefined;
 
 /** One schema walked where it sits: its node, or every construct in it that is not allowed. */
 export type WalkedLocation = { readonly at: Path; readonly walked: Walked };
@@ -124,7 +124,7 @@ function optionalField(result: Walked): Walked<Field> {
 /** What the schema itself says of its node: its metadata, and its origin from the caller. */
 function ownMetadata(schema: core.$ZodType, at: Path, originOf: OriginOf): Walked<Metadata> {
   const metadata = metadataOf(schema, at);
-  const origin = originOf(schema);
+  const origin = originOf(schema, at);
   if (metadata.kind === 'not-allowed' || origin === undefined) {
     return metadata;
   }

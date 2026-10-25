@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage, exporting } from '../../test/root-package.ts';
+import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -48,7 +48,7 @@ function failuresOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
   const validated = validateContract(
     root,
-    aRootPackage(root, { exportsOf: exporting([root, exported]) }),
+    aRootPackage(root, { rootExports: { definitions: root, ...exported } }),
   );
   return validated.kind === 'invalid' ? validated.failures : [];
 }
@@ -139,9 +139,9 @@ describe('validateContract: a Definitions Package’s root file exports only wha
 
   test('the Definitions object exported under a second name fails definitions-export', () => {
     const root = defineDefinitions({});
-    const exportsOf = exporting([root, { again: root }]);
+    const rootExports = { definitions: root, again: root };
 
-    const validated = validateContract(root, aRootPackage(root, { exportsOf }));
+    const validated = validateContract(root, aRootPackage(root, { rootExports }));
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -174,16 +174,15 @@ describe('validateContract: a Definitions Package’s root file exports only wha
     ]);
   });
 
-  test('a Contract’s listed Definitions Package is not judged by what it exports', () => {
+  test('an installed Definitions Package a Contract uses is not judged by what it exports', () => {
     const definitions = defineDefinitions({});
     const contract = defineContract({
       name: 'ping-service',
-      definitions: [definitions],
       groups: [defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] })],
     });
-    const exportsOf = exporting([definitions, { permission, helper: () => true }]);
+    const packages = [anInstalledPackage(definitions, { permission, helper: () => true })];
 
-    const validated = validateContract(contract, aRootPackage(contract, { exportsOf }));
+    const validated = validateContract(contract, aRootPackage(contract, { packages }));
 
     expect(validated.kind).toBe('valid');
   });

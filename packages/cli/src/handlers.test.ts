@@ -388,7 +388,10 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
         "import { defineContract, defineGroup } from '@cf-loom/contract';",
         "import { defineContract, defineGroup } from '@cf-loom/contract';\nimport { definitions } from '@org/definitions';",
       )
-      .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
+      .replace(
+        "name: 'orders-service',",
+        "name: 'orders-service', standardRejections: definitions,",
+      ),
   };
 }
 

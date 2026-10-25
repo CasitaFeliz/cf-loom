@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage, exporting } from '../../test/root-package.ts';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -64,15 +64,12 @@ const guardsPackage = defineDefinitions({});
 const refusedElementNames = failingNames(
   guardsPackage,
   {
-    exportsOf: exporting([
-      guardsPackage,
-      Object.fromEntries(
-        candidates.map((name, index) => [
-          `guard${index}`,
-          defineGuard({ name, description: 'A guard' }),
-        ]),
-      ),
-    ]),
+    rootExports: Object.fromEntries(
+      candidates.map((name, index) => [
+        `guard${index}`,
+        defineGuard({ name, description: 'A guard' }),
+      ]),
+    ),
   },
   1,
 );

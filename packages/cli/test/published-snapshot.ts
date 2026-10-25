@@ -44,7 +44,6 @@ const standardCodes = {
 
 const serviceBody = {
   kind: 'service',
-  definitions: {},
   standardRejections,
   defs: {},
   endpoints: {},

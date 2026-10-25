@@ -15,7 +15,7 @@ const contractFields = {
   declared: {
     kind: true,
     name: true,
-    definitions: true,
+    standardRejections: true,
     groups: true,
     dependencies: true,
   },

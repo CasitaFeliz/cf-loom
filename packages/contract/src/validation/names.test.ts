@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage, exporting } from '../../test/root-package.ts';
+import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
-  type Definitions,
   defineApplication,
   defineContract,
   defineDefinitions,
@@ -13,15 +12,11 @@ import {
   type Endpoint,
   type Group,
 } from '../index.ts';
-import { type RootPackage, validateContract } from '../internal/index.ts';
+import { validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  return validateContract(root, aRootPackage(root, { originOf }));
-}
-
-function noOrigin() {
-  return undefined;
+function validateInPackage(root: unknown) {
+  return validateContract(root, aRootPackage(root));
 }
 
 const listing = {
@@ -50,7 +45,7 @@ function aGroup(name: string, endpoints: readonly [Endpoint, ...Endpoint[]]): Gr
 }
 
 function validateGroups(groups: readonly Group[]) {
-  return validateInPackage(defineContract({ name: 'orders-service', groups }), noOrigin);
+  return validateInPackage(defineContract({ name: 'orders-service', groups }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -64,7 +59,7 @@ describe('validateContract: name grammars', () => {
       groups: [aGroup('orders', [listOrders])],
     });
 
-    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(contract).kind).toBe('valid');
   });
 
   test('a Service name that is not kebab-case fails', () => {
@@ -73,7 +68,7 @@ describe('validateContract: name grammars', () => {
       groups: [aGroup('orders', [listOrders])],
     });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(['name'], 'name-grammar', 'A Service name is kebab-case: OrdersService'),
     );
   });
@@ -253,9 +248,9 @@ describe('validateContract: name grammars', () => {
     (name) => {
       const guard = defineGuard({ name, description: 'A guard' });
       const definitions = defineDefinitions({});
-      const exportsOf = exporting([definitions, { guard }]);
+      const rootExports = { definitions, guard };
 
-      expect(validateContract(definitions, aRootPackage(definitions, { exportsOf }))).toEqual(
+      expect(validateContract(definitions, aRootPackage(definitions, { rootExports }))).toEqual(
         failed(
           ['guards', name, 'name'],
           'name-grammar',
@@ -293,7 +288,7 @@ describe('validateContract: name grammars', () => {
       standardRejections: { notFound: { code: 'not-found', status: 404, message: 'Not found' } },
     });
 
-    expect(validateInPackage(definitions, noOrigin)).toEqual(
+    expect(validateInPackage(definitions)).toEqual(
       failed(
         ['standardRejections', 'notFound', 'code'],
         'name-grammar',
@@ -364,25 +359,21 @@ describe('validateContract: unique names and identities', () => {
     );
   });
 
-  test('a Guard named like one in a listed Definitions Package fails', () => {
+  test('a Service’s own Guard named like an unreached Guard of its standardRejections package is valid', () => {
     const shared = defineGuard({ name: 'apiKey', description: 'A key' });
     const local = defineGuard({ name: 'apiKey', description: 'A local key' });
     const definitions = defineDefinitions({});
     const endpoint = defineEndpoint({ ...listing, guards: [local] });
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [aGroup('orders', [endpoint])],
     });
-    const exportsOf = exporting([definitions, { shared }]);
+    const packages = [anInstalledPackage(definitions, { shared })];
 
-    expect(validateContract(contract, aRootPackage(contract, { exportsOf }))).toEqual(
-      failed(
-        ['guards', 'apiKey', 'name'],
-        'duplicate-guard-name',
-        'A Guard name is unique across the Contract and its Definitions Packages: apiKey',
-      ),
-    );
+    const validated = validateContract(contract, aRootPackage(contract, { packages }));
+
+    expect(validated.kind).toBe('valid');
   });
 
   test('a Guard named like an attached one, reached only through another Guard’s guards, fails as a duplicate', () => {
@@ -415,67 +406,6 @@ describe('validateContract: unique names and identities', () => {
   });
 });
 
-describe('validateContract: listed Definitions Packages', () => {
-  const installed = (definitions: Definitions) => ({
-    definitions,
-    packageName: '@org/definitions',
-    version: '4.2.0',
-    exports: {},
-  });
-
-  test('a Definitions Package listed twice fails, named by its package', () => {
-    const definitions = defineDefinitions({});
-    const contract = defineContract({
-      name: 'orders-service',
-      definitions: [definitions, definitions],
-    });
-
-    const validated = validateContract(
-      contract,
-      aRootPackage(contract, { packages: [installed(definitions)] }),
-    );
-
-    expect(validated).toEqual(
-      failed(
-        ['definitions', 1],
-        'duplicate-definitions',
-        'A Contract lists each Definitions Package once: @org/definitions',
-      ),
-    );
-  });
-
-  test('a Definitions Package with Standard Rejections listed twice fails only as a duplicate', () => {
-    const definitions = defineDefinitions({
-      standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
-    });
-    const contract = defineContract({
-      name: 'orders-service',
-      definitions: [definitions, definitions],
-    });
-
-    const validated = validateContract(
-      contract,
-      aRootPackage(contract, { packages: [installed(definitions)] }),
-    );
-
-    expect(validated).toEqual(
-      failed(
-        ['definitions', 1],
-        'duplicate-definitions',
-        'A Contract lists each Definitions Package once: @org/definitions',
-      ),
-    );
-  });
-
-  test('two Definitions objects that declare the same are two packages', () => {
-    const first = defineDefinitions({});
-    const second = defineDefinitions({});
-    const contract = defineContract({ name: 'orders-service', definitions: [first, second] });
-
-    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
-  });
-});
-
 describe('validateContract: Groups', () => {
   test('two Groups with one name fail', () => {
     expect(
@@ -497,10 +427,7 @@ describe('validateContract: the root is named as its package', () => {
   ] as const;
 
   test.each(roots)('%s named as its package.json without the scope is valid', (_, root) => {
-    const validated = validateContract(
-      root,
-      aRootPackage(root, { originOf: noOrigin, packageName: 'orders-service' }),
-    );
+    const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
 
     expect(validated.kind).toBe('valid');
   });
@@ -508,7 +435,7 @@ describe('validateContract: the root is named as its package', () => {
   test.each(roots)('%s named otherwise fails package-name', (_, root) => {
     const validated = validateContract(
       root,
-      aRootPackage(root, { originOf: noOrigin, packageName: 'billing-service' }),
+      aRootPackage(root, { packageName: 'billing-service' }),
     );
 
     expect(validated).toEqual({
@@ -527,10 +454,7 @@ describe('validateContract: the root is named as its package', () => {
   test('a wrong package name is reported with every other failure at once', () => {
     const root = defineContract({ name: 'Orders', groups: [] });
 
-    const validated = validateContract(
-      root,
-      aRootPackage(root, { originOf: noOrigin, packageName: 'orders' }),
-    );
+    const validated = validateContract(root, aRootPackage(root, { packageName: 'orders' }));
 
     const rules = validated.kind === 'invalid' ? validated.failures.map(ruleOf) : [];
     expect(rules).toEqual(['name-grammar', 'package-name']);

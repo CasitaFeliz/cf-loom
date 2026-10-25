@@ -5,8 +5,8 @@ import {
   isDefinitions,
 } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import { type OriginOf, openCompositionsOf, walkSchemas } from '../walker/index.ts';
-import { type Declarations, declarationsOf, type ExportsOf, type Root } from '../written/index.ts';
+import { openCompositionsOf, walkSchemas } from '../walker/index.ts';
+import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
 import { exportFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
@@ -16,8 +16,9 @@ import { groupFailures } from './groups.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { messageBodyFailures, messageFailures } from './messages.ts';
 import { nameFailures } from './name-grammars.ts';
-import { listedOnceFailures, packageNameFailures, uniquenessFailures } from './names.ts';
+import { packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
+import { ambiguousFailures, ambiguousSchemaFailure, schemaOriginsOf } from './provenance.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import {
   failuresAt,
@@ -28,7 +29,6 @@ import {
   nodesOf,
   schemaSlotsOf,
 } from './schemas.ts';
-import { onceFailures } from './standard-codes.ts';
 import { structureFailures } from './structure.ts';
 import { subscriptionFailures } from './subscriptions.ts';
 import { conflictFailures, textPartFailures } from './text-only.ts';
@@ -45,26 +45,27 @@ export type ValidatedSchemas = {
 
 /**
  * A Definitions Package installed where the root is validated: its Definitions object, the
- * package.json name and exact version, which the Snapshot records, and what its module exports,
- * by name.
+ * package.json name and exact version, what its module exports by name, and the other installed
+ * Definitions Packages its files import, directly or through any package, which says which of two
+ * exporters of one object imports it from the other.
  */
 export type ResolvedDefinitions = {
   readonly definitions: Definitions;
   readonly packageName: string;
   readonly version: string;
   readonly exports: Readonly<Record<string, unknown>>;
+  readonly reaches: readonly ResolvedDefinitions[];
 };
 
 /**
- * The package a root sits in: its package.json name, scope included, which a Service's or
- * Application's root is named as without the scope; every Definitions Package its files import,
- * as Node resolved them; where each shared schema came from; and what each package's module exports.
+ * The package a root sits in: its package.json name, scope included; every Definitions Package its
+ * files import, as Node resolved them; and what the root file exports, by name, which a Definitions
+ * root's members are.
  */
 export type RootPackage = {
   readonly packageName: string;
   readonly packages: readonly ResolvedDefinitions[];
-  readonly originOf: OriginOf;
-  readonly exportsOf: ExportsOf;
+  readonly rootExports: Readonly<Record<string, unknown>>;
 };
 
 /**
@@ -92,16 +93,18 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     const message = 'A root is a Contract, an Application or a Definitions Package';
     return invalid([failure([], 'not-a-root', message)]);
   }
-  const declarations = declarationsOf(root, rootPackage.exportsOf);
+  const { packages, rootExports } = rootPackage;
+  const declarations = declarationsOf(root, rootExports);
   const slots = schemaSlotsOf(declarations);
-  const walked = walkSchemas(locatedSchemasOf(slots.slots), rootPackage.originOf);
+  const origins = schemaOriginsOf(packages);
+  const walked = walkSchemas(locatedSchemasOf(slots.slots), origins.originOf);
   const nodes = nodesOf(slots.slots, walked);
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
-    ...listedOnceFailures(declarations, rootPackage.packages),
-    ...onceFailures(declarations, rootPackage.packages),
-    ...exportFailures(declarations, rootPackage.exportsOf),
+    ...exportFailures(declarations, rootExports),
+    ...ambiguousFailures(declarations, packages),
+    ...origins.ambiguous.map(ambiguousSchemaFailure),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),

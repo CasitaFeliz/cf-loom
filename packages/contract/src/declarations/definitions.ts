@@ -14,8 +14,9 @@ type DefinitionsDeclaration = {
 };
 
 /**
- * A declared Definitions Package. What it holds is what its root file exports beside it: Guards,
- * Rejections and zod schemas, each under the name Services import it by.
+ * A declared Definitions Package, which a Contract names as `standardRejections` to take its
+ * Standard Rejections. What it holds is what its root file exports beside it: Guards, Rejections
+ * and zod schemas, each under the name Services import it by.
  */
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
   Readonly<Declaration> & { readonly kind: 'definitions' };

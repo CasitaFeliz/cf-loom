@@ -37,9 +37,22 @@ type ObjectPart = { readonly at: Path; readonly value: unknown; readonly require
 /** Every list is a list, every object part an object, and every item the declaration that belongs there. */
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
+    ...standardsSourceFailures(declarations.root),
     ...listsOf(declarations).flatMap(listingFailures),
     ...readableOf(declarations).flatMap(objectPartsOf).flatMap(objectPartFailures),
   ];
+}
+
+/** What a Contract names as `standardRejections`, when it names one, is a Definitions Package's definitions. */
+function standardsSourceFailures(root: Declarations['root']): readonly DeclarationFailure[] {
+  if (root.kind !== 'contract' || root.standardRejections === undefined) {
+    return [];
+  }
+  if (isDefinitions(root.standardRejections)) {
+    return [];
+  }
+  const message = "A Contract's standardRejections is a Definitions Package's definitions";
+  return [failure(['standardRejections'], 'not-a-declaration', message)];
 }
 
 function listsOf(declarations: Declarations): readonly Listing[] {
@@ -88,12 +101,6 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
   switch (root.kind) {
     case 'contract':
       return [
-        {
-          at: ['definitions'],
-          list: root.definitions,
-          noun: 'a Definitions Package',
-          fits: isDefinitions,
-        },
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
         {
           at: ['dependencies'],

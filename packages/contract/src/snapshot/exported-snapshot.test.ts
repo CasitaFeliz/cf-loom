@@ -21,7 +21,6 @@ import {
   type ResolvedDefinitions,
   type SchemaNode,
   type ServiceSnapshot,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -32,7 +31,6 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
     kind: 'service',
     name: 'orders-service',
     generator: 'test',
-    definitions: {},
     standardRejections: {
       invalidInput: 'INVALID_INPUT',
       notFound: 'NOT_FOUND',
@@ -582,7 +580,6 @@ function serviceSnapshotOf(
   const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
     packages,
-    originOf: schemaOriginsOf(packages),
   });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
@@ -590,7 +587,6 @@ function serviceSnapshotOf(
   }
   const snapshot = snapshotOf(validated, {
     generator: 'test',
-    packages,
     committed: undefined,
     now: 0,
   });
@@ -625,7 +621,6 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineContract({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   const packages: readonly ResolvedDefinitions[] = [
@@ -633,6 +628,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
       definitions,
       packageName: '@org/definitions',
       version: '1.0.0',
+      reaches: [],
       exports: { definitions, userToken, permission, unusedGuard },
     },
   ];
@@ -678,7 +674,6 @@ function codeReachSnapshot(): ServiceSnapshot {
   });
   const root = defineContract({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   return serviceSnapshotOf(root, [
@@ -686,6 +681,7 @@ function codeReachSnapshot(): ServiceSnapshot {
       definitions,
       packageName: '@org/definitions',
       version: '1.0.0',
+      reaches: [],
       exports: { definitions, unused },
     },
   ]);

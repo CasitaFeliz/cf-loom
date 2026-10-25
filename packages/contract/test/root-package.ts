@@ -1,31 +1,33 @@
 import type { Definitions } from '../src/index.ts';
-import type { ExportsOf, RootPackage } from '../src/internal/index.ts';
+import type { ResolvedDefinitions, RootPackage } from '../src/internal/index.ts';
 
 /**
  * The package a test's root sits in: named as the root is, or `@org/definitions` for a
- * Definitions Package, with no Definitions Package installed and no schema from one, unless the
- * test gives otherwise; each installed package's exports are what it exports.
+ * Definitions Package, with no Definitions Package installed and a root file that exports
+ * nothing else, unless the test gives otherwise.
  */
 export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): RootPackage {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packages = given.packages ?? [];
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
-    packages,
-    originOf: () => undefined,
-    exportsOf: (definitions) =>
-      packages.find((resolved) => resolved.definitions === definitions)?.exports ?? {},
+    packages: [],
+    rootExports: {},
     ...given,
   };
 }
 
-/** What each of a test's Definitions Packages exports beside its Definitions object, by name. */
-export function exporting(
-  ...packages: readonly (readonly [Definitions, Readonly<Record<string, unknown>>])[]
-): ExportsOf {
-  const byDefinitions = new Map(packages);
-  return (definitions) => {
-    const exported = byDefinitions.get(definitions);
-    return exported === undefined ? {} : { definitions, ...exported };
+/** A Definitions Package installed beside a test's root, exporting what is given beside its Definitions object. */
+export function anInstalledPackage(
+  definitions: Definitions,
+  exported: Readonly<Record<string, unknown>>,
+  installed: Partial<ResolvedDefinitions> = {},
+): ResolvedDefinitions {
+  return {
+    definitions,
+    packageName: '@org/definitions',
+    version: '4.2.0',
+    exports: { definitions, ...exported },
+    reaches: [],
+    ...installed,
   };
 }

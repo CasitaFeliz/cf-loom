@@ -165,12 +165,11 @@ function codeSlots({ rejections: [first, ...others] }: LocatedCode): readonly Sl
 }
 
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
-function sharedSlots({ root, allPackages }: Declarations): readonly Slot[] {
-  const [own] = allPackages;
-  if (root.kind !== 'definitions' || own === undefined) {
+function sharedSlots({ ownPackage }: Declarations): readonly Slot[] {
+  if (ownPackage === undefined) {
     return [];
   }
-  return own.members.schemas.map(([name, value]) => ({
+  return ownPackage.members.schemas.map(([name, value]) => ({
     at: ['exports', name],
     owner: value,
     part: 'schema' as const,

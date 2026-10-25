@@ -52,7 +52,6 @@ const standardRejections = z.strictObject({
 const service = z.strictObject({
   ...heading,
   kind: z.literal('service'),
-  definitions: byKey(text),
   standardRejections,
   defs: byKey(schemaNode),
   endpoints: byKey(publishedEndpoint),

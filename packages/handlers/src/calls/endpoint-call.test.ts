@@ -155,7 +155,7 @@ describe('an EndpointHandler’s Resources', () => {
     });
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });
     const orders: Orders = { find: () => undefined };
@@ -457,7 +457,7 @@ describe('an EndpointHandler’s Rejections', () => {
     });
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });
     const getOrderHandler = handle(getOrder, () => reject(notFound));

@@ -1,0 +1,350 @@
+import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
+import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
+import {
+  type Definitions,
+  defineContract,
+  defineDefinitions,
+  defineEndpoint,
+  defineGroup,
+  defineGuard,
+  defineRejection,
+  type Guard,
+  type Rejection,
+} from '../index.ts';
+import {
+  type ResolvedDefinitions,
+  type Snapshot,
+  snapshotOf,
+  validateContract,
+} from '../internal/index.ts';
+
+const context = { generator: 'test', committed: undefined, now: 0 };
+
+/** A Service whose one Endpoint attaches the Guards, answers the Rejections and returns the body given. */
+function aService(
+  { guards = [], rejections = [], body = z.object({ ok: z.boolean() }) }: Reached,
+  standardRejections?: Definitions,
+) {
+  const ping = defineEndpoint({
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Ping',
+    guards: [...guards],
+    success: { status: 200, body },
+    rejections: [...rejections],
+  });
+  const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
+  return defineContract({
+    name: 'ping-service',
+    groups: [group],
+    ...(standardRejections === undefined ? {} : { standardRejections }),
+  });
+}
+
+type Reached = {
+  readonly guards?: readonly Guard[];
+  readonly rejections?: readonly Rejection[];
+  readonly body?: z.ZodObject;
+};
+
+function validatedOf(root: unknown, packages: readonly ResolvedDefinitions[]) {
+  return validateContract(root, aRootPackage(root, { packages }));
+}
+
+function snapshotIn(root: unknown, packages: readonly ResolvedDefinitions[]): Snapshot {
+  const validated = validatedOf(root, packages);
+  if (validated.kind !== 'valid') {
+    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  return snapshotOf(validated, context);
+}
+
+function serviceIn(root: unknown, packages: readonly ResolvedDefinitions[]) {
+  const snapshot = snapshotIn(root, packages);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The fixture is no Service');
+  }
+  return snapshot;
+}
+
+/** A Definitions Package installed as `name@1.0.0`, exporting what is given, reaching the packages given. */
+function aPackage(
+  packageName: string,
+  exported: Readonly<Record<string, unknown>>,
+  reaches: readonly ResolvedDefinitions[] = [],
+): ResolvedDefinitions {
+  const installed = { packageName, version: '1.0.0', reaches };
+  return anInstalledPackage(defineDefinitions({}), exported, installed);
+}
+
+/** The origin of the `total` field of the ping's Success body. */
+function totalOrigin(snapshot: ReturnType<typeof serviceIn>): unknown {
+  const body = snapshot.endpoints['GET /ping']?.success.body;
+  const total = body?.type === 'object' ? body.fields['total']?.schema : undefined;
+  return total === undefined ? undefined : Reflect.get(total, 'origin');
+}
+
+const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });
+const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+const money = z.object({ amount: z.int() });
+
+describe('validateContract and snapshotOf: where a reached declaration came from', () => {
+  test('a Guard, a Rejection and a schema an installed package exports take its origin, with no list', () => {
+    const org = aPackage('@org/definitions', { apiKey, forbidden, money });
+    const root = aService({
+      guards: [apiKey],
+      rejections: [forbidden],
+      body: z.object({ total: money }),
+    });
+
+    const snapshot = serviceIn(root, [org]);
+
+    expect(snapshot.guards['apiKey']?.origin).toBe('@org/definitions@1.0.0');
+    expect(snapshot.codes['FORBIDDEN']?.origin).toBe('@org/definitions@1.0.0');
+    expect(totalOrigin(snapshot)).toBe('@org/definitions@1.0.0#money');
+  });
+
+  test('a Guard reached only through another Guard’s guards takes its package’s origin', () => {
+    const permission = defineGuard({
+      name: 'permission',
+      description: 'Builds on the key',
+      guards: [apiKey],
+    });
+    const org = aPackage('@org/definitions', { apiKey, permission });
+    const own = defineGuard({
+      name: 'own',
+      description: 'Builds on permission',
+      guards: [permission],
+    });
+
+    const snapshot = serviceIn(aService({ guards: [apiKey, permission, own] }), [org]);
+
+    expect(snapshot.guards['apiKey']?.origin).toBe('@org/definitions@1.0.0');
+    expect(snapshot.guards['own']?.origin).toBe('local');
+  });
+
+  test('a schema of one package reached inside another’s takes its own package’s origin', () => {
+    const order = z.object({ total: money });
+    const p2 = aPackage('@p2/defs', { money });
+    const p1 = aPackage('@p1/defs', { order }, [p2]);
+
+    const snapshot = serviceIn(aService({ body: z.object({ order }) }), [p1, p2]);
+
+    const body = snapshot.endpoints['GET /ping']?.success.body;
+    const orderNode = body?.type === 'object' ? body.fields['order']?.schema : undefined;
+    expect(orderNode).toMatchObject({
+      origin: '@p1/defs@1.0.0#order',
+      fields: { total: { schema: { origin: '@p2/defs@1.0.0#money' } } },
+    });
+  });
+
+  test('an installed package the Contract reaches nothing of appears in no origin', () => {
+    const org = aPackage('@org/definitions', { apiKey });
+    const unused = aPackage('@org/unused', { forbidden });
+
+    const text = JSON.stringify(serviceIn(aService({ guards: [apiKey] }), [org, unused]));
+
+    expect(text).not.toContain('@org/unused');
+  });
+
+  test('the package named as standardRejections gives the Standard Rejections’ codes, with its origin', () => {
+    const definitions = defineDefinitions({
+      standardRejections: {
+        notFound: { code: 'RESOURCE_NOT_FOUND', status: 404, message: 'Not here' },
+      },
+    });
+    const org = anInstalledPackage(definitions, {}, { version: '1.0.0' });
+
+    const snapshot = serviceIn(aService({}, definitions), [org]);
+
+    expect(snapshot.standardRejections.notFound).toBe('RESOURCE_NOT_FOUND');
+    expect(snapshot.codes['RESOURCE_NOT_FOUND']?.origin).toBe('@org/definitions@1.0.0');
+    expect(snapshot.codes['INVALID_INPUT']?.origin).toBe('standard');
+    expect(snapshot).not.toHaveProperty('definitions');
+  });
+
+  test('a Guard one package re-exports from another it imports belongs to the other', () => {
+    const p2 = aPackage('@p2/defs', { apiKey });
+    const p1 = aPackage('@p1/defs', { apiKey }, [p2]);
+
+    const onlyP1 = serviceIn(aService({ guards: [apiKey] }), [p1, p2]);
+    const both = serviceIn(aService({ guards: [apiKey] }), [p2, p1]);
+
+    expect(onlyP1.guards['apiKey']?.origin).toBe('@p2/defs@1.0.0');
+    expect(both.guards['apiKey']?.origin).toBe('@p2/defs@1.0.0');
+  });
+
+  test('a Guard two packages export, each importing the other, fails definitions-ambiguous', () => {
+    const p1Reaches: ResolvedDefinitions[] = [];
+    const p1 = aPackage('@p1/defs', { apiKey }, p1Reaches);
+    const p2 = aPackage('@p2/defs', { apiKey }, [p1]);
+    p1Reaches.push(p2);
+
+    const validated = validatedOf(aService({ guards: [apiKey] }), [p1, p2]);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['guards', 'apiKey'],
+          rule: 'definitions-ambiguous',
+          message:
+            'A declaration belongs to one Definitions Package: exported by both @p1/defs and @p2/defs, and neither imports it from the other',
+        },
+      ],
+    });
+  });
+
+  test('a schema two packages export, neither importing the other, fails where the walk meets it', () => {
+    const p1 = aPackage('@p1/defs', { money });
+    const p2 = aPackage('@p2/defs', { money });
+
+    const validated = validatedOf(aService({ body: z.object({ total: money }) }), [p1, p2]);
+
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [
+        {
+          at: ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields', 'total'],
+          rule: 'definitions-ambiguous',
+        },
+      ],
+    });
+  });
+
+  test('a Definitions root re-exporting another package’s Guard writes that package’s origin, and its own Guards stay local', () => {
+    const p2 = aPackage('@p2/defs', { apiKey });
+    const own = defineGuard({ name: 'own', description: 'Its own', guards: [apiKey] });
+    const root = defineDefinitions({});
+
+    const validated = validateContract(
+      root,
+      aRootPackage(root, { packages: [p2], rootExports: { definitions: root, apiKey, own } }),
+    );
+    const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
+
+    expect(snapshot?.kind === 'definitions' && snapshot.guards['apiKey']?.origin).toBe(
+      '@p2/defs@1.0.0',
+    );
+    expect(snapshot?.kind === 'definitions' && snapshot.guards['own']?.origin).toBe('local');
+  });
+});
+
+/** How package P1 reaches P2 in a row of the exhaustive table. */
+type Edge = 'direct' | 'none';
+
+/** Which packages export a member in a row: P1, P2, both, or neither. */
+type Exporters = 'p1' | 'p2' | 'both' | 'none';
+
+/** The origin the rule gives a member, from a reference model of it written apart from the code. */
+function expectedOrigin(exporters: Exporters, edge: Edge): string | 'ambiguous' {
+  switch (exporters) {
+    case 'none':
+      return 'local';
+    case 'p1':
+      return '@p1/defs@1.0.0';
+    case 'p2':
+      return '@p2/defs@1.0.0';
+    case 'both':
+      return edge === 'direct' ? '@p2/defs@1.0.0' : 'ambiguous';
+  }
+}
+
+const exporterRows: readonly Exporters[] = ['p1', 'p2', 'both', 'none'];
+const edgeRows: readonly Edge[] = ['direct', 'none'];
+const rows = edgeRows.flatMap((edge) =>
+  exporterRows.flatMap((guardBy) => exporterRows.map((codeBy) => ({ edge, guardBy, codeBy }))),
+);
+
+/** Whether a package exports a member in a row. */
+function isExportedBy(owner: 'p1' | 'p2', by: Exporters): boolean {
+  return by === owner || by === 'both';
+}
+
+describe('validateContract and snapshotOf: provenance follows identity and imports', () => {
+  test.each(rows)(
+    'a Guard exported by $guardBy and a code by $codeBy, P1 reaching P2: $edge',
+    ({ edge, guardBy, codeBy }) => {
+      const guard = defineGuard({ name: 'gate', description: 'A gate' });
+      const rejection = defineRejection({ code: 'TAKEN', status: 409, message: 'Taken' });
+      const p2 = aPackage('@p2/defs', {
+        ...(isExportedBy('p2', guardBy) ? { gate: guard } : {}),
+        ...(isExportedBy('p2', codeBy) ? { taken: rejection } : {}),
+      });
+      const p1 = aPackage(
+        '@p1/defs',
+        {
+          ...(isExportedBy('p1', guardBy) ? { gate: guard } : {}),
+          ...(isExportedBy('p1', codeBy) ? { taken: rejection } : {}),
+        },
+        edge === 'direct' ? [p2] : [],
+      );
+      const root = aService({ guards: [guard], rejections: [rejection] });
+
+      const validated = validatedOf(root, [p1, p2]);
+
+      const expected = [expectedOrigin(guardBy, edge), expectedOrigin(codeBy, edge)];
+      if (expected.includes('ambiguous')) {
+        const rules = validated.kind === 'invalid' ? validated.failures.map(ruleOf) : [];
+        expect(rules).toEqual(
+          expected.filter((origin) => origin === 'ambiguous').map(() => 'definitions-ambiguous'),
+        );
+        return;
+      }
+      const snapshot = serviceIn(root, [p1, p2]);
+      expect([snapshot.guards['gate']?.origin, snapshot.codes['TAKEN']?.origin]).toEqual(expected);
+    },
+  );
+});
+
+function ruleOf(failure: { readonly kind: string; readonly rule?: string }): string {
+  return failure.rule ?? failure.kind;
+}
+
+/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+describe('validateContract and snapshotOf: origins are exactly the packages used', () => {
+  test('the origins name exactly the packages whose members the Contract reaches, two copies of one name counted as two', () => {
+    const next = seededNext(178);
+    for (let draw = 0; draw < 40; draw += 1) {
+      const guards = Array.from({ length: 3 }, (_, index) =>
+        defineGuard({ name: `gate${index}`, description: 'A gate' }),
+      );
+      const versions = ['1.0.0', '2.0.0', '3.0.0'];
+      const owners = guards.map(() => Math.floor(next() * 4));
+      const reached = guards.filter(() => next() < 0.6);
+      const packages = versions.map((version, index) =>
+        anInstalledPackage(
+          defineDefinitions({}),
+          Object.fromEntries(
+            guards.filter((_, at) => owners[at] === index).map((guard) => [guard.name, guard]),
+          ),
+          { packageName: '@org/definitions', version },
+        ),
+      );
+
+      const snapshot = serviceIn(aService({ guards: reached }), packages);
+
+      const origins = new Set(Object.values(snapshot.guards).map(({ origin }) => origin));
+      origins.delete('local');
+      const used = new Set(
+        reached
+          .map((guard) => owners[guards.indexOf(guard)] ?? 3)
+          .filter((owner) => owner < 3)
+          .map((owner) => `@org/definitions@${versions[owner]}`),
+      );
+      expect(origins).toEqual(used);
+    }
+  });
+});

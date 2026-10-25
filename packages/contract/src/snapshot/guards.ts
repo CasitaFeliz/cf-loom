@@ -1,7 +1,7 @@
 import type { ValidatedGuard } from '../validation/index.ts';
 import { sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
-import { listedOriginOf } from './origins.ts';
+import { packageOriginOf } from './origins.ts';
 import type { GuardSnapshot } from './types.ts';
 
 /**
@@ -12,18 +12,17 @@ export function guardSnapshotsOf(
   guards: readonly ValidatedGuard[],
   sources: SnapshotSources,
 ): Readonly<Record<string, GuardSnapshot>> {
-  const reached = guards.filter((located) => located.reached);
   return Object.fromEntries(
-    reached.map((located) => [located.guard.name, guardSnapshotOf(located, sources)]),
+    guards.map((located) => [located.guard.name, guardSnapshotOf(located, sources)]),
   );
 }
 
 function guardSnapshotOf(
-  { guard, listedIn }: ValidatedGuard,
-  { nodeOf, packages }: SnapshotSources,
+  { guard, from }: ValidatedGuard,
+  { nodeOf }: SnapshotSources,
 ): GuardSnapshot {
   return {
-    origin: listedOriginOf(listedIn, packages),
+    origin: packageOriginOf(from),
     description: guard.description,
     guards: (guard.guards ?? []).map(({ name }) => name),
     qualifier: nodeOf(guard, 'qualifier') ?? null,

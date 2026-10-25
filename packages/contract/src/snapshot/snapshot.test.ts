@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage, exporting } from '../../test/root-package.ts';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -21,7 +21,6 @@ import {
   type ResolvedDefinitions,
   type Snapshot,
   type SnapshotContext,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -178,6 +177,7 @@ const orgPackage: ResolvedDefinitions = {
   definitions: orgDefinitions,
   packageName: '@org/definitions',
   version: '4.2.0',
+  reaches: [],
   exports: {
     definitions: orgDefinitions,
     userToken,
@@ -203,7 +203,7 @@ const notifyOnFailed = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  definitions: [orgDefinitions],
+  standardRejections: orgDefinitions,
   groups: [
     ordersGroup,
     defineGroup({
@@ -220,25 +220,32 @@ const stampedAt = '2026-10-17T09:30:00Z';
 function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
   return {
     generator: '@cf-loom/cli@2.1.0',
-    packages: [orgPackage],
     committed: undefined,
     now: Date.parse('2026-10-18T12:00:00.750Z'),
     ...overrides,
   };
 }
 
-function snapshotFor(root: unknown, context: SnapshotContext = aContext()): Snapshot {
-  const originOf = schemaOriginsOf(context.packages);
-  const exportsOf = exporting([orgDefinitions, orgPackage.exports]);
-  const validated = validateContract(root, aRootPackage(root, { originOf, exportsOf }));
+/** The Snapshot of a root, beside the Definitions Packages installed, `@org/definitions` by default. */
+function snapshotFor(
+  root: unknown,
+  context: SnapshotContext = aContext(),
+  packages: readonly ResolvedDefinitions[] = [orgPackage],
+): Snapshot {
+  const rootExports = root === orgDefinitions ? orgPackage.exports : {};
+  const validated = validateContract(root, aRootPackage(root, { packages, rootExports }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
   return snapshotOf(validated, context);
 }
 
-function serviceSnapshot(root: unknown = contract, context: SnapshotContext = aContext()) {
-  const snapshot = snapshotFor(root, context);
+function serviceSnapshot(
+  root: unknown = contract,
+  context: SnapshotContext = aContext(),
+  packages: readonly ResolvedDefinitions[] = [orgPackage],
+) {
+  const snapshot = snapshotFor(root, context, packages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -270,7 +277,7 @@ function searchQueryOf({
   });
   const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
   const root = defineContract({ name: 'search-service', groups: [group] });
-  return serviceSnapshot(root, aContext({ packages: [] })).endpoints['GET /search']?.input.query;
+  return serviceSnapshot(root, aContext(), []).endpoints['GET /search']?.input.query;
 }
 
 /**
@@ -308,7 +315,7 @@ function codeReachSnapshot() {
   });
   const root = defineContract({
     name: 'orders-service',
-    definitions: [orgDefinitions],
+    standardRejections: orgDefinitions,
     groups: [group],
   });
   return serviceSnapshot(root);
@@ -327,7 +334,6 @@ describe('snapshotOf: a Service', () => {
       kind: 'service',
       name: 'orders-service',
       generator: '@cf-loom/cli@2.1.0',
-      definitions: { '@org/definitions': '4.2.0' },
       events: {},
       commands: {},
       subscriptions: {},
@@ -528,7 +534,7 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('a code declared twice is written with the first declaration’s message, a Definitions Package’s before an Endpoint’s', () => {
+  test('a code declared twice is written with the first declaration’s message, a Guard’s before an Endpoint’s', () => {
     const lockedAgain = defineRejection({
       code: 'UNAUTHENTICATED',
       status: 401,
@@ -540,13 +546,14 @@ describe('snapshotOf: a Service', () => {
       path: '/ping',
       visibility: 'public',
       description: 'Ping',
+      guards: [userToken],
       success: { status: 200, body: z.object({ ok: z.boolean() }) },
       rejections: [lockedAgain],
     });
     const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
     const root = defineContract({
       name: 'ping-service',
-      definitions: [orgDefinitions],
+      standardRejections: orgDefinitions,
       groups: [group],
     });
 
@@ -678,7 +685,7 @@ describe('snapshotOf: a Service', () => {
     const group = defineGroup({ name: 'tree', description: 'Tree', endpoints: [tree] });
     const root = defineContract({ name: 'tree-service', groups: [group] });
 
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+    const snapshot = serviceSnapshot(root, aContext(), []);
 
     expect(snapshot.endpoints['GET /tree']?.success.body).toEqual({
       type: 'ref',
@@ -739,7 +746,7 @@ function messagingSnapshot(declared: {
     ],
     dependencies: [paymentsDependency],
   });
-  return serviceSnapshot(root, aContext({ packages: [] }));
+  return serviceSnapshot(root, aContext(), []);
 }
 
 const orderIdBody = {
@@ -836,7 +843,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+    const snapshot = serviceSnapshot(root, aContext(), []);
 
     expect(snapshot.commands).toMatchObject({
       'ChargeCard@1': { group: 'orders' },
@@ -875,7 +882,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+    const snapshot = serviceSnapshot(root, aContext(), []);
 
     expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2Xy', 'settle2xy']);
   });
@@ -899,7 +906,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const text = textOf(serviceSnapshot(root, aContext({ packages: [] })));
+    const text = textOf(serviceSnapshot(root, aContext(), []));
 
     expect(text.indexOf('"OrderCreated@10"')).toBeLessThan(text.indexOf('"OrderCreated@2"'));
   });
@@ -960,7 +967,7 @@ describe('snapshotOf: an Application', () => {
     });
     const application = defineApplication({ name: 'web-admin', dependencies: [adminDependency] });
 
-    const snapshot = snapshotFor(application, aContext({ packages: [] }));
+    const snapshot = snapshotFor(application, aContext(), []);
 
     expect(snapshot).toEqual({
       format: 1,
@@ -979,7 +986,7 @@ describe('snapshotOf: an Application', () => {
 
 describe('snapshotOf: a Definitions Package', () => {
   test('a Definitions Package’s Snapshot writes every Guard, shared schema and code it declares, as local', () => {
-    const snapshot = snapshotFor(orgDefinitions, aContext({ packages: [] }));
+    const snapshot = snapshotFor(orgDefinitions, aContext(), []);
 
     expect(snapshot).toMatchObject({
       format: 1,
@@ -1018,7 +1025,7 @@ describe('snapshotOf: a Definitions Package', () => {
   });
 
   test('a Definitions Package’s standardRejections maps each Standard Rejection to its code', () => {
-    const snapshot = snapshotFor(orgDefinitions, aContext({ packages: [] }));
+    const snapshot = snapshotFor(orgDefinitions, aContext(), []);
 
     expect(snapshot.kind === 'definitions' && snapshot.standardRejections).toEqual({
       invalidInput: 'BAD_REQUEST',
@@ -1032,7 +1039,7 @@ describe('canonicalTextOf', () => {
   test('keys are sorted by code point, indented by two spaces, with a final newline', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
-    const text = textOf(snapshotFor(application, aContext({ packages: [] })));
+    const text = textOf(snapshotFor(application, aContext(), []));
 
     expect(text).toBe(
       [
@@ -1051,7 +1058,7 @@ describe('canonicalTextOf', () => {
   test('the same Contract written in another order gives the same bytes', () => {
     const reordered = defineContract({
       name: 'orders-service',
-      definitions: [orgDefinitions],
+      standardRejections: orgDefinitions,
       groups: [
         defineGroup({
           name: 'orders',
@@ -1094,7 +1101,7 @@ describe('canonicalTextOf', () => {
     const group = defineGroup({ name: 'tagged', description: 'Tagged', endpoints: [tagged] });
     const root = defineContract({ name: 'tagged-service', groups: [group] });
 
-    const text = textOf(snapshotFor(root, aContext({ packages: [] })));
+    const text = textOf(snapshotFor(root, aContext(), []));
 
     expect(text.indexOf('"\\"a\\"": {')).toBeLessThan(text.indexOf('"1": {'));
   });

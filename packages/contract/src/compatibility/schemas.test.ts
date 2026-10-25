@@ -46,7 +46,6 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
   guards: {},
   codes: {},

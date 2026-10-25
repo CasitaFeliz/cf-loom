@@ -1,13 +1,6 @@
 import { type Guard, isGuard, isRejection, type Rejection } from '../declarations/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-import {
-  type Declarations,
-  type ExportsOf,
-  isSchema,
-  listOf,
-  reachedGuardsOf,
-  textOf,
-} from '../written/index.ts';
+import { type Declarations, isSchema, listOf, reachedGuardsOf, textOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /** The name a Definitions Package's root file exports its Definitions object under. */
@@ -20,12 +13,11 @@ const definitionsExport = 'definitions';
  */
 export function exportFailures(
   { root }: Declarations,
-  exportsOf: ExportsOf,
+  exports: Readonly<Record<string, unknown>>,
 ): readonly DeclarationFailure[] {
   if (root.kind !== 'definitions') {
     return [];
   }
-  const exports = exportsOf(root);
   const names = Object.keys(exports).sort(byCodePoint);
   return [
     ...names.flatMap((name) => otherExportFailures(name, exports[name], root)),

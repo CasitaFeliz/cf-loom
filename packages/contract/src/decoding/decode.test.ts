@@ -28,7 +28,6 @@ import {
   type PublishedSnapshot,
   type RefNode,
   type SchemaNode,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -74,7 +73,6 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
-    definitions: {},
     standardRejections,
     defs: {},
     endpoints: {},
@@ -295,7 +293,6 @@ describe('decodeSnapshot', () => {
   describe('what decodes', () => {
     test('a Service’s published Snapshot, written as canonical text, decodes to the same Snapshot', () => {
       const published = aService({
-        definitions: { '@org/definitions': '4.2.0' },
         defs: { tree: treeDef },
         endpoints: {
           'GET /orders/{}': {
@@ -637,11 +634,6 @@ describe('decodeSnapshot', () => {
         at: ['subscriptions', '__proto__'],
       },
       {
-        where: 'definitions',
-        snapshot: { ...aService(), definitions: protoKeyed('1.0.0') },
-        at: ['definitions', '__proto__'],
-      },
-      {
         where: 'an Application’s dependencies',
         snapshot: {
           ...anApplication(),
@@ -711,9 +703,15 @@ describe('decodeSnapshot', () => {
       ['a list', []],
       ['a number', 3],
     ])('a map given as %s is malformed at the map', (_, map) => {
-      const result = serviceWith({ definitions: map });
+      const result = serviceWith({ defs: map });
 
-      expect(result).toEqual(malformedAt(['definitions']));
+      expect(result).toEqual(malformedAt(['defs']));
+    });
+
+    test('a Service’s Snapshot with a definitions map is malformed: its origins say which packages it uses', () => {
+      const result = decodedFrom({ ...aService(), definitions: { '@org/definitions': '4.2.0' } });
+
+      expect(result).toEqual(malformedAt(['definitions'], 'is a key its format does not define'));
     });
 
     test('keys named like an Object’s own properties are kept as the keys they are', () => {
@@ -1456,14 +1454,11 @@ function declaredSnapshot() {
     ],
     dependencies: [defineDependency({ provider: payments })],
   });
-  const validated = validateContract(
-    root,
-    aRootPackage(root, { packageName: 'orders-service', originOf: schemaOriginsOf([]) }),
-  );
+  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, { generator: 'test', packages: [], committed: undefined, now: 0 });
+  return snapshotOf(validated, { generator: 'test', committed: undefined, now: 0 });
 }
 
 const formatOneFixture = `{
@@ -1480,7 +1475,6 @@ const formatOneFixture = `{
     "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
-  "definitions": { "@org/definitions": "4.2.0" },
   "defs": {},
   "dependencies": {
     "payments-service": {
