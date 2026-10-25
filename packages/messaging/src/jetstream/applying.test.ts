@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
+import { handle, readersOf } from '@cf-loom/handlers';
 import { JetStreamApiError, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -100,6 +101,8 @@ function anOrders(prefix: string) {
   return { stream, created, charge, chargeDurable, plan };
 }
 
+type Orders = ReturnType<typeof anOrders>;
+
 /** Billing’s plan under a prefix: no stream, and one durable consumer on Orders’ stream. */
 function aBilling(prefix: string) {
   const orders = anOrders(prefix);
@@ -117,6 +120,27 @@ function aBilling(prefix: string) {
 /** Limits as a Service reads them from a JSON file, so a test can write a value the types refuse. */
 function readFromJson(limits: unknown): BrokerLimits {
   return JSON.parse(JSON.stringify(limits));
+}
+
+/** Orders’ stream, holding its subjects, as the organization’s tooling would arrange it. */
+function arrangeOrdersStream(orders: Orders): Promise<void> {
+  return arrangeStream(server.url, {
+    name: orders.stream,
+    subjects: [orders.charge, orders.created],
+  });
+}
+
+/** The Handlers `consume` needs for Orders’ plan: one for its Command, which does nothing. */
+function chargeHandlers() {
+  const readers = readersOf({
+    commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+    subscriptions: {},
+  });
+  return {
+    commands: { chargeCardV1: handle(readers.commands.chargeCardV1, async () => undefined) },
+    subscriptions: {},
+    readers,
+  };
 }
 
 async function rejectionOf(applying: Promise<void>): Promise<Error> {
@@ -510,6 +534,108 @@ describe('applying a broker plan with jetstream()', () => {
     const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(durable.ack_wait).toBe(120 * nanosPerSecond);
     expect(durable.backoff ?? []).toEqual([]);
+  });
+});
+
+describe('applying a broker plan to a durable consumer cf-loom cannot pull from', () => {
+  test('apply turns off headers only on an existing durable consumer', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurable(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      filter_subject: orders.charge,
+      ack_policy: 'explicit',
+      headers_only: true,
+    });
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+
+    await broker.apply(orders.plan, testLimits);
+
+    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(durable.headers_only ?? false).toBe(false);
+  });
+
+  test('apply clears the priority groups, policy and timeout of an existing durable consumer', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurable(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      filter_subject: orders.charge,
+      ack_policy: 'explicit',
+      priority_groups: ['g'],
+      priority_policy: 'pinned_client',
+      priority_timeout: 120 * nanosPerSecond,
+    });
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+
+    await broker.apply(orders.plan, testLimits);
+
+    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(durable.priority_groups ?? []).toEqual([]);
+    expect(durable.priority_policy ?? 'none').toBe('none');
+    expect(durable.priority_timeout ?? 0).toBe(0);
+  });
+
+  test.each([
+    ['delivers headers only', () => ({ headers_only: true })],
+    [
+      'has priority groups pinned to a client',
+      () => ({ priority_groups: ['g'], priority_policy: 'pinned_client' as const }),
+    ],
+    [
+      'has priority groups with the overflow policy',
+      () => ({ priority_groups: ['g', 'h'], priority_policy: 'overflow' as const }),
+    ],
+    ['is filtered on another subject', (orders: Orders) => ({ filter_subject: orders.created })],
+  ])(
+    'a durable consumer that %s is refused by consume until apply ran, and accepted after',
+    async (_name, settings) => {
+      const prefix = aPrefix();
+      const orders = anOrders(prefix);
+      await arrangeOrdersStream(orders);
+      await arrangeDurable(server.url, orders.stream, {
+        durable_name: orders.chargeDurable,
+        filter_subject: orders.charge,
+        ack_policy: 'explicit',
+        ...settings(orders),
+      });
+      const broker = jetstream({ connect: aConnect().connect, prefix });
+      const opened = await messaging(contract, broker);
+      onTestFinished(() => opened.close());
+      const handlers = chargeHandlers();
+      await expect(opened.consume(handlers)).rejects.toThrow(
+        `The durable consumer ${orders.chargeDurable} `,
+      );
+
+      await broker.apply(orders.plan, testLimits);
+
+      await expect(opened.consume(handlers)).resolves.toBeUndefined();
+    },
+  );
+
+  test('a durable consumer that does not acknowledge explicitly, which NATS does not change, rejects apply and is still refused by consume', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurable(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      filter_subject: orders.charge,
+      ack_policy: 'none',
+    });
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const opened = await messaging(contract, broker);
+    onTestFinished(() => opened.close());
+
+    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+
+    expect(error.message).toContain(
+      `The durable consumer ${orders.chargeDurable} could not be applied: `,
+    );
+    await expect(opened.consume(chargeHandlers())).rejects.toThrow(
+      `The durable consumer ${orders.chargeDurable} has the ack policy none, not explicit`,
+    );
   });
 });
 
