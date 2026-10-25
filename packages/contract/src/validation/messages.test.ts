@@ -70,10 +70,32 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'orderCreated@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase: orderCreated',
+        'A Message name is PascalCase words: orderCreated',
       ),
     );
   });
+
+  test.each([
+    ['URLRefresh', 'A Message name is PascalCase words: URLRefresh (write UrlRefresh)'],
+    ['OrderID', 'A Message name is PascalCase words: OrderID (write OrderId)'],
+    ['PlanA', 'A Message name is PascalCase words: PlanA'],
+    ['A', 'A Message name is PascalCase words: A'],
+  ])('a Message name %s, with a capital that starts no word, fails', (name, message) => {
+    const result = validateMessages([anEvent({ name })]);
+
+    expect(result).toEqual(
+      failed(['groups', 'orders', 'events', `${name}@1`, 'name'], 'name-grammar', message),
+    );
+  });
+
+  test.each(['UrlRefresh', 'OrderV2', 'Order2Items', 'Plan2'])(
+    'a Message name %s, whose every capital starts a word, validates',
+    (name) => {
+      const result = validateMessages([anEvent({ name })]);
+
+      expect(result.kind).toBe('valid');
+    },
+  );
 
   test('a version that is not a whole number from 1 fails, as a cast lets it through', () => {
     const result = validateMessages([], [aCommand({ version: 0 })]);
@@ -258,7 +280,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'commands', 'charge_card@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase: charge_card',
+        'A Message name is PascalCase words: charge_card',
       ),
     );
   });

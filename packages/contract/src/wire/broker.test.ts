@@ -98,23 +98,23 @@ describe('the Wire protocol over the broker', () => {
   });
 
   test('two Subscriptions whose names differ only in the case of a letter get two durable consumers', () => {
-    const settle2x = defineSubscription({
-      name: 'settle2x',
+    const settle2xy = defineSubscription({
+      name: 'settle2xy',
       description: 'Settles lower',
       event: orderCreatedV2,
     });
-    const settle2X = defineSubscription({
-      name: 'settle2X',
+    const settle2Xy = defineSubscription({
+      name: 'settle2Xy',
       description: 'Settles upper',
       event: orderCreatedV2,
     });
 
     const durables = [
-      durableNameOf('orders-service', settle2x),
-      durableNameOf('orders-service', settle2X),
+      durableNameOf('orders-service', settle2xy),
+      durableNameOf('orders-service', settle2Xy),
     ];
 
-    expect(durables).toEqual(['orders-service_settle2x', 'orders-service_settle2-x']);
+    expect(durables).toEqual(['orders-service_settle2xy', 'orders-service_settle2-xy']);
   });
 
   test('a prefixed subject is <prefix>.<subject> and a prefixed stream or durable consumer <prefix>_<name>', () => {

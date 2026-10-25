@@ -28,6 +28,7 @@ export {
   kebabCase,
   pascalCase,
   upperSnakeCase,
+  wordsOf,
 } from './grammars.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';

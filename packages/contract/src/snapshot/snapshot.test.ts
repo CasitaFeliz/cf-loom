@@ -841,13 +841,13 @@ describe('snapshotOf: Messages and Subscriptions', () => {
   });
 
   test('two Subscriptions whose names differ only in the case of a letter get two keys', () => {
-    const settle2x = defineSubscription({
-      name: 'settle2x',
+    const settle2xy = defineSubscription({
+      name: 'settle2xy',
       description: 'Settles lower',
       event: orderCreatedV2,
     });
-    const settle2X = defineSubscription({
-      name: 'settle2X',
+    const settle2Xy = defineSubscription({
+      name: 'settle2Xy',
       description: 'Settles upper',
       event: orderCreatedV2,
     });
@@ -858,14 +858,14 @@ describe('snapshotOf: Messages and Subscriptions', () => {
           name: 'messages',
           description: 'Messages',
           events: [orderCreatedV2],
-          subscriptions: [settle2x, settle2X],
+          subscriptions: [settle2xy, settle2Xy],
         }),
       ],
     });
 
     const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
 
-    expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2X', 'settle2x']);
+    expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2Xy', 'settle2xy']);
   });
 
   test('Message Versions are keyed in code point order in the canonical text', () => {

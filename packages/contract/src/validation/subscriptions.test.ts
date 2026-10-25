@@ -267,18 +267,23 @@ describe('validateContract: Subscriptions', () => {
       failed(
         ['groups', 'orders', 'subscriptions', 'charge-on-created', 'name'],
         'name-grammar',
-        'A Subscription name is camelCase: charge-on-created',
+        'A Subscription name is camelCase words: charge-on-created',
       ),
     );
   });
 
   test.each([
-    ['NotifyOnSettled', 'A Subscription name is camelCase: NotifyOnSettled'],
-    ['1stAudit', 'A Subscription name is camelCase: 1stAudit'],
-    ['delete', 'A Subscription name is camelCase and no reserved word: delete'],
-    ['handle', 'A Subscription name is camelCase and no reserved word: handle'],
-    ['then', 'A Subscription name is camelCase and no reserved word: then'],
-    ['toJSON', 'A Subscription name is camelCase and no reserved word: toJSON'],
+    ['NotifyOnSettled', 'A Subscription name is camelCase words: NotifyOnSettled'],
+    ['1stAudit', 'A Subscription name is camelCase words: 1stAudit'],
+    ['delete', 'A Subscription name is camelCase words and no reserved word: delete'],
+    ['handle', 'A Subscription name is camelCase words and no reserved word: handle'],
+    ['then', 'A Subscription name is camelCase words and no reserved word: then'],
+    [
+      'toJSON',
+      'A Subscription name is camelCase words and no reserved word: toJSON (write toJson)',
+    ],
+    ['notifyOnURL', 'A Subscription name is camelCase words: notifyOnURL (write notifyOnUrl)'],
+    ['notifyOnX', 'A Subscription name is camelCase words: notifyOnX'],
   ])('a Subscription name %s, which code cannot name, fails the name grammar', (name, message) => {
     const named = defineSubscription({
       name,

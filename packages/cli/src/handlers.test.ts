@@ -2289,7 +2289,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase and no reserved word: handle\n',
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: handle\n',
     });
   });
 
@@ -2317,7 +2317,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase and no reserved word: then\n',
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: then\n',
     });
   });
 
@@ -2685,10 +2685,10 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test.each([
-    ['charge-on-created', 'camelCase'],
-    ['1stAudit', 'camelCase'],
-    ['delete', 'camelCase and no reserved word'],
-    ['handle', 'camelCase and no reserved word'],
+    ['charge-on-created', 'camelCase words'],
+    ['1stAudit', 'camelCase words'],
+    ['delete', 'camelCase words and no reserved word'],
+    ['handle', 'camelCase words and no reserved word'],
   ])('a Subscription named %s, which is no name in code, fails the name grammar', (name, rule) => {
     const project = aProject(
       aMessagingService({ subscriptions: ['notifyOnSettled', inlineSubscription(name)] }),
