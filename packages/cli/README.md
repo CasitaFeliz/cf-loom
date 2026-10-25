@@ -328,7 +328,7 @@ The responses are one per status, in status order; when several answer one statu
 | 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one |
 | 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` |
 
-A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input. The OpenAPI operation of a `HEAD` Endpoint has no body in any response, since the host drops them.
+A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input.
 
 The `authorization` header is no header parameter, since OpenAPI tools ignore one: it is a security scheme. Each Guard of an Endpoint that is not Retired that demands an `authorization` header is the scheme `components.securitySchemes.<Guard name>`, `{ "type": "apiKey", "in": "header", "name": "authorization" }`; an `authorization` header that no Guard demands, so the Endpoint's own, is the scheme `authorization`. The OpenAPI operation's `security` is one requirement naming every such scheme in code point order, followed by `{}` as an alternative when the header is optional. A document with no such header has no `securitySchemes`.
 

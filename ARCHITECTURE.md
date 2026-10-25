@@ -126,7 +126,7 @@ How an Endpoint's Input and Outcome travel over HTTP, between `serve` and the cl
 - The request path is the URL's path as the [WHATWG URL Standard](https://url.spec.whatwg.org/) resolves it, the same on every host: dot segments, `%2e` included, are removed and `\` reads as `/`, so a path param's text is never `.` or `..`.
 - Each path segment is percent-decoded on its own, so a decoded value never spans segments: `/orders/a%2Fb` is one param, `a/b`; a segment that is not valid percent-encoding is kept as sent. There is no trailing-slash or case folding, and an empty segment matches neither a literal nor a param, so `/orders/` and `//orders` match nothing; a request path matches a declared path exactly (see [Identities](SNAPSHOT.md#identities) in SNAPSHOT.md).
 - Routing compares segment by segment, left to right: a literal beats a param at the first segment where they differ.
-- An undeclared method or path is `NO_SUCH_ENDPOINT`. `HEAD`, `OPTIONS` and CORS preflight are not answered by cf-loom unless declared; the host, its adapter or the organization's gateway handles them.
+- An undeclared method or path is `NO_SUCH_ENDPOINT`. No Endpoint is `HEAD`: every Outcome but a Success travels in the response body, and a response to `HEAD` has none. `HEAD`, and `OPTIONS` and CORS preflight unless declared, are answered by the host, its adapter or the organization's gateway, not by cf-loom.
 
 A Rejection travels with its declared status and its Envelope, `{ rejection: { code, message, body } }`; a Rejection that declares no body has no `body` key. Rejection codes are open for Callers.
 
