@@ -57,7 +57,7 @@ type BareMessageRefusal =
 /** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
 type ImplementationOf<
   Target extends HandleArgument,
-  Last extends ResourcesLast,
+  Last extends ResourcesLast<Last>,
 > = Target extends Endpoint
   ? EndpointImplementation<Target, Last>
   : Target extends Guard
@@ -86,7 +86,7 @@ type TargetOf<Target extends HandleArgument> = Target extends MessageElement
 
 function handleImplementation<
   Target extends HandleArgument,
-  Last extends ResourcesLast = LastNotAnnotated,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 >(
   target: TargetOf<Target>,
   implementation: ImplementationOf<Target, Last>,

@@ -57,7 +57,7 @@ type DirectRequestField = { readonly request?: Partial<HandledRequest> };
 /** What an EndpointHandler's implementation returns, given the Input, the Context and request, and last the Resources it takes, `Needs<'orders'>`; may be async. */
 export type EndpointImplementation<
   Target extends Endpoint,
-  Last extends ResourcesLast = LastNotAnnotated,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 > = (
   input: InputOf<Target>,
   call: EndpointCall<Target>,
@@ -67,7 +67,7 @@ export type EndpointImplementation<
 /** What a GuardHandler's implementation returns, given its demands, its Context, Qualifier and request, and last the Resources it takes, `Needs<'callers'>`; may be async. */
 export type GuardImplementation<
   Target extends Guard,
-  Last extends ResourcesLast = LastNotAnnotated,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 > = (
   demands: DemandsOf<Target>,
   call: GuardCall<Target>,

@@ -495,6 +495,29 @@ describe('handle and Resources', () => {
     expect(write).toBeTypeOf('function');
   });
 
+  test('an implementation whose last parameter holds anything beside resources is a type error', () => {
+    type Orders = { readonly orders: { readonly find: (orderId: string) => string | undefined } };
+    const written = (
+      _input: unknown,
+      _call: unknown,
+      last: { readonly resources: Orders; readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+    const intersected = (
+      _input: unknown,
+      _call: unknown,
+      last: WithResources<Orders> & { readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+
+    const write = () => [
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, written),
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, intersected),
+    ];
+
+    expect(write).toBeTypeOf('function');
+  });
+
   test('a stub takes no Resources', () => {
     const getOrderStub = handle.stub(getOrder);
     const apiKeyStub = handle.stub(apiKey);
@@ -567,18 +590,24 @@ describe('ResourcesOf', () => {
       handle(notifyOnPaid, (_body, _meta, { resources }: WithResources<any>) => {
         resources.notifications.send();
       }),
+      handle<typeof getOrder, any>(getOrder, () => reject(notFound)),
+      handle(getOrder, (_input, _call, last: any) => (last ? reject(notFound) : reject(notFound))),
     ] as const;
 
     expectTypeOf(handlers[0]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     expectTypeOf(handlers[1]).toEqualTypeOf<GuardHandler<typeof apiKey, any>>();
     expectTypeOf(handlers[2]).toEqualTypeOf<CommandHandler<typeof chargeCard, any>>();
     expectTypeOf(handlers[3]).toEqualTypeOf<EventHandler<typeof notifyOnPaid, any>>();
+    expectTypeOf(handlers[4]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[5]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
     expect(handlers.map(({ element }) => element)).toEqual([
       getOrder,
       apiKey,
       chargeCardV1,
       notifyOnPaidV1,
+      getOrder,
+      getOrder,
     ]);
   });
 

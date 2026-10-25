@@ -14,8 +14,10 @@ export type ResourcesNotAnnotated = {
 /** What a Handler takes beside what it is given: the Service's Resources, which `serve` and `consume` hand it unread. */
 export type WithResources<Resources extends object> = { readonly resources: Resources };
 
-/** What an implementation's last parameter may hold: `resources`, when it takes some. */
-export type ResourcesLast = { readonly resources?: object };
+/** What an implementation's last parameter may hold: `resources`, when it takes some, and no other field, which no run would give it. */
+export type ResourcesLast<Last = object> = { readonly resources?: object } & {
+  readonly [Key in Exclude<keyof Last, 'resources'>]?: never;
+};
 
 /** The last parameter of an implementation that leaves it unannotated: `resources` optional, since it takes none, and typed to name the fix. */
 export type LastNotAnnotated = { readonly resources?: ResourcesNotAnnotated };

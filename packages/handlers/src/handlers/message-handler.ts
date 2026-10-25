@@ -30,13 +30,13 @@ type Answered = undefined | MessageFault;
 /** What a CommandHandler's implementation returns, given the body, its meta, and last the Resources it takes, `Needs<'payments'>`: nothing, which acknowledges the Command, or a `MessageFault`; may be async. */
 export type CommandImplementation<
   Target extends Pairing<Command>,
-  Last extends ResourcesLast = LastNotAnnotated,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 > = (body: ReadBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
 /** What an EventHandler's implementation returns, given the body, its meta, and last the Resources it takes, `Needs<'payments'>`: nothing, which acknowledges the Event, or a `MessageFault`; may be async. */
 export type EventImplementation<
   Target extends Pairing<Subscription>,
-  Last extends ResourcesLast = LastNotAnnotated,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 > = (body: ReadBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
 /** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
