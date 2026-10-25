@@ -8,59 +8,65 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { isRootKind, publishedNameOf } from '../loading/index.ts';
-import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
+import { type ChosenVersion, chosenVersionOf } from './against.ts';
+import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { versionsOf } from './package-versions.ts';
 import { snapshotTextOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';
 import {
   type BaselineSource,
-  baselineVersionOf,
   metadataFrom,
   type VersionMetadata,
   type Versions,
-  versionsFrom,
 } from './versions.ts';
 
-/** Why a package has no Baseline: the registry npm reads its scope from does not know it, or it has only prereleases. */
-export type NoBaseline =
-  | UnknownPackage
-  | { readonly kind: 'only-prereleases'; readonly versions: readonly string[] };
+/** Why a package has no Baseline: the registry npm reads its scope from does not know it. */
+export type NoBaseline = UnknownPackage;
 
 /** A package's Baseline as its registry holds it, why it has none, or why it cannot be read. */
 export type ReadBaseline =
   | {
       readonly kind: 'baseline';
       readonly packageName: string;
-      /** The published Snapshot of the highest version that is not a prerelease. */
+      /** The published Snapshot of the highest version, a prerelease included, or of the one `--against` names. */
       readonly snapshot: PublishedSnapshot;
       /** That version's peer ranges, which the peer rule compares with the proposed ones. */
       readonly peers: PeerRanges;
       /** Every published version, prereleases included, lowest first. */
       readonly versions: readonly string[];
+      /** The highest published version that is not a prerelease, which a prerelease Baseline's version derives from. */
+      readonly stable: string | undefined;
+      /** Whether the Baseline is the highest version or the one `--against` named. */
+      readonly chosen: ChosenVersion['chosen'];
     }
   | { readonly kind: 'no-baseline'; readonly packageName: string; readonly why: NoBaseline }
   | Failed;
 
 type Declared = Pick<Snapshot, 'kind' | 'name'>;
 
-/** npm's 404 for a package, before anything is known of why the registry lacks it. */
-type NotFound = { readonly kind: 'not-found' };
+/** The package whose Baseline is read: the declared Snapshot it publishes, under which scope, and the version `check --against` names. */
+export type BaselineQuery = {
+  readonly declared: Declared;
+  readonly scope: string;
+  readonly against: string | undefined;
+};
 
 const unnamable = failed(
   'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
 );
 
-/** A package and every version it lists, lowest first. */
-type Published = { readonly packageName: string; readonly versions: readonly string[] };
+/** A package and the versions it lists. */
+type Published = { readonly packageName: string; readonly listed: Versions };
 
 /**
  * Reads, through the organization's own npm, the Baseline of the package a declared Snapshot
- * publishes as under `scope`: the highest published version that is not a prerelease, its
- * metadata, and only its `snapshot.json`; anything that cannot be proven fails closed.
+ * publishes as under `scope`: the highest published version, a prerelease included, or the one
+ * `against` names, its metadata, and only its `snapshot.json`; anything that cannot be proven
+ * fails closed.
  */
 export async function baselineOf(
   npm: NpmPlace,
-  declared: Declared,
-  scope: string,
+  { declared, scope, against }: BaselineQuery,
 ): Promise<ReadBaseline> {
   const packageName = packageNameOf(scope, declared);
   if (typeof packageName !== 'string') {
@@ -73,7 +79,7 @@ export async function baselineOf(
     case 'not-found':
       return await baselineOfMissing(npm, packageName, scope);
     case 'versions':
-      return await baselineAmong(npm, { packageName, versions: listed.versions }, declared);
+      return await baselineAmong(npm, { packageName, listed }, { declared, against });
   }
 }
 
@@ -96,42 +102,16 @@ async function baselineOfMissing(
   return unknown.kind === 'failed' ? unknown : { kind: 'no-baseline', packageName, why: unknown };
 }
 
-async function versionsOf(
-  npm: NpmPlace,
-  packageName: string,
-): Promise<Versions | NotFound | Failed> {
-  const call = { label: `npm view ${packageName}`, args: ['view', packageName, 'versions'] };
-  const run = await jsonFromNpm(npm, call);
-  switch (run.kind) {
-    case 'json':
-      return versionsFrom(packageName, run.value);
-    case 'refused':
-      return refusedViewOf(packageName, run);
-    case 'failed':
-      return run;
-  }
-}
-
-function refusedViewOf(packageName: string, refused: Refused): NotFound | Failed {
-  if (refused.code !== 'E404') {
-    return failed(refused.message);
-  }
-  if (refused.summary.startsWith('Unpublished on')) {
-    const gone = 'its Baseline is gone, so nothing can be checked against it';
-    return failed(`${packageName} was unpublished: ${refused.summary}; ${gone}`);
-  }
-  return { kind: 'not-found' };
-}
-
 async function baselineAmong(
   npm: NpmPlace,
-  { packageName, versions }: Published,
-  declared: Declared,
+  { packageName, listed }: Published,
+  { declared, against }: Pick<BaselineQuery, 'declared' | 'against'>,
 ): Promise<ReadBaseline> {
-  const version = baselineVersionOf(versions);
-  if (version === undefined) {
-    return { kind: 'no-baseline', packageName, why: { kind: 'only-prereleases', versions } };
+  const chosen = await chosenVersionOf(npm, listed, { packageName, against });
+  if (chosen.kind === 'failed') {
+    return chosen;
   }
+  const { version } = chosen;
   const source = { spec: `${packageName}@${version}`, version, declared };
   const metadata = await metadataOf(npm, source);
   if (metadata.kind === 'failed') {
@@ -146,7 +126,9 @@ async function baselineAmong(
     return snapshot;
   }
   const { peers } = metadata;
-  return { kind: 'baseline', packageName, snapshot: snapshot.snapshot, peers, versions };
+  const { versions, stable } = listed;
+  const read = { snapshot: snapshot.snapshot, peers, versions, stable, chosen: chosen.chosen };
+  return { kind: 'baseline', packageName, ...read };
 }
 
 async function metadataOf(

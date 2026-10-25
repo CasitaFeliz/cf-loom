@@ -1,17 +1,21 @@
 import {
-  compareSemanticVersions,
-  isPrerelease,
   isSemanticVersion,
   ownOf,
   type PeerRanges,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
+import { compareSemanticVersions, listedVersionsOf } from '../versioning/index.ts';
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
-/** The versions a package lists, lowest first. */
-export type Versions = { readonly kind: 'versions'; readonly versions: readonly string[] };
+/** The versions a package lists, lowest first, with the Baseline among them and the highest that is not a prerelease. */
+export type Versions = {
+  readonly kind: 'versions';
+  readonly versions: readonly string[];
+  readonly baseline: string;
+  readonly stable: string | undefined;
+};
 
 /** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
 export type VersionMetadata = {
@@ -32,26 +36,27 @@ export type BaselineSource = {
  * a key that is no semantic version, is a failure, since the highest version cannot be proven.
  */
 export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
-  const items: readonly unknown[] = Array.isArray(printed) ? printed : [printed];
-  if (items.length === 0 || printed === undefined) {
-    return failed(
-      `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`,
-    );
-  }
+  const items = keysPrintedIn(printed);
   const unreadable = items.find((item) => !isSemanticVersion(item));
   if (unreadable !== undefined) {
     const key = typeof unreadable === 'string' ? unreadable : JSON.stringify(unreadable);
     return failed(`${packageName} lists ${key}, which is no semantic version`);
   }
-  return {
-    kind: 'versions',
-    versions: items.filter(isSemanticVersion).sort(compareSemanticVersions),
-  };
+  const versions = items.filter(isSemanticVersion).sort(compareSemanticVersions);
+  const { baseline, stable } = listedVersionsOf(versions);
+  if (baseline === undefined) {
+    const none = `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`;
+    return failed(none);
+  }
+  return { kind: 'versions', versions, baseline, stable };
 }
 
-/** The version of the Baseline: the highest of versions listed lowest first that is not a prerelease. */
-export function baselineVersionOf(versions: readonly string[]): string | undefined {
-  return versions.filter((version) => !isPrerelease(version)).at(-1);
+/** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */
+function keysPrintedIn(printed: unknown): readonly unknown[] {
+  if (printed === undefined) {
+    return [];
+  }
+  return Array.isArray(printed) ? printed : [printed];
 }
 
 /**

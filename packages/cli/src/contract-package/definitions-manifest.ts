@@ -20,7 +20,7 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 
 /**
  * A Definitions Package's own package.json as published: its version, peers as carets on the
- * versions it is built with and `cfLoom`, and `snapshot.json` in its `files`; refused when it is
+ * versions it is built with and `cfLoom`, `snapshot.json` in its `files` and no `publishConfig.tag`; refused when it is
  * not named as the package it publishes as, or depends on a range no registry can install.
  */
 export function definitionsManifestOf(
@@ -44,6 +44,7 @@ export function definitionsManifestOf(
   const manifest = {
     ...source,
     version: published.version,
+    ...publishConfigWithoutTagOf(source['publishConfig']),
     ...filesWithSnapshotOf(source['files']),
     peerDependencies: peerRangesOf(peers),
     cfLoom: cfLoomOf(published),
@@ -53,6 +54,15 @@ export function definitionsManifestOf(
 
 function unpublishable(line: string): DefinitionsManifest {
   return { kind: 'unpublishable', line };
+}
+
+/** The `publishConfig` field without its `tag`, which npm reads over the dist-tag `publish` chooses; a field that is no map stays as it is. */
+function publishConfigWithoutTagOf(publishConfig: unknown): { readonly publishConfig?: unknown } {
+  if (typeof publishConfig !== 'object' || publishConfig === null || Array.isArray(publishConfig)) {
+    return {};
+  }
+  const kept = Object.entries(publishConfig).filter(([name]) => name !== 'tag');
+  return { publishConfig: Object.fromEntries(kept) };
 }
 
 /** The `files` field with `snapshot.json` listed, if the package lists its files; one that lists none packs everything. */

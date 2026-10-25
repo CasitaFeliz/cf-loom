@@ -1,18 +1,18 @@
 import { canonicalTextOf, publishedSnapshotOf, versionBumpOf } from '@cf-loom/contract/internal';
 import { type Peers, peerRangesOf } from '../contract-package/index.ts';
 import type { Run } from '../project/index.ts';
+import {
+  type DerivedVersion,
+  type Deriving,
+  derivedVersionOf,
+  type PublishOptions,
+} from '../versioning/index.ts';
 import { comparedLinesOf } from './check-lines.ts';
 import { endingOf } from './checked.ts';
 import { type Comparison, checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
 import { done, type Exit, type Stopped, toolingError } from './exit.ts';
 import { builtPeersOf } from './peers.ts';
 import { publishedPackageOf, type ToPublish } from './published-package.ts';
-import {
-  type DerivedVersion,
-  type Deriving,
-  derivedVersionOf,
-  type PublishOptions,
-} from './published-version.ts';
 
 /** What a publish goes on with once the Snapshot is compared: the comparison and the peers the package is built with. */
 type Prepared = {
@@ -60,7 +60,7 @@ async function preparedOf(run: Run): Promise<Prepared | Stopped> {
   if (peers.kind === 'failed') {
     return { kind: 'stopped', exit: toolingError(peers.message) };
   }
-  const comparison = await comparisonOf(built, run);
+  const comparison = await comparisonOf(built, run, undefined);
   if (comparison.kind === 'stopped') {
     return comparison;
   }
@@ -70,11 +70,8 @@ async function preparedOf(run: Run): Promise<Prepared | Stopped> {
 /** What the version is derived from: the Baseline and how far the Changes and peers move from it, and every listed version. */
 function derivingOf({ comparison, peers }: Prepared, options: PublishOptions): Deriving {
   switch (comparison.kind) {
-    case 'no-baseline': {
-      const { why } = comparison;
-      const versions = why.kind === 'only-prereleases' ? why.versions : [];
-      return { baseline: undefined, versions, ...options };
-    }
+    case 'no-baseline':
+      return { baseline: undefined, versions: [], ...options };
     case 'baseline': {
       const { read, report } = comparison;
       const bump = versionBumpOf(report, { baseline: read.peers, proposed: peerRangesOf(peers) });
@@ -89,5 +86,6 @@ function toPublishOf({ comparison, peers }: Prepared, { version, tag }: DerivedV
   const { project, snapshot } = comparison.built;
   const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
   const published = publishedSnapshotOf(baseline, snapshot, version);
-  return { project, published, text: canonicalTextOf(published), peers, tag };
+  const highest = baseline?.version;
+  return { project, published, text: canonicalTextOf(published), peers, tag, highest };
 }
