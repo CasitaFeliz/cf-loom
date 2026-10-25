@@ -795,17 +795,118 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  test('an id on a schema that closes no cycle is ignored', () => {
+  describe('an id on a schema that lies on no cycle', () => {
+    function acyclicAt(at: readonly (string | number)[], id: string) {
+      return {
+        at,
+        construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
+        instead: '.meta({ id }) only on a recursive schema',
+      };
+    }
+
     const money = z.object({ amount: z.int() }).meta({ id: 'money' });
 
-    expect(walkBody(money)).toEqual({
-      located: [
-        walkedAt(['body'], {
-          type: 'object',
-          fields: { amount: { required: true, schema: { type: 'number', int: true } } },
-        }),
-      ],
-      defs: {},
+    test('two schemas with one id each fail as acyclic, and none as a duplicate', () => {
+      const order = z.object({
+        paid: z.object({ amount: z.int() }).meta({ id: 'money' }),
+        due: z.object({ amount: z.int() }).meta({ id: 'money' }),
+      });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              acyclicAt(['body', 'fields', 'paid'], 'money'),
+              acyclicAt(['body', 'fields', 'due'], 'money'),
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+
+    test('one schema used at two fields fails at both', () => {
+      const order = z.object({ paid: money, due: money });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              acyclicAt(['body', 'fields', 'paid'], 'money'),
+              acyclicAt(['body', 'fields', 'due'], 'money'),
+            ],
+          ),
+        ],
+        defs: {},
+      });
+    });
+
+    test('it fails with what else is not allowed in the schema', () => {
+      const dated = z.object({ at: z.date() }).meta({ id: 'dated' });
+
+      const failures = [
+        acyclicAt(['body'], 'dated'),
+        { at: ['body', 'fields', 'at'], ...dateRefused },
+      ];
+      expect(walkBody(dated)).toEqual({ located: [refusedAt(['body'], failures)], defs: {} });
+    });
+
+    test('it fails beside a recursive schema that has the same id', () => {
+      const node: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(node);
+          },
+        })
+        .meta({ id: 'node' });
+
+      const walked = walkSchemas(
+        [
+          { at: ['body'], schema: node },
+          { at: ['success'], schema: z.string().meta({ id: 'node' }) },
+        ],
+        () => undefined,
+      );
+
+      expect(walked.located).toEqual([
+        walkedAt(['body'], { type: 'ref', name: 'node' }),
+        refusedAt(['success'], [acyclicAt(['success'], 'node')]),
+      ]);
+      expect(Object.keys(walked.defs)).toEqual(['node']);
+    });
+
+    test('it fails on a leaf inside a recursive schema', () => {
+      const tree: z.ZodType = z
+        .object({
+          label: z.string().meta({ id: 'label' }),
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id: 'tree' });
+
+      const walked = walkBody(tree);
+
+      const failure = acyclicAt(['body', 'fields', 'label'], 'label');
+      expect(walked.located).toEqual([refusedAt(['body'], [failure])]);
+    });
+
+    test('it fails on an alias outside the cycle it points at, and the cycle is still a def', () => {
+      const tree: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id: 'tree' });
+      const alias = z.lazy(() => tree).meta({ id: 'alias' });
+
+      const walked = walkSchemas([{ at: ['body'], schema: alias }], () => undefined);
+
+      expect(walked.located).toEqual([refusedAt(['body'], [acyclicAt(['body'], 'alias')])]);
+      expect(Object.keys(walked.defs)).toEqual(['tree']);
     });
   });
 

@@ -124,6 +124,14 @@ export function refusedWrapperId(wrapper: 'optional' | 'nonoptional'): Refused {
   };
 }
 
+/** A recursion id on a schema that lies on no cycle, which an id names. */
+export function refusedAcyclicId(id: string): Refused {
+  return {
+    construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
+    instead: '.meta({ id }) only on a recursive schema',
+  };
+}
+
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {
   return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };
