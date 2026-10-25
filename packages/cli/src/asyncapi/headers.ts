@@ -21,7 +21,7 @@ export const brokerHeaders: JsonSchema = {
       type: 'string',
       minLength: 1,
       description:
-        'The broker message id, <event|command>.<Name>.v<version>:<Fact id>, which the Broker deduplicates by',
+        'The broker message id, event.<Name>.v<version>:<Fact id>, which the Broker deduplicates by',
     },
   },
   additionalProperties: {

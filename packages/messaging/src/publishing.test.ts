@@ -583,7 +583,7 @@ describe('sender.send', () => {
   });
 });
 
-describe('an Event and a Command in one stream', () => {
+describe('messaging() over memory(): publish and send', () => {
   test('an Event and a Command with one name and version, published and sent with one Fact id, both reach the Broker', async () => {
     const chargeEvent = defineEvent({
       name: 'Charge',
