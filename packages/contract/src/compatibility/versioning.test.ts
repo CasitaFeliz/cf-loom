@@ -283,6 +283,7 @@ describe('versionBumpOf', () => {
 
   test('adding a Command bumps patch: no Consumer reads a Command', () => {
     const added: CommandSnapshot = {
+      group: 'orders',
       lifecycle: 'active',
       description: 'Charge a card',
       body: { type: 'object', mode: 'strict', fields: {} },
@@ -306,6 +307,7 @@ describe('versionBumpOf', () => {
   test('a Breaking change to a Public Event’s body is refused, so it bumps patch', () => {
     const event = (fields: Record<string, { required: boolean; schema: { type: 'string' } }>) =>
       ({
+        group: 'orders',
         visibility: 'public',
         lifecycle: 'active',
         description: 'An order was placed',
