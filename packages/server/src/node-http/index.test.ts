@@ -73,7 +73,7 @@ const contract = defineContract({
 
 const handlers = {
   endpoints: {
-    createOrder: handle(createOrder, ({ body }, { apiKey: caller }) =>
+    createOrder: handle(createOrder, ({ body }, { context: { apiKey: caller } }) =>
       success({ headers: { 'x-order-count': 1 }, body: { ...body, by: caller.callerId } }),
     ),
     noteOrder: handle(noteOrder, ({ body }) => success(body)),
@@ -440,16 +440,16 @@ describe('nodeHttp', () => {
     expect(after.status).toBe(204);
   });
 
-  test('with two requests in flight and an onOutcome that throws on the first, both are answered', async () => {
+  test('with two requests in flight and an onAnswered that throws on the first, both are answered', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     let records = 0;
-    const onOutcome = () => {
+    const onAnswered = () => {
       records += 1;
       if (records === 1) {
         throw new Error('the hook broke');
       }
     };
-    const url = await listening(nodeHttp(serve(contract, handlers, { onOutcome })));
+    const url = await listening(nodeHttp(serve(contract, handlers, { onAnswered })));
 
     const answered = await Promise.all([fetch(`${url}/orders/o-1`), fetch(`${url}/orders/o-2`)]);
 
@@ -585,6 +585,29 @@ describe('nodeHttp', () => {
     const response = await fetch(`${url}/customers`);
 
     expect(response.status).toBe(404);
+  });
+
+  test('a Caller that disconnects aborts the signal its EndpointHandler received', async () => {
+    const signals: AbortSignal[] = [];
+    const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+    const waiting = handle(getOrder, async ({ params }, { request }) => {
+      signals.push(request.signal);
+      started();
+      await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+      return success({ id: params.orderId });
+    });
+    const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: waiting } };
+    const url = await listening(nodeHttp(serve(contract, served)));
+    const socket = connect(Number(new URL(url).port), '127.0.0.1');
+    socket.on('error', () => undefined);
+
+    socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n');
+    await handlerStarted;
+    socket.destroy();
+    const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
+    await Promise.race([aborted, new Promise((resolve) => setTimeout(resolve, 1000))]);
+
+    expect(signals[0]?.aborted).toBe(true);
   });
 
   test('close() ends the server', async () => {

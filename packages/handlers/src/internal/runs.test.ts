@@ -27,6 +27,8 @@ import {
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
+const request = { signal: new AbortController().signal, headers: new Headers() };
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
@@ -93,6 +95,7 @@ describe('runEndpoint', () => {
     const call = {
       input: { params: { orderId: 'nope' } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
@@ -116,6 +119,7 @@ describe('runEndpoint', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
@@ -128,6 +132,7 @@ describe('runEndpoint', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
@@ -149,6 +154,7 @@ describe('runGuard', () => {
       demands: {},
       context: { apiKey: {} },
       qualifier: 'orders:delete',
+      request,
       resources: undefined,
     };
 
@@ -175,6 +181,7 @@ describe('runGuard', () => {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
@@ -188,6 +195,7 @@ describe('runGuard', () => {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
@@ -209,6 +217,7 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
@@ -232,6 +241,7 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
@@ -239,7 +249,9 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
 
     expect(run).toMatchObject({
       kind: 'thrown',
-      fault: { cause: new TypeError("apiKey's Handler returned no Outcome but the kind success") },
+      fault: {
+        cause: new TypeError("apiKey's Handler returned no Admission but the kind success"),
+      },
     });
   });
 
@@ -248,6 +260,7 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
@@ -261,12 +274,14 @@ describe('what a run tells to be no Outcome', () => {
   const endpointCall = {
     input: { params: { orderId: ORDER_ID } },
     context: getContext,
+    request,
     resources: undefined,
   };
   const guardCall = {
     demands: { headers: { 'x-api-key': 'k' } },
     context: {},
     qualifier: undefined,
+    request,
     resources: undefined,
   };
   const fields = { committed: 'no', retryable: true, message: 'Try again' };
@@ -305,7 +320,7 @@ describe('what a run tells to be no Outcome', () => {
 describe('a Handler of another kind', () => {
   test('runGuard given an EndpointHandler throws Not a Handler', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
-    const call = { demands: {}, context: {}, qualifier: undefined, resources: undefined };
+    const call = { demands: {}, context: {}, qualifier: undefined, request, resources: undefined };
 
     const run = () => runGuard(getOrderHandler as never, call);
 

@@ -10,6 +10,7 @@ import {
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
+import { sentOf } from './runs.ts';
 
 /** How many bytes of a request body `serve` reads before answering `BODY_TOO_LARGE`: a whole number from 0, or `'unlimited'`. */
 export type BodyLimit = number | 'unlimited';
@@ -23,17 +24,18 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
   readonly maxBodyBytes?: BodyLimit;
   /**
    * Receives every Fault the Service's side produced: one a Handler returned or threw, an Outcome
-   * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.
+   * that broke the Contract, or the runtime's own bug; never the Caller's; with the Request it
+   * came from. The console without it.
    */
-  readonly onServiceFault?: (fault: ServedFault) => void | Promise<void>;
+  readonly onServiceFault?: (fault: ServedFault, request: Request) => void | Promise<void>;
   /**
    * Answers every request no declared Endpoint matches, such as a health check or CORS preflight,
    * its Response returned as is, and the internal Fault if it rejects; without it,
    * `NO_SUCH_ENDPOINT`, or `METHOD_NOT_ALLOWED` on a declared path.
    */
   readonly fallback?: Http;
-  /** Receives one record per request answered, for metrics and tracing; never one the fallback answered. */
-  readonly onOutcome?: (request: AnsweredRequest) => void | Promise<void>;
+  /** Receives one record per request answered, and the Request, for metrics and tracing; never one the fallback answered. */
+  readonly onAnswered?: (answered: AnsweredRequest, request: Request) => void | Promise<void>;
 };
 
 /**
@@ -59,15 +61,11 @@ export function serve(
     }
     const { endpoint, answered } = answer;
     if (answered.kind === 'fault' && answered.servedFault !== undefined) {
-      await reportServedFault(answered.servedFault, options.onServiceFault);
+      await reportServedFault(answered.servedFault, request, options.onServiceFault);
     }
-    const { status } = answered.response;
-    const durationMs = performance.now() - started;
-    const sent = { status, kind: answered.kind, durationMs };
-    await recordAnswered(
-      answeredRequestOf(request.method, endpoint?.declared, sent),
-      options.onOutcome,
-    );
+    const sent = { ...sentOf(answered), durationMs: performance.now() - started };
+    const record = answeredRequestOf(request, endpoint?.declared, sent);
+    await recordAnswered(record, request, options.onAnswered);
     return answered.response;
   };
 }

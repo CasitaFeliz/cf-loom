@@ -15,10 +15,9 @@ import {
   type Pairing,
   type Written,
 } from '../calls/index.ts';
-import { checkedBody } from '../checks/index.ts';
+import { checkedBody, type HandledRequest } from '../checks/index.ts';
 import { reject } from '../outcomes/index.ts';
 import type {
-  DirectCall,
   EndpointHandler,
   EndpointImplementation,
   GuardHandler,
@@ -30,9 +29,8 @@ import type {
   DirectMeta,
   EventHandler,
   EventImplementation,
-  MessageCall,
 } from './message-handler.ts';
-import type { NoResources } from './resources.ts';
+import type { HandledResourcesOf, NoResources, ResourcesNotAnnotated } from './resources.ts';
 import {
   type AnyHandler,
   type AnyWritten,
@@ -83,13 +81,13 @@ type TargetOf<Target extends HandleArgument> = Target extends MessageElement
 
 function handleImplementation<
   Target extends HandleArgument,
-  Resources extends object = NoResources,
+  Resources extends object = ResourcesNotAnnotated,
 >(
   target: TargetOf<Target>,
   implementation: ImplementationOf<Target, Resources>,
-): HandlerOf<Target, Resources> {
+): HandlerOf<Target, HandledResourcesOf<Resources>> {
   const how = { implementation: implementation as Implementation, stub: false };
-  return handlerOf(target, how) as HandlerOf<Target, Resources>;
+  return handlerOf(target, how) as HandlerOf<Target, HandledResourcesOf<Resources>>;
 }
 
 function stubOf<Target extends HandleArgument>(
@@ -150,32 +148,49 @@ function directCallOf(written: AnyWritten) {
   return messageCallOf(written);
 }
 
+/** What a direct call is given beside its Input or demands, before it is checked. */
+type DirectCallGiven = {
+  readonly context?: unknown;
+  readonly qualifier?: unknown;
+  readonly request?: Partial<HandledRequest>;
+};
+
+/** What a direct call is given last, before it is checked: the Resources, passed on unchecked. */
+type DirectLastGiven = { readonly resources?: unknown };
+
 function endpointCallOf(written: Written<Endpoint>) {
-  return async (input: unknown, context: unknown, directCall?: DirectCall<object>) => {
-    const run = await endpointRunOf(written, { input, context, resources: directCall?.resources });
+  return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
+    const given = { input, context: call.context ?? {}, request: requestOf(call) };
+    const run = await endpointRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
   };
 }
 
-/** A GuardHandler's last argument as a direct call may leave it, before it is checked. */
-type GuardCallGiven = { readonly qualifier?: unknown; readonly resources?: unknown };
-
 function guardCallOf(written: Written<Guard>) {
-  return async (demands: unknown, context: unknown, call?: GuardCallGiven) => {
-    const given = { demands, context, qualifier: call?.qualifier, resources: call?.resources };
-    const run = await guardRunOf(written, given);
+  return async (demands: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
+    const { qualifier } = call;
+    const given = { demands, context: call.context ?? {}, qualifier, request: requestOf(call) };
+    const run = await guardRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
+  };
+}
+
+/** The request a direct call gives its Handler: a signal never aborted and empty headers, unless given. */
+function requestOf({ request }: DirectCallGiven): HandledRequest {
+  return {
+    signal: request?.signal ?? new AbortController().signal,
+    headers: request?.headers ?? new Headers(),
   };
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (body: unknown, given: DirectMeta, call?: MessageCall<object>) => {
+  return async (body: unknown, given: DirectMeta, last?: DirectLastGiven) => {
     const { messageId, factId, deliveryCount, lastAttempt = false, headers = {} } = given;
     const signal = given.signal ?? new AbortController().signal;
     const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
     const run = await messageRunOf(
       written,
-      { body, meta, resources: call?.resources },
+      { body, meta, resources: last?.resources },
       checkedBody,
     );
     return messageAnswerOf(written.element, run);

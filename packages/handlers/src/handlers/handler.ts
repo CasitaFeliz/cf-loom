@@ -10,47 +10,70 @@ import type {
   Subscription,
 } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
+import type { HandledRequest } from '../checks/index.ts';
 import type { Admission, CheckedAdmission, CheckedOutcome, Outcome } from '../outcomes/index.ts';
 import type { Readers } from './reader.ts';
-import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
+import type {
+  CallArgument,
+  NoResources,
+  ResourcesField,
+  ResourcesNotAnnotated,
+} from './resources.ts';
 
-/** What an EndpointHandler's implementation returns, given the Input, the Context and the Resources it takes; may be async. */
-export type EndpointImplementation<
-  Target extends Endpoint,
-  Resources extends object = NoResources,
-> = (
-  input: InputOf<Target>,
-  context: ContextOf<Target>,
-  call: ResourcesField<Resources>,
-) => Outcome<Target> | Promise<Outcome<Target>>;
+/** What an EndpointHandler is given beside its Input: the Context its Guards provided, and the request. */
+export type EndpointCall<Target extends Endpoint> = {
+  readonly context: ContextOf<Target>;
+  readonly request: HandledRequest;
+};
 
 /** `qualifier`, only when the Guard declares one. */
 type QualifierField<Target extends Guard> = Target extends { readonly qualifier: core.$ZodType }
   ? { readonly qualifier: QualifierOf<Target> }
   : unknown;
 
-/** A GuardHandler's last argument, to its implementation and its direct call: its Qualifier, when its Guard declares one, and the Resources it takes. */
-export type GuardCall<
+/**
+ * What a GuardHandler is given beside its demands: the Context of the Guards it lists, its
+ * Qualifier when its Guard declares one, and the request.
+ */
+export type GuardCall<Target extends Guard> = {
+  readonly context: RequiredContextOf<Target>;
+  readonly request: HandledRequest;
+} & QualifierField<Target>;
+
+/** `context` in a direct call, optional exactly when no Guard gives the Handler a Context. */
+type ContextField<Context> = keyof Context extends never
+  ? { readonly context?: Context }
+  : { readonly context: Context };
+
+/** `request` in a direct call: each field left out is a signal never aborted, or empty headers. */
+type DirectRequestField = { readonly request?: Partial<HandledRequest> };
+
+/** What an EndpointHandler's implementation returns, given the Input, the Context and request, and the Resources it takes; may be async. */
+export type EndpointImplementation<
+  Target extends Endpoint,
+  Resources extends object = ResourcesNotAnnotated,
+> = (
+  input: InputOf<Target>,
+  call: EndpointCall<Target>,
+  last: ResourcesField<Resources>,
+) => Outcome<Target> | Promise<Outcome<Target>>;
+
+/** What a GuardHandler's implementation returns, given its demands, its Context, Qualifier and request, and the Resources it takes; may be async. */
+export type GuardImplementation<
   Target extends Guard,
-  Resources extends object = NoResources,
-> = QualifierField<Target> & ResourcesField<Resources>;
-
-/** What a GuardHandler's implementation returns, given its demands, the Context of the Guards it lists, and its Qualifier and Resources; may be async. */
-export type GuardImplementation<Target extends Guard, Resources extends object = NoResources> = (
+  Resources extends object = ResourcesNotAnnotated,
+> = (
   demands: DemandsOf<Target>,
-  context: RequiredContextOf<Target>,
-  call: GuardCall<Target, Resources>,
+  call: GuardCall<Target>,
+  last: ResourcesField<Resources>,
 ) => Admission<Target> | Promise<Admission<Target>>;
-
-/** The last argument of an EndpointHandler's direct call: the Resources the Handler takes. */
-export type DirectCall<Resources extends object = NoResources> = ResourcesField<Resources>;
 
 /** The Handler of one Endpoint: calling it runs the Contract's checks and answers what `serve` would. */
 export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = {
   (
     input: InputOf<Target>,
-    context: ContextOf<Target>,
-    ...call: CallArgument<DirectCall<Resources>>
+    call: ContextField<ContextOf<Target>> & DirectRequestField,
+    ...last: CallArgument<ResourcesField<Resources>>
   ): Promise<CheckedOutcome<Target>>;
   readonly element: Target;
 };
@@ -75,8 +98,8 @@ export type HandlerMap = {
 export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = {
   (
     demands: DemandsOf<Target>,
-    context: RequiredContextOf<Target>,
-    ...call: CallArgument<GuardCall<Target, Resources>>
+    call: ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField,
+    ...last: CallArgument<ResourcesField<Resources>>
   ): Promise<CheckedAdmission<Target>>;
   readonly element: Target;
 };

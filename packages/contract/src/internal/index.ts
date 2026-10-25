@@ -44,6 +44,7 @@ export {
   isGroup,
   isGuard,
   isLive,
+  isMethod,
   isRejection,
   isReservedCode,
   isStamp,

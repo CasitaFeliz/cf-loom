@@ -107,12 +107,15 @@ const userTokenHandler = handle(userToken, ({ headers }) => {
   return admit({ userId: 'u-1' });
 });
 
-const permissionHandler = handle(permission, (_demands, { userToken: user }, { qualifier }) => {
-  calls.push('permission');
-  return admit({ granted: [user.userId, ...qualifier] });
-});
+const permissionHandler = handle(
+  permission,
+  (_demands, { context: { userToken: user }, qualifier }) => {
+    calls.push('permission');
+    return admit({ granted: [user.userId, ...qualifier] });
+  },
+);
 
-const updateOrderHandler = handle(updateOrder, (_input, context) => {
+const updateOrderHandler = handle(updateOrder, (_input, { context }) => {
   calls.push('updateOrder');
   return success({ by: context.userToken.userId, granted: context.permission.granted });
 });

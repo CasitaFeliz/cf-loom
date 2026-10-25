@@ -15,18 +15,26 @@ import {
   withIssues,
 } from './checked.ts';
 
-/** What one call of an EndpointHandler is given, before it is checked; its Resources are passed on unchecked. */
+/**
+ * What a request carries beside its Input, for cancelling and tracing: its abort signal and its
+ * headers as received, never validated and never Input.
+ */
+export type HandledRequest = { readonly signal: AbortSignal; readonly headers: Headers };
+
+/** What one call of an EndpointHandler is given, before it is checked; its request and Resources are passed on unchecked. */
 export type EndpointGiven = {
   readonly input: unknown;
   readonly context: unknown;
+  readonly request: HandledRequest;
   readonly resources: unknown;
 };
 
-/** What one call of a GuardHandler is given, before it is checked; its Resources are passed on unchecked. */
+/** What one call of a GuardHandler is given, before it is checked; its request and Resources are passed on unchecked. */
 export type GuardGiven = {
   readonly demands: unknown;
   readonly context: unknown;
   readonly qualifier: unknown;
+  readonly request: HandledRequest;
   readonly resources: unknown;
 };
 

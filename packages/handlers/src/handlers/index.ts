@@ -1,6 +1,6 @@
 export { handle } from './handle.ts';
 export type {
-  DirectCall,
+  EndpointCall,
   EndpointHandler,
   EndpointImplementation,
   GuardCall,
@@ -14,7 +14,6 @@ export type {
   CommandImplementation,
   EventHandler,
   EventImplementation,
-  MessageCall,
   MessageFault,
 } from './message-handler.ts';
 export type { Readers } from './reader.ts';
@@ -23,6 +22,7 @@ export type {
   CallArgument,
   NoResources,
   ResourcesField,
+  ResourcesNotAnnotated,
   ResourcesOf,
   WithResources,
 } from './resources.ts';

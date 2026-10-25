@@ -8,7 +8,7 @@ import { invoiceFor } from './invoice-for.ts';
 
 export default handle(
   createInvoice,
-  async ({ body }, _context, { resources: { orders } }: Needs<'orders'>) => {
+  async ({ body }, _call, { resources: { orders } }: Needs<'orders'>) => {
     const invoicing = await invoiceFor(orders, body.orderId);
     switch (invoicing.kind) {
       case 'invoice':

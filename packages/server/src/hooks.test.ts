@@ -1,5 +1,6 @@
 import {
   defineContract,
+  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -9,7 +10,7 @@ import {
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { type AnsweredRequest, type ServedFault, serve } from './index.ts';
+import { type AnsweredRequest, type ServedFault, type ServeOptions, serve } from './index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -120,6 +121,28 @@ function tooLarge(): Request {
 
 function get(path: string): Request {
   return new Request(`http://test${path}`);
+}
+
+/** The fields every record of a request answered before the Caller went away carries. */
+function sent(status: number, kind: AnsweredRequest['kind']) {
+  return { status, kind, aborted: false, durationMs: expect.any(Number) };
+}
+
+/** Serves the map with an `onAnswered` that keeps every record, and the records it kept. */
+function recording(
+  options: Omit<ServeOptions, 'onAnswered'> = {},
+  served: Parameters<typeof serve>[1] = handlers,
+) {
+  const answered: AnsweredRequest[] = [];
+  const requests: Request[] = [];
+  const http = serve(contract, served, {
+    ...options,
+    onAnswered: (record, request) => {
+      answered.push(record);
+      requests.push(request);
+    },
+  });
+  return { http, answered, requests };
 }
 
 describe('serve: onServiceFault', () => {
@@ -280,13 +303,13 @@ describe('serve: a hook that fails', () => {
     expect(logged).toHaveBeenCalledWith('getOrder: onServiceFault threw', broken);
   });
 
-  test('onOutcome still receives the record when onServiceFault throws', async () => {
+  test('onAnswered still receives the record when onServiceFault throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       onServiceFault: throwing,
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
@@ -298,31 +321,31 @@ describe('serve: a hook that fails', () => {
   test.each([
     ['throws', throwing],
     ['rejects', rejecting],
-  ])('an onOutcome that %s leaves the response returned, and is logged', async (_, onOutcome) => {
+  ])('an onAnswered that %s leaves the response returned, and is logged', async (_, onAnswered) => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const response = await serve(contract, handlers, { onOutcome })(get('/orders/o-1'));
+    const response = await serve(contract, handlers, { onAnswered })(get('/orders/o-1'));
 
     expect(response.status).toBe(200);
-    expect(logged).toHaveBeenCalledWith('getOrder: onOutcome threw', broken);
+    expect(logged).toHaveBeenCalledWith('getOrder: onAnswered threw', broken);
   });
 
-  test('an onOutcome that throws for a request no Endpoint matched is logged as serve’s', async () => {
+  test('an onAnswered that throws for a request no Endpoint matched is logged as serve’s', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await serve(contract, handlers, { onOutcome: throwing })(get('/customers'));
+    await serve(contract, handlers, { onAnswered: throwing })(get('/customers'));
 
-    expect(logged).toHaveBeenCalledWith('serve: onOutcome threw', broken);
+    expect(logged).toHaveBeenCalledWith('serve: onAnswered threw', broken);
   });
 
-  test('serve waits for an async onOutcome before it resolves', async () => {
+  test('serve waits for an async onAnswered before it resolves', async () => {
     let recorded = false;
-    const onOutcome = async () => {
+    const onAnswered = async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       recorded = true;
     };
 
-    await serve(contract, handlers, { onOutcome })(get('/orders/o-1'));
+    await serve(contract, handlers, { onAnswered })(get('/orders/o-1'));
 
     expect(recorded).toBe(true);
   });
@@ -340,13 +363,13 @@ describe('serve: a hook that fails', () => {
   });
 });
 
-describe('serve: onOutcome', () => {
+describe('serve: onAnswered', () => {
   test('receives the method, the Endpoint, its declared path, the status, kind and duration of every request, and only the method when none matched', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       onServiceFault: () => undefined,
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
@@ -356,29 +379,12 @@ describe('serve: onOutcome', () => {
 
     const getOrderRecord = { method: 'GET', endpoint: 'getOrder', path: '/orders/:orderId' };
     expect(answered).toStrictEqual([
-      { ...getOrderRecord, status: 200, kind: 'success', durationMs: expect.any(Number) },
-      { ...getOrderRecord, status: 404, kind: 'rejection', durationMs: expect.any(Number) },
-      { ...getOrderRecord, status: 503, kind: 'fault', durationMs: expect.any(Number) },
-      { method: 'GET', status: 404, kind: 'fault', durationMs: expect.any(Number) },
+      { ...getOrderRecord, ...sent(200, 'success') },
+      { ...getOrderRecord, ...sent(404, 'rejection'), code: 'NOT_FOUND' },
+      { ...getOrderRecord, ...sent(503, 'fault') },
+      { method: 'GET', ...sent(404, 'fault'), code: 'NO_SUCH_ENDPOINT' },
     ]);
     expect(answered.every(({ durationMs }) => durationMs >= 0)).toBe(true);
-  });
-
-  test('a request no Endpoint matched carries its method as received, whatever it is', async () => {
-    const answered: AnsweredRequest[] = [];
-    const http = serve(contract, handlers, {
-      onOutcome: (request) => {
-        answered.push(request);
-      },
-    });
-
-    await http(new Request('http://test/customers', { method: 'propfind' }));
-    await http(new Request('http://test/customers', { method: 'HEAD' }));
-
-    expect(answered).toStrictEqual([
-      { method: 'propfind', status: 404, kind: 'fault', durationMs: expect.any(Number) },
-      { method: 'HEAD', status: 404, kind: 'fault', durationMs: expect.any(Number) },
-    ]);
   });
 
   test('a Guard’s Rejection and invalid input carry the Endpoint and its path', async () => {
@@ -387,8 +393,8 @@ describe('serve: onOutcome', () => {
       contract,
       { ...handlers, guards: { apiKey: handle(apiKey, () => reject(unauthenticated)) } },
       {
-        onOutcome: (request) => {
-          answered.push(request);
+        onAnswered: (record) => {
+          answered.push(record);
         },
       },
     );
@@ -408,18 +414,16 @@ describe('serve: onOutcome', () => {
       method: 'POST',
       endpoint: 'importOrders',
       path: '/imports',
-      kind: 'rejection',
-      status: 400,
-      durationMs: expect.any(Number),
+      ...sent(400, 'rejection'),
+      code: 'INVALID_INPUT',
     };
     expect(answered).toStrictEqual([
       {
         method: 'GET',
         endpoint: 'getOrder',
         path: '/orders/:orderId',
-        kind: 'rejection',
-        status: 401,
-        durationMs: expect.any(Number),
+        ...sent(401, 'rejection'),
+        code: 'UNAUTHENTICATED',
       },
       importRecord,
       importRecord,
@@ -427,19 +431,19 @@ describe('serve: onOutcome', () => {
   });
 });
 
-describe('serve: onOutcome for the Caller’s Faults', () => {
+describe('serve: onAnswered for the Caller’s Faults', () => {
   test('METHOD_NOT_ALLOWED is recorded with its method, as a fault with status 405', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
     await http(new Request('http://test/orders', { method: 'DELETE' }));
 
     expect(answered).toStrictEqual([
-      { method: 'DELETE', status: 405, kind: 'fault', durationMs: expect.any(Number) },
+      { method: 'DELETE', ...sent(405, 'fault'), code: 'METHOD_NOT_ALLOWED' },
     ]);
   });
 
@@ -447,8 +451,8 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       fallback: async () => new Response('ok'),
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
@@ -462,8 +466,8 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       maxBodyBytes: 8,
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
@@ -475,17 +479,15 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
         method: 'POST',
         endpoint: 'archive',
         path: '/archive',
-        status: 410,
-        kind: 'fault',
-        durationMs: expect.any(Number),
+        ...sent(410, 'fault'),
+        code: 'RETIRED',
       },
       {
         method: 'POST',
         endpoint: 'importOrders',
         path: '/imports',
-        status: 413,
-        kind: 'fault',
-        durationMs: expect.any(Number),
+        ...sent(413, 'fault'),
+        code: 'BODY_TOO_LARGE',
       },
     ]);
   });
@@ -493,8 +495,8 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
   test('durationMs is the time the request took', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
-      onOutcome: (request) => {
-        answered.push(request);
+      onAnswered: (record) => {
+        answered.push(record);
       },
     });
 
@@ -521,5 +523,133 @@ describe('serve: the Deprecation header', () => {
     const response = await serve(contract, handlers)(get('/orders'));
 
     expect(response.headers.get('deprecation')).toBeNull();
+  });
+});
+
+describe('serve: what the hooks receive beside the record', () => {
+  test('onServiceFault receives the Request beside the Fault', async () => {
+    const requests: Request[] = [];
+    const request = get('/orders/thrown');
+
+    await serve(contract, handlers, {
+      onServiceFault: (_fault, received) => {
+        requests.push(received);
+      },
+    })(request);
+
+    expect(requests).toEqual([request]);
+  });
+
+  test('onAnswered receives the Request beside the record, its traceparent readable', async () => {
+    const { http, requests } = recording();
+    const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+
+    await http(new Request('http://test/orders/o-1', { headers: { traceparent } }));
+
+    expect(requests[0]?.headers.get('traceparent')).toBe(traceparent);
+  });
+
+  test('a request no Endpoint matched, with a method no Endpoint may declare, is recorded as _OTHER', async () => {
+    const { http, answered } = recording();
+
+    await http(new Request('http://test/customers', { method: 'X-ABC123' }));
+    await http(new Request('http://test/customers', { method: 'propfind' }));
+
+    expect(answered.map(({ method }) => method)).toEqual(['_OTHER', '_OTHER']);
+  });
+
+  test('a request no Endpoint matched keeps a method an Endpoint may declare, and HEAD', async () => {
+    const { http, answered } = recording();
+
+    await http(new Request('http://test/customers', { method: 'OPTIONS' }));
+    await http(new Request('http://test/customers', { method: 'HEAD' }));
+
+    expect(answered.map(({ method }) => method)).toEqual(['OPTIONS', 'HEAD']);
+  });
+
+  test('a Rejection is recorded with the code its root resolves', async () => {
+    const definitions = defineDefinitions({
+      standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Nothing here' } },
+    });
+    const rooted = defineContract({
+      name: 'orders-service',
+      standardRejections: definitions,
+      groups: contract.groups,
+    });
+    const answered: AnsweredRequest[] = [];
+    const http = serve(rooted, handlers, {
+      onAnswered: (record) => {
+        answered.push(record);
+      },
+    });
+
+    await http(get('/orders/missing'));
+
+    expect(answered[0]?.code).toBe('MISSING');
+  });
+
+  test('the invalid-input Rejection is recorded with the code its root resolves', async () => {
+    const definitions = defineDefinitions({
+      standardRejections: {
+        invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
+      },
+    });
+    const rooted = defineContract({
+      name: 'orders-service',
+      standardRejections: definitions,
+      groups: contract.groups,
+    });
+    const answered: AnsweredRequest[] = [];
+    const http = serve(rooted, handlers, {
+      onAnswered: (record) => {
+        answered.push(record);
+      },
+    });
+
+    await http(new Request('http://test/imports', { method: 'POST', body: 'not json' }));
+
+    expect(answered[0]).toMatchObject({ status: 422, code: 'BAD_REQUEST' });
+  });
+
+  test.each([
+    ['RETIRED', new Request('http://test/archive', { method: 'POST' })],
+    ['NO_SUCH_ENDPOINT', get('/customers')],
+    ['METHOD_NOT_ALLOWED', new Request('http://test/orders', { method: 'DELETE' })],
+    ['BODY_TOO_LARGE', tooLarge()],
+    ['INVALID_OUTCOME', get('/orders/leaky')],
+  ])('the reserved Fault %s is recorded with its code', async (code, request) => {
+    const { http, answered } = recording({ maxBodyBytes: 8, onServiceFault: () => undefined });
+
+    await http(request);
+
+    expect(answered[0]).toMatchObject({ kind: 'fault', code });
+  });
+
+  test('a Fault a Handler returned is recorded with no code', async () => {
+    const { http, answered } = recording({ onServiceFault: () => undefined });
+
+    await http(get('/orders/down'));
+
+    expect(answered[0]).toMatchObject({ kind: 'fault', status: 503 });
+    expect(answered[0]).not.toHaveProperty('code');
+  });
+
+  test('a request whose signal was aborted before the answer is recorded as aborted', async () => {
+    const controller = new AbortController();
+    const slow = handle(getOrder, async () => {
+      controller.abort();
+      return success({ secret: 'a long enough secret' });
+    });
+    const { http, answered } = recording(
+      {},
+      {
+        ...handlers,
+        endpoints: { ...handlers.endpoints, getOrder: slow },
+      },
+    );
+
+    await http(new Request('http://test/orders/o-1', { signal: controller.signal }));
+
+    expect(answered[0]?.aborted).toBe(true);
   });
 });

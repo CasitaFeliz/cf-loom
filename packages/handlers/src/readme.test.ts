@@ -12,7 +12,6 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
-  type GuardCall,
   handle,
   isRejectionOf,
   type ResourcesOf,
@@ -121,7 +120,7 @@ const resources: Resources = { orders, callers, permissions, notifications };
 
 const getOrderHandler = handle(
   getOrder,
-  async ({ params }, context, { resources: { orders } }: Needs<'orders'>) => {
+  async ({ params }, { context }, { resources: { orders } }: Needs<'orders'>) => {
     const order = await orders.find(params.orderId, context.apiKey.callerId);
     if (!order) return reject(notFound);
     if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
@@ -131,11 +130,7 @@ const getOrderHandler = handle(
 
 const apiKeyHandler = handle(
   apiKey,
-  async (
-    { headers },
-    _context,
-    { resources: { callers } }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
-  ) => {
+  async ({ headers }, _call, { resources: { callers } }: Needs<'callers'>) => {
     const caller = await callers.byKey(headers['x-api-key']);
     if (!caller) return reject(unauthenticated);
     return admit({ callerId: caller.id });
@@ -146,11 +141,8 @@ const permissionHandler = handle(
   permission,
   async (
     _demands,
-    { userToken },
-    {
-      qualifier,
-      resources: { permissions },
-    }: GuardCall<typeof permission, Pick<Resources, 'permissions'>>,
+    { context: { userToken }, qualifier },
+    { resources: { permissions } }: Needs<'permissions'>,
   ) => {
     const held = await permissions.of(userToken.userId);
     const granted = qualifier.every((code) => held.includes(code));
@@ -219,7 +211,7 @@ describe('the handlers README', () => {
   test('the EndpointHandler example answers its Success', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
-      { apiKey: { callerId: 'c-1' } },
+      { context: { apiKey: { callerId: 'c-1' } } },
       { resources: { orders } },
     );
 
@@ -233,7 +225,7 @@ describe('the handlers README', () => {
   test('the EndpointHandler example answers not found, told by its declaration', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
-      { apiKey: { callerId: 'c-2' } },
+      { context: { apiKey: { callerId: 'c-2' } } },
       { resources: { orders } },
     );
 
@@ -255,8 +247,8 @@ describe('the handlers README', () => {
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
     const context = { userToken: { userId: 'u-1' } };
     const admissions = [
-      await permissionHandler({}, context, { qualifier: ['orders:edit'], resources }),
-      await permissionHandler({}, context, { qualifier: ['customers:read'], resources }),
+      await permissionHandler({}, { context, qualifier: ['orders:edit'] }, { resources }),
+      await permissionHandler({}, { context, qualifier: ['customers:read'] }, { resources }),
     ];
 
     expect(admissions).toMatchObject([

@@ -174,7 +174,7 @@ const provider = defineContract({
 
 const handlers = {
   endpoints: {
-    getOrder: handle(getOrder, ({ params }, { apiKey: key }) => {
+    getOrder: handle(getOrder, ({ params }, { context: { apiKey: key } }) => {
       if (params.orderId === 'missing') {
         return reject(notFound);
       }
@@ -314,7 +314,7 @@ describe('end to end against serve through node:http and the global fetch', () =
   test('a Success the client receives equals what a direct call of its EndpointHandler returns', async () => {
     const direct = await handlers.endpoints.getOrder(
       { params: { orderId: 'o-1' }, headers: { 'x-api-key': 'caller-7' } },
-      { apiKey: { callerId: 'caller-7' } },
+      { context: { apiKey: { callerId: 'caller-7' } } },
     );
 
     const outcome = await ordersClient().getOrder({ params: { orderId: 'o-1' } });

@@ -12,6 +12,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type CheckedOutcome,
+  type EndpointCall,
   type Fault,
   fault,
   handle,
@@ -137,13 +138,13 @@ describe('an EndpointHandler’s Resources', () => {
     const received: unknown[] = [];
     const getOrderHandler = handle(
       getOrder,
-      (_input, context, call: WithResources<{ readonly orders: Orders }>) => {
+      (_input, { context }, call: WithResources<{ readonly orders: Orders }>) => {
         received.push(context, call.resources);
         return success({ id: ORDER_ID, total: 1 });
       },
     );
 
-    await getOrderHandler(getInput, getContext, { resources });
+    await getOrderHandler(getInput, { context: getContext }, { resources });
 
     expect(received).toHaveLength(2);
     expect(received[0]).toStrictEqual(getContext);
@@ -154,27 +155,78 @@ describe('an EndpointHandler’s Resources', () => {
     const orders: Orders = { find: () => undefined };
     const getOrderHandler = handle(
       getOrder,
-      (input, _context, { resources }: WithResources<{ readonly orders: Orders }>) =>
+      (input, _call, { resources }: WithResources<{ readonly orders: Orders }>) =>
         resources.orders.find(input.params.orderId) === undefined
           ? reject(notFound)
           : success({ id: ORDER_ID, total: 1 }),
     );
 
-    const outcome = await getOrderHandler(getInput, getContext, { resources: { orders } });
+    const outcome = await getOrderHandler(
+      getInput,
+      { context: getContext },
+      { resources: { orders } },
+    );
 
     expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notFound });
+  });
+});
+
+describe('an EndpointHandler’s second argument', () => {
+  test('the implementation receives the Context and the request, with the headers a direct call gives', async () => {
+    const received: EndpointCall<typeof getOrder>[] = [];
+    const getOrderHandler = handle(getOrder, (_input, call) => {
+      received.push(call);
+      return success({ id: ORDER_ID, total: 1 });
+    });
+    const headers = new Headers({ traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-01' });
+
+    await getOrderHandler(getInput, { context: getContext, request: { headers } });
+
+    expect(received[0]?.context).toStrictEqual(getContext);
+    expect(received[0]?.request.headers.get('traceparent')).toBe(
+      '00-4bf92f3577b34da6a3ce929d0e0e4736-01',
+    );
+  });
+
+  test('a direct call without a request gives the Handler a signal never aborted and empty headers', async () => {
+    const received: EndpointCall<typeof getOrder>[] = [];
+    const getOrderHandler = handle(getOrder, (_input, call) => {
+      received.push(call);
+      return success({ id: ORDER_ID, total: 1 });
+    });
+
+    await getOrderHandler(getInput, { context: getContext });
+
+    expect(received[0]?.request.signal).toBeInstanceOf(AbortSignal);
+    expect(received[0]?.request.signal.aborted).toBe(false);
+    expect([...(received[0]?.request.headers ?? [])]).toEqual([]);
+  });
+
+  test('a direct call may leave out the Context only when no Guard gives the Handler one', () => {
+    const getOrderHandler = handle.stub(getOrder);
+    const deleteOrderHandler = handle.stub(deleteOrder);
+
+    // @ts-expect-error getOrder's Guards give it a Context
+    const withoutContext = () => getOrderHandler(getInput, {});
+
+    expectTypeOf(deleteOrderHandler).toBeCallableWith(getInput, {});
+    expectTypeOf(getOrderHandler).toBeCallableWith(getInput, { context: getContext });
+    expect(withoutContext).toBeTypeOf('function');
   });
 });
 
 describe('an EndpointHandler’s Input', () => {
   test('the implementation receives the parsed Input, unknown keys stripped, then the Context', async () => {
     const received: unknown[] = [];
-    const getOrderHandler = handle(getOrder, (input, context) => {
+    const getOrderHandler = handle(getOrder, (input, { context }) => {
       received.push(input, context);
       return success({ id: ORDER_ID, total: 1 });
     });
 
-    await getOrderHandler({ params: { orderId: ORDER_ID, extra: 'x' } as never }, getContext);
+    await getOrderHandler(
+      { params: { orderId: ORDER_ID, extra: 'x' } as never },
+      { context: getContext },
+    );
 
     expect(received).toEqual([{ params: { orderId: ORDER_ID } }, getContext]);
   });
@@ -239,7 +291,7 @@ describe('an EndpointHandler’s Context', () => {
 
   test('a Context that breaks its Guard’s context schema throws', async () => {
     const issues = await issuesOf(() =>
-      getOrderHandler(getInput, { apiKey: { callerId: 7 } } as never),
+      getOrderHandler(getInput, { context: { apiKey: { callerId: 7 } } as never }),
     );
 
     expect(issues).toEqual([
@@ -263,7 +315,7 @@ describe('an EndpointHandler’s Context', () => {
   test('a Context key no attached Guard provides throws', async () => {
     const context = { ...getContext, internalOnly: {} } as never;
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, context));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context }));
 
     expect(issues).toEqual([
       {
@@ -282,7 +334,7 @@ describe('an EndpointHandler’s Success', () => {
       success({ id: ORDER_ID, total: 1, extra: true }),
     );
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toStrictEqual({
       kind: 'success',
@@ -321,7 +373,7 @@ describe('an EndpointHandler’s Success', () => {
   test('a Success body that breaks a constraint throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID, total: -1 }));
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues).toEqual([
       { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
@@ -429,7 +481,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a direct call returns a Standard Rejection as built, with no code', async () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notFound });
   });
@@ -437,7 +489,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('isRejectionOf tells the not-found Rejection a Handler built', async () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
@@ -446,7 +498,7 @@ describe('an EndpointHandler’s Rejections', () => {
     const lockedAt = '2026-10-18T10:00:00Z';
     const getOrderHandler = handle(getOrder, () => reject(orderLocked, { lockedAt }));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toStrictEqual({
       kind: 'rejection',
@@ -462,9 +514,9 @@ describe('an EndpointHandler’s Rejections', () => {
     });
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
     // @ts-expect-error a direct call takes no contract
-    const withContract = () => getOrderHandler(getInput, getContext, { contract });
+    const withContract = () => getOrderHandler(getInput, { context: getContext }, { contract });
 
     expect(outcome.kind).toBe('rejection');
     expect(withContract).toBeTypeOf('function');
@@ -477,7 +529,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a Guard’s Rejection is one the Endpoint answers', async () => {
     const getOrderHandler = handle(getOrder, () => reject(unauthenticated));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toStrictEqual({ kind: 'rejection', rejection: unauthenticated });
   });
@@ -485,7 +537,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a Rejection body that breaks its schema throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(orderLocked, { lockedAt: 'soon' }));
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues).toEqual([
       { part: 'body', path: ['lockedAt'], code: 'invalid_format', message: expect.any(String) },
@@ -495,7 +547,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a missing Rejection body throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(orderLocked as never));
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues.map(({ part, code }) => ({ part, code }))).toEqual([
       { part: 'body', code: 'required' },
@@ -507,7 +559,7 @@ describe('an EndpointHandler’s Rejections', () => {
       Reflect.apply(reject, undefined, [notFound, { id: ORDER_ID }]),
     );
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues.map(({ part, path }) => ({ part, path }))).toEqual([{ part: 'body', path: [] }]);
   });
@@ -515,7 +567,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('a Rejection the Endpoint does not answer throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(forbidden) as never);
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues).toEqual([
       {
@@ -532,7 +584,7 @@ describe('an EndpointHandler’s Rejections', () => {
     const body = { lockedAt, by: 'someone' };
     const getOrderHandler = handle(getOrder, () => reject(orderLocked, body));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toMatchObject({ kind: 'rejection', body: { lockedAt } });
     expect(isRejectionOf(outcome, orderLocked) && outcome.body).toEqual({ lockedAt });
@@ -541,7 +593,7 @@ describe('an EndpointHandler’s Rejections', () => {
   test('the invalid-input Rejection is the runtime’s, never a Handler’s', async () => {
     const getOrderHandler = handle(getOrder, () => reject(invalidInput as never));
 
-    const call = getOrderHandler(getInput, getContext);
+    const call = getOrderHandler(getInput, { context: getContext });
 
     await expect(call).rejects.toThrow(InvalidOutcomeError);
   });
@@ -567,7 +619,7 @@ describe('an EndpointHandler’s Faults', () => {
       throw error;
     });
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toEqual({
       kind: 'fault',
@@ -583,7 +635,7 @@ describe('an EndpointHandler’s Faults', () => {
       fault({ committed: 'no', retryable: true }),
     );
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toEqual({
       kind: 'fault',
@@ -666,7 +718,7 @@ describe('fault() retryAfter', () => {
         }) as never,
     );
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues).toEqual([
       {
@@ -706,12 +758,14 @@ describe('what an EndpointHandler returns', () => {
 
   test('the parsed Context reaches the implementation, unknown keys stripped', async () => {
     const received: unknown[] = [];
-    const getOrderHandler = handle(getOrder, (_input, context) => {
+    const getOrderHandler = handle(getOrder, (_input, { context }) => {
       received.push(context);
       return reject(notFound);
     });
 
-    await getOrderHandler(getInput, { apiKey: { callerId: 'c-1', extra: true } } as never);
+    await getOrderHandler(getInput, {
+      context: { apiKey: { callerId: 'c-1', extra: true } } as never,
+    });
 
     expect(received).toEqual([getContext]);
   });
@@ -733,7 +787,7 @@ describe('what an EndpointHandler returns', () => {
       fault({ committed: 'no', retryable: true, message: 'Try again', cause }),
     );
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toEqual({
       kind: 'fault',
@@ -750,7 +804,7 @@ describe('what an EndpointHandler returns', () => {
   ])('%s is no Outcome and answers the Fault Internal error', async (_name, returned, what) => {
     const getOrderHandler = handle(getOrder, () => returned as never);
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(outcome).toEqual({
       kind: 'fault',
@@ -786,7 +840,7 @@ describe('more of what a direct call answers', () => {
     }
     const getOrderHandler = handle(getOrder, () => success(new Row() as never));
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues.map(({ path, code }) => ({ path, code }))).toEqual([
       { path: ['total'], code: 'required' },
@@ -813,7 +867,7 @@ describe('more of what a direct call answers', () => {
   test('something that is no Rejection, rejected, throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(undefined as never));
 
-    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+    const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
     expect(issues.map(({ message }) => message)).toEqual([
       'A value that is no Rejection is not a Rejection getOrder answers',
@@ -827,7 +881,7 @@ describe('a Standard Rejection from another copy of @cf-loom/contract', () => {
     const source: { readonly notImplemented: unknown } = await import(sourceUrl);
     const getOrderHandler = handle(getOrder, () => reject(source.notImplemented as never));
 
-    const outcome = await getOrderHandler(getInput, getContext);
+    const outcome = await getOrderHandler(getInput, { context: getContext });
 
     expect(source.notImplemented).not.toBe(notImplemented);
     expect(outcome).toStrictEqual({ kind: 'rejection', rejection: source.notImplemented });
@@ -838,13 +892,13 @@ describe('an EndpointHandler stub', () => {
   const stub = handle.stub(getOrder);
 
   test('a stub returns the not-implemented Rejection as built', async () => {
-    const outcome = await stub(getInput, getContext);
+    const outcome = await stub(getInput, { context: getContext });
 
     expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notImplemented });
   });
 
   test('a stub still throws on Input that breaks the Contract', async () => {
-    const call = stub({ params: { orderId: 'nope' } }, getContext);
+    const call = stub({ params: { orderId: 'nope' } }, { context: getContext });
 
     await expect(call).rejects.toThrow(InvalidInputError);
   });

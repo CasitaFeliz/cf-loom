@@ -1,4 +1,4 @@
-import type { StandardRejections } from '@cf-loom/contract';
+import type { ReservedCode, StandardRejections } from '@cf-loom/contract';
 import {
   faultResponseOf,
   type InputIssue,
@@ -16,10 +16,19 @@ import type { Fault, Issue } from '@cf-loom/handlers';
 import type { EndpointRun, GuardRun } from '@cf-loom/handlers/internal';
 import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
-/** How one request was answered; only a Fault may be the Service's, for `onServiceFault`. */
+/**
+ * How one request was answered, with the code sent: a Rejection's as its root resolves it, or a
+ * reserved Fault's; only a Fault may be the Service's, for `onServiceFault`.
+ */
 export type Answered =
-  | { readonly kind: Exclude<AnsweredRequest['kind'], 'fault'>; readonly response: Response }
-  | { readonly kind: 'fault'; readonly response: Response; readonly servedFault?: ServedFault };
+  | { readonly kind: 'success'; readonly response: Response }
+  | { readonly kind: 'rejection'; readonly response: Response; readonly code: string }
+  | {
+      readonly kind: 'fault';
+      readonly response: Response;
+      readonly code?: ReservedCode;
+      readonly servedFault?: ServedFault;
+    };
 
 /** A run that did not answer: given what broke the Contract, built what broke it, or threw. */
 export type FailedRun = Exclude<EndpointRun, { readonly kind: 'answered' }>;
@@ -63,11 +72,10 @@ export function answeredOfNotSuccess(
   standards: StandardRejections,
 ): Answered {
   switch (answer.kind) {
-    case 'rejection':
-      return {
-        kind: 'rejection',
-        response: rejectionResponseOf(sentRejectionOf(answer, standards)),
-      };
+    case 'rejection': {
+      const sent = sentRejectionOf(answer, standards);
+      return { kind: 'rejection', response: rejectionResponseOf(sent), code: sent.code };
+    }
     case 'fault': {
       const servedFault = { ...faultedBy, kind: 'returned' as const, fault: answer };
       return { kind: 'fault', response: faultResponseOf(answer), servedFault };
@@ -99,7 +107,7 @@ export function answeredOfInvalidInput(
     return { kind: 'fault', response: runtimeBugResponse(), servedFault };
   }
   const response = invalidInputResponseOf(issues.filter(isInputIssue), standards);
-  return { kind: 'rejection', response };
+  return { kind: 'rejection', response, code: standards.invalidInput.code };
 }
 
 /**
@@ -112,7 +120,24 @@ function runtimeBugResponse(): Response {
 
 function invalidOutcomeOf(issues: readonly Issue[], faultedBy: FaultedBy): Answered {
   const servedFault = { ...faultedBy, kind: 'invalid-outcome' as const, issues };
-  return { kind: 'fault', response: reservedResponseOf('INVALID_OUTCOME'), servedFault };
+  return { ...reservedAnsweredOf('INVALID_OUTCOME'), servedFault };
+}
+
+/** A reserved Fault answered: its response, by default the one its code alone gives, and its code. */
+export function reservedAnsweredOf(
+  code: ReservedCode,
+  response: Response = reservedResponseOf(code),
+): Extract<Answered, { readonly kind: 'fault' }> {
+  return { kind: 'fault', response, code };
+}
+
+/** What a request's record says of its answer: its status and kind, and its code when it has one. */
+export function sentOf(answered: Answered): Pick<AnsweredRequest, 'status' | 'kind' | 'code'> {
+  const { kind, response } = answered;
+  if (kind === 'success' || answered.code === undefined) {
+    return { status: response.status, kind };
+  }
+  return { status: response.status, kind, code: answered.code };
 }
 
 function isInputIssue(issue: Issue): issue is InputIssue {

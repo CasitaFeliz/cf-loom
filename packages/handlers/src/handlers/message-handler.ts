@@ -2,7 +2,12 @@ import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
-import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
+import type {
+  CallArgument,
+  NoResources,
+  ResourcesField,
+  ResourcesNotAnnotated,
+} from './resources.ts';
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
 type ReadBodyOf<Target extends Pairing> = core.output<Target['reader']>;
@@ -23,25 +28,22 @@ type Answered = undefined | MessageFault;
 /** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a `MessageFault`; may be async. */
 export type CommandImplementation<
   Target extends Pairing<Command>,
-  Resources extends object = NoResources,
+  Resources extends object = ResourcesNotAnnotated,
 > = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
-  call: MessageCall<Resources>,
+  last: ResourcesField<Resources>,
 ) => Answered | Promise<Answered>;
 
 /** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a `MessageFault`; may be async. */
 export type EventImplementation<
   Target extends Pairing<Subscription>,
-  Resources extends object = NoResources,
+  Resources extends object = ResourcesNotAnnotated,
 > = (
   body: ReadBodyOf<Target>,
   meta: MessageMeta,
-  call: MessageCall<Resources>,
+  last: ResourcesField<Resources>,
 ) => Answered | Promise<Answered>;
-
-/** The last argument of a Message Handler's direct call: the Resources it takes. */
-export type MessageCall<Resources extends object = NoResources> = ResourcesField<Resources>;
 
 /** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type CommandHandler<
@@ -51,7 +53,7 @@ export type CommandHandler<
   (
     body: ReadBodyOf<Target>,
     meta: DirectMeta,
-    ...call: CallArgument<MessageCall<Resources>>
+    ...last: CallArgument<ResourcesField<Resources>>
   ): Promise<Fault | undefined>;
   readonly element: Target['element'];
 };
@@ -64,7 +66,7 @@ export type EventHandler<
   (
     body: ReadBodyOf<Target>,
     meta: DirectMeta,
-    ...call: CallArgument<MessageCall<Resources>>
+    ...last: CallArgument<ResourcesField<Resources>>
   ): Promise<Fault | undefined>;
   readonly element: Target['element'];
 };

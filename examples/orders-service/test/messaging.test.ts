@@ -31,7 +31,7 @@ afterEach(async () => {
 /** Places an order and waits for the Messages it set going, returning the new order's id. */
 async function placeOrder(): Promise<string> {
   const input = { body: { customerId: CUSTOMER_ID, total } };
-  const outcome = await createOrderHandler(input, context, { resources });
+  const outcome = await createOrderHandler(input, { context }, { resources });
   await broker.settled();
   if (outcome.kind !== 'success') throw new Error('the order was not placed');
   return outcome.body.id;

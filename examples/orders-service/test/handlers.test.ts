@@ -33,7 +33,7 @@ describe('getOrder', () => {
   test('a seeded order is answered with its status and total', async () => {
     const input = { params: { orderId: PAID_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context);
+    const outcome = await getOrderHandler(input, { context });
 
     expect(outcome).toMatchObject({
       kind: 'success',
@@ -50,7 +50,7 @@ describe('getOrder', () => {
   test('an order nobody placed is answered the not-found Rejection', async () => {
     const input = { params: { orderId: UNKNOWN_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context);
+    const outcome = await getOrderHandler(input, { context });
 
     expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
@@ -58,7 +58,7 @@ describe('getOrder', () => {
   test('a locked order is answered ORDER_LOCKED with the instant it was locked', async () => {
     const input = { params: { orderId: LOCKED_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context);
+    const outcome = await getOrderHandler(input, { context });
 
     expect(isRejectionOf(outcome, orderLocked) && outcome.body).toEqual({
       lockedAt: '2026-01-15T09:30:00Z',
@@ -68,7 +68,7 @@ describe('getOrder', () => {
   test('an order id that is no UUID throws InvalidInputError', async () => {
     const input = { params: { orderId: 'o-1' } };
 
-    const called = getOrderHandler(input, context);
+    const called = getOrderHandler(input, { context });
 
     await expect(called).rejects.toBeInstanceOf(InvalidInputError);
   });
@@ -80,7 +80,7 @@ describe('createOrder', () => {
 
     const input = { body: { customerId: CUSTOMER_ID, total } };
 
-    const outcome = await createOrderHandler(input, context, { resources });
+    const outcome = await createOrderHandler(input, { context }, { resources });
 
     expect(outcome).toMatchObject({
       kind: 'success',
