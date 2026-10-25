@@ -128,7 +128,7 @@ export const getOrder = defineEndpoint({
 
 ## Rejections
 
-A Rejection is declared once and referenced wherever it can be answered.
+A Rejection is declared once and referenced wherever it can be answered. An Endpoint or a Guard lists each Rejection once: a code, or a Standard Rejection, listed twice is a type error.
 
 ```ts
 // src/contract/rejections/order-locked.rejection.ts

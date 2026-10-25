@@ -238,6 +238,20 @@ describe('a declared Guard’s containers', () => {
   });
 });
 
+describe('defineGuard Rejections', () => {
+  test('a Guard listing one Rejection twice is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'apiKey',
+        description: 'A key per Caller',
+        // @ts-expect-error UNAUTHENTICATED is listed twice
+        rejections: [unauthenticated, unauthenticated],
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineGuard nested fields', () => {
   test('an undeclared field in demands is a type error', () => {
     const declare = () =>

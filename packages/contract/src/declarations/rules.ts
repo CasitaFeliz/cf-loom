@@ -58,6 +58,35 @@ export type IsOneLiteral<Value> = [Value] extends [never]
     ? true
     : false;
 
+type ListedKeyOf<Listed> = Listed extends {
+  readonly kind: 'standard-rejection';
+  readonly name: infer Name extends string;
+}
+  ? Name
+  : Listed extends { readonly kind: 'rejection'; readonly code: infer Code extends string }
+    ? Code
+    : never;
+
+/** The one literal key a listed Rejection is judged by; none where its type leaves the key open. */
+type OnceKeyOf<Listed> =
+  IsOneLiteral<LiteralNames<ListedKeyOf<Listed>>> extends true
+    ? LiteralNames<ListedKeyOf<Listed>>
+    : never;
+
+type ListedOnceRule<Key extends string, Rest, Earlier extends string> = [Key] extends [never]
+  ? RejectionsOnceRule<Rest, Earlier>
+  : Key extends Earlier
+    ? `${Key} is listed twice`
+    : RejectionsOnceRule<Rest, Earlier | Key>;
+
+/** What a list of Rejections must also satisfy: each code once, a Standard Rejection by its name. */
+export type RejectionsOnceRule<
+  Rejections,
+  Earlier extends string = never,
+> = Rejections extends readonly [infer First, ...infer Rest]
+  ? ListedOnceRule<OnceKeyOf<First>, Rest, Earlier>
+  : unknown;
+
 type VersionRefusal = 'A Message version is one literal whole number from 1';
 
 /** Whether a literal number's text is not a whole number from 1 written without an exponent. */

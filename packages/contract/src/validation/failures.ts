@@ -43,6 +43,7 @@ export type Rule =
   | 'qualifier-value'
   | 'qualifier-keys'
   | 'rejection-status'
+  | 'rejection-once'
   | 'code-status-conflict'
   | 'code-body-conflict'
   | 'reserved-code'
