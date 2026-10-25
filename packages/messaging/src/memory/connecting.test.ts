@@ -129,7 +129,9 @@ describe('memory(): one connection', () => {
     await broker.settled();
 
     expect(handled).toEqual(['a']);
-    expect(broker.pending).toMatchObject([{ messageId: 'ChargeCard.v1:b', deliveryCount: 1 }]);
+    expect(broker.pending).toMatchObject([
+      { messageId: 'command.ChargeCard.v1:b', deliveryCount: 1 },
+    ]);
   });
 
   test('deliver and redeliver reject after close', async () => {
@@ -164,6 +166,8 @@ describe('memory(): one connection', () => {
     await Promise.all([closing, redelivering]);
 
     expect(handled).toEqual(['x:1', 'hold:1']);
-    expect(broker.pending).toMatchObject([{ messageId: 'ChargeCard.v1:x', deliveryCount: 2 }]);
+    expect(broker.pending).toMatchObject([
+      { messageId: 'command.ChargeCard.v1:x', deliveryCount: 2 },
+    ]);
   });
 });
