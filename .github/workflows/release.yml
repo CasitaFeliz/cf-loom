@@ -15,6 +15,9 @@
 #   npmjs.com with NPM_READ_TOKEN, a read-only secret of that environment, which its ~/.npmrc names
 #   as ${NPM_READ_TOKEN} for pnpm to expand. npmjs.com answers 404 for a restricted package the token
 #   cannot read, as if it were unpublished, so select-mode first fails if the token cannot read @cf-loom.
+# - Every job but publish runs on the org's self-hosted orb runners (CasitaFeliz/orb-infra, README "CI runners");
+#   publish runs on a GitHub-hosted runner, the only kind npm trusted publishing accepts. If the orb runners are
+#   down, point their runs-on back to ubuntu-latest.
 # - A publish that failed halfway: "Re-run failed jobs" on its run. The tarballs are kept 30 days and the
 #   versions already published are skipped, so the re-run publishes the rest; otherwise the next push to
 #   main that carries no changeset retries. npm cannot take a version back: fix forward with the next
@@ -63,7 +66,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   select-mode:
-    runs-on: ubuntu-latest
+    runs-on: orb
     environment:
       name: npm
       deployment: false
@@ -105,7 +108,7 @@ jobs:
   version:
     needs: select-mode
     if: needs.select-mode.outputs.mode == 'version'
-    runs-on: ubuntu-latest
+    runs-on: orb
     permissions:
       contents: write
       pull-requests: write
@@ -126,7 +129,7 @@ jobs:
   pack:
     needs: [checks, select-mode]
     if: needs.select-mode.outputs.mode == 'publish'
-    runs-on: ubuntu-latest
+    runs-on: orb
     permissions:
       contents: read
     outputs:
@@ -148,7 +151,7 @@ jobs:
 
   publish:
     needs: pack
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest   # npm trusted publishing accepts only GitHub-hosted runners
     environment: npm
     permissions:
       contents: write
