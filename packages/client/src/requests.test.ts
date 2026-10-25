@@ -122,8 +122,8 @@ function recording(response: () => Response, baseUrl: string | URL = 'http://ord
   const sent: Request[] = [];
   const orders = client(ordersDependency, {
     baseUrl,
-    fetch: async (url, init) => {
-      sent.push(new Request(url, init));
+    fetch: async (request) => {
+      sent.push(request);
       return response();
     },
   });
@@ -133,6 +133,14 @@ function recording(response: () => Response, baseUrl: string | URL = 'http://ord
 const counted = () => Response.json({ count: 1 });
 
 describe('what a call sends', () => {
+  test('the Request fetch receives never follows a redirect', async () => {
+    const { orders, sent } = recording(counted);
+
+    await orders.searchOrders({ params: { shopId: 's-1' }, query: { ids: ['1'] } });
+
+    expect(sent[0]?.redirect).toBe('manual');
+  });
+
   test('each path param is percent-encoded as one segment', async () => {
     const { orders, sent } = recording(counted);
 
@@ -246,7 +254,7 @@ describe('what a call sends', () => {
     const http = serve(provider, handlers);
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
-      fetch: (url, init) => http(new Request(url, init)),
+      fetch: http,
     });
 
     const outcome = await orders.priceOrder({
@@ -511,7 +519,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
     const http = serve(provider, handlers);
     const echoes = client(echoingDependency, {
       baseUrl: 'http://orders.test',
-      fetch: (url, init) => http(new Request(url, init)),
+      fetch: http,
     });
 
     const outcome = await echoes.echoLarge({ params: { size: 1e21 } });

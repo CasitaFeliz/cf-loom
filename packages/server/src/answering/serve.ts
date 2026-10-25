@@ -1,4 +1,4 @@
-import type { Contract } from '@cf-loom/contract';
+import type { Contract, Http } from '@cf-loom/contract';
 import type { ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
@@ -9,9 +9,6 @@ import {
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
-
-/** The fetch-style handler `serve` returns: what an adapter connects to its host. */
-export type Http = (request: Request) => Promise<Response>;
 
 /** What `serve` takes besides the Contract and the Handler map: the Resources its Handlers take, and what is operational about serving; none of it is part of the Contract. */
 export type ServeOptions<Resources extends object = NoResources> = ResourcesField<Resources> & {

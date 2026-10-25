@@ -6,6 +6,5 @@ export type {
   ClientOptions,
   ConfiguredName,
   DeprecationNotice,
-  Fetch,
   OnDeprecation,
 } from './client-types.ts';

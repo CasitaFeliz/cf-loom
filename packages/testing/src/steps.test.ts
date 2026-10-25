@@ -176,7 +176,7 @@ describe('fakeProvider: steps', () => {
       }),
     );
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect([response.headers.get('x-stage'), response.headers.get('x-count')]).toEqual([
@@ -195,7 +195,7 @@ describe('fakeProvider: steps', () => {
     payments.on('cancelPayment').otherwise((r) => r.success());
     payments.on('checkPayment').otherwise((r) => r.success({ headers: { 'x-count': 3 } }));
 
-    const cancelled = await payments.fetch(at, { method: 'DELETE' });
+    const cancelled = await payments.fetch(new Request(at, { method: 'DELETE' }));
     const checked = await payments.client().checkPayment({ params });
 
     expect([cancelled.status, await cancelled.text()]).toEqual([204, '']);
@@ -206,7 +206,7 @@ describe('fakeProvider: steps', () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.reject('NO_PAYMENT'));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(404);
@@ -224,7 +224,7 @@ describe('fakeProvider: steps', () => {
     const body = { lockedAt: '2026-10-19T10:00:00Z', reason: { unknown: 'chargeback' } };
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOCKED', body));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(409);
@@ -269,7 +269,7 @@ describe('fakeProvider: steps', () => {
     };
     payments.on('getPayment').otherwise((r) => r.reject('INVALID_INPUT', { issues: [issue] }));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(400);
@@ -290,7 +290,7 @@ describe('fakeProvider: steps', () => {
       .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { expiredAt: '2026-01' }))
       .once((r) => r.reject({ unknown: 'CARD_EXPIRED', message: 'The card expired' }, null));
 
-    const response = await payments.fetch(at, {});
+    const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(422);
@@ -313,7 +313,10 @@ describe('fakeProvider: steps', () => {
       .once((r) => r.fault({ committed: 'unknown', retryable: true }))
       .once((r) => r.fault({ committed: 'yes', retryable: false, message: 'Done, but lost' }));
 
-    const responses = [await payments.fetch(at, {}), await payments.fetch(at, {})];
+    const responses = [
+      await payments.fetch(new Request(at)),
+      await payments.fetch(new Request(at)),
+    ];
     const bodies = await Promise.all(responses.map((response) => response.json()));
 
     expect(responses.map((response) => response.status)).toEqual([503, 500]);
@@ -334,7 +337,7 @@ describe('fakeProvider: steps', () => {
       const payments = fakeProvider(paymentsDependency);
       payments.on('getPayment').otherwise((r) => r.fault({ code }));
 
-      const response = await payments.fetch(at, {});
+      const response = await payments.fetch(new Request(at));
       const outcome = await payments.client().getPayment({ params });
 
       expect(response.status).toBe(status);
@@ -352,7 +355,7 @@ describe('fakeProvider: steps', () => {
     const controller = new AbortController();
     const reason = new Error('Gave up');
 
-    const answering = payments.fetch(at, { signal: controller.signal });
+    const answering = payments.fetch(new Request(at, { signal: controller.signal }));
     controller.abort(reason);
 
     await expect(answering).rejects.toBe(reason);
@@ -467,7 +470,9 @@ function capture(
 ): Promise<Response> {
   const headers = { 'content-type': 'application/json' };
   const init: RequestInit = { method: 'POST', headers, body, duplex: 'half' };
-  return payments.fetch(`${at}/capture`, signal === undefined ? init : { ...init, signal });
+  return payments.fetch(
+    new Request(`${at}/capture`, signal === undefined ? init : { ...init, signal }),
+  );
 }
 
 /** Lets every request sent so far read what it can. */

@@ -106,16 +106,24 @@ describe('the README', () => {
     expect(results).toEqual([120, null, 'retried']);
   });
 
-  test('a fetch wrapper adding a browser’s credentials type-checks, and Client names the headers', () => {
+  test('a fetch wrapper building another Request sends the call with a browser’s credentials', async () => {
+    const sent: Request[] = [];
+    const answering = async (request: Request) => {
+      sent.push(request);
+      return Response.json({ amount: 120 });
+    };
     const credentialed: Client<typeof paymentsDependency, 'x-api-key'> = client(
       paymentsDependency,
       {
         baseUrl: 'https://payments.test',
         headers: { 'x-api-key': 'k' },
-        fetch: (url, init) => fetch(url, { ...init, credentials: 'include' }),
+        fetch: (request) => answering(new Request(request, { credentials: 'include' })),
       },
     );
 
-    expect(Object.keys(credentialed)).toEqual(['getPayment']);
+    await credentialed.getPayment({ params: { paymentId } });
+
+    expect(sent[0]?.credentials).toBe('include');
+    expect(sent[0]?.headers.get('x-api-key')).toBe('k');
   });
 });

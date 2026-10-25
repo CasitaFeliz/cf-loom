@@ -13,7 +13,7 @@ import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contr
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { client, type Happened, type InferredFault } from './index.ts';
+import { client, type Happened, type Http, type InferredFault } from './index.ts';
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -65,7 +65,7 @@ const input = { params: { orderId: 'o-1' } };
 
 /** A `fetch` that does what `answer` does, every time. */
 function fetching(answer: () => Promise<Response>) {
-  return (_url: string, _init: RequestInit) => answer();
+  return (_request: Request) => answer();
 }
 
 /** A `fetch` that throws `error`, as a network failure does. */
@@ -87,7 +87,7 @@ function networkError(code: string): TypeError {
   return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
 }
 
-function ordersOver(fetch: (url: string, init: RequestInit) => Promise<Response>) {
+function ordersOver(fetch: Http) {
   return client(ordersDependency, { baseUrl: 'http://orders.test', fetch });
 }
 
@@ -663,8 +663,8 @@ describe('the network rows against node:http', () => {
     const { port } = socketServer.address() as AddressInfo;
     const late = client(ordersDependency, {
       baseUrl: `http://127.0.0.1:${port}`,
-      fetch: async (url, init) => {
-        const response = await fetch(url, init);
+      fetch: async (request) => {
+        const response = await fetch(request);
         await new Promise((resolve) => setTimeout(resolve, 50));
         return response;
       },

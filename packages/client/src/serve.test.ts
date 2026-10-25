@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   type ContractPackage,
@@ -343,7 +344,7 @@ describe('end to end against serve through node:http and the global fetch', () =
       await orders.getOrder({ params: { orderId: 'broken' } }),
       await client(ordersDependency, {
         baseUrl,
-        fetch: (url, init) => fetch(url, { ...init, body: JSON.stringify(large) }),
+        fetch: (request) => fetch(new Request(request, { body: JSON.stringify(large) })),
       }).createOrder({ body: large }),
     ];
 
@@ -365,5 +366,78 @@ describe('end to end against serve through node:http and the global fetch', () =
     expect(notices).toEqual([
       { provider: 'orders-service', endpoint: 'createOrder', deprecatedAt: '2026-10-17T09:30:00Z' },
     ]);
+  });
+});
+
+/** A Provider that answers `status` with a `location` at another origin, and that other origin, which records what reaches it. */
+async function redirectingTo(status: 307 | 303) {
+  const reached: string[] = [];
+  const elsewhere = createServer((request, response) => {
+    reached.push(`${request.method} ${request.url} ${request.headers['x-api-key']}`);
+    response.writeHead(200, { 'content-type': 'application/json' }).end('{"id":"elsewhere"}');
+  });
+  await new Promise<void>((resolve) => elsewhere.listen(0, '127.0.0.1', resolve));
+  const elsewherePort = (elsewhere.address() as AddressInfo).port;
+  const redirecting = createServer((_request, response) => {
+    response.writeHead(status, { location: `http://localhost:${elsewherePort}/x` }).end();
+  });
+  await new Promise<void>((resolve) => redirecting.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${(redirecting.address() as AddressInfo).port}/`;
+  const close = () => {
+    redirecting.close();
+    elsewhere.close();
+  };
+  return { baseUrl, reached, close };
+}
+
+describe('a redirect', () => {
+  test('a cross-origin 307 is a Fault and the other origin receives nothing', async () => {
+    const { baseUrl, reached, close } = await redirectingTo(307);
+    const orders = client(ordersDependency, { baseUrl, headers: { 'x-api-key': 'SECRET' } });
+
+    const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });
+    close();
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 307',
+    });
+    expect(reached).toEqual([]);
+  });
+
+  test('a 303 is a Fault and no GET follows it', async () => {
+    const { baseUrl, reached, close } = await redirectingTo(303);
+    const orders = client(ordersDependency, { baseUrl });
+
+    const outcome = await orders.createOrder({ body: { quantity: 1 } });
+    close();
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 303',
+    });
+    expect(reached).toEqual([]);
+  });
+});
+
+describe('serve in the same process', () => {
+  test('what serve returns is a client’s fetch with no adapter', async () => {
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      headers: { 'x-api-key': 'caller-7' },
+      fetch: serve(provider, handlers),
+    });
+
+    const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      value: { id: 'o-1', by: 'caller-7' },
+      headers: { 'x-stage': 'shipped', 'x-count': 2 },
+    });
   });
 });

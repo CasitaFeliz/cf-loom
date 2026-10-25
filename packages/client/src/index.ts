@@ -1,10 +1,10 @@
+export type { Http } from '@cf-loom/contract';
 export type {
   CallInput,
   CallOptions,
   Client,
   ClientOptions,
   DeprecationNotice,
-  Fetch,
   OnDeprecation,
 } from './calling/index.ts';
 export { client } from './calling/index.ts';

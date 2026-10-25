@@ -11,7 +11,7 @@ The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `infe
 | Module | Holds | Depends on |
 | --- | --- | --- |
 | `endpoints/` | each listed Endpoint as the client calls it, prepared once: its entry in the Provider's exported Snapshot, found by identity, for the header names its Input declares and its Success headers' nodes, and its Rejections by resolved code; what any Dependency gives the client, and the Endpoints it lists, `ListedEndpoints`, none for a Dependency written without the list, and their by-name view, `ListedName` and `ListedEndpoint`, which name the client's methods and `fakeProvider`'s scripts | none |
-| `request/` | the `baseUrl` checked once; a call's Input read by the contract's reading as the Provider reads the request it would send, every Guard admitting and a body left out sent with no content type; then its text, that it can travel; the URL and the `RequestInit` it is sent with | none |
+| `request/` | the `baseUrl` checked once; a call's Input read by the contract's reading as the Provider reads the request it would send, every Guard admitting and a body left out sent with no content type; then its text, that it can travel; the Request it is sent as, which never follows a redirect | none |
 | `inference/` | `Happened`, the Fault inferred from what `fetch` threw or a response that carried no Outcome, the organization's `inferFault`, the fixed messages, and `Retry-After` | none |
 | `decoding/` | the Outcome types, decoded and as each Endpoint types them; a response decoded in order: the Success with its headers and body read by their Reader schemas, else an Envelope, else the inferred Fault; a Rejection known by code, its body read or dropped; the client's own `INVALID_OUTCOME` | `endpoints`, `inference` |
 | `calling/` | `client()` and its types, the Provider's exported Snapshot refused, before any Endpoint's entry is read, in a format the client does not read; one call top to bottom; the headers given to `client()`; the Deprecation told once per method | `endpoints`, `request`, `inference`, `decoding` |
@@ -23,7 +23,7 @@ The wire rules the client shares with `serve` and `@cf-loom/testing` live in `@c
 1. A signal already aborted returns its Fault, `committed: 'no'`, and nothing is sent.
 2. The headers given to `client()` that the Endpoint declares and the call did not pass are added, a function among them called now.
 3. The Input is read as the Provider reads the request it would send, every Guard admitting it and a declared body left out sent with no content type, and its text checked that it can travel; what fails returns the Provider's invalid-input Rejection, its body read with the Provider's Reader as a received one is, and nothing is sent. A signal aborted meanwhile returns its Fault, `committed: 'no'`.
-4. `fetch` is called with the URL and init. What it throws is inferred as a Fault, or reaches the Caller unchanged when it is no network failure, abort or timeout.
+4. `fetch` is called with the Request. What it throws is inferred as a Fault, or reaches the Caller unchanged when it is no network failure, abort or timeout.
 5. The response is decoded, then its `Deprecation` is told the first time a method sees it; what `onDeprecation` throws goes to the console.
 
 Each method returns its decoded Outcome typed by its Endpoint: the decoding is one function for every Endpoint, and each typed Outcome is its decoded form narrowed, so the methods are cast to `Client` once, in `client()`.

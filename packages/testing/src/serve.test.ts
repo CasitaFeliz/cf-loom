@@ -194,7 +194,7 @@ describe('fakeProvider and serve answer alike', () => {
     const url = `http://payments.test${path}`;
 
     const fromServe = await seenOf(await served(new Request(url, init)));
-    const fromFake = await seenOf(await scriptedFake().fetch(url, init));
+    const fromFake = await seenOf(await scriptedFake().fetch(new Request(url, init)));
 
     expect(fromFake).toEqual(fromServe);
   });
@@ -206,7 +206,7 @@ describe('fakeProvider and serve answer alike', () => {
     serviceFaults.length = 0;
 
     const fromServe = await served(new Request(url));
-    const fromFake = payments.fetch(url, {});
+    const fromFake = payments.fetch(new Request(url));
 
     await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
     expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
@@ -368,11 +368,11 @@ describe('serve, the client and fakeProvider read a request alike', () => {
     fake.on('refundPayment').otherwise((r) => r.success());
     const caller = client(refundDependency, {
       baseUrl: 'http://payments.test',
-      fetch: (sentUrl, sentInit) => servedRefund(new Request(sentUrl, sentInit)),
+      fetch: servedRefund,
     });
 
     const fromServe = await seenOf(await servedRefund(new Request(url, init)));
-    const fromFake = await seenOf(await fake.fetch(url, init));
+    const fromFake = await seenOf(await fake.fetch(new Request(url, init)));
     const fromClient = await caller.refundPayment(input as never);
 
     expect(fromFake).toEqual(fromServe);

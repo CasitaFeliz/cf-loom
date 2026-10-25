@@ -147,6 +147,7 @@ A response with the declared Success status is decoded as the Success; a respons
 | A timeout, a reset or abort after the request was sent (a `TimeoutError` or `AbortError`, or a `TypeError` whose `cause.code` is `ECONNRESET` or `UND_ERR_SOCKET`), a body that fails while it is read, or 503 | `committed: 'unknown'`, `retryable: true` |
 | Any other network failure of `fetch` (any other `TypeError`), or any other status (500, 502, 504…) | `committed: 'unknown'`, `retryable: false` |
 
+- The client never follows a redirect: it sends every request with `redirect: 'manual'`, so a 3xx is decoded as any status but the Success's, and one with no Envelope becomes an inferred Fault; a browser hides a redirect behind status 0, inferred the same way.
 - After `fetch` throws, or a body fails while it is read, a signal of the call that is aborted decides first: its reason named `TimeoutError` is a timeout, any other an abort, whatever was thrown. Errors are told by their `name`, never by their class, since each realm has its own.
 - The `cause.code` values are Node's and undici's. Browsers and Deno report a refused connection or a DNS failure as a bare `TypeError`, which lands on the last row; Bun's errors are not verified.
 - An inferred Fault says one of five fixed messages, which carry nothing received: "No connection to the Provider", "The request was aborted", "The request timed out", "The connection failed" and "The Provider answered <status>".

@@ -82,8 +82,8 @@ const ordersDependency = defineDependency({
 });
 
 /** What a Deprecated Endpoint answers: its response with `Deprecation`, here a Rejection. */
-async function deprecated(url: string): Promise<Response> {
-  if (url.endsWith('/ping')) {
+async function deprecated(request: Request): Promise<Response> {
+  if (request.url.endsWith('/ping')) {
     return new Response(null, { status: 204 });
   }
   const headers = { deprecation: '@1792229400' };

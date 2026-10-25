@@ -1,4 +1,5 @@
 import {
+  type Http as ContractHttp,
   type ContractPackage,
   defineContract,
   defineDependency,
@@ -10,10 +11,11 @@ import {
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import type { Http as ServerHttp } from '@cf-loom/server';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { type Client, client, type ReceivedOutcome } from './index.ts';
+import { type Client, client, type Http, type ReceivedOutcome } from './index.ts';
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -219,5 +221,19 @@ describe('the client’s types', () => {
     // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
     expectTypeOf<ReceivedOutcome<typeof ordersDependency, 'ping'>>().toBeObject();
     expect(ordersDependency.endpoints.map(({ name }) => name)).toContain('listOrders');
+  });
+});
+
+describe('Http', () => {
+  test('the global fetch is an Http, and a function of a URL and an init is not', () => {
+    expectTypeOf<typeof globalThis.fetch>().toExtend<Http>();
+    expectTypeOf<(url: string, init: RequestInit) => Promise<Response>>().not.toExtend<Http>();
+    expect(typeof globalThis.fetch).toBe('function');
+  });
+
+  test('the client, the server and the contract export one Http', () => {
+    expectTypeOf<Http>().toEqualTypeOf<ServerHttp>();
+    expectTypeOf<Http>().toEqualTypeOf<ContractHttp>();
+    expectTypeOf<ContractHttp>().toEqualTypeOf<(request: Request) => Promise<Response>>();
   });
 });

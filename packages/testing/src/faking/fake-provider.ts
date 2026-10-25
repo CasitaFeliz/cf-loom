@@ -1,4 +1,4 @@
-import { type Client, type ClientOptions, client, type Fetch } from '@cf-loom/client';
+import { type Client, type ClientOptions, client } from '@cf-loom/client';
 import {
   type AnyDependency,
   baseUrlOf,
@@ -6,6 +6,7 @@ import {
   type ListedEndpoint,
   type ListedName,
 } from '@cf-loom/client/internal';
+import type { Http } from '@cf-loom/contract';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { FakeCall } from './calls.ts';
@@ -25,7 +26,7 @@ export type FakeClientOptions<D extends AnyDependency, Configured extends string
  * Endpoint's script, and the calls each received.
  */
 export type FakeProvider<D extends AnyDependency> = {
-  readonly fetch: Fetch;
+  readonly fetch: Http;
   client<Configured extends ConfiguredName<D> = never>(
     options?: FakeClientOptions<D, Configured>,
   ): Client<D, Configured>;

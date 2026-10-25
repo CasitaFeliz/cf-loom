@@ -56,7 +56,7 @@ Both hooks are called before the response is returned; what one throws is the Se
 
 ## Types
 
-- `Http`, `(request: Request) => Promise<Response>`: the fetch-style handler `serve` returns.
+- `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
 - `ServeOptions<Resources>`, `{ resources, maxBodyBytes?, onServiceFault?, onOutcome? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take and what is operational about serving; none of it is part of the Contract.
 - `ServedFault`: what `onServiceFault` receives, `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
 - `AnsweredRequest`, `{ method, endpoint?, path?, status, kind, durationMs }`: what `onOutcome` receives.
