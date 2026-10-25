@@ -4,7 +4,7 @@ import {
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
-import { type DefUse, defNamesLineOf, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
+import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
 import {
   applicationEntryOf,
@@ -25,11 +25,6 @@ import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts
 import { packagePaths } from './paths.ts';
 import { rejectionModuleOf } from './rejection-code.ts';
 
-/** The files of a Contract Package, or the line saying which names cannot be written as code. */
-export type ContractPackageFiles =
-  | { readonly kind: 'files'; readonly files: readonly PackageFile[] }
-  | { readonly kind: 'unnamed'; readonly line: string };
-
 /** A Snapshot in canonical order, every map in code point order, with its canonical text. */
 export type CanonicalSnapshot = {
   readonly snapshot: ContractSnapshot;
@@ -44,7 +39,7 @@ export type CanonicalSnapshot = {
 export function contractPackageFilesOf(
   { snapshot, text }: CanonicalSnapshot,
   packaging: Packaging,
-): ContractPackageFiles {
+): readonly PackageFile[] {
   const packageFiles = [
     manifestOf(snapshot, packaging),
     { path: packagePaths.snapshot, text },
@@ -52,24 +47,19 @@ export function contractPackageFilesOf(
     snapshotModuleOf(snapshot),
   ];
   if (snapshot.kind === 'application') {
-    return { kind: 'files', files: [...packageFiles, applicationEntryOf()] };
+    return [...packageFiles, applicationEntryOf()];
   }
-  const sources = serviceSourcesOf(snapshot, packaging.version);
-  if (sources.kind === 'unnamed') {
-    return sources;
-  }
-  return { kind: 'files', files: [...packageFiles, ...sources.files] };
+  return [...packageFiles, ...serviceSourcesOf(snapshot, packaging.version)];
 }
 
 /**
  * A Service's sources, written from the Snapshot cut to what it exports: the entry, each exported
- * Endpoint and Event, the Guards and codes they reach, and the recursive defs those reach; or why
- * their names cannot be written.
+ * Endpoint and Event, the Guards and codes they reach, and the recursive defs those reach.
  */
 function serviceSourcesOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
   version: string,
-): ContractPackageFiles {
+): readonly PackageFile[] {
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
   const events = exportedEventsOf(exported);
@@ -78,18 +68,13 @@ function serviceSourcesOf(
     exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
-  const unnamed = defNamesLineOf(defUses);
-  if (unnamed !== undefined) {
-    return { kind: 'unnamed', line: unnamed };
-  }
-  const files = [
+  return [
     serviceEntryOf({ name: snapshot.name, version, endpoints, events, defUses }),
     exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(exported, defUses),
   ];
-  return { kind: 'files', files };
 }
 
 /** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */

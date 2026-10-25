@@ -34,6 +34,7 @@ export type {
 } from '../declarations/index.ts';
 export {
   codeNameOf,
+  follows,
   isCommand,
   isContract,
   isEndpoint,
@@ -46,9 +47,11 @@ export {
   isStamp,
   isStandardRejection,
   isSubscription,
+  kebabCase,
   lifecycleOf,
   standardRejectionDefaults,
   standardRejectionNames,
+  upperSnakeCase,
 } from '../declarations/index.ts';
 export type { DecodedSnapshot } from '../decoding/index.ts';
 export { decodeSnapshot } from '../decoding/index.ts';
@@ -114,12 +117,9 @@ export type {
 } from '../validation/index.ts';
 export {
   failureLineOf,
-  follows,
-  kebabCase,
   locationOf,
   problemLineOf,
   problemOf,
-  upperSnakeCase,
   validateContract,
   walkedTextPartsOf,
 } from '../validation/index.ts';
