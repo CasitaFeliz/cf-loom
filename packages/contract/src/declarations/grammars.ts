@@ -11,7 +11,7 @@ export type Grammar = {
 /** The grammar of a Service, Application, Definitions Package or Group name. */
 export const kebabCase: Grammar = { name: 'kebab-case', pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ };
 
-/** The grammar of an Endpoint, Guard or Subscription name, and of a path param's name. */
+/** The grammar of an Endpoint, Guard or Subscription name, a path param and a recursion id. */
 export const camelCase: Grammar = { name: 'camelCase', pattern: /^[a-z][a-zA-Z0-9]*$/ };
 
 /**

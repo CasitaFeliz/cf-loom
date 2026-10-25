@@ -1,6 +1,3 @@
-import type { Path } from '../walker/index.ts';
-import { type Declarations, textOf } from '../written/index.ts';
-import { type DeclarationFailure, failure } from './failures.ts';
 import {
   elementName,
   follows,
@@ -9,7 +6,10 @@ import {
   kebabCase,
   pascalCase,
   upperSnakeCase,
-} from './grammars.ts';
+} from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
+import { type Declarations, textOf } from '../written/index.ts';
+import { type DeclarationFailure, failure } from './failures.ts';
 
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
 type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
