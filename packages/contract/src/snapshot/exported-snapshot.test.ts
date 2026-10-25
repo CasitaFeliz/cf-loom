@@ -283,7 +283,8 @@ describe('exportedSnapshotOf', () => {
     { reach: 'only a Public Endpoint lists', code: orderLocked, kept: true },
     { reach: 'only a Private Endpoint lists', code: 'PURGED', kept: false },
     {
-      reach: 'only a listed Definitions Package declares, which the declared Snapshot never writes',
+      reach:
+        'only an imported Definitions Package declares, which the declared Snapshot never writes',
       code: 'UNUSED',
       kept: false,
     },
@@ -597,7 +598,7 @@ function serviceSnapshotOf(
 }
 
 /**
- * A Service whose one Public Endpoint attaches a listed Definitions Package's Guard and the Guard it
+ * A Service whose one Public Endpoint attaches an imported Definitions Package's Guard and the Guard it
  * builds on, the package's other Guard attached by none.
  */
 function sharedGuardsSnapshot(): ServiceSnapshot {

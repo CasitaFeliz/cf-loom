@@ -453,7 +453,7 @@ describe('an EndpointHandler’s Rejections', () => {
     expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
-  test('given the root, a Standard Rejection resolves to the listed Definitions Package’s', async () => {
+  test('given the root, a Standard Rejection resolves to the standardRejections package’s', async () => {
     const definitions = defineDefinitions({
       standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
     });

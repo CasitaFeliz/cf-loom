@@ -6,7 +6,7 @@ import type { GuardSnapshot } from './types.ts';
 
 /**
  * The Guards the root reaches, by name: a Service's Endpoints attach them, directly or through a
- * Guard's `guards`; a Definitions Package reaches all of its own.
+ * Guard's `guards`; a Definitions Package's are those it exports and those they reach.
  */
 export function guardSnapshotsOf(
   guards: readonly ValidatedGuard[],

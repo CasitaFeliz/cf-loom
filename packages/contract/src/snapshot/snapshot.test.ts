@@ -327,7 +327,7 @@ function textOf(snapshot: Snapshot): string {
 }
 
 describe('snapshotOf: a Service', () => {
-  test('the top level names the format, the kind, the Contract, the generator and the Definitions Packages at their versions', () => {
+  test('the top level names the format, the kind, the Contract and the generator, and no Definitions Package', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot).toMatchObject({
@@ -503,7 +503,7 @@ describe('snapshotOf: a Service', () => {
     { reach: 'a Guard at the end of the attached chain answers', code: 'DEEP', written: true },
     { reach: 'only a Private Endpoint lists', code: 'PURGED', written: true },
     {
-      reach: 'only a listed Definitions Package declares, and no Endpoint reaches',
+      reach: 'only an imported Definitions Package declares, and no Endpoint reaches',
       code: 'UNUSED',
       written: false,
     },

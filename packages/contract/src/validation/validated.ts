@@ -37,8 +37,8 @@ export type ValidatedSubscription = LocatedSubscription & { readonly service: st
 
 /**
  * The declarations of a valid root as gathered, in the root's order: the root itself, its Groups,
- * Endpoints by identity, Guards and codes with whether the root reaches them, each code with its first
- * declaration, the Standard Rejections resolved, the Dependencies by Provider, and the Message
+ * Endpoints by identity, the Guards and codes it reaches, each code with its one declaration and
+ * the Definitions Package each came from, the Standard Rejections resolved, the Dependencies by Provider, and the Message
  * Versions and Subscriptions. The Snapshot's writer puts them in canonical form.
  */
 export type ValidatedDeclarations = {

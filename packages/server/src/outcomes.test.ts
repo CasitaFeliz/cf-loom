@@ -308,7 +308,7 @@ describe('serve: a Rejection', () => {
     });
   });
 
-  test('a Standard Rejection resolves to the listed Definitions Package’s code, status and message, with no body key', async () => {
+  test('a Standard Rejection resolves to the code, status and message of the Definitions Package named as standardRejections, with no body key', async () => {
     const { http } = serveWith(() => reject(notFound));
 
     const response = await http(getRequest.clone());

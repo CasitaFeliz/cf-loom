@@ -2202,7 +2202,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Guard a listed Definitions Package’s entry does not export is the Service’s own, and needs a file that exports it', () => {
+  test('a Guard an imported Definitions Package’s entry does not export is the Service’s own, and needs a file that exports it', () => {
     const definitions = withDefinitionsGuard();
     const project = aProject({
       ...definitions,

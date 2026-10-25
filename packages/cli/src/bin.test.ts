@@ -175,8 +175,8 @@ function installedDefinitions(
   };
 }
 
-/** Lists `@org/definitions` on the project's root. */
-function listDefinitions(project: string): void {
+/** Names `@org/definitions` as the project root's `standardRejections`. */
+function takeStandardRejections(project: string): void {
   write(project, {
     'src/contract/index.ts': read(project, 'src/contract/index.ts')
       .replace(
@@ -573,13 +573,13 @@ describe('cf-loom generate', () => {
     expect(ran.stderr).toContain('run cf-loom init');
   });
 
-  test('a listed Definitions Package is written at the exact version installed, with its origins', () => {
+  test('an imported Definitions Package is recorded at the exact version installed, in its origins', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
       ...installedDefinitions('node_modules'),
     });
-    listDefinitions(project);
+    takeStandardRejections(project);
 
     const ran = cfLoom(project, 'generate');
 
@@ -1109,13 +1109,13 @@ describe('cf-loom generate: what it refuses', () => {
     );
   });
 
-  test('a listed Definitions Package is resolved from the root file, not the working directory', () => {
+  test('an imported Definitions Package is resolved from the root file, not the working directory', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
       ...installedDefinitions('src/contract/node_modules'),
     });
-    listDefinitions(project);
+    takeStandardRejections(project);
 
     const ran = cfLoom(project, 'generate');
 
@@ -1124,13 +1124,13 @@ describe('cf-loom generate: what it refuses', () => {
     expect(snapshot.codes.MISSING.origin).toBe('@org/definitions@4.2.0');
   });
 
-  test('a listed Definitions Package whose package.json has no version is a tooling error', () => {
+  test('an imported Definitions Package whose package.json has no version is a tooling error once the Contract takes from it', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
       ...installedDefinitions('node_modules', { version: undefined }),
     });
-    listDefinitions(project);
+    takeStandardRejections(project);
 
     const ran = cfLoom(project, 'generate');
 
@@ -1460,10 +1460,10 @@ function definitionsModuleOf(code: string): string {
   ].join('\n');
 }
 
-/** A Service root, named `name`, that imports `imports` and lists `listed` as its Definitions Packages. */
-function aServiceListing(
+/** A Service root, named `name`, that imports `imports` and takes its Standard Rejections from `source`. */
+function aServiceTaking(
   imports: readonly string[],
-  listed: string,
+  source: string,
   name = 'orders-service',
 ): Readonly<Record<string, string>> {
   return {
@@ -1471,7 +1471,7 @@ function aServiceListing(
       "import { defineContract } from '@cf-loom/contract';",
       ...imports,
       '',
-      `export const contract = defineContract({ name: '${name}', standardRejections: ${listed} });`,
+      `export const contract = defineContract({ name: '${name}', standardRejections: ${source} });`,
       '',
     ].join('\n'),
   };
@@ -1536,8 +1536,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
   test('a Service of one scope takes its Standard Rejections from a Definitions Package of another, named after its package.json', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@payments/svc', type: 'module' }),
-      'cf-loom.config.ts': config.replace("'@org'", "'@payments'"),
-      ...aServiceListing(
+      ...aServiceTaking(
         ["import { definitions } from '@platform/definitions';"],
         'definitions',
         'svc',
@@ -1607,7 +1606,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     ({ nodeOptions, entry, code }) => {
       const project = aProject({
         'cf-loom.config.ts': config,
-        ...aServiceListing(["import { definitions } from '@org/definitions';"], 'definitions'),
+        ...aServiceTaking(["import { definitions } from '@org/definitions';"], 'definitions'),
         ...anInstalledPackage('@org/definitions', { exports: { '.': entry } }, conditionFiles),
       });
 
@@ -1668,7 +1667,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
 
   test('a standardRejections no imported package exports is a tooling error', () => {
     const project = aProject({
-      ...aServiceListing(["import { definitions } from './definitions.ts';"], 'definitions'),
+      ...aServiceTaking(["import { definitions } from './definitions.ts';"], 'definitions'),
       'src/contract/definitions.ts': definitionsModuleOf('MISSING'),
     });
 
@@ -1684,7 +1683,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
 
   test('a standardRejections two packages export, each importing the other, is a tooling error naming both', () => {
     const project = aProject({
-      ...aServiceListing(["import { definitions } from '@org/definitions';"], 'definitions'),
+      ...aServiceTaking(["import { definitions } from '@org/definitions';"], 'definitions'),
       ...anInstalledPackage(
         '@org/definitions',
         { exports: './index.js' },
@@ -1713,7 +1712,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
 
   test('a standardRejections reached only through a package re-exporting it belongs to the package it comes from', () => {
     const project = aProject({
-      ...aServiceListing(["import { definitions } from '@w/wrapper';"], 'definitions'),
+      ...aServiceTaking(["import { definitions } from '@w/wrapper';"], 'definitions'),
       ...anInstalledPackage(
         '@org/definitions',
         { exports: './index.js' },
