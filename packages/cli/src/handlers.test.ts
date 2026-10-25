@@ -2176,50 +2176,6 @@ describe('cf-loom generate: what it refuses', () => {
     expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(false);
   });
 
-  test('an Endpoint exported only under another name exits 1 naming it', () => {
-    const service = aService();
-    const project = aProject({
-      ...service,
-      'src/contract/endpoints/orders/create-order.endpoint.ts': (
-        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
-      ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
-        'import { createOrder }',
-        'import { createOrderEndpoint as createOrder }',
-      ),
-    });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'endpoints.createOrder is not exported as createOrder\n',
-    });
-  });
-
-  test('an Endpoint exported only as default exits 1 naming it', () => {
-    const service = aService();
-    const project = aProject({
-      ...service,
-      'src/contract/endpoints/orders/create-order.endpoint.ts': (
-        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
-      ).replace('export const createOrder =', 'export default'),
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
-        'import { createOrder }',
-        'import createOrder',
-      ),
-    });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'endpoints.createOrder is not exported as createOrder\n',
-    });
-  });
-
   test('a local Guard exported by no file exits 1 naming it', () => {
     const service = aService();
     const project = aProject({
@@ -2243,7 +2199,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Guard its Definitions Package exports under another name exits 1 naming it', () => {
+  test('a Guard a listed Definitions Package reaches but its entry does not export exits 1 naming the package', () => {
     const definitions = withDefinitionsGuard();
     const project = aProject({
       ...definitions,
@@ -2251,10 +2207,12 @@ describe('cf-loom generate: what it refuses', () => {
         definitions['node_modules/@org/definitions/index.js'] ?? ''
       )
         .replace('export const userToken =', 'const userToken =')
-        .concat('export { userToken as token };\n'),
+        .concat('export const guards = [userToken];\n'),
       'src/contract/endpoints/orders/create-order.endpoint.ts': (
         definitions['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
-      ).replace('{ userToken }', '{ token as userToken }'),
+      )
+        .replace('{ userToken }', '{ guards }')
+        .replace('guards: [userToken]', 'guards: [guards[0]]'),
     });
 
     const ran = cfLoom(project, 'generate');
@@ -2262,7 +2220,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'guards.userToken is not exported as userToken by @org/definitions\n',
+      stderr: 'guards.userToken is not exported by @org/definitions\n',
     });
   });
 
@@ -2344,6 +2302,44 @@ describe('cf-loom generate: what it refuses', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toEqual({ status: 1, stdout: '', stderr: `${renamedGetOrderLine}\n` });
+  });
+
+  test('an Endpoint whose name alone changed prints the line for its old Handler and none about its export', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/endpoints/orders/get-order.endpoint.ts', (text) =>
+      text.replace("name: 'getOrder'", "name: 'fetchOrder'"),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${renamedGetOrderLine}\n` });
+  });
+
+  test('an Endpoint whose name alone changed generates once its Handler is moved as the line says', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const code = implement(project, 'src/endpoints/orders/get-order.handler.ts', 'get');
+    edit(project, 'src/contract/endpoints/orders/get-order.endpoint.ts', (text) =>
+      text.replace("name: 'getOrder'", "name: 'fetchOrder'"),
+    );
+    renameSync(
+      join(project, 'src/endpoints/orders/get-order.handler.ts'),
+      join(project, 'src/endpoints/orders/fetch-order.handler.ts'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/endpoints/orders/fetch-order.handler.ts')).toBe(code);
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      importOf('fetchOrderEndpointHandler', './endpoints/orders/fetch-order.handler.ts'),
+    );
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      '    fetchOrder: fetchOrderEndpointHandler,\n',
+    );
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('a Handler of an Endpoint no longer declared lists every Endpoint that lacks its Handler', () => {
@@ -2745,60 +2741,34 @@ describe('cf-loom generate: what it refuses', () => {
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
   });
 
-  test('a Command’s Message Version exported only under another name exits 1 naming it', () => {
-    const project = aProject(aMessagingService());
-    edit(project, 'src/contract/messages.ts', (text) =>
-      text
-        .replace('export const chargeCardV2 =', 'const chargeCardV2 =')
-        .concat('export { chargeCardV2 as chargeCardNext };\n'),
-    );
-    edit(project, 'src/contract/index.ts', (text) =>
-      text.replace('  chargeCardV2,\n', '  chargeCardNext as chargeCardV2,\n'),
-    );
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'commands.ChargeCard@2 is not exported as chargeCardV2\n',
-    });
-  });
-
-  test('a Subscription exported only under another name exits 1 naming it', () => {
-    const project = aProject(aMessagingService());
-    edit(project, 'src/contract/subscriptions.ts', (text) =>
-      text.replace('export const auditCreated =', 'export const auditCreatedNext ='),
-    );
-    edit(project, 'src/contract/index.ts', (text) =>
-      text.replace('import { auditCreated,', 'import { auditCreatedNext as auditCreated,'),
-    );
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'subscriptions.auditCreated is not exported as auditCreated\n',
-    });
-  });
-
-  test('every Endpoint, Command and Subscription not exported under its name is named, the Endpoints first', () => {
+  test('every Endpoint, Command and Subscription that no file exports is named, the Endpoints first', () => {
     const service = aMessagingService({
       subscriptions: ['notifyOnSettled', 'auditCreated', inlineSubscription('auditOrders')],
     });
     const project = aProject({
-      ...service,
-      'src/contract/endpoints/orders/create-order.endpoint.ts': (
-        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
-      ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
-      'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '').replace(
-        'export const refundCardV1 =',
-        'export const refundCard =',
-      ),
+      ...without(service, 'src/contract/endpoints/orders/create-order.endpoint.ts'),
+      'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '')
+        .replace('export const refundCardV1 =', 'const refundCardV1 =')
+        .concat('export const commandList = [refundCardV1];\n'),
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
-        .replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }')
-        .replace('  refundCardV1,\n', '  refundCard as refundCardV1,\n'),
+        .replace(
+          `${importOf('{ createOrder }', './endpoints/orders/create-order.endpoint.ts')}\n`,
+          '',
+        )
+        .replace('  refundCardV1,\n', '  commandList,\n')
+        .replace('chargeCardV2, refundCardV1]', 'chargeCardV2, commandList[0]]')
+        .replace(
+          'const orders = defineGroup({',
+          [
+            "import { defineEndpoint } from '@cf-loom/contract';",
+            "import { z } from 'zod';",
+            'const createOrder = defineEndpoint({',
+            "  name: 'createOrder', method: 'POST', path: '/orders', visibility: 'private',",
+            "  description: 'createOrder', success: { status: 200, body: z.object({}) },",
+            '});',
+            'const orders = defineGroup({',
+          ].join('\n'),
+        ),
     });
 
     const ran = cfLoom(project, 'generate');
@@ -2807,8 +2777,8 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr: lines([
-        'endpoints.createOrder is not exported as createOrder',
-        'commands.RefundCard@1 is not exported as refundCardV1',
+        'endpoints.createOrder is exported by no file under src/contract/',
+        'commands.RefundCard@1 is exported by no file under src/contract/',
         'subscriptions.auditOrders is exported by no file under src/contract/',
       ]),
     });
@@ -3069,6 +3039,335 @@ describe('cf-loom generate: the Service type-checks', () => {
       expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
     },
   );
+
+  describe('a declaration exported under another name', () => {
+    test('an Endpoint exported under another name generates a stub that imports it under its name, and passes tsc', () => {
+      const service = aService();
+      const project = aProject({
+        ...service,
+        'src/contract/endpoints/orders/create-order.endpoint.ts': (
+          service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+        ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
+        'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+          'import { createOrder }',
+          'import { createOrderEndpoint as createOrder }',
+        ),
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/endpoints/orders/create-order.handler.ts')).toBe(
+        lines([
+          "import { handle } from '@cf-loom/handlers';",
+          "import { createOrderEndpoint as createOrder } from '../../contract/endpoints/orders/create-order.endpoint.ts';",
+          '',
+          'export default handle.stub(createOrder);',
+        ]),
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    test('a local Guard exported under another name generates a stub that imports it under its name, and passes tsc', () => {
+      const service = aService();
+      const project = aProject({
+        ...service,
+        'src/contract/guards/api-key.guard.ts': apiKeyGuard.replace(
+          'export const apiKey =',
+          'export const apiKeyGuard =',
+        ),
+        'src/contract/endpoints/orders/get-order.endpoint.ts': (
+          service['src/contract/endpoints/orders/get-order.endpoint.ts'] ?? ''
+        ).replace('{ apiKey }', '{ apiKeyGuard as apiKey }'),
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/guards/api-key.handler.ts')).toBe(
+        lines([
+          "import { handle } from '@cf-loom/handlers';",
+          "import { apiKeyGuard as apiKey } from '../contract/guards/api-key.guard.ts';",
+          '',
+          'export default handle.stub(apiKey);',
+        ]),
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    test('an Endpoint exported only as default generates a stub that imports default under its name, and passes tsc', () => {
+      const service = aService();
+      const project = aProject({
+        ...service,
+        'src/contract/endpoints/orders/create-order.endpoint.ts': (
+          service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+        ).replace('export const createOrder =', 'export default'),
+        'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+          'import { createOrder }',
+          'import createOrder',
+        ),
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/endpoints/orders/create-order.handler.ts')).toBe(
+        lines([
+          "import { handle } from '@cf-loom/handlers';",
+          "import { default as createOrder } from '../../contract/endpoints/orders/create-order.endpoint.ts';",
+          '',
+          'export default handle.stub(createOrder);',
+        ]),
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    test('a Guard its Definitions Package exports under another name is imported from the package under its name, and passes tsc', () => {
+      const definitions = withDefinitionsGuard();
+      const project = aProject({
+        ...definitions,
+        'node_modules/@org/definitions/index.js': (
+          definitions['node_modules/@org/definitions/index.js'] ?? ''
+        )
+          .replace('export const userToken =', 'const userToken =')
+          .concat('export { userToken as token };\n'),
+        'node_modules/@org/definitions/index.d.ts': lines([
+          "import type { Definitions, Guard } from '@cf-loom/contract';",
+          "export declare const token: Guard<{ readonly name: 'userToken'; readonly description: 'A user' }>;",
+          "export declare const definitions: Definitions<{ readonly name: 'definitions'; readonly guards: readonly [typeof token] }>;",
+        ]),
+        'src/contract/endpoints/orders/create-order.endpoint.ts': (
+          definitions['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+        ).replace('{ userToken }', '{ token as userToken }'),
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/guards/user-token.handler.ts')).toBe(
+        lines([
+          "import { handle } from '@cf-loom/handlers';",
+          "import { token as userToken } from '@org/definitions';",
+          '',
+          'export default handle.stub(userToken);',
+        ]),
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    test('renaming only the export of an Endpoint, its importers following, leaves every generated file as it was', () => {
+      const service = aService();
+      const project = aProject(service);
+      cfLoom(project, 'generate');
+      const before = writtenBy(project);
+      edit(project, 'src/contract/endpoints/orders/get-order.endpoint.ts', (text) =>
+        text.replace('export const getOrder =', 'export const fetchOrder ='),
+      );
+      edit(project, 'src/contract/index.ts', (text) =>
+        text.replace('import { getOrder }', 'import { fetchOrder as getOrder }'),
+      );
+
+      const ran = cfLoom(project, 'generate');
+      const verified = cfLoom(project, 'verify');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(writtenBy(project)).toEqual(before);
+      expect(verified).toMatchObject({ status: 0, stderr: '' });
+    });
+
+    test('a declaration exported from two files is imported from the first file in code point order, under its name there', () => {
+      const project = aProject({
+        ...aService(),
+        'src/contract/aliases.ts': lines([
+          importOf('{ createOrder }', './endpoints/orders/create-order.endpoint.ts'),
+          'export { createOrder as order };',
+        ]),
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/endpoints/orders/create-order.handler.ts')).toContain(
+        "import { order as createOrder } from '../../contract/aliases.ts';",
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    test('a declaration exported under two names by one file is imported under the first name in code point order', () => {
+      const service = aService();
+      const project = aProject({
+        ...service,
+        'src/contract/guards/api-key.guard.ts': `${apiKeyGuard}export { apiKey as anApiKey };\n`,
+        'tsconfig.json': tsconfig,
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/guards/api-key.handler.ts')).toContain(
+        "import { anApiKey as apiKey } from '../contract/guards/api-key.guard.ts';",
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+
+    /** What a file exports a declaration as, from its name in code, for each class of export name. */
+    const exportNameClasses: readonly (readonly [string, (name: string) => string])[] = [
+      ['the same as its name in code', (name) => name],
+      ['another identifier', (name) => `${name}Declared`],
+      ['handle', () => 'handle'],
+      ['a reserved word', () => 'class'],
+      ['default', () => 'default'],
+      ['no identifier', () => "'get-order'"],
+    ];
+
+    /** A file declaring `declaration` and exporting it as `exported`, which `importOfName` imports. */
+    function exportedAs(exported: string, declaration: readonly string[], more: readonly string[]) {
+      const exporting =
+        exported === 'default' ? 'export default declared;' : `export { declared as ${exported} };`;
+      return lines([...more, `const declared = ${declaration.join(' ')};`, exporting]);
+    }
+
+    /** The import that binds a declaration exported as `exported` to its name in code. */
+    function importOfName(exported: string, name: string, specifier: string): string {
+      const imported = exported === 'default' ? name : `{ ${exported} as ${name} }`;
+      return `import ${imported} from '${specifier}';`;
+    }
+
+    /** A Service whose Endpoint, Guard, Command’s Message Version and Subscription are exported as `exportNameOf` says. */
+    function exportedAsService(exportNameOf: (name: string) => string): Record<string, string> {
+      const guard = exportNameOf('apiKey');
+      const endpoint = exportNameOf('createOrder');
+      const command = exportNameOf('chargeCardV1');
+      const subscription = exportNameOf('auditCreated');
+      return {
+        'package.json': manifest,
+        'cf-loom.config.ts': config,
+        'src/contract/guards/api-key.guard.ts': exportedAs(
+          guard,
+          ["defineGuard({ name: 'apiKey', description: 'An API key' })"],
+          ["import { defineGuard } from '@cf-loom/contract';"],
+        ),
+        'src/contract/endpoints/create-order.endpoint.ts': exportedAs(
+          endpoint,
+          [
+            "defineEndpoint({ name: 'createOrder', method: 'POST', path: '/orders',",
+            "visibility: 'private', description: 'Create', guards: [apiKey],",
+            'success: { status: 200, body: z.object({}) } })',
+          ],
+          [
+            "import { defineEndpoint } from '@cf-loom/contract';",
+            "import { z } from 'zod';",
+            importOfName(guard, 'apiKey', '../guards/api-key.guard.ts'),
+          ],
+        ),
+        'src/contract/events/order-created.v1.event.ts': lines([
+          "import { defineEvent } from '@cf-loom/contract';",
+          "import { z } from 'zod';",
+          '',
+          'export const orderCreatedV1 = defineEvent({',
+          "  name: 'OrderCreated',",
+          '  version: 1,',
+          "  visibility: 'internal',",
+          "  description: 'Created',",
+          '  body: z.object({ orderId: z.uuid() }),',
+          '});',
+        ]),
+        'src/contract/commands/charge-card.v1.command.ts': exportedAs(
+          command,
+          [
+            "defineCommand({ name: 'ChargeCard', version: 1, description: 'Charge',",
+            'body: z.object({ orderId: z.uuid() }) })',
+          ],
+          ["import { defineCommand } from '@cf-loom/contract';", "import { z } from 'zod';"],
+        ),
+        'src/contract/subscriptions/audit-created.subscription.ts': exportedAs(
+          subscription,
+          [
+            "defineSubscription({ name: 'auditCreated', description: 'Audit', event: orderCreatedV1 })",
+          ],
+          [
+            "import { defineSubscription } from '@cf-loom/contract';",
+            "import { orderCreatedV1 } from '../events/order-created.v1.event.ts';",
+          ],
+        ),
+        'src/contract/index.ts': lines([
+          "import { defineContract, defineGroup } from '@cf-loom/contract';",
+          importOfName(command, 'chargeCardV1', './commands/charge-card.v1.command.ts'),
+          importOfName(endpoint, 'createOrder', './endpoints/create-order.endpoint.ts'),
+          importOf('{ orderCreatedV1 }', './events/order-created.v1.event.ts'),
+          importOfName(
+            subscription,
+            'auditCreated',
+            './subscriptions/audit-created.subscription.ts',
+          ),
+          '',
+          'const orders = defineGroup({',
+          "  name: 'orders',",
+          "  description: 'Orders',",
+          '  endpoints: [createOrder],',
+          '  events: [orderCreatedV1],',
+          '  commands: [chargeCardV1],',
+          '  subscriptions: [auditCreated],',
+          '});',
+          '',
+          "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
+        ]),
+        'tsconfig.json': tsconfig,
+      };
+    }
+
+    test.each(exportNameClasses)(
+      'every declaration exported as %s generates code that passes tsc',
+      (_class, exportNameOf) => {
+        const project = aProject(exportedAsService(exportNameOf));
+
+        const ran = cfLoom(project, 'generate');
+
+        expect(ran).toMatchObject({ status: 0, stderr: '' });
+        expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+      },
+    );
+
+    test('a Command’s Message Version and a Subscription exported under other names are imported by the readers file under theirs, and pass tsc', () => {
+      const project = aProject({ ...aMessagingService(), 'tsconfig.json': tsconfig });
+      edit(project, 'src/contract/messages.ts', (text) =>
+        text
+          .replace('export const chargeCardV2 =', 'const chargeCardV2 =')
+          .concat('export { chargeCardV2 as chargeCardNext };\n'),
+      );
+      edit(project, 'src/contract/subscriptions.ts', (text) =>
+        text.replace('export const auditCreated =', 'export const auditCreatedNext ='),
+      );
+      edit(project, 'src/contract/index.ts', (text) =>
+        text
+          .replace('  chargeCardV2,\n', '  chargeCardNext as chargeCardV2,\n')
+          .replace('import { auditCreated,', 'import { auditCreatedNext as auditCreated,'),
+      );
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      const readers = read(project, 'src/readers.generated.ts');
+      expect(readers).toContain(
+        importOf(
+          '{ chargeCardNext as chargeCardV2Command, chargeCardV1 as chargeCardV1Command, refundCardV1 as refundCardV1Command }',
+          './contract/messages.ts',
+        ),
+      );
+      expect(readers).toContain(
+        importOf(
+          '{ auditCreatedNext as auditCreatedSubscription, notifyOnSettled as notifyOnSettledSubscription }',
+          './contract/subscriptions.ts',
+        ),
+      );
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    });
+  });
 });
 
 describe('cf-loom verify: the Handler map, readers and Handlers', () => {
@@ -3282,23 +3581,23 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     );
   });
 
-  test('verify exits 1 on an Endpoint exported only under another name, as generate does', () => {
-    const project = aProject(aService());
+  test('verify exits 0 on a Service whose Endpoint is exported under another name', () => {
+    const service = aService();
+    const project = aProject({
+      ...service,
+      'src/contract/endpoints/orders/create-order.endpoint.ts': (
+        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+      ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        'import { createOrder }',
+        'import { createOrderEndpoint as createOrder }',
+      ),
+    });
     cfLoom(project, 'generate');
-    edit(project, 'src/contract/endpoints/orders/create-order.endpoint.ts', (text) =>
-      text.replace('export const createOrder =', 'export const createOrderEndpoint ='),
-    );
-    edit(project, 'src/contract/index.ts', (text) =>
-      text.replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }'),
-    );
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'endpoints.createOrder is not exported as createOrder\n',
-    });
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('verify exits 1 naming the readers file out of date after a Command’s Message Version is exported from another file', () => {

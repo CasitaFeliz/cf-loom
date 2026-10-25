@@ -13,6 +13,7 @@ export {
   defaultImportOf,
   defaultImportsOf,
   headerOf,
+  importedNameOf,
   moduleTextOf,
   namedImportOf,
   namespaceImportOf,

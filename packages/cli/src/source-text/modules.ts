@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { stringLiteralOf } from './literals.ts';
+import { keyOf, stringLiteralOf } from './literals.ts';
 
 /** Which cf-loom command writes a generated file, as its first line says. */
 export type GeneratingCommand = 'generate' | 'package';
@@ -17,6 +17,14 @@ export function namedImportOf(names: readonly string[], specifier: string): stri
 /** An import of a whole module under one name. */
 export function namespaceImportOf(local: string, specifier: string): string {
   return `import * as ${local} from ${stringLiteralOf(specifier)};`;
+}
+
+/**
+ * An export as an import list names it under `local`: bare when it is called `local`, else
+ * aliased, quoted when its name is no identifier.
+ */
+export function importedNameOf(exported: string, local: string): string {
+  return exported === local ? local : `${keyOf(exported)} as ${local}`;
 }
 
 /** An import of a module's default export under a local name. */
