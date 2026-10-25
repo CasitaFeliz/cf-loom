@@ -615,28 +615,35 @@ describe('applying a broker plan to a durable consumer cf-loom cannot pull from'
     },
   );
 
-  test('a durable consumer that does not acknowledge explicitly, which NATS does not change, rejects apply and is still refused by consume', async () => {
-    const prefix = aPrefix();
-    const orders = anOrders(prefix);
-    await arrangeOrdersStream(orders);
-    await arrangeDurable(server.url, orders.stream, {
-      durable_name: orders.chargeDurable,
-      filter_subject: orders.charge,
-      ack_policy: 'none',
-    });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
-    const opened = await messaging(contract, broker);
-    onTestFinished(() => opened.close());
+  test.each([
+    ['does not acknowledge explicitly', { ack_policy: 'none' as const }, 'has the ack policy none'],
+    ['is a push consumer', { deliver_subject: 'somewhere.else' }, 'is a push consumer'],
+  ])(
+    'a durable consumer that %s, which NATS does not change, rejects apply and is still refused by consume',
+    async (_name, settings, difference) => {
+      const prefix = aPrefix();
+      const orders = anOrders(prefix);
+      await arrangeOrdersStream(orders);
+      await arrangeDurable(server.url, orders.stream, {
+        durable_name: orders.chargeDurable,
+        filter_subject: orders.charge,
+        ack_policy: 'explicit',
+        ...settings,
+      });
+      const broker = jetstream({ connect: aConnect().connect, prefix });
+      const opened = await messaging(contract, broker);
+      onTestFinished(() => opened.close());
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+      const error = await rejectionOf(broker.apply(orders.plan, testLimits));
 
-    expect(error.message).toContain(
-      `The durable consumer ${orders.chargeDurable} could not be applied: `,
-    );
-    await expect(opened.consume(chargeHandlers())).rejects.toThrow(
-      `The durable consumer ${orders.chargeDurable} has the ack policy none, not explicit`,
-    );
-  });
+      expect(error.message).toContain(
+        `The durable consumer ${orders.chargeDurable} could not be applied: `,
+      );
+      await expect(opened.consume(chargeHandlers())).rejects.toThrow(
+        `The durable consumer ${orders.chargeDurable} ${difference}`,
+      );
+    },
+  );
 });
 
 describe('what applying a broker plan refuses', () => {

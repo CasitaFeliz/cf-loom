@@ -38,7 +38,7 @@ async function createOrUpdate(
   }
 }
 
-/** nats.js types its optional settings without `undefined`, yet an update it is given a key as `undefined` for writes over what the durable consumer holds: the one way through its typed API to clear a setting. */
+/** nats.js types its optional settings without `undefined`, yet its `update` sends a key given as `undefined` as cleared: the one way through its typed API to clear a setting. */
 function natsSettingsOf(settings: DurableSettings): Partial<ConsumerConfig> {
   return settings as unknown as Partial<ConsumerConfig>;
 }

@@ -1,26 +1,27 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { AckPolicy, type ConsumerConfig } from '@nats-io/jetstream';
 
-type PriorityKey = 'priority_groups' | 'priority_policy' | 'priority_timeout';
+type ClearedKey = 'deliver_subject' | 'priority_groups' | 'priority_policy' | 'priority_timeout';
 
-/** A durable consumer's settings as `apply` sends them: NATS's own, with the priority settings named so they are always cleared. */
-export type DurableSettings = Omit<Partial<ConsumerConfig>, PriorityKey> & {
-  readonly [Key in PriorityKey]: undefined;
+/** A durable consumer's settings as `apply` sends them: NATS's own, with the settings of a consumer cf-loom does not pull from named so they are always cleared. */
+export type DurableSettings = Omit<Partial<ConsumerConfig>, ClearedKey> & {
+  readonly [Key in ClearedKey]: undefined;
 };
 
 /** The settings `durableShapeOf` names, each with the one value a pull consumer of cf-loom's has. */
-type DurableShape = Pick<DurableSettings, PriorityKey> & {
+type DurableShape = Pick<DurableSettings, ClearedKey> & {
   readonly ack_policy: AckPolicy;
   readonly filter_subject: string;
   readonly headers_only: false;
 };
 
-/** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject, its Messages' bodies delivered and no priority groups. */
+/** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject, its Messages' bodies delivered, no deliver subject and no priority groups. */
 export function durableShapeOf(subject: string): DurableShape {
   return {
     ack_policy: AckPolicy.Explicit,
     filter_subject: subject,
     headers_only: false,
+    deliver_subject: undefined,
     priority_groups: undefined,
     priority_policy: undefined,
     priority_timeout: undefined,
