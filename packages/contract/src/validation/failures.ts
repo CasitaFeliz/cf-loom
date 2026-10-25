@@ -44,13 +44,9 @@ export type Rule =
   | 'qualifier-keys'
   | 'rejection-status'
   | 'rejection-once'
-  | 'code-status-conflict'
-  | 'code-body-conflict'
   | 'reserved-code'
   | 'standard-rejection-listed'
   | 'standard-rejection-on-guard'
-  | 'standard-code-redefined'
-  | 'standard-codes-distinct'
   | 'dependency-selection'
   | 'application-dependency'
   | 'dependency-provider'
@@ -65,6 +61,7 @@ export type Rule =
   | 'definitions-export'
   | 'definitions-unexported'
   | 'definitions-ambiguous'
+  | 'code-once'
   | 'package-name';
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */

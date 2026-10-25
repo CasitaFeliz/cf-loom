@@ -1929,6 +1929,56 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     });
   });
 
+  test('a code two imported Definitions Packages each declare, both reached, exits 1 naming both, and nothing is written', () => {
+    const packageOf = (name: string, guard: string, message: string) =>
+      anInstalledPackage(
+        name,
+        { exports: './index.js' },
+        {
+          'index.js': [
+            "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';",
+            `export const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: '${message}' });`,
+            `export const ${guard} = defineGuard({ name: '${guard}', description: 'A guard', rejections: [forbidden] });`,
+            'export const definitions = defineDefinitions({});',
+            '',
+          ].join('\n'),
+        },
+      );
+    const project = aProject({
+      'src/contract/index.ts': [
+        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        "import { auth } from '@org/auth-definitions';",
+        "import { billing } from '@org/billing-definitions';",
+        '',
+        'export const ping = defineEndpoint({',
+        "  name: 'ping',",
+        "  method: 'GET',",
+        "  path: '/ping',",
+        "  visibility: 'public',",
+        "  description: 'Answers',",
+        '  guards: [auth, billing],',
+        '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
+        '});',
+        "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
+        "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+        '',
+      ].join('\n'),
+      ...packageOf('@org/auth-definitions', 'auth', 'Not allowed'),
+      ...packageOf('@org/billing-definitions', 'billing', 'Forbidden by billing'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'rejections.FORBIDDEN code-once: A code is declared once: FORBIDDEN (@org/auth-definitions@1.2.3 and @org/billing-definitions@1.2.3)\n',
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
   test('two installed copies of one Definitions Package, both reached, are two origins', () => {
     const copyOf = (version: string, code: string) => ({
       name: '@org/definitions',

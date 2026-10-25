@@ -157,14 +157,14 @@ A Contract describes shapes, not behavior. Only the nodes and checks listed in [
 
 Codes:
 
-- A code has one HTTP status and one body shape across the whole Contract, Guards and imported Definitions Packages included; two declarations with different shapes (see [Neutral](#neutral)), a union's options in another order included, fail `generate`.
+- A code is declared once across the Contract and the Definitions Packages it uses (see [Rejections](packages/contract/README.md#rejections) in the contract README), so it has one status, one body and one message.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status and body it last had, as a kept code is: another status is Breaking, and its body follows the rules of a Success.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new reserved code only comes with a cf-loom major.
 
 Standard Rejections:
 
-- The invalid-input and not-implemented Rejections are implicit on every Endpoint, since cf-loom's runtime produces them. The not-found Rejection is listed in an Endpoint's `rejections` like any Rejection, so adding it later is Additive. Neither a Contract nor a Definitions Package may declare a Rejection with the code a Standard Rejection resolves to, from the Definitions Package the Contract names as `standardRejections`, or cf-loom's defaults; each Standard Rejection resolves to a code of its own, and the resolved codes count among the codes for the one-status rule above.
+- The invalid-input and not-implemented Rejections are implicit on every Endpoint, since cf-loom's runtime produces them. The not-found Rejection is listed in an Endpoint's `rejections` like any Rejection, so adding it later is Additive. Neither a Contract nor a Definitions Package may declare a Rejection with the code a Standard Rejection resolves to, from the Definitions Package the Contract names as `standardRejections`, or cf-loom's defaults; a resolved code counts as a declaration of it (see the code rule above), so each Standard Rejection resolves to a code of its own.
 - A Definitions Package may declare the code, HTTP status and message of each Standard Rejection; without one, cf-loom's defaults apply, and the body of the invalid-input Rejection is always cf-loom's (see [Rejections](packages/contract/README.md#rejections) in the contract README). The Snapshot carries them resolved, so changing the Definitions Package or upgrading cf-loom shows up in the Compatibility Check.
 
 ### Messages

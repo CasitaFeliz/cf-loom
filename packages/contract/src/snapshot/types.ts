@@ -51,7 +51,7 @@ export type GuardSnapshot = {
   readonly rejections: readonly string[];
 };
 
-/** A code with its one status and body shape and its first declaration's message. */
+/** A code with its declaration's status, message and body shape. */
 export type CodeSnapshot = {
   readonly origin: Origin;
   readonly status: number;

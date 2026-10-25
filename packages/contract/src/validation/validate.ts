@@ -7,6 +7,7 @@ import {
 import type { SchemaNode } from '../walker/index.ts';
 import { openCompositionsOf, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
+import { codeOnceFailures } from './code-once.ts';
 import { exportFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
@@ -19,7 +20,7 @@ import { nameFailures } from './name-grammars.ts';
 import { packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { ambiguousFailures, ambiguousSchemaFailure, schemaOriginsOf } from './provenance.ts';
-import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
+import { rejectionFailures } from './rejections.ts';
 import {
   failuresAt,
   locatedSchemasOf,
@@ -104,6 +105,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...packageNameFailures(root, rootPackage.packageName),
     ...exportFailures(declarations, rootExports),
     ...ambiguousFailures(declarations, packages),
+    ...codeOnceFailures(declarations, packages),
     ...origins.ambiguous.map(ambiguousSchemaFailure),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
@@ -148,7 +150,6 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
   return [
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => qualifierFailures(endpoint, nodes)),
-    ...rejectionBodyFailures(declarations, nodes),
     ...messageBodyFailures(declarations, nodes),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),
   ];

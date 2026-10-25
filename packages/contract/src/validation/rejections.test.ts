@@ -31,15 +31,6 @@ const listing = {
   success: { status: 200, body: z.array(z.object({ id: z.uuid() })) },
 } as const;
 
-const creating = {
-  name: 'createOrder',
-  method: 'POST',
-  path: '/orders',
-  visibility: 'public',
-  description: 'Creates an order',
-  success: { status: 201, body: z.object({ id: z.uuid() }) },
-} as const;
-
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
   status: 409,
@@ -107,214 +98,6 @@ describe('validateContract: Rejection statuses', () => {
   });
 });
 
-describe('validateContract: one status and one body per code', () => {
-  test('two declarations of one code that agree validate', () => {
-    const lockedAgain = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Another message',
-      body: z.object({ lockedAt: z.iso.datetime() }),
-    });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [orderLocked] }),
-      defineEndpoint({ ...creating, rejections: [lockedAgain] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints).kind).toBe('valid');
-  });
-
-  test('two declarations of one code with different statuses fail', () => {
-    const lockedAgain = defineRejection({ code: 'ORDER_LOCKED', status: 423, message: 'Locked' });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [orderLocked] }),
-      defineEndpoint({ ...creating, rejections: [lockedAgain] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: ['rejections', 'ORDER_LOCKED', 'status'],
-          rule: 'code-status-conflict',
-          message: 'A code has one HTTP status across the Contract: ORDER_LOCKED is 409 and 423',
-        },
-        {
-          kind: 'declaration',
-          at: ['rejections', 'ORDER_LOCKED', 'body'],
-          rule: 'code-body-conflict',
-          message: 'A code has one body schema across the Contract: ORDER_LOCKED',
-        },
-      ],
-    });
-  });
-
-  test('two declarations of one code with different bodies fail', () => {
-    const lockedAgain = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: z.object({ until: z.iso.datetime() }),
-    });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [orderLocked] }),
-      defineEndpoint({ ...creating, rejections: [lockedAgain] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints)).toEqual(
-      failed(
-        ['rejections', 'ORDER_LOCKED', 'body'],
-        'code-body-conflict',
-        'A code has one body schema across the Contract: ORDER_LOCKED',
-      ),
-    );
-  });
-
-  test('two declarations of one code whose bodies differ only in annotations agree', () => {
-    const lockedAgain = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: z.object({ lockedAt: z.iso.datetime().describe('When it locked') }).describe('Lock'),
-    });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [orderLocked] }),
-      defineEndpoint({ ...creating, rejections: [lockedAgain] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints).kind).toBe('valid');
-  });
-
-  test('two declarations of one code whose union bodies differ only in their options’ descriptions agree', () => {
-    const declared = (body: z.ZodType) =>
-      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
-    const endpoints = [
-      defineEndpoint({
-        ...listing,
-        rejections: [declared(z.union([z.string().describe('a'), z.number().describe('z')]))],
-      }),
-      defineEndpoint({ ...creating, rejections: [declared(z.union([z.string(), z.number()]))] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints).kind).toBe('valid');
-  });
-
-  test('two declarations of one code whose union bodies list the same options in another order fail', () => {
-    const declared = (body: z.ZodType) =>
-      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [declared(z.union([z.string(), z.number()]))] }),
-      defineEndpoint({ ...creating, rejections: [declared(z.union([z.number(), z.string()]))] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints)).toEqual(
-      failed(
-        ['rejections', 'ORDER_REFUSED', 'body'],
-        'code-body-conflict',
-        'A code has one body schema across the Contract: ORDER_REFUSED',
-      ),
-    );
-  });
-
-  test('two declarations of one code whose intersection bodies differ only in their items’ descriptions agree', () => {
-    const declared = (body: z.ZodType) =>
-      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
-    const described = z.intersection(
-      z.string().min(1).describe('a'),
-      z.string().max(10).describe('z'),
-    );
-    const bare = z.intersection(z.string().min(1), z.string().max(10));
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [declared(described)] }),
-      defineEndpoint({ ...creating, rejections: [declared(bare)] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints).kind).toBe('valid');
-  });
-
-  test('a Standard Rejection’s resolved code joins the one-status rule', () => {
-    const definitions = defineDefinitions({
-      standardRejections: { notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' } },
-    });
-    const missing = defineRejection({ code: 'NOT_FOUND', status: 410, message: 'Gone' });
-    const orders = defineGroup({
-      name: 'orders',
-      description: 'Orders',
-      endpoints: [defineEndpoint({ ...listing, rejections: [missing] })],
-    });
-    const contract = defineContract({
-      name: 'orders-service',
-      standardRejections: definitions,
-      groups: [orders],
-    });
-
-    expect(validateInPackage(contract)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          at: ['rejections', 'NOT_FOUND', 'code'],
-          rule: 'standard-code-redefined',
-          message:
-            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
-        },
-        {
-          kind: 'declaration',
-          at: ['rejections', 'NOT_FOUND', 'status'],
-          rule: 'code-status-conflict',
-          message: 'A code has one HTTP status across the Contract: NOT_FOUND is 404 and 410',
-        },
-      ],
-    });
-  });
-
-  test('a null body beside a bodiless declaration of one code fails once, as no schema', () => {
-    const locked = defineRejection({ code: 'LOCKED', status: 423, message: 'Locked' });
-    const lockedNull = defineRejection({
-      code: 'LOCKED',
-      status: 423,
-      message: 'Locked',
-      body: null as unknown as z.ZodString,
-    });
-    const endpoints = [
-      defineEndpoint({ ...listing, rejections: [locked] }),
-      defineEndpoint({ ...creating, rejections: [lockedNull] }),
-    ] as const;
-
-    expect(validateEndpoints(endpoints)).toEqual(
-      failed(['rejections', 'LOCKED', 'body'], 'not-a-schema', 'body is not a zod schema'),
-    );
-  });
-
-  test('a Guard’s Rejection disagreeing with an Endpoint’s on one code fails', () => {
-    const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
-    const forbiddenWithBody = defineRejection({
-      code: 'FORBIDDEN',
-      status: 403,
-      message: 'Forbidden',
-      body: z.object({ missing: z.string() }),
-    });
-    const permission = defineGuard({
-      name: 'permission',
-      description: 'A permission',
-      rejections: [forbidden],
-    });
-    const endpoint = defineEndpoint({
-      ...listing,
-      guards: [permission],
-      rejections: [forbiddenWithBody],
-    });
-
-    expect(validateEndpoints([endpoint])).toEqual(
-      failed(
-        ['rejections', 'FORBIDDEN', 'body'],
-        'code-body-conflict',
-        'A code has one body schema across the Contract: FORBIDDEN',
-      ),
-    );
-  });
-});
-
 describe('validateContract: an Endpoint or a Guard lists each Rejection once', () => {
   const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
 
@@ -343,9 +126,23 @@ describe('validateContract: an Endpoint or a Guard lists each Rejection once', (
 
     const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
 
-    expect(validated).toEqual(
-      failed([...endpointAt, 'rejections', 1], 'rejection-once', 'ORDER_LOCKED is listed twice'),
-    );
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: [...endpointAt, 'rejections', 1],
+          rule: 'rejection-once',
+          message: 'ORDER_LOCKED is listed twice',
+        },
+        {
+          kind: 'declaration',
+          at: ['rejections', 'ORDER_LOCKED'],
+          rule: 'code-once',
+          message: 'A code is declared once: ORDER_LOCKED (the Contract, twice)',
+        },
+      ],
+    });
   });
 
   test('an Endpoint listing notFound twice fails at the second listing, naming it', () => {
@@ -475,14 +272,14 @@ describe('validateContract: Standard Rejections', () => {
       validateEndpoints([defineEndpoint({ ...listing, rejections: [notFoundAgain] })]),
     ).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND', 'code'],
-        'standard-code-redefined',
-        'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
+        ['rejections', 'NOT_FOUND'],
+        'code-once',
+        'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
       ),
     );
   });
 
-  test('the Standard codes are the ones the listed Definitions Package resolves', () => {
+  test('the Standard codes are the ones the standardRejections package resolves', () => {
     const definitions = defineDefinitions({
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
@@ -506,17 +303,17 @@ describe('validateContract: Standard Rejections', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['rejections', 'BAD_REQUEST', 'code'],
-          rule: 'standard-code-redefined',
+          at: ['rejections', 'BAD_REQUEST'],
+          rule: 'code-once',
           message:
-            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: BAD_REQUEST',
+            'A code is declared once: BAD_REQUEST (the Contract and the invalidInput Standard Rejection)',
         },
         {
           kind: 'declaration',
-          at: ['rejections', 'NOT_FOUND', 'code'],
-          rule: 'standard-code-redefined',
+          at: ['rejections', 'NOT_FOUND'],
+          rule: 'code-once',
           message:
-            'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND',
+            'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
         },
       ],
     });
@@ -532,9 +329,9 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notFound', 'code'],
-        'standard-codes-distinct',
-        'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+        ['rejections', 'NOT_FOUND'],
+        'code-once',
+        'A code is declared once: NOT_FOUND (the invalidInput Standard Rejection and the notFound Standard Rejection)',
       ),
     );
   });
@@ -550,9 +347,9 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['standardRejections', 'standardRejections', 'notImplemented', 'code'],
-        'standard-codes-distinct',
-        'Each Standard Rejection resolves to a code of its own: GONE is notFound and notImplemented',
+        ['rejections', 'GONE'],
+        'code-once',
+        'A code is declared once: GONE (the notFound Standard Rejection and the notImplemented Standard Rejection)',
       ),
     );
   });
@@ -564,21 +361,21 @@ describe('validateContract: Standard Rejections', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notFound', 'code'],
-        'standard-codes-distinct',
-        'Each Standard Rejection resolves to a code of its own: NOT_FOUND is invalidInput and notFound',
+        ['rejections', 'NOT_FOUND'],
+        'code-once',
+        'A code is declared once: NOT_FOUND (the invalidInput Standard Rejection and the notFound Standard Rejection)',
       ),
     );
   });
 
-  test('a Rejection declared with a Standard code and the same status fails once, as a redefinition', () => {
+  test('a Rejection declared with a Standard code and the same status fails once', () => {
     const missing = defineRejection({ code: 'NOT_FOUND', status: 404, message: 'Missing' });
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [missing] })])).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND', 'code'],
-        'standard-code-redefined',
-        `Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to: NOT_FOUND`,
+        ['rejections', 'NOT_FOUND'],
+        'code-once',
+        'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
       ),
     );
   });

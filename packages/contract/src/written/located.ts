@@ -43,8 +43,8 @@ export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
 export type LocatedRejection = { readonly at: Path; readonly rejection: Rejection };
 
 /**
- * A code the root reaches and every declaration of it, the first met first, in the root's order:
- * a Definitions root's exports, then the Guards', then the Endpoints'.
+ * A code the root reaches and every declaration of it, which a valid root has one of, in the
+ * root's order: a Definitions root's exports, then the Guards', then the Endpoints'.
  */
 export type LocatedCode = {
   readonly code: string;

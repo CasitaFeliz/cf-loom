@@ -534,34 +534,6 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('a code declared twice is written with the first declaration’s message, a Guard’s before an Endpoint’s', () => {
-    const lockedAgain = defineRejection({
-      code: 'UNAUTHENTICATED',
-      status: 401,
-      message: 'Declared again',
-    });
-    const ping = defineEndpoint({
-      name: 'ping',
-      method: 'GET',
-      path: '/ping',
-      visibility: 'public',
-      description: 'Ping',
-      guards: [userToken],
-      success: { status: 200, body: z.object({ ok: z.boolean() }) },
-      rejections: [lockedAgain],
-    });
-    const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
-    const root = defineContract({
-      name: 'ping-service',
-      standardRejections: orgDefinitions,
-      groups: [group],
-    });
-
-    const snapshot = serviceSnapshot(root);
-
-    expect(snapshot.codes['UNAUTHENTICATED']?.message).toBe('Unauthenticated');
-  });
-
   test('standardRejections maps each Standard Rejection to the code it resolved to', () => {
     const snapshot = serviceSnapshot();
 

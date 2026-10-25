@@ -26,17 +26,15 @@ import {
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /**
- * A schema slot: where it sits, what owns it and which part it is; a Rejection body declared
- * again for a code already written is `compared` with the first and not written itself. The owner
- * is the declaration itself, since two declarations may sit at one location; a shared schema of a
- * Definitions Package owns its own slot.
+ * A schema slot: where it sits, what owns it and which part it is. The owner is the declaration
+ * itself, since two declarations may sit at one location; a shared schema of a Definitions Package
+ * owns its own slot.
  */
 export type Slot = {
   readonly at: Path;
   readonly owner: unknown;
   readonly part: Part;
   readonly value: unknown;
-  readonly role: 'snapshot' | 'compared';
 };
 
 /** A slot that holds a zod schema, so the walk can be given it. */
@@ -153,15 +151,11 @@ function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
   return guardParts.map((part) => slot(owned, part, writtenAt(guard, part)));
 }
 
-/** One body per code is written, the first declaration's; every other is compared with it. */
-function codeSlots({ rejections: [first, ...others] }: LocatedCode): readonly Slot[] {
-  return [
-    slot({ at: first.at, owner: first.rejection }, 'body', first.rejection.body),
-    ...others.map(({ at, rejection }) => ({
-      ...slot({ at, owner: rejection }, 'body', rejection.body),
-      role: 'compared' as const,
-    })),
-  ];
+/** Each declaration of a code owns its body's slot; a valid root has one per code. */
+function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
+  return rejections.map(({ at, rejection }) =>
+    slot({ at, owner: rejection }, 'body', rejection.body),
+  );
 }
 
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
@@ -174,7 +168,6 @@ function sharedSlots({ ownPackage }: Declarations): readonly Slot[] {
     owner: value,
     part: 'schema' as const,
     value,
-    role: 'snapshot' as const,
   }));
 }
 
@@ -191,7 +184,7 @@ function slot(
   part: Exclude<Part, 'schema'>,
   value: unknown,
 ): Slot {
-  return { at: slotAt(at, part), owner, part, value, role: 'snapshot' };
+  return { at: slotAt(at, part), owner, part, value };
 }
 
 function isFilled(slot: Slot): boolean {

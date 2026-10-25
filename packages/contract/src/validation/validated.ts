@@ -21,7 +21,7 @@ import type { ResolvedDefinitions, RootPackage } from './validate.ts';
 export type ValidatedGuard = LocatedGuard & { readonly from: ResolvedDefinitions | undefined };
 
 /**
- * A code a valid root reaches: its first declaration, where it sits, and the Definitions Package
+ * A code a valid root reaches: its one declaration, where it sits, and the Definitions Package
  * that declaration belongs to; none for the root's own.
  */
 export type ValidatedCode = {

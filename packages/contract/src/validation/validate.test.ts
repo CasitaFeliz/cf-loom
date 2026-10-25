@@ -694,42 +694,6 @@ describe('validateContract: the README’s examples', () => {
     expect(validated).toEqual(['valid', 'valid', 'valid']);
   });
 
-  test('a code declared twice is written once, as its first declaration, and compared from both', () => {
-    const lockedAgain = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: z.object({ lockedAt: z.iso.datetime().describe('When it locked') }),
-    });
-    const retryOrder = defineEndpoint({
-      name: 'retryOrder',
-      method: 'POST',
-      path: '/orders/:orderId/retry',
-      visibility: 'public',
-      description: 'Retries one order',
-      input: { params: z.object({ orderId: z.uuid() }) },
-      success: { status: 204 },
-      rejections: [lockedAgain],
-    });
-    const group = defineGroup({
-      name: 'orders',
-      description: 'Orders',
-      endpoints: [getOrder, retryOrder],
-    });
-
-    const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [group] }),
-    );
-
-    const { schemas, declarations } = validated.kind === 'valid' ? validated : unreachable();
-    const written = declarations.codes.find(({ code }) => code === 'ORDER_LOCKED');
-    expect(written?.rejection).toBe(orderLocked);
-    expect(schemas.nodeOf(written?.rejection, 'body')).toEqual({
-      type: 'object',
-      fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
-    });
-  });
-
   test('a Contract of 4000 Endpoints validates', () => {
     const endpoints = Array.from({ length: 4000 }, (_, index) =>
       defineEndpoint({

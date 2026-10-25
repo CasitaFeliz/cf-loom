@@ -34,7 +34,7 @@ export function standardRejectionsOf({
 }
 
 /**
- * The codes a root reaches with their first declaration, then every Standard Rejection's code;
+ * The codes a root reaches with their declaration, then every Standard Rejection's code;
  * none is removed, since only the Baseline knows a removed code.
  */
 export function codeSnapshotsOf(
