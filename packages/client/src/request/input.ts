@@ -100,15 +100,15 @@ function travelingInputOf(
 
 /**
  * The fields the Provider reads from a part: those its Guards demand and those the Input declares;
- * a name both declare is parsed from the one value the Caller passed, so the Input's stands.
+ * a name both declare holds the one value the Caller passed, whichever is kept.
  */
 function sentFieldsOf(
   field: 'query' | 'headers',
   parsed: Readonly<Record<string, unknown>>,
   demands: readonly Readonly<Record<string, unknown>>[],
 ): Readonly<Record<string, unknown>> {
-  const sources = [...demands, parsed];
-  return Object.fromEntries(sources.flatMap((source) => Object.entries(fieldsIn(source[field]))));
+  const parts = [...demands, parsed].map((source) => fieldsIn(source[field]));
+  return Object.assign({}, ...parts);
 }
 
 /** A path param whose text cannot arrive as its own segment. */

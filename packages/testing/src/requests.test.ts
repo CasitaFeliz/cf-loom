@@ -316,7 +316,7 @@ describe('fakeProvider: requests', () => {
     const create = () =>
       fakeProvider(paymentsDependency, { baseUrl: 'ftp://ann:secret@gateway.test/api?x=1' });
 
-    expect(create).toThrow(new Error('The baseUrl ftp://gateway.test/api is no http or https URL'));
+    expect(create).toThrow(new Error("The baseUrl's scheme ftp: is no http or https"));
   });
 
   test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {

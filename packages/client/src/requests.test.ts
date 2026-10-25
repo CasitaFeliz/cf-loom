@@ -250,27 +250,35 @@ describe('what a call sends', () => {
     (baseUrl) => {
       const create = () => client(ordersDependency, { baseUrl });
 
-      expect(create).toThrow(/is no http or https URL/);
+      expect(create).toThrow(/is no http or https/);
     },
   );
-
-  test('a baseUrl that is no http or https URL is thrown by its scheme, host and path', () => {
-    const create = () => client(ordersDependency, { baseUrl: 'ftp://orders.test/api' });
-
-    expect(create).toThrow(new Error('The baseUrl ftp://orders.test/api is no http or https URL'));
-  });
 
   test.each([
-    ['ftp://ann:secret@orders.test/api?token=t0k#top', 'ftp://orders.test/api'],
+    ['ftp://orders.test/api', 'ftp:'],
+    ['ftp://ann:secret@orders.test/api?token=t0k#top', 'ftp:'],
     ['blob:http://ann:secret@orders.test/id', 'blob:'],
+    ['blob:/http://ann:secret@orders.test/id', 'blob:'],
+    ['unix:/var/run/orders.sock', 'unix:'],
   ])(
-    'a baseUrl of %s that is no http or https URL is thrown without its credentials, query or fragment',
-    (baseUrl, shown) => {
+    'a baseUrl of %s that is no http or https URL is thrown by its scheme alone',
+    (baseUrl, scheme) => {
       const create = () => client(ordersDependency, { baseUrl });
 
-      expect(create).toThrow(new Error(`The baseUrl ${shown} is no http or https URL`));
+      expect(create).toThrow(new Error(`The baseUrl's scheme ${scheme} is no http or https`));
     },
   );
+
+  test('a baseUrl with a username or a password is thrown without them, nor its query or fragment', () => {
+    const create = () =>
+      client(ordersDependency, { baseUrl: 'https://ann:secret@orders.test/api?token=t0k#top' });
+
+    expect(create).toThrow(
+      new Error(
+        'The baseUrl https://orders.test/api has a username or a password, which fetch refuses',
+      ),
+    );
+  });
 
   test('an optional query param passed as undefined sends no key', async () => {
     const { orders, sent } = recording(counted);
@@ -632,7 +640,8 @@ describe('every header and query param the Provider reads reaches the request, w
   /** What the Request carries under the name, as a list: its one value, or none. */
   function carriedBy(request: Request | undefined, part: string, name: string) {
     if (part === 'headers') {
-      return [request?.headers.get(name) ?? []].flat();
+      const value = request?.headers.get(name);
+      return value == null ? [] : [value];
     }
     return new URL(request?.url ?? '').searchParams.getAll(name);
   }
