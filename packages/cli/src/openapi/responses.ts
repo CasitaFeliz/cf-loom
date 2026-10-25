@@ -75,7 +75,7 @@ function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
     { status: faultStatusOf({ retryable: true }), description: 'A retryable Fault', schema },
   ];
   if (body !== null) {
-    const description = `BODY_TOO_LARGE: ${tooLarge.message}, when serve is given maxBodyBytes`;
+    const description = `BODY_TOO_LARGE: ${tooLarge.message}, when serve is given maxBodyBytes as a number`;
     parts.push({ status: tooLarge.status, description, schema });
   }
   return parts;

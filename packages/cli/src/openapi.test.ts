@@ -983,7 +983,7 @@ describe('cf-loom openapi: the responses', () => {
 
   test('the 413 response is described as BODY_TOO_LARGE', () => {
     expect(valueAt(responseOf('/orders', 'post', '413'), 'description')).toBe(
-      'BODY_TOO_LARGE: The body is too large, when serve is given maxBodyBytes',
+      'BODY_TOO_LARGE: The body is too large, when serve is given maxBodyBytes as a number',
     );
   });
 

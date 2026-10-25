@@ -50,13 +50,13 @@ export type ServedContract = {
   readonly endpoints: readonly ServedEndpoint[];
   readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
   readonly standards: StandardRejections;
-  readonly maxBodyBytes: number | undefined;
+  readonly maxBodyBytes: number;
   readonly resources: unknown;
 };
 
-/** What `serve()` hands a ServedContract besides the Contract and the Handler map. */
+/** What `serve()` hands a ServedContract besides the Contract and the Handler map, as given, typed or not. */
 export type ServedOptions = {
-  readonly maxBodyBytes?: number;
+  readonly maxBodyBytes?: unknown;
   readonly resources?: unknown;
 };
 
@@ -72,9 +72,23 @@ export function servedContractOf(
     endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
     nodes,
     standards: standardRejectionsOf(contract),
-    maxBodyBytes: options.maxBodyBytes,
+    maxBodyBytes: bodyLimitOf(options.maxBodyBytes),
     resources: options.resources,
   };
+}
+
+/** The most bytes of a body `serve` reads: none or `'unlimited'` is no limit, and anything but a whole number from 0 throws. */
+function bodyLimitOf(given: unknown): number {
+  if (given === undefined || given === 'unlimited') {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (typeof given === 'number' && Number.isSafeInteger(given) && given >= 0) {
+    return given;
+  }
+  const named = typeof given === 'string' ? JSON.stringify(given) : String(given);
+  throw new Error(
+    `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+  );
 }
 
 function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedEndpoint {

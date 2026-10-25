@@ -12,10 +12,16 @@ import {
   type ServedFault,
 } from './hooks.ts';
 
+/** How many bytes of a request body `serve` reads before answering `BODY_TOO_LARGE`: a whole number from 0, or `'unlimited'`. */
+export type BodyLimit = number | 'unlimited';
+
 /** What `serve` takes besides the Contract and the Handler map: the Resources its Handlers take, and what is operational about serving; none of it is part of the Contract. */
 export type ServeOptions<Resources extends object = NoResources> = ResourcesField<Resources> & {
-  /** The most bytes of a body `serve` reads before answering `BODY_TOO_LARGE`; none sets no limit. */
-  readonly maxBodyBytes?: number;
+  /**
+   * The most bytes of a body `serve` reads before answering `BODY_TOO_LARGE`, or `'unlimited'`;
+   * none sets no limit, the host's or the gateway's. Any other value throws at startup.
+   */
+  readonly maxBodyBytes?: BodyLimit;
   /**
    * Receives every Fault the Service's side produced: one a Handler returned or threw, an Outcome
    * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.

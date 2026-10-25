@@ -68,7 +68,7 @@ async function bodyKindOf(contentType: string | null): Promise<string> {
     body: new TextEncoder().encode('{}'),
   });
 
-  return (await bodyOf(request, undefined)).kind;
+  return (await bodyOf(request, Number.POSITIVE_INFINITY)).kind;
 }
 
 /** Whether a header value can travel: `texts` when it can, `issues` when it cannot. */
@@ -410,7 +410,7 @@ describe('bodyOf', () => {
       body: '{}',
     });
 
-    const body = await bodyOf(request, undefined);
+    const body = await bodyOf(request, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({
       kind: 'malformed',
@@ -425,7 +425,7 @@ describe('bodyOf', () => {
       body: '{',
     });
 
-    const body = await bodyOf(request, undefined);
+    const body = await bodyOf(request, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({ kind: 'malformed', message: 'The body is not JSON' });
   });
@@ -435,7 +435,7 @@ describe('bodyOf, reading a Response', () => {
   test('a JSON Response body is read as its value', async () => {
     const response = Response.json({ id: 'o-1' });
 
-    const body = await bodyOf(response, undefined);
+    const body = await bodyOf(response, Number.POSITIVE_INFINITY);
 
     expect(body).toEqual({ kind: 'value', value: { id: 'o-1' } });
   });
@@ -450,7 +450,7 @@ describe('bodyOf, reading a Response', () => {
     });
     const response = new Response(stream, { headers: { 'content-type': 'application/json' } });
 
-    const body = await bodyOf(response, undefined);
+    const body = await bodyOf(response, Number.POSITIVE_INFINITY);
 
     expect(body).toMatchObject({
       kind: 'unreadable',
