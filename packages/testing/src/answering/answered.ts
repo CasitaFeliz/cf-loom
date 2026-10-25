@@ -9,6 +9,7 @@ import {
   methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
+  travelingFaultOf,
   upperSnakeCase,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
@@ -55,13 +56,13 @@ type ScriptedFault = Extract<Answer, { readonly kind: 'fault' }>;
 
 /** The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a Fault. */
 function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
-  const envelope = envelopeOf({ fault: answer });
-  if (envelope === undefined || !('fault' in envelope)) {
+  const fault = travelingFaultOf(answer);
+  if (fault === undefined) {
     const what =
       "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  return envelope.fault;
+  return fault;
 }
 
 /** A reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path takes. */

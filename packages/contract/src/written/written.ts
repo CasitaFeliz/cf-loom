@@ -20,7 +20,10 @@ export function isPlainObject(value: unknown): value is WrittenObject {
   return prototype === Object.prototype || prototype === null;
 }
 
-/** A value a map holds itself under a name; nothing it only inherits, nor anything of a list or a non-object. */
+/**
+ * A value a map holds itself under a name, as JSON holds it: nothing it only inherits, so a key a
+ * Contract names never reads `Object.prototype`'s; nor anything of a list or a non-object.
+ */
 export function ownOf(map: unknown, name: string): unknown {
   if (typeof map !== 'object' || map === null || Array.isArray(map)) {
     return undefined;

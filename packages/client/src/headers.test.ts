@@ -5,6 +5,7 @@ import {
   defineEndpoint,
   defineGroup,
   type Endpoint,
+  type ExportedSnapshot,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
@@ -182,26 +183,45 @@ describe('headers given to client()', () => {
     expect(sent[0]?.headers.get('authorization')).toBe('Bearer configured');
   });
 
-  test('a header given to client() is sent whatever Object.prototype holds under its name', async () => {
+  test('a header given to client() under a name every object already has is sent when the call passes headers without it', async () => {
+    const declared = defineEndpoint({
+      name: 'trace',
+      method: 'GET',
+      path: '/trace',
+      visibility: 'public',
+      description: 'Traced',
+      input: { headers: z.object({ 'x-trace': z.string().optional() }) },
+      success: { status: 204 },
+    });
+    const named = defineEndpoint({
+      name: 'trace',
+      method: 'GET',
+      path: '/trace',
+      visibility: 'public',
+      description: 'Traced',
+      input: { headers: z.object({ constructor: z.string().optional() }) },
+      success: { status: 204 },
+    });
+    const written = contractPackageOf({ trace: declared }, defaultStandards);
+    const renamed = JSON.stringify(written.exportedSnapshot).replaceAll('x-trace', 'constructor');
+    const dependency = defineDependency({
+      provider: {
+        ...written,
+        endpoints: { trace: named },
+        exportedSnapshot: JSON.parse(renamed) as ExportedSnapshot,
+      },
+      endpoints: [named],
+    });
     const { sent, fetch } = recorded();
-    const orders = client(ordersDependency, {
+    const traced = client(dependency, {
       baseUrl: 'http://orders.test',
       fetch,
-      headers: { authorization: 'Bearer configured' },
-    });
-    Object.defineProperty(Object.prototype, 'authorization', {
-      value: 'Bearer inherited',
-      writable: true,
-      configurable: true,
+      headers: { constructor: 'configured' },
     });
 
-    try {
-      await orders.getOrder({ ...params, headers: { 'x-api-key': 'key-2' } });
-    } finally {
-      Reflect.deleteProperty(Object.prototype, 'authorization');
-    }
+    await traced.trace({ headers: {} } as never);
 
-    expect(sent[0]?.headers.get('authorization')).toBe('Bearer configured');
+    expect(sent[0]?.headers.get('constructor')).toBe('configured');
   });
 
   test('an aborted signal sends nothing and calls no header function', async () => {

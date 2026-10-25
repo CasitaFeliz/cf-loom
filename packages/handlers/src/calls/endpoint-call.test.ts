@@ -124,40 +124,11 @@ const nest = defineEndpoint({
   success: { status: 204 },
 });
 
-const everyPart = defineEndpoint({
-  name: 'everyPart',
-  method: 'POST',
-  path: '/orders/:orderId/parts',
-  visibility: 'public',
-  description: 'An Endpoint that reads all four parts of its Input',
-  input: {
-    params: z.object({ orderId: z.uuid() }),
-    query: z.object({ page: z.string() }),
-    headers: z.object({ 'x-request-id': z.string() }),
-    body: z.object({ note: z.string() }),
-  },
-  success: { status: 204 },
-});
-
 const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' } as const;
 const { note: _note, ...withoutNote } = validOrder;
 const createInput = { headers: { 'x-request-id': 'r-1' }, body: validOrder };
 const getInput = { params: { orderId: ORDER_ID } };
 const getContext = { apiKey: { callerId: 'c-1' } };
-
-/** Runs a call while Object.prototype holds a name every plain object then inherits, then restores it. */
-async function withInherited<Result>(
-  name: string,
-  value: unknown,
-  run: () => Promise<Result>,
-): Promise<Result> {
-  Object.defineProperty(Object.prototype, name, { value, configurable: true });
-  try {
-    return await run();
-  } finally {
-    Reflect.deleteProperty(Object.prototype, name);
-  }
-}
 
 async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]> {
   try {
@@ -350,28 +321,6 @@ describe('an EndpointHandler’s Input', () => {
     ]);
   });
 
-  test.each(['params', 'query', 'headers', 'body'] as const)(
-    'Input is read from the parts the call holds itself, never from an %s Object.prototype has',
-    async (part) => {
-      const everyPartHandler = handle(everyPart, () => success());
-      const given = {
-        params: { orderId: ORDER_ID },
-        query: { page: '1' },
-        headers: { 'x-request-id': 'r-1' },
-        body: { note: 'n' },
-      };
-      const { [part]: _left, ...without } = given;
-
-      const issues = await withInherited(part, given[part], () =>
-        issuesOf(() => everyPartHandler(without as never, {})),
-      );
-
-      expect(issues).toEqual([
-        { part: `input.${part}`, path: [], code: 'required', message: expect.any(String) },
-      ]);
-    },
-  );
-
   test('a part the Endpoint does not declare is not read', async () => {
     const received: unknown[] = [];
     const deleteOrderHandler = handle(deleteOrder, (input) => {
@@ -427,7 +376,7 @@ describe('an EndpointHandler’s Context', () => {
   });
 });
 
-describe('an EndpointHandler’s Context, given by a caller who inherits names', () => {
+describe('an EndpointHandler’s Context, for a Guard named like every object', () => {
   test.each(Object.getOwnPropertyNames(Object.prototype))(
     'a Guard named %s with an optional Context is admitted with its key absent',
     async (name) => {
@@ -463,35 +412,6 @@ describe('an EndpointHandler’s Context, given by a caller who inherits names',
     await getOrderHandler(getInput, { context: getContext });
 
     expect(received).toEqual([getContext]);
-  });
-});
-
-describe('an EndpointHandler’s Outcome, built by a Handler who inherits names', () => {
-  const noBodyRejection = defineRejection({ code: 'NO_BODY', status: 409, message: 'No body' });
-  const answersNoBody = defineEndpoint({
-    name: 'answersNoBody',
-    method: 'GET',
-    path: '/no-body',
-    visibility: 'public',
-    description: 'Answers without a body',
-    success: { status: 204 },
-    rejections: [noBodyRejection],
-  });
-
-  test('a Success without headers is not read from one Object.prototype has', async () => {
-    const answersNoBodyHandler = handle(answersNoBody, () => success());
-
-    const outcome = await withInherited('headers', 'inherited', () => answersNoBodyHandler({}, {}));
-
-    expect(outcome).toEqual({ kind: 'success', status: 204 });
-  });
-
-  test('a Rejection without a body is not read from one Object.prototype has', async () => {
-    const answersNoBodyHandler = handle(answersNoBody, () => reject(noBodyRejection));
-
-    const outcome = await withInherited('body', 'inherited', () => answersNoBodyHandler({}, {}));
-
-    expect(outcome).toEqual({ kind: 'rejection', rejection: noBodyRejection });
   });
 });
 

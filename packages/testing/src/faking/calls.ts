@@ -75,5 +75,5 @@ function inputOf(reading: InputReading): unknown {
 }
 
 function invalidCallOf(reading: InvalidReading): InvalidCall {
-  return { issues: invalidInputBodyOf(reading.issues).issues };
+  return frozenCopyOf({ issues: invalidInputBodyOf(reading.issues).issues }) as InvalidCall;
 }

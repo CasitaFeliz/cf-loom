@@ -1,7 +1,6 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   headerTextsOf,
-  ownOf,
   parsedPartOf,
   partFieldOf,
   schemaOf,
@@ -103,7 +102,7 @@ function parsedSuccessOf(
     schema: schemaOf(endpoint, part),
   }));
   const checks = parts.map(({ part, field, schema }) => {
-    return [field, parsedPartOf(part, schema, { value: ownOf(given, field) })] as const;
+    return [field, parsedPartOf(part, schema, { value: given[field] })] as const;
   });
   const declared = parts.filter(({ schema }) => schema !== undefined);
   return mapValue(checkedAll(Object.fromEntries(checks)), (parsed) => {

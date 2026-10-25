@@ -239,6 +239,7 @@ export {
   textOfValue,
   textPartsOf,
   transportHeaderFitOf,
+  travelingFaultOf,
   withDeprecation,
 } from '../wire/index.ts';
 export type {

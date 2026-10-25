@@ -11,7 +11,7 @@ import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
-import { verifiedOf } from './verify.ts';
+import { throwMistakesOf } from './verify.ts';
 
 /** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
@@ -63,7 +63,7 @@ export function fakeProvider<const D extends AnyDependency>(
     calls: (name) =>
       faking.calls.callsOf(name) as readonly Frozen<InputOf<ListedEndpoint<D, typeof name>>>[],
     invalidCalls: (name) => faking.calls.invalidCallsOf(name),
-    verify: () => verifiedOf(faking),
+    verify: () => throwMistakesOf(faking),
   };
   return Object.freeze(fake);
 }

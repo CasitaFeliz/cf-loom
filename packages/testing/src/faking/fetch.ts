@@ -53,21 +53,31 @@ export function fakingOf(provided: Provided): Faking {
 
 /**
  * The fake's `fetch`: each request answered as its Provider would, or aborted by its signal; one
- * already aborted is refused before anything is read, recorded or taken. A mistake it throws is
- * kept, for `verify()` to throw wherever the code under test caught it.
+ * already aborted is refused before anything is read, recorded or taken.
  */
 export function fakeFetchOf(faking: Faking): Http {
   return async (request) => {
     request.signal.throwIfAborted();
-    try {
-      return await abortableOf(fakeResponseOf(faking, request), request.signal);
-    } catch (e) {
-      if (e instanceof FakeProviderError) {
-        faking.mistakes.push(e);
-      }
-      throw e;
-    }
+    return await abortableOf(
+      recordedMistakesOf(faking, fakeResponseOf(faking, request)),
+      request.signal,
+    );
   };
+}
+
+/**
+ * A request's answer, a mistake it throws kept for `verify()` to throw wherever the code under test
+ * caught it, even one found after the request's signal was aborted.
+ */
+async function recordedMistakesOf(faking: Faking, answering: Promise<Response>): Promise<Response> {
+  try {
+    return await answering;
+  } catch (e) {
+    if (e instanceof FakeProviderError) {
+      faking.mistakes.push(e);
+    }
+    throw e;
+  }
 }
 
 /**

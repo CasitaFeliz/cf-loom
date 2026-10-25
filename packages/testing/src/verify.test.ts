@@ -218,6 +218,32 @@ describe('fake.verify()', () => {
     expect(linesOf(thrown)).toEqual(['payments-service: getPayment: 1 once step left unused']);
   });
 
+  test('a mistake a step makes after the Caller aborted its request is still reported', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const started = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    payments.on('getPayment').otherwise(async () => {
+      started.resolve();
+      await released.promise;
+      throw new Error('A step broke');
+    });
+    const controller = new AbortController();
+    const answering = caughtFrom(
+      payments.fetch(new Request(requests.getPayment, { signal: controller.signal })),
+    );
+    await started.promise;
+
+    controller.abort();
+    const caught = await answering;
+    released.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(caught).not.toBeInstanceOf(FakeProviderError);
+    expect(linesOf(verifiedBy(() => payments.verify()))).toEqual([
+      'payments-service: getPayment: a step threw',
+    ]);
+  });
+
   test('a request aborted before it took its step leaves its once step unused', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').once(paid);

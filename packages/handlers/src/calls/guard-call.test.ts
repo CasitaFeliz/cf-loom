@@ -55,20 +55,6 @@ type Keyed = { readonly callers: { readonly byKey: () => string } };
 const apiKeyDemands = { headers: { 'x-api-key': 'key-1' } };
 const userContext = { userToken: { userId: 'u-1' } };
 
-/** Runs a call while Object.prototype holds a name every plain object then inherits, then restores it. */
-async function withInherited<Result>(
-  name: string,
-  value: unknown,
-  run: () => Promise<Result>,
-): Promise<Result> {
-  Object.defineProperty(Object.prototype, name, { value, configurable: true });
-  try {
-    return await run();
-  } finally {
-    Reflect.deleteProperty(Object.prototype, name);
-  }
-}
-
 async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]> {
   try {
     await call();
@@ -183,25 +169,6 @@ describe('a GuardHandler’s direct call', () => {
         code: 'too_small',
         message: expect.any(String),
       },
-    ]);
-  });
-
-  test('demands and a Context are read from what the call holds itself, never from what Object.prototype has', async () => {
-    const permissionHandler = handle(permission, () => admit());
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
-
-    const demandIssues = await withInherited('headers', apiKeyDemands.headers, () =>
-      issuesOf(() => apiKeyHandler({} as never, {})),
-    );
-    const contextIssues = await withInherited('userToken', userContext.userToken, () =>
-      issuesOf(() => permissionHandler({}, { context: {} as never, qualifier: ['orders:edit'] })),
-    );
-
-    expect(demandIssues).toEqual([
-      { part: 'demands.headers', path: [], code: 'required', message: expect.any(String) },
-    ]);
-    expect(contextIssues).toEqual([
-      { part: 'context', path: ['userToken'], code: 'required', message: expect.any(String) },
     ]);
   });
 

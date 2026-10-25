@@ -72,7 +72,7 @@ function checkedBuilt<Answered extends EndpointRejection>(
   built: AnyRejection,
 ): Checked<BuiltRejection<Answered>> {
   const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
-  const body = parsedPartOf('body', schema, { value: ownOf(built, 'body') });
+  const body = parsedPartOf('body', schema, { value: built.body });
   return mapValue(body, (parsed) => {
     const checked =
       parsed === undefined

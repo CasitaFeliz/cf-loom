@@ -7,7 +7,7 @@ import type { Faking } from './fetch.ts';
  * fake threw, then each Endpoint's `once` steps no request took. It forgets nothing, so it throws
  * again on every call.
  */
-export function verifiedOf(faking: Faking): void {
+export function throwMistakesOf(faking: Faking): void {
   const mistakes = [...faking.mistakes, ...unusedStepsOf(faking)];
   const [first, ...others] = mistakes;
   if (first === undefined) {

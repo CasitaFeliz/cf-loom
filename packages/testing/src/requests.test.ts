@@ -161,6 +161,11 @@ type Tagged = {
   body: { labels: string[]; detail: { note: string } };
 };
 
+/** An invalid call, as a test that wrote to it would see it. */
+type Invalid = {
+  issues: { in: string; path: (string | number)[]; code: string; message: string }[];
+};
+
 /** A fake of tagPayment that took one request, and the call it recorded. */
 async function taggedOnce() {
   const fake = fakeProvider(taggingDependency);
@@ -481,6 +486,27 @@ describe('fakeProvider: requests', () => {
     const call = await taggedOnce();
 
     const writing = () => write(call);
+
+    expect(writing).toThrow(TypeError);
+  });
+
+  test.each([
+    ['the call', (call: Invalid) => Object.assign(call, { issues: [] })],
+    [
+      'its list of issues',
+      (call: Invalid) => call.issues.push({ in: 'body', path: [], code: 'x', message: 'x' }),
+    ],
+    ['an issue', (call: Invalid) => Object.assign(call.issues[0] as object, { code: 'x' })],
+    [
+      'the path of an issue',
+      (call: Invalid) => (call.issues[0] as Invalid['issues'][number]).path.push('x'),
+    ],
+  ])('%s of an invalid call cannot be written to', async (_part, write) => {
+    const { fake } = countingFake();
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }));
+    const [call] = fake.invalidCalls('getPayment') as unknown as Invalid[];
+
+    const writing = () => write(call as Invalid);
 
     expect(writing).toThrow(TypeError);
   });

@@ -42,6 +42,7 @@ export {
   internalError,
   receivedEnvelopeOf,
   reservedFaults,
+  travelingFaultOf,
 } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
 export type { Http } from './http.ts';
