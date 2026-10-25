@@ -10,7 +10,6 @@ import {
 } from '../schema-code/index.ts';
 import {
   headerOf,
-  keyOf,
   moduleTextOf,
   namedImportOf,
   relativeSpecifierOf,
@@ -33,7 +32,8 @@ export type MessageExports =
 
 /**
  * The text of the readers file; the line saying which name cannot be written as code, which comes
- * before the lines saying which Message is exported under no name in code.
+ * before the lines naming each Command's Message Version or Subscription not exported under its
+ * name in code.
  */
 export type ReadersText =
   | { readonly kind: 'text'; readonly text: string }
@@ -159,7 +159,7 @@ function memberLinesOf(key: TableKey, pairings: readonly Pairing[]): readonly st
   }
   const entries = pairings.map(({ handled, local, reader }) => {
     const pairing = `${withReaderImport.name}(${local}, ${reader})`;
-    return `    ${keyOf(tableMemberOf(handled).name)}: ${pairing},`;
+    return `    ${tableMemberOf(handled).name}: ${pairing},`;
   });
   return [`  ${key}: {`, ...entries, '  },'];
 }
