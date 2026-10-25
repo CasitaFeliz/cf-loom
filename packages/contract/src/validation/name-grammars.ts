@@ -79,7 +79,7 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
 /** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */
 function hintFor(grammar: Grammar, text: string): string {
   const words = wordsOf(text);
-  return words !== text && follows(grammar, words) ? ` (write ${words})` : '';
+  return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
 function rootNoun(kind: Declarations['root']['kind']): string {

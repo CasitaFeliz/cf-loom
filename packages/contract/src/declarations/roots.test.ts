@@ -137,7 +137,7 @@ describe('defineApplication', () => {
 
     expectTypeOf<
       Written['dependencies']
-    >().toExtend<'An Application depends on Public Endpoints only: refundPayment'>();
+    >().toExtend<'An Application depends on Public Endpoints only: refundPayment is internal'>();
   });
 
   test('an Application may list no Dependencies, which means it depends on nothing', () => {

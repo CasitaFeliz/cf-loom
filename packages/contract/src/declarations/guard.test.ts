@@ -252,6 +252,26 @@ describe('defineGuard Rejections', () => {
   });
 });
 
+describe('defineGuard Rejections with one code', () => {
+  test('a Guard listing two Rejections with one code is a type error', () => {
+    const unauthenticatedAgain = defineRejection({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      message: 'Unauthenticated again',
+    });
+
+    const declare = () =>
+      defineGuard({
+        name: 'apiKey',
+        description: 'A key per Caller',
+        // @ts-expect-error UNAUTHENTICATED is listed twice
+        rejections: [unauthenticated, unauthenticatedAgain],
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineGuard nested fields', () => {
   test('an undeclared field in demands is a type error', () => {
     const declare = () =>

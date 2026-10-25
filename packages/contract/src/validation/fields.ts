@@ -155,7 +155,7 @@ function stringFailures({ at, value, fields }: Readable): readonly DeclarationFa
 
 /** A `description` or a `message` says something: a string of spaces says nothing. */
 function blankFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
-  const blank = Object.keys(fields.texts).filter((field) => {
+  const blank = Object.keys(fields.nonBlank).filter((field) => {
     const text = value[field];
     return typeof text === 'string' && text.trim() === '';
   });

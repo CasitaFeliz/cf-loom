@@ -29,14 +29,14 @@ type ObjectKeys<Shape> = {
 
 /**
  * What a kind of object declares, as maps so `satisfies` demands exactly the type's fields, the
- * ones it requires, the strings among them, those among the strings that must say something,
- * and the parts written as objects.
+ * ones it requires, the strings among them, those among the strings that are never blank, and
+ * the parts written as objects.
  */
 export type Fields<Shape> = {
   readonly declared: Readonly<Record<keyof Shape, true>>;
   readonly required: Readonly<Record<RequiredKeys<Shape>, true>>;
   readonly strings: Readonly<Record<StringKeys<Shape>, true>>;
-  readonly texts: Readonly<Partial<Record<StringKeys<Shape>, true>>>;
+  readonly nonBlank: Readonly<Partial<Record<StringKeys<Shape>, true>>>;
   readonly objects: Readonly<Record<ObjectKeys<Shape>, true>>;
 };
 

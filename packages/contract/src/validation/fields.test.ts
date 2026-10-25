@@ -512,7 +512,7 @@ describe('validateContract: a description or a message is never blank', () => {
   ];
 
   test.each(blankTexts.flatMap((text) => described.map(([kind, at]) => [kind, text, at] as const)))(
-    'a %s whose description is %j fails',
+    '%s whose description is %j fails',
     (kind, text, at) => {
       const contract = contractWithDescription(kind.toLowerCase(), text);
 

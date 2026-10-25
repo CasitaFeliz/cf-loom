@@ -1,4 +1,9 @@
-import { eventVisibilities, isMessageVersion, lifecycleOf } from '../declarations/index.ts';
+import {
+  eventVisibilities,
+  isMessageVersion,
+  lifecycleOf,
+  messageBodyRefusal,
+} from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
@@ -20,6 +25,17 @@ type LocatedMessage = {
   readonly message: LocatedEvent['event'] | LocatedCommand['command'];
 };
 
+/** The declared Events and Commands, each with where it sits. */
+function locatedMessagesOf({ events, commands }: Declarations): {
+  readonly events: readonly LocatedMessage[];
+  readonly commands: readonly LocatedMessage[];
+} {
+  return {
+    events: events.map(({ at, event }) => ({ at, message: event })),
+    commands: commands.map(({ at, command }) => ({ at, message: command })),
+  };
+}
+
 const eventVisibility: ClosedValue = {
   rule: 'visibility',
   allowed: eventVisibilities,
@@ -28,8 +44,7 @@ const eventVisibility: ClosedValue = {
 
 /** The rules of the declared Message Versions, judged without the Baseline's tombstones. */
 export function messageFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const events = declarations.events.map(({ at, event }) => ({ at, message: event }));
-  const commands = declarations.commands.map(({ at, command }) => ({ at, message: command }));
+  const { events, commands } = locatedMessagesOf(declarations);
   const messages = [...events, ...commands];
   return [
     ...messages.flatMap(versionFailures),
@@ -48,13 +63,11 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
 
 /** A Message body is an object of its fields, judged on the walked node, so a Message can grow. */
 export function messageBodyFailures(
-  { events, commands }: Declarations,
+  declarations: Declarations,
   { nodeOf, defs }: Nodes,
 ): readonly DeclarationFailure[] {
-  const located = [
-    ...events.map(({ at, event }) => ({ at, message: event })),
-    ...commands.map(({ at, command }) => ({ at, message: command })),
-  ];
+  const { events, commands } = locatedMessagesOf(declarations);
+  const located = [...events, ...commands];
   const notObjects = located.filter(({ message }) => {
     const body = nodeOf(message, 'body');
     return body !== undefined && !isObjectOf(body, defs);
@@ -63,7 +76,7 @@ export function messageBodyFailures(
     failure(
       slotAt(message.at, 'body'),
       'not-an-object-schema',
-      `A Message body is an object of its fields: ${identityOf(message)}`,
+      `${messageBodyRefusal}: ${identityOf(message)}`,
     ),
   );
 }

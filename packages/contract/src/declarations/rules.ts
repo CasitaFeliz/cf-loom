@@ -2,7 +2,8 @@ import type * as core from 'zod/v4/core';
 import type { GroupedField } from './grouped.ts';
 import type { ReservedName } from './reserved-names.ts';
 
-type Refusal<Message extends string> = { readonly [Text in Message]: never };
+/** A type no value has, whose only key is the sentence a type error reads. */
+export type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
 /** What a declaration must also satisfy: each field it holds is one its kind declares. */
 export type DeclaredFieldsRule<Declaration, Shape> = {
@@ -88,7 +89,8 @@ export type RejectionsOnceRule<
   ? ListedOnceRule<OnceKeyOf<First>, Rest, Earlier>
   : unknown;
 
-type BodyRefusal = 'A Message body is an object of its fields';
+/** Why a Message body is refused, as the types and `generate` both say it. */
+export const messageBodyRefusal = 'A Message body is an object of its fields';
 
 /** A body schema a Message can grow with: an object, or a schema `generate` reads through to one. */
 type GrowableBody = core.$ZodObject | core.$ZodIntersection | core.$ZodLazy;
@@ -102,11 +104,10 @@ export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }
   IsOneLiteral<Declaration['body']['_zod']['def']['type']> extends true
     ? Declaration['body'] extends GrowableBody
       ? unknown
-      : { readonly body: Refusal<BodyRefusal> }
+      : { readonly body: Refusal<typeof messageBodyRefusal> }
     : unknown;
 
-type VersionRefusal =
-  'A Message version is one literal whole number from 1 to Number.MAX_SAFE_INTEGER';
+type VersionRefusal = 'A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER';
 
 /** Whether a literal number's text is not a whole number from 1 written without an exponent. */
 type IsNotWholeFromOne<Version extends number> = `${Version}` extends
@@ -114,6 +115,7 @@ type IsNotWholeFromOne<Version extends number> = `${Version}` extends
   | `-${string}`
   | `${string}.${string}`
   | `${string}e${string}`
+  | 'Infinity'
   ? true
   : false;
 

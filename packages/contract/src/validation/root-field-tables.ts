@@ -21,7 +21,7 @@ const contractFields = {
   },
   required: { kind: true, name: true },
   strings: { kind: true, name: true },
-  texts: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<Contract>;
 
@@ -29,7 +29,7 @@ const applicationFields = {
   declared: { kind: true, name: true, dependencies: true },
   required: { kind: true, name: true },
   strings: { kind: true, name: true },
-  texts: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<Application>;
 
@@ -53,7 +53,7 @@ export const eventFields = {
     body: true,
   },
   strings: { kind: true, name: true, visibility: true, description: true, lifecycle: true },
-  texts: { description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Event>;
 
@@ -69,7 +69,7 @@ export const commandFields = {
   },
   required: { kind: true, name: true, version: true, description: true, body: true },
   strings: { kind: true, name: true, description: true, lifecycle: true },
-  texts: { description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Command>;
 
@@ -78,7 +78,7 @@ export const subscriptionFields = {
   declared: { kind: true, name: true, description: true, event: true },
   required: { kind: true, name: true, description: true, event: true },
   strings: { kind: true, name: true, description: true },
-  texts: { description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Subscription>;
 
@@ -94,7 +94,7 @@ export const definitionsFields = {
   },
   required: { kind: true, name: true },
   strings: { kind: true, name: true },
-  texts: {},
+  nonBlank: {},
   objects: { schemas: true, standardRejections: true },
 } satisfies Fields<Definitions>;
 
@@ -111,7 +111,7 @@ export const groupFields = {
   },
   required: { kind: true, name: true, description: true },
   strings: { kind: true, name: true, description: true },
-  texts: { description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Group>;
 
@@ -130,7 +130,7 @@ export const dependencyFields = {
   declared: { kind: true, provider: true, endpoints: true },
   required: { kind: true },
   strings: { kind: true },
-  texts: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<DependencyFields>;
 

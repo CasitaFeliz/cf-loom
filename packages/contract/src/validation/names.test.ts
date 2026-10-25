@@ -111,6 +111,7 @@ describe('validateContract: name grammars', () => {
 
   test.each([
     ['getURL', 'getUrl'],
+    ['getURLs', 'getUrLs'],
     ['URLs', undefined],
     ['listIDs', undefined],
     ['getX', undefined],

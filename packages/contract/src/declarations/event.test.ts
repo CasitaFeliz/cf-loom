@@ -124,6 +124,21 @@ describe('defineEvent', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a version too large to be a number, which is Infinity, is a type error', () => {
+    const declare = () =>
+      defineEvent({
+        name: 'OrderCreated',
+        // @ts-expect-error Infinity is no whole number
+        // biome-ignore lint/correctness/noPrecisionLoss: the literal under test is too large for a number
+        version: 1e999,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body,
+      });
+
+    expect(declare).not.toThrow();
+  });
+
   test('a version that is a union of two literals is a type error', () => {
     const oneOfTwo: 1 | 2 = 1 as 1 | 2;
     const declare = () =>

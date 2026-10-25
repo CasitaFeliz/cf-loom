@@ -22,27 +22,27 @@ type ApplicationDeclaration = {
   readonly dependencies?: readonly Dependency[];
 };
 
-/** The names of the Endpoints that are not Public out of the Dependencies an Application lists. */
-type NonPublicNames<Dependencies> = Dependencies extends readonly (infer Listed)[]
+/** Each Endpoint that is not Public out of the Dependencies an Application lists, as `getThing is internal`. */
+type NonPublicOf<Dependencies> = Dependencies extends readonly (infer Listed)[]
   ? Listed extends { readonly endpoints?: readonly (infer Selected)[] }
     ? Selected extends {
-        readonly visibility: infer Visibility;
+        readonly visibility: infer Visibility extends string;
         readonly name: infer Name extends string;
       }
       ? Visibility extends 'public'
         ? never
-        : Name
+        : `${Name} is ${Visibility}`
       : never
     : never
   : never;
 
 /** What an Application must also satisfy: it depends on Public Endpoints only, as it runs outside the network. */
 type PublicOnlyRule<Declaration extends ApplicationDeclaration> = [
-  NonPublicNames<Declaration['dependencies']>,
+  NonPublicOf<Declaration['dependencies']>,
 ] extends [never]
   ? unknown
   : {
-      readonly dependencies: `An Application depends on Public Endpoints only: ${JoinedNames<NonPublicNames<Declaration['dependencies']>>}`;
+      readonly dependencies: `An Application depends on Public Endpoints only: ${JoinedNames<NonPublicOf<Declaration['dependencies']>>}`;
     };
 
 /** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */
