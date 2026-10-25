@@ -6,12 +6,35 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
+  openEnumReader,
 } from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
 import { memory } from './index.ts';
+
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
@@ -57,7 +80,12 @@ const payments = {
   endpoints: {},
   events: { paymentSettledV1 },
   standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: invalidInputBody,
+    },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },

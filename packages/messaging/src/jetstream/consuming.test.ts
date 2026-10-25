@@ -1,5 +1,27 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
+
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   type ContractPackage,
@@ -9,6 +31,7 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
+  openEnumReader,
 } from '@cf-loom/contract';
 import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
@@ -534,7 +557,12 @@ describe('consuming over jetstream()', () => {
       endpoints: {},
       events: { paymentSettledV1 },
       standardRejections: {
-        invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+        invalidInput: {
+          code: 'INVALID_INPUT',
+          status: 400,
+          message: 'Invalid input',
+          body: invalidInputBody,
+        },
         notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
         notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
       },

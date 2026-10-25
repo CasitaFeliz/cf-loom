@@ -11,7 +11,7 @@
                   "code": {
                     "required": true,
                     "schema": {
-                      "open": false,
+                      "open": true,
                       "type": "enum",
                       "values": [
                         "invalid_format",
@@ -29,7 +29,7 @@
                   "in": {
                     "required": true,
                     "schema": {
-                      "open": false,
+                      "open": true,
                       "type": "enum",
                       "values": [
                         "body",
@@ -234,94 +234,9 @@
   "kind": "service",
   "name": "billing-service",
   "standardRejections": {
-    "invalidInput": {
-      "body": {
-        "fields": {
-          "issues": {
-            "required": true,
-            "schema": {
-              "items": {
-                "fields": {
-                  "code": {
-                    "required": true,
-                    "schema": {
-                      "open": false,
-                      "type": "enum",
-                      "values": [
-                        "invalid_format",
-                        "invalid_type",
-                        "invalid_value",
-                        "malformed",
-                        "not_multiple",
-                        "required",
-                        "too_big",
-                        "too_small",
-                        "unrecognized_key"
-                      ]
-                    }
-                  },
-                  "in": {
-                    "required": true,
-                    "schema": {
-                      "open": false,
-                      "type": "enum",
-                      "values": [
-                        "body",
-                        "headers",
-                        "params",
-                        "query"
-                      ]
-                    }
-                  },
-                  "message": {
-                    "required": true,
-                    "schema": {
-                      "type": "string"
-                    }
-                  },
-                  "path": {
-                    "required": true,
-                    "schema": {
-                      "items": {
-                        "options": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "number"
-                          }
-                        ],
-                        "type": "union"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "type": "object"
-              },
-              "type": "array"
-            }
-          }
-        },
-        "type": "object"
-      },
-      "code": "BAD_REQUEST",
-      "message": "The request is invalid",
-      "origin": "@org/definitions@0.0.0",
-      "status": 400
-    },
-    "notFound": {
-      "code": "RESOURCE_NOT_FOUND",
-      "message": "The resource does not exist",
-      "origin": "@org/definitions@0.0.0",
-      "status": 404
-    },
-    "notImplemented": {
-      "code": "NOT_YET_IMPLEMENTED",
-      "message": "Not implemented yet",
-      "origin": "@org/definitions@0.0.0",
-      "status": 501
-    }
+    "invalidInput": "BAD_REQUEST",
+    "notFound": "RESOURCE_NOT_FOUND",
+    "notImplemented": "NOT_YET_IMPLEMENTED"
   },
   "subscriptions": {
     "draftInvoiceOnCreated": {
