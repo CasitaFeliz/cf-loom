@@ -7,6 +7,7 @@ import {
   failed,
   failuresOf,
   type LocatedSchema,
+  type Outline,
   type Walked,
   type Walker,
   walked,
@@ -26,7 +27,7 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   );
   const fields = allWalked(fieldEntries);
   if (refusals.length > 0 || fields.kind === 'not-allowed') {
-    return failed(failuresOf([...refusals, fields]));
+    return failed(failuresOf([...refusals, fields]), { type: 'object' });
   }
   return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
 }
@@ -43,18 +44,19 @@ function protoFieldFailure({ at, schema }: LocatedSchema, walker: Walker): Walke
 export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): Walked {
   const key = walker.schema(def.keyType, [...at, 'key']);
   const value = walker.schema(def.valueType, [...at, 'value']);
+  const record: Outline = { type: 'record' };
   if (def.mode === 'loose') {
-    return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]));
+    return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]), record);
   }
   if (key.kind === 'not-allowed') {
-    return failed(failuresOf([key, value]));
+    return failed(failuresOf([key, value]), record);
   }
   const recordKey = recordKeyOf(key.value);
   if (recordKey.kind === 'refused') {
-    return failed(failuresOf([notAllowed(at, recordKey.refusal), value]));
+    return failed(failuresOf([notAllowed(at, recordKey.refusal), value]), record);
   }
   if (value.kind === 'not-allowed') {
-    return value;
+    return failed(value.failures, record);
   }
   return walked({ type: 'record', key: recordKey.node, value: value.value });
 }
@@ -69,7 +71,7 @@ export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker
     walker.schema(def.right, [...at, 'items', 1]),
   ]);
   if (items.kind === 'not-allowed') {
-    return items;
+    return failed(items.failures, { type: 'allOf' });
   }
   const [left, right] = items.value;
   if (left?.type === 'object' && right?.type === 'object') {
@@ -121,7 +123,7 @@ function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
     (key) => canonicalJson(left.fields[key]) !== canonicalJson(right.fields[key]),
   );
   if (differs) {
-    return notAllowed(at, refused.differingIntersection);
+    return notAllowed(at, refused.differingIntersection, { type: 'object' });
   }
   const fields = { ...left.fields, ...right.fields };
   const nullable = left.nullable === true && right.nullable === true;

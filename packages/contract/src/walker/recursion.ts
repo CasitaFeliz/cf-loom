@@ -1,8 +1,15 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
-import type { SchemaNode } from './nodes.ts';
+import type { RefNode, SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedAcyclicId, refusedDuplicateId } from './not-allowed.ts';
-import { failed, failuresOf, type LocatedSchema, type Walked, walked } from './walked.ts';
+import {
+  type Failed,
+  failed,
+  type LocatedSchema,
+  refusedBeside,
+  type Walked,
+  walked,
+} from './walked.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
 export type Entering = LocatedSchema & { readonly id: string | undefined };
@@ -29,7 +36,7 @@ type State = {
   readonly nameBySchema: Map<core.$ZodType, string>;
   readonly schemaById: Map<string, core.$ZodType>;
   readonly defById: Map<string, SchemaNode>;
-  readonly reportedBySchema: Map<core.$ZodType, Walked>;
+  readonly reportedBySchema: Map<core.$ZodType, Failed>;
   count: number;
 };
 
@@ -135,17 +142,20 @@ function offCycle(ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
     return node;
   }
-  const refusal = notAllowed(ancestor.at, refusedAcyclicId(ancestor.id));
-  return failed(failuresOf([refusal, node]));
+  return refusedBeside(notAllowed(ancestor.at, refusedAcyclicId(ancestor.id)), node);
 }
 
-/** A schema with an id on a cycle is walked once: its def, or its failures, kept for every use. */
+/**
+ * A schema with an id on a cycle is walked once: its def, or its failures, kept for every use,
+ * each of which is a `ref` to it.
+ */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
-    return node;
+    return withOutlineReported(state, ancestor, node);
   }
+  const ref: RefNode = { type: 'ref', name: ancestor.id };
   if (node.kind === 'not-allowed') {
-    return dropOpenGroup(state, ancestor, node);
+    return dropOpenGroup(state, ancestor, failed(node.failures, ref));
   }
   const owner = state.schemaById.get(ancestor.id);
   if (owner !== undefined && owner !== ancestor.schema) {
@@ -153,12 +163,12 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   }
   state.schemaById.set(ancestor.id, ancestor.schema);
   if (leadsBackWithNoNode(ancestor.id, node.value, state.defById)) {
-    return dropOpenGroup(state, ancestor, notAllowed(ancestor.at, refused.nodelessCycle));
+    return dropOpenGroup(state, ancestor, notAllowed(ancestor.at, refused.nodelessCycle, ref));
   }
   state.nameBySchema.set(ancestor.schema, ancestor.id);
   state.defById.set(ancestor.id, node.value);
   state.openDefs.push({ schema: ancestor.schema, index: ancestor.index, low: ancestor.low });
-  return walked({ type: 'ref', name: ancestor.id });
+  return walked(ref);
 }
 
 /**
@@ -166,7 +176,7 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
  * it, so every use of any of them reports that failure. A dropped def leaves the open defs, so a
  * later failure higher up does not record itself over the first.
  */
-function dropOpenGroup(state: State, ancestor: Ancestor, failure: Walked): Walked {
+function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walked {
   state.reportedBySchema.set(ancestor.schema, failure);
   const dropped = state.openDefs.filter((def) => def.index > ancestor.index);
   for (const { schema } of dropped) {
@@ -180,6 +190,18 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Walked): Walke
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
   return failure;
+}
+
+/**
+ * A schema on a cycle no id names is recorded when it is met again, before its walk ends; once it
+ * has, the record says what node it was building, so every later use judges its checks alike.
+ */
+function withOutlineReported(state: State, ancestor: Ancestor, node: Walked): Walked {
+  const reported = state.reportedBySchema.get(ancestor.schema);
+  if (reported !== undefined && node.kind === 'not-allowed') {
+    state.reportedBySchema.set(ancestor.schema, failed(reported.failures, node.outline));
+  }
+  return node;
 }
 
 function hasId(ancestor: Ancestor): boolean {

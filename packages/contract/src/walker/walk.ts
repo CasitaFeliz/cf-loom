@@ -5,9 +5,8 @@ import { notAllowed, refusedWrapperId } from './not-allowed.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   distinctFailures,
-  failed,
-  failuresOf,
   type LocatedSchema,
+  refusedBeside,
   type Walked,
   type Walker,
   walked,
@@ -58,6 +57,7 @@ export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginO
   return { located: walkedLocations, defs: recursion.defs() };
 }
 
+/** A schema's failures each once, without the node the walk was building. */
 function distinct(walked: Walked): Walked {
   if (walked.kind === 'walked') {
     return walked;
@@ -106,8 +106,9 @@ type Wrapper = LocatedSchema & { readonly kind: 'optional' | 'nonoptional' };
 function throughWrapper(wrapper: Wrapper, inner: Walked, state: WalkState): Walked {
   const { schema, at, kind } = wrapper;
   const checked = withOwnChecks(schema, inner, at);
-  const refusals = hasOwnId(schema) ? [notAllowed(at, refusedWrapperId(kind))] : [];
-  const joined = refusals.length === 0 ? checked : failed(failuresOf([...refusals, checked]));
+  const joined = hasOwnId(schema)
+    ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
+    : checked;
   return annotatedBy(joined, ownMetadata(schema, at, state.originOf));
 }
 

@@ -3,7 +3,7 @@ import { type DeclaredCheck, isConditional, refusedCheck } from './check-defs.ts
 import type { NotAllowed, NumberNode, Path, Regex, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, refused, refusedName, refusedRepeatedCheck } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
-import { failed, type Walked, walked } from './walked.ts';
+import { failed, type Outline, outlineOf, type Walked, walked } from './walked.ts';
 
 type Constraint<Node> = Walked<Partial<Node>>;
 
@@ -11,26 +11,36 @@ type ConstraintOf<Node> = (check: DeclaredCheck, at: Path) => Constraint<Node>;
 
 type Bounds = { readonly min?: number; readonly max?: number };
 
-/** The node types that take checks, and `other` for every type that takes none. */
-export type CheckedType = 'string' | 'number' | 'array' | 'other';
+/**
+ * A walked schema with the constraint of each of its checks, by what its node's type takes; a
+ * failed walk gains the checks' refusals, judged by the node it was building, beside its failures.
+ */
+export function constrain(
+  walkedSchema: Walked,
+  checks: readonly DeclaredCheck[],
+  at: Path,
+): Walked {
+  const outline = outlineOf(walkedSchema);
+  const constraints = constraintsOf(constraintOfType(outline.type), checks, at);
+  const failures = failuresOfConstraints(constraints, Object.keys(outline), at);
+  if (walkedSchema.kind === 'not-allowed') {
+    return failed([...walkedSchema.failures, ...failures], constrained(outline, constraints));
+  }
+  if (failures.length > 0) {
+    return failed(failures, constrained(outline, constraints));
+  }
+  return walked(constrained(walkedSchema.value, constraints));
+}
 
-/** The constraint a check sets on each type of node, written once for every use of it. */
-const constraintOfType = {
-  string: stringConstraint,
-  number: numberConstraint,
-  array: lengthConstraint,
-  other: refusedConstraint,
-};
-
-/** A node with the constraint of each check, by what its type takes. */
-export function constrain(node: SchemaNode, checks: readonly DeclaredCheck[], at: Path): Walked {
-  switch (node.type) {
+/** The constraint a check sets on a node of each type; one that takes no check refuses them all. */
+function constraintOfType(type: SchemaNode['type'] | undefined): ConstraintOf<object> {
+  switch (type) {
     case 'string':
-      return withConstraints(node, constraintsOf(constraintOfType.string, checks, at), at);
+      return stringConstraint;
     case 'number':
-      return withConstraints(node, constraintsOf(constraintOfType.number, checks, at), at);
+      return numberConstraint;
     case 'array':
-      return withConstraints(node, constraintsOf(constraintOfType.array, checks, at), at);
+      return lengthConstraint;
     case 'boolean':
     case 'enum':
     case 'object':
@@ -41,20 +51,9 @@ export function constrain(node: SchemaNode, checks: readonly DeclaredCheck[], at
     case 'allOf':
     case 'json':
     case 'ref':
-      return withConstraints(node, constraintsOf(constraintOfType.other, checks, at), at);
+    case undefined:
+      return refusedConstraint;
   }
-}
-
-/**
- * The checks refused on a schema whose walk left no node, judged as a node of the type its def
- * fixes would judge them.
- */
-export function checkFailuresOf(
-  type: CheckedType,
-  checks: readonly DeclaredCheck[],
-  at: Path,
-): readonly NotAllowed[] {
-  return failuresOfConstraints(constraintsOf<object>(constraintOfType[type], checks, at), [], at);
 }
 
 /** What each check sets, or why it is refused: a conditional check is refused on any type. */
@@ -68,22 +67,18 @@ function constraintsOf<Node>(
   );
 }
 
-function withConstraints<Node extends SchemaNode>(
+/** The node with every constraint that was walked set on it. */
+function constrained<Node extends Outline>(
   node: Node,
-  constraints: readonly Constraint<Node>[],
-  at: Path,
-): Walked {
-  const failures = failuresOfConstraints(constraints, Object.keys(node), at);
-  if (failures.length > 0) {
-    return failed(failures);
-  }
-  let constrainedNode: SchemaNode = node;
+  constraints: readonly Constraint<object>[],
+): Node {
+  let constrainedNode = node;
   for (const constraint of constraints) {
     if (constraint.kind === 'walked') {
       constrainedNode = { ...constrainedNode, ...constraint.value };
     }
   }
-  return walked(constrainedNode);
+  return constrainedNode;
 }
 
 /** Every constraint refused, not finite, or set twice, given the keys the node already holds. */
