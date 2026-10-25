@@ -1,4 +1,10 @@
-import { type ContractPackage, type Endpoint, isEndpoint, reaches } from '../declarations/index.ts';
+import {
+  type ContractPackage,
+  type Dependency,
+  type Endpoint,
+  isEndpoint,
+  reaches,
+} from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
@@ -7,6 +13,7 @@ import {
   isPlainObject,
   type LocatedDependency,
   listOf,
+  providerExportsOf,
   type Root,
   textOf,
 } from '../written/index.ts';
@@ -32,7 +39,7 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
     }
     return [
       ...selectedOf(located).flatMap((selected) =>
-        selectedFailures(selected, provider, declarations.root.kind),
+        selectedFailures(selected, located.dependency, declarations.root.kind),
       ),
       ...repeatedFailures(selectedOf(located)),
       ...unusedFailures(located, provider, declarations),
@@ -64,15 +71,14 @@ function isSelected(listed: { readonly at: Path; readonly endpoint: unknown }): 
 
 function selectedFailures(
   { at, endpoint }: Selected,
-  provider: ContractPackage,
+  dependency: Dependency,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
   const packageKind = rootKind === 'application' ? 'application' : 'service';
   if (!reaches(packageKind, endpoint.visibility)) {
     return [unreachableEndpointFailure(at, endpoint)];
   }
-  const exported: readonly unknown[] = Object.values(provider.endpoints);
-  if (!exported.includes(endpoint)) {
+  if (!providerExportsOf(dependency).endpoints.includes(endpoint)) {
     const message = `${selection}: ${endpoint.name} is not one of them`;
     return [failure(at, 'dependency-selection', message)];
   }

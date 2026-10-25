@@ -1,22 +1,18 @@
-import type { Dependency, Group } from '@cf-loom/contract';
 import {
   declarationsListedBy,
-  isCommand,
-  isEndpoint,
-  isEvent,
   isGroup,
-  isSubscription,
+  isListable,
+  providerExportsOf,
 } from '@cf-loom/contract/internal';
 import type { ExportedValue } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
 
-type Declarations = BuiltService['validated']['declarations'];
+type ValidatedDeclarations = BuiltService['validated']['declarations'];
 
 /**
- * A line for every Endpoint, Event, Command's Message Version or Subscription that a file under
- * `src/contract/` exports and no Group lists, and for every Group it exports that the root does
- * not list, whose own declarations get none: each once, at the first file that exports it, since
- * the Contract would leave it out without a word.
+ * A line for every Group a file under `src/contract/` exports that the root does not list, then
+ * for every Endpoint, Event, Command's Message Version or Subscription it exports that no Group
+ * lists, each at the first file that exports it.
  */
 export function unreachedLinesOf(
   { validated }: BuiltService,
@@ -24,54 +20,51 @@ export function unreachedLinesOf(
 ): readonly string[] {
   const unlistedGroups = unlistedGroupsOf(validated.declarations, exports);
   const reached = reachedOf(validated.declarations, unlistedGroups);
-  const unreached = exports.filter(({ value }) =>
-    isGroup(value) ? unlistedGroups.includes(value) : isListable(value) && !reached.has(value),
-  );
-  const firsts = unreached.filter(
-    ({ value }, index) => unreached.findIndex((other) => other.value === value) === index,
-  );
-  return firsts.map(lineOf);
+  const groups = firstExportsOf(exports, (value) => unlistedGroups.includes(value));
+  const declarations = firstExportsOf(exports, (value) => isListable(value) && !reached.has(value));
+  return [...groups.map(unlistedGroupLineOf), ...declarations.map(unlistedDeclarationLineOf)];
 }
 
 /** The Groups that a file exports and the root does not list. */
 function unlistedGroupsOf(
-  { groups }: Declarations,
+  { groups }: ValidatedDeclarations,
   exports: readonly ExportedValue[],
-): readonly Group[] {
-  const listed = groups.map(({ group }) => group);
+): readonly unknown[] {
+  const listed: readonly unknown[] = groups.map(({ group }) => group);
   return exports
     .map(({ value }) => value)
-    .filter(isGroup)
-    .filter((group) => !listed.includes(group));
+    .filter((value) => isGroup(value) && !listed.includes(value));
 }
 
-/** What needs no line: what a Group of the root lists, what a Provider owns, and what an unlisted Group lists. */
+/** What needs no line: whatever a Group lists, the root's or an unlisted one, and what a Provider exports. */
 function reachedOf(
-  { endpoints, events, commands, subscriptions, dependencies }: Declarations,
-  unlistedGroups: readonly Group[],
+  { groups, dependencies }: ValidatedDeclarations,
+  unlistedGroups: readonly unknown[],
 ): ReadonlySet<unknown> {
+  const allGroups = [...groups.map(({ group }) => group), ...unlistedGroups.filter(isGroup)];
   return new Set<unknown>([
-    ...endpoints.map(({ endpoint }) => endpoint),
-    ...events.map(({ event }) => event),
-    ...commands.map(({ command }) => command),
-    ...subscriptions.map(({ subscription }) => subscription),
-    ...dependencies.flatMap(({ dependency }) => providedBy(dependency)),
-    ...unlistedGroups.flatMap(declarationsListedBy),
+    ...allGroups.flatMap(declarationsListedBy),
+    ...dependencies.flatMap(({ dependency }) =>
+      Object.values(providerExportsOf(dependency)).flat(),
+    ),
   ]);
 }
 
-/** The Endpoints and Events a Dependency's Provider exports, which it owns and no Group of this Contract lists. */
-function providedBy({ provider }: Dependency): readonly unknown[] {
-  return [...Object.values(provider.endpoints), ...Object.values(provider.events)];
+/** The first export of each exported value that `isUnreached` holds for. */
+function firstExportsOf(
+  exports: readonly ExportedValue[],
+  isUnreached: (value: unknown) => boolean,
+): readonly ExportedValue[] {
+  const unreached = exports.filter(({ value }) => isUnreached(value));
+  return unreached.filter(
+    ({ value }, index) => unreached.findIndex((other) => other.value === value) === index,
+  );
 }
 
-function isListable(value: unknown): boolean {
-  return isEndpoint(value) || isEvent(value) || isCommand(value) || isSubscription(value);
+function unlistedGroupLineOf({ path, name }: ExportedValue): string {
+  return `${path} exports ${name}, which the root does not list: list it in groups or delete it`;
 }
 
-function lineOf({ path, name, value }: ExportedValue): string {
-  const unlisted = isGroup(value)
-    ? 'the root does not list: list it in groups'
-    : 'no Group lists: list it in a Group';
-  return `${path} exports ${name}, which ${unlisted} or delete it`;
+function unlistedDeclarationLineOf({ path, name }: ExportedValue): string {
+  return `${path} exports ${name}, which no Group lists: list it in a Group or delete it`;
 }

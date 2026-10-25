@@ -3054,10 +3054,10 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
     },
   );
 
-  test('every declaration no Group lists is named, in code point order of its file', () => {
+  test('every declaration no Group lists is named, in code point order of its file, not of its name', () => {
     const project = aProject({
       ...withUnlistedEndpoint(aMessagingService()),
-      'src/contract/order-shipped.event.ts': lines([
+      'src/contract/a-order-shipped.event.ts': lines([
         "import { defineEvent } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         '',
@@ -3075,10 +3075,28 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
 
     expect(ran.stderr).toBe(
       lines([
+        unreachedLine('src/contract/a-order-shipped.event.ts', 'orderShippedV1'),
         unreachedLine('src/contract/endpoints/archive/list-archived.endpoint.ts', 'listArchived'),
-        unreachedLine('src/contract/order-shipped.event.ts', 'orderShippedV1'),
       ]),
     );
+  });
+
+  test('an Endpoint a file exports as default and no Group lists is reported as default', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/endpoints/archive/list-archived.endpoint.ts': anEndpoint({
+        name: 'listArchived',
+        path: '/archived',
+      }).replace('export const listArchived =', 'export default'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${unreachedLine(archivedEndpointFile, 'default')}\n`,
+    });
   });
 
   test('a Guard that no Endpoint attaches does not fail generate', () => {
@@ -3116,7 +3134,13 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
   });
 
   test('a Provider’s Event that a file under src/contract exports is not reported', () => {
-    const project = aProject(aMessagingService());
+    const project = aProject({
+      ...aMessagingService(),
+      'src/contract/provider-events.ts': lines([
+        importOf('{ paymentSettledV1 }', './payments.ts'),
+        'export { paymentSettledV1 };',
+      ]),
+    });
 
     const ran = cfLoom(project, 'generate');
 
@@ -3219,7 +3243,29 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
   });
 
   test('a Retired Endpoint that a Group still lists is not reported', () => {
-    const project = aProject(aService());
+    const retiredFile = 'src/contract/endpoints/orders/archived-orders.endpoint.ts';
+    const project = aProject(
+      withRoot(
+        {
+          ...aService(),
+          [retiredFile]: anEndpoint({
+            name: 'archivedOrders',
+            path: '/archived-orders',
+            lifecycle: 'retired',
+          }),
+        },
+        (root) =>
+          root
+            .replace(
+              "import { defineContract, defineGroup } from '@cf-loom/contract';",
+              `import { defineContract, defineGroup } from '@cf-loom/contract';\n${importOf('{ archivedOrders }', './endpoints/orders/archived-orders.endpoint.ts')}`,
+            )
+            .replace(
+              'endpoints: [getOrder, createOrder, listOrders]',
+              'endpoints: [getOrder, createOrder, listOrders, archivedOrders]',
+            ),
+      ),
+    );
 
     const ran = cfLoom(project, 'generate');
 

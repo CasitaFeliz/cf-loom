@@ -39,12 +39,12 @@ export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
 /** A file of the Contract exporting a value under a name. */
 export type ExportedValue = FileExport & { readonly value: unknown };
 
-/** The files of the Contract that export a declaration, by identity, in code point order of file and name. */
+/** The files of the Contract that export a declaration under a name in code, by identity, in code point order of file and name. */
 export type ExportsOf = (declaration: unknown) => readonly FileExport[];
 
 /**
- * What `src/contract/` exports: every export in code point order of file and name, and where a
- * declaration is exported; or the file that could not be imported.
+ * What `src/contract/` exports: every export, a default one included, in code point order of file
+ * and name, and where a declaration is exported under a name; or the file that could not be imported.
  */
 export type ContractExports =
   | {
@@ -77,7 +77,8 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
   return {
     kind: 'exported',
     exports,
-    exportsOf: (declaration) => exports.filter(({ value }) => value === declaration),
+    exportsOf: (declaration) =>
+      exports.filter(({ name, value }) => name !== 'default' && value === declaration),
   };
 }
 
@@ -85,9 +86,7 @@ function isContractSource(file: string): boolean {
   return file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.d.ts');
 }
 
-/** A module's named exports, in code point order. */
+/** A module's exports, `default` included, in code point order of their names. */
 function namesOf(exports: Readonly<Record<string, unknown>>): readonly string[] {
-  return Object.keys(exports)
-    .filter((name) => name !== 'default')
-    .sort(byCodePoint);
+  return Object.keys(exports).sort(byCodePoint);
 }

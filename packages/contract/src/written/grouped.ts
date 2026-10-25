@@ -116,6 +116,11 @@ export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
   };
 }
 
+/** Whether a value is an Endpoint, Event, Command or Subscription, which a Group lists. */
+export function isListable(value: unknown): value is GroupedDeclarations[GroupedField] {
+  return groupedFields.some((field) => fieldListings[field].fits(value));
+}
+
 /** Every declaration a Group lists in one field, in its order, repeats included. */
 export function listingsOf<Field extends GroupedField>(
   { at, group }: LocatedGroup,
@@ -129,7 +134,7 @@ export function listingsOf<Field extends GroupedField>(
   }));
 }
 
-/** Every declaration a Group lists, in any field, whatever sits in its lists that is none left out. */
+/** Every declaration a Group's lists hold, in field order; what fits no field is left out. */
 export function declarationsListedBy(group: Group): readonly unknown[] {
   return groupedFields.flatMap((field) => declarationsListedIn(group, field));
 }

@@ -7,7 +7,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '../index.ts';
-import { declarationsListedBy } from '../internal/index.ts';
+import { declarationsListedBy, isListable } from '../internal/index.ts';
 
 const listOrders = defineEndpoint({
   name: 'listOrders',
@@ -68,7 +68,7 @@ describe('declarationsListedBy', () => {
     expect(listed).toEqual([orderCreatedV1]);
   });
 
-  test('a cast Group lists what is no declaration of its field in no list', () => {
+  test('a cast Group lists only the declarations of each field, and nothing from a field that is no list', () => {
     const cast = defineGroup({
       name: 'orders',
       description: 'Order lifecycle',
@@ -81,5 +81,21 @@ describe('declarationsListedBy', () => {
     const listed = declarationsListedBy(cast);
 
     expect(listed).toEqual([listOrders]);
+  });
+});
+
+describe('isListable', () => {
+  test('an Endpoint, an Event, a Command and a Subscription are listable; a Group and what is no declaration are not', () => {
+    const orders = defineGroup({
+      name: 'orders',
+      description: 'Order lifecycle',
+      endpoints: [listOrders],
+    });
+
+    const listable = [listOrders, orderCreatedV1, chargeCardV1, notifyOnCreated].map(isListable);
+    const others = [orders, 'listOrders', undefined, { kind: 'endpoint' }].map(isListable);
+
+    expect(listable).toEqual([true, true, true, true]);
+    expect(others).toEqual([false, false, false, false]);
   });
 });
