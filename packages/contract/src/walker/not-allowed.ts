@@ -50,7 +50,7 @@ export const refused = {
   urlNormalize: { construct: 'z.url({ normalize })' },
   readonly: { construct: '.readonly()' },
   numericEnum: { construct: 'numeric z.enum() values' },
-  emptyEnum: { construct: 'a z.enum() without values' },
+  emptyEnum: { construct: 'a z.enum() or z.literal() without values' },
   optional: { construct: '.optional()' },
   nonoptional: { construct: '.nonoptional()' },
   null: { construct: 'z.null()', instead: nullableInstead },

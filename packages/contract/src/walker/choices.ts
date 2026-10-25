@@ -17,14 +17,15 @@ import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from 
 /** An enum of string values, open when `openEnum()` declared it or zod derived it from one. */
 export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   const values: readonly unknown[] = Object.values(schema._zod.def.entries);
-  if (values.length === 0) {
-    return notAllowed(at, refused.emptyEnum);
-  }
   const strings = values.filter(isString);
   if (strings.length !== values.length) {
     return notAllowed(at, refused.numericEnum);
   }
-  return walked({ ...enumOf(strings), open: isOpen(schema) });
+  const closed = enumOf(strings, at);
+  if (closed.kind === 'not-allowed') {
+    return closed;
+  }
+  return walked({ ...closed.value, open: isOpen(schema) });
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
@@ -39,7 +40,7 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
   if (options.kind === 'not-allowed') {
     return options;
   }
-  return walked(choiceOf(options.value));
+  return choiceOf(options.value, at);
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
@@ -118,22 +119,30 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
  * intersection, and is nullable when any of its literals is. Any other union keeps its options in
  * declared order, since zod's union returns the first option that parses.
  */
-function choiceOf(options: readonly SchemaNode[]): SchemaNode {
+function choiceOf(options: readonly SchemaNode[], at: Path): Walked {
   const literals = options.filter(isClosedEnum);
   if (literals.length !== options.length) {
-    return { type: 'union', options: [...options] };
+    return walked({ type: 'union', options: [...options] });
   }
-  const values = enumOf(literals.flatMap((literal) => literal.values));
-  return literals.some((literal) => literal.nullable === true)
-    ? { ...values, nullable: true }
-    : values;
+  const values = enumOf(
+    literals.flatMap((literal) => literal.values),
+    at,
+  );
+  if (values.kind === 'not-allowed') {
+    return values;
+  }
+  const nullable = literals.some((literal) => literal.nullable === true);
+  return walked(nullable ? { ...values.value, nullable: true } : values.value);
 }
 
-/** A closed enum of literal values, each once, in canonical order. */
-export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
+/** A closed enum of literal values, each once, in canonical order; one without values is refused. */
+export function enumOf(values: readonly JsonPrimitive[], at: Path): Walked<EnumNode> {
+  if (values.length === 0) {
+    return notAllowed(at, refused.emptyEnum);
+  }
   const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
   const distinct = [...valueByJson.values()];
-  return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
+  return walked({ type: 'enum', values: distinct.sort(byCanonicalJson), open: false });
 }
 
 /** A closed enum, which is how a literal walks. */

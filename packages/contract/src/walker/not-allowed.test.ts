@@ -23,7 +23,7 @@ function refusedAt(at: readonly (string | number)[], construct: string, instead?
 
 const mutating = '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()';
 const dynamicValue = 'z.record() or z.json()';
-const noValues = 'a z.enum() without values';
+const noValues = 'a z.enum() or z.literal() without values';
 const nonFinite = 'a number that is not finite (NaN or Infinity)';
 /** A pattern option the types of most formats refuse, as an author could still pass it. */
 function patternOf(pattern: RegExp): object {
@@ -128,6 +128,7 @@ describe('walkSchemas: the Not allowed list', () => {
     ['numeric z.enum() values', z.enum({ low: 1, high: 2 }), 'numeric z.enum() values'],
     ['a z.enum() with every value excluded', z.enum(['a']).exclude(['a']), noValues],
     ['an openEnum() with every value excluded', openEnum(['a']).exclude(['a']), noValues],
+    ['a z.literal() without values', z.literal([]), noValues],
     ['.optional() outside an object field', z.string().optional(), '.optional()'],
     ['z.literal(NaN)', z.literal(Number.NaN), nonFinite],
     ['z.literal(Infinity)', z.literal(Number.POSITIVE_INFINITY), nonFinite],
