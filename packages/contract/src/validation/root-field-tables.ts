@@ -27,7 +27,7 @@ const contractFields = {
 
 const applicationFields = {
   declared: { kind: true, name: true, dependencies: true },
-  required: { kind: true, name: true, dependencies: true },
+  required: { kind: true, name: true },
   strings: { kind: true, name: true },
   texts: {},
   objects: {},

@@ -3,13 +3,11 @@ import { type RootKind, rootPlaces } from '../loading/index.ts';
 /** A root that declares nothing yet, under the export the CLI loads it from. */
 export function rootTemplateOf(kind: RootKind, name: string): string {
   const { define, exported } = rootPlaces[kind];
-  const fields =
-    kind === 'application' ? [`  name: '${name}',`, '  dependencies: [],'] : [`  name: '${name}',`];
   return lines([
     `import { ${define} } from '@cf-loom/contract';`,
     '',
     `export const ${exported} = ${define}({`,
-    ...fields,
+    `  name: '${name}',`,
     '});',
   ]);
 }

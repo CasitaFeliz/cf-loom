@@ -8,7 +8,7 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a root's and a Group's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included, and a `description` or a `message` is never blank.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a root's and a Group's lists left out are empty. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included, and a `description` or a `message` is never blank.
 
 ## The root
 
@@ -50,7 +50,7 @@ export const application = defineApplication({
 });
 ```
 
-A Dependency of an Application on an Endpoint that is not Public is a type error, and an Application has no Subscriptions, so each of its Dependencies selects Endpoints.
+A Dependency of an Application on an Endpoint that is not Public is a type error that names the Endpoint, and `generate` fails on one the types did not catch; an Application has no Subscriptions, so each of its Dependencies selects Endpoints.
 
 ## Definitions Packages
 

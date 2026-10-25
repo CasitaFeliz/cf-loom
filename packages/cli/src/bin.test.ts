@@ -255,7 +255,6 @@ describe('cf-loom init', () => {
         '',
         'export const application = defineApplication({',
         "  name: 'orders-service',",
-        '  dependencies: [],',
         '});',
         '',
       ].join('\n'),

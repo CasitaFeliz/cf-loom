@@ -319,14 +319,14 @@ describe('validateContract: required fields', () => {
     );
   });
 
-  test('an Application whose dependencies is null fails once, as a required field', () => {
+  test('an Application whose dependencies is null fails once, as no list', () => {
     const application = defineApplication({
       name: 'web-admin',
       dependencies: null as unknown as readonly never[],
     });
 
     expect(validateInPackage(application, noOrigin)).toEqual(
-      required(['dependencies'], 'dependencies is a required field'),
+      failed(['dependencies'], 'not-a-list', 'dependencies is a list'),
     );
   });
 
@@ -357,14 +357,10 @@ describe('validateContract: required fields', () => {
     );
   });
 
-  test('an Application without dependencies fails', () => {
-    const application = defineApplication(
-      withoutField({ name: 'web-admin', dependencies: [] }, 'dependencies'),
-    );
+  test('an Application without dependencies validates', () => {
+    const application = defineApplication({ name: 'web-admin' });
 
-    expect(validateInPackage(application, noOrigin)).toEqual(
-      required(['dependencies'], 'dependencies is a required field'),
-    );
+    expect(validateInPackage(application, noOrigin).kind).toBe('valid');
   });
 
   test('a Group without a description fails', () => {
