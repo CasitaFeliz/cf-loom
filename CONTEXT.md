@@ -191,7 +191,7 @@ _Avoid_: dispatcher, bus
 ### Compatibility
 
 **Snapshot**:
-A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package.
+A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version` and the history; the **exported Snapshot** is the cut of it that a Contract Package exports.
 _Avoid_: schema dump, manifest
 
 **Baseline**:
