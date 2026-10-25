@@ -18,7 +18,7 @@ export function subscriptionDifferencesOf(
 ): readonly SiteDifferences[] {
   return counterpartsOf(baseline.subscriptions, proposed.subscriptions).map(
     (subscription): SiteDifferences => ({
-      site: { kind: 'subscription', name: subscription.key },
+      site: { kind: 'subscription', name: subscription.key, visibility: 'private' },
       differences: differencesOf(subscription),
     }),
   );

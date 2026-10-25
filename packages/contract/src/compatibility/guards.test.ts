@@ -9,9 +9,9 @@ import {
   type Field,
   type GuardSnapshot,
   type ObjectNode,
-  type Path,
   type PublishedDefinitionsSnapshot,
   type SchemaNode,
+  type Step,
 } from '../internal/index.ts';
 
 const unauthenticated = 'UNAUTHENTICATED';
@@ -104,11 +104,11 @@ function guardChangesOf(from: GuardSnapshot, to: GuardSnapshot): readonly Change
 }
 
 function breaking(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'breaking', approval: 'needed' };
+  return { site, difference, class: 'breaking', verdict: 'approval-needed' };
 }
 
 function additive(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'additive' };
+  return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
 function placeOf(site: ChangeSite): string {
@@ -126,12 +126,20 @@ function placeOf(site: ChangeSite): string {
   }
 }
 
-function inputField(at: Path, isRequired: boolean): Difference {
+function demandAt(part: 'query' | 'headers', name: string): readonly Step[] {
+  return [
+    { kind: 'part', name: 'demands' },
+    { kind: 'part', name: part },
+    { kind: 'field', name },
+  ];
+}
+
+function inputField(at: readonly Step[], isRequired: boolean): Difference {
   const shape = { kind: 'field-added', required: isRequired } as const;
   return { kind: 'schema', position: 'input', at, shape };
 }
 
-const guardSite: ChangeSite = { kind: 'guard', name: 'authenticated' };
+const guardSite: ChangeSite = { kind: 'guard', name: 'authenticated', visibility: 'public' };
 
 function codeSite(code: string): ChangeSite {
   return { kind: 'code', code, visibility: 'public' };
@@ -162,7 +170,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     expect(changes).toEqual([
       breaking(guardSite, { kind: 'removed' }),
-      additive({ kind: 'guard', name: 'signedIn' }, { kind: 'added' }),
+      additive({ kind: 'guard', name: 'signedIn', visibility: 'public' }, { kind: 'added' }),
     ]);
   });
 
@@ -171,9 +179,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
 
-    expect(changes).toEqual([
-      breaking(guardSite, inputField(['demands', 'query', 'fields', 'token'], true)),
-    ]);
+    expect(changes).toEqual([breaking(guardSite, inputField(demandAt('query', 'token'), true))]);
   });
 
   test('an optional query demand added is Additive', () => {
@@ -181,25 +187,20 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
 
-    expect(changes).toEqual([
-      additive(guardSite, inputField(['demands', 'query', 'fields', 'token'], false)),
-    ]);
+    expect(changes).toEqual([additive(guardSite, inputField(demandAt('query', 'token'), false))]);
   });
 
-  test('an optional header demand with a format added is Breaking by the header text rule, beside its Additive field Change', () => {
-    const at = ['demands', 'headers', 'fields', 'x-trace'];
+  test('an optional header demand with a format added is one Breaking Change, by the header text rule alone', () => {
+    const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional({ type: 'string', format: 'uuid' }) });
 
     const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
 
-    expect(changes).toEqual([
-      additive(guardSite, inputField(at, false)),
-      breaking(guardSite, { kind: 'header-refuses-text', at }),
-    ]);
+    expect(changes).toEqual([breaking(guardSite, { kind: 'header-refuses-text', at })]);
   });
 
   test('an optional header demand that accepts every text added is Additive', () => {
-    const at = ['demands', 'headers', 'fields', 'x-trace'];
+    const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional(aString) });
 
     const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
@@ -216,7 +217,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
       additive(guardSite, {
         kind: 'schema',
         position: 'input',
-        at: ['demands', 'query', 'fields', 'token'],
+        at: demandAt('query', 'token'),
         shape: { kind: 'field-removed' },
       }),
     ]);
@@ -263,11 +264,9 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const changes = guardChangesOf(aGuard(), to);
 
-    const traceAt = ['demands', 'headers', 'fields', 'x-trace'];
     expect(changes).toEqual([
-      breaking(guardSite, inputField(['demands', 'query', 'fields', 'token'], true)),
-      additive(guardSite, inputField(traceAt, false)),
-      breaking(guardSite, { kind: 'header-refuses-text', at: traceAt }),
+      breaking(guardSite, inputField(demandAt('query', 'token'), true)),
+      breaking(guardSite, { kind: 'header-refuses-text', at: demandAt('headers', 'x-trace') }),
       additive(guardSite, { kind: 'rejection-added', code: unauthenticated }),
     ]);
   });

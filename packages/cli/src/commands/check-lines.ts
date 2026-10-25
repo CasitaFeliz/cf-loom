@@ -1,6 +1,7 @@
-import type { Change } from '@cf-loom/contract/internal';
 import { firstStableOf } from '../versioning/index.ts';
-import { type Checked, type Ending, partsOf, reasonOf, tokenOf } from './checked.ts';
+import { tokenOf } from './author-path.ts';
+import { type Checked, type Ending, reasonOf, siteOf } from './checked.ts';
+import type { CheckedChange, DifferenceJson } from './checked-change.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
 const jsonFields = new Set(['value']);
@@ -8,18 +9,33 @@ const jsonFields = new Set(['value']);
 /** Fields a Change line has a word for, so it does not repeat them as `name=value`. */
 const wordedFields = new Set(['kind', 'at', 'position', 'shape']);
 
-/** A Change on one line: its site, its kinds and fields, and its class. */
-export function changeLineOf(change: Change): string {
-  const parts = partsOf(change);
-  const kinds = parts.shape === null ? [parts.difference] : [parts.difference, parts.shape];
-  const path = parts.at === null ? [] : [`at ${parts.at}`];
-  const where = parts.position === null ? [] : [`(${parts.position})`];
-  const described = [...kinds, ...path, ...where, ...fieldsOf(change)].join(' ');
-  return `${parts.site} ${described}: ${classTextOf(change)}`;
+/** A Change on one line: its site, its kinds, path, Position and fields, its class and Verdict, and its hint. */
+export function changeLineOf(change: CheckedChange): string {
+  const { site, difference, path } = change;
+  const shape = difference.kind === 'schema' ? [difference.shape.kind] : [];
+  const where = path === null ? [] : [`at ${path}`];
+  const described = [
+    difference.kind,
+    ...shape,
+    ...where,
+    ...positionOf(difference),
+    ...fieldsOf(difference),
+  ].join(' ');
+  const hint = change.hint === null ? '' : `; ${change.hint}`;
+  return `${siteOf(site)} ${described}: ${judgmentOf(change)}${hint}`;
+}
+
+/** The Position, written only when the path does not already start with it. */
+function positionOf(difference: DifferenceJson): string[] {
+  if (!('position' in difference)) {
+    return [];
+  }
+  const startsWithIt = 'at' in difference && difference.at[0] === difference.position;
+  return startsWithIt ? [] : [`(${difference.position})`];
 }
 
 /** The fields of a difference and its shape that the line has no word for, as `name=value`. */
-function fieldsOf({ difference }: Change): string[] {
+function fieldsOf(difference: DifferenceJson): string[] {
   const shape = difference.kind === 'schema' ? difference.shape : {};
   const named = [...Object.entries(difference), ...Object.entries(shape)];
   const unworded = named.filter(([name]) => !wordedFields.has(name));
@@ -33,19 +49,27 @@ function valueTextOf(name: string, value: unknown): string {
   return typeof value === 'string' ? tokenOf(value) : String(value);
 }
 
-/** A Change's class in words. */
-function classTextOf(change: Change): string {
-  switch (change.class) {
+/** A Change's class in words, then what the Verdict adds to it. */
+function judgmentOf({ class: changeClass, verdict }: CheckedChange): string {
+  const word = classWordOf(changeClass);
+  switch (verdict) {
+    case 'allowed':
+      return changeClass === 'breaking' ? `${word}, needs no Approval` : word;
+    case 'approval-needed':
+      return `${word}, needs a Breaking Change Approval`;
+    case 'refused':
+      return `${word}, refused`;
+  }
+}
+
+function classWordOf(changeClass: CheckedChange['class']): string {
+  switch (changeClass) {
+    case 'breaking':
+      return 'Breaking';
     case 'additive':
       return 'Additive';
     case 'neutral':
       return 'Neutral';
-    case 'not-allowed':
-      return 'Not allowed';
-    case 'breaking':
-      return change.approval === 'needed'
-        ? 'Breaking, needs a Breaking Change Approval'
-        : 'Breaking, needs no Approval';
   }
 }
 
@@ -83,7 +107,7 @@ export function linesOf(checked: Checked, status: Ending['status']): readonly st
 
 function closingLinesOf(
   compared: string,
-  changes: readonly Change[],
+  changes: readonly CheckedChange[],
   status: Ending['status'],
 ): string[] {
   if (changes.length === 0) {

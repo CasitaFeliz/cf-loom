@@ -6,6 +6,7 @@ import {
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
 import type { Checked } from './checked.ts';
+import { checkedChangeOf } from './checked-change.ts';
 import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
 
 /** A package's Baseline as the registry holds it. */
@@ -70,7 +71,8 @@ export function checkedFrom(comparison: Comparison): Checked {
     case 'baseline': {
       const { packageName, snapshot, stable, chosen } = comparison.read;
       const against = { kind: 'baseline', version: snapshot.version, stable, chosen } as const;
-      return { kind: 'checked', packageName, against, changes: comparison.report.changes };
+      const changes = comparison.report.changes.map(checkedChangeOf);
+      return { kind: 'checked', packageName, against, changes };
     }
   }
 }

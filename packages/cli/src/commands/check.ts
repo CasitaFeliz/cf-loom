@@ -13,7 +13,7 @@ export type CheckOptions = { readonly output: Output; readonly against: string |
 
 /**
  * Runs the Compatibility Check of the committed Snapshot against its Baseline and prints every
- * Change with its class; it only reports, and the organization enforces any Approval.
+ * Change with its class and Verdict; it only reports, and the organization enforces any Approval.
  */
 export async function check(run: Run, { output, against }: CheckOptions): Promise<Exit> {
   const checked = await checkedOf(run, against);

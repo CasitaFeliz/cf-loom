@@ -1,6 +1,7 @@
-import { type Field, isKeyedRecord, type ObjectNode, type Path } from '../walker/index.ts';
+import { type Field, isKeyedRecord, type ObjectNode } from '../walker/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type Finding, found, inside, type NodePairOf } from './findings.ts';
+import { fieldStep, type Step } from './steps.ts';
 
 /**
  * How two objects differ: a change of mode is a different type, so no field is compared then;
@@ -16,7 +17,7 @@ export function objectFindingsOf({ baseline, proposed }: NodePairOf<'object'>): 
 }
 
 function fieldFindingsOf(field: Counterpart<Field>, object: ObjectNode): readonly Finding[] {
-  const steps = ['fields', field.key];
+  const steps = [fieldStep(field.key)];
   switch (field.kind) {
     case 'added':
       return [found({ kind: 'field-added', required: field.proposed.required }, steps)];
@@ -35,7 +36,11 @@ function removalOf(object: ObjectNode): { readonly kind: 'key-removed' | 'field-
   return { kind: isKeyedRecord(object) ? 'key-removed' : 'field-removed' };
 }
 
-function requirednessFindingsOf(baseline: Field, proposed: Field, steps: Path): readonly Finding[] {
+function requirednessFindingsOf(
+  baseline: Field,
+  proposed: Field,
+  steps: readonly Step[],
+): readonly Finding[] {
   if (baseline.required === proposed.required) {
     return [];
   }

@@ -62,7 +62,7 @@ function aCode(status: number): CodeSnapshot {
 }
 
 function subscriptionSite(name: string): ChangeSite {
-  return { kind: 'subscription', name };
+  return { kind: 'subscription', name, visibility: 'private' };
 }
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
@@ -109,7 +109,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
   test.each([
     { name: 'its old Event', event: 'orders-service:OrderPlaced@1' },
     { name: 'another Event', event: 'payments-service:PaymentSettled@1' },
-  ])('declaring a removed Subscription’s name again with $name is not allowed', ({ event }) => {
+  ])('declaring a removed Subscription’s name again with $name is refused', ({ event }) => {
     const baseline = aBaseline({ subscriptions: { legacySync: aRemovedSubscription() } });
     const proposed = aProposed({ subscriptions: { legacySync: aSubscription(event) } });
 
@@ -119,7 +119,8 @@ describe('compatibilityReportOf, Subscriptions', () => {
       {
         site: subscriptionSite('legacySync'),
         difference: { kind: 'identity-reused' },
-        class: 'not-allowed',
+        class: 'breaking',
+        verdict: 'refused',
       },
     ]);
   });
@@ -127,7 +128,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
   test.each([
     { name: 'another version', to: 'orders-service:OrderPlaced@2' },
     { name: 'another Service’s Event', to: 'payments-service:PaymentSettled@1' },
-  ])('changing a Subscription’s Event to $name is not allowed, naming both', ({ to }) => {
+  ])('changing a Subscription’s Event to $name is refused, naming both', ({ to }) => {
     const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const proposed = aProposed({ subscriptions: { notifyOnPlaced: aSubscription(to) } });
 
@@ -137,7 +138,8 @@ describe('compatibilityReportOf, Subscriptions', () => {
       {
         site: subscriptionSite('notifyOnPlaced'),
         difference: { kind: 'event-changed', from: 'orders-service:OrderPlaced@1', to },
-        class: 'not-allowed',
+        class: 'breaking',
+        verdict: 'refused',
       },
     ]);
   });

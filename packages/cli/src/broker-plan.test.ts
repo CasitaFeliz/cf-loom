@@ -520,7 +520,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
 
       expect(ran).toEqual({
         status,
-        stdout: `${JSON.stringify({ status, errors: [line] })}\n`,
+        stdout: `${JSON.stringify({ format: 1, status, errors: [line] })}\n`,
         stderr: `${line}\n`,
       });
     },

@@ -11,6 +11,7 @@ import { bodyDifferencesOf } from './bodies.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import type { Difference, SiteDifferences } from './report.ts';
+import { partsOf } from './steps.ts';
 import { widerOf } from './visibility.ts';
 
 /**
@@ -93,7 +94,7 @@ function comparedDifferencesOf(
       const bodies = { baseline: baseline.body, proposed: proposed.body };
       return [
         ...statusDifferencesOf(baseline.status, proposed.status),
-        ...bodyDifferencesOf(bodies, defs, { position: 'success', at: ['body'] }),
+        ...bodyDifferencesOf(bodies, defs, { position: 'success', at: partsOf('body') }),
       ];
     }
     case 'added':

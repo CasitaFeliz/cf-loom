@@ -1,28 +1,40 @@
 import type { Visibility } from '../declarations/index.ts';
-import type { JsonPrimitive, ObjectNode, Path, SchemaNode } from '../walker/index.ts';
+import type { JsonPrimitive, ObjectNode, SchemaNode } from '../walker/index.ts';
+import type { Step } from './steps.ts';
 
 /**
- * Where a Change is: an Element by identity with its Visibility, which decides the bump; a
- * Rejection code; a Subscription by name; or a Definitions Package's shared schema or Guard by
- * name. When the Visibility moved, it is the wider of the two; when the Element is on one side
- * only, that side's.
+ * Where a Change is, with the Visibility that decides its bump: the wider of the Baseline's and
+ * the proposed one when it moved, else the side the Element is on.
  */
 export type ChangeSite =
-  | { readonly kind: 'endpoint'; readonly identity: string; readonly visibility: Visibility }
-  | { readonly kind: 'event'; readonly identity: string; readonly visibility: Visibility }
-  | { readonly kind: 'command'; readonly identity: string }
+  /** An Endpoint by identity, with its name: the proposed one, or the Baseline's when it is dropped. */
+  | {
+      readonly kind: 'endpoint';
+      readonly identity: string;
+      readonly name: string;
+      readonly visibility: Visibility;
+    }
+  /** An Event or a Command by identity; a Command is always Private. */
+  | {
+      readonly kind: 'event' | 'command';
+      readonly identity: string;
+      readonly visibility: Visibility;
+    }
   /**
    * A Rejection code, which is no Element: its Visibility is the widest of the Endpoints that answer
-   * it before or after the change, or Private when none does, or Public in a Definitions Package,
-   * and decides the bump.
+   * it before or after the change, or Private when none does, or Public in a Definitions Package.
    */
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
-  /** A Subscription by name: no Element, and no Consumer relies on what a Service itself consumes. */
-  | { readonly kind: 'subscription'; readonly name: string }
-  /** A Definitions Package's shared schema by name: it has no Position until an Element uses it. */
-  | { readonly kind: 'shared-schema'; readonly name: string }
-  /** A Definitions Package's Guard by name: no Endpoint attaches it until a Service does. */
-  | { readonly kind: 'guard'; readonly name: string };
+  /**
+   * A Subscription by name, Private since no Consumer relies on what a Service itself consumes; or
+   * a Definitions Package's shared schema or Guard by name, Public since the Services that import
+   * it may use all of it.
+   */
+  | {
+      readonly kind: 'subscription' | 'shared-schema' | 'guard';
+      readonly name: string;
+      readonly visibility: Visibility;
+    };
 
 /**
  * Where a shape is read, which decides what makes a change to it Breaking: Input, Success (a
@@ -32,9 +44,6 @@ export type Position = 'input' | 'success' | 'message';
 
 /** Where an Endpoint's part is read: as Input by the Service, or as Success by a Caller. */
 export type EndpointPosition = Exclude<Position, 'message'>;
-
-/** Where a schema is judged: in one Position, or in all three as `every`, for a shared schema. */
-export type PositionOrEvery = Position | 'every';
 
 /** A type whose values an enum can all share: a string, a number or a boolean. */
 export type BaseType = 'string' | 'number' | 'boolean';
@@ -122,11 +131,12 @@ export type Difference =
   | { readonly kind: 'name-kind-changed'; readonly from: 'event' | 'command' }
   /** A Subscription's Event changed, as the Snapshot spells it: the Releases side by side share its durable consumer. */
   | { readonly kind: 'event-changed'; readonly from: string; readonly to: string }
+  /** An Endpoint renamed, with the Baseline's Visibility, since only its Callers knew the old name. */
   | {
       readonly kind: 'renamed';
       readonly from: string;
       readonly to: string;
-      readonly visibility: Visibility;
+      readonly baselineVisibility: Visibility;
     }
   /**
    * URLs this Endpoint won by routing precedence in the Baseline that an Endpoint the Baseline does
@@ -137,13 +147,13 @@ export type Difference =
   /** A Visibility narrowed: a Dependency may lose reach. */
   | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
   /**
-   * A difference inside a schema, at its path from the site, read in one Position, or in `every`
-   * for a shared schema, which takes the strongest class of the three.
+   * A difference inside a schema, at its steps from the site, read in one Position; a shared schema
+   * is read as a Message, the strongest.
    */
   | {
       readonly kind: 'schema';
-      readonly at: Path;
-      readonly position: PositionOrEvery;
+      readonly at: readonly Step[];
+      readonly position: Position;
       readonly shape: ShapeDifference;
     }
   /** A shared schema, a Guard or a Rejection gone from its Definitions Package. */
@@ -151,16 +161,24 @@ export type Difference =
   /** A Success's or a code's HTTP status changed: Callers may depend on either. */
   | { readonly kind: 'status-changed'; readonly from: number; readonly to: number }
   /** An Endpoint's or a Rejection's body declared where the Baseline declared none. */
-  | { readonly kind: 'body-added'; readonly at: Path; readonly position: EndpointPosition }
+  | {
+      readonly kind: 'body-added';
+      readonly at: readonly Step[];
+      readonly position: EndpointPosition;
+    }
   /** An Endpoint's or a Rejection's body the Baseline declared and the proposed Snapshot no longer does. */
-  | { readonly kind: 'body-removed'; readonly at: Path; readonly position: EndpointPosition }
+  | {
+      readonly kind: 'body-removed';
+      readonly at: readonly Step[];
+      readonly position: EndpointPosition;
+    }
   /** A path param renamed at its position: the URL is the same, and params are matched by position. */
   | { readonly kind: 'param-renamed'; readonly from: string; readonly to: string }
   /**
    * An optional Input header added whose schema refuses some text: a proxy, a gateway or a browser
    * may already send one under its name.
    */
-  | { readonly kind: 'header-refuses-text'; readonly at: Path }
+  | { readonly kind: 'header-refuses-text'; readonly at: readonly Step[] }
   /** A code an Endpoint or a Guard answers that it did not. */
   | { readonly kind: 'rejection-added'; readonly code: string }
   /** A code an Endpoint or a Guard no longer answers. */
@@ -172,15 +190,19 @@ export type SiteDifferences = {
   readonly differences: readonly Difference[];
 };
 
-/** A difference's class; only a Breaking Change says whether it needs a Breaking Change Approval. */
-export type Classification =
-  | { readonly class: 'additive' | 'neutral' | 'not-allowed' }
-  | { readonly class: 'breaking'; readonly approval: 'needed' | 'not-needed' };
+/** The class COMPATIBILITY.md gives a difference: Breaking, Additive or Neutral. */
+export type ChangeClass = 'breaking' | 'additive' | 'neutral';
 
-/** How the Compatibility Check judges a difference: its class, or Not allowed, which fails the check. */
-export type ChangeClass = Classification['class'];
+/**
+ * What the Compatibility Check does with a Change: allows it, needs a Breaking Change Approval for
+ * it, or refuses it, which fails the check whatever Approval is given.
+ */
+export type Verdict = 'allowed' | 'approval-needed' | 'refused';
 
-/** One difference the Compatibility Check found, with its class. */
+/** A difference's class, and the Verdict on it. */
+export type Classification = { readonly class: ChangeClass; readonly verdict: Verdict };
+
+/** One difference the Compatibility Check found, with its class and Verdict. */
 export type Change = {
   readonly site: ChangeSite;
   readonly difference: Difference;

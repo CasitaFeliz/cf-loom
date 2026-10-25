@@ -17,10 +17,13 @@ export type {
   PeerRanges,
   Position,
   ShapeDifference,
+  Step,
+  Verdict,
 } from '../compatibility/index.ts';
 export {
   compatibilityReportOf,
   publishedSnapshotOf,
+  snapshotPathOf,
   versionBumpOf,
 } from '../compatibility/index.ts';
 export type {

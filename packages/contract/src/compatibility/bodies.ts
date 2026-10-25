@@ -3,6 +3,7 @@ import type { BothDefs } from './findings.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
+import { partsOf } from './steps.ts';
 
 /** A body of the Baseline and the proposed one, `null` where none is declared. */
 export type Bodies = {
@@ -40,5 +41,5 @@ export function messageBodyDifferencesOf(
     return [];
   }
   const bodies = { baseline: pair.baseline.body, proposed: pair.proposed.body };
-  return schemaDifferencesOf(bodies, defs, { position: 'message', at: ['body'] });
+  return schemaDifferencesOf(bodies, defs, { position: 'message', at: partsOf('body') });
 }
