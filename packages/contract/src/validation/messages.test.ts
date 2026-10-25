@@ -104,7 +104,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'commands', 'ChargeCard@0', 'version'],
         'message-version',
-        'A Message version is a whole number from 1: 0',
+        'A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER: 0',
       ),
     );
   });
@@ -256,7 +256,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'OrderCreated@1.5', 'version'],
         'message-version',
-        'A Message version is a whole number from 1: 1.5',
+        'A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER: 1.5',
       ),
     );
   });
@@ -421,6 +421,18 @@ describe('validateContract: a Message Version’s version keeps its text and its
         readBack: version,
         isAfterPredecessor: true,
       })),
+    );
+  });
+
+  test('a version past Number.MAX_SAFE_INTEGER fails saying the bound', () => {
+    const validated = validateMessages([anEvent({ version: 2 ** 53 })]);
+
+    expect(validated).toEqual(
+      failed(
+        ['groups', 'orders', 'events', 'OrderCreated@9007199254740992', 'version'],
+        'message-version',
+        'A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER: 9007199254740992',
+      ),
     );
   });
 

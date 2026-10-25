@@ -105,7 +105,8 @@ export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }
       : { readonly body: Refusal<BodyRefusal> }
     : unknown;
 
-type VersionRefusal = 'A Message version is one literal whole number from 1';
+type VersionRefusal =
+  'A Message version is one literal whole number from 1 to Number.MAX_SAFE_INTEGER';
 
 /** Whether a literal number's text is not a whole number from 1 written without an exponent. */
 type IsNotWholeFromOne<Version extends number> = `${Version}` extends

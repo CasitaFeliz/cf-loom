@@ -85,7 +85,7 @@ function versionFailures({ at, message }: LocatedMessage): readonly DeclarationF
   if (isWithoutValue(version) || isMessageVersion(version)) {
     return [];
   }
-  const text = `A Message version is a whole number from 1: ${textOf(version)}`;
+  const text = `A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER: ${textOf(version)}`;
   return [failure([...at, 'version'], 'message-version', text)];
 }
 
