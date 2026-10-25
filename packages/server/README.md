@@ -46,7 +46,7 @@ nodeHttp(http).listen(3000);
 
 How `serve` validates every Outcome before sending it is in [Validation](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md#validation). `serve(contract, handlers, { onServiceFault })` receives every Fault the Service's side produced, a `ServedFault` naming its `element`, the Endpoint, with its name as `identity`, and, when a GuardHandler produced it, its `guard`, the Guard:
 
-- `returned`, a Fault the Handler returned, as `fault`; only its `committed`, `retryable` and `message` travel, never its `cause` or any field it adds;
+- `returned`, a Fault the Handler returned, as `fault`; only its `committed`, `retryable` and `message` travel, and its `retryAfter` as `Retry-After`, never its `cause` or any field it adds;
 - `thrown`, a throw or a return that is no Outcome, with the error, or a `TypeError` naming what came back, as `cause`;
 - `invalid-outcome`, an Outcome that broke a constraint, or a Success header whose value cannot travel as HTTP field text, answered `INVALID_OUTCOME`, with the issues;
 - `runtime-bug`, a Context or Qualifier `serve` built that breaks the Contract, answered as a Fault with `committed: 'no'`, with the issues.

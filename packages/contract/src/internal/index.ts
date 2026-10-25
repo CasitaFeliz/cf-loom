@@ -153,6 +153,7 @@ export type {
   DurableConsumed,
   InputIssue,
   InvalidInputBody,
+  Match,
   Matchable,
   ReceivedHeaders,
   RejectionEnvelope,

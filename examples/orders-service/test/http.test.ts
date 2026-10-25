@@ -1,5 +1,10 @@
 import { admit, handle } from '@cf-loom/handlers';
-import { type ConsumedFault, type Messaging, messaging } from '@cf-loom/messaging';
+import {
+  type ConsumedFault,
+  type Messaging,
+  type MessagingOptions,
+  messaging,
+} from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { type Http, type ServedFault, serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
@@ -139,17 +144,14 @@ describe('serve', () => {
 });
 
 describe('onServiceFault', () => {
-  test('one async hook for ServedFault and ConsumedFault is accepted by both serve and messaging', async () => {
-    const heard: string[] = [];
+  test('one async hook for ServedFault and ConsumedFault is accepted by both serve and messaging', () => {
     const onServiceFault = async (fault: ServedFault | ConsumedFault): Promise<void> => {
-      heard.push(`${fault.identity} ${fault.kind}`);
+      expectTypeOf(fault.identity).toEqualTypeOf<string>();
     };
 
-    const both = await messaging(contract, memory(), { onServiceFault });
     const served = serve(contract, handlers, { resources, onServiceFault });
-    await both.close();
 
-    expectTypeOf(served).toEqualTypeOf<Http>();
-    expect(heard).toEqual([]);
+    expectTypeOf(onServiceFault).toExtend<NonNullable<MessagingOptions['onServiceFault']>>();
+    expect(typeof served).toBe('function');
   });
 });

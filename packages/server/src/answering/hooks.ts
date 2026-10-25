@@ -1,11 +1,11 @@
 import type { Endpoint, Guard, Method } from '@cf-loom/contract';
 import type { Issue } from '@cf-loom/handlers';
 import {
-  faultLineOf,
-  faultLogOf,
+  failureCauseOf,
+  failureLineOf,
   type HandlerFailure,
   type HandlerFaultBase,
-  hookThrewLineOf,
+  hookFailureOf,
   issueLineOf,
   logOf,
 } from '@cf-loom/handlers/internal';
@@ -72,11 +72,10 @@ export async function reportServedFault(
     logServedFault(servedFault);
     return;
   }
-  try {
-    await onServiceFault(servedFault);
-  } catch (e) {
-    console.error(...logOf(hookThrewLineOf(sourceOf(servedFault), 'onServiceFault'), e));
-  }
+  await hookFailureOf(onServiceFault, servedFault, {
+    source: sourceOf(servedFault),
+    hook: 'onServiceFault',
+  });
 }
 
 /** Hands a request's record to `onOutcome`, if any; one that fails is logged. */
@@ -84,10 +83,11 @@ export async function recordAnswered(
   record: AnsweredRequest,
   onOutcome: ((request: AnsweredRequest) => void | Promise<void>) | undefined,
 ): Promise<void> {
-  try {
-    await onOutcome?.(record);
-  } catch (e) {
-    console.error(...logOf(hookThrewLineOf(record.endpoint ?? 'serve', 'onOutcome'), e));
+  if (onOutcome !== undefined) {
+    await hookFailureOf(onOutcome, record, {
+      source: record.endpoint ?? 'serve',
+      hook: 'onOutcome',
+    });
   }
 }
 
@@ -96,12 +96,8 @@ function logServedFault(servedFault: ServedFault): void {
   const where = sourceOf(servedFault);
   switch (servedFault.kind) {
     case 'returned':
-      console.error(...faultLogOf(where, servedFault.fault));
-      return;
     case 'thrown':
-      console.error(
-        ...logOf(faultLineOf(where, { message: 'the Handler threw' }), servedFault.cause),
-      );
+      console.error(...logOf(failureLineOf(where, servedFault), failureCauseOf(servedFault)));
       return;
     case 'invalid-outcome':
     case 'runtime-bug':

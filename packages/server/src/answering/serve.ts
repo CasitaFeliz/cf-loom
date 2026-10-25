@@ -3,7 +3,6 @@ import type { ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
-import type { Http } from './fallback.ts';
 import {
   type AnsweredRequest,
   answeredRequestOf,
@@ -11,6 +10,9 @@ import {
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
+
+/** The fetch-style handler `serve` returns: what an adapter connects to its host. */
+export type Http = (request: Request) => Promise<Response>;
 
 /** How many bytes of a request body `serve` reads before answering `BODY_TOO_LARGE`: a whole number from 0, or `'unlimited'`. */
 export type BodyLimit = number | 'unlimited';

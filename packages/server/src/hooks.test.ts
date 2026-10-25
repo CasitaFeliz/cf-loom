@@ -315,6 +315,18 @@ describe('serve: a hook that fails', () => {
     expect(logged).toHaveBeenCalledWith('serve: onOutcome threw', broken);
   });
 
+  test('serve waits for an async onOutcome before it resolves', async () => {
+    let recorded = false;
+    const onOutcome = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      recorded = true;
+    };
+
+    await serve(contract, handlers, { onOutcome })(get('/orders/o-1'));
+
+    expect(recorded).toBe(true);
+  });
+
   test('serve waits for an async onServiceFault before it resolves', async () => {
     let heard = false;
     const onServiceFault = async () => {

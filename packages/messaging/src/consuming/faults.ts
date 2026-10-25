@@ -1,6 +1,7 @@
 import {
   elementNameOf,
-  faultLineOf,
+  failureCauseOf,
+  failureLineOf,
   hookThrewLineOf,
   issueLineOf,
   logOf,
@@ -22,9 +23,8 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
     case 'invalid-body':
       return fault.issues.map((issue) => issueLineOf(source, issue));
     case 'returned':
-      return [faultLineOf(source, fault.fault)];
     case 'thrown':
-      return [faultLineOf(source, { message: 'the Handler threw' })];
+      return [failureLineOf(source, fault)];
   }
 }
 
@@ -63,13 +63,12 @@ function causeOf(fault: ConsumedFault): unknown {
     case 'invalid-body':
       return undefined;
     case 'returned':
-      return fault.fault.cause;
     case 'thrown':
-      return fault.cause;
+      return failureCauseOf(fault);
   }
 }
 
 /** What names a Message in a line: the Element handling it, its subject, broker message id and Fact id. */
-function sourceOf({ identity, subject, messageId, factId }: About): string {
+export function sourceOf({ identity, subject, messageId, factId }: About): string {
   return `${identity} ${subject} ${messageId} ${factId}`;
 }

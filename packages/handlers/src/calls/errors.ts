@@ -68,22 +68,6 @@ export function elementNameOf(element: HandledElement): string {
   return element.name;
 }
 
-/** Which Handler a Fault came from, as both hooks name it: its declaration, and the name it goes by in lines and metrics. */
-export type HandlerFaultBase<Element extends HandledElement> = {
-  readonly element: Element;
-  readonly identity: string;
-};
-
-/** How a Handler failed, as `serve`'s and messaging's `onServiceFault` both receive it. */
-export type HandlerFailure =
-  | { readonly kind: 'returned'; readonly fault: Fault }
-  | { readonly kind: 'thrown'; readonly cause: unknown };
-
-/** The console line of a hook that threw or rejected, after what it was called for. */
-export function hookThrewLineOf(source: string, hook: 'onServiceFault' | 'onOutcome'): string {
-  return faultLineOf(source, { message: `${hook} threw` });
-}
-
 /** One Issue as a line of an error or a log, after what it came from: where it sits and what broke, never the received value. */
 export function issueLineOf(source: string, { part, path, code, message }: Issue): string {
   return `${source}: ${[part, ...path].join('.')} ${code}: ${message}`;

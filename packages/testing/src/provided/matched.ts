@@ -1,5 +1,5 @@
 import { basePathOf } from '@cf-loom/client/internal';
-import { matchOf, type TextSource } from '@cf-loom/contract/internal';
+import { type Match, matchOf, type TextSource } from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { ListedEndpoint, Provided } from './provided.ts';
 
@@ -35,7 +35,7 @@ export function matchedOf(provided: Provided, request: Request): Matched {
 /** A matched exported Endpoint, or the test's mistake when the Dependency does not list it. */
 function listedMatchOf(
   provided: Provided,
-  match: { readonly matched: Provided['exported'][number]; readonly source: TextSource },
+  match: Extract<Match<Provided['exported'][number]>, { readonly kind: 'matched' }>,
   reached: string,
 ): Matched {
   const { listed, identity } = match.matched;

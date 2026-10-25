@@ -1,19 +1,19 @@
 import type { Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
+  type Match,
   matchOf,
   methodNotAllowedResponseOf,
   type Reading,
   type ReadingSource,
   readingOf,
   reservedResponseOf,
-  type TextSource,
   withDeprecation,
 } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { type EndpointRun, notRunFaultOf, runEndpoint } from '@cf-loom/handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, partsOf } from './call.ts';
-import { fallbackAnswerOf, type Http } from './fallback.ts';
+import { fallbackAnswerOf } from './fallback.ts';
 import { guardRunsOf } from './guards.ts';
 import type { FaultedBy } from './hooks.ts';
 import {
@@ -23,6 +23,7 @@ import {
   answeredOfNotSuccess,
   answeredOfSuccess,
 } from './runs.ts';
+import type { Http } from './serve.ts';
 
 /**
  * How a request was answered, and the declared Endpoint it matched, if any; or the fallback's
@@ -62,7 +63,7 @@ function reservedAnswerOf(response: Response): AnsweredFor {
 /** A request a declared Endpoint matched: `RETIRED`, or its call answered. */
 async function matchedAnswerOf(
   served: ServedContract,
-  { matched: endpoint, source }: { readonly matched: ServedEndpoint; readonly source: TextSource },
+  { matched: endpoint, source }: Extract<Match<ServedEndpoint>, { readonly kind: 'matched' }>,
   request: Request,
 ): Promise<AnsweredFor> {
   switch (endpoint.kind) {

@@ -795,7 +795,7 @@ describe('consuming over jetstream()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
   }, 10_000);
 
-  test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered', async () => {
+  test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered though its Fault would end it', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
@@ -804,17 +804,18 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix, {
       onServiceFault: async () => Promise.reject(hook),
     });
-    const throwingOnce = ({ meta }: Received) => {
+    const refusingOnce = ({ meta }: Received) => {
       if (meta.deliveryCount === 1) {
-        throw new Error('the database is down');
+        return fault({ committed: 'no', retryable: false });
       }
       return undefined;
     };
-    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+    await orders.consume(handlersOf(received, { notify: refusingOnce }));
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(logged).toHaveBeenCalledWith(
       'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
       hook,

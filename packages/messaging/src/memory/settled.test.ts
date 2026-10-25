@@ -295,13 +295,9 @@ describe('settled()', () => {
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
   });
 
-  test('an onServiceFault that rejects leaves the Message pending and makes settled() reject', async () => {
+  test('an onServiceFault that rejects leaves pending a Message it would have ended, and makes settled() reject', async () => {
     const { broker, publisher } = await running(
-      () => ({
-        notify: () => {
-          throw new Error('gateway down');
-        },
-      }),
+      () => ({ notify: () => fault({ committed: 'no', retryable: false }) }),
       { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
     );
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });

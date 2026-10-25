@@ -3,13 +3,17 @@ export type {
   GuardRun,
   HandlerFailure,
   HandlerFaultBase,
+  HookName,
   MessageGiven,
   MessageRun,
 } from '../calls/index.ts';
 export {
   elementNameOf,
+  failureCauseOf,
+  failureLineOf,
   faultLineOf,
   faultLogOf,
+  hookFailureOf,
   hookThrewLineOf,
   issueLineOf,
   logOf,
@@ -26,3 +30,4 @@ export {
   runGuard,
   runMessage,
 } from '../handlers/index.ts';
+export { thrownFault } from '../outcomes/index.ts';

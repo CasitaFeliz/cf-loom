@@ -7,15 +7,18 @@ import {
 } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { faultResponseOf, internalError, reservedResponseOf } from '@cf-loom/contract/internal';
-import { faultLineOf, logOf } from '@cf-loom/handlers/internal';
-import type { Http } from '../answering/index.ts';
+import { reservedResponseOf } from '@cf-loom/contract/internal';
+import { faultLineOf } from '@cf-loom/handlers/internal';
+import { answeredOf, type Http } from '../answering/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
 const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
 
 /** The methods whose request never carries a body, which a web-standard `Request` refuses one for. */
 const bodiless: readonly string[] = ['GET', 'HEAD'];
+
+/** The line a handler that rejects is logged on. */
+const rejectedLine = faultLineOf('nodeListener', { message: 'the handler rejected' });
 
 /** How an incoming message reads as a web-standard request: a `Request`, or what answers it instead. */
 type Incoming =
@@ -43,7 +46,8 @@ export function nodeHttp(http: Http): Server {
  */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
   const read = incomingOf(incoming);
-  const response = read.kind === 'request' ? await answeredOf(http, read.request) : read.response;
+  const response =
+    read.kind === 'request' ? await answeredOf(http, read.request, rejectedLine) : read.response;
   if (!incoming.complete) {
     outgoing.setHeader('connection', 'close');
   }
@@ -51,16 +55,6 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
     await written(response, outgoing);
   } catch {
     outgoing.destroy();
-  }
-}
-
-/** What `http` answers, or the internal Fault when it rejects, logged, so no rejection reaches the process. */
-async function answeredOf(http: Http, request: Request): Promise<Response> {
-  try {
-    return await http(request);
-  } catch (e) {
-    console.error(...logOf(faultLineOf('nodeListener', { message: 'the handler rejected' }), e));
-    return faultResponseOf({ committed: 'unknown', retryable: false, message: internalError });
   }
 }
 
