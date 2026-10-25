@@ -108,6 +108,24 @@ describe('the client’s types', () => {
     expect(Object.keys(orders)).toEqual(['getOrder', 'listOrders']);
   });
 
+  test('each method is named after the Endpoint it calls and typed by it, and no other name is', () => {
+    const orders = client(ordersDependency, { baseUrl });
+
+    expectTypeOf(orders.getOrder).toEqualTypeOf<Client<typeof ordersDependency>['getOrder']>();
+    // @ts-expect-error ping is exported but not listed
+    const unlisted = () => orders.ping;
+    expect(unlisted).toBeTypeOf('function');
+  });
+
+  test('a Dependency that lists no Endpoint gives a client with no methods', () => {
+    const empty = defineDependency({ provider: orders, endpoints: [] });
+
+    const emptyClient = client(empty, { baseUrl });
+
+    expectTypeOf(emptyClient).toEqualTypeOf<Readonly<Record<never, never>>>();
+    expect(Object.keys(emptyClient)).toEqual([]);
+  });
+
   test('a required header not given to client() stays required on each call', () => {
     const orders = client(ordersDependency, { baseUrl, headers: { 'x-api-key': 'k' } });
     type Input = Parameters<typeof orders.getOrder>[0];
@@ -178,6 +196,6 @@ describe('the client’s types', () => {
     >();
     // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
     expectTypeOf<ReceivedOutcome<typeof ordersDependency, 'ping'>>().toBeObject();
-    expect(ordersDependency.endpoints.listOrders.name).toBe('listOrders');
+    expect(ordersDependency.endpoints.map(({ name }) => name)).toContain('listOrders');
   });
 });

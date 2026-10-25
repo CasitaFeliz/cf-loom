@@ -1,5 +1,11 @@
 import { type Client, type ClientOptions, client, type Fetch } from '@cf-loom/client';
-import { type AnyDependency, baseUrlOf, type ConfiguredName } from '@cf-loom/client/internal';
+import {
+  type AnyDependency,
+  baseUrlOf,
+  type ConfiguredName,
+  type ListedEndpoint,
+  type ListedName,
+} from '@cf-loom/client/internal';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { FakeCall } from './calls.ts';
@@ -14,8 +20,6 @@ export type FakeClientOptions<D extends AnyDependency, Configured extends string
   'baseUrl' | 'fetch'
 >;
 
-type ListedName<D extends AnyDependency> = keyof D['endpoints'] & string;
-
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed
  * Endpoint's script, and the calls each received.
@@ -27,8 +31,8 @@ export type FakeProvider<D extends AnyDependency> = {
   ): Client<D, Configured>;
   on<Name extends ListedName<D>>(
     name: Name,
-  ): Script<D['endpoints'][Name], D['provider']['standardRejections']>;
-  calls<Name extends ListedName<D>>(name: Name): readonly FakeCall<D['endpoints'][Name]>[];
+  ): Script<ListedEndpoint<D, Name>, D['provider']['standardRejections']>;
+  calls<Name extends ListedName<D>>(name: Name): readonly FakeCall<ListedEndpoint<D, Name>>[];
 };
 
 /**
@@ -53,10 +57,10 @@ export function fakeProvider<const D extends AnyDependency>(
 
 /** One script for every Endpoint, typed where a test reaches it by name. */
 type ScriptOf<D extends AnyDependency, Name extends ListedName<D>> = Script<
-  D['endpoints'][Name],
+  ListedEndpoint<D, Name>,
   D['provider']['standardRejections']
 >;
 
 type FakeCallOf<D extends AnyDependency, Name extends ListedName<D>> = FakeCall<
-  D['endpoints'][Name]
+  ListedEndpoint<D, Name>
 >;

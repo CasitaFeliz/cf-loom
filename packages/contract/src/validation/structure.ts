@@ -1,6 +1,7 @@
 import {
   isDefinitions,
   isDependency,
+  isEndpoint,
   isGroup,
   isGuard,
   isRejection,
@@ -44,10 +45,16 @@ export function structureFailures(declarations: Declarations): readonly Declarat
 }
 
 function listsOf(declarations: Declarations): readonly Listing[] {
-  const { root, groups, endpoints, guards, allPackages } = declarations;
+  const { root, groups, endpoints, guards, allPackages, dependencies } = declarations;
   return [
     ...rootListings(root),
     ...groups.flatMap(groupListings),
+    ...dependencies.map(({ at, dependency }) => ({
+      at: [...at, 'endpoints'],
+      list: dependency.endpoints,
+      noun: 'an Endpoint',
+      fits: isEndpoint,
+    })),
     ...endpoints.flatMap(({ at, endpoint }) => [
       { at: [...at, 'guards'], list: endpoint.guards, noun: 'an Attachment' },
       {

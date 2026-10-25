@@ -225,7 +225,7 @@ describe('the README’s declaration examples', () => {
       dependencies: [adminOrdersDependency, adminPaymentsDependency],
     });
 
-    expect(application.dependencies[1].endpoints.getPayment).toBe(getPayment);
+    expect(application.dependencies[1].endpoints).toEqual([getPayment]);
   });
 });
 
@@ -246,9 +246,9 @@ describe('the README’s Subscription example', () => {
     expect(notifyOnSettled.event).toBe(payments.events.paymentSettledV1);
   });
 
-  test('the Dependency holds the Contract Package and the Endpoints it calls by name', () => {
+  test('the Dependency holds the Contract Package and the Endpoints it calls, as listed', () => {
     expect(paymentsDependency.provider.events.paymentSettledV1).toBe(notifyOnSettled.event);
-    expect(paymentsDependency.endpoints.getPayment).toBe(getPayment);
+    expect(paymentsDependency.endpoints).toEqual([getPayment]);
   });
 });
 

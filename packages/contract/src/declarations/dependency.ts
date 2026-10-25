@@ -3,7 +3,6 @@ import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import { isEndpoint } from './predicates.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 import type { StandardRejections } from './standard-rejections.ts';
 
@@ -35,37 +34,21 @@ type DependencyDeclaration<Provider extends ContractPackage> = {
   readonly endpoints?: readonly ElementOf<Provider['endpoints']>[];
 };
 
-type SelectedEndpoints<Declaration> = Declaration extends {
-  readonly endpoints: readonly (infer Selected)[];
-}
-  ? Selected
-  : never;
-
-type EndpointsByName<Endpoints> = {
-  readonly [Selected in Endpoints as Selected extends Endpoint
-    ? Selected['name']
-    : never]: Selected;
-};
-
 /**
  * What a Contract uses of one Provider: its Contract Package, as imported, with the version it
- * relied on, its Standard Rejections and the Elements it exports, and the Endpoints it calls, by
- * name. The Events it receives are its Subscriptions'.
+ * relied on, its Standard Rejections and the Elements it exports, and the Endpoints it calls, as
+ * listed. The Events it receives are its Subscriptions'.
  */
 export type Dependency<
   Provider extends ContractPackage = ContractPackage,
-  Endpoints = Readonly<Record<string, Endpoint>>,
+  Endpoints extends readonly Endpoint[] = readonly Endpoint[],
 > = {
   readonly kind: 'dependency';
   readonly provider: Provider;
-  readonly endpoints: Endpoints;
+  readonly endpoints?: Endpoints;
 };
 
-/**
- * Declares what a Contract uses of one Provider, so its client reaches no more. It keeps what was
- * written and never throws: an item that is no Endpoint is kept by its position, and a selection
- * that is no list as written, for `generate` to report.
- */
+/** Declares what a Contract uses of one Provider, so its client reaches no more. */
 export function defineDependency<
   const Provider extends ContractPackage,
   const Declaration extends Omit<DependencyDeclaration<Provider>, 'provider'>,
@@ -73,21 +56,6 @@ export function defineDependency<
   declaration: Declaration & { readonly provider: Provider } & NoInfer<
       DeclaredFieldsRule<Declaration, DependencyDeclaration<Provider>>
     >,
-): Dependency<Provider, EndpointsByName<SelectedEndpoints<Declaration>>> {
-  const endpoints = byNameOf(declaration.endpoints);
-  const dependency = freezeDeclaration('dependency', { ...declaration, endpoints });
-  return dependency as Dependency<Provider, EndpointsByName<SelectedEndpoints<Declaration>>>;
-}
-
-/** The selected Endpoints by name, none when left out; a selection that is no list, as written. */
-function byNameOf(endpoints: unknown): unknown {
-  if (endpoints === undefined) {
-    return {};
-  }
-  return Array.isArray(endpoints) ? Object.fromEntries(endpoints.map(byName)) : endpoints;
-}
-
-/** A selected Endpoint keyed by its name; anything else by its position, which no name can be. */
-function byName(selected: unknown, index: number): readonly [string, unknown] {
-  return [isEndpoint(selected) ? selected.name : String(index), selected];
+): Readonly<Declaration & { readonly provider: Provider }> & { readonly kind: 'dependency' } {
+  return freezeDeclaration('dependency', declaration);
 }

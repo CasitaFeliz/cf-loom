@@ -1,5 +1,11 @@
 import { byCodePoint } from '../walker/index.ts';
-import { identityOf, type LocatedDependency, providerNameOf, textOf } from '../written/index.ts';
+import {
+  identityOf,
+  type LocatedDependency,
+  listOf,
+  providerNameOf,
+  textOf,
+} from '../written/index.ts';
 import type { DependencySnapshot } from './types.ts';
 
 /**
@@ -11,7 +17,7 @@ export function dependencySnapshotsOf(
   located: readonly LocatedDependency[],
 ): Readonly<Record<string, DependencySnapshot>> {
   const entries = located.map(({ dependency }) => {
-    const endpoints = Object.values(dependency.endpoints).map(({ method, path, name }) => ({
+    const endpoints = listOf(dependency.endpoints).map(({ method, path, name }) => ({
       id: identityOf(method, path),
       name,
     }));

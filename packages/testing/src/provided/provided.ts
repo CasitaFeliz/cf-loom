@@ -45,7 +45,8 @@ export function providedOf(dependency: AnyDependency, base: URL): Provided {
   const { provider } = dependency;
   checkExportedFormat(provider);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
-  for (const [name, endpoint] of Object.entries(dependency.endpoints)) {
+  for (const endpoint of dependency.endpoints ?? []) {
+    const { name } = endpoint;
     const entry = exportedEntryOf(provider, endpoint);
     listedByEntry.set(entry, listedEndpointOf(provider, { name, endpoint, entry }));
   }

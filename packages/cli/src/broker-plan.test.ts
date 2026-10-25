@@ -476,7 +476,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'dependencies.payments-service.endpoints.0 dependency-selection: A Dependency selects Elements its Provider exports: endpoints.0 is not an Endpoint\n',
+        'dependencies.payments-service.endpoints.0 not-a-declaration: endpoints.0 is not an Endpoint\n',
     });
   });
 

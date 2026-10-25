@@ -6,7 +6,7 @@ import {
   reservedFaults,
 } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
-import type { AnyDependency } from '../endpoints/index.ts';
+import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';
 
 type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : undefined;
@@ -72,15 +72,13 @@ export type ReceivedRejection<Target extends Endpoint, Standards extends Standar
   | UnknownRejection;
 
 /** The Outcome a Caller receives from one Endpoint of a Dependency: a Success, a Rejection or a Fault. */
-export type ReceivedOutcome<
-  D extends AnyDependency,
-  Name extends keyof D['endpoints'],
-> = D['endpoints'][Name] extends infer Target extends Endpoint
-  ?
-      | ReceivedSuccess<Target>
-      | ReceivedRejection<Target, D['provider']['standardRejections']>
-      | ReceivedFault
-  : never;
+export type ReceivedOutcome<D extends AnyDependency, Name extends ListedName<D>> =
+  ListedEndpoint<D, Name> extends infer Target extends Endpoint
+    ?
+        | ReceivedSuccess<Target>
+        | ReceivedRejection<Target, D['provider']['standardRejections']>
+        | ReceivedFault
+    : never;
 
 /** What broke the Contract in an answer, and whether the Provider had committed it. */
 export type BrokenOutcome = {

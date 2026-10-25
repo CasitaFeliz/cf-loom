@@ -158,7 +158,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 'getReceipt'],
+        ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: getReceipt is not one of them',
       ),
@@ -180,7 +180,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 'healthCheck'],
+        ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: healthCheck is private',
       ),
@@ -194,9 +194,9 @@ describe('validateContract: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', '1'],
-        'dependency-selection',
-        'A Dependency selects Elements its Provider exports: endpoints.1 is not an Endpoint',
+        ['dependencies', 'payments-service', 'endpoints', 1],
+        'not-a-declaration',
+        'endpoints.1 is not an Endpoint',
       ),
     );
   });
@@ -214,6 +214,22 @@ describe('validateContract: a Service’s Dependencies', () => {
         ['dependencies', 'payments-service', 'events'],
         'undeclared-field',
         'events is not a declared field',
+      ),
+    );
+  });
+
+  test('an Endpoint listed twice in one Dependency fails at its second listing', () => {
+    const paymentsDependency = dependencyAsWritten({
+      provider: payments,
+      endpoints: [getPayment, refundPayment, getPayment],
+    });
+    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+
+    expect(validateInPackage(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'payments-service', 'endpoints', 2],
+        'dependency-selection',
+        'A Dependency selects Elements its Provider exports: getPayment is listed twice',
       ),
     );
   });
@@ -239,15 +255,51 @@ describe('validateContract: a Dependency written as the types refuse', () => {
       what: 'an Endpoint written undefined',
       declaration: { provider: payments, endpoints: [undefined] },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints', '0'],
-        rule: 'dependency-selection',
-        message:
-          'A Dependency selects Elements its Provider exports: endpoints.0 is not an Endpoint',
+        at: ['dependencies', 'payments-service', 'endpoints', 0],
+        rule: 'not-a-declaration',
+        message: 'endpoints.0 is not an Endpoint',
       },
     },
     {
       what: 'endpoints written null',
       declaration: { provider: payments, endpoints: null },
+      line: {
+        at: ['dependencies', 'payments-service', 'endpoints'],
+        rule: 'not-a-list',
+        message: 'endpoints is a list',
+      },
+    },
+    {
+      what: 'a hole where an Endpoint belongs',
+      // biome-ignore lint/suspicious/noSparseArray: the hole is what the test writes
+      declaration: { provider: payments, endpoints: [, getPayment] },
+      line: {
+        at: ['dependencies', 'payments-service', 'endpoints', 0],
+        rule: 'not-a-declaration',
+        message: 'endpoints.0 is not an Endpoint',
+      },
+    },
+    {
+      what: 'endpoints written as a map by name',
+      declaration: { provider: payments, endpoints: { whatever: getPayment } },
+      line: {
+        at: ['dependencies', 'payments-service', 'endpoints'],
+        rule: 'not-a-list',
+        message: 'endpoints is a list',
+      },
+    },
+    {
+      what: 'endpoints written as an empty map',
+      declaration: { provider: payments, endpoints: {} },
+      line: {
+        at: ['dependencies', 'payments-service', 'endpoints'],
+        rule: 'not-a-list',
+        message: 'endpoints is a list',
+      },
+    },
+    {
+      what: 'an Endpoint written where the list belongs',
+      declaration: { provider: payments, endpoints: getPayment },
       line: {
         at: ['dependencies', 'payments-service', 'endpoints'],
         rule: 'not-a-list',
@@ -336,7 +388,7 @@ describe('validateContract: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 'refundPayment'],
+        ['dependencies', 'payments-service', 'endpoints', 0],
         'application-dependency',
         'An Application depends on Public Endpoints only: refundPayment is internal',
       ),
@@ -351,7 +403,7 @@ describe('validateContract: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 'refundPayment'],
+        ['dependencies', 'payments-service', 'endpoints', 0],
         'application-dependency',
         'An Application depends on Public Endpoints only: refundPayment is internal',
       ),
@@ -374,7 +426,7 @@ describe('validateContract: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application, noOrigin)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 'healthCheck'],
+        ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: healthCheck is private',
       ),

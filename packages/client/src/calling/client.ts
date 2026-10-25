@@ -21,9 +21,10 @@ export function client<const D extends AnyDependency, Configured extends Configu
   };
   checkExportedFormat(dependency.provider);
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
-  const methods = Object.entries(dependency.endpoints).map(([name, endpoint]) => {
+  const methods = (dependency.endpoints ?? []).map((endpoint) => {
     const called = calledEndpointOf(endpoint, dependency.provider);
-    return [name, methodOf(called, calling, deprecationWatchOf(called, onDeprecation))] as const;
+    const method = methodOf(called, calling, deprecationWatchOf(called, onDeprecation));
+    return [endpoint.name, method] as const;
   });
   return Object.freeze(Object.fromEntries(methods)) as Client<D, Configured>;
 }

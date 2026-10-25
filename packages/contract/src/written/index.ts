@@ -78,6 +78,7 @@ export { resolvedStandards, standardRejectionsOf } from './standard-rejections.t
 export type { WrittenObject } from './written.ts';
 export {
   entriesOf,
+  isEmptyField,
   isMissing,
   isPlainObject,
   isWithoutValue,

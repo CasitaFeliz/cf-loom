@@ -1,9 +1,9 @@
 import type { Endpoint, InputOf } from '@cf-loom/contract';
 import type { ReceivedOutcome } from '../decoding/index.ts';
-import type { AnyDependency } from '../endpoints/index.ts';
+import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { InferFault } from '../inference/index.ts';
 
-type EndpointOf<D extends AnyDependency> = D['endpoints'][keyof D['endpoints']];
+type EndpointOf<D extends AnyDependency> = NonNullable<D['endpoints']>[number];
 
 type HeadersOf<Target extends Endpoint> =
   InputOf<Target> extends { readonly headers: infer Headers }
@@ -102,7 +102,7 @@ type Method<
   Target extends Endpoint,
   Configured extends string,
   D extends AnyDependency,
-  Name extends keyof D['endpoints'],
+  Name extends ListedName<D>,
 > =
   Readonly<Record<never, never>> extends CallInput<Target, Configured>
     ? (
@@ -116,7 +116,5 @@ type Method<
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
 export type Client<D extends AnyDependency, Configured extends string = never> = {
-  readonly [Name in keyof D['endpoints']]: D['endpoints'][Name] extends Endpoint
-    ? Method<D['endpoints'][Name], Configured, D, Name>
-    : never;
+  readonly [Name in ListedName<D>]: Method<ListedEndpoint<D, Name>, Configured, D, Name>;
 };
