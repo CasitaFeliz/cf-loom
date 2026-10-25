@@ -8,6 +8,7 @@ import {
   defineGuard,
   defineRejection,
   type Endpoint,
+  type Method,
   notFound,
   openEnum,
   openEnumReader,
@@ -17,7 +18,7 @@ import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contr
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { client, type DeprecationNotice } from './index.ts';
 
@@ -224,7 +225,76 @@ function ordersClient() {
   });
 }
 
+const declarable = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+  'OPTIONS',
+] as const satisfies readonly Method[];
+
+/** What a Caller receives from an Endpoint with `method`, served alone, that answers a Rejection and then a Fault. */
+async function outcomesOfEndpointWith(method: Method) {
+  const probe = defineEndpoint({
+    name: 'probe',
+    method,
+    path: '/probes/:answer',
+    visibility: 'public',
+    description: 'Answers what its path says',
+    input: { params: z.object({ answer: z.enum(['rejection', 'fault']) }) },
+    success: { status: 204 },
+    rejections: [orderLocked],
+  });
+  const group = defineGroup({ name: 'probes', description: 'Probes', endpoints: [probe] });
+  const service = defineContract({ name: 'orders-service', groups: [group] });
+  const answering = handle(probe, ({ params }) =>
+    params.answer === 'rejection'
+      ? reject(orderLocked, { lockedAt: '2026-10-18T10:00:00Z' })
+      : fault({ committed: 'no', retryable: true }),
+  );
+  const probeServer = nodeHttp(
+    serve(service, { endpoints: { probe: answering }, guards: {}, deprecatedAt: {} }),
+  );
+  await new Promise<void>((resolve) => probeServer.listen(0, '127.0.0.1', resolve));
+  try {
+    const probeUrl = `http://127.0.0.1:${(probeServer.address() as AddressInfo).port}/`;
+    const provider = contractPackageOf({ probe }, defaultStandards);
+    const probes = client(defineDependency({ provider, endpoints: [probe] }), {
+      baseUrl: probeUrl,
+    });
+    const rejection = await probes.probe({ params: { answer: 'rejection' } });
+    const faulted = await probes.probe({ params: { answer: 'fault' } });
+    return { method, rejection, fault: faulted };
+  } finally {
+    probeServer.close();
+  }
+}
+
 describe('end to end against serve through node:http and the global fetch', () => {
+  test('every declarable method delivers a Rejection with its body and a Fault with its committed', async () => {
+    expectTypeOf<Exclude<Method, (typeof declarable)[number]>>().toEqualTypeOf<never>();
+
+    const delivered = [];
+    for (const method of declarable) {
+      delivered.push(await outcomesOfEndpointWith(method));
+    }
+
+    expect(delivered).toEqual(
+      declarable.map((method) => ({
+        method,
+        rejection: {
+          kind: 'rejection',
+          known: true,
+          code: 'ORDER_LOCKED',
+          message: 'The order can no longer be changed',
+          body: { lockedAt: '2026-10-18T10:00:00Z' },
+        },
+        fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
+      })),
+    );
+  });
+
   test('a Success arrives with its body and its typed headers', async () => {
     const outcome = await ordersClient().getOrder({ params: { orderId: 'o-1' } });
 

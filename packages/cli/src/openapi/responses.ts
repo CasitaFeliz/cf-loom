@@ -19,17 +19,13 @@ type StatusPart = {
   readonly schema?: JsonSchema | undefined;
 };
 
-/** What every response of an OpenAPI operation shares: whether the host drops its bodies, and its Deprecation stamp. */
-type ResponseTraits = { readonly isHead: boolean; readonly deprecatedAt: string | undefined };
-
 /** The responses `serve` gives an Endpoint, one per status in status order. */
-export function responsesOf(method: string, served: Served): OpenApiObject {
-  const isHead = method === 'HEAD';
+export function responsesOf(served: Served): OpenApiObject {
   switch (served.kind) {
     case 'retired':
-      return responsesFrom([retiredPart], { isHead, deprecatedAt: undefined });
+      return responsesFrom([retiredPart], undefined);
     case 'live':
-      return responsesFrom(livePartsOf(served), { isHead, deprecatedAt: served.deprecatedAt });
+      return responsesFrom(livePartsOf(served), served.deprecatedAt);
   }
 }
 
@@ -86,21 +82,24 @@ function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
 }
 
 /** One response per status in status order: the descriptions joined, the schemas alternatives. */
-function responsesFrom(parts: readonly StatusPart[], traits: ResponseTraits): OpenApiObject {
+function responsesFrom(
+  parts: readonly StatusPart[],
+  deprecatedAt: string | undefined,
+): OpenApiObject {
   const byStatus = new Map<number, StatusPart[]>();
   for (const part of parts) {
     byStatus.set(part.status, [...(byStatus.get(part.status) ?? []), part]);
   }
   const statuses = [...byStatus.keys()].sort((left, right) => left - right);
   return Object.fromEntries(
-    statuses.map((status) => [String(status), responseOf(byStatus.get(status) ?? [], traits)]),
+    statuses.map((status) => [
+      String(status),
+      responseOf(byStatus.get(status) ?? [], deprecatedAt),
+    ]),
   );
 }
 
-function responseOf(
-  parts: readonly StatusPart[],
-  { isHead, deprecatedAt }: ResponseTraits,
-): OpenApiObject {
+function responseOf(parts: readonly StatusPart[], deprecatedAt: string | undefined): OpenApiObject {
   const partHeaders = parts.flatMap(({ headers }) => Object.entries(headers ?? {}));
   const deprecation = Object.entries(deprecationOf(deprecatedAt));
   const headers = Object.fromEntries([...partHeaders, ...deprecation]);
@@ -108,7 +107,7 @@ function responseOf(
   return definedOf({
     description: parts.map(({ description }) => description).join('; '),
     headers: Object.keys(headers).length === 0 ? undefined : headers,
-    content: isHead || schemas.length === 0 ? undefined : jsonContentOf(alternativesOf(schemas)),
+    content: schemas.length === 0 ? undefined : jsonContentOf(alternativesOf(schemas)),
   });
 }
 

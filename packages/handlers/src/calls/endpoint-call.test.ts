@@ -96,14 +96,14 @@ const deleteOrder = defineEndpoint({
   success: { status: 204 },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
+const orderTotal = defineEndpoint({
+  name: 'orderTotal',
+  method: 'GET',
+  path: '/orders/:orderId/total',
   visibility: 'internal',
-  description: 'Whether an order exists',
+  description: 'The total of an order, in a header',
   input: { params: z.object({ orderId: z.uuid() }) },
-  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+  success: { status: 204, headers: z.object({ 'x-total': z.int() }) },
 });
 
 const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' } as const;
@@ -321,12 +321,12 @@ describe('an EndpointHandler’s Success', () => {
     expect(outcome).toEqual({ kind: 'success', status: 204 });
   });
 
-  test('success({ headers }) resolves a HEAD Endpoint with headers', async () => {
-    const headOrderHandler = handle(headOrder, () => success({ headers: { 'x-total': 3 } }));
+  test('success({ headers }) resolves a 204 Endpoint with headers', async () => {
+    const orderTotalHandler = handle(orderTotal, () => success({ headers: { 'x-total': 3 } }));
 
-    const outcome = await headOrderHandler(getInput, {});
+    const outcome = await orderTotalHandler(getInput, {});
 
-    expect(outcome).toEqual({ kind: 'success', status: 200, headers: { 'x-total': 3 } });
+    expect(outcome).toEqual({ kind: 'success', status: 204, headers: { 'x-total': 3 } });
   });
 
   test('a Success body that breaks a constraint throws InvalidOutcomeError', async () => {
@@ -606,23 +606,23 @@ describe('an EndpointHandler’s Faults', () => {
 });
 
 describe('what an EndpointHandler returns', () => {
-  test('a body on a HEAD Success or a headers-only Success throws InvalidOutcomeError', async () => {
-    const headOrderHandler = handle(
-      headOrder,
+  test('a body on a headers-only Success throws InvalidOutcomeError', async () => {
+    const orderTotalHandler = handle(
+      orderTotal,
       () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } }) as never,
     );
 
-    const issues = await issuesOf(() => headOrderHandler(getInput, {}));
+    const issues = await issuesOf(() => orderTotalHandler(getInput, {}));
 
     expect(issues).toEqual([
       { part: 'success.body', path: [], code: 'invalid_type', message: 'Expected no value' },
     ]);
   });
 
-  test('a body on a HEAD Success or a headers-only Success is a type error', () => {
+  test('a body on a headers-only Success is a type error', () => {
     const write = () => [
-      // @ts-expect-error a HEAD Success has no body
-      handle(headOrder, () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } })),
+      // @ts-expect-error a headers-only Success has no body
+      handle(orderTotal, () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } })),
       // @ts-expect-error a 204 Success has no body
       handle(deleteOrder, () => success({ id: ORDER_ID })),
     ];

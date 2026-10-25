@@ -41,16 +41,6 @@ const getOrder = defineEndpoint({
   success: { status: 200, body: z.object({ id: z.string() }) },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
-  visibility: 'public',
-  description: 'Whether an order exists',
-  input: { params: z.object({ orderId: z.string() }) },
-  success: { status: 200, headers: z.object({ 'x-exists': z.boolean() }) },
-});
-
 const greet = defineEndpoint({
   name: 'greet',
   method: 'GET',
@@ -67,7 +57,7 @@ const contract = defineContract({
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [createOrder, getOrder, headOrder, greet],
+      endpoints: [createOrder, getOrder, greet],
     }),
   ],
 });
@@ -78,7 +68,6 @@ const handlers = {
       success({ headers: { 'x-order-count': 1 }, body: { ...body, by: caller.callerId } }),
     ),
     getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId })),
-    headOrder: handle(headOrder, () => success({ headers: { 'x-exists': true } })),
     greet: handle(greet, ({ query }) => success({ headers: { 'x-greeted': query.name } })),
   },
   guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
@@ -306,7 +295,7 @@ describe('nodeHttp', () => {
   });
 
   test('a response to HEAD carries no body', async () => {
-    const url = await listening();
+    const url = await listening(nodeHttp(async () => Response.json({ a: 1 })));
 
     const answer = await raw(
       url,
@@ -314,7 +303,7 @@ describe('nodeHttp', () => {
     );
 
     expect(statusLineOf(answer)).toBe('HTTP/1.1 200 OK');
-    expect(answer.toLowerCase()).toContain('x-exists: true');
+    expect(answer.toLowerCase()).toContain('content-type: application/json');
     expect(bodyOf(answer)).toBe('');
   });
 

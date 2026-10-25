@@ -1022,6 +1022,7 @@ describe('decodeSnapshot', () => {
     test.each([
       ['no method', 'GET'],
       ['a method the format does not define', 'FETCH /orders'],
+      ['HEAD, which no Endpoint declares', 'HEAD /orders'],
       ['a path that does not start with a slash', 'GET orders'],
       ['an empty segment', 'GET /orders//{}'],
       ['a trailing slash', 'GET /orders/'],

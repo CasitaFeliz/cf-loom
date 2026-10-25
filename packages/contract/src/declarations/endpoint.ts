@@ -72,10 +72,8 @@ type ExactParamsRule<Params, Names extends string> =
       : ExactParamsMessage<Names>
     : ExactParamsMessage<Names>;
 
-type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends
-  | 'GET'
-  | 'HEAD'
-  ? { readonly input?: { readonly body?: 'A GET or HEAD Endpoint takes no body' } }
+type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'GET'
+  ? { readonly input?: { readonly body?: 'A GET Endpoint takes no body' } }
   : unknown;
 
 type SuccessBodyRule<Declaration extends EndpointDeclaration> =
@@ -83,9 +81,8 @@ type SuccessBodyRule<Declaration extends EndpointDeclaration> =
     ? SuccessBodyOf<Declaration>
     : unknown;
 
-type SuccessBodyOf<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'HEAD'
-  ? { readonly success?: { readonly body?: 'A HEAD Endpoint answers no body' } }
-  : Declaration['success']['status'] extends 204
+type SuccessBodyOf<Declaration extends EndpointDeclaration> =
+  Declaration['success']['status'] extends 204
     ? { readonly success?: { readonly body?: 'A 204 Success has no body' } }
     : Declaration['success'] extends { readonly body: core.$ZodType }
       ? unknown
