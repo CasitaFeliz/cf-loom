@@ -25,7 +25,7 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   return walked({ ...enumOf(strings), open: isOpen(schema) });
 }
 
-/** An `enum` for a union of literals, else a `union` of its options in canonical order. */
+/** An `enum` for a union of literals, else a `union` of its options in declared order. */
 export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
   const def = schema._zod.def;
   if (def.inclusive === false) {
@@ -111,13 +111,14 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
 }
 
 /**
- * A union of literals is always an enum: it carries only its own annotations, like a merged
- * intersection, and is nullable when any of its literals is.
+ * A union of closed literals is one enum: it carries only its own annotations, like a merged
+ * intersection, and is nullable when any of its literals is. Any other union keeps its options in
+ * declared order, since zod's union returns the first option that parses.
  */
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
   const literals = options.filter(isLiterals);
   if (literals.length !== options.length) {
-    return { type: 'union', options: [...options].sort(byCanonicalJson) };
+    return { type: 'union', options: [...options] };
   }
   const values = enumOf(literals.flatMap(valuesOf));
   return literals.some((literal) => literal.nullable === true)

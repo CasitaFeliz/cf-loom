@@ -263,7 +263,7 @@ Readers get a type with an Unknown case and must handle it: an unknown value arr
 
 A set of variants that grows is an object whose `type` is an Open Enum and whose variants' fields are optional, as `payment` above: a reader handles a `type` it does not know, and a new variant adds a value and its optional fields. A `z.discriminatedUnion()` is closed (see [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) in COMPATIBILITY.md).
 
-`openEnum()` takes string values. Inside an intersection, use `.extend()` (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema `openEnum()` returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` described the same way stays closed.
+`openEnum()` takes string values. Inside an intersection or a plain union, use `.extend()` or a discriminated union (see [Not allowed](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Openness belongs to the schema `openEnum()` returns and survives zod's own `.describe()`, `.meta()` and `zod/mini` metadata, which keep its shape; a `z.enum()` described the same way stays closed.
 
 ## Dependencies
 

@@ -82,6 +82,24 @@ const richEndpoint = [
   '});',
 ];
 
+/** An Endpoint answering a union whose first option keeps a key the second one would drop. */
+const overlappingUnionEndpoint = [
+  'export const overlap = defineEndpoint({',
+  "  name: 'overlap',",
+  "  method: 'GET',",
+  "  path: '/overlap',",
+  "  visibility: 'public',",
+  "  description: 'Overlap',",
+  '  success: {',
+  '    status: 200,',
+  '    body: z.union([',
+  '      z.object({ b: z.string(), c: z.number() }),',
+  '      z.object({ b: z.string(), a: z.string().optional() }),',
+  '    ]),',
+  '  },',
+  '});',
+];
+
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
@@ -111,6 +129,7 @@ const service: Readonly<Record<string, string>> = {
     '  success: { status: 200, body: everything },',
     '});',
     ...richEndpoint,
+    ...overlappingUnionEndpoint,
     'export const proto = defineEndpoint({',
     "  name: 'proto',",
     "  method: 'POST',",
@@ -121,7 +140,7 @@ const service: Readonly<Record<string, string>> = {
     '  success: { status: 204 },',
     '});',
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
-    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto], events: [shaped] });",
+    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, overlap, proto], events: [shaped] });",
     "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
@@ -213,6 +232,7 @@ let echo: Endpoint;
 let entrySnapshot: unknown;
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
+let overlap: { readonly success: { readonly body: Reader } };
 let shaped: Shaped;
 let snapshot: {
   readonly defs: Readonly<Record<string, unknown>>;
@@ -245,6 +265,7 @@ beforeAll(async () => {
   entrySnapshot = entry.snapshot;
   rich = entry.contract.endpoints.rich;
   proto = entry.contract.endpoints.proto;
+  overlap = entry.contract.endpoints.overlap;
   shaped = entry.contract.events.shapedV1;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
@@ -278,6 +299,12 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.data?.['tree']).toEqual(sample.tree);
+  });
+
+  test('the Reader of a union reads with the first option that parses, as the Provider’s schema does', () => {
+    const parsed = overlap.success.body.safeParse({ b: 'x', c: 1 });
+
+    expect(parsed.data).toEqual({ b: 'x', c: 1 });
   });
 
   test('the Success reader strips keys it does not know, a nested object’s included', () => {

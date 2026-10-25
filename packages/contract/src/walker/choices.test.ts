@@ -81,12 +81,63 @@ describe('walkSchemas: enums', () => {
   });
 });
 
-describe('walkSchemas: unions', () => {
-  test('a union holds its options', () => {
-    expect(walkBody(z.union([z.string(), z.number()]))).toEqual(
-      walkedTo({ type: 'union', options: [{ type: 'number' }, { type: 'string' }] }),
-    );
+const declaredOptions = [
+  { name: 'a string', schema: z.string(), node: { type: 'string' } },
+  {
+    name: 'an object',
+    schema: z.object({ id: z.string() }),
+    node: {
+      type: 'object',
+      mode: 'open',
+      fields: { id: { required: true, schema: { type: 'string' } } },
+    },
+  },
+  {
+    name: 'an array',
+    schema: z.array(z.number()),
+    node: { type: 'array', items: { type: 'number' } },
+  },
+] as const;
+
+const closedValues = [
+  { name: 'a literal d', schema: z.literal('d') },
+  { name: 'a literal a', schema: z.literal('a') },
+  { name: 'an enum of c and b', schema: z.enum(['c', 'b']) },
+] as const;
+
+/** Every order the items can be declared in. */
+function ordersOf<Item>(items: readonly Item[]): readonly (readonly Item[])[] {
+  if (items.length <= 1) {
+    return [items];
+  }
+  return items.flatMap((item, index) => {
+    const others = items.filter((_, other) => other !== index);
+    return ordersOf(others).map((order) => [item, ...order]);
   });
+}
+
+function titled<Item extends { readonly name: string }>(order: readonly Item[]) {
+  return [order.map(({ name }) => name).join(', then '), order] as const;
+}
+
+describe('walkSchemas: unions', () => {
+  test.each(ordersOf(declaredOptions).map(titled))(
+    'a union of %s keeps that order',
+    (_names, options) => {
+      const walked = walkBody(z.union(options.map(({ schema }) => schema)));
+
+      expect(walked).toEqual(walkedTo({ type: 'union', options: options.map(({ node }) => node) }));
+    },
+  );
+
+  test.each(ordersOf(closedValues).map(titled))(
+    'a union of %s is one enum with sorted values',
+    (_names, options) => {
+      const walked = walkBody(z.union(options.map(({ schema }) => schema)));
+
+      expect(walked).toEqual(walkedTo({ type: 'enum', values: ['a', 'b', 'c', 'd'], open: false }));
+    },
+  );
 
   test('a union of described literals is an enum, without their descriptions', () => {
     const flag = z.union([z.literal('on').describe('Switched on'), z.literal('off')]);

@@ -28,7 +28,7 @@ export type {
   TupleNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
-export { openIntersectionsOf } from './open-intersections.ts';
+export { openCompositionsOf } from './open-compositions.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
 export type { StringFormat } from './string-formats.ts';
 export { isStringFormat } from './string-formats.ts';

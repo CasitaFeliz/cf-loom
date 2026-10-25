@@ -733,6 +733,12 @@ const unionRows: readonly Row[] = [
     found: [found({ kind: 'union-changed' }, breaksEverywhere)],
   },
   {
+    change: 'reordering a plain union’s options, since the first option that parses wins',
+    from: plainUnion(aString, aNumber),
+    to: plainUnion(aNumber, aString),
+    found: [found({ kind: 'union-changed' }, breaksEverywhere)],
+  },
+  {
     change: 'adding nullability to a plain union, which is no change of its options',
     from: plainUnion(aString, aNumber),
     to: { type: 'union', options: [aString, aNumber], nullable: true },
@@ -744,16 +750,40 @@ describe('compatibilityReportOf, unions', () => {
   test.each(casesOf(unionRows))('$change is $outcome in $place', expectRow);
 
   test.each(places)(
-    'a plain union whose options differ only in descriptions is no Change in $name, whatever order they sort in',
+    'a plain union whose options differ only in descriptions is no Change in $name',
     (place) => {
-      const withNumberFirst = plainUnion(
-        { type: 'number', description: 'a' },
-        { type: 'string', description: 'z' },
-      );
-      const withStringFirst = plainUnion(
+      const described = plainUnion(
         { type: 'string', description: 'a' },
         { type: 'number', description: 'z' },
       );
+      const redescribed = plainUnion(
+        { type: 'string', description: 'z' },
+        { type: 'number', description: 'a' },
+      );
+
+      const report = reportOf(place, { from: described, to: redescribed });
+
+      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    },
+  );
+
+  test.each(places)(
+    'an intersection whose items differ only in descriptions is no Change in $name, whatever order they sort in',
+    (place) => {
+      const withNumberFirst: SchemaNode = {
+        type: 'allOf',
+        items: [
+          { type: 'number', description: 'a' },
+          { type: 'string', description: 'z' },
+        ],
+      };
+      const withStringFirst: SchemaNode = {
+        type: 'allOf',
+        items: [
+          { type: 'string', description: 'a' },
+          { type: 'number', description: 'z' },
+        ],
+      };
 
       const report = reportOf(place, { from: withNumberFirst, to: withStringFirst });
 

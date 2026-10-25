@@ -585,7 +585,7 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('a union is anyOf its options', () => {
-    expect(echoed('union')).toEqual({ anyOf: [{ type: 'number' }, { type: 'string' }] });
+    expect(echoed('union')).toEqual({ anyOf: [{ type: 'string' }, { type: 'number' }] });
   });
 
   test('an intersection that is not of open objects is allOf its items', () => {

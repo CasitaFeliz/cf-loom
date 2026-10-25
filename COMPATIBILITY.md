@@ -98,7 +98,7 @@ An Open Enum gives its readers a type with an Unknown case, so they must handle 
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is compared as a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible.
+A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is compared as a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible. Reordering a plain union's options is a change, since the first option that parses wins.
 
 ### Constraints
 
@@ -158,7 +158,7 @@ A Contract describes shapes, not behavior. Only the nodes and checks listed in [
 
 Codes:
 
-- A code has one HTTP status and one body shape across the whole Contract, Guards and imported Definitions Packages included; two declarations with different shapes (see [Neutral](#neutral)) fail `generate`.
+- A code has one HTTP status and one body shape across the whole Contract, Guards and imported Definitions Packages included; two declarations with different shapes (see [Neutral](#neutral)), a union's options in another order included, fail `generate`.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status and body it last had, as a kept code is: another status is Breaking, and its body follows the rules of a Success.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new reserved code only comes with a cf-loom major.

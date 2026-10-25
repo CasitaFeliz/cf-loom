@@ -206,6 +206,23 @@ describe('validateContract: one status and one body per code', () => {
     expect(validateEndpoints(endpoints).kind).toBe('valid');
   });
 
+  test('two declarations of one code whose union bodies list the same options in another order fail', () => {
+    const declared = (body: z.ZodType) =>
+      defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });
+    const endpoints = [
+      defineEndpoint({ ...listing, rejections: [declared(z.union([z.string(), z.number()]))] }),
+      defineEndpoint({ ...creating, rejections: [declared(z.union([z.number(), z.string()]))] }),
+    ] as const;
+
+    expect(validateEndpoints(endpoints)).toEqual(
+      failed(
+        ['rejections', 'ORDER_REFUSED', 'body'],
+        'code-body-conflict',
+        'A code has one body schema across the Contract: ORDER_REFUSED',
+      ),
+    );
+  });
+
   test('two declarations of one code whose intersection bodies differ only in their items’ descriptions agree', () => {
     const declared = (body: z.ZodType) =>
       defineRejection({ code: 'ORDER_REFUSED', status: 409, message: 'Refused', body });

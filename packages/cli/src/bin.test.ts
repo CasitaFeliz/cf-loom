@@ -506,6 +506,23 @@ describe('cf-loom generate', () => {
     });
   });
 
+  test('a union reaching an Open Enum exits 1 in one line, since no reader can tell its Unknown case from another option', () => {
+    const body = "z.union([openEnum(['a']), z.literal('b')])";
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text.replace('import { defineEndpoint }', 'import { defineEndpoint, openEnum }'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'groups.health.endpoints.GET /ping.success.body not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)\n',
+    });
+  });
+
   test('a field named __proto__ exits 1 in one line, since zod drops it when parsing', () => {
     const body = "z.object({ ['__proto__']: z.string() })";
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
