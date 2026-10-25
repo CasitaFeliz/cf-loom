@@ -87,6 +87,10 @@ export const refused = {
     construct: 'an intersection that is not of open objects reaching an openEnum()',
     instead: '.extend()',
   },
+  openUnion: {
+    construct: 'a z.union() reaching an openEnum()',
+    instead: 'z.discriminatedUnion(), or one openEnum() of all the values',
+  },
   protoField: { construct: 'a field named __proto__ (zod drops it when parsing)' },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
   nodelessCycle: {

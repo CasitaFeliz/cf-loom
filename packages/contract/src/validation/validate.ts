@@ -1,11 +1,6 @@
 import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import {
-  keyedRecordsOf,
-  type OriginOf,
-  openIntersectionsOf,
-  walkSchemas,
-} from '../walker/index.ts';
+import { keyedRecordsOf, type OriginOf, openCompositionsOf, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf, isReadShapePart, type Root } from '../written/index.ts';
 import { type ExportsOf, unlistedFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
@@ -89,7 +84,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
-    ...openIntersectionsOf(nodes.slots, nodes.defs),
+    ...openCompositionsOf(nodes.slots, nodes.defs),
     ...keyedRecordsOf({ queryOrHeaders: [], readShapes: readShapeSlotsOf(nodes) }, nodes.defs),
     ...new Set(walked.located.flatMap(failuresAt)),
   ];
