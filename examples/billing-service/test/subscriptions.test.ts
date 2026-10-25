@@ -57,7 +57,7 @@ describe('draftInvoiceOnCreated called directly', () => {
   test('with a faked OrderCreated, the Handler drafts the invoice', async () => {
     const body = anOrderCreated(CALLED_ORDER_ID);
     const factId = `${CALLED_ORDER_ID}:created`;
-    const meta = { messageId: `OrderCreated.v1:${factId}`, factId, deliveryCount: 1 };
+    const meta = { messageId: `event.OrderCreated.v1:${factId}`, factId, deliveryCount: 1 };
 
     const answer = await draftInvoiceOnCreatedHandler(body, meta);
 
