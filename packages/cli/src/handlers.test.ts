@@ -1388,6 +1388,24 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
+  test.each([
+    'src/endpoints/orders/GetOrder.handler.ts',
+    'src/endpoints/Orders/get-order.handler.ts',
+    'src/endpoints/orders/get_order.handler.ts',
+    'src/endpoints/orders/-get-order.handler.ts',
+    'src/commands/payments/charge-card.v0.handler.ts',
+    'src/commands/payments/charge-card.v01.handler.ts',
+    'src/commands/payments/charge-card.vx.handler.ts',
+  ])('a .handler.ts file %s, whose names break a variable’s grammar, is no Handler', (path) => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    write(project, { [path]: 'export const onEvent = () => {};\n' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
   test('a .handler.ts file outside every Handler template of the layout is no Handler', () => {
     const project = aProject({
       ...aService(),
