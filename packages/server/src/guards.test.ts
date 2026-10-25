@@ -5,7 +5,7 @@ import {
   defineGuard,
   defineRejection,
 } from '@cf-loom/contract';
-import { admit, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type ServedFault, serve } from './index.ts';
@@ -190,6 +190,18 @@ describe('serve: Guards', () => {
       { status: 400, body: guardIssue },
       { status: 400, body: guardIssue },
     ]);
+  });
+
+  test('a GuardHandler’s retryable Fault with retryAfter is sent with retry-after', async () => {
+    const busy = handle(userToken, () =>
+      fault({ committed: 'no', retryable: true, retryAfter: 30 }),
+    );
+    const http = serve(contract, { ...handlers, guards: { ...handlers.guards, userToken: busy } });
+
+    const response = await http(put(ORDER_ID));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('30');
   });
 
   test('a GuardHandler’s Rejection stops the request with its declared status', async () => {

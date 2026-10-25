@@ -69,10 +69,13 @@ const readers = readersOf({
   },
 });
 
+/** A Fault a Message Handler returns, which carries no `retryAfter`. */
+type MessageFault = Fault & { readonly retryAfter?: never };
+
 type Implementation = (
   body: { readonly orderId: string },
   meta: MessageMeta,
-) => Fault | undefined | Promise<Fault | undefined>;
+) => MessageFault | undefined | Promise<MessageFault | undefined>;
 
 type Handlers = {
   readonly charge?: Implementation;

@@ -121,7 +121,12 @@ type Orders = ReturnType<typeof anOrders>;
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
 
-type Behavior = (received: Received) => Promise<Fault | undefined> | Fault | undefined;
+/** A Fault a Message Handler returns, which carries no `retryAfter`. */
+type MessageFault = Fault & { readonly retryAfter?: never };
+
+type Behavior = (
+  received: Received,
+) => Promise<MessageFault | undefined> | MessageFault | undefined;
 
 /** The Handler map of Orders, each Handler recording what it receives and then doing as the behavior says. */
 function handlersOf(
@@ -129,7 +134,7 @@ function handlersOf(
   behaviors: { notify?: Behavior; charge?: Behavior } = {},
 ) {
   const recording = (handler: string, behavior: Behavior | undefined) => {
-    return async (body: unknown, meta: MessageMeta): Promise<Fault | undefined> => {
+    return async (body: unknown, meta: MessageMeta): Promise<MessageFault | undefined> => {
       const entry = { handler, body, meta };
       received.push(entry);
       return await behavior?.(entry);

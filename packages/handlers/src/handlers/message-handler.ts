@@ -12,8 +12,11 @@ export type DirectMeta = Omit<MessageMeta, 'headers'> & {
   readonly headers?: MessageMeta['headers'];
 };
 
-/** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a Fault. */
-type Answered = undefined | Fault;
+/**
+ * What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a
+ * Fault with no `retryAfter`, since the durable consumer's configuration decides redelivery.
+ */
+type Answered = undefined | (Fault & { readonly retryAfter?: never });
 
 /** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a Fault; may be async. */
 export type CommandImplementation<

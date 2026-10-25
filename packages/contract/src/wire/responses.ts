@@ -47,10 +47,22 @@ export function rejectionResponseOf(rejection: SentRejection): Response {
   return jsonResponseOf(rejection.status, rejectionEnvelopeOf(rejection));
 }
 
-/** The response of a Fault the Service produced: only its `committed`, `retryable` and `message` travel. */
-export function faultResponseOf({ committed, retryable, message }: SentFault): Response {
+/**
+ * The response of a Fault the Service produced: only its `committed`, `retryable` and `message`
+ * travel, and its `retryAfter` as `Retry-After` when it has one.
+ */
+export function faultResponseOf({
+  committed,
+  retryable,
+  message,
+  retryAfter,
+}: SentFault & { readonly retryAfter?: number | undefined }): Response {
   const envelope = faultEnvelopeOf({ committed, retryable, message });
-  return jsonResponseOf(faultStatusOf({ retryable }), envelope);
+  const response = jsonResponseOf(faultStatusOf({ retryable }), envelope);
+  if (retryAfter !== undefined) {
+    response.headers.set('retry-after', String(retryAfter));
+  }
+  return response;
 }
 
 /** The status a Fault the Service produced travels with: 503 when retryable, else 500. */

@@ -605,6 +605,27 @@ describe('an EndpointHandler’s Faults', () => {
   });
 });
 
+describe('fault() retryAfter', () => {
+  test('retryAfter is given only to a retryable Fault', () => {
+    const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
+
+    expectTypeOf(later.retryAfter).toEqualTypeOf<number>();
+    // @ts-expect-error a Fault not worth retrying says no time to retry
+    expect(() => fault({ committed: 'no', retryable: false, retryAfter: 5 })).not.toThrow();
+  });
+
+  test.each([1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'fault() refuses a retryAfter of %s, naming it',
+    (retryAfter) => {
+      const building = () => fault({ committed: 'no', retryable: true, retryAfter });
+
+      expect(building).toThrow(
+        `fault() takes retryAfter as a whole number of seconds from 0: got ${retryAfter}`,
+      );
+    },
+  );
+});
+
 describe('what an EndpointHandler returns', () => {
   test('a body on a headers-only Success throws InvalidOutcomeError', async () => {
     const orderTotalHandler = handle(

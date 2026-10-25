@@ -977,6 +977,14 @@ describe('cf-loom openapi: the responses', () => {
     expect(valueAt(responseOf('/health', 'get', '503'), 'description')).toBe('A retryable Fault');
   });
 
+  test('the 503 response lists an optional retry-after header, whole seconds from 0', () => {
+    expect(valueAt(responseOf('/health', 'get', '503'), 'headers', 'retry-after')).toEqual({
+      required: false,
+      description: 'When to retry, in whole seconds, if the Fault says',
+      schema: { type: 'integer', minimum: 0 },
+    });
+  });
+
   test('an OpenAPI operation with an Input body answers the Fault Envelope under 413', () => {
     expect(responseBodyOf('/orders', 'post', '413')).toEqual(refTo('FaultEnvelope'));
   });

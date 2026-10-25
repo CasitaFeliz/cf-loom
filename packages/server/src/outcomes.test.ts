@@ -343,6 +343,16 @@ describe('serve: a Rejection', () => {
 });
 
 describe('serve: a Fault', () => {
+  test('a retryable Fault with retryAfter is sent with retry-after, and one without it with none', async () => {
+    const later = serveWith(() => fault({ committed: 'no', retryable: true, retryAfter: 5 }));
+    const now = serveWith(() => fault({ committed: 'no', retryable: true }));
+
+    const responses = [await later.http(getRequest.clone()), await now.http(getRequest.clone())];
+
+    expect(responses.map(({ status }) => status)).toEqual([503, 503]);
+    expect(responses.map(({ headers }) => headers.get('retry-after'))).toEqual(['5', null]);
+  });
+
   test('a Fault the Handler returns travels with 503 when retryable, its cause kept from the Caller', async () => {
     const cause = new Error('the database is down');
     const { http, faults } = serveWith(() =>
