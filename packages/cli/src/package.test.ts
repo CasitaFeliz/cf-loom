@@ -330,6 +330,29 @@ function withDeclarations(
   };
 }
 
+/** Every Rejection code of up to five characters over `A`, `1` and `_` that the grammar accepts. */
+function shortCodes(): readonly string[] {
+  const grammar = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
+  const codes: string[] = [];
+  let words = [''];
+  for (let length = 1; length <= 5; length++) {
+    words = words.flatMap((word) => [`${word}A`, `${word}1`, `${word}_`]);
+    codes.push(...words.filter((word) => grammar.test(word)));
+  }
+  return codes;
+}
+
+/** A Service whose one Endpoint, `ping`, lists a Rejection for each code given, with statuses cycling. */
+function withRejectionsOf(codes: readonly string[]): Readonly<Record<string, string>> {
+  const statuses = [409, 422];
+  const declarations = codes.map(
+    (code, index) =>
+      `export const rejection${index} = defineRejection({ code: '${code}', status: ${statuses[index % statuses.length]}, message: 'Rejected' });`,
+  );
+  const names = codes.map((_, index) => `rejection${index}`);
+  return withDeclarations(declarations, `rejections: [${names.join(', ')}],`);
+}
+
 /** A Service as `withDeclarations` writes it, its root also listing the Events given. */
 function withEvents(
   declarations: readonly string[],
@@ -1313,6 +1336,55 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(defs).toContain('.rest(');
   });
 
+  test('every code the grammar accepts has a module and a name of its own, so the package builds', async () => {
+    const codes = shortCodes();
+    expect(codes).toHaveLength(69);
+    const project = aProject(withRejectionsOf(codes));
+    const out = join(aFolder(), 'contract-orders-service');
+
+    const ran = packageIn(project, '--out', out);
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(readdirSync(join(out, 'src/rejections'))).toHaveLength(69);
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+    const listed = built.contract.endpoints.ping.rejections.map(
+      (rejection: { code: string }) => rejection.code,
+    );
+    expect(listed.sort()).toEqual([...codes].sort());
+  });
+
+  test('codes that differ only by an underscore before a digit are Rejections of their own in the built package', async () => {
+    const project = aProject(
+      withDeclarations(
+        [
+          "export const first = defineRejection({ code: 'ORDER_1', status: 409, message: 'One' });",
+          "export const second = defineRejection({ code: 'ORDER1', status: 422, message: 'Other' });",
+        ],
+        'rejections: [first, second],',
+      ),
+    );
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    const statusByCode = new Map(
+      built.contract.endpoints.ping.rejections.map(
+        ({ code, status }: { code: string; status: number }) => [code, status],
+      ),
+    );
+    expect(statusByCode).toEqual(
+      new Map([
+        ['ORDER_1', 409],
+        ['ORDER1', 422],
+      ]),
+    );
+  });
+
   test('an Application’s package exports its Snapshot only, and builds', async () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
@@ -1755,26 +1827,6 @@ describe('cf-loom package: what it refuses', () => {
     expect(ran.status).toBe(1);
     expect(ran.stderr).toBe(cfLoom(project, 'generate').stderr);
     expect(existsSync(join(project, '.cf-loom'))).toBe(false);
-  });
-
-  test('two codes that are one name in code are a tooling error naming both', () => {
-    const project = aProject(
-      withDeclarations(
-        [
-          "export const first = defineRejection({ code: 'ORDER_1', status: 409, message: 'One' });",
-          "export const second = defineRejection({ code: 'ORDER1', status: 422, message: 'Other' });",
-        ],
-        'rejections: [first, second],',
-      ),
-    );
-
-    const ran = packageIn(project);
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The codes ORDER1 and ORDER_1 are one name in code: rename one of them\n',
-    });
   });
 
   test('ids that extend one another each give two names of their own in code, and the package builds', () => {

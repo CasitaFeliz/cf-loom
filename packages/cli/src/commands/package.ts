@@ -36,10 +36,7 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
   }
   const packaging = { scope: project.scope, version: localVersion, peers: peers.peers };
   const files = contractPackageFilesOf({ snapshot, text }, packaging);
-  if (files.kind === 'unnamed') {
-    return toolingError(files.line);
-  }
-  const written = writeContractPackageTo(run.cwd, out, files.files);
+  const written = writeContractPackageTo(run.cwd, out, files);
   switch (written.kind) {
     case 'written':
       return done([`Wrote ${out}`]);
