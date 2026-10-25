@@ -6,7 +6,7 @@ import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from 
 export function walkArray(def: core.$ZodArrayDef, at: Path, walker: Walker): Walked {
   const items = walker.schema(def.element, [...at, 'items']);
   if (items.kind === 'not-allowed') {
-    return items;
+    return failed(items.failures, { type: 'array' });
   }
   return walked({ type: 'array', items: items.value });
 }
@@ -18,7 +18,7 @@ export function walkTuple(def: core.$ZodTupleDef, at: Path, walker: Walker): Wal
   const rest: Walked<SchemaNode | undefined> =
     def.rest === null ? walked(undefined) : walker.schema(def.rest, [...at, 'rest']);
   if (items.kind === 'not-allowed' || rest.kind === 'not-allowed') {
-    return failed(failuresOf([items, rest]));
+    return failed(failuresOf([items, rest]), { type: 'tuple' });
   }
   if (rest.value === undefined) {
     return walked({ type: 'tuple', items: items.value });

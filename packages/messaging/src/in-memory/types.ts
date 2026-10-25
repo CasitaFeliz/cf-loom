@@ -1,5 +1,6 @@
 import type { Command, Event, Subscription } from '@cf-loom/contract';
 import type { Broker, Settlement } from '../broker/index.ts';
+import type { GivenHeaders } from '../sending/index.ts';
 
 /**
  * What `memory()` returns: a `Broker` that keeps everything in memory, serves one connection and
@@ -8,7 +9,7 @@ import type { Broker, Settlement } from '../broker/index.ts';
 export type MemoryBroker = Broker & {
   /**
    * Waits until nothing is in flight, Messages Handlers publish or send meanwhile included; rejects
-   * when a Handler threw, a Message was ended, an `onServiceFault` threw or deliveries were cut
+   * when a Handler threw or returned a Fault, a Message was ended, an `onServiceFault` threw or deliveries were cut
    * since the last `settled()`.
    */
   readonly settled: () => Promise<void>;
@@ -22,7 +23,7 @@ export type MemoryBroker = Broker & {
     message: Event | Command,
     body: unknown,
     meta?: DeliveryMeta,
-  ) => Promise<Settlement['kind']>;
+  ) => Promise<Settlement>;
   /**
    * Delivers every pending Message again, each to the consumer it is pending for alone, as attempt
    * `deliveryCount + 1`.
@@ -41,16 +42,18 @@ export type RecordedMessage = {
   readonly body: unknown;
 };
 
-/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out. */
+/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out, an `undefined` one left out. */
 export type DeliveryMeta = {
   readonly factId?: string;
   readonly messageId?: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  readonly headers?: GivenHeaders;
 };
 
 /** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */
 export type PendingMessage = {
   readonly element: Subscription | Command;
+  /** `notifyOnSettled` for a Subscription, `ChargeCard@1` for a Command's Message Version. */
+  readonly identity: string;
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;

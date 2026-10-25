@@ -397,7 +397,13 @@ describe('runMessage', () => {
     },
     subscriptions: {},
   }).commands.shipV1;
-  const meta = { messageId: 'command.Ship.v1:o-1', factId: 'o-1', deliveryCount: 1, headers: {} };
+  const meta = {
+    messageId: 'command.Ship.v1:o-1',
+    factId: 'o-1',
+    deliveryCount: 1,
+    lastAttempt: false,
+    headers: {},
+  };
 
   test('runMessage reads a received body with its Reader, without writing it back', async () => {
     const received: unknown[] = [];

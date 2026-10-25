@@ -66,6 +66,7 @@ function aBroker() {
     connect: async () => ({
       publish: async (message) => {
         published.push(message);
+        return { duplicate: false };
       },
       consume: async (given) => {
         consumers.push(...given);
@@ -83,27 +84,29 @@ describe('the messaging README', () => {
     const total = { amount: 12, currency: 'EUR' };
     const order = { id: orderId };
     const traceparent = '00-abc-def-01';
-    const v1 = { orderId, total: total.amount };
-    const v2 = { orderId, total };
+    const headers: Readonly<Record<string, string>> = { traceparent };
+    const meta = { factId: 'o-1:created', headers };
     const { publisher, sender, close } = await messaging(contract, broker);
 
-    await publisher.publish('OrderCreated', {
-      v1: { orderId, total: total.amount },
-      v2: { orderId, total },
-    });
-    await sender.send('ChargeCard', { orderId });
-    await publisher.publish(
+    const { duplicates } = await publisher.publish(
       'OrderCreated',
-      { v1, v2 },
-      { factId: `${order.id}:created`, headers: { traceparent } },
+      { v1: { orderId, total: total.amount }, v2: { orderId, total } },
+      { factId: `${order.id}:created` },
+    );
+    await sender.send(
+      'ChargeCard',
+      { orderId },
+      { factId: `${meta.factId}:charge`, headers: { traceparent: meta.headers['traceparent'] } },
     );
     await close();
 
-    expect(published.map((message) => message.messageId).slice(3)).toEqual([
+    expect(duplicates).toEqual([]);
+    expect(published.map((message) => message.messageId)).toEqual([
       'event.OrderCreated.v1:o-1:created',
       'event.OrderCreated.v2:o-1:created',
+      'command.ChargeCard.v1:o-1:created:charge',
     ]);
-    expect(published[4]?.headers).toEqual({ traceparent });
+    expect(published[2]?.headers).toEqual({ traceparent });
   });
 
   test('the Message Handlers example runs through consume, reading its meta', async () => {
@@ -143,15 +146,18 @@ describe('the messaging README', () => {
       headers: { traceparent: '00-abc-def-01' },
     };
     const body = { orderId: 'o-1', total: { amount: 12, currency: 'EUR' } };
-    const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
+    const consumer = consumers.find(
+      (candidate) => candidate.durable === 'orders-service_notify-on-created',
+    );
 
     const settlement = await consumer?.receive({
       ...meta,
+      lastAttempt: false,
       body: new TextEncoder().encode(JSON.stringify(body)),
     });
     await running.close();
 
-    expect(settlement).toEqual({ kind: 'acked' });
+    expect(settlement).toBe('acked');
     expect(received).toEqual(['o-1', meta]);
   });
 });

@@ -91,14 +91,14 @@ describe('memory(): one connection', () => {
   test('messaging() connects through memory() and closes', async () => {
     const broker = memory();
     const started = await messaging(contract, broker);
-    await started.publisher.publish('OrderCreated', { v1: charge });
+    await started.publisher.publish('OrderCreated', { v1: charge }, { factId: 'f-18' });
 
     await started.close();
 
     expect(broker.messages).toHaveLength(1);
-    await expect(started.publisher.publish('OrderCreated', { v1: charge })).rejects.toThrow(
-      'messaging is closed',
-    );
+    await expect(
+      started.publisher.publish('OrderCreated', { v1: charge }, { factId: 'f-19' }),
+    ).rejects.toThrow('messaging is closed');
   });
 
   test('a second messaging() through the same memory() rejects, even after the first was closed', async () => {

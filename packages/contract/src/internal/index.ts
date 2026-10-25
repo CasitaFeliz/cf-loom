@@ -29,6 +29,7 @@ export {
 export type {
   GroupedField,
   GroupedOf,
+  IsOneLiteral,
   ProvidedEvent,
   Refusal,
 } from '../declarations/index.ts';

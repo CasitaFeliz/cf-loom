@@ -125,7 +125,7 @@ One numbered version of a Command or Event (`PaymentCreated@2`), declared anew t
 _Avoid_: schema version, major (that is the Contract Package's version)
 
 **Fact id**:
-The id shared by every Message one `publish` or `send` call sends for the same fact, so a Handler can recognize a fact it already handled.
+The id the calling code derives from the fact and gives every Message one `publish` or `send` call sends for it, so a Handler can recognize a fact it already handled.
 _Avoid_: correlation id, event id
 
 **Broker**:

@@ -2,14 +2,22 @@ import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
+import { type Received, registerConsumerDetails } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
 /** What of the Handler map `consume` reads: the Handlers of Commands and Subscriptions, and the `readers` that pair each with the Reader it reads with. */
 export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | 'readers'>;
 
-/** What one `consume` runs its Handlers with: where it reports faults and the Resources it hands them. */
-type ConsumersRun = { readonly report: Report; readonly resources: unknown };
+/**
+ * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
+ * and `received`, which wraps each consumer's run as the messaging's life allows it.
+ */
+type ConsumersRun = {
+  readonly report: Report;
+  readonly resources: unknown;
+  readonly received: Received;
+};
 
 /**
  * The consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
@@ -20,7 +28,7 @@ type ConsumersRun = { readonly report: Report; readonly resources: unknown };
 export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { report, resources }: ConsumersRun,
+  { report, resources, received }: ConsumersRun,
 ): readonly BrokerConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
@@ -33,12 +41,19 @@ export function consumersOf(
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))
-    .map(({ consumed, handler, reader }) => ({
-      durable: consumed.durable,
-      stream: consumed.stream,
-      subject: consumed.subject,
-      element: consumed.element,
-      reader,
-      receive: (delivery) => settlementOf({ consumed, handler, resources }, delivery, report),
-    }));
+    .map(({ consumed, handler, reader }) => {
+      const settle = received((delivery) =>
+        settlementOf({ consumed, handler, resources }, delivery, report),
+      );
+      const { durable, stream, subject, element } = consumed;
+      const consumer: BrokerConsumer = {
+        durable,
+        stream,
+        subject,
+        receive: async (delivery) => (await settle(delivery)).settlement,
+      };
+      const identity = elementNameOf(element);
+      registerConsumerDetails(consumer, { element, identity, reader, settle });
+      return consumer;
+    });
 }

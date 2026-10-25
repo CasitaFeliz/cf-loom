@@ -1,19 +1,17 @@
 import type * as core from 'zod/v4/core';
-import { checksOf } from './check-defs.ts';
 import { annotatedBy, hasOwnId, type Metadata, metadataOf } from './metadata.ts';
 import type { Field, Origin, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refusedWrapperId } from './not-allowed.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   distinctFailures,
-  failed,
-  failuresOf,
   type LocatedSchema,
+  refusedBeside,
   type Walked,
   type Walker,
   walked,
 } from './walked.ts';
-import { constrained, type Def, walkDefinition } from './zod-types.ts';
+import { type Def, walkDefinition, withOwnChecks } from './zod-types.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages installed. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
@@ -72,6 +70,7 @@ export function walkMeetingSchemas(
   return { located: walkedLocations, defs: recursion.defs(), met: state.met };
 }
 
+/** A schema's failures each once, without the node the walk was building. */
 function distinct(walked: Walked): Walked {
   if (walked.kind === 'walked') {
     return walked;
@@ -122,10 +121,10 @@ type Wrapper = LocatedSchema & { readonly kind: 'optional' | 'nonoptional' };
  */
 function throughWrapper(wrapper: Wrapper, inner: Walked, state: WalkState): Walked {
   const { schema, at, kind } = wrapper;
-  const checks = checksOf(schema);
-  const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
-  const refusals = hasOwnId(schema) ? [notAllowed(at, refusedWrapperId(kind))] : [];
-  const joined = refusals.length === 0 ? checked : failed(failuresOf([...refusals, checked]));
+  const checked = withOwnChecks(schema, inner, at);
+  const joined = hasOwnId(schema)
+    ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
+    : checked;
   return annotatedBy(joined, ownMetadata(schema, at, state.originOf));
 }
 
