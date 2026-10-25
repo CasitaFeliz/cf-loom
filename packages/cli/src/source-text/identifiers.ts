@@ -12,7 +12,7 @@ export function kebabCaseOfCode(code: string): string {
  */
 export function camelCaseOfCode(code: string): string {
   const [first = '', ...rest] = code.toLowerCase().split('_');
-  return [first, ...rest.map(afterUnderscore)].join('');
+  return [first, ...rest.map(laterWordOf)].join('');
 }
 
 /**
@@ -43,7 +43,7 @@ export function pascalCaseOf(name: string): string {
   return upperFirst(name);
 }
 
-function afterUnderscore(word: string): string {
+function laterWordOf(word: string): string {
   return /^[0-9]/.test(word) ? `_${word}` : upperFirst(word);
 }
 
