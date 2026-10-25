@@ -79,12 +79,12 @@ function siblingImportsOf(path: string, siblings: readonly Sibling[]): readonly 
   return [...byPath].map(([siblingPath, named]) => {
     const specifier = relativeSpecifierOf(path, siblingPath);
     const sorted = [...named.values()].sort((left, right) => byCodePoint(left.name, right.name));
-    return { specifier, line: namedImportOf(sorted.map(importedNameOf), specifier) };
+    return { specifier, line: namedImportOf(sorted.map(siblingSpecifierOf), specifier) };
   });
 }
 
 /** A name as an import list writes it: a type's after `type`. */
-function importedNameOf({ name, kind }: Sibling): string {
+function siblingSpecifierOf({ name, kind }: Sibling): string {
   switch (kind) {
     case 'value':
       return name;
