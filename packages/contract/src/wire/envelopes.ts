@@ -96,17 +96,23 @@ export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope
   if (isRejectionShape(rejection)) {
     return rejectionEnvelopeOf(rejection);
   }
-  const fault = ownOf(received, 'fault');
-  if (isFaultShape(fault)) {
-    const { committed, retryable, message } = fault;
-    const code = isReservedCode(fault.code) ? fault.code : undefined;
-    return faultEnvelopeOf(
-      code === undefined
-        ? { committed, retryable, message }
-        : { code, committed, retryable, message },
-    );
+  const fault = travelingFaultOf(ownOf(received, 'fault'));
+  return fault === undefined ? undefined : faultEnvelopeOf(fault);
+}
+
+/**
+ * The Fault a received value is, read by its fields alone; a code that is not reserved is dropped.
+ * None when it is no Fault, which a Caller then does not read as one.
+ */
+export function travelingFaultOf(received: unknown): TravelingFault | undefined {
+  if (!isFaultShape(received)) {
+    return undefined;
   }
-  return undefined;
+  const { committed, retryable, message } = received;
+  const code = isReservedCode(received.code) ? received.code : undefined;
+  return code === undefined
+    ? { committed, retryable, message }
+    : { code, committed, retryable, message };
 }
 
 type RejectionFields = {

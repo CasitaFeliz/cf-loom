@@ -1,6 +1,7 @@
 import { networkFailureOf } from '@cf-loom/client/internal';
 import type { ReservedCode } from '@cf-loom/contract';
 import {
+  envelopeOf,
   faultResponseOf,
   follows,
   isJsonValue,
@@ -8,6 +9,7 @@ import {
   methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
+  travelingFaultOf,
   upperSnakeCase,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
@@ -38,7 +40,7 @@ export function responseOf(answer: Answer, { listed, otherMethods }: Matched): R
     case 'unknown-rejection':
       return builtOf(listed, unsendable, () => unknownRejectionResponseOf(answer, listed));
     case 'fault':
-      return builtOf(listed, unsendable, () => faultResponseOf(answer));
+      return builtOf(listed, unsendable, () => faultResponseOf(readableFaultOf(answer, listed)));
     case 'reserved':
       return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, otherMethods));
     case 'no-connection':
@@ -48,6 +50,19 @@ export function responseOf(answer: Answer, { listed, otherMethods }: Matched): R
     case 'status':
       return builtOf(listed, unsendable, () => bareStatusResponseOf(answer, listed));
   }
+}
+
+type ScriptedFault = Extract<Answer, { readonly kind: 'fault' }>;
+
+/** The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a Fault. */
+function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
+  const fault = travelingFaultOf(answer);
+  if (fault === undefined) {
+    const what =
+      "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
+  return fault;
 }
 
 /** A reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path takes. */
@@ -65,7 +80,7 @@ type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;
  * no Contract could declare.
  */
 function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
-  const refused = refusedUnknownCodeOf(answer.code, listed);
+  const refused = refusedUnknownCodeOf(answer.code, listed) ?? refusedMessageOf(answer);
   if (refused !== undefined) {
     throw mistakeOf({ ...whoOf(listed), what: refused });
   }
@@ -86,6 +101,13 @@ function undeclaredRejectionResponseOf(answer: UnknownRejection, listed: ListedE
     }
     return rejectionResponseOf({ code, status: unknownRejectionStatus, message, body });
   });
+}
+
+/** Why a scripted message cannot travel as a Rejection's, if it cannot: no Caller would read it as one. */
+function refusedMessageOf({ code, message = code }: UnknownRejection): string | undefined {
+  return envelopeOf({ rejection: { code, message } }) === undefined
+    ? 'r.unknownRejection takes message a string'
+    : undefined;
 }
 
 /** Why a code cannot stand for one the Endpoint does not answer, if it cannot. */

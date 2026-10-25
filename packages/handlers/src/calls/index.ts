@@ -28,4 +28,4 @@ export type {
   Implementation,
   Written,
 } from './run.ts';
-export { endpointRunOf, guardRunOf, notRunFaultOf } from './run.ts';
+export { endpointRunOf, guardRunOf } from './run.ts';

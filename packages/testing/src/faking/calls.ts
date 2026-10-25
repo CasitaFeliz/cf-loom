@@ -1,8 +1,14 @@
 import {
+  frozenCopyOf,
   type InvalidInputBody,
   invalidInputBodyOf,
   type Reading,
 } from '@cf-loom/contract/internal';
+
+/** A value readonly all the way down: the objects it holds, and the lists. */
+export type Frozen<Value> = Value extends object
+  ? { readonly [Key in keyof Value]: Frozen<Value[Key]> }
+  : Value;
 
 /** A request a fake answered with the invalid-input Rejection: the Issues it answered. */
 export type InvalidCall = { readonly issues: InvalidInputBody['issues'] };
@@ -33,7 +39,7 @@ export function callLogOf(): CallLog {
     slotsOf(name).push(slot);
     return {
       fill: (reading) => {
-        slot.reading = reading;
+        slot.reading = recordedOf(reading);
       },
     };
   };
@@ -42,6 +48,14 @@ export function callLogOf(): CallLog {
   const invalidCallsOf = (name: string) =>
     Object.freeze(readingsOf(name).filter(isInvalid).map(invalidCallOf));
   return { arrived, callsOf, invalidCallsOf };
+}
+
+/** A reading as the log keeps it: a valid request's Input a frozen copy, which no step can change. */
+function recordedOf(reading: Reading): Reading {
+  if (reading.kind !== 'input') {
+    return reading;
+  }
+  return { kind: 'input', input: frozenCopyOf(reading.input) as typeof reading.input };
 }
 
 type InputReading = Extract<Reading, { readonly kind: 'input' }>;
@@ -61,5 +75,5 @@ function inputOf(reading: InputReading): unknown {
 }
 
 function invalidCallOf(reading: InvalidReading): InvalidCall {
-  return { issues: invalidInputBodyOf(reading.issues).issues };
+  return frozenCopyOf({ issues: invalidInputBodyOf(reading.issues).issues }) as InvalidCall;
 }

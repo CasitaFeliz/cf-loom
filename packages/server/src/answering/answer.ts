@@ -1,15 +1,12 @@
-import type { Endpoint, Http, StandardRejections } from '@cf-loom/contract';
+import type { Http, StandardRejections } from '@cf-loom/contract';
 import {
   type Match,
   matchOf,
   methodNotAllowedResponseOf,
-  type Reading,
-  type ReadingSource,
   readingOf,
   withDeprecation,
 } from '@cf-loom/contract/internal';
-import type { Fault } from '@cf-loom/handlers';
-import { type EndpointRun, notRunFaultOf, runEndpoint } from '@cf-loom/handlers/internal';
+import { type EndpointRun, runEndpoint } from '@cf-loom/handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, handledRequestOf, partsOf } from './call.ts';
 import { fallbackAnswerOf } from './fallback.ts';
@@ -80,12 +77,10 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
   const faultedBy = { element: declared, identity: declared.name };
   const runs = guardRunsOf(call, served);
   const source = { ...partsOf(call, served), admit: runs.admit };
-  const reading = await readingOrThrownOf(declared, source);
+  const reading = await readingOf(declared, source);
   switch (reading.kind) {
     case 'stopped':
       return reading.answer;
-    case 'thrown':
-      return answeredOfFailedRun(reading, faultedBy, served.standards);
     case 'invalid':
       return answeredOfInvalidInput(reading.issues, faultedBy, served.standards);
     case 'input': {
@@ -98,21 +93,6 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
       const run = await runEndpoint(call.endpoint.handler, given);
       return answeredRunOf(run, faultedBy, served.standards);
     }
-  }
-}
-
-/**
- * The request read with its Guards' runs; a throw while parsing it, such as a stack overflow on
- * deeply nested Input, is a throw before any Handler ran.
- */
-async function readingOrThrownOf(
-  endpoint: Endpoint,
-  source: ReadingSource<Answered>,
-): Promise<Reading<Answered> | { readonly kind: 'thrown'; readonly fault: Fault }> {
-  try {
-    return await readingOf(endpoint, source);
-  } catch (e) {
-    return { kind: 'thrown', fault: notRunFaultOf(e) };
   }
 }
 

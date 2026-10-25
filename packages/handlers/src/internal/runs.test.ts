@@ -437,6 +437,98 @@ describe('runMessage', () => {
   });
 });
 
+describe('a run given a value nested past the stack', () => {
+  const tree: z.ZodType = z.object({
+    get next() {
+      return tree.optional();
+    },
+  });
+  const nestV1 = defineCommand({
+    name: 'Nest',
+    version: 1,
+    description: 'A deep body',
+    body: tree,
+  });
+  const nesting = readersOf({
+    commands: { nestV1: { element: nestV1, reader: tree } },
+    subscriptions: {},
+  }).commands.nestV1;
+  const nest = defineEndpoint({
+    name: 'nest',
+    method: 'POST',
+    path: '/nest',
+    visibility: 'public',
+    description: 'A deep body',
+    input: { body: tree },
+    success: { status: 204 },
+  });
+  const meta = {
+    messageId: 'command.Nest.v1:o-1',
+    factId: 'o-1',
+    deliveryCount: 1,
+    lastAttempt: false,
+    headers: {},
+    signal: new AbortController().signal,
+  };
+
+  function nestedTo(depth: number): object {
+    let body: object = {};
+    for (let level = 0; level < depth; level += 1) {
+      body = { next: body };
+    }
+    return body;
+  }
+
+  test('runEndpoint is invalid-input at the root of the part, never thrown', async () => {
+    const nestHandler = handle(nest, () => success());
+
+    const run = await runEndpoint(nestHandler, {
+      input: { body: nestedTo(5000) },
+      context: {},
+      request,
+      resources: undefined,
+    });
+
+    expect(run).toEqual({
+      kind: 'invalid-input',
+      issues: [
+        {
+          part: 'input.body',
+          path: [],
+          code: 'malformed',
+          message: 'The value is nested too deeply to read',
+        },
+      ],
+    });
+  });
+
+  test('runMessage is never thrown, and its Handler runs exactly when the body was read', async () => {
+    let next = 219;
+    const draw = () => {
+      next = (Math.imul(next, 1664525) + 1013904223) >>> 0;
+      return next / 2 ** 32;
+    };
+    const ran: boolean[] = [];
+    const nestHandler = handle(nesting, () => {
+      ran.push(true);
+    });
+    const runs: string[] = [];
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const depth = 1 + Math.floor(20_000 ** draw() * draw());
+      const run = await runMessage(nestHandler, {
+        body: nestedTo(depth),
+        meta,
+        resources: undefined,
+      });
+      runs.push(`${run.kind} ${ran.length}`);
+      ran.length = 0;
+    }
+
+    expect(new Set(runs)).toEqual(new Set(['answered 1', 'invalid-input 0']));
+  });
+});
+
 describe('mappedHandlerOf, by its key', () => {
   test('mappedHandlerOf names the key of a missing Handler, or of one written for another Element', () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);

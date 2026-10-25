@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { type InputPart, type Issue, partFieldOf } from '../written/index.ts';
+import { type InputPart, type Issue, ownOf, partFieldOf } from '../written/index.ts';
 import { parseValue } from './parse-value.ts';
 
 /** A party's declared parts parsed: each value under its field, or every Issue at its part. */
@@ -24,7 +24,7 @@ export function parsedPartsOf<Part extends InputPart>(
       continue;
     }
     const field = partFieldOf(part);
-    const parsed = parseValue(schema, fieldOf(given, field));
+    const parsed = parseValue(schema, ownOf(given, field));
     if (parsed.kind === 'issues') {
       issues.push(...parsed.issues.map((issue) => ({ part, ...issue })));
     } else {
@@ -35,9 +35,4 @@ export function parsedPartsOf<Part extends InputPart>(
     return { kind: 'issues', issues };
   }
   return { kind: 'value', value: Object.fromEntries(values) };
-}
-
-/** A field of what a party was given, whatever it was given. */
-function fieldOf(given: unknown, field: string): unknown {
-  return typeof given === 'object' && given !== null ? Reflect.get(given, field) : undefined;
 }

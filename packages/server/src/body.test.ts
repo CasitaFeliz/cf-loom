@@ -288,25 +288,31 @@ describe('serve: maxBodyBytes', () => {
     expect(response.status).toBe(201);
   });
 
-  test('a body nested past the stack answers the Fault 500, which onServiceFault receives as thrown', async () => {
+  test('a body nested past the stack answers the invalid-input Rejection, malformed at input.body, and no Handler runs', async () => {
     const faults: ServedFault[] = [];
-    const watched = serve(contract, handlers, {
-      onServiceFault: (fault) => {
-        faults.push(fault);
-      },
+    const ran: string[] = [];
+    const nestHandler = handle(nest, () => {
+      ran.push('nest');
+      return success();
     });
+    const watched = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, nest: nestHandler } },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
+    );
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 
     const response = await watched(
       new Request('http://test/nest', { method: 'POST', headers: json, body: deep }),
     );
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      fault: { committed: 'no', retryable: false, message: 'Internal error' },
-    });
-    expect(faults).toMatchObject([
-      { kind: 'thrown', element: nest, identity: 'nest', cause: expect.any(RangeError) },
-    ]);
+    expect(response.status).toBe(400);
+    expect(await issuesOf(response)).toEqual(malformed('The value is nested too deeply to read'));
+    expect(faults).toEqual([]);
+    expect(ran).toEqual([]);
   });
 });
