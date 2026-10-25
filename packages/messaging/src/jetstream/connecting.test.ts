@@ -70,13 +70,18 @@ function aConnect() {
 const notHeld = (stream: string, subjects: readonly string[]) =>
   `The stream ${stream} does not hold ${subjects.join(', ')}: apply the Service's broker plan`;
 
+const absent = (stream: string) =>
+  `The stream ${stream} does not exist: apply the Service's broker plan`;
+
 describe('jetstream()', () => {
   test.each(['stag_ing', 'a.b', 'Staging', ''])(
-    'jetstream() refuses the prefix "%s", which is not kebab-case, naming it',
+    'jetstream() refuses the prefix "%s", which is not kebab-case, naming it and saying to leave it undefined for none',
     (prefix) => {
       const broker = () => jetstream({ connect: aConnect().connect, prefix });
 
-      expect(broker).toThrow(`The broker prefix "${prefix}" is not kebab-case, such as staging`);
+      expect(broker).toThrow(
+        `The broker prefix "${prefix}" is not kebab-case, such as staging: leave prefix undefined for none`,
+      );
     },
   );
 
@@ -160,7 +165,7 @@ describe('jetstream()', () => {
     );
   });
 
-  test('messaging() rejects when the subjects are held by a stream that is not the Service’s, naming the Service’s stream', async () => {
+  test('messaging() rejects naming its own stream as absent when another stream holds its subjects', async () => {
     const prefix = aPrefix();
     const subjects = [`${prefix}.orders-service.>`];
     await arrangeStream(server.url, { name: `${prefix}_somebody-else`, subjects });
@@ -168,27 +173,55 @@ describe('jetstream()', () => {
 
     const opening = messaging(contract, jetstream({ connect: service.connect, prefix }));
 
-    await expect(opening).rejects.toThrow(
-      notHeld(`${prefix}_orders-service`, [
-        `${prefix}.orders-service.event.OrderCreated.v1`,
-        `${prefix}.orders-service.command.ChargeCard.v1`,
-      ]),
-    );
+    await expect(opening).rejects.toThrow(absent(`${prefix}_orders-service`));
   });
 
-  test('messaging() rejects when the Service’s stream does not exist, naming it', async () => {
+  test('messaging() rejects naming a stream that does not exist and the broker plan, and drains the connection it opened', async () => {
     const prefix = aPrefix();
     const service = aConnect();
 
     const opening = messaging(contract, jetstream({ connect: service.connect, prefix }));
 
-    await expect(opening).rejects.toThrow(
-      notHeld(`${prefix}_orders-service`, [
-        `${prefix}.orders-service.event.OrderCreated.v1`,
-        `${prefix}.orders-service.command.ChargeCard.v1`,
-      ]),
-    );
+    await expect(opening).rejects.toThrow(absent(`${prefix}_orders-service`));
+    expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
+
+  test.each([
+    ['holds every subject', 2, (prefix: string) => arrangePlanOf(server.url, contract, prefix)],
+    ['does not exist', 3, () => Promise.resolve()],
+    [
+      'holds only some subjects',
+      3,
+      (prefix: string) =>
+        arrangeStream(server.url, {
+          name: `${prefix}_orders-service`,
+          subjects: [`${prefix}.orders-service.event.OrderCreated.v1`],
+        }),
+    ],
+  ])(
+    'messaging() checks a Service’s stream that %s with %i $JS.API.STREAM.NAMES requests and no other',
+    async (_name, requests, arrange) => {
+      const prefix = aPrefix();
+      await arrange(prefix);
+      const requested: string[] = [];
+      const connectRecording = async (): Promise<NatsConnection> => {
+        const connection = await connect({ servers: server.url });
+        onTestFinished(() => connection.close());
+        return withMethods(connection, {
+          request: (subject, payload, options) => {
+            requested.push(subject);
+            return connection.request(subject, payload, options);
+          },
+        });
+      };
+
+      await messaging(contract, jetstream({ connect: connectRecording, prefix })).catch(
+        () => undefined,
+      );
+
+      expect(requested).toEqual(Array(requests).fill('$JS.API.STREAM.NAMES'));
+    },
+  );
 
   test('messaging() rejects with the stream check’s own error when the Service’s connection is already closed', async () => {
     const checkFailure = new Error('the Broker did not answer');
