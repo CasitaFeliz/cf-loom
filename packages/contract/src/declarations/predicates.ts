@@ -1,6 +1,6 @@
 import type { Command } from './command.ts';
 import type { Definitions } from './definitions.ts';
-import type { Dependencies } from './dependencies.ts';
+import type { Dependency } from './dependency.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
 import { isDeclaration } from './freeze-declaration.ts';
@@ -21,7 +21,7 @@ export type Kind =
   | Guard['kind']
   | Rejection['kind']
   | StandardRejection['kind']
-  | Dependencies['kind']
+  | Dependency['kind']
   | Event['kind']
   | Command['kind']
   | Subscription['kind'];
@@ -67,8 +67,8 @@ export function isStandardRejection(value: unknown): value is StandardRejection 
 }
 
 /** Whether a value is a declared Dependency, from any copy of this package. */
-export function isDependencies(value: unknown): value is Dependencies {
-  return isDeclaration(value) && value.kind === 'dependencies';
+export function isDependency(value: unknown): value is Dependency {
+  return isDeclaration(value) && value.kind === 'dependency';
 }
 
 /** Whether a value is a declared Event's Message Version, from any copy of this package. */

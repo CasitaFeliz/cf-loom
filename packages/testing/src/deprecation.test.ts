@@ -2,7 +2,7 @@ import type { DeprecationNotice } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -66,11 +66,15 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment, listPayments }), {
+const paymentsDependency = defineDependency({
+  provider: contractPackageOf({ getPayment, listPayments }),
   endpoints: [getPayment, listPayments],
 });
 
-type Builder = StepBuilder<typeof getPayment, (typeof paymentsDeps)['standardRejections']>;
+type Builder = StepBuilder<
+  typeof getPayment,
+  (typeof paymentsDependency)['provider']['standardRejections']
+>;
 
 const deprecation = `@${Date.parse('2026-10-17T09:30:00Z') / 1000}`;
 
@@ -86,7 +90,7 @@ describe('fakeProvider: Deprecation', () => {
     ['a reserved code', (r: Builder) => r.fault({ code: 'INVALID_OUTCOME' })],
     ['a bare status', (r: Builder) => r.status(502)],
   ])('%s of a Deprecated Endpoint carries Deprecation', async (_name, step) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
 
     const response = await payments.fetch('https://payments-service.test/payments/pay-1', {});
@@ -95,7 +99,7 @@ describe('fakeProvider: Deprecation', () => {
   });
 
   test('the invalid-input Rejection of a Deprecated Endpoint carries Deprecation', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     const response = await payments.fetch('https://payments-service.test/payments/ab', {});
 
@@ -103,7 +107,7 @@ describe('fakeProvider: Deprecation', () => {
   });
 
   test('onDeprecation is told once per method, and never for an Active Endpoint', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.success({ id: 'pay-1' }));
     payments.on('listPayments').otherwise((r) => r.success([]));
     const notices: DeprecationNotice[] = [];

@@ -81,13 +81,7 @@ function dependencyProblems(
       text: id,
     })),
   );
-  const events = providers.flatMap(([provider, dependency]) =>
-    dependency.events.map((text, index) => ({
-      at: ['dependencies', provider, 'events', index],
-      text,
-    })),
-  );
-  return [...unreadable(ids, endpointIdentity), ...unreadable(events, messageIdentity)];
+  return unreadable(ids, endpointIdentity);
 }
 
 const unheld = {

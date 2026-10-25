@@ -122,7 +122,7 @@ function commandPairingOf({ message }: Readable, atOf: MessageAt): Pairing {
 }
 
 /**
- * A Subscription paired with its own Event's Reader, or with its Dependency's Event's body, which
+ * A Subscription paired with its own Event's Reader, or with its Provider's Event's body, which
  * the Provider's Contract Package wrote as a Reader.
  */
 function subscriptionPairingOf(

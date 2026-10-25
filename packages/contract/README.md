@@ -1,6 +1,6 @@
 # @cf-loom/contract
 
-The declarations of a Contract: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`, `openEnumReader`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented`; and their types (see [Types](#types)). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
+The declarations of a Contract: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependency`, `openEnum`, `openEnumReader`; the Standard Rejections `invalidInput`, `notFound`, `notImplemented`; and their types (see [Types](#types)). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md); the rules for changing a Contract are in [COMPATIBILITY.md](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of `zod`, `@cf-loom/contract` and sibling files. Every declaration is a named export under its name in code (`getOrder`, `chargeCardV1`, `notifyOnSettled`), as in `export const getOrder = defineEndpoint({ name: 'getOrder', … })`: `generate` imports Endpoints, Guards, Commands' Message Versions and Subscriptions by it, in stubs and in the readers file (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README).
 
@@ -20,7 +20,7 @@ export const contract = defineContract({
   name: 'orders-service',
   definitions: [orgDefinitions],
   groups: [ordersGroup],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 ```
 
@@ -33,10 +33,11 @@ Names follow fixed grammars, so they are safe in code, subjects and broker names
 An Application has the same layout as a Service (see [Layout](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#layout) in README.md) with only Dependencies:
 
 ```ts
-// web-admin/src/contract/dependencies/payments-service.dependencies.ts
+// web-admin/src/contract/dependencies/payments-service.dependency.ts
 import { contract as payments } from '@org/contract-payments-service';
 
-export const adminPaymentsDeps = defineDependencies(payments, {
+export const adminPaymentsDependency = defineDependency({
+  provider: payments,
   endpoints: [payments.endpoints.getPayment],
 });
 ```
@@ -45,11 +46,11 @@ export const adminPaymentsDeps = defineDependencies(payments, {
 // web-admin/src/contract/index.ts
 export const application = defineApplication({
   name: 'web-admin',
-  dependencies: [adminOrdersDeps, adminPaymentsDeps],
+  dependencies: [adminOrdersDependency, adminPaymentsDependency],
 });
 ```
 
-A Dependency of an Application on an Endpoint that is not Public, or on any Event, is a type error.
+A Dependency of an Application on an Endpoint that is not Public is a type error, and an Application has no Subscriptions, so each of its Dependencies selects Endpoints.
 
 ## Definitions Packages
 
@@ -274,34 +275,36 @@ npx cf-loom add-dependency payments-service getPayment
 ```
 
 ```ts
-// src/contract/dependencies/payments-service.dependencies.ts
+// src/contract/dependencies/payments-service.dependency.ts
 import { contract as payments } from '@org/contract-payments-service';
 
-export const paymentsDeps = defineDependencies(payments, {
+export const paymentsDependency = defineDependency({
+  provider: payments,
   endpoints: [payments.endpoints.getPayment],
-  events: [payments.events.paymentSettledV1],
 });
 ```
 
-A Contract Package's Elements are its declarations: a Dependency keeps the Endpoints and Events it selects by identity, and the Snapshot records each by its identity (see [Identities](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#identities) in SNAPSHOT.md). A Dependency records the Provider's name as `provider`, the `version` of the Contract Package it was declared against as `against`, the Provider's resolved Standard Rejections as `standardRejections`, their codes kept as the Provider wrote them so a Caller narrows by them, the Elements the Provider exports as `exported` and the Provider's exported Snapshot as `exportedSnapshot`, whose nodes the client reads (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md), and exposes the Elements it selects by their names in code (`paymentsDeps.endpoints.getPayment`, `paymentsDeps.events.paymentSettledV1`); selecting an Element the Provider's Contract Package does not export is a type error, and `generate` checks each selected Element against `exported`. A Contract lists at most one Dependency per Provider; a second fails `generate`. The client has methods only for the Endpoints listed, and a Subscription may only reference an Event listed here; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md. An Event listed here that no Subscription uses fails `generate`, since a Dependency names only what its owner uses.
+A Dependency holds the Provider's Contract Package as `provider`, the `contract` it exports, and the Endpoints it calls as `endpoints`, the list as written; its client has a method named after each Endpoint it lists (`client(paymentsDependency, …).getPayment`, see the [client README](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md)). From `provider` the Snapshot records the Provider's name and the `version` the Dependency was declared against, the client narrows by the Provider's Standard Rejections, their codes kept as the Provider wrote them, and reads nodes from its exported Snapshot (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). A Contract Package's Elements are its declarations: the Dependency keeps the Endpoints it selects by identity, and the Snapshot records each by its identity (see [Identities](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#identities) in SNAPSHOT.md). Selecting an Endpoint the Provider's Contract Package does not export is a type error, and `generate` checks each listed Endpoint against the ones `provider` exports and fails on one listed twice; `defineDependency` never throws, so what the types refuse, written through a cast, is reported by `generate`. A Dependency selects no Event: a Subscription to another Service's Event takes it from that Service's Contract Package (see [Subscriptions](#subscriptions)), and needs that Service listed as a Dependency. A Contract lists at most one Dependency per Provider; a second fails `generate`. A Dependency is used: one that lists no Endpoint and whose Provider exports no Event a Subscription receives fails `generate`, since a Dependency names only what its owner uses. The client has methods only for the Endpoints listed; which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md.
 
 ## Subscriptions
 
 ```ts
 // src/contract/subscriptions/orders/notify-on-settled.subscription.ts
+import { contract as payments } from '@org/contract-payments-service';
+
 export const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: paymentsDeps.events.paymentSettledV1,
+  event: payments.events.paymentSettledV1,
 });
 ```
 
-`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one listed in a Dependency, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one a listed Dependency's Provider exports, taken from its Contract Package, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 
 - `Visibility`, `Lifecycle`, `Method`, `SuccessStatus` and `RejectionStatus`: the values a declaration may take.
 - `IssueCode`, the closed set of codes an issue of invalid Input says went wrong (see [Rejections](#rejections)); a Caller reads them as an Open Enum, so a code a later cf-loom adds arrives as its Unknown case (see [What a call receives](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#what-a-call-receives) in the client README).
 - `StandardRejection`, the type of `invalidInput`, `notFound` and `notImplemented`; `StandardRejections`, their codes, statuses and messages resolved, as a Contract Package carries them.
-- `Contract`, `Application`, `Definitions`, `Group`, `Endpoint`, `Guard`, `Rejection`, `Event`, `Command`, `Subscription` and `Dependencies`: what each declaration returns, typed by what was written; `Attachment`, a Guard as an Endpoint's `guards` lists it: the Guard bare, or a `QualifiedAttachment` `{ guard, qualifier }` for a Guard that declares a `qualifier`; `ContractPackage`, the `contract` a Contract Package exports, `ExportedElements`, the Endpoints and Events of it a Dependency keeps, and `ExportedSnapshot`, its Snapshot cut to what it exports (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
+- `Contract`, `Application`, `Definitions`, `Group`, `Endpoint`, `Guard`, `Rejection`, `Event`, `Command`, `Subscription` and `Dependency`: what each declaration returns, typed by what was written; `Attachment`, a Guard as an Endpoint's `guards` lists it: the Guard bare, or a `QualifiedAttachment` `{ guard, qualifier }` for a Guard that declares a `qualifier`; `ContractPackage`, the `contract` a Contract Package exports, which a Dependency holds as `provider`, and `ExportedSnapshot`, its Snapshot cut to what it exports (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md).
 - `InputOf<typeof getOrder>`, the Input its EndpointHandler receives, one key per declared part; `SuccessOf<typeof getOrder>`, its Success's status, headers and body; `ContextOf<typeof getOrder>`, its Context, one key per Guard that provides a Context, by name; `ProvidedContextOf<typeof apiKey>`, the Context one Guard provides (`undefined` without a `context`); `QualifierOf<typeof permission>`, the Qualifier its GuardHandler receives, typed by its `qualifier` schema (`undefined` without a `qualifier`); `RequiredContextOf<typeof permission>`, the Context a Guard's GuardHandler reads from the Guards it lists, keyed like `ContextOf`; `DemandsOf<typeof apiKey>`, what a Guard's GuardHandler receives first, one key per declared demand part (`{}` when it demands nothing); `RejectionsOf<typeof getOrder>`, every Rejection it may answer: its own, its Guards' and the two cf-loom's runtime adds, and `RejectionsOf<typeof apiKey>`, a Guard's own and the not-implemented Rejection its stub answers.

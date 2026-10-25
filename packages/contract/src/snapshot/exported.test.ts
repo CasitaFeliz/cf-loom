@@ -62,7 +62,7 @@ function declaredSnapshotOf() {
 }
 
 const providing = {
-  provider: 'orders-service',
+  name: 'orders-service',
   exportedSnapshot: exportedSnapshotOf(declaredSnapshotOf()),
 };
 

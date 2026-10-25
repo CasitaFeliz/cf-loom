@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -108,7 +108,8 @@ const defaultStandards = {
 
 const orders = contractPackageOf({ searchOrders, createOrder, priceOrder }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, {
+const ordersDependency = defineDependency({
+  provider: orders,
   endpoints: [searchOrders, createOrder, priceOrder],
 });
 
@@ -121,7 +122,7 @@ function inFormat(contractPackage: typeof orders, format: unknown): typeof order
 /** A client whose `fetch` records each request and answers `response`. */
 function recording(response: () => Response, baseUrl: string | URL = 'http://orders.test') {
   const sent: Request[] = [];
-  const orders = client(ordersDeps, {
+  const orders = client(ordersDependency, {
     baseUrl,
     fetch: async (url, init) => {
       sent.push(new Request(url, init));
@@ -191,24 +192,24 @@ describe('what a call sends', () => {
   });
 
   test('a baseUrl with a query or a fragment is a bug, thrown when the client is created', () => {
-    const withQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?key=1' });
-    const withFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#top' });
+    const withQuery = () => client(ordersDependency, { baseUrl: 'http://orders.test/?key=1' });
+    const withFragment = () => client(ordersDependency, { baseUrl: 'http://orders.test/#top' });
 
     expect(withQuery).toThrow(/query or a fragment/);
     expect(withFragment).toThrow(/query or a fragment/);
   });
 
   test('a baseUrl with a username or a password is a bug, thrown when the client is created', () => {
-    const withUsername = () => client(ordersDeps, { baseUrl: 'http://ann@orders.test/' });
-    const withPassword = () => client(ordersDeps, { baseUrl: 'http://:secret@orders.test/' });
+    const withUsername = () => client(ordersDependency, { baseUrl: 'http://ann@orders.test/' });
+    const withPassword = () => client(ordersDependency, { baseUrl: 'http://:secret@orders.test/' });
 
     expect(withUsername).toThrow(/a username or a password/);
     expect(withPassword).toThrow(/a username or a password/);
   });
 
   test('a baseUrl ending in an empty query or fragment is refused too', () => {
-    const emptyQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?' });
-    const emptyFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#' });
+    const emptyQuery = () => client(ordersDependency, { baseUrl: 'http://orders.test/?' });
+    const emptyFragment = () => client(ordersDependency, { baseUrl: 'http://orders.test/#' });
 
     expect(emptyQuery).toThrow(/query or a fragment/);
     expect(emptyFragment).toThrow(/query or a fragment/);
@@ -245,7 +246,7 @@ describe('what a call sends', () => {
       groups: [defineGroup({ name: 'prices', description: 'Prices', endpoints: [priceOrder] })],
     });
     const http = serve(provider, handlers);
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: (url, init) => http(new Request(url, init)),
     });
@@ -268,7 +269,7 @@ describe('Input that cannot be sent', () => {
   /** A client whose `fetch` must never be called. */
   function unsent() {
     let calls = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
         calls += 1;
@@ -425,10 +426,10 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
     success: { status: 204 },
   });
   const making = contractPackageOf({ makeOrder }, defaultStandards);
-  const makingDeps = defineDependencies(making, { endpoints: [makeOrder] });
+  const makingDependency = defineDependency({ provider: making, endpoints: [makeOrder] });
 
   test('a demand that fails gives only its Issues, though the body fails too', async () => {
-    const makers = client(makingDeps, {
+    const makers = client(makingDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => counted(),
     });
@@ -459,7 +460,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
     success: { status: 204, headers: z.object({ 'x-small': z.literal(1.5e-7) }) },
   });
   const echoing = contractPackageOf({ echoLarge }, defaultStandards);
-  const echoingDeps = defineDependencies(echoing, { endpoints: [echoLarge] });
+  const echoingDependency = defineDependency({ provider: echoing, endpoints: [echoLarge] });
 
   test('travels as plain decimal both ways and reads back as its literal', async () => {
     const handlers = {
@@ -474,7 +475,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
       groups: [defineGroup({ name: 'large', description: 'Large', endpoints: [echoLarge] })],
     });
     const http = serve(provider, handlers);
-    const echoes = client(echoingDeps, {
+    const echoes = client(echoingDependency, {
       baseUrl: 'http://orders.test',
       fetch: (url, init) => http(new Request(url, init)),
     });
@@ -517,9 +518,9 @@ describe('several Guards, checked in Attachment order', () => {
     success: { status: 204 },
   });
   const shops = contractPackageOf({ listShops }, defaultStandards);
-  const shopsDeps = defineDependencies(shops, { endpoints: [listShops] });
+  const shopsDependency = defineDependency({ provider: shops, endpoints: [listShops] });
   const shopsClient = () =>
-    client(shopsDeps, {
+    client(shopsDependency, {
       baseUrl: 'http://shops.test',
       fetch: async () => new Response(null, { status: 204 }),
     });
@@ -564,7 +565,7 @@ describe('several Guards, checked in Attachment order', () => {
 
 describe('a Provider’s exported Snapshot, read when the client is created', () => {
   test('a Contract Package in a newer format is refused', () => {
-    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [searchOrders] });
+    const newer = defineDependency({ provider: inFormat(orders, 2), endpoints: [searchOrders] });
 
     const create = () => client(newer, { baseUrl: 'http://orders.test' });
 
@@ -574,7 +575,7 @@ describe('a Provider’s exported Snapshot, read when the client is created', ()
   });
 
   test('a Contract Package in a newer format is refused even when no Endpoint is listed', () => {
-    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [] });
+    const newer = defineDependency({ provider: inFormat(orders, 2), endpoints: [] });
 
     const create = () => client(newer, { baseUrl: 'http://orders.test' });
 
@@ -582,7 +583,10 @@ describe('a Provider’s exported Snapshot, read when the client is created', ()
   });
 
   test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {
-    const damaged = defineDependencies(inFormat(orders, '1'), { endpoints: [searchOrders] });
+    const damaged = defineDependency({
+      provider: inFormat(orders, '1'),
+      endpoints: [searchOrders],
+    });
 
     const create = () => client(damaged, { baseUrl: 'http://orders.test' });
 

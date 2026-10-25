@@ -2,7 +2,7 @@ import { client } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -94,13 +94,13 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(
-  contractPackageOf({ getPayment: readers.getPayment, capturePayment: readers.capturePayment }, [
-    getPayment,
-    capturePayment,
-  ]),
-  { endpoints: [readers.getPayment, readers.capturePayment] },
-);
+const paymentsDependency = defineDependency({
+  provider: contractPackageOf(
+    { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
+    [getPayment, capturePayment],
+  ),
+  endpoints: [readers.getPayment, readers.capturePayment],
+});
 
 const headers = { 'x-stage': 'settled', 'x-count': 0.000_000_15 } as const;
 const body = { stage: 'pending', id: 'pay-1', amount: 5 } as const;
@@ -148,7 +148,7 @@ const served = serve(
 
 /** The fake, scripted to answer each payment as the Provider's Handler does. */
 function scriptedFake() {
-  const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+  const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
   payments.on('getPayment').otherwise((builder, { params }) => {
     switch (params.paymentId) {
       case 'missing':
@@ -204,7 +204,7 @@ describe('fakeProvider and serve answer alike', () => {
 
   test('a Success header that cannot travel: serve answers INVALID_OUTCOME and the fake calls the script a mistake at the same header', async () => {
     const url = 'http://payments.test/payments/unsendable';
-    const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+    const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
     payments.on('getPayment').otherwise((r) => r.success({ headers: unsendable, body }));
     serviceFaults.length = 0;
 
@@ -279,10 +279,10 @@ const packagedRefund = defineEndpoint({
   success: { status: 204 },
 });
 
-const refundDeps = defineDependencies(
-  contractPackageOf({ refundPayment: packagedRefund }, [refundPayment]),
-  { endpoints: [packagedRefund] },
-);
+const refundDependency = defineDependency({
+  provider: contractPackageOf({ refundPayment: packagedRefund }, [refundPayment]),
+  endpoints: [packagedRefund],
+});
 
 /** The Provider of `refundPayment`, every GuardHandler admitting, so no run stops the reading. */
 const servedRefund = serve(
@@ -367,9 +367,9 @@ describe('serve, the client and fakeProvider read a request alike', () => {
     ],
   ])('%s', async (_name, input) => {
     const [url, init] = requestOf(input);
-    const fake = fakeProvider(refundDeps, { baseUrl: 'http://payments.test' });
+    const fake = fakeProvider(refundDependency, { baseUrl: 'http://payments.test' });
     fake.on('refundPayment').otherwise((r) => r.success());
-    const caller = client(refundDeps, {
+    const caller = client(refundDependency, {
       baseUrl: 'http://payments.test',
       fetch: (sentUrl, sentInit) => servedRefund(new Request(sentUrl, sentInit)),
     });

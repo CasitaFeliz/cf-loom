@@ -2,7 +2,7 @@ import type { Client, ReceivedOutcome } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -78,22 +78,25 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment }), {
+/** The Provider's Contract Package, as a Consumer imports it. */
+const payments = contractPackageOf({ getPayment });
+
+const paymentsDependency = defineDependency({
+  provider: payments,
   endpoints: [getPayment],
-  events: [paymentSettledV1],
 });
 
 const PAYMENT_ID = 'pay-1';
 const amount = 1200;
 
-type PaymentOutcome = ReceivedOutcome<typeof paymentsDeps, 'getPayment'>;
+type PaymentOutcome = ReceivedOutcome<typeof paymentsDependency, 'getPayment'>;
 
 /** The code under test: it asks for a payment until the Provider answers it, keeping each Outcome. */
 class SettlementService {
   readonly outcomes: PaymentOutcome[] = [];
-  readonly #payments: Client<typeof paymentsDeps, 'x-api-key'>;
+  readonly #payments: Client<typeof paymentsDependency, 'x-api-key'>;
 
-  constructor(payments: Client<typeof paymentsDeps, 'x-api-key'>) {
+  constructor(payments: Client<typeof paymentsDependency, 'x-api-key'>) {
     this.#payments = payments;
   }
 
@@ -109,7 +112,7 @@ class SettlementService {
 }
 
 test('the README’s fakeProvider example runs: each Outcome in order, and the calls listed', async () => {
-  const payments = fakeProvider(paymentsDeps);
+  const payments = fakeProvider(paymentsDependency);
   payments
     .on('getPayment')
     .once((r) => r.reject('NOT_FOUND'))
@@ -141,14 +144,14 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
   const notifyOnSettled = defineSubscription({
     name: 'notifyOnSettled',
     description: 'Notify on settled',
-    event: paymentsDeps.events.paymentSettledV1,
+    event: payments.events.paymentSettledV1,
   });
   const readers = readersOf({
     commands: {},
     subscriptions: {
       notifyOnSettled: {
         element: notifyOnSettled,
-        reader: paymentsDeps.events.paymentSettledV1.body,
+        reader: payments.events.paymentSettledV1.body,
       },
     },
   });
@@ -165,7 +168,9 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
     },
   );
 
-  const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
+  const settled = fakeEvent(payments.events.paymentSettledV1, {
+    paymentId: PAYMENT_ID,
+  });
   const answer = await notifyOnSettledHandler(
     settled,
     { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },

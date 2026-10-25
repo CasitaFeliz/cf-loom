@@ -208,7 +208,7 @@ function aMessagingService({
     .filter(([, list]) => list !== '[]')
     .map(([field, list]) => `  ${field}: ${list},`);
   const root = lines([
-    "import { defineContract, defineDependencies, defineGroup } from '@cf-loom/contract';",
+    "import { defineContract, defineDependency, defineGroup } from '@cf-loom/contract';",
     importOf(
       '{ chargeCardV1, chargeCardV2, orderCreatedV1, orderCreatedV2, orderPurgedV1, refundCardV1 }',
       './messages.ts',
@@ -216,7 +216,7 @@ function aMessagingService({
     importOf('{ paymentSettledV1, payments }', './payments.ts'),
     importOf('{ auditCreated, notifyOnSettled }', './subscriptions.ts'),
     '',
-    'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
+    'const paymentsDependency = defineDependency({ provider: payments });',
     '',
     'const orders = defineGroup({',
     "  name: 'orders',",
@@ -227,7 +227,7 @@ function aMessagingService({
     'export const contract = defineContract({',
     "  name: 'orders-service',",
     '  groups: [orders],',
-    '  dependencies: [paymentsDeps],',
+    '  dependencies: [paymentsDependency],',
     '});',
   ]);
   return {
@@ -459,6 +459,24 @@ describe('cf-loom broker-plan: what it refuses', () => {
       stdout: '',
       stderr:
         'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+    });
+  });
+
+  test('a Dependency written as the types refuse fails with its line, never as a root that threw', () => {
+    const service = aMessagingService();
+    const root = (service['src/contract/index.ts'] ?? '').replace(
+      'defineDependency({ provider: payments })',
+      'defineDependency({ provider: payments, endpoints: [undefined] } as never)',
+    );
+    const project = aProject({ ...service, 'src/contract/index.ts': root });
+
+    const ran = cfLoom(project, 'broker-plan');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'dependencies.payments-service.endpoints.0 not-a-declaration: endpoints.0 is not an Endpoint\n',
     });
   });
 

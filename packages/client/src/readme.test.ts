@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -63,7 +63,10 @@ const payments = contractPackageOf({ getPayment }, {
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 } as const);
 
-const paymentsDeps = defineDependencies(payments, { endpoints: [payments.endpoints.getPayment] });
+const paymentsDependency = defineDependency({
+  provider: payments,
+  endpoints: [payments.endpoints.getPayment],
+});
 
 const paymentId = '6f1c2a3e-8a4b-4c1d-9e2f-0a1b2c3d4e5f';
 const settings = { paymentsKey: 'k-1' };
@@ -74,7 +77,7 @@ async function readmeExample(answer: () => Response) {
   const baseUrl = 'https://payments.test';
   const fetch = async () => answer();
 
-  const payments = client(paymentsDeps, {
+  const payments = client(paymentsDependency, {
     baseUrl,
     headers: { 'x-api-key': settings.paymentsKey }, // a string
     fetch,
@@ -107,11 +110,14 @@ describe('the README', () => {
   });
 
   test('a fetch wrapper adding a browser’s credentials type-checks, and Client names the headers', () => {
-    const credentialed: Client<typeof paymentsDeps, 'x-api-key'> = client(paymentsDeps, {
-      baseUrl: 'https://payments.test',
-      headers: { 'x-api-key': 'k' },
-      fetch: (url, init) => fetch(url, { ...init, credentials: 'include' }),
-    });
+    const credentialed: Client<typeof paymentsDependency, 'x-api-key'> = client(
+      paymentsDependency,
+      {
+        baseUrl: 'https://payments.test',
+        headers: { 'x-api-key': 'k' },
+        fetch: (url, init) => fetch(url, { ...init, credentials: 'include' }),
+      },
+    );
 
     expect(Object.keys(credentialed)).toEqual(['getPayment']);
   });

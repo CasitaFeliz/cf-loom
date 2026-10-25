@@ -1,7 +1,7 @@
+import type { contract as orders } from '@org/contract-orders-service';
 import type { z } from 'zod';
-import type { ordersDeps } from '../contract/dependencies/orders-service.dependencies.ts';
 
-type OrderCreated = z.infer<typeof ordersDeps.events.orderCreatedV1.body>;
+type OrderCreated = z.infer<typeof orders.events.orderCreatedV1.body>;
 
 /** An invoice started for one order, for its total, not yet sent. */
 export type DraftInvoice = { readonly orderId: string; readonly total: OrderCreated['total'] };

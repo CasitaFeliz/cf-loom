@@ -2,7 +2,9 @@ import { isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   identityOf,
+  type LocatedDependency,
   type LocatedEndpoint,
+  providerNameOf,
   type Root,
   textOf,
 } from '../written/index.ts';
@@ -92,14 +94,15 @@ function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure
   );
 }
 
+/** A Dependency whose provider has no name is the Dependency rule's, and repeats no other. */
 function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFailure[] {
-  const providerOf = (located: Declarations['dependencies'][number]) =>
-    textOf(located.dependencies.provider);
-  return repeated(dependencies, providerOf).map(({ at, dependencies: listed }) =>
+  const providerOf = ({ dependency }: LocatedDependency) => providerNameOf(dependency);
+  const named = dependencies.filter((located) => providerOf(located) !== undefined);
+  return repeated(named, (located) => textOf(providerOf(located))).map((located) =>
     failure(
-      at,
+      located.at,
       'duplicate-dependency',
-      `A Contract lists one Dependency per Provider: ${textOf(listed.provider)}`,
+      `A Contract lists one Dependency per Provider: ${textOf(providerOf(located))}`,
     ),
   );
 }

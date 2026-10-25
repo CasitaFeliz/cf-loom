@@ -95,6 +95,7 @@ export {
   isDeclared,
   isDeclaredRejection,
   isSemanticVersion,
+  isSubscriptionTombstone,
   ownRejectionsOf,
   schemaOriginsOf,
   semanticVersionPartsOf,

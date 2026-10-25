@@ -25,9 +25,8 @@ import {
 import {
   commandFields,
   definitionsFields,
-  dependenciesFields,
+  dependencyFields,
   eventFields,
-  exportedFields,
   groupFields,
   rootFields,
   subscriptionFields,
@@ -79,10 +78,7 @@ function writtenOf(declarations: Declarations): readonly Written[] {
       written([...at, 'demands'], guard.demands, demandsFields),
     ]),
     ...rejections.map(({ at, rejection }) => written(at, rejection, rejectionFields)),
-    ...dependencies.flatMap(({ at, dependencies: listed }) => [
-      written(at, listed, dependenciesFields),
-      written([...at, 'exported'], listed.exported, exportedFields),
-    ]),
+    ...dependencies.map(({ at, dependency }) => written(at, dependency, dependencyFields)),
     ...allPackages.flatMap(standardRejectionsOf),
     ...messagingWrittenOf(declarations),
   ];

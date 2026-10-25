@@ -1,5 +1,5 @@
-import type { AnyDependencies } from '@cf-loom/client/internal';
-import type { Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { AnyDependency } from '@cf-loom/client/internal';
+import type { ContractPackage, Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -41,20 +41,22 @@ export type Provided = {
  * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, so routing
  * precedence is the Provider's, and each listed one with what its requests are read by.
  */
-export function providedOf(deps: AnyDependencies, base: URL): Provided {
-  checkExportedFormat(deps);
+export function providedOf(dependency: AnyDependency, base: URL): Provided {
+  const { provider } = dependency;
+  checkExportedFormat(provider);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
-  for (const [name, endpoint] of Object.entries(deps.endpoints)) {
-    const entry = exportedEntryOf(deps, endpoint);
-    listedByEntry.set(entry, listedEndpointOf(deps, { name, endpoint, entry }));
+  for (const endpoint of dependency.endpoints ?? []) {
+    const { name } = endpoint;
+    const entry = exportedEntryOf(provider, endpoint);
+    listedByEntry.set(entry, listedEndpointOf(provider, { name, endpoint, entry }));
   }
-  const entries = Object.entries(deps.exportedSnapshot.endpoints);
+  const entries = Object.entries(provider.exportedSnapshot.endpoints);
   const exported = entries.map(([identity, entry]) => {
     const { method, path } = methodAndPathOf(identity, entry.params);
     const segments = pathSegmentsOf(path);
     return { identity, method, segments, listed: listedByEntry.get(entry) };
   });
-  return { provider: deps.provider, base, exported };
+  return { provider: provider.name, base, exported };
 }
 
 /** A listed Endpoint by its name in code, its packaged declaration and its exported entry. */
@@ -65,12 +67,12 @@ type Listing = {
 };
 
 function listedEndpointOf(
-  deps: AnyDependencies,
+  provider: ContractPackage,
   { name, endpoint, entry }: Listing,
 ): ListedEndpoint {
-  const standards = deps.standardRejections;
+  const standards = provider.standardRejections;
   return {
-    provider: deps.provider,
+    provider: provider.name,
     name,
     endpoint,
     nodes: textPartNodesOf(entry),

@@ -6,11 +6,11 @@ The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@cf-loom/testing` builds its fake and its client with: the types `AnyDependencies`, from `endpoints/`, and `ConfiguredName`, from `calling/`, and `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@cf-loom/testing` builds its fake and its client with: the types `AnyDependency`, from `endpoints/`, and `ConfiguredName`, from `calling/`, and `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `endpoints/` | each listed Endpoint as the client calls it, prepared once: its entry in the Provider's exported Snapshot, found by identity, for the header names its Input declares and its Success headers' nodes, and its Rejections by resolved code; what any Dependency gives the client | none |
+| `endpoints/` | each listed Endpoint as the client calls it, prepared once: its entry in the Provider's exported Snapshot, found by identity, for the header names its Input declares and its Success headers' nodes, and its Rejections by resolved code; what any Dependency gives the client, and the Endpoints it lists, `ListedEndpoints`, none for a Dependency written without the list, and their by-name view, `ListedName` and `ListedEndpoint`, which name the client's methods and `fakeProvider`'s scripts | none |
 | `request/` | the `baseUrl` checked once; a call's Input read by the contract's reading as the Provider reads the request it would send, every Guard admitting and a body left out sent with no content type; then its text, that it can travel; the URL and the `RequestInit` it is sent with | none |
 | `inference/` | `Happened`, the Fault inferred from what `fetch` threw or a response that carried no Outcome, the organization's `inferFault`, the fixed messages, and `Retry-After` | none |
 | `decoding/` | the Outcome types, decoded and as each Endpoint types them; a response decoded in order: the Success with its headers and body read by their Reader schemas, else an Envelope, else the inferred Fault; a Rejection known by code, its body read or dropped; the client's own `INVALID_OUTCOME` | `endpoints`, `inference` |

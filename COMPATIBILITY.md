@@ -52,7 +52,7 @@ The version also protects Consumers' installs. The peers of a Contract Package a
 | Turn a Command into an Event, or the reverse | A new Message, under a new name, plus the retirement of the old one: a name belongs to one kind across the whole Contract and its history |
 | Add an Endpoint that takes a URL routing sent to an existing Endpoint of the same method (`/orders/latest` next to `/orders/:id`) | Breaking on the existing one, whose Input loses that value; the Change names the Endpoint that takes it (routing precedence is in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md). Which values a param's schema accepts is not read: `/orders/latest` takes from `/orders/:id` even when `id` is a uuid. A Retired Endpoint that is still declared shadows too, but is never shadowed, since it has no Input to lose; deleting it is Neutral. Routes outside the Contract are not seen (see [Endpoints](ARCHITECTURE.md#endpoints) in ARCHITECTURE.md) |
 | Widen Visibility (Private → Internal → Public) | Additive |
-| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking, since a Dependency may lose reach (which Elements a Service or an Application may depend on is in [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md). No Deprecation needed, since the Element stays Active |
+| Narrow Visibility (Public → Internal, Internal → Private, Public → Private) | Breaking, since a Dependency or a Subscription to another Service's Event may lose reach (which Elements a Service or an Application may depend on is in [Dependencies](ARCHITECTURE.md#dependencies) in ARCHITECTURE.md). No Deprecation needed, since the Element stays Active |
 
 ### Fields
 

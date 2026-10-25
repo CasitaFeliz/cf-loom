@@ -433,7 +433,7 @@ describe('publishedSnapshotOf', () => {
     const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
     const proposed: ApplicationSnapshot = {
       ...anApplication(),
-      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [], events: [] } },
+      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [] } },
     };
 
     const published = publishedSnapshotOf(baseline, proposed, '1.0.1');

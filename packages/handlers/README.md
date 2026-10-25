@@ -70,7 +70,7 @@ export type Resources = {
   readonly orders: Orders;
   readonly callers: Callers;
   readonly permissions: Permissions;
-  readonly payments: Client<typeof paymentsDeps>;
+  readonly payments: Client<typeof paymentsDependency>;
   readonly publisher: EventPublisher<typeof contract>;
   readonly sender: CommandSender<typeof contract>;
 };
@@ -84,7 +84,7 @@ const resources: Resources = {
   orders: await mongoOrders(),
   callers: await mongoCallers(),
   permissions: await mongoPermissions(),
-  payments: client(paymentsDeps, { baseUrl }),
+  payments: client(paymentsDependency, { baseUrl }),
   publisher: running.publisher,
   sender: running.sender,
 };

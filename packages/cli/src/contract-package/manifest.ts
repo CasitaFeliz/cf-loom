@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import {
   type ApplicationSnapshot,
+  byCodePoint,
   hashedTextOf,
+  isSubscriptionTombstone,
+  messageIdentityOf,
   type PeerRanges,
   type PublishedApplicationSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  readEventReference,
   type ServiceSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
@@ -73,15 +77,49 @@ export function cfLoomOf(snapshot: Snapshot | PublishedSnapshot) {
   };
 }
 
+/**
+ * Each Dependency as the Snapshot records it, with the Events received from its Provider, which
+ * the Snapshot keeps only in the Subscriptions, so the registry's metadata records every use of a
+ * Provider's Elements.
+ */
 function dependenciesOf(snapshot: Snapshot | PublishedSnapshot) {
   switch (snapshot.kind) {
     case 'service':
+      return withEventsOf(snapshot.dependencies, receivedEventsOf(snapshot.subscriptions));
     case 'application':
-      return snapshot.dependencies;
+      return withEventsOf(snapshot.dependencies, []);
     case 'definitions':
       return {};
   }
 }
+
+function withEventsOf(
+  dependencies: PublishedServiceSnapshot['dependencies'],
+  received: readonly EventReference[],
+) {
+  const entries = Object.entries(dependencies).map(([provider, dependency]) => {
+    const events = received.filter((event) => event.service === provider);
+    const identities = new Set(events.map(({ name, version }) => messageIdentityOf(name, version)));
+    return [provider, { ...dependency, events: [...identities].sort(byCodePoint) }] as const;
+  });
+  return Object.fromEntries(entries);
+}
+
+/** The Events a Service's Subscriptions receive, a removed Subscription's not among them. */
+function receivedEventsOf(
+  subscriptions: PublishedServiceSnapshot['subscriptions'],
+): readonly EventReference[] {
+  const received: EventReference[] = [];
+  for (const subscription of Object.values(subscriptions)) {
+    const reference = readEventReference(subscription.event);
+    if (!isSubscriptionTombstone(subscription) && reference !== undefined) {
+      received.push(reference);
+    }
+  }
+  return received;
+}
+
+type EventReference = NonNullable<ReturnType<typeof readEventReference>>;
 
 /**
  * The package's own build: strict, no Node or DOM types since Applications import it in

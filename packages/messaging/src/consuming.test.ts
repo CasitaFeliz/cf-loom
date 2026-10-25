@@ -2,7 +2,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -60,7 +60,7 @@ const refundV1 = defineCommand({
   body: orderBody,
 });
 
-/** A Dependency's Event as its Provider's Contract Package declares it: its body a Reader. */
+/** A Provider's Event as its Contract Package declares it: its body a Reader. */
 const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
@@ -82,7 +82,7 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
 const notifyOnCreated = defineSubscription({
   name: 'notifyOnCreated',
@@ -107,7 +107,7 @@ const contract = defineContract({
       subscriptions: [notifyOnCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 const readers = readersOf({
@@ -283,7 +283,7 @@ describe('consume', () => {
     ]);
   });
 
-  test('a Subscription to a Dependency’s Event reads the Provider’s stream and subject', async () => {
+  test('a Subscription to a Provider’s Event reads the Provider’s stream and subject', async () => {
     const { consumers } = await consuming();
 
     const settled = consumers.find((consumer) => consumer.element === notifyOnSettled);

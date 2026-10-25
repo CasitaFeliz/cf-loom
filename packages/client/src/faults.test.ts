@@ -3,7 +3,7 @@ import { type AddressInfo, createServer as createNetServer } from 'node:net';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -62,7 +62,7 @@ const defaultStandards = {
 
 const orders = contractPackageOf({ getOrder }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [getOrder] });
+const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder] });
 
 const input = { params: { orderId: 'o-1' } };
 
@@ -91,7 +91,7 @@ function networkError(code: string): TypeError {
 }
 
 function ordersOver(fetch: (url: string, init: RequestInit) => Promise<Response>) {
-  return client(ordersDeps, { baseUrl: 'http://orders.test', fetch });
+  return client(ordersDependency, { baseUrl: 'http://orders.test', fetch });
 }
 
 describe('row 1: no connection is committed no and retryable', () => {
@@ -397,7 +397,7 @@ describe('what is no network failure', () => {
 describe('inferFault', () => {
   test('replaces the inference, receiving what happened and cf-loom’s inference', async () => {
     const received: [Happened, InferredFault][] = [];
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: answering(502),
       inferFault: (happened, inferred) => {
@@ -426,7 +426,7 @@ describe('inferFault', () => {
 
   test('is given cf-loom’s own inference as its second argument', async () => {
     const inferred: InferredFault[] = [];
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: answering(429),
       inferFault: (_happened, ours) => {
@@ -441,7 +441,7 @@ describe('inferFault', () => {
   });
 
   test('returning undefined keeps cf-loom’s inference', async () => {
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: throwing(networkError('ECONNREFUSED')),
       inferFault: () => undefined,
@@ -464,15 +464,17 @@ describe('inferFault', () => {
     const json = { 'content-type': 'application/json' };
     const baseUrl = 'http://orders.test';
 
-    await client(ordersDeps, { baseUrl, fetch: throwing(new TypeError('x')), inferFault }).getOrder(
-      input,
-    );
-    await client(ordersDeps, {
+    await client(ordersDependency, {
+      baseUrl,
+      fetch: throwing(new TypeError('x')),
+      inferFault,
+    }).getOrder(input);
+    await client(ordersDependency, {
       baseUrl,
       fetch: fetching(async () => new Response(failing, { status: 200, headers: json })),
       inferFault,
     }).getOrder(input);
-    await client(ordersDeps, { baseUrl, fetch: answering(503), inferFault }).getOrder(input, {
+    await client(ordersDependency, { baseUrl, fetch: answering(503), inferFault }).getOrder(input, {
       signal: AbortSignal.abort(),
     });
 
@@ -557,7 +559,7 @@ describe('the network rows against node:http', () => {
   }
 
   function ordersAt(baseUrl: string) {
-    return client(ordersDeps, { baseUrl });
+    return client(ordersDependency, { baseUrl });
   }
 
   test('a refused connection is no connection', async () => {
@@ -662,7 +664,7 @@ describe('the network rows against node:http', () => {
     );
     await new Promise<void>((resolve) => socketServer.listen(0, '127.0.0.1', resolve));
     const { port } = socketServer.address() as AddressInfo;
-    const late = client(ordersDeps, {
+    const late = client(ordersDependency, {
       baseUrl: `http://127.0.0.1:${port}`,
       fetch: async (url, init) => {
         const response = await fetch(url, init);

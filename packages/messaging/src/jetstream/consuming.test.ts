@@ -5,7 +5,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -554,7 +554,7 @@ describe('consuming over jetstream()', () => {
           subscriptions: [notifyOnSettled],
         }),
       ],
-      dependencies: [defineDependencies(payments, { events: [paymentSettledV1] })],
+      dependencies: [defineDependency({ provider: payments })],
     });
     const broker = jetstream({
       connect: aConnect().connect,

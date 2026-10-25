@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -98,7 +98,7 @@ const orders = contractPackageOf({ editOrder, getOrder }, {
   notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
 } as const);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [editOrder, getOrder] });
+const ordersDependency = defineDependency({ provider: orders, endpoints: [editOrder, getOrder] });
 
 const edit = {
   params: { orderId: 'o-1' },
@@ -107,7 +107,7 @@ const edit = {
 };
 
 function rejecting(status: number, rejection: Record<string, unknown>) {
-  return client(ordersDeps, {
+  return client(ordersDependency, {
     baseUrl: 'http://orders.test',
     fetch: async () => Response.json({ rejection }, { status }),
   });
@@ -218,7 +218,7 @@ describe('telling a Rejection', () => {
       rejection: { code: 'UNAUTHENTICATED', message: 'No' },
       fault: { committed: 'no', retryable: true, message: 'Busy' },
     };
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => Response.json(both, { status: 401 }),
     });

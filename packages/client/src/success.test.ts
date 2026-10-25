@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -86,14 +86,15 @@ const defaultStandards = {
 
 const orders = contractPackageOf({ getOrder, cancelOrder, headOrder }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, {
+const ordersDependency = defineDependency({
+  provider: orders,
   endpoints: [getOrder, cancelOrder, headOrder],
 });
 
 const params = { params: { orderId: 'o-1' } };
 
 function ordersAnswering(response: () => Response) {
-  return client(ordersDeps, { baseUrl: 'http://orders.test', fetch: async () => response() });
+  return client(ordersDependency, { baseUrl: 'http://orders.test', fetch: async () => response() });
 }
 
 describe('a Success', () => {
@@ -255,11 +256,17 @@ describe('an Open Enum Success header', () => {
   const tracking = contractPackageOf({ trackOrder: trackOrderReader }, defaultStandards, [
     trackOrder,
   ]);
-  const trackingDeps = defineDependencies(tracking, { endpoints: [trackOrderReader] });
+  const trackingDependency = defineDependency({
+    provider: tracking,
+    endpoints: [trackOrderReader],
+  });
 
   function trackingAnswering(stage: string) {
     const response = () => new Response(null, { status: 204, headers: { 'x-stage': stage } });
-    return client(trackingDeps, { baseUrl: 'http://orders.test', fetch: async () => response() });
+    return client(trackingDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => response(),
+    });
   }
 
   test('a declared value is read as itself, and one it does not know as its Unknown case', async () => {
@@ -301,8 +308,11 @@ describe('an Open Enum Success header', () => {
     const staging = contractPackageOf({ stageOrder: stageOrderReader }, defaultStandards, [
       stageOrder,
     ]);
-    const stagingDeps = defineDependencies(staging, { endpoints: [stageOrderReader] });
-    const stages = client(stagingDeps, {
+    const stagingDependency = defineDependency({
+      provider: staging,
+      endpoints: [stageOrderReader],
+    });
+    const stages = client(stagingDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => Response.json({ stage: 'lost' }),
     });

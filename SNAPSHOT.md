@@ -4,7 +4,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 ## Where it lives
 
-- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot into the package it writes, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Dependency it declares, and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, into which `publish` writes `version`, `cfLoom` (with `dependencies` empty) and `peerDependencies` (a caret on each version of `zod` and `@cf-loom/contract` installed beside the root), and beside which it adds `snapshot.json`, listed in its `files` when it has them.
+- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot into the package it writes, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Dependency it declares, each as the Snapshot records it with `events`, the identities of the Provider's Events its Subscriptions receive, sorted (empty for an Application), and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, into which `publish` writes `version`, `cfLoom` (with `dependencies` empty) and `peerDependencies` (a caret on each version of `zod` and `@cf-loom/contract` installed beside the root), and beside which it adds `snapshot.json`, listed in its `files` when it has them.
 - A Service's Contract Package also exports `contract.exportedSnapshot`, the Snapshot cut to what the package exports, keyed as here, with `format` and no other heading (see [The Contract Package](ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). The client and `@cf-loom/testing` read Snapshot nodes from it at runtime, so they too read every format the CLI ever wrote, as the Compatibility Check does, and refuse any other, never reading it as far as it goes (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README).
 - `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to `cf-loom.config.ts`, so every Contract change shows up in review. It is built from the source, offline; the one thing it reads from the committed file is each Endpoint's `deprecatedAt` (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
 - The declared Snapshot leaves out `version` and the history only the Baseline knows: the version each Retired Element was Retired in, tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
@@ -13,7 +13,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Canonical form
 
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
-- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id` and `events` by identity, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a Qualifier's list) keep it.
+- Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id`, and `enum.values`, `union.options` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a Qualifier's list) keep it.
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the `definitions` versions are in it, so adopting a newer version changes the hash even when no shape changed.
 
 ## Top level
@@ -156,15 +156,14 @@ Every code that ever existed in the Contract stays here, with the status and bod
 "dependencies": {
   "payments-service": {
     "against": "5.1.0",
-    "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }],
-    "events": ["PaymentSettled@1"]
+    "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }]
   }
 }
 ```
 
 - A Subscription records the Group that lists it.
 - A removed Subscription stays as a tombstone that keeps its Event and drops its Group and description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
-- A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
+- A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name. The Events a Service receives from a Provider are recorded once, by its Subscriptions, each `event` naming the Provider before the Event's identity.
 
 ## Lifecycle and tombstones
 

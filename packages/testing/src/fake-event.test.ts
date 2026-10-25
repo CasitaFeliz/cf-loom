@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -16,7 +16,7 @@ import { FakeProviderError, fakeEvent } from './index.ts';
 
 const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
 
-/** A Dependency's Event as its Provider's Contract Package exports it: its body a Reader schema. */
+/** A Provider's Event as its Contract Package exports it: its body a Reader schema. */
 const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
   version: 1,
@@ -42,9 +42,9 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
-const settledEvent = paymentsDeps.events.paymentSettledV1;
+const settledEvent = payments.events.paymentSettledV1;
 
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
@@ -61,7 +61,7 @@ const contract = defineContract({
       subscriptions: [notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 const readers = readersOf({

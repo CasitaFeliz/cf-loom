@@ -203,7 +203,7 @@ describe("a Message Handler's body", () => {
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
   });
 
-  test("a Subscription to a Dependency's Event reads with that Event's body", async () => {
+  test("a Subscription to a Provider's Event reads with that Event's body", async () => {
     const received: unknown[] = [];
     const notifyOnSettledHandler = handle(notifyOnSettledReader, (given) => {
       received.push(given);

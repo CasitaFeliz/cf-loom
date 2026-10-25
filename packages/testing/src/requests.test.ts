@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -111,13 +111,16 @@ function inFormat(contractPackage: typeof payments, format: unknown): typeof pay
   return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment, capturePayment] });
+const paymentsDependency = defineDependency({
+  provider: payments,
+  endpoints: [getPayment, capturePayment],
+});
 
 const at = 'https://payments-service.test';
 
 /** A fake whose every listed Endpoint counts the steps it took. */
 function countingFake(options: { readonly baseUrl?: string } = {}) {
-  const fake = fakeProvider(paymentsDeps, options);
+  const fake = fakeProvider(paymentsDependency, options);
   const taken = { getPayment: 0, capturePayment: 0 };
   fake.on('getPayment').otherwise((builder, { params }) => {
     taken.getPayment += 1;
@@ -192,7 +195,7 @@ describe('fakeProvider: requests', () => {
   });
 
   test('a valid request reaches its step with its Input parsed, unknown keys stripped', async () => {
-    const fake = fakeProvider(paymentsDeps);
+    const fake = fakeProvider(paymentsDependency);
     const inputs: unknown[] = [];
     fake.on('capturePayment').otherwise((builder, input) => {
       inputs.push(input);
@@ -206,7 +209,7 @@ describe('fakeProvider: requests', () => {
   });
 
   test('text parts are converted by their nodes, a repeated query key as a list', async () => {
-    const fake = fakeProvider(paymentsDeps);
+    const fake = fakeProvider(paymentsDependency);
     fake.on('getPayment').otherwise((r, { params }) => r.success({ id: params.paymentId }));
 
     await fake.fetch(`${at}/payments/pay-1?expand=a&expand=b`, { headers: { 'x-api-key': 'k' } });
@@ -266,8 +269,8 @@ describe('fakeProvider: requests', () => {
     async (_, latest) => {
       const declared = [getPayment, capturePayment, getSummary, latest];
       const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const deps = defineDependencies(provider, { endpoints: [getPayment] });
-      const fake = fakeProvider(deps);
+      const dependency = defineDependency({ provider: provider, endpoints: [getPayment] });
+      const fake = fakeProvider(dependency);
       fake
         .on('getPayment')
         .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
@@ -279,20 +282,21 @@ describe('fakeProvider: requests', () => {
   );
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
-    const create = () => fakeProvider(paymentsDeps, { baseUrl: 'https://gateway.test/api?x=1' });
+    const create = () =>
+      fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/api?x=1' });
 
     expect(create).toThrow('has a query or a fragment');
   });
 
   test('a baseUrl with a username or a password is a bug, refused when the fake is created', () => {
     const create = () =>
-      fakeProvider(paymentsDeps, { baseUrl: 'https://ann:secret@gateway.test/' });
+      fakeProvider(paymentsDependency, { baseUrl: 'https://ann:secret@gateway.test/' });
 
     expect(create).toThrow('has a username or a password');
   });
 
   test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {
-    const newer = defineDependencies(inFormat(payments, 2), { endpoints: [getPayment] });
+    const newer = defineDependency({ provider: inFormat(payments, 2), endpoints: [getPayment] });
 
     const create = () => fakeProvider(newer);
 

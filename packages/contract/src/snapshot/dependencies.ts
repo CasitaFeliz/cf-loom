@@ -1,28 +1,31 @@
 import { byCodePoint } from '../walker/index.ts';
-import { identityOf, type LocatedDependencies, messageIdentityOf } from '../written/index.ts';
+import {
+  identityOf,
+  type LocatedDependency,
+  listOf,
+  providerNameOf,
+  textOf,
+} from '../written/index.ts';
 import type { DependencySnapshot } from './types.ts';
 
 /**
- * The Dependencies by Provider, each with the version it was declared against, its Endpoints by
- * identity with their names and its Events by identity, sorted since their order means nothing.
+ * The Dependencies by Provider, each with the version it was declared against and its Endpoints
+ * by identity with their names, sorted since their order means nothing. The Events a Contract
+ * receives are its Subscriptions'.
  */
 export function dependencySnapshotsOf(
-  located: readonly LocatedDependencies[],
+  located: readonly LocatedDependency[],
 ): Readonly<Record<string, DependencySnapshot>> {
-  const entries = located.map(({ dependencies }) => {
-    const endpoints = Object.values(dependencies.endpoints).map(({ method, path, name }) => ({
+  const entries = located.map(({ dependency }) => {
+    const endpoints = listOf(dependency.endpoints).map(({ method, path, name }) => ({
       id: identityOf(method, path),
       name,
     }));
-    const events = Object.values(dependencies.events).map(({ name, version }) =>
-      messageIdentityOf(name, version),
-    );
-    const dependency: DependencySnapshot = {
-      against: dependencies.against,
+    const snapshot: DependencySnapshot = {
+      against: dependency.provider.version,
       endpoints: endpoints.sort((left, right) => byCodePoint(left.id, right.id)),
-      events: events.sort(byCodePoint),
     };
-    return [dependencies.provider, dependency] as const;
+    return [textOf(providerNameOf(dependency)), snapshot] as const;
   });
   return Object.fromEntries(entries);
 }

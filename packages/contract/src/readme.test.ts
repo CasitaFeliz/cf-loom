@@ -6,7 +6,7 @@ import {
   defineCommand,
   defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -144,9 +144,9 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, {
+const paymentsDependency = defineDependency({
+  provider: payments,
   endpoints: [payments.endpoints.getPayment],
-  events: [payments.events.paymentSettledV1],
 });
 
 const orders = {
@@ -185,7 +185,7 @@ const orderCreatedV1 = defineEvent({
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: paymentsDeps.events.paymentSettledV1,
+  event: payments.events.paymentSettledV1,
 });
 
 const ordersGroup = defineGroup({
@@ -203,7 +203,7 @@ describe('the README’s declaration examples', () => {
       name: 'orders-service',
       definitions: [definitions],
       groups: [ordersGroup],
-      dependencies: [paymentsDeps],
+      dependencies: [paymentsDependency],
     });
 
     expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
@@ -211,19 +211,21 @@ describe('the README’s declaration examples', () => {
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {
-    const adminOrdersDeps = defineDependencies(orders, {
+    const adminOrdersDependency = defineDependency({
+      provider: orders,
       endpoints: [orders.endpoints.getOrder],
     });
-    const adminPaymentsDeps = defineDependencies(payments, {
+    const adminPaymentsDependency = defineDependency({
+      provider: payments,
       endpoints: [payments.endpoints.getPayment],
     });
 
     const application = defineApplication({
       name: 'web-admin',
-      dependencies: [adminOrdersDeps, adminPaymentsDeps],
+      dependencies: [adminOrdersDependency, adminPaymentsDependency],
     });
 
-    expect(application.dependencies[1].endpoints.getPayment).toBe(getPayment);
+    expect(application.dependencies[1].endpoints).toEqual([getPayment]);
   });
 });
 
@@ -240,8 +242,13 @@ describe('the README’s Event and Command examples', () => {
 });
 
 describe('the README’s Subscription example', () => {
-  test('a Subscription receives a Dependency’s Event', () => {
-    expect(notifyOnSettled.event).toBe(paymentsDeps.events.paymentSettledV1);
+  test('a Subscription takes a Provider’s Event from its Contract Package', () => {
+    expect(notifyOnSettled.event).toBe(payments.events.paymentSettledV1);
+  });
+
+  test('the Dependency holds the Contract Package and the Endpoints it calls, as listed', () => {
+    expect(paymentsDependency.provider.events.paymentSettledV1).toBe(notifyOnSettled.event);
+    expect(paymentsDependency.endpoints).toEqual([getPayment]);
   });
 });
 

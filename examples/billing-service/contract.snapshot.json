@@ -143,9 +143,6 @@
           "id": "GET /orders/{}",
           "name": "getOrder"
         }
-      ],
-      "events": [
-        "OrderCreated@1"
       ]
     }
   },

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { ReceivedOutcome } from '@cf-loom/client';
-import type { ordersDeps } from '../contract/dependencies/orders-service.dependencies.ts';
+import type { ordersDependency } from '../contract/dependencies/orders-service.dependency.ts';
 import type { OrdersClient } from '../orders-client/orders-client.ts';
 
-type OrderOutcome = ReceivedOutcome<typeof ordersDeps, 'getOrder'>;
+type OrderOutcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
 type Order = Extract<OrderOutcome, { kind: 'success' }>['value'];
 type OrderRejection = Extract<OrderOutcome, { kind: 'rejection' }>;
 

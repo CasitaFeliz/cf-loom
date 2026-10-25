@@ -88,7 +88,6 @@ function ordersDependency(against: string): ApplicationSnapshot['dependencies'][
   return {
     against,
     endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-    events: [],
   };
 }
 

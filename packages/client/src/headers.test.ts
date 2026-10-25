@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -72,7 +72,7 @@ const defaultStandards = {
 
 const orders = contractPackageOf({ getOrder, ping }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [getOrder, ping] });
+const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder, ping] });
 
 /** Every request a client sent, as its `fetch` received it. */
 function recorded() {
@@ -90,7 +90,7 @@ describe('headers given to client()', () => {
   test('a value and an async function are sent, the function called on every request', async () => {
     const { sent, fetch } = recorded();
     let tokens = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch,
       headers: {
@@ -115,7 +115,7 @@ describe('headers given to client()', () => {
   test('the call’s own value wins, and the function is then not called', async () => {
     const { sent, fetch } = recorded();
     let called = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch,
       headers: {
@@ -140,7 +140,7 @@ describe('headers given to client()', () => {
   test('a header is sent only to an Endpoint that declares it', async () => {
     const { sent, fetch } = recorded();
     let called = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch,
       headers: {
@@ -160,7 +160,7 @@ describe('headers given to client()', () => {
 
   test('the headers a call passes are sent beside those given to client()', async () => {
     const { sent, fetch } = recorded();
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch,
       headers: { authorization: 'Bearer configured' },
@@ -174,7 +174,7 @@ describe('headers given to client()', () => {
 
   test('an aborted signal sends nothing and calls no header function', async () => {
     let called = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: recorded().fetch,
       headers: {
@@ -197,7 +197,7 @@ describe('headers given to client()', () => {
   });
 
   test('an already aborted signal is answered before a header function could throw', async () => {
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: recorded().fetch,
       headers: {
@@ -215,7 +215,7 @@ describe('headers given to client()', () => {
 
   test('a header function that throws reaches the caller unchanged', async () => {
     const error = new Error('no token');
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: recorded().fetch,
       headers: {

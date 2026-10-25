@@ -1,2 +1,8 @@
-export type { AnyDependencies, CalledEndpoint, Providing } from './called.ts';
+export type {
+  AnyDependency,
+  CalledEndpoint,
+  ListedEndpoint,
+  ListedEndpoints,
+  ListedName,
+} from './called.ts';
 export { calledEndpointOf } from './called.ts';

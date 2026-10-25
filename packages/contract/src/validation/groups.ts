@@ -3,6 +3,7 @@ import {
   type Declarations,
   fieldListings,
   groupedFields,
+  isEmptyField,
   type Listed,
   type LocatedGroup,
   listingsOf,
@@ -44,10 +45,6 @@ export function groupFailures({ groups }: Declarations): readonly DeclarationFai
 /** A field lists nothing when it is left out or an empty list; anything else is the structure rule's. */
 function listsNothing({ group }: LocatedGroup): boolean {
   return groupedFields.every((field) => isEmptyField(group[field]));
-}
-
-function isEmptyField(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.length === 0);
 }
 
 function emptyGroupFailure(at: LocatedGroup['at']): DeclarationFailure {

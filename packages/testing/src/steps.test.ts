@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineRejection,
@@ -111,7 +111,8 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values(declared)), {
+const paymentsDependency = defineDependency({
+  provider: contractPackageOf(readers, Object.values(declared)),
   endpoints: [
     readers.getPayment,
     readers.cancelPayment,
@@ -129,7 +130,7 @@ const success = {
 
 describe('fakeProvider: steps', () => {
   test('once steps answer in order, then the last otherwise answers every other request', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('getPayment')
       .once((r) => r.reject('NO_PAYMENT'))
@@ -155,7 +156,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('a step may be async', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('cancelPayment').otherwise(async (builder) => {
       await new Promise((resolve) => setTimeout(resolve, 1));
       return builder.success();
@@ -167,7 +168,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('a Success carries its headers as text, a number and an Open Enum Unknown case included', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     const lost = { unknown: 'lost' };
     payments.on('getPayment').otherwise((r) =>
       r.success({
@@ -191,7 +192,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('success() answers a 204 with no body, and a HEAD Endpoint its headers alone', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('cancelPayment').otherwise((r) => r.success());
     payments.on('checkPayment').otherwise((r) => r.success({ headers: { 'x-count': 3 } }));
 
@@ -203,7 +204,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('reject(code) answers a declared code with its status, a Standard one by the Provider’s code', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.reject('NO_PAYMENT'));
 
     const response = await payments.fetch(at, {});
@@ -220,7 +221,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('reject(code, body) answers its body as its reader reads it, an Unknown case included', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     const body = { lockedAt: '2026-10-19T10:00:00Z', reason: { unknown: 'chargeback' } };
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOCKED', body));
 
@@ -238,7 +239,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('reject({ unknown }) answers 422, its message the code unless given, and the client does not know it', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('getPayment')
       .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { expiredAt: '2026-01' }))
@@ -261,7 +262,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('fault answers 503 when retryable and 500 otherwise, saying Internal error by default', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('getPayment')
       .once((r) => r.fault({ committed: 'unknown', retryable: true }))
@@ -285,7 +286,7 @@ describe('fakeProvider: steps', () => {
   ] as const)(
     'fault({ code: %s }) answers its status and its committed',
     async (code, status, committed) => {
-      const payments = fakeProvider(paymentsDeps);
+      const payments = fakeProvider(paymentsDependency);
       payments.on('getPayment').otherwise((r) => r.fault({ code }));
 
       const response = await payments.fetch(at, {});
@@ -297,7 +298,7 @@ describe('fakeProvider: steps', () => {
   );
 
   test('an abort while a step waits rejects fetch with the signal’s reason', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     const waiting = Promise.withResolvers<void>();
     payments.on('getPayment').otherwise(async (builder) => {
       await waiting.promise;
@@ -314,7 +315,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('steps are taken in the order requests arrived, whichever finishes reading first', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('capturePayment')
       .once((r, { body }) => r.success({ amount: body.amount }))
@@ -331,7 +332,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('an invalid request between two valid ones takes no turn from the first', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('capturePayment')
       .once((r, { body }) => r.success({ amount: body.amount }))
@@ -350,7 +351,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('a request aborted while its body is read holds no later request back', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('capturePayment').otherwise((r, { body }) => r.success({ amount: body.amount }));
     const controller = new AbortController();
     const reason = new Error('Gave up');
@@ -365,7 +366,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('a request aborted while it waits for its turn records no call and takes no step', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments
       .on('capturePayment')
       .once((r, { body }) => r.success({ amount: body.amount }))
@@ -389,7 +390,7 @@ describe('fakeProvider: steps', () => {
   });
 
   test('a mistake gives up its turn, so the next request is answered once a step is added', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     const unscripted = capture(payments, '{"amount":1}');
     await expect(unscripted).rejects.toThrow('it was never scripted');
@@ -415,7 +416,7 @@ function gatedBodyOf(amount: number) {
 
 /** A capture of the payment, its body JSON text or a stream. */
 function capture(
-  payments: ReturnType<typeof fakeProvider<typeof paymentsDeps>>,
+  payments: ReturnType<typeof fakeProvider<typeof paymentsDependency>>,
   body: string | ReadableStream<Uint8Array>,
   signal?: AbortSignal,
 ): Promise<Response> {

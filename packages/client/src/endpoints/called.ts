@@ -1,4 +1,4 @@
-import type { Dependencies, Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { ContractPackage, Dependency, Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -7,16 +7,22 @@ import {
 } from '@cf-loom/contract/internal';
 
 /** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
-export type AnyDependencies = Dependencies<
-  Readonly<Record<string, Endpoint>>,
-  unknown,
-  StandardRejections
->;
+export type AnyDependency = Dependency<ContractPackage, readonly Endpoint[]>;
 
-/** What an Endpoint is called through of its Dependency: its Provider, Standard codes and nodes. */
-export type Providing = Pick<
-  AnyDependencies,
-  'provider' | 'standardRejections' | 'exportedSnapshot'
+/** The Endpoints a Dependency lists: none when it was written without the list. */
+export type ListedEndpoints<D extends AnyDependency> = D extends {
+  readonly endpoints?: infer Listed;
+}
+  ? Extract<Listed, readonly Endpoint[]>
+  : never;
+
+/** The name of each Endpoint a Dependency lists: a method of its client and a script of its fake. */
+export type ListedName<D extends AnyDependency> = ListedEndpoints<D>[number]['name'];
+
+/** The Endpoint a Dependency lists under a name. */
+export type ListedEndpoint<D extends AnyDependency, Name> = Extract<
+  ListedEndpoints<D>[number],
+  { readonly name: Name }
 >;
 
 /**
@@ -34,11 +40,11 @@ export type CalledEndpoint = {
 };
 
 /** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */
-export function calledEndpointOf(endpoint: Endpoint, providing: Providing): CalledEndpoint {
-  const entry = exportedEntryOf(providing, endpoint);
-  const standards = providing.standardRejections;
+export function calledEndpointOf(endpoint: Endpoint, provider: ContractPackage): CalledEndpoint {
+  const entry = exportedEntryOf(provider, endpoint);
+  const standards = provider.standardRejections;
   return {
-    provider: providing.provider,
+    provider: provider.name,
     name: endpoint.name,
     endpoint,
     inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),

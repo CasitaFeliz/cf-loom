@@ -1,5 +1,5 @@
 import type { Definitions } from './definitions.ts';
-import type { Dependencies } from './dependencies.ts';
+import type { ContractPackage, Dependency } from './dependency.ts';
 import type { Endpoint } from './endpoint.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
@@ -10,7 +10,7 @@ type ContractDeclaration = {
   readonly name: string;
   readonly definitions?: readonly Definitions[];
   readonly groups?: readonly Group[];
-  readonly dependencies?: readonly Dependencies[];
+  readonly dependencies?: readonly Dependency[];
 };
 
 /** A Service's declared Contract, the root `generate`, `serve` and `messaging` read. */
@@ -20,15 +20,12 @@ export type Contract<Declaration extends ContractDeclaration = ContractDeclarati
 type PublicEndpoint = Endpoint & { readonly visibility: 'public' };
 
 /** What an Application may depend on: Public Endpoints only, as it runs outside the network. */
-type ApplicationDependencies = Dependencies<
-  Readonly<Record<string, PublicEndpoint>>,
-  Readonly<Record<string, never>>
->;
+type ApplicationDependency = Dependency<ContractPackage, readonly PublicEndpoint[]>;
 
 /** What an Application's root lists: its Dependencies and nothing else. */
 type ApplicationDeclaration = {
   readonly name: string;
-  readonly dependencies: readonly ApplicationDependencies[];
+  readonly dependencies: readonly ApplicationDependency[];
 };
 
 /** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */

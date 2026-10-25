@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -79,7 +79,10 @@ const defaultStandards = {
 
 const orders = contractPackageOf({ listOrders, listCarts, ping }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [listOrders, listCarts, ping] });
+const ordersDependency = defineDependency({
+  provider: orders,
+  endpoints: [listOrders, listCarts, ping],
+});
 
 /** What a Deprecated Endpoint answers: its response with `Deprecation`, here a Rejection. */
 async function deprecated(url: string): Promise<Response> {
@@ -99,7 +102,7 @@ afterEach(() => {
 describe('the Deprecation warning', () => {
   test('is told once per method of a client, naming the Provider, the Endpoint and when', async () => {
     const notices: DeprecationNotice[] = [];
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: deprecated,
       onDeprecation: (notice) => notices.push(notice),
@@ -118,8 +121,8 @@ describe('the Deprecation warning', () => {
 
   test('goes to the console without onDeprecation, once per client', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const first = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
-    const second = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const first = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const second = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
     await first.listOrders();
     await first.listOrders();
@@ -134,7 +137,7 @@ describe('the Deprecation warning', () => {
   test('an instant before 1970 is told, and one past the Date range is not', async () => {
     const notices: DeprecationNotice[] = [];
     const answering = (deprecation: string) =>
-      client(ordersDeps, {
+      client(ordersDependency, {
         baseUrl: 'http://orders.test',
         fetch: async () => Response.json({ ids: [] }, { headers: { deprecation } }),
         onDeprecation: (notice) => notices.push(notice),
@@ -153,7 +156,7 @@ describe('the Deprecation warning', () => {
   test('what onDeprecation throws is caught and written to the console, and the Outcome returned', async () => {
     const error = new Error('a bug in the hook');
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
         const headers = { deprecation: '@1792229400' };
@@ -172,7 +175,7 @@ describe('the Deprecation warning', () => {
 
   test('is not told for an Active Endpoint', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const orders = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
     await orders.ping();
 
@@ -182,7 +185,7 @@ describe('the Deprecation warning', () => {
 
 describe('fetch', () => {
   test('without the option, the global fetch is called, as it is at the call', async () => {
-    const orders = client(ordersDeps, { baseUrl: 'http://orders.test' });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test' });
     const global = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', global);
 
