@@ -1,10 +1,17 @@
 import {
   byCodePoint,
   codeNameOf,
+  type SchemaNode,
   type ServiceSnapshot,
   standardRejectionNames,
 } from '@cf-loom/contract/internal';
-import { type DefUse, defTypeNameOf, loomNeeds } from '../schema-code/index.ts';
+import {
+  type DefUse,
+  defTypeNameOf,
+  loomNeeds,
+  type Writing,
+  zodExpressionOf,
+} from '../schema-code/index.ts';
 import {
   jsonLiteralOf,
   keyOf,
@@ -100,22 +107,61 @@ export function snapshotModuleOf(snapshot: unknown): PackageFile {
   });
 }
 
-/** The Standard Rejections resolved, as the Snapshot records them, for every Caller. */
+/**
+ * The Standard Rejections resolved, as the Snapshot records their codes under `codes`, for every
+ * Caller; the invalid-input one with the Reader of its body.
+ */
 export function standardRejectionsModuleOf(
-  snapshot: Pick<ServiceSnapshot, 'standardRejections'>,
+  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'codes'>,
 ): PackageFile {
-  const lines = standardRejectionNames.map((name) => {
-    const { code, status, message } = snapshot.standardRejections[name];
-    const fields = `code: ${stringLiteralOf(code)}, status: ${status}, message: ${stringLiteralOf(message)}`;
-    return `  ${name}: { ${fields} },`;
-  });
+  const reader: Writing = { mode: 'reader', needs: loomNeeds() };
+  const lines = standardRejectionNames.flatMap((name) =>
+    standardRejectionLinesOf(name, snapshot, reader),
+  );
   return packageModuleOf({
     path: packagePaths.standardRejections,
     body: [
       'export const standardRejections = {',
       ...lines,
-      '} as const satisfies loom.StandardRejections;',
+      '} as const satisfies loom.ProvidedStandardRejections;',
     ],
-    needs: loomNeeds(),
+    needs: reader.needs,
   });
+}
+
+function standardRejectionLinesOf(
+  name: keyof ServiceSnapshot['standardRejections'],
+  { standardRejections, codes }: Pick<ServiceSnapshot, 'standardRejections' | 'codes'>,
+  reader: Writing,
+): readonly string[] {
+  const code = standardRejections[name];
+  const held = codes[code];
+  if (held === undefined) {
+    throw new Error(
+      `A Snapshot holds the code of every Standard Rejection: ${code} is missing, a bug.`,
+    );
+  }
+  return [
+    `  ${name}: {`,
+    `    code: ${stringLiteralOf(code)},`,
+    `    status: ${held.status},`,
+    `    message: ${stringLiteralOf(held.message)},`,
+    ...bodyLinesOf(name, held.body, reader),
+    '  },',
+  ];
+}
+
+/** Only the invalid-input Rejection has a body, which the decoder and `generate` both guarantee. */
+function bodyLinesOf(
+  name: keyof ServiceSnapshot['standardRejections'],
+  body: SchemaNode | null,
+  reader: Writing,
+): readonly string[] {
+  if (name !== 'invalidInput') {
+    return [];
+  }
+  if (body === null) {
+    throw new Error('A Snapshot gives the invalid-input code a body: a bug.');
+  }
+  return [`    body: ${zodExpressionOf(body, reader)},`];
 }

@@ -1489,6 +1489,24 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     },
   );
 
+  test('a snapshot.json whose Standard Rejection names a code it does not hold fails, naming both', async ({
+    lab,
+  }) => {
+    const standardRejections = {
+      invalidInput: 'INVALID_INPUT',
+      notFound: 'NOPE',
+      notImplemented: 'NOT_IMPLEMENTED',
+    };
+    const published = { ...aPublishedSnapshot(orders, '1.0.0'), standardRejections };
+    const snapshotJson = JSON.stringify(published);
+
+    const { read } = await readOrders(lab, ordersWith(aVersion('1.0.0', { snapshotJson })));
+
+    expect(failureIn(read)).toBe(
+      `${ordersPackage}@1.0.0's snapshot.json is malformed: standardRejections.notFound names a code the Snapshot does not hold: NOPE`,
+    );
+  });
+
   test('a failure message is the first line of npm’s summary, with ANSI and control characters removed', async ({
     lab,
   }) => {

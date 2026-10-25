@@ -4526,7 +4526,7 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
             'export const payments = {',
           ].join('\n'),
         )
-        .replace('import { defineEvent }', 'import { defineEndpoint, defineEvent }')
+        .replace('import { defineEvent,', 'import { defineEndpoint, defineEvent,')
         .replace('endpoints: {},', 'endpoints: { getPayment },'),
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
         .replace(

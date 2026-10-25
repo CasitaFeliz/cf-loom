@@ -19,9 +19,9 @@ const orderLocked = 'ORDER_LOCKED';
 const orderGone = 'ORDER_GONE';
 const notFound = 'NOT_FOUND';
 const standardRejections: DefinitionsSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 
 const aString: SchemaNode = { type: 'string' };
@@ -308,10 +308,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       codes: { [notFound]: aCode({ origin: 'standard', status: 404 }) },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
@@ -361,10 +358,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
@@ -384,10 +378,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 

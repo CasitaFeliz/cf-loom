@@ -11,6 +11,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider, type StepBuilder } from './index.ts';
 
 const getPayment = defineEndpoint({
@@ -57,11 +58,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     throw new Error('The fixture is no Service');
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }

@@ -51,7 +51,7 @@ function serviceSnapshotOf(
     events: eventSnapshotsOf(declarations.events, sources),
     commands: commandSnapshotsOf(declarations.commands, sources),
     guards: guardSnapshotsOf(declarations.guards, sources),
-    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
+    codes: codeSnapshotsOf(declarations.codes, sources),
     subscriptions: subscriptionSnapshotsOf(declarations.subscriptions),
     dependencies: dependencySnapshotsOf(declarations.dependencies),
   };
@@ -78,7 +78,7 @@ function definitionsSnapshotOf(
     defs: schemas.defs,
     schemas: Object.fromEntries(shared),
     guards: guardSnapshotsOf(declarations.guards, sources),
-    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
+    codes: codeSnapshotsOf(declarations.codes, sources),
   };
 }
 

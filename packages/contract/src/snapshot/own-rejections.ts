@@ -16,7 +16,7 @@ export function ownRejectionsOf(
   snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
 ): readonly ListedRejection[] {
   const { standardRejections } = snapshot;
-  const added = new Set(addedStandardRejectionNames.map((name) => standardRejections[name].code));
+  const added = new Set(addedStandardRejectionNames.map((name) => standardRejections[name]));
   const attached = endpoint.guards.map(({ guard }) => guard);
   for (const guard of reachedGuardNamesOf(attached, snapshot.guards)) {
     for (const code of snapshot.guards[guard]?.rejections ?? []) {
@@ -24,7 +24,7 @@ export function ownRejectionsOf(
     }
   }
   const own = endpoint.rejections.filter((code) => !added.has(code));
-  const notFoundCode = standardRejections.notFound.code;
+  const notFoundCode = standardRejections.notFound;
   return own.map(
     (code): ListedRejection =>
       code === notFoundCode ? { kind: 'not-found' } : { kind: 'declared', code },

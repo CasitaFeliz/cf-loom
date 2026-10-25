@@ -4,7 +4,7 @@ import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
-import type { StandardRejections } from './standard-rejections.ts';
+import type { ProvidedStandardRejections } from './standard-rejections.ts';
 
 type ExportedVisibility = Exclude<Visibility, 'private'>;
 
@@ -22,7 +22,7 @@ export type ContractPackage = {
     Record<string, Endpoint & { readonly visibility: ExportedVisibility }>
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
-  readonly standardRejections: StandardRejections;
+  readonly standardRejections: ProvidedStandardRejections;
   readonly exportedSnapshot: ExportedSnapshot;
 };
 

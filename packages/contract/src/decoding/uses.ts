@@ -15,9 +15,12 @@ import {
   type SchemaNode,
 } from '../walker/index.ts';
 
-/** A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, or a Guard. */
+/**
+ * A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, the code a
+ * Standard Rejection resolved to, or a Guard.
+ */
 export type Use = {
-  readonly kind: 'def' | 'code' | 'guard';
+  readonly kind: 'def' | 'code' | 'standard-code' | 'guard';
   readonly name: string;
   readonly at: Path;
 };
@@ -39,6 +42,11 @@ export function usesOf(snapshot: Used): readonly Use[] {
     ...guards.flatMap(([name, { rejections }]) =>
       namesAt(['guards', name, 'rejections'], rejections, 'code'),
     ),
+    ...Object.entries(snapshot.standardRejections).map(([name, code]) => ({
+      kind: 'standard-code' as const,
+      name: code,
+      at: ['standardRejections', name],
+    })),
     ...endpoints.flatMap(([identity, { guards: attached }]) =>
       attached.map(({ guard }, index) => ({
         kind: 'guard' as const,
@@ -77,7 +85,6 @@ function isRefAt(located: LocatedNode): located is { at: Path; node: RefNode } {
 }
 
 function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoint>[]) {
-  const standards = Object.entries(snapshot.standardRejections);
   return [
     ...partsAt(['defs'], snapshot.defs),
     ...(snapshot.kind === 'definitions' ? partsAt(['schemas'], snapshot.schemas) : []),
@@ -91,9 +98,6 @@ function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoi
     ]),
     ...Object.entries(snapshot.codes).flatMap(([code, { body }]) =>
       partsAt(['codes', code], { body }),
-    ),
-    ...standards.flatMap(([name, { body }]) =>
-      partsAt(['standardRejections', name], { body: body ?? null }),
     ),
   ];
 }

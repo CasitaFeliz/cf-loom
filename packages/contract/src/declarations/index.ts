@@ -70,6 +70,7 @@ export { defineApplication, defineContract } from './roots.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,
+  ProvidedStandardRejections,
   StandardRejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type * as core from 'zod/v4/core';
+import { openEnum } from '../open/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 
@@ -55,8 +57,16 @@ export type StandardRejectionDeclarations = {
   readonly notImplemented?: StandardRejectionDeclaration<501>;
 };
 
-/** Every Standard Rejection resolved, as a Contract Package carries them for its Callers. */
+/** Every Standard Rejection resolved: its code, status and message. */
 export type StandardRejections = Required<StandardRejectionDeclarations>;
+
+/**
+ * Every Standard Rejection as a Contract Package carries it for its Callers: resolved, and the
+ * invalid-input one with the Reader schema of its body, generated from the Provider's Snapshot.
+ */
+export type ProvidedStandardRejections = StandardRejections & {
+  readonly invalidInput: StandardRejectionDeclaration & { readonly body: core.$ZodType };
+};
 
 /** cf-loom's own code, status and message of each Standard Rejection, where no Definitions Package declares one. */
 export const standardRejectionDefaults: StandardRejections = {
@@ -65,7 +75,7 @@ export const standardRejectionDefaults: StandardRejections = {
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 };
 
-/** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue of invalid Input says went wrong: a set cf-loom owns, never zod's codes. */
 export const issueCodes = [
   'required',
   'invalid_type',
@@ -78,7 +88,7 @@ export const issueCodes = [
   'malformed',
 ] as const;
 
-/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue says went wrong: a code of the set cf-loom owns, never zod's. */
 export type IssueCode = (typeof issueCodes)[number];
 
 /** The parts of a request an issue of invalid Input may sit in, as values. */
@@ -91,9 +101,9 @@ export const inputIns = ['params', 'query', 'headers', 'body'] as const;
 export const invalidInputBody = z.object({
   issues: z.array(
     z.object({
-      in: z.enum(inputIns),
+      in: openEnum(inputIns),
       path: z.array(z.union([z.string(), z.number()])),
-      code: z.enum(issueCodes),
+      code: openEnum(issueCodes),
       message: z.string(),
     }),
   ),
