@@ -69,7 +69,7 @@ const readers = readersOf({
   subscriptions: { notifyOnSettled: { element: notifyOnSettled, reader: settledEvent.body } },
 });
 
-const meta = { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 };
+const meta = { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 };
 
 /** The Subscription's Handler, keeping every body it receives. */
 function aNotifier() {

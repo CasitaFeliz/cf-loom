@@ -41,7 +41,7 @@ export type RecordedMessage = {
   readonly body: unknown;
 };
 
-/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out. */
+/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out. */
 export type DeliveryMeta = {
   readonly factId?: string;
   readonly messageId?: string;

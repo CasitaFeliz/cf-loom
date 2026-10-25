@@ -33,7 +33,7 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
   ];
 }
 
-/** A Success declares an allowed status; HEAD and 204 answer no body, every other status one. */
+/** A Success declares an allowed status; 204 answers no body, every other status one. */
 function successFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
   const success: Partial<Endpoint['success']> | undefined = endpoint.success;
   if (typeof success !== 'object' || success === null || isWithoutValue(success.status)) {
@@ -44,11 +44,6 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');
-  if (endpoint.method === 'HEAD') {
-    return success.body === undefined
-      ? []
-      : [failure(bodyAt, 'success-body', 'A HEAD Endpoint answers no body')];
-  }
   if (success.status === 204) {
     return success.body === undefined
       ? []
@@ -60,10 +55,9 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
 }
 
 function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
-  const takesNoBody = endpoint.method === 'GET' || endpoint.method === 'HEAD';
-  if (!takesNoBody || isMissing(endpoint.input?.body)) {
+  if (endpoint.method !== 'GET' || isMissing(endpoint.input?.body)) {
     return [];
   }
-  const message = 'A GET or HEAD Endpoint takes no body';
+  const message = 'A GET Endpoint takes no body';
   return [failure(slotAt(at, 'input.body'), 'input-body', message)];
 }

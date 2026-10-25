@@ -59,14 +59,8 @@ function failedAt(at: readonly string[], rule: string, message: string) {
 
 describe('validateContract: an Endpoint’s method, Visibility and lifecycle', () => {
   test('every declared method validates', () => {
-    const methods = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
-    const endpoints = methods.map((method) =>
-      defineEndpoint({
-        ...createOrder,
-        method,
-        success: method === 'HEAD' ? { status: 200 } : createOrder.success,
-      }),
-    );
+    const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
+    const endpoints = methods.map((method) => defineEndpoint({ ...createOrder, method }));
 
     expect(endpoints.map((endpoint) => validateEndpoint(endpoint).kind)).toEqual(
       methods.map(() => 'valid'),
@@ -82,7 +76,21 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
       failedAt(
         ['TRACE /orders', 'method'],
         'method',
-        'A method is GET, HEAD, POST, PUT, PATCH, DELETE or OPTIONS: TRACE',
+        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: TRACE',
+      ),
+    );
+  });
+
+  test('a HEAD Endpoint reached through a cast fails the method rule', () => {
+    const method = 'HEAD' as Method;
+
+    const validated = validateEndpoint(defineEndpoint({ ...listOrders, method }));
+
+    expect(validated).toEqual(
+      failedAt(
+        ['HEAD /orders', 'method'],
+        'method',
+        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: HEAD',
       ),
     );
   });
@@ -139,22 +147,6 @@ describe('validateContract: a Success’s status and body', () => {
     );
   });
 
-  test('a HEAD Endpoint’s Success status is checked like any other', () => {
-    const status = 205 as SuccessStatus;
-
-    const validated = validateEndpoint(
-      defineEndpoint({ ...listOrders, method: 'HEAD', success: { status } }),
-    );
-
-    expect(validated).toEqual(
-      failedAt(
-        ['HEAD /orders', 'success', 'status'],
-        'success-status',
-        'A Success status is 200, 201, 202, 203 or 204: 205',
-      ),
-    );
-  });
-
   test('a 204 Success without a body validates', () => {
     expect(
       validateEndpoint(defineEndpoint({ ...createOrder, success: { status: 204 } })).kind,
@@ -170,20 +162,6 @@ describe('validateContract: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(['POST /orders', 'success', 'body'], 'success-body', 'A 204 Success has no body'),
-    );
-  });
-
-  test('a HEAD Endpoint’s Success with a body fails', () => {
-    const method = 'HEAD' as Method;
-
-    const validated = validateEndpoint(defineEndpoint({ ...listOrders, method }));
-
-    expect(validated).toEqual(
-      failedAt(
-        ['HEAD /orders', 'success', 'body'],
-        'success-body',
-        'A HEAD Endpoint answers no body',
-      ),
     );
   });
 
@@ -215,32 +193,7 @@ describe('validateContract: an Input body', () => {
     );
 
     expect(validated).toEqual(
-      failedAt(
-        ['GET /orders', 'input', 'body'],
-        'input-body',
-        'A GET or HEAD Endpoint takes no body',
-      ),
-    );
-  });
-
-  test('a body on HEAD fails', () => {
-    const method = 'HEAD' as Method;
-
-    const validated = validateEndpoint(
-      defineEndpoint({
-        ...listOrders,
-        method,
-        success: { status: 200 as SuccessStatus },
-        input: { body: z.object({ total: z.int() }) },
-      }),
-    );
-
-    expect(validated).toEqual(
-      failedAt(
-        ['HEAD /orders', 'input', 'body'],
-        'input-body',
-        'A GET or HEAD Endpoint takes no body',
-      ),
+      failedAt(['GET /orders', 'input', 'body'], 'input-body', 'A GET Endpoint takes no body'),
     );
   });
 });

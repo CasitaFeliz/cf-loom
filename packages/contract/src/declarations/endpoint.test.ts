@@ -142,6 +142,19 @@ describe('defineEndpoint path params', () => {
   });
 });
 
+describe('defineEndpoint methods', () => {
+  test('HEAD is no method an Endpoint declares: a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error HEAD is no Method
+        method: 'HEAD',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineEndpoint bodies', () => {
   test('a body on GET is a type error', () => {
     const declare = () =>
@@ -149,41 +162,6 @@ describe('defineEndpoint bodies', () => {
         ...listOrders,
         // @ts-expect-error a GET takes no body
         input: { body: z.object({ status: z.string() }) },
-      });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('a body on HEAD is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        method: 'HEAD',
-        success: { status: 200 },
-        // @ts-expect-error a HEAD takes no body
-        input: { body: z.object({ status: z.string() }) },
-      });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('a HEAD Endpoint answers a status and headers but no body', () => {
-    const checkOrders = defineEndpoint({
-      ...listOrders,
-      method: 'HEAD',
-      success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
-    });
-
-    expect(checkOrders.success.status).toBe(200);
-  });
-
-  test('a HEAD Endpoint’s Success with a body is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        method: 'HEAD',
-        // @ts-expect-error a HEAD Endpoint answers no body
-        success: { status: 200, body: orderBody },
       });
 
     expect(declare).not.toThrow();
