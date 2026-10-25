@@ -33,22 +33,38 @@ export type Turn = {
   readonly done: () => void;
 };
 
+/** What an Endpoint's script has met: the requests that took a turn, the once steps added, and those no request took. */
+export type Tally = {
+  readonly requests: number;
+  readonly onces: number;
+  readonly unused: number;
+};
+
 /** One Endpoint's script, and the turns its requests take steps in, in the order they arrived. */
 export type Scripted = {
   readonly script: AnyScript;
   readonly turn: () => Turn;
   readonly wasScripted: () => boolean;
+  readonly tally: () => Tally;
 };
+
+/** A number of once steps in words: `1 once step`, `2 once steps`. */
+export function onceStepsOf(count: number): string {
+  return `${count} once step${count === 1 ? '' : 's'}`;
+}
 
 /** An Endpoint's script, empty: no step until a test adds one. */
 export function scriptedOf(): Scripted {
   const onces: AnyStep[] = [];
   let otherwise: AnyStep | undefined;
   let scripted = false;
+  let added = 0;
+  let requests = 0;
   let arrived: Promise<void> = Promise.resolve();
   const script: AnyScript = {
     once: (step) => {
       scripted = true;
+      added += 1;
       onces.push(step);
       return script;
     },
@@ -65,9 +81,11 @@ export function scriptedOf(): Scripted {
     const next = async (signal: AbortSignal) => {
       await before;
       signal.throwIfAborted();
+      requests += 1;
       return onces.shift() ?? otherwise;
     };
     return { next, done: () => taken.resolve() };
   };
-  return { script, turn, wasScripted: () => scripted };
+  const tally = () => ({ requests, onces: added, unused: onces.length });
+  return { script, turn, wasScripted: () => scripted, tally };
 }

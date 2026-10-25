@@ -9,8 +9,9 @@ import {
 import type { Http, InputOf } from '@cf-loom/contract';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
-import type { InvalidCall } from './calls.ts';
+import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
+import { throwMistakes } from './verify.ts';
 
 /** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
@@ -23,7 +24,7 @@ export type FakeClientOptions<
 
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed
- * Endpoint's script, and the calls each received, valid and invalid.
+ * Endpoint's script, the calls each received, valid and invalid, and `verify()`.
  */
 export type FakeProvider<D extends AnyDependency> = {
   readonly fetch: Http;
@@ -31,10 +32,18 @@ export type FakeProvider<D extends AnyDependency> = {
     options?: FakeClientOptions<D, Configured>,
   ): Client<D, Configured>;
   on<Name extends ListedName<D>>(name: Name): Script<D, Name>;
-  /** The requests the Endpoint read as valid, in the order they reached `fetch`, each its parsed Input. */
-  calls<Name extends ListedName<D>>(name: Name): readonly InputOf<ListedEndpoint<D, Name>>[];
+  /** The requests the Endpoint read as valid, in the order they reached `fetch`, each a frozen copy of its parsed Input. */
+  calls<Name extends ListedName<D>>(
+    name: Name,
+  ): readonly Frozen<InputOf<ListedEndpoint<D, Name>>>[];
   /** The requests the Endpoint answered with the invalid-input Rejection, in the order they reached `fetch`. */
   invalidCalls<Name extends ListedName<D>>(name: Name): readonly InvalidCall[];
+  /**
+   * Throws what the test got wrong so far, wherever the code under test caught it: every mistake
+   * `fetch` threw, and one a step made after its request was aborted, then each Endpoint's `once`
+   * steps no request took; returns when there is none.
+   */
+  verify(): void;
 };
 
 /**
@@ -53,8 +62,9 @@ export function fakeProvider<const D extends AnyDependency>(
     client: (clientOptions) => client(dependency, { ...clientOptions, baseUrl: base, fetch }),
     on: (name) => faking.scriptedByNameOf(name).script as Script<D, typeof name>,
     calls: (name) =>
-      faking.calls.callsOf(name) as readonly InputOf<ListedEndpoint<D, typeof name>>[],
+      faking.calls.callsOf(name) as readonly Frozen<InputOf<ListedEndpoint<D, typeof name>>>[],
     invalidCalls: (name) => faking.calls.invalidCallsOf(name),
+    verify: () => throwMistakes(faking),
   };
   return Object.freeze(fake);
 }

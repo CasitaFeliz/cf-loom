@@ -120,9 +120,38 @@ describe('fakeProvider: types', () => {
 
     expect([unlisted, unknown]).toHaveLength(2);
     expectTypeOf(payments.calls('getPayment')).toEqualTypeOf<
-      readonly InputOf<typeof readers.getPayment>[]
+      readonly {
+        readonly params: { readonly paymentId: string };
+        readonly headers: { readonly 'x-api-key': string };
+      }[]
     >();
     expectTypeOf(payments.invalidCalls('getPayment')).toEqualTypeOf<readonly InvalidCall[]>();
+  });
+
+  test('a call is readonly at every depth', () => {
+    const payments = fakeProvider(paymentsDependency);
+    type Call = ReturnType<typeof payments.calls<'getPayment'>>[number];
+
+    const writingPart = (call: Call) => {
+      // @ts-expect-error a recorded call is never written to
+      call.params = { paymentId: 'x' };
+    };
+    const writingParam = (call: Call) => {
+      // @ts-expect-error a recorded call is never written to at any depth
+      call.params.paymentId = 'x';
+    };
+
+    expect([writingPart, writingParam]).toHaveLength(2);
+    expectTypeOf<Call>().toEqualTypeOf<{
+      readonly params: { readonly paymentId: string };
+      readonly headers: { readonly 'x-api-key': string };
+    }>();
+  });
+
+  test('verify takes nothing and returns nothing', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    expectTypeOf(payments.verify).toEqualTypeOf<() => void>();
   });
 
   test('a call is the parsed Input itself, read with no narrowing', () => {

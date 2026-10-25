@@ -16,13 +16,17 @@ export function isDeclaration(value: unknown): value is { readonly kind: unknown
 }
 
 function frozenFields(fields: object): object {
-  const entries = Object.entries(fields).map(([field, value]) => [field, frozenContainer(value)]);
+  const entries = Object.entries(fields).map(([field, value]) => [field, frozenCopyOf(value)]);
   return Object.fromEntries(entries);
 }
 
-function frozenContainer(value: unknown): unknown {
+/**
+ * A value with its plain objects and lists copied and frozen all the way down, so what holds it can
+ * never change it; any other value, a declaration or a schema, keeps its identity.
+ */
+export function frozenCopyOf(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return Object.freeze(value.map(frozenContainer));
+    return Object.freeze(value.map(frozenCopyOf));
   }
   if (!isPlainContainer(value)) {
     return value;

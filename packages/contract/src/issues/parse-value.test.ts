@@ -5,6 +5,39 @@ import { encodedValueOf, parseValue } from '../internal/index.ts';
 
 const order = z.object({ id: z.uuid(), lines: z.array(z.object({ quantity: z.int().min(1) })) });
 
+const tree: z.ZodType = z.object({
+  get next() {
+    return tree.optional();
+  },
+});
+
+const nestedTooDeeply = {
+  path: [],
+  code: 'malformed',
+  message: 'The value is nested too deeply to read',
+} as const;
+
+/** A value `depth` levels deep, as a recursive object or as nested lists. */
+function nestedTo(depth: number, wrap: (inner: unknown) => unknown): unknown {
+  let value: unknown = {};
+  for (let level = 0; level < depth; level += 1) {
+    value = wrap(value);
+  }
+  return value;
+}
+
+const asObject = (inner: unknown): unknown => ({ next: inner });
+const asList = (inner: unknown): unknown => [inner];
+
+/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
 function codesOf(schema: z.ZodType, value: unknown): readonly string[] {
   const parsed = parseValue(schema, value);
   return parsed.kind === 'issues' ? parsed.issues.map((issue) => issue.code) : [];
@@ -156,6 +189,45 @@ describe('parseValue', () => {
 
     expect(codes).toEqual(['invalid_value']);
   });
+
+  test.each([
+    ['a recursive object', tree, asObject],
+    ['z.json()', z.json(), asList],
+  ])(
+    'a value nested past the stack in %s is one malformed issue at its root',
+    (_, schema, wrap) => {
+      const parsed = parseValue(schema, nestedTo(5000, wrap));
+
+      expect(parsed).toEqual({ kind: 'issues', issues: [nestedTooDeeply] });
+    },
+  );
+
+  test('a throw that is no stack overflow still throws', () => {
+    const broken = new Error('getter broke');
+    const value = Object.defineProperty({}, 'id', {
+      enumerable: true,
+      get(): string {
+        throw broken;
+      },
+    });
+
+    const parse = () => parseValue(z.object({ id: z.string() }), value);
+
+    expect(parse).toThrow(broken);
+  });
+
+  test('a value of any depth is parsed or one malformed issue, never a throw', () => {
+    const next = seededNext(219);
+    const answers = new Set<string>();
+
+    for (let draw = 0; draw < 60; draw += 1) {
+      const depth = 1 + Math.floor(20_000 ** next() * next());
+      const parsed = parseValue(tree, nestedTo(depth, asObject));
+      answers.add(parsed.kind === 'value' ? 'parsed' : JSON.stringify(parsed.issues));
+    }
+
+    expect(answers).toEqual(new Set(['parsed', JSON.stringify([nestedTooDeeply])]));
+  });
 });
 
 describe('encodedValueOf', () => {
@@ -199,5 +271,11 @@ describe('encodedValueOf', () => {
       kind: 'issues',
       issues: [{ path: ['stage'], code: 'invalid_value' }],
     });
+  });
+
+  test('a value nested past the stack is one malformed issue at its root', () => {
+    const encoded = encodedValueOf(tree, nestedTo(5000, asObject));
+
+    expect(encoded).toEqual({ kind: 'issues', issues: [nestedTooDeeply] });
   });
 });

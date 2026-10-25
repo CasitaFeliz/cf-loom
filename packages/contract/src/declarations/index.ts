@@ -18,7 +18,7 @@ export type { Endpoint } from './endpoint.ts';
 export { defineEndpoint } from './endpoint.ts';
 export type { Event } from './event.ts';
 export { defineEvent } from './event.ts';
-export { isDeclaration } from './freeze-declaration.ts';
+export { frozenCopyOf, isDeclaration } from './freeze-declaration.ts';
 export type { Grammar } from './grammars.ts';
 export {
   camelCase,

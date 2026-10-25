@@ -14,12 +14,26 @@ export type Parsed<Value = unknown> =
   | { readonly kind: 'value'; readonly value: Value }
   | { readonly kind: 'issues'; readonly issues: readonly SchemaIssue[] };
 
-/** Parses a value with its schema and turns zod's failures into cf-loom's issues. */
+/**
+ * What a value nested past the stack is: one issue at its root, since no Reader can read it, and the
+ * stack's bound is no number cf-loom chooses.
+ */
+const nestedTooDeeply: SchemaIssue = {
+  path: [],
+  code: 'malformed',
+  message: 'The value is nested too deeply to read',
+};
+
+/**
+ * Parses a value with its schema and turns zod's failures into cf-loom's issues; a value nested
+ * past the stack is one `malformed` issue at its root, so a received value never makes a reader
+ * throw.
+ */
 export function parseValue<Schema extends core.$ZodType>(
   schema: Schema,
   value: unknown,
 ): Parsed<core.output<Schema>> {
-  return parsedOf(z.safeParse(schema, value), value);
+  return parsedOf(() => z.safeParse(schema, value), value);
 }
 
 /**
@@ -27,15 +41,33 @@ export function parseValue<Schema extends core.$ZodType>(
  * constraints checked, unknown keys stripped and an Unknown case turned into its text.
  */
 export function encodedValueOf(schema: core.$ZodType, value: unknown): Parsed {
-  return parsedOf(z.safeEncode(schema, value), value);
+  return parsedOf(() => z.safeEncode(schema, value), value);
 }
 
-function parsedOf<Value>(result: z.ZodSafeParseResult<Value>, value: unknown): Parsed<Value> {
+function parsedOf<Value>(run: () => z.ZodSafeParseResult<Value>, value: unknown): Parsed<Value> {
+  const result = settledOf(run);
+  if (result === undefined) {
+    return { kind: 'issues', issues: [nestedTooDeeply] };
+  }
   if (result.success) {
     return { kind: 'value', value: result.data };
   }
   const issues = result.error.issues.flatMap((issue) => schemaIssuesOf(issue, value));
   return { kind: 'issues', issues };
+}
+
+/** What zod's run returned, or nothing when it overflowed the stack; any other throw is rethrown. */
+function settledOf<Value>(
+  run: () => z.ZodSafeParseResult<Value>,
+): z.ZodSafeParseResult<Value> | undefined {
+  try {
+    return run();
+  } catch (e) {
+    if (e instanceof RangeError) {
+      return undefined;
+    }
+    throw e;
+  }
 }
 
 function schemaIssuesOf(issue: core.$ZodIssue, value: unknown): readonly SchemaIssue[] {

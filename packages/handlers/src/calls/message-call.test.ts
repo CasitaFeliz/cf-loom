@@ -74,6 +74,24 @@ const chargeCard = readers.commands.chargeCardV1;
 const notifyOnPaidReader = readers.subscriptions.notifyOnPaid;
 const notifyOnSettledReader = readers.subscriptions.notifyOnSettled;
 
+const tree: z.ZodType = z.object({
+  get next() {
+    return tree.optional();
+  },
+});
+
+const nestV1 = defineCommand({
+  name: 'Nest',
+  version: 1,
+  description: 'A deep body',
+  body: tree,
+});
+
+const nesting = readersOf({
+  commands: { nestV1: { element: nestV1, reader: tree } },
+  subscriptions: {},
+}).commands.nestV1;
+
 const meta = { messageId: 'command.ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 
 const body = { orderId: ORDER_ID, status: 'paid' } as const;
@@ -215,6 +233,29 @@ describe("a Message Handler's body", () => {
     await notifyOnSettledHandler({ orderId: ORDER_ID, status: { unknown: 'refunded' } }, meta);
 
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
+  });
+
+  test('a body nested past the stack throws InvalidInputError at body, and the implementation never runs', async () => {
+    let deep: object = {};
+    for (let depth = 0; depth < 5000; depth += 1) {
+      deep = { next: deep };
+    }
+    const received: unknown[] = [];
+    const nestHandler = handle(nesting, (given) => {
+      received.push(given);
+    });
+
+    const issues = await issuesOf(nestHandler(deep, meta));
+
+    expect(issues).toEqual([
+      {
+        part: 'body',
+        path: [],
+        code: 'malformed',
+        message: 'The value is nested too deeply to read',
+      },
+    ]);
+    expect(received).toEqual([]);
   });
 
   test('a throw while reading the body is rethrown', async () => {
