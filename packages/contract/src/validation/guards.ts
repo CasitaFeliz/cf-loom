@@ -110,7 +110,8 @@ function valueFailures(
   if (stripped.length === 0) {
     return [];
   }
-  const message = `A Qualifier holds only the keys its schema declares: ${stripped.join(', ')}`;
+  const keys = stripped.join(', ');
+  const message = `A Qualifier holds only the keys its schema keeps when zod parses it: ${keys}`;
   return [failure(qualifierAt, 'qualifier-keys', message)];
 }
 

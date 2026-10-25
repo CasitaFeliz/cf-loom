@@ -281,7 +281,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
     );
   });
@@ -295,7 +295,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: burst.every',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: burst.every',
       ),
     );
   });
@@ -314,7 +314,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: 1.extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
       ),
     );
   });
@@ -340,7 +340,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: tenantId',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: tenantId',
       ),
     );
   });
@@ -362,7 +362,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
     );
   });
@@ -388,7 +388,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
     );
   });
@@ -410,7 +410,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: children.0.extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: children.0.extra',
       ),
     );
   });
@@ -432,7 +432,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: scope',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: scope',
       ),
     );
   });
@@ -468,7 +468,7 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: globex.extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: globex.extra',
       ),
     );
   });
@@ -487,7 +487,21 @@ describe('validateContract: a Qualifier against its schema', () => {
       failed(
         [...guardsAt, 0, 'qualifier'],
         'qualifier-keys',
-        'A Qualifier holds only the keys its schema declares: 1.extra',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
+      ),
+    );
+  });
+
+  test('an undeclared key named after an Object.prototype member is reported', () => {
+    const guards: readonly Attachment[] = [
+      { guard: quota, qualifier: { perMinute: 60, constructor: true } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        [...guardsAt, 0, 'qualifier'],
+        'qualifier-keys',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: constructor',
       ),
     );
   });
@@ -541,7 +555,7 @@ type ObjectSample = Sample & { readonly schema: z.ZodObject };
 const text: Sample = { schema: z.string(), nextValue: () => 'text' };
 const count: Sample = { schema: z.int(), nextValue: () => 7 };
 
-function draw<Item>(next: () => number, items: readonly [Item, ...Item[]]): Item {
+function oneOf<Item>(next: () => number, items: readonly [Item, ...Item[]]): Item {
   return items[Math.floor(next() * items.length)] ?? items[0];
 }
 
@@ -579,7 +593,7 @@ function aUnion(next: () => number, depth: number): Sample {
   ];
   return {
     schema: z.union(options.map((option) => option.schema)),
-    nextValue: () => draw(next, options).nextValue(),
+    nextValue: () => oneOf(next, options).nextValue(),
   };
 }
 
@@ -591,7 +605,7 @@ function aTaggedUnion(next: () => number, depth: number): Sample {
   ] as const;
   return {
     schema: z.discriminatedUnion('kind', [options[0].schema, options[1].schema, options[2].schema]),
-    nextValue: () => draw(next, options).nextValue(),
+    nextValue: () => oneOf(next, options).nextValue(),
   };
 }
 
@@ -625,9 +639,9 @@ function aTuple(next: () => number, depth: number): Sample {
 
 function aSample(next: () => number, depth: number): Sample {
   if (depth === 0) {
-    return draw(next, [text, count]);
+    return oneOf(next, [text, count]);
   }
-  const kind = draw(next, [
+  const build = oneOf(next, [
     anObject,
     anObject,
     aUnion,
@@ -637,7 +651,7 @@ function aSample(next: () => number, depth: number): Sample {
     anArray,
     aTuple,
   ]);
-  return kind(next, depth);
+  return build(next, depth);
 }
 
 /** Every key and index of a value, as paths. */
@@ -661,24 +675,33 @@ function strippedPathsOf(value: unknown, parsed: unknown): readonly string[] {
     .sort();
 }
 
+type Validated = ReturnType<typeof validateGuards>;
+
+type Reported = Extract<Validated, { readonly kind: 'invalid' }>['failures'][number];
+
+type KeysReported = Extract<Reported, { readonly kind: 'declaration' }>;
+
+function isQualifierKeysFailure(reported: Reported): reported is KeysReported {
+  return reported.kind === 'declaration' && reported.rule === 'qualifier-keys';
+}
+
+function keysNamedBy(reported: KeysReported): readonly string[] {
+  return reported.message.slice(reported.message.indexOf(': ') + 2).split(', ');
+}
+
 /** The paths a validated root names in its `qualifier-keys` failures. */
-function reportedKeysOf(validated: ReturnType<typeof validateGuards>): readonly string[] {
+function reportedKeysOf(validated: Validated): readonly string[] {
   if (validated.kind === 'valid') {
     return [];
   }
-  const keys = validated.failures.flatMap((reported) =>
-    reported.kind === 'declaration' && reported.rule === 'qualifier-keys'
-      ? reported.message.slice(reported.message.indexOf(': ') + 2).split(', ')
-      : [],
-  );
-  return keys.sort();
+  return validated.failures.filter(isQualifierKeysFailure).flatMap(keysNamedBy).sort();
 }
 
 describe('validateContract: a Qualifier holds the keys zod keeps when it parses it', () => {
-  test('a Qualifier names exactly the keys zod strips, whatever the union, record, array or tuple around them', () => {
+  test('generate names exactly the keys zod strips, whatever the union, record, array or tuple around them', () => {
     const next = seededNext(214);
     let stripping = 0;
-    for (let at = 0; at < 300; at += 1) {
+    for (let draw = 0; draw < 300; draw += 1) {
       const { schema, nextValue } = aSample(next, 2);
       const qualifier = nextValue();
       const guard = defineGuard({ name: 'scope', description: 'A scope', qualifier: schema });
@@ -687,8 +710,8 @@ describe('validateContract: a Qualifier holds the keys zod keeps when it parses 
 
       const validated = validateGuards([{ guard, qualifier } as Attachment]);
 
-      expect(reportedKeysOf(validated), `draw ${at}`).toEqual(stripped);
-      expect(validated.kind, `draw ${at}`).toBe(stripped.length === 0 ? 'valid' : 'invalid');
+      expect(reportedKeysOf(validated), `draw ${draw}`).toEqual(stripped);
+      expect(validated.kind, `draw ${draw}`).toBe(stripped.length === 0 ? 'valid' : 'invalid');
     }
     expect(stripping).toBeGreaterThan(30);
   });
