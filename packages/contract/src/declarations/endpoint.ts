@@ -6,7 +6,13 @@ import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type { Rejection } from './rejection.ts';
-import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
+import type {
+  DeclaredFieldsRule,
+  IsOneLiteral,
+  JoinedNames,
+  LiteralNames,
+  ReservedNameRule,
+} from './rules.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 /** What a Caller sends, part by part; an absent part is not accepted. */
@@ -147,7 +153,11 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
   SuccessBodyRule<Declaration> &
   HeadersRule<Declaration> &
   GuardsRule<Declaration> &
-  NoInfer<DeclaredFieldsRule<Declaration, EndpointDeclaration> & NestedFieldsRule<Declaration>>;
+  NoInfer<
+    ReservedNameRule<Declaration> &
+      DeclaredFieldsRule<Declaration, EndpointDeclaration> &
+      NestedFieldsRule<Declaration>
+  >;
 
 /** Declares one HTTP method on one literal path, refusing what TypeScript can state exactly. */
 export function defineEndpoint<const Declaration extends EndpointDeclaration>(

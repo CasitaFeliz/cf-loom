@@ -1,4 +1,5 @@
 import type { GroupedField } from './grouped.ts';
+import type { ReservedName } from './reserved-names.ts';
 
 type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
@@ -9,6 +10,12 @@ export type DeclaredFieldsRule<Declaration, Shape> = {
     keyof Shape
   >]: Refusal<`${Field & string} is not a declared field`>;
 };
+
+/** What an Endpoint, Guard or Subscription must also satisfy: its name is no reserved name. */
+export type ReservedNameRule<Declaration extends { readonly name: string }> =
+  Declaration['name'] extends ReservedName
+    ? { readonly name: Refusal<`A name is no reserved word: ${Declaration['name']}`> }
+    : unknown;
 
 /** What a Group must also satisfy: it lists at least one Endpoint, Event, Command or Subscription. */
 export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, GroupedField>] extends [

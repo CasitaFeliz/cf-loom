@@ -37,21 +37,18 @@ const apiKey = defineGuard({
   context: z.object({ callerId: z.string() }),
 });
 
-function anEndpoint<const Name extends string>(name: Name) {
-  return defineEndpoint({
-    name,
-    method: 'GET',
-    path: '/orders/:orderId',
-    visibility: 'public',
-    description: 'One order by id',
-    input: { params: z.object({ orderId: z.uuid() }) },
-    success: { status: 200, body: z.object({ id: z.uuid() }) },
-    rejections: [notFound],
-  });
-}
+const orderEndpoint = {
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order by id',
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 200, body: z.object({ id: z.uuid() }) },
+  rejections: [notFound],
+} as const;
 
-const getOrder = anEndpoint('getOrder');
-const findOrder = anEndpoint('findOrder');
+const getOrder = defineEndpoint({ ...orderEndpoint, name: 'getOrder' });
+const findOrder = defineEndpoint({ ...orderEndpoint, name: 'findOrder' });
 
 function aCommand<const Name extends string>(name: Name) {
   return defineCommand({

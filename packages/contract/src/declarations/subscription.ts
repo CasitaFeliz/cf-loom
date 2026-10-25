@@ -1,7 +1,7 @@
 import type { Lifecycle } from './element.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { DeclaredFieldsRule } from './rules.ts';
+import type { DeclaredFieldsRule, ReservedNameRule } from './rules.ts';
 
 /** What an author writes to declare a Subscription: its name, what it is for, and an Event that still works. */
 type SubscriptionDeclaration = {
@@ -16,7 +16,10 @@ export type Subscription<Declaration extends SubscriptionDeclaration = Subscript
 
 /** Declares that a Service receives an Event, its own or one a listed Dependency's Provider exports. */
 export function defineSubscription<const Declaration extends SubscriptionDeclaration>(
-  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, SubscriptionDeclaration>>,
+  declaration: Declaration &
+    NoInfer<
+      ReservedNameRule<Declaration> & DeclaredFieldsRule<Declaration, SubscriptionDeclaration>
+    >,
 ): Subscription<Declaration> {
   return freezeDeclaration('subscription', declaration);
 }

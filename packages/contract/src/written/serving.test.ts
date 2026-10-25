@@ -17,7 +17,7 @@ const permission = defineGuard({
   qualifier: z.array(z.string()),
 });
 
-function anEndpoint<const Name extends string>(name: Name, path: string) {
+function anEndpoint(name: string, path: string) {
   return defineEndpoint({
     name,
     method: 'GET',
