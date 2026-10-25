@@ -1059,33 +1059,60 @@ describe('the connection applying a broker plan uses', () => {
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 
-  test('apply, when the server goes away before its drain after applying everything, closes its connection and rejects saying NATS did not answer the drain', async () => {
+  test.each([
+    ['keeps reconnecting', -1],
+    ['gives up reconnecting after one attempt', 1],
+  ])(
+    'apply, when the server goes away before its drain after applying everything and the Service’s connect %s, closes its connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause',
+    async (_reconnecting, maxReconnectAttempts) => {
+      const prefix = aPrefix();
+      const own = await aNatsServer();
+      onTestFinished(() => own.stop());
+      const opened: NatsConnection[] = [];
+      const connectLosingServerAtDrain = async (): Promise<NatsConnection> => {
+        const connection = await connect({
+          servers: own.url,
+          maxReconnectAttempts,
+          reconnectTimeWait: 200,
+        });
+        onTestFinished(() => connection.close());
+        opened.push(connection);
+        const drain = async () => {
+          await stopServerUnder(connection, own);
+          return await connection.drain();
+        };
+        return withMethods(connection, { drain });
+      };
+      const broker = jetstream({ connect: connectLosingServerAtDrain, prefix });
+
+      const error = await rejectionOf(broker.apply(anOrders(prefix).plan, testLimits));
+
+      expect(error.message).toBe(
+        'NATS did not answer the drain, so the connection was closed without it',
+      );
+      expect(error.cause).toBeInstanceOf(Error);
+      expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+    },
+  );
+
+  test('apply, when its JetStream manager cannot be made and the drain is not answered either, rejects with that error unchanged and closes its connection', async () => {
     const prefix = aPrefix();
-    const own = await aNatsServer();
-    onTestFinished(() => own.stop());
     const opened: NatsConnection[] = [];
-    const connectLosingServerAtDrain = async (): Promise<NatsConnection> => {
-      const connection = await connect({
-        servers: own.url,
-        maxReconnectAttempts: -1,
-        reconnectTimeWait: 200,
-      });
+    const connectUndrainable = async (): Promise<NatsConnection> => {
+      const connection = await connect({ servers: server.url });
       onTestFinished(() => connection.close());
       opened.push(connection);
-      const drain = async () => {
-        await stopServerUnder(connection, own);
-        return await connection.drain();
-      };
-      return withMethods(connection, { drain });
+      return withMethods(connection, { drain: () => Promise.reject(new Error('no answer')) });
     };
-    const broker = jetstream({ connect: connectLosingServerAtDrain, prefix });
+    const broker = jetstream({
+      connect: connectUndrainable,
+      prefix,
+      jetstream: { apiPrefix: '' },
+    });
 
     const error = await rejectionOf(broker.apply(anOrders(prefix).plan, testLimits));
 
-    expect(error.message).toBe(
-      'NATS did not answer the drain, so the connection was closed without it',
-    );
-    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.message).toBe("'prefix' cannot be empty");
     expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 

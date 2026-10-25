@@ -2,7 +2,7 @@ import { decodeBrokerPlan } from '@cf-loom/contract/internal';
 import type { JetStreamManager, JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Applied } from './applied.ts';
-import { drainOrClose, drainOrCloseAfterFailure } from './connection.ts';
+import { drainOrClose, unansweredDrainError } from './connection.ts';
 import { applyDurable } from './durable-applying.ts';
 import { type ResolvedPlan, settingsOf } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
@@ -52,20 +52,18 @@ function checkedOf(prefix: string | null, plan: unknown, limits: unknown): Check
 
 async function appliedOn(applier: Applier, settings: ResolvedPlan): Promise<Applied> {
   const natsConnection = await applier.connect();
-  let applied: Applied;
-  try {
-    const manager = await managerOf(natsConnection, applier.jetstream);
-    applied = await applyAll(manager, settings);
-  } catch (error) {
-    await drainOrCloseAfterFailure(natsConnection);
-    throw error;
+  const applying = managerOf(natsConnection, applier.jetstream).then((manager) =>
+    applyAll(manager, settings),
+  );
+  const [applied] = await Promise.allSettled([applying]);
+  const ended = await drainOrClose(natsConnection);
+  if (applied.status === 'rejected') {
+    throw applied.reason;
   }
-  if (applied.kind === 'refused') {
-    await drainOrCloseAfterFailure(natsConnection);
-  } else {
-    await drainOrClose(natsConnection);
+  if (applied.value.kind === 'applied' && ended.kind === 'unanswered') {
+    throw unansweredDrainError(ended.cause);
   }
-  return applied;
+  return applied.value;
 }
 
 async function applyAll(manager: JetStreamManager, settings: ResolvedPlan): Promise<Applied> {

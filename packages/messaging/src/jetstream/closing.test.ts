@@ -110,6 +110,18 @@ async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
   }
 }
 
+/** Tells when close asks NATS whether it still answers the Service’s drain, by wrapping the `flush` of the connection the Service’s connect returns. */
+function aFlushSignal() {
+  const asked = Promise.withResolvers<undefined>();
+  const replacing = (raw: NatsConnection) => ({
+    flush: () => {
+      asked.resolve(undefined);
+      return raw.flush();
+    },
+  });
+  return { replacing, asked: asked.promise };
+}
+
 /** A Handler that never settles, so a delivery stays in flight until the messaging hands it back. */
 const neverSettling = () => new Promise<undefined>(() => undefined);
 
@@ -174,21 +186,15 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
     const server = await anOwnServer();
     const proxy = await aHoldingProxy(server.url);
     onTestFinished(() => proxy.stop());
-    const asked = Promise.withResolvers<undefined>();
-    const signalingFlush = (raw: NatsConnection) => ({
-      flush: () => {
-        asked.resolve(undefined);
-        return raw.flush();
-      },
-    });
+    const flushing = aFlushSignal();
     const { close, connection } = await aMessaging(server, {
       servers: proxy.url,
-      replacing: signalingFlush,
+      replacing: flushing.replacing,
     });
     proxy.hold();
     connection.drain().catch(() => undefined);
     const closing = close();
-    await asked.promise;
+    await flushing.asked;
 
     await connection.close();
 
@@ -227,6 +233,115 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
       expect(connection.isClosed()).toBe(true);
     },
   );
+
+  test('close, when the Service’s connect does not reconnect and the socket drops while cf-loom drains, closes the connection and rejects saying NATS did not answer the drain', async () => {
+    const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
+    const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
+      nats: { reconnect: false },
+      consuming: neverSettling,
+    });
+    proxy.hold();
+    const closing = rejectionOf(close());
+    await vi.waitFor(() => expect(connection.isDraining()).toBe(true));
+
+    proxy.drop();
+
+    const error = await closing;
+    expect(error).toMatchObject({ message: unanswered });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close, when the Service’s connect does not reconnect and the socket drops while the Service drains, closes the connection and rejects saying NATS did not answer the drain', async () => {
+    const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
+    const flushing = aFlushSignal();
+    const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
+      nats: { reconnect: false },
+      replacing: flushing.replacing,
+    });
+    proxy.hold();
+    connection.drain().catch(() => undefined);
+    const closing = rejectionOf(close());
+    await flushing.asked;
+
+    proxy.drop();
+
+    const error = await closing;
+    expect(error).toMatchObject({ message: unanswered });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close, when the Service’s connect gave up reconnecting before the drain, closes the connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause', async () => {
+    const server = await anOwnServer();
+    const { close, connection } = await aMessaging(server, {
+      nats: { maxReconnectAttempts: 1 },
+      consuming: neverSettling,
+    });
+    await stopServerUnder(connection, server);
+
+    const error = await rejectionOf(close());
+
+    expect(error).toMatchObject({ message: unanswered, cause: expect.any(Error) });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close, when the Service’s connect gives up reconnecting while cf-loom drains, closes the connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause', async () => {
+    const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
+    const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
+      nats: { maxReconnectAttempts: 1 },
+      consuming: neverSettling,
+    });
+    proxy.hold();
+    const closing = rejectionOf(close());
+    await vi.waitFor(() => expect(connection.isDraining()).toBe(true));
+
+    await proxy.stop();
+
+    const error = await closing;
+    expect(error).toMatchObject({ message: unanswered, cause: expect.any(Error) });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close, when the connection dropped while cf-loom drained it and reconnected before the drain ended, closes the connection and rejects saying NATS did not answer the drain', async () => {
+    const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
+    const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
+      consuming: neverSettling,
+    });
+    proxy.hold();
+    const closing = rejectionOf(close());
+    await vi.waitFor(() => expect(connection.isDraining()).toBe(true));
+
+    proxy.drop();
+
+    const error = await closing;
+    expect(error).toMatchObject({ message: unanswered });
+    expect(connection.isClosed()).toBe(true);
+  });
+
+  test('close resolves when nats.js had already closed the Service’s connection before close was called', async () => {
+    const server = await anOwnServer();
+    const { close, connection } = await aMessaging(server, {
+      nats: { reconnect: false },
+      consuming: neverSettling,
+    });
+    await stopServerUnder(connection, server);
+    await connection.closed();
+
+    const closing = close();
+
+    await expect(closing).resolves.toBeUndefined();
+  });
 
   test('close({ signal }) that handed a delivery back, when the server is gone, closes the connection and rejects with the drain’s error, not CloseAbortedError', async () => {
     const server = await anOwnServer();
