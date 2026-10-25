@@ -19,17 +19,16 @@ type StatusPart = {
   readonly schema?: JsonSchema | undefined;
 };
 
-/** What every response of an OpenAPI operation shares: whether the host drops its bodies, and its Deprecation stamp. */
-type ResponseTraits = { readonly isHead: boolean; readonly deprecatedAt: string | undefined };
+/** What every response of an OpenAPI operation shares: its Deprecation stamp. */
+type ResponseTraits = { readonly deprecatedAt: string | undefined };
 
 /** The responses `serve` gives an Endpoint, one per status in status order. */
-export function responsesOf(method: string, served: Served): OpenApiObject {
-  const isHead = method === 'HEAD';
+export function responsesOf(served: Served): OpenApiObject {
   switch (served.kind) {
     case 'retired':
-      return responsesFrom([retiredPart], { isHead, deprecatedAt: undefined });
+      return responsesFrom([retiredPart], { deprecatedAt: undefined });
     case 'live':
-      return responsesFrom(livePartsOf(served), { isHead, deprecatedAt: served.deprecatedAt });
+      return responsesFrom(livePartsOf(served), { deprecatedAt: served.deprecatedAt });
   }
 }
 
@@ -97,10 +96,7 @@ function responsesFrom(parts: readonly StatusPart[], traits: ResponseTraits): Op
   );
 }
 
-function responseOf(
-  parts: readonly StatusPart[],
-  { isHead, deprecatedAt }: ResponseTraits,
-): OpenApiObject {
+function responseOf(parts: readonly StatusPart[], { deprecatedAt }: ResponseTraits): OpenApiObject {
   const partHeaders = parts.flatMap(({ headers }) => Object.entries(headers ?? {}));
   const deprecation = Object.entries(deprecationOf(deprecatedAt));
   const headers = Object.fromEntries([...partHeaders, ...deprecation]);
@@ -108,7 +104,7 @@ function responseOf(
   return definedOf({
     description: parts.map(({ description }) => description).join('; '),
     headers: Object.keys(headers).length === 0 ? undefined : headers,
-    content: isHead || schemas.length === 0 ? undefined : jsonContentOf(alternativesOf(schemas)),
+    content: schemas.length === 0 ? undefined : jsonContentOf(alternativesOf(schemas)),
   });
 }
 
