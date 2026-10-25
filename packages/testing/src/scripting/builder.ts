@@ -50,9 +50,9 @@ export type ScriptedFault =
   | { readonly code: NonNullable<ReceivedFault['code']> };
 
 /**
- * What a step builds its answer with, typed by its Endpoint and the Provider's Standard codes, as
- * a Caller reads each Outcome: a Success, a Rejection, a Fault, or what the client infers its Fault
- * from, a network failure or a status.
+ * What a step builds its answer with, typed by its Endpoint and the Provider's Standard Rejections,
+ * which type the invalid-input body by its Reader, as a Caller reads each Outcome: a Success, a
+ * Rejection, a Fault, or what the client infers its Fault from, a network failure or a status.
  */
 export type StepBuilder<Target extends Endpoint, Standards extends ProvidedStandardRejections> = {
   success(...success: SuccessArguments<Target>): ScriptedAnswer;
