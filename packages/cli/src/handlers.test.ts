@@ -542,7 +542,7 @@ describe('cf-loom generate: the Handler map', () => {
     );
   });
 
-  test('readers.generated.ts pairs nothing while the Service declares no Message, and the Handler map still imports its readers', () => {
+  test('readers.generated.ts pairs nothing while the Service declares no Message', () => {
     const project = aProject(aService());
 
     cfLoom(project, 'generate');
@@ -1868,7 +1868,8 @@ describe('cf-loom generate: the Service type-checks', () => {
         importOf('handlers', './handlers.generated.ts'),
         '',
         'handlers satisfies HandlerMap;',
-        'export const readers: { commands: Record<never, never>; subscriptions: Record<never, never> } = handlers.readers;',
+        'export const commands: Readonly<Record<string, never>> = handlers.readers.commands;',
+        'export const subscriptions: Readonly<Record<string, never>> = handlers.readers.subscriptions;',
       ]),
     });
 

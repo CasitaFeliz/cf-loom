@@ -372,23 +372,6 @@ describe('consume', () => {
     },
   );
 
-  test('readers that pair another declaration than the Contract’s throw, naming the pairing', async () => {
-    const mispaired = readersOf({
-      ...readers,
-      subscriptions: {
-        ...readers.subscriptions,
-        notifyOnSettled: { element: notifyOnCreated, reader: orderReader },
-      },
-    });
-    const { consume } = await messaging(contract, aBroker().broker);
-
-    const consumingAll = consume({ ...handlers, readers: mispaired });
-
-    await expect(consumingAll).rejects.toThrow(
-      "readers.subscriptions.notifyOnSettled pairs another declaration than the Contract's: run cf-loom generate",
-    );
-  });
-
   test('a Handler the map only inherits throws, as if it had none', async () => {
     const inherited = Object.create(handlers.subscriptions);
     const { consume } = await messaging(contract, aBroker().broker);

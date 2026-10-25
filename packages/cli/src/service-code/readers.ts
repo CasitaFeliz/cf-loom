@@ -51,8 +51,8 @@ type Pairing = {
 /** `readersOf`, which the table of pairings is built by, and the package it is imported from. */
 const readersOfImport = { name: 'readersOf', specifier: '@cf-loom/handlers' } as const;
 
-/** The name the readers file exports its table of pairings under. */
-const readersTable = 'readers';
+/** The name the readers file exports its table of pairings under, which the Handler map imports and lists. */
+export const readersTable = 'readers';
 
 /** The tables of the `readers` object, in the order they are written. */
 const tableKeys = ['commands', 'subscriptions'] as const;

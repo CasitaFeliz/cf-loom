@@ -96,7 +96,7 @@ const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 
 const handleRefusal =
-  'handle() takes an Endpoint or a Guard, or a Command or Subscription paired by readersOf(), as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
+  'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
 
 describe('handle', () => {
   test('a Handler returned by handle() is a function that carries its Element', () => {
@@ -544,6 +544,17 @@ describe('readersOf', () => {
     ],
   ])('readersOf given %s names the key it refuses', (_what, key, pairing) => {
     const pair = () => readersOf({ commands: {}, subscriptions: {}, ...pairing } as never);
+
+    expect(pair).toThrow(
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,
+    );
+  });
+
+  test.each([
+    ['commands', { subscriptions: {} }],
+    ['subscriptions', { commands: {} }],
+  ])('readersOf given a table without %s names it', (key, tables) => {
+    const pair = () => readersOf(tables as never);
 
     expect(pair).toThrow(
       `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,

@@ -14,7 +14,6 @@ export {
   isStub,
   mappedHandlerOf,
   mappedMessageHandlerOf,
-  readerOf,
   runEndpoint,
   runGuard,
   runMessage,

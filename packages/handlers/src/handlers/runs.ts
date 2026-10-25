@@ -1,5 +1,4 @@
 import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
-import type * as core from 'zod/v4/core';
 import {
   type EndpointRun,
   endpointRunOf,
@@ -49,9 +48,4 @@ export function runMessage(
   received: MessageGiven,
 ): Promise<MessageRun> {
   return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedMessageBody);
-}
-
-/** The Reader schema a Message Handler reads a body with, as the readers file pairs it. */
-export function readerOf(handler: { readonly element: MessageElement }): core.$ZodType {
-  return writtenOf(handler, isMessageWritten).pairing.reader;
 }

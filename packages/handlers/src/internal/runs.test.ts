@@ -19,7 +19,6 @@ import {
   isStub,
   logOf,
   mappedHandlerOf,
-  readerOf,
   runEndpoint,
   runGuard,
   runMessage,
@@ -414,14 +413,6 @@ describe('runMessage', () => {
 
     expect(run).toEqual({ kind: 'answered', answer: undefined });
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
-  });
-
-  test('readerOf gives the Reader a Message Handler was paired with', () => {
-    const shipHandler = handle(shipping, () => undefined);
-
-    const reader = readerOf(shipHandler);
-
-    expect(reader).toBe(shipping.reader);
   });
 
   test('runMessage given a value handle() did not return throws', () => {

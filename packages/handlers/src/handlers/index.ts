@@ -25,4 +25,4 @@ export type {
   ResourcesOf,
   WithResources,
 } from './resources.ts';
-export { isStub, readerOf, runEndpoint, runGuard, runMessage } from './runs.ts';
+export { isStub, runEndpoint, runGuard, runMessage } from './runs.ts';

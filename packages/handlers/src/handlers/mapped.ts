@@ -33,8 +33,8 @@ export function mappedHandlerOf<Element extends HandledElement>(
 
 /**
  * The Handler a map holds for a Command's Message Version or a Subscription, with the Reader its
- * `readers` pair with it: the Handler must be written for that very pairing, which must be of
- * that very Element; throws, naming the key, otherwise.
+ * `readers` pair with it: the Handler must be written for that very pairing; throws, naming the
+ * key, otherwise.
  */
 export function mappedMessageHandlerOf<Element extends MessageElement>(
   map: Pick<HandlerMap, 'commands' | 'subscriptions' | 'readers'>,
@@ -46,11 +46,6 @@ export function mappedMessageHandlerOf<Element extends MessageElement>(
   const pairing = ownOf(ownOf(map.readers, at.map), at.key);
   if (!isPairing(pairing)) {
     throw new Error(`${paired} is not in the Handler map: run cf-loom generate`);
-  }
-  if (pairing.element !== element) {
-    throw new Error(
-      `${paired} pairs another declaration than the Contract's: run cf-loom generate`,
-    );
   }
   if (!isWrittenForPairing(handler, pairing)) {
     throw new Error(

@@ -12,6 +12,7 @@ import {
 import { handlerLocalOf, pairingNameOf } from './code-names.ts';
 import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
+import { readersTable } from './readers.ts';
 
 /**
  * The Handler map written at `file`: plain data importing each Handler and the `readers` of the
@@ -29,7 +30,7 @@ export function handlerMapTextOf(
   const readersSpecifier = relativeSpecifierOf(file, readersFile);
   const readersImport = {
     specifier: readersSpecifier,
-    line: namedImportOf(['readers'], readersSpecifier),
+    line: namedImportOf([readersTable], readersSpecifier),
   };
   const imports = [...handlerImports, readersImport]
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
@@ -45,7 +46,7 @@ export function handlerMapTextOf(
     ...mapLinesOf('guards', guards),
     ...mapLinesOf('commands', commands),
     ...mapLinesOf('subscriptions', subscriptions),
-    '  readers,',
+    `  ${readersTable},`,
     ...stampLinesOf(stamps),
     '};',
   ];
