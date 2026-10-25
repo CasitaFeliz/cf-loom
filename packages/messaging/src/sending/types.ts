@@ -1,6 +1,7 @@
 import type { Command, Contract, Event } from '@cf-loom/contract';
 import type { GroupedOf, IsOneLiteral, Refusal } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
+import type { GivenHeaders } from './checks.ts';
 
 /**
  * What a `publish` or `send` call carries besides its bodies: the Fact id its Messages share,
@@ -8,7 +9,7 @@ import type * as core from 'zod/v4/core';
  */
 export type MessageOptions = {
   readonly factId: string;
-  readonly headers?: Readonly<Record<string, string | undefined>>;
+  readonly headers?: GivenHeaders;
 };
 
 /** What `publish` resolves to: the Fact id, and the identity of each version the Broker already held and dropped as a duplicate. */

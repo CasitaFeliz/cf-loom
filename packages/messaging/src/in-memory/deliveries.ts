@@ -2,6 +2,7 @@ import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
 import {
   consumedFaultLinesOf,
   consumerDetailsOf,
+  leftPending,
   receiveFailureLineOf,
   type Settled,
 } from '../consuming/index.ts';
@@ -10,9 +11,6 @@ import { Failures } from './failures.ts';
 import { DeliveryLine } from './line.ts';
 import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
-
-/** A delivery whose `settle` rejected, through a bug of the core, is left for redelivery. */
-const leftPending: Settled = { settlement: 'pending', fault: undefined, hookFailure: undefined };
 
 /** How severe a settlement is, the most severe first. */
 const bySeverity: readonly Settlement[] = ['ended', 'pending', 'acked'];

@@ -20,7 +20,7 @@ const { duplicates } = await publisher.publish(
   { factId: `${order.id}:created` },
 );
 // in a Message Handler, chaining from the Message it handles
-await sender.send('ChargeCard', { orderId }, { factId: `${meta.factId}:charge`, headers: { traceparent: meta.headers.traceparent } });
+await sender.send('ChargeCard', { orderId }, { factId: `${meta.factId}:charge`, headers: { traceparent: meta.headers['traceparent'] } });
 ```
 
 `publish` takes an Event's name and one body for each of its Active and Deprecated versions, whatever Groups its versions sit in: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event; publishing an Event whose `version` is typed `number`, which keys no body, is a type error too. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it is refused with `InvalidMessageError` (see below), each such version listed by its identity with its `issues` at `body`, and nothing is sent. `publish` sends the versions in version order.

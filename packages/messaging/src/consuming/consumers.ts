@@ -1,16 +1,13 @@
 import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
-import type { BrokerConsumer, Delivery } from '../broker/index.ts';
+import type { BrokerConsumer } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
-import { registerConsumerDetails, type Settled } from './details.ts';
+import { type Received, registerConsumerDetails } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
 /** What of the Handler map `consume` reads: the Handlers of Commands and Subscriptions, and the `readers` that pair each with the Reader it reads with. */
 export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | 'readers'>;
-
-/** Runs a delivery through its Handler and answers how it settled. */
-export type Settle = (delivery: Delivery) => Promise<Settled>;
 
 /**
  * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
@@ -19,7 +16,7 @@ export type Settle = (delivery: Delivery) => Promise<Settled>;
 type ConsumersRun = {
   readonly report: Report;
   readonly resources: unknown;
-  readonly received: (settle: Settle) => Settle;
+  readonly received: Received;
 };
 
 /**

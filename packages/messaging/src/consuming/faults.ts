@@ -113,7 +113,7 @@ function causeOf(fault: ConsumedFault): unknown {
 }
 
 /** What names a Message in a line: the Element handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
-export function sourceOf(about: About): string {
+function sourceOf(about: About): string {
   const { identity, subject, messageId, factId, deliveryCount, lastAttempt } = about;
   const attempt = lastAttempt ? `attempt ${deliveryCount}, the last` : `attempt ${deliveryCount}`;
   return `${identity} ${subject} ${messageId} ${factId} ${attempt}`;

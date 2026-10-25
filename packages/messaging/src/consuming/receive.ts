@@ -1,7 +1,7 @@
 import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
-import type { Delivery, Settlement } from '../broker/index.ts';
+import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
 import type { Settled } from './details.ts';
 import { type About, aboutOf, type ConsumedFault, type Report } from './faults.ts';
@@ -14,7 +14,7 @@ export type Pulled = {
 };
 
 /** A run as the Broker would settle it, before its Fault is reported. */
-type Ran = { readonly settlement: Settlement; readonly fault: ConsumedFault | undefined };
+type Ran = Omit<Settled, 'hookFailure'>;
 
 /**
  * What became of one delivery once its Handler ran, every Fault it built reported; a hook that

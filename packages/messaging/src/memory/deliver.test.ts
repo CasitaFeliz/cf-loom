@@ -597,8 +597,9 @@ describe('pending and redeliver()', () => {
 
     await broker.deliver(orderCreatedV2, created, { factId: 'o-1' });
 
-    expect(broker.pending[0]?.element).toBe(faults[0]?.element);
-    expect(broker.pending[0]?.identity).toBe(faults[0]?.identity);
+    const named = { element: notifyOnCreated, identity: 'notifyOnCreated' };
+    expect(broker.pending).toMatchObject([named]);
+    expect(faults).toMatchObject([named]);
   });
 
   test('an Event two Subscriptions take, one ending it and one acknowledging, makes settled() reject with the one Fault’s line', async () => {

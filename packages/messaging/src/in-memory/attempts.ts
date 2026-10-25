@@ -10,13 +10,7 @@ import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
 import { consumerDetailsOf } from '../consuming/index.ts';
-import {
-  headerPartsOf,
-  InvalidMessageError,
-  type InvalidPart,
-  idPartsOf,
-  sizePartsOf,
-} from '../sending/index.ts';
+import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
@@ -70,28 +64,16 @@ function attemptsOf(
 ): readonly Attempt[] {
   const factId = meta.factId ?? globalThis.crypto.randomUUID();
   const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
-  const { headers, invalid: refusedHeaders } = headerPartsOf(meta.headers ?? {});
-  const parts = { messageId, factId, headers };
-  const invalid: InvalidPart[] = [
-    ...givenIdPartsOf(meta),
-    ...refusedHeaders,
-    ...sizePartsOf(message, parts),
-  ];
+  const measured = [{ version: message, messageId, factId }];
+  const { headers, invalid } = checkedHeadersOf(meta, meta.headers ?? {}, measured);
   if (invalid.length > 0) {
     throw new InvalidMessageError(invalid);
   }
+  const parts = { messageId, factId, headers };
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
     return { consumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
   });
-}
-
-/** The ids a test gave that would not arrive as given; a random one, or one derived from an accepted Fact id, always does. */
-function givenIdPartsOf({ factId, messageId }: DeliveryMeta): readonly InvalidPart[] {
-  return [
-    ...(factId === undefined ? [] : idPartsOf('factId', factId)),
-    ...(messageId === undefined ? [] : idPartsOf('messageId', messageId)),
-  ];
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {

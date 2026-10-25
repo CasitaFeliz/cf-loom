@@ -1,5 +1,5 @@
 import type { BrokerConnection, BrokerConsumer, Delivery } from '../broker/index.ts';
-import type { Settle, Settled } from '../consuming/index.ts';
+import { leftPending, type Received, type Settle, type Settled } from '../consuming/index.ts';
 import { MessagingClosedError } from './closed.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
@@ -10,8 +10,6 @@ type State =
   | { readonly kind: 'open'; readonly consumption: Consumption }
   | { readonly kind: 'closing'; readonly closed: Promise<void>; readonly idle: () => void }
   | { readonly kind: 'closed'; readonly closed: Promise<void> };
-
-const leftPending: Settled = { settlement: 'pending', fault: undefined, hookFailure: undefined };
 
 /**
  * The life of one messaging over its broker connection: publishing while open or closing, since a
@@ -52,9 +50,7 @@ export class MessagingLife {
    * Hands the broker its consumers, once, built with `received`, which runs a delivery only while
    * open; a broker that rejects them leaves `consume` to retry.
    */
-  async consume(
-    consumersOf: (received: (settle: Settle) => Settle) => readonly BrokerConsumer[],
-  ): Promise<void> {
+  async consume(consumersOf: (received: Received) => readonly BrokerConsumer[]): Promise<void> {
     const state = this.#state;
     switch (state.kind) {
       case 'closing':

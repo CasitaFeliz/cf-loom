@@ -1,5 +1,6 @@
 import type { Command, Event, Subscription } from '@cf-loom/contract';
 import type { Broker, Settlement } from '../broker/index.ts';
+import type { GivenHeaders } from '../sending/index.ts';
 
 /**
  * What `memory()` returns: a `Broker` that keeps everything in memory, serves one connection and
@@ -45,7 +46,7 @@ export type RecordedMessage = {
 export type DeliveryMeta = {
   readonly factId?: string;
   readonly messageId?: string;
-  readonly headers?: Readonly<Record<string, string | undefined>>;
+  readonly headers?: GivenHeaders;
 };
 
 /** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */

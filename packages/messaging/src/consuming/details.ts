@@ -12,6 +12,19 @@ export type Settled = {
   readonly hookFailure: HookFailure | undefined;
 };
 
+/** Runs a delivery through its Handler and answers how it settled. */
+export type Settle = (delivery: Delivery) => Promise<Settled>;
+
+/** Wraps a consumer's `settle` as the messaging's life allows it: run while open, left pending once closing. */
+export type Received = (settle: Settle) => Settle;
+
+/** A delivery left for redelivery without running its Handler, so with nothing reported. */
+export const leftPending: Settled = {
+  settlement: 'pending',
+  fault: undefined,
+  hookFailure: undefined,
+};
+
 /**
  * What the in-memory Broker reads of a consumer beyond the Broker seam: the Element it consumes,
  * its identity, the Reader its Handler reads with, and `settle`, `receive` with what it reported.
@@ -20,7 +33,7 @@ export type ConsumerDetails = {
   readonly element: Subscription | Command;
   readonly identity: string;
   readonly reader: core.$ZodType;
-  readonly settle: (delivery: Delivery) => Promise<Settled>;
+  readonly settle: Settle;
 };
 
 const detailsByConsumer = new WeakMap<BrokerConsumer, ConsumerDetails>();
