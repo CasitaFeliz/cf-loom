@@ -1,8 +1,9 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
+import { contractFolder } from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
-import { declaredHandledOf, type Handled } from './handled.ts';
+import { declaredHandledOf, type Handled, type MessageHandled } from './handled.ts';
 
 /** The Handler file of a declared Element, and whether the Handler map imports it. */
 export type HandlerPath = {
@@ -11,10 +12,13 @@ export type HandlerPath = {
   readonly isMapped: boolean;
 };
 
-/** Where every declared Element's Handler lives, or the line saying which two share a path. */
+/**
+ * Where every declared Element's Handler lives, or the line saying why one cannot be placed: its
+ * path lies under `src/contract/`, or two share a path.
+ */
 export type HandlerPaths =
   | { readonly kind: 'placed'; readonly paths: readonly HandlerPath[] }
-  | { readonly kind: 'colliding'; readonly line: string };
+  | { readonly kind: 'unplaced'; readonly line: string };
 
 /**
  * The Handler path of every Element a Service declares one for, a Retired Endpoint's, the Guards
@@ -27,8 +31,8 @@ export function handlerPathsOf(snapshot: ServiceSnapshot, layout: ServiceLayout)
     isMapped,
     path: pathOf(handled, layout),
   }));
-  const line = collidingLineOf(paths);
-  return line === undefined ? { kind: 'placed', paths } : { kind: 'colliding', line };
+  const line = contractLineOf(paths) ?? collidingLineOf(paths);
+  return line === undefined ? { kind: 'placed', paths } : { kind: 'unplaced', line };
 }
 
 /** Where a Handler lives, from its Element's names alone, as the layout places its kind. */
@@ -43,12 +47,26 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
       return filledPathOf(layout.guard, { name: kebabCaseOf(handled.name) });
     case 'command':
       return filledPathOf(layout.command, {
+        group: handled.group,
         name: messageFileNameOf(handled.name),
         version: handled.version,
       });
     case 'subscription':
-      return filledPathOf(layout.subscription, { name: kebabCaseOf(handled.name) });
+      return filledPathOf(layout.subscription, {
+        group: handled.group,
+        name: kebabCaseOf(handled.name),
+      });
   }
+}
+
+/** The line naming the first Element, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
+function contractLineOf(paths: readonly HandlerPath[]): string | undefined {
+  const placed = paths.find(({ path }) => path.startsWith(`${contractFolder}/`));
+  if (placed === undefined) {
+    return undefined;
+  }
+  const under = `${elementLabelOf(placed.handled)} is ${placed.path}, under ${contractFolder}/, which holds only the Contract`;
+  return `${under}: give it another path in the layout of ${configFile}`;
 }
 
 /** The line naming the first two Elements, in the map's order, whose Handlers share a path. */
@@ -66,7 +84,7 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
 }
 
 /** An Element as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
-export function elementLabelOf(handled: Handled): string {
+export function elementLabelOf(handled: Handled | MessageHandled): string {
   switch (handled.kind) {
     case 'endpoint':
       return `endpoints.${handled.name}`;

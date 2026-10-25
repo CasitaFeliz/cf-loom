@@ -27,9 +27,9 @@ export async function generate(run: Run): Promise<Exit> {
 }
 
 /**
- * A Service's files, or every line that stops them: two Elements at one Handler path, a name the
- * readers cannot write, an Element no stub or the readers could import, a file nothing names, a
- * Handler path that is no file.
+ * A Service's files, or every line that stops them: a Handler path under `src/contract/` or two
+ * Elements at one, a name the readers cannot write, an Element no stub or the readers could
+ * import, a file nothing names, a Handler path that is no file.
  */
 async function generateService(run: Run, built: BuiltService): Promise<Exit> {
   const service = placedOf(built);

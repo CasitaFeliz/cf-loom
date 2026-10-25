@@ -21,11 +21,12 @@ export function channelOf(publishedVersion: PublishedVersion): AsyncApiObject {
   };
 }
 
-/** The operation by which the Service sends the message of a Message Version on its channel. */
-export function operationOf({ identity }: PublishedVersion): AsyncApiObject {
+/** The operation by which the Service sends the message of a Message Version on its channel, tagged with its Group. */
+export function operationOf({ identity, event }: PublishedVersion): AsyncApiObject {
   return {
     action: 'send',
     channel: { $ref: `#/channels/${identity}` },
+    tags: [{ name: event.group }],
     messages: [{ $ref: `#/channels/${identity}/messages/${identity}` }],
   };
 }

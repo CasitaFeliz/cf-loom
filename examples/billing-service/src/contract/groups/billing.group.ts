@@ -1,8 +1,10 @@
 import { defineGroup } from '@cf-loom/contract';
-import { createInvoice } from './create-invoice.endpoint.ts';
+import { createInvoice } from '../endpoints/billing/create-invoice.endpoint.ts';
+import { draftInvoiceOnCreated } from '../subscriptions/billing/draft-invoice-on-created.subscription.ts';
 
-export const invoicesGroup = defineGroup({
-  name: 'invoices',
+export const billingGroup = defineGroup({
+  name: 'billing',
   description: 'Invoices for paid orders',
   endpoints: [createInvoice],
+  subscriptions: [draftInvoiceOnCreated],
 });

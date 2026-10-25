@@ -742,16 +742,20 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     );
   });
 
-  test.each(['src/{group}/{name}.handler.ts', 'src/e{group}-x/{name}.handler.ts'])(
-    'a path whose first folder under src/ holds a variable, as %s, is a tooling error',
-    (path) => {
-      const ran = generatedWithLayout(`{ endpoint: '${path}' }`);
+  test.each([
+    ['src/{group}/{name}.handler.ts', 'src/health/ping.handler.ts'],
+    ['src/e{group}-x/{name}.handler.ts', 'src/ehealth-x/ping.handler.ts'],
+  ])('a variable may stand in the first folder under src/, as %s', (path, filled) => {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith(`{ endpoint: '${path}' }`),
+      ...aRoot(),
+    });
 
-      expect(ran).toEqual(
-        refusedWith(`layout.endpoint's first folder under src/ holds a variable: ${path}`),
-      );
-    },
-  );
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, filled))).toBe(true);
+  });
 
   test('a variable in the file name right under src/ is accepted', () => {
     const project = aProject({
@@ -852,6 +856,26 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
     expect(ran).toEqual(
       refusedWith(
         "layout.guard holds {group}, but a Guard's Handler path takes only {name}: src/guards/{group}/{name}.handler.ts",
+      ),
+    );
+  });
+
+  test('a variable a Command’s Handler path does not take is a tooling error listing the three it takes', () => {
+    const ran = generatedWithLayout("{ command: 'src/{module}/{name}.v{version}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout.command holds {module}, but a Command's Handler path takes only {group}, {name} and {version}: src/{module}/{name}.v{version}.handler.ts",
+      ),
+    );
+  });
+
+  test('a version in a Subscription’s Handler path is a tooling error listing the two it takes', () => {
+    const ran = generatedWithLayout("{ subscription: 'src/{group}/{name}.v{version}.handler.ts' }");
+
+    expect(ran).toEqual(
+      refusedWith(
+        "layout.subscription holds {version}, but a Subscription's Handler path takes only {group} and {name}: src/{group}/{name}.v{version}.handler.ts",
       ),
     );
   });
@@ -1683,8 +1707,8 @@ function aMessagingRoot({
       `import { ping } from './ping.endpoint.ts';\nimport { chargeCardV1, ${listed} } from './messages.ts';`,
     )
     .replace(
-      'groups: [health] }',
-      `groups: [health], events: [${listed}], commands: [chargeCardV1] }`,
+      'endpoints: [ping] }',
+      `endpoints: [ping], events: [${listed}], commands: [chargeCardV1] }`,
     );
   return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
 }

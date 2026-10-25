@@ -41,15 +41,15 @@ export const fieldRules: Readonly<Record<LayoutField, FieldRules>> = {
     ending: handlerEnding,
   },
   command: {
-    default: 'src/commands/{name}.v{version}.handler.ts',
+    default: 'src/commands/{group}/{name}.v{version}.handler.ts',
     owner: "a Command's Handler path",
-    variables: ['name', 'version'],
+    variables: ['group', 'name', 'version'],
     ending: handlerEnding,
   },
   subscription: {
-    default: 'src/subscriptions/{name}.handler.ts',
+    default: 'src/subscriptions/{group}/{name}.handler.ts',
     owner: "a Subscription's Handler path",
-    variables: ['name'],
+    variables: ['group', 'name'],
     ending: handlerEnding,
   },
   handlerMap: {
@@ -96,7 +96,6 @@ const pathRules: readonly PathRule[] = [
   locationRefusalOf,
   endingRefusalOf,
   variableRefusalOf,
-  firstFolderRefusalOf,
   segmentRefusalOf,
   folderRefusalOf,
   declarationRefusalOf,
@@ -132,20 +131,15 @@ function variableRefusalOf(field: LayoutField, path: string): string | undefined
   if (foreign === undefined) {
     return undefined;
   }
-  const takes =
-    taken.length === 0
-      ? 'takes no variable'
-      : `takes only ${taken.map((name) => `{${name}}`).join(' and ')}`;
+  const takes = taken.length === 0 ? 'takes no variable' : `takes only ${joinedOf(taken)}`;
   return `layout.${field} holds {${foreign}}, but ${owner} ${takes}: ${path}`;
 }
 
-/** No name a variable takes may fill into `src/contract/`, so its first folder is literal. */
-function firstFolderRefusalOf(field: LayoutField, path: string): string | undefined {
-  const [, first = '', ...rest] = path.split('/');
-  if (rest.length === 0 || first.replace(variablePattern, '') === first) {
-    return undefined;
-  }
-  return `layout.${field}'s first folder under ${layoutFolder}/ holds a variable: ${path}`;
+/** Variables as a sentence names them: `{name}`, `{name} and {version}`, `{group}, {name} and {version}`. */
+function joinedOf(taken: readonly Variable[]): string {
+  const written = taken.map((name) => `{${name}}`);
+  const last = written.at(-1) ?? '';
+  return written.length === 1 ? last : `${written.slice(0, -1).join(', ')} and ${last}`;
 }
 
 function segmentRefusalOf(field: LayoutField, path: string): string | undefined {

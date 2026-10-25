@@ -15,7 +15,11 @@ import type { AsyncApiObject } from './objects.ts';
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
   readonly asyncapi: '3.1.0';
-  readonly info: { readonly title: string; readonly version: string };
+  readonly info: {
+    readonly title: string;
+    readonly version: string;
+    readonly tags: readonly { readonly name: string }[];
+  };
   readonly defaultContentType: string;
   readonly channels: Readonly<Record<string, AsyncApiObject>>;
   readonly operations: Readonly<Record<string, AsyncApiObject>>;
@@ -44,7 +48,7 @@ export function asyncApiDocumentOf(
   }
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
-    info: { title: snapshot.name, version },
+    info: { title: snapshot.name, version, tags: tagsOf(published) },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
@@ -66,6 +70,12 @@ function publishedVersionsOf(
       const subject = subjectOf(snapshot.name, { kind: 'event', name, version });
       return { identity, name, address: prefixedSubjectOf(prefix, subject), event };
     });
+}
+
+/** The Groups of the written Message Versions, each once, in code point order. */
+function tagsOf(published: readonly PublishedVersion[]): readonly { readonly name: string }[] {
+  const groups = [...new Set(published.map(({ event }) => event.group))];
+  return groups.sort(byCodePoint).map((name) => ({ name }));
 }
 
 /** What each Message Version writes, by its identity, in the order given. */

@@ -1,5 +1,5 @@
 import { defineSubscription } from '@cf-loom/contract';
-import { ordersDeps } from '../dependencies/orders-service.dependencies.ts';
+import { ordersDeps } from '../../dependencies/orders-service.dependencies.ts';
 
 export const draftInvoiceOnCreated = defineSubscription({
   name: 'draftInvoiceOnCreated',

@@ -287,13 +287,17 @@ const service: Readonly<Record<string, string>> = {
     '  body: z.object({ cardToken: z.string() }),',
     '});',
     "export const auditPlaced = defineSubscription({ name: 'auditPlaced', description: 'Audit placed', event: orderPlacedV2 });",
-    'export const contract = defineContract({',
-    "  name: 'orders-service',",
-    '  definitions: [definitions],',
-    '  groups: [orders],',
+    'const messages = defineGroup({',
+    "  name: 'messages',",
+    "  description: 'Messages',",
     '  events: [orderPlacedV1, orderPlacedV2, stockReserved, orderPurged],',
     '  commands: [chargeCardV1],',
     '  subscriptions: [auditPlaced],',
+    '});',
+    'export const contract = defineContract({',
+    "  name: 'orders-service',",
+    '  definitions: [definitions],',
+    '  groups: [orders, messages],',
     '});',
   ]),
 };
@@ -335,7 +339,10 @@ function withEvents(
   const files = withDeclarations(declarations, '', body);
   const root = (files['src/contract/index.ts'] ?? '')
     .replace('defineRejection }', 'defineRejection, defineEvent }')
-    .replace('groups: [pings] }', `groups: [pings], events: [${events}] }`);
+    .replace(
+      "const pings = defineGroup({ name: 'pings', description: 'Pings', endpoints: [ping] });",
+      `const pings = defineGroup({ name: 'pings', description: 'Pings', endpoints: [ping], events: [${events}] });`,
+    );
   return { ...files, 'src/contract/index.ts': root };
 }
 
@@ -432,7 +439,7 @@ function aSubscriber(more: readonly string[]): string {
       include: ['src'],
     }),
     'src/contract/index.ts': lines([
-      "import { defineContract, defineDependencies, defineSubscription } from '@cf-loom/contract';",
+      "import { defineContract, defineDependencies, defineGroup, defineSubscription } from '@cf-loom/contract';",
       "import { contract as orders } from '@org/contract-orders-service';",
       '',
       'export const ordersDeps = defineDependencies(orders, {',
@@ -450,7 +457,7 @@ function aSubscriber(more: readonly string[]): string {
       '});',
       'export const contract = defineContract({',
       "  name: 'billing-service',",
-      '  subscriptions: [auditPlacedV1, auditPlacedV2],',
+      "  groups: [defineGroup({ name: 'audits', description: 'Audits', subscriptions: [auditPlacedV1, auditPlacedV2] })],",
       '  dependencies: [ordersDeps],',
       '});',
       ...more,
@@ -921,8 +928,16 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(typeCheck(consumer)).toEqual({ status: 0, stdout: '' });
     const snapshot = JSON.parse(read(consumer, 'contract.snapshot.json'));
     expect(snapshot.subscriptions).toEqual({
-      auditPlacedV1: { description: 'Audit placed v1', event: 'orders-service:OrderPlaced@1' },
-      auditPlacedV2: { description: 'Audit placed v2', event: 'orders-service:OrderPlaced@2' },
+      auditPlacedV1: {
+        group: 'audits',
+        description: 'Audit placed v1',
+        event: 'orders-service:OrderPlaced@1',
+      },
+      auditPlacedV2: {
+        group: 'audits',
+        description: 'Audit placed v2',
+        event: 'orders-service:OrderPlaced@2',
+      },
     });
     expect(snapshot.dependencies['orders-service'].events).toEqual([
       'OrderPlaced@1',

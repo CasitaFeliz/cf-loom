@@ -6,13 +6,13 @@ import { type HandlerPath, handlerPathsOf } from '../service-code/index.ts';
 /** A Service with the Handler path of every Element it declares one for. */
 export type PlacedService = BuiltService & { readonly handlerPaths: readonly HandlerPath[] };
 
-/** The Service with its Handler paths, or the line saying which two Elements share one. */
+/** The Service with its Handler paths, or the line saying why one cannot be placed. */
 export function placedOf(service: BuiltService): PlacedService | Tooling {
   const placed = handlerPathsOf(service.snapshot, service.project.layout);
   switch (placed.kind) {
     case 'placed':
       return { ...service, handlerPaths: placed.paths };
-    case 'colliding':
+    case 'unplaced':
       return { kind: 'tooling', message: placed.line };
   }
 }
