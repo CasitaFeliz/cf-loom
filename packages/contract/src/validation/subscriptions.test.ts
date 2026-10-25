@@ -210,6 +210,36 @@ describe('validateContract: Subscriptions', () => {
     );
   });
 
+  test('a Subscription to a Provider’s Private Event fails even when the Provider bears the Service’s own name', () => {
+    const privateEvent = defineEvent({
+      name: 'PaymentRefunded',
+      version: 1,
+      visibility: 'private',
+      description: 'A payment was refunded',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const provider = {
+      ...payments,
+      name: 'orders-service',
+      events: { ...payments.events, paymentRefundedV1: privateEvent },
+    } as unknown as typeof payments;
+    const onRefunded = defineSubscription({
+      name: 'onRefunded',
+      description: 'Receives it',
+      event: privateEvent,
+    });
+
+    const result = validateSubscriptions([onRefunded], [orderCreatedV1], provider);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onRefunded', 'event'],
+        'subscription-event',
+        "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
+      ),
+    );
+  });
+
   test('a Subscription whose event is not an Event fails', () => {
     const notAnEvent = aSubscription('onSomething', { name: 'OrderCreated', version: 1 });
 

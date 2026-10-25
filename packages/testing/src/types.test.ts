@@ -126,6 +126,15 @@ describe('fakeProvider: types', () => {
     >();
   });
 
+  test('a Dependency written without a list gives on and calls no name', () => {
+    const payments = fakeProvider(defineDependency({ provider: paymentsDependency.provider }));
+
+    // @ts-expect-error getPayment is exported but not listed
+    const unlisted = () => payments.on('getPayment');
+
+    expect(unlisted).toBeTypeOf('function');
+  });
+
   test('reject takes the Endpoint’s codes, the Provider’s Standard ones included, each with its body', () => {
     const payments = fakeProvider(paymentsDependency);
 

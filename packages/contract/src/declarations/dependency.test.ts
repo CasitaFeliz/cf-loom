@@ -77,6 +77,7 @@ describe('defineDependency', () => {
     const paymentsDependency = defineDependency({ provider: payments });
 
     expect(paymentsDependency).not.toHaveProperty('endpoints');
+    expectTypeOf<keyof typeof paymentsDependency>().toEqualTypeOf<'kind' | 'provider'>();
   });
 
   test('a Contract Package exports only Public and Internal Elements', () => {

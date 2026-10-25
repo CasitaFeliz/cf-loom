@@ -126,6 +126,15 @@ describe('the client’s types', () => {
     expect(Object.keys(emptyClient)).toEqual([]);
   });
 
+  test('a Dependency written without a list gives a client with no methods', () => {
+    const noList = defineDependency({ provider: orders });
+
+    const noMethods = client(noList, { baseUrl });
+
+    expectTypeOf(noMethods).toEqualTypeOf<Readonly<Record<never, never>>>();
+    expect(Object.keys(noMethods)).toEqual([]);
+  });
+
   test('a required header not given to client() stays required on each call', () => {
     const orders = client(ordersDependency, { baseUrl, headers: { 'x-api-key': 'k' } });
     type Input = Parameters<typeof orders.getOrder>[0];

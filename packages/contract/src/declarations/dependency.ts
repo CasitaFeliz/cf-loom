@@ -48,14 +48,19 @@ export type Dependency<
   readonly endpoints?: Endpoints;
 };
 
+/** The Contract Package a declaration holds as its `provider`, which bounds the Endpoints it lists. */
+type ProviderOf<Declaration> = Declaration extends {
+  readonly provider: infer Provider extends ContractPackage;
+}
+  ? Provider
+  : ContractPackage;
+
 /** Declares what a Contract uses of one Provider, so its client reaches no more. */
 export function defineDependency<
-  const Provider extends ContractPackage,
-  const Declaration extends Omit<DependencyDeclaration<Provider>, 'provider'>,
+  const Declaration extends DependencyDeclaration<ProviderOf<Declaration>>,
 >(
-  declaration: Declaration & { readonly provider: Provider } & NoInfer<
-      DeclaredFieldsRule<Declaration, DependencyDeclaration<Provider>>
-    >,
-): Readonly<Declaration & { readonly provider: Provider }> & { readonly kind: 'dependency' } {
+  declaration: Declaration &
+    NoInfer<DeclaredFieldsRule<Declaration, DependencyDeclaration<ProviderOf<Declaration>>>>,
+): Readonly<Declaration> & { readonly kind: 'dependency' } {
   return freezeDeclaration('dependency', declaration);
 }

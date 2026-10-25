@@ -152,6 +152,40 @@ describe('validateContract: a Service’s Dependencies', () => {
     );
   });
 
+  test('a Dependency whose Provider bears the Service’s own name gives a Subscription to an own Event nothing, so it is unused', () => {
+    const orderCreatedV1 = defineEvent({
+      name: 'OrderCreated',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was placed',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const auditOrders = defineSubscription({
+      name: 'auditOrders',
+      description: 'Receives it',
+      event: orderCreatedV1,
+    });
+    const orders = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      events: [orderCreatedV1],
+      subscriptions: [auditOrders],
+    });
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: [orders],
+      dependencies: [dependencyAsWritten({ provider: { ...payments, name: 'orders-service' } })],
+    });
+
+    expect(validateInPackage(contract, noOrigin)).toEqual(
+      failed(
+        ['dependencies', 'orders-service'],
+        'unused-dependency',
+        "A Dependency is used: orders-service gives no Endpoint and no Subscription's Event",
+      ),
+    );
+  });
+
   test('a Dependency on an Endpoint the Provider does not export fails', () => {
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints: [getReceipt] });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });

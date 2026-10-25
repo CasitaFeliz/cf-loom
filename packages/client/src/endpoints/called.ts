@@ -9,12 +9,19 @@ import {
 /** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
 export type AnyDependency = Dependency<ContractPackage, readonly Endpoint[]>;
 
+/** The Endpoints a Dependency lists: none when it was written without the list. */
+export type ListedEndpoints<D extends AnyDependency> = D extends {
+  readonly endpoints?: infer Listed;
+}
+  ? Extract<Listed, readonly Endpoint[]>
+  : never;
+
 /** The name of each Endpoint a Dependency lists: a method of its client and a script of its fake. */
-export type ListedName<D extends AnyDependency> = NonNullable<D['endpoints']>[number]['name'];
+export type ListedName<D extends AnyDependency> = ListedEndpoints<D>[number]['name'];
 
 /** The Endpoint a Dependency lists under a name. */
 export type ListedEndpoint<D extends AnyDependency, Name> = Extract<
-  NonNullable<D['endpoints']>[number],
+  ListedEndpoints<D>[number],
   { readonly name: Name }
 >;
 

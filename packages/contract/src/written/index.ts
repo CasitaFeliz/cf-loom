@@ -47,7 +47,7 @@ export type {
   LocatedSubscription,
   Root,
 } from './located.ts';
-export { eventServiceOf } from './messaging.ts';
+export { eventServiceOf, eventSourceOf } from './messaging.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,

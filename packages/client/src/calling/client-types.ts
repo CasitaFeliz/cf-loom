@@ -1,9 +1,14 @@
 import type { Endpoint, InputOf } from '@cf-loom/contract';
 import type { ReceivedOutcome } from '../decoding/index.ts';
-import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
+import type {
+  AnyDependency,
+  ListedEndpoint,
+  ListedEndpoints,
+  ListedName,
+} from '../endpoints/index.ts';
 import type { InferFault } from '../inference/index.ts';
 
-type EndpointOf<D extends AnyDependency> = NonNullable<D['endpoints']>[number];
+type EndpointOf<D extends AnyDependency> = ListedEndpoints<D>[number];
 
 type HeadersOf<Target extends Endpoint> =
   InputOf<Target> extends { readonly headers: infer Headers }

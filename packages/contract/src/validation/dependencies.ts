@@ -2,7 +2,7 @@ import { type ContractPackage, type Endpoint, isEndpoint, reaches } from '../dec
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
-  eventServiceOf,
+  eventSourceOf,
   isEmptyField,
   isPlainObject,
   type LocatedDependency,
@@ -110,7 +110,7 @@ function unusedFailures(
   { root, subscriptions }: Declarations,
 ): readonly DeclarationFailure[] {
   const receivesEvents = subscriptions.some(
-    ({ subscription }) => eventServiceOf(root, subscription.event) === provider.name,
+    ({ subscription }) => eventSourceOf(root, subscription.event) === dependency,
   );
   if (!isEmptyField(dependency.endpoints) || receivesEvents) {
     return [];
