@@ -2,8 +2,8 @@
 
 How an issue becomes code on `main`: plan, implement, review, fix, merge. Code follows
 [CODING_STANDARDS.md](CODING_STANDARDS.md); design decisions are the user's ([CLAUDE.md](CLAUDE.md#working-here)).
-Each role is an agent defined in [`.claude/agents/`](.claude/agents), which holds its model; the main session
-spawns it by name and passes only the issue, the PR, the worktree and the plan.
+Each role is an agent defined in [`.claude/agents/`](.claude/agents); a definition names its model, or leaves it out
+to run on the session's. The main session spawns an agent by name and passes what its definition lists.
 
 ## The unit of work
 
@@ -47,16 +47,17 @@ A `cf-root-cause` agent finds the cause before the user sees options. It runs wh
 
 - a second fix lands on the same area or the same kind of defect in one issue;
 - the user rejects every option offered;
-- a plan or a fix adds a config option, a rule whose only job is keeping two sources in step, a safeguard, a special
-  case, or a second name for a concept that already exists;
-- a finding is the consequence of an earlier decision, or a reviewer marks it Escalate.
+- a plan or a fix adds to cf-loom a config option, a rule whose only job is keeping two sources in step, a
+  safeguard, a special case, or a second name for a concept that already exists;
+- a finding is the consequence of an earlier decision;
+- a reviewer marks a finding a class or Escalate, or a fixer stops on a possible class.
 
 Its prompt states the symptom in neutral words and the history of the attempts, never a proposed fix. The agent
 reproduces each symptom, looks for every instance of the same kind, and names the design-level cause before it
 proposes anything: a missing concept, a concept in two places, reimplementing what a dependency owns, or a boundary in
 the wrong place. It says whether a documented decision causes it, and offers two or three fixes at the level of the
-cause, each with the symptoms it removes and its cost. The main session then asks or decides as [Decisions](#decisions)
-says.
+cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
+glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
 
 ## 1. Plan
 
@@ -128,7 +129,7 @@ this way (a gap in the plan, a missing concept, a misread document); and **Escal
 special case or the area was fixed in an earlier round.
 
 The main session merges the reports, removes duplicates, checks each finding against the code and sorts them in
-C27's order. A class or an Escalate goes to the [Root-cause check](#root-cause-check) before anything is fixed. Once
+C27's order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. Once
 the round's fixes are pushed, it posts one comment on the PR for the round, listing every finding by lens as
 **fixed**, **asked** (with the user's answer) or **dismissed** (with the reason).
 
@@ -151,7 +152,8 @@ to fix and merge, rework the plan, or split the issue.
 A PR is done when all of these hold; the main session checks them and lists them in the last round's comment:
 
 - [ ] every test in the plan exists and passes;
-- [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head;
+- [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head, and actionlint too when the PR
+      changes `.github/workflows/`;
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
 - [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
@@ -197,8 +199,9 @@ round, at most two rounds. The reviewer reads once the change passes locally.
   to a registry you started yourself.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
-`scripts/guard-agent-bash.ts`, a hook in [`.claude/settings.json`](.claude/settings.json), refuses the commands that
-break the last three rules most often.
+`scripts/refuse-agent-bash.ts`, a hook in [`.claude/settings.json`](.claude/settings.json), refuses the commonest
+breaks of these rules: reading `~/.npmrc`, using port 4873, publishing to a registry that is not on 127.0.0.1, and
+deleting a glob under `/tmp`.
 
 ## Changesets
 

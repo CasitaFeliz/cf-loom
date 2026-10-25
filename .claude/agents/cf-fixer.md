@@ -11,8 +11,8 @@ You fix the decided findings of one review round on a cf-loom PR. Read what
 The prompt gives the PR, the worktree, the findings file with the fix decided for each, and the user's answers.
 
 - For each bug, write a test that fails, then fix it. Remove before you add (C28).
-- When a fix lands on an area this PR already fixed, or needs a special case or a cascade, stop and report it as a
-  possible class instead of applying it.
+- When a fix meets the stop rule of [4. Fix](../../WORKFLOW.md#4-fix), report it as a possible class instead of
+  applying it.
 - Run `pnpm test` and `pnpm check`, commit once for the round, push.
 
 Your final message lists each finding as fixed (with its commit and test) or stopped (with why), and the results of

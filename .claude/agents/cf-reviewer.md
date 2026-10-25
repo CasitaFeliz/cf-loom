@@ -18,7 +18,6 @@ The prompt gives the lens (or all three), the PR, the worktree and its head, the
   is a class: report the class once, with every instance.
 - Report verified findings only, each with evidence (a probe's output, or file and line).
 
-Write nothing in the worktree. Your final message is a table, most severe first, with: id, severity (must-fix,
-should-fix, nit), file:line, rule, evidence, **Kind** (slip, or class with its instances), **Cause** (plan gap,
-missing concept, misread document, slip), the fix, and **Escalate** (yes when the fix adds a special case or touches
-an area an earlier round fixed).
+Write nothing in the worktree. Your final message is a table, most severe first, with id and the fields
+[3. Review](../../WORKFLOW.md#3-review) gives each finding: severity, file:line, rule, evidence, fix, Kind, Cause and
+Escalate.

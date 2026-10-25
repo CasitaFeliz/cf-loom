@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/guard-agent-bash.ts",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/scripts/refuse-agent-bash.ts",
             "timeout": 10,
             "type": "command"
           }
