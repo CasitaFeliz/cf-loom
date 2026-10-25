@@ -136,11 +136,8 @@ async function stagedFilesOf(
     case 'service':
     case 'application': {
       const packaging = { scope: project.scope, version: published.version, peers };
-      const generated = contractPackageFilesOf({ snapshot: published, text }, packaging);
-      if (generated.kind === 'unnamed') {
-        return { kind: 'failed', message: generated.line };
-      }
-      return { kind: 'files', files: generated.files, copied: [], build: 'with-tsc' };
+      const files = contractPackageFilesOf({ snapshot: published, text }, packaging);
+      return { kind: 'files', files, copied: [], build: 'with-tsc' };
     }
     case 'definitions':
       return await definitionsFilesOf(npm, project, { published, text, peers });
