@@ -14,8 +14,8 @@ export type BrokerService = {
 
 /** One messaging's connection to a broker. */
 export type BrokerConnection = {
-  /** Sends one Message and resolves once the broker has taken it. */
-  readonly publish: (message: OutgoingMessage) => Promise<void>;
+  /** Sends one Message and resolves once the Broker has taken it, saying whether it dropped it as a duplicate. */
+  readonly publish: (message: OutgoingMessage) => Promise<BrokerAck>;
   /**
    * Hands the consumers to the broker; resolves once consuming has started and rejects having
    * started nothing. Once `closing` aborts, or if it already has, it hands nothing more to `receive`;
@@ -25,6 +25,9 @@ export type BrokerConnection = {
   /** Called once every `receive` has settled; ends what `consume` started and finishes applying any Settlement. */
   readonly close: () => Promise<void>;
 };
+
+/** What the Broker answers a Message it took: whether it already held one with that `messageId` and dropped this one. */
+export type BrokerAck = { readonly duplicate: boolean };
 
 /** A Message as it leaves: its subject, ids, transport headers and UTF-8 JSON body, unprefixed. */
 export type OutgoingMessage = {

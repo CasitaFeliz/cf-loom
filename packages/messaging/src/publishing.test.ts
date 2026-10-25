@@ -10,9 +10,10 @@ import { z } from 'zod';
 import {
   type Broker,
   InvalidMessageError,
+  MessageNotSentError,
+  MessagingClosedError,
   messaging,
   type OutgoingMessage,
-  PublishError,
 } from './index.ts';
 import { memory } from './memory/index.ts';
 
@@ -123,6 +124,7 @@ function aBroker(failingAt?: number) {
           throw error;
         }
         published.push(message);
+        return { duplicate: false };
       },
       consume: async () => undefined,
       close: async () => undefined,
@@ -133,9 +135,21 @@ function aBroker(failingAt?: number) {
 
 async function opened(failingAt?: number) {
   const recording = aBroker(failingAt);
-  const { publisher, sender } = await messaging(contract, recording.broker);
-  return { ...recording, publisher, sender };
+  const { publisher, sender, close } = await messaging(contract, recording.broker);
+  return { ...recording, publisher, sender, close };
 }
+
+/** A messaging over memory(), which reports a broker message id it already took as a duplicate. */
+async function overMemory() {
+  const broker = memory();
+  const { publisher, sender } = await messaging(contract, broker);
+  return { broker, publisher, sender };
+}
+
+const fact = { factId: 'o-1' };
+
+const factIdRule =
+  'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate';
 
 function decoded(message: OutgoingMessage | undefined): unknown {
   return JSON.parse(new TextDecoder().decode(message?.body));
@@ -152,7 +166,7 @@ describe('publisher.publish', () => {
   test('publish sends one Message per Active and Deprecated version, in version order, on <service>.event.<Name>.v<n> whatever Group lists each version', async () => {
     const { publisher, published } = await opened();
 
-    await publisher.publish('OrderCreated', { v2, v3 });
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
 
     expect(published.map((message) => message.subject)).toEqual([
       'orders-service.event.OrderCreated.v2',
@@ -163,7 +177,7 @@ describe('publisher.publish', () => {
   test('a Retired version is never sent, even given a body', async () => {
     const { publisher, published } = await opened();
 
-    await publisher.publish('OrderCreated', { v1: { orderId: ORDER_ID }, v2, v3 } as never);
+    await publisher.publish('OrderCreated', { v1: { orderId: ORDER_ID }, v2, v3 } as never, fact);
 
     expect(published.map((message) => message.subject)).not.toContain(
       'orders-service.event.OrderCreated.v1',
@@ -174,24 +188,12 @@ describe('publisher.publish', () => {
     const { publisher, published } = await opened();
     const withExtra = { ...v2, extra: 'dropped' };
 
-    await publisher.publish('OrderCreated', { v2: withExtra, v3 });
+    await publisher.publish('OrderCreated', { v2: withExtra, v3 }, fact);
 
     expect(published.map(decoded)).toEqual([v2, v3]);
   });
 
-  test('the Messages of one call share a random Fact id, and two calls differ', async () => {
-    const { publisher, published } = await opened();
-
-    await publisher.publish('OrderCreated', { v2, v3 });
-    await publisher.publish('OrderCreated', { v2, v3 });
-
-    const [first, second, third] = published.map((message) => message.factId);
-    expect(first).toEqual(expect.any(String));
-    expect(second).toBe(first);
-    expect(third).not.toBe(first);
-  });
-
-  test('a Fact id given is the Fact id sent', async () => {
+  test('the Fact id given is the Fact id every Message of the call is sent with', async () => {
     const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
@@ -210,13 +212,46 @@ describe('publisher.publish', () => {
     ]);
   });
 
+  test('publish resolves to its Fact id and no duplicates the first time', async () => {
+    const { publisher } = await overMemory();
+
+    const result = await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
+
+    expect(result).toEqual({ factId: 'o-1:created', duplicates: [] });
+  });
+
+  test('publishing again with the same Fact id resolves to every version as a duplicate, and records none twice', async () => {
+    const { broker, publisher } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
+
+    const again = await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
+
+    expect(again).toEqual({
+      factId: 'o-1:created',
+      duplicates: ['OrderCreated@2', 'OrderCreated@3'],
+    });
+    expect(broker.messages).toHaveLength(2);
+  });
+
   test('transport headers reach the broker as given', async () => {
     const { publisher, published } = await opened();
     const headers = { traceparent: '00-abc-def-01' };
 
-    await publisher.publish('OrderCreated', { v2, v3 }, { headers });
+    await publisher.publish('OrderCreated', { v2, v3 }, { ...fact, headers });
 
     expect(published.map((message) => message.headers)).toEqual([headers, headers]);
+  });
+
+  test('an undefined header is left out of the Message', async () => {
+    const { publisher, published } = await opened();
+    const headers = { traceparent: '00-abc-def-01', tracestate: undefined };
+
+    await publisher.publish('OrderCreated', { v2, v3 }, { ...fact, headers });
+
+    expect(published.map((message) => message.headers)).toEqual([
+      { traceparent: '00-abc-def-01' },
+      { traceparent: '00-abc-def-01' },
+    ]);
   });
 
   test('a Fact id and transport headers that travel unchanged reach the broker exactly as given', async () => {
@@ -247,16 +282,24 @@ describe('publisher.publish', () => {
     'Nats-TTL',
     'nats-expected-stream',
     'Cf-Loom-Tenant',
-  ])('a header named %s throws and nothing is sent', async (name) => {
-    const { publisher, published } = await opened();
+  ])(
+    'a header named %s rejects with InvalidMessageError naming headers.<name>, and nothing is sent',
+    async (name) => {
+      const { publisher, published } = await opened();
+      const headers = { [name]: 'x' };
 
-    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers: { [name]: 'x' } });
+      const error = await rejectionOf(
+        publisher.publish('OrderCreated', { v2, v3 }, { ...fact, headers }),
+      );
 
-    await expect(publishing).rejects.toThrow(
-      `The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
-    );
-    expect(published).toEqual([]);
-  });
+      expect(error).toBeInstanceOf(InvalidMessageError);
+      expect(error).toMatchObject({
+        message: `headers.${name}: The transport header ${name} takes a name cf-loom or NATS reserves: any starting with Cf-Loom- or Nats-`,
+        invalid: [{ kind: 'header', name, fit: 'reserved-name' }],
+      });
+      expect(published).toEqual([]);
+    },
+  );
 
   test.each([
     ['trace id', '"trace id"'],
@@ -264,100 +307,99 @@ describe('publisher.publish', () => {
     ['café', '"café"'],
     ['', '""'],
   ])(
-    'a header whose name is %j cannot travel over NATS: it throws and nothing is sent',
+    'a header whose name is %j cannot travel over NATS: it rejects with InvalidMessageError naming headers.<name>, and nothing is sent',
     async (name, quoted) => {
       const { publisher, published } = await opened();
+      const headers = { [name]: 'x' };
 
-      const publishing = publisher.publish(
-        'OrderCreated',
-        { v2, v3 },
-        { headers: { [name]: 'x' } },
+      const error = await rejectionOf(
+        publisher.publish('OrderCreated', { v2, v3 }, { ...fact, headers }),
       );
 
-      await expect(publishing).rejects.toThrow(
-        `The transport header name ${quoted} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`,
-      );
+      expect(error).toBeInstanceOf(InvalidMessageError);
+      expect(error).toMatchObject({
+        message: `headers.${quoted}: The transport header name ${quoted} cannot travel over NATS: it is empty or holds a colon, a space, a control or a non-ASCII character`,
+        invalid: [{ kind: 'header', name, fit: 'uncarried-name' }],
+      });
       expect(published).toEqual([]);
     },
   );
 
   test.each([' x', 'x\n', 'x ', 'x\uD800'])(
-    'a header whose value is %j would not arrive as given over NATS: it throws and nothing is sent',
+    'a header whose value is %j would not arrive as given over NATS: it rejects with InvalidMessageError naming headers.<name>, and nothing is sent',
     async (value) => {
       const { publisher, published } = await opened();
+      const headers = { 'x-note': value };
 
-      const publishing = publisher.publish(
-        'OrderCreated',
-        { v2, v3 },
-        { headers: { 'x-note': value } },
+      const error = await rejectionOf(
+        publisher.publish('OrderCreated', { v2, v3 }, { ...fact, headers }),
       );
 
-      await expect(publishing).rejects.toThrow(
-        'The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
-      );
+      expect(error).toBeInstanceOf(InvalidMessageError);
+      expect(error).toMatchObject({
+        message:
+          'headers.x-note: The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
+        invalid: [{ kind: 'header', name: 'x-note', fit: 'uncarried-value' }],
+      });
       expect(published).toEqual([]);
     },
   );
 
-  test.each([' o-1', 'o-1 ', 'o-1\n', 'o-1\r', 'o-1\uD800'])(
-    'a Fact id of %j would not arrive as given over NATS: it throws and nothing is sent',
+  test.each(['', ' o-1', 'o-1 ', 'o-1\n', 'o-1\r', 'o-1\uD800'])(
+    'a Fact id of %j rejects with InvalidMessageError at factId, and nothing is sent',
     async (factId) => {
       const { publisher, published } = await opened();
 
-      const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId });
+      const error = await rejectionOf(publisher.publish('OrderCreated', { v2, v3 }, { factId }));
 
-      await expect(publishing).rejects.toThrow(
-        'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
-      );
+      expect(error).toBeInstanceOf(InvalidMessageError);
+      expect(error).toMatchObject({
+        message: `factId: ${factIdRule}`,
+        invalid: [{ kind: 'id', at: 'factId' }],
+      });
       expect(published).toEqual([]);
     },
   );
 
-  test('a bad Fact id and bad headers together throw for the Fact id first', async () => {
+  test('a bad Fact id and bad headers are all listed in one InvalidMessageError, the Fact id first, then the headers as the record lists them', async () => {
     const { publisher, published } = await opened();
     const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
 
-    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1 ', headers });
-
-    await expect(publishing).rejects.toThrow(/^A Fact id is a non-empty string /);
-    expect(published).toEqual([]);
-  });
-
-  test('two bad headers throw for the first one the record lists', async () => {
-    const { publisher, published } = await opened();
-    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
-
-    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { headers });
-
-    await expect(publishing).rejects.toThrow(/^The transport header x-a has a value /);
-    expect(published).toEqual([]);
-  });
-
-  test('an empty Fact id throws and nothing is sent', async () => {
-    const { publisher, published } = await opened();
-
-    const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: '' });
-
-    await expect(publishing).rejects.toThrow('A Fact id is a non-empty string');
-    expect(published).toEqual([]);
-  });
-
-  test('a Fact id whose broker headers would take more bytes than JetStream stores throws naming the Message Version and its bytes, and nothing is sent', async () => {
-    const { publisher, published } = await opened();
-
-    const publishing = publisher.publish(
-      'OrderCreated',
-      { v2, v3 },
-      { factId: 'o'.repeat(33_000) },
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1 ', headers }),
     );
 
-    await expect(publishing).rejects.toThrow(
-      'The broker headers of OrderCreated@2 would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+    expect(error).toMatchObject({
+      invalid: [
+        { kind: 'id', at: 'factId' },
+        { kind: 'header', name: 'x-a', fit: 'uncarried-value' },
+        { kind: 'header', name: 'Nats-TTL', fit: 'reserved-name' },
+      ],
+    });
+    expect(published).toEqual([]);
+  });
+
+  test('broker headers over 65,535 bytes reject with InvalidMessageError naming the version and its bytes, and nothing is sent', async () => {
+    const { publisher, published } = await opened();
+
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o'.repeat(33_000) }),
+    );
+
+    expect(error).toBeInstanceOf(InvalidMessageError);
+    expect(error).toMatchObject({
+      invalid: [
+        { kind: 'too-large', identity: 'OrderCreated@2', bytes: 66068 },
+        { kind: 'too-large', identity: 'OrderCreated@3', bytes: 66068 },
+      ],
+    });
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'OrderCreated@2: The broker headers would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(published).toEqual([]);
   });
 
-  test('transport headers that together take more bytes than JetStream stores throw the same way, though each one alone travels', async () => {
+  test('transport headers that together take more bytes than JetStream stores are refused the same way, though each one alone travels', async () => {
     const { publisher, published } = await opened();
     const headers = {
       'x-a': 'a'.repeat(30_000),
@@ -368,7 +410,7 @@ describe('publisher.publish', () => {
     const publishing = publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1', headers });
 
     await expect(publishing).rejects.toThrow(
-      /^The broker headers of OrderCreated@2 would take 90095 bytes, over the 65535 JetStream stores/,
+      /^OrderCreated@2: The broker headers would take 90095 bytes, over the 65535 JetStream stores/,
     );
     expect(published).toEqual([]);
   });
@@ -390,53 +432,65 @@ describe('publisher.publish', () => {
     const factId = 'g'.repeat(32_737);
     const bodies = { v9: { treeId: 't-1' }, v10: { treeId: 't-1' } };
 
-    const publishing = publisher.publish('Grown', bodies, { factId });
+    const error = await rejectionOf(publisher.publish('Grown', bodies, { factId }));
 
-    await expect(publishing).rejects.toThrow(
-      /^The broker headers of Grown@10 would take 65536 bytes, over the 65535 JetStream stores/,
-    );
+    expect(error).toMatchObject({
+      invalid: [{ kind: 'too-large', identity: 'Grown@10', bytes: 65536 }],
+    });
     expect(published).toEqual([]);
   });
 
-  test('broker headers too large are refused before a body that breaks its schema', async () => {
+  test('a refused header and a body that breaks its schema are both listed in one InvalidMessageError', async () => {
     const { publisher, published } = await opened();
     const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
+    const headers = { 'Nats-TTL': '1' };
 
-    const publishing = publisher.publish(
-      'OrderCreated',
-      { v2, v3: broken },
-      { factId: 'o'.repeat(33_000) },
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', { v2, v3: broken }, { ...fact, headers }),
     );
 
-    await expect(publishing).rejects.toThrow(/^The broker headers of OrderCreated@2 would take /);
+    expect(error).toMatchObject({
+      invalid: [
+        { kind: 'header', name: 'Nats-TTL', fit: 'reserved-name' },
+        { kind: 'body', identity: 'OrderCreated@3' },
+      ],
+    });
+    expect((error as Error).message.split('\n')).toEqual([
+      expect.stringMatching(/^headers\.Nats-TTL: The transport header Nats-TTL takes a name /),
+      expect.stringMatching(/^OrderCreated@3: body\.total\.amount too_small: /),
+    ]);
     expect(published).toEqual([]);
   });
 
-  test('broker headers too large are refused after a transport header that cannot travel', async () => {
-    const { publisher, published } = await opened();
-    const headers = { 'Nats-TTL': '1' };
+  test('broker headers too large are listed before a body that breaks its schema', async () => {
+    const { publisher } = await opened();
+    const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
 
-    const publishing = publisher.publish(
-      'OrderCreated',
-      { v2, v3 },
-      { factId: 'o'.repeat(33_000), headers },
+    const error = await rejectionOf(
+      publisher.publish('OrderCreated', { v2, v3: broken }, { factId: 'o'.repeat(33_000) }),
     );
 
-    await expect(publishing).rejects.toThrow(/^The transport header Nats-TTL takes a name /);
-    expect(published).toEqual([]);
+    expect(error).toMatchObject({
+      invalid: [
+        { kind: 'too-large', identity: 'OrderCreated@2' },
+        { kind: 'too-large', identity: 'OrderCreated@3' },
+        { kind: 'body', identity: 'OrderCreated@3' },
+      ],
+    });
   });
 
   test('a body that breaks its version’s schema throws InvalidMessageError naming the version and the path, and no version is sent', async () => {
     const { publisher, published } = await opened();
     const broken = { ...v3, total: { amount: -1, currency: 'EUR' } };
 
-    const error = await rejectionOf(publisher.publish('OrderCreated', { v2, v3: broken }));
+    const error = await rejectionOf(publisher.publish('OrderCreated', { v2, v3: broken }, fact));
 
     expect(error).toBeInstanceOf(InvalidMessageError);
     expect(error).toMatchObject({
       message: expect.stringMatching(/^OrderCreated@3: body\.total\.amount too_small: /),
       invalid: [
         {
+          kind: 'body',
           identity: 'OrderCreated@3',
           issues: [{ part: 'body', path: ['total', 'amount'], code: 'too_small' }],
         },
@@ -451,7 +505,7 @@ describe('publisher.publish', () => {
     const brokenV3 = { ...v3, orderId: 'nope' };
 
     const error = await rejectionOf(
-      publisher.publish('OrderCreated', { v2: brokenV2, v3: brokenV3 }),
+      publisher.publish('OrderCreated', { v2: brokenV2, v3: brokenV3 }, fact),
     );
 
     expect(error).toMatchObject({
@@ -466,15 +520,20 @@ describe('publisher.publish', () => {
     ]);
   });
 
-  test('a version the broker fails throws PublishError naming the Fact id and the versions already sent, with the broker’s error as cause', async () => {
+  test('a Broker that fails on the second version rejects publish with MessageNotSentError naming the Fact id and the version sent, the Broker’s error as cause', async () => {
     const { publisher, error } = await opened(2);
 
     const thrown = await rejectionOf(
       publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' }),
     );
 
-    expect(thrown).toBeInstanceOf(PublishError);
-    expect(thrown).toMatchObject({ factId: 'o-1:created', sent: ['OrderCreated@2'], cause: error });
+    expect(thrown).toBeInstanceOf(MessageNotSentError);
+    expect(thrown).toMatchObject({
+      message: 'OrderCreated with Fact id o-1:created was not sent whole; sent: OrderCreated@2',
+      factId: 'o-1:created',
+      sent: ['OrderCreated@2'],
+      cause: error,
+    });
   });
 
   test('retrying with the same Fact id sends the same broker message ids', async () => {
@@ -493,7 +552,7 @@ describe('publisher.publish', () => {
   test('a name the root does not publish throws at runtime', async () => {
     const { publisher } = await opened();
 
-    const publishing = publisher.publish('OrderShipped' as never, {} as never);
+    const publishing = publisher.publish('OrderShipped' as never, {} as never, fact);
 
     await expect(publishing).rejects.toThrow('OrderShipped is no Event the Contract publishes');
   });
@@ -501,13 +560,28 @@ describe('publisher.publish', () => {
   test('bodies missing a live version throw InvalidMessageError at runtime', async () => {
     const { publisher, published } = await opened();
 
-    const error = await rejectionOf(publisher.publish('OrderCreated', { v3 } as never));
+    const error = await rejectionOf(publisher.publish('OrderCreated', { v3 } as never, fact));
 
     expect(error).toMatchObject({
       invalid: [
-        { identity: 'OrderCreated@2', issues: [{ part: 'body', path: [], code: 'required' }] },
+        {
+          kind: 'body',
+          identity: 'OrderCreated@2',
+          issues: [{ part: 'body', path: [], code: 'required' }],
+        },
       ],
     });
+    expect(published).toEqual([]);
+  });
+
+  test('publish after close rejects with MessagingClosedError', async () => {
+    const { publisher, published, close } = await opened();
+    await close();
+
+    const error = await rejectionOf(publisher.publish('OrderCreated', { v2, v3 }, fact));
+
+    expect(error).toBeInstanceOf(MessagingClosedError);
+    expect(error).toMatchObject({ message: 'messaging is closed' });
     expect(published).toEqual([]);
   });
 });
@@ -516,7 +590,7 @@ describe('sender.send', () => {
   test('send sends the Command’s one Active version on <service>.command.<Name>.v<n>, never a Deprecated one, whatever Group lists it', async () => {
     const { sender, published } = await opened();
 
-    await sender.send('ChargeCard', charge);
+    await sender.send('ChargeCard', charge, fact);
 
     expect(published.map((message) => message.subject)).toEqual([
       'orders-service.command.ChargeCard.v2',
@@ -534,21 +608,42 @@ describe('sender.send', () => {
     expect(decoded(published[0])).toEqual(charge);
   });
 
-  test('send refuses a Fact id or a transport header publish refuses, and sends nothing', async () => {
+  test('send resolves duplicate false, then true for the same Fact id', async () => {
+    const { sender } = await overMemory();
+
+    const first = await sender.send('ChargeCard', charge, { factId: 'o-1:charge' });
+    const second = await sender.send('ChargeCard', charge, { factId: 'o-1:charge' });
+
+    expect([first, second]).toEqual([
+      { factId: 'o-1:charge', duplicate: false },
+      { factId: 'o-1:charge', duplicate: true },
+    ]);
+  });
+
+  test('send refuses a Fact id or a transport header publish refuses with InvalidMessageError, and sends nothing', async () => {
     const { sender, published } = await opened();
 
     const refusals = [
       await rejectionOf(sender.send('ChargeCard', charge, { factId: 'o-1 ' })),
-      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'Nats-TTL': '1h' } })),
-      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'trace id': 'x' } })),
-      await rejectionOf(sender.send('ChargeCard', charge, { headers: { 'x-note': 'x\n' } })),
+      await rejectionOf(
+        sender.send('ChargeCard', charge, { ...fact, headers: { 'Nats-TTL': '1h' } }),
+      ),
+      await rejectionOf(
+        sender.send('ChargeCard', charge, { ...fact, headers: { 'trace id': 'x' } }),
+      ),
+      await rejectionOf(
+        sender.send('ChargeCard', charge, { ...fact, headers: { 'x-note': 'x\n' } }),
+      ),
     ];
 
+    expect(refusals.every((error) => error instanceof InvalidMessageError)).toBe(true);
     expect(refusals.map((error) => (error as Error).message)).toEqual([
-      expect.stringMatching(/^A Fact id is a non-empty string /),
-      expect.stringMatching(/^The transport header Nats-TTL takes a name /),
-      expect.stringMatching(/^The transport header name "trace id" cannot travel /),
-      expect.stringMatching(/^The transport header x-note has a value /),
+      `factId: ${factIdRule}`,
+      expect.stringMatching(/^headers\.Nats-TTL: The transport header Nats-TTL takes a name /),
+      expect.stringMatching(
+        /^headers\."trace id": The transport header name "trace id" cannot travel /,
+      ),
+      expect.stringMatching(/^headers\.x-note: The transport header x-note has a value /),
     ]);
     expect(published).toEqual([]);
   });
@@ -559,7 +654,7 @@ describe('sender.send', () => {
     const sending = sender.send('ChargeCard', charge, { factId: 'o'.repeat(33_000) });
 
     await expect(sending).rejects.toThrow(
-      'The broker headers of ChargeCard@2 would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+      'ChargeCard@2: The broker headers would take 66068 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(published).toEqual([]);
   });
@@ -567,19 +662,35 @@ describe('sender.send', () => {
   test('a body that breaks the schema throws InvalidMessageError and nothing is sent', async () => {
     const { sender, published } = await opened();
 
-    const error = await rejectionOf(sender.send('ChargeCard', { ...charge, amount: -1 }));
+    const error = await rejectionOf(sender.send('ChargeCard', { ...charge, amount: -1 }, fact));
 
     expect(error).toBeInstanceOf(InvalidMessageError);
     expect(error).toMatchObject({ message: expect.stringMatching(/^ChargeCard@2: body\.amount /) });
     expect(published).toEqual([]);
   });
 
-  test('a broker failure rejects send with the broker’s error', async () => {
+  test('a Broker that fails rejects send with MessageNotSentError, nothing sent, the Broker’s error as cause', async () => {
     const { sender, error } = await opened(1);
 
-    const sending = sender.send('ChargeCard', charge);
+    const thrown = await rejectionOf(sender.send('ChargeCard', charge, { factId: 'o-1:charge' }));
 
-    await expect(sending).rejects.toBe(error);
+    expect(thrown).toBeInstanceOf(MessageNotSentError);
+    expect(thrown).toMatchObject({
+      message: 'ChargeCard with Fact id o-1:charge was not sent whole; sent: none',
+      factId: 'o-1:charge',
+      sent: [],
+      cause: error,
+    });
+  });
+
+  test('send after close rejects with MessagingClosedError', async () => {
+    const { sender, published, close } = await opened();
+    await close();
+
+    const error = await rejectionOf(sender.send('ChargeCard', charge, fact));
+
+    expect(error).toBeInstanceOf(MessagingClosedError);
+    expect(published).toEqual([]);
   });
 });
 

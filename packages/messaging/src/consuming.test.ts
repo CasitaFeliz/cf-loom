@@ -141,7 +141,7 @@ function aBroker() {
   const consumers: BrokerConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
-      publish: async () => undefined,
+      publish: async () => ({ duplicate: false }),
       consume: async (given) => {
         consumers.push(...given);
       },

@@ -191,7 +191,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('a published Event reaches the Service’s own Subscription to that version, its body read with the Subscription’s Reader', async () => {
     const { publisher, broker, received } = await running();
 
-    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-24' });
     await broker.settled();
 
     const notified = received.filter(({ handler }) => handler === 'notifyOnCreated');
@@ -201,7 +201,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('each version of a published Event reaches only the Subscriptions to that version', async () => {
     const { publisher, broker, received } = await running();
 
-    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-25' });
     await broker.settled();
 
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
@@ -226,7 +226,7 @@ describe('memory(): what the Service publishes and sends', () => {
         }),
       },
     }));
-    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-26' });
 
     await flush();
     const whileHeld = [...log];
@@ -240,7 +240,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('a sent Command reaches its CommandHandler', async () => {
     const { sender, broker, received } = await running();
 
-    await sender.send('ChargeCard', { orderId: 'o-1' });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-27' });
     await broker.settled();
 
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
@@ -278,15 +278,15 @@ describe('memory(): what the Service publishes and sends', () => {
           log.push(`${orderId} starts`);
           if (orderId === 'a') {
             await gate.opened;
-            await started.sender.send('ChargeCard', { orderId: 'c' });
+            await started.sender.send('ChargeCard', { orderId: 'c' }, { factId: 'f-29' });
           }
           await Promise.resolve();
           log.push(`${orderId} ends`);
         }),
       },
     }));
-    await sender.send('ChargeCard', { orderId: 'a' });
-    await sender.send('ChargeCard', { orderId: 'b' });
+    await sender.send('ChargeCard', { orderId: 'a' }, { factId: 'f-30' });
+    await sender.send('ChargeCard', { orderId: 'b' }, { factId: 'f-31' });
 
     gate.open();
     await broker.settled();
@@ -306,7 +306,7 @@ describe('memory(): what the Service publishes and sends', () => {
       },
     }));
 
-    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-32' });
     const recordedMeanwhile = broker.messages.length;
     const handledMeanwhile = [...handled];
     gate.open();
@@ -320,7 +320,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('an Event no Subscription takes is recorded and delivered nowhere', async () => {
     const { publisher, broker, received } = await running();
 
-    await publisher.publish('OrderArchived', { v1: v1Body });
+    await publisher.publish('OrderArchived', { v1: v1Body }, { factId: 'f-33' });
     await broker.settled();
 
     expect(broker.messages.map(({ subject }) => subject)).toEqual([
@@ -335,7 +335,7 @@ describe('memory(): what the Service publishes and sends', () => {
       subscriptions: { notifyOnV1: handle.stub(readers.subscriptions.notifyOnV1) },
     }));
 
-    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-34' });
     await broker.settled();
 
     expect(broker.messages.map(({ subject }) => subject)).toContain(
@@ -347,7 +347,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('a Message published before consume is recorded and never delivered', async () => {
     const received: Received[] = [];
     const { broker, started } = await connected();
-    await started.publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
+    await started.publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-35' });
 
     await started.consume(handlersOf(received));
     await broker.settled();
@@ -409,7 +409,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('a Message that fails its Reader is ended and its Handler never runs', async () => {
     const { publisher, broker, received, faults } = await running();
 
-    await publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } });
+    await publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } }, { factId: 'f-42' });
     const settling = broker.settled();
 
     await expect(settling).rejects.toThrow('onAudited');

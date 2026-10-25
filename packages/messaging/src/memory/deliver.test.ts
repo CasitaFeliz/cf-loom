@@ -20,7 +20,7 @@ import {
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { providedStandardRejections } from '../../test/standard-rejections.ts';
-import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
+import { type ConsumedFault, InvalidMessageError, type Messaging, messaging } from '../index.ts';
 import { type MemoryBroker, memory } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -330,15 +330,6 @@ describe('deliver()', () => {
     expect(second?.factId).not.toBe(first?.factId);
   });
 
-  test('an empty Fact id is refused, and no Handler runs', async () => {
-    const { broker, received } = await running();
-
-    const delivering = broker.deliver(chargeCardV1, charge, { factId: '' });
-
-    await expect(delivering).rejects.toThrow('A Fact id is a non-empty string');
-    expect(received).toEqual([]);
-  });
-
   test('meta.headers reach the Handler; without them it receives {}', async () => {
     const { broker, received } = await running();
     const headers = { traceparent: '00-abc-def-01' };
@@ -370,59 +361,69 @@ describe('deliver()', () => {
       { 'x-note': 'x ' },
       'The transport header x-note has a value that would not arrive as given over NATS: not a string, a CR or LF, whitespace leading or trailing, or a lone surrogate',
     ],
-  ])('the headers %j are refused, and no Handler runs', async (headers, message) => {
-    const { broker, received } = await running();
+  ])(
+    'the headers %j are refused with InvalidMessageError, and no Handler runs',
+    async (headers, message) => {
+      const { broker, received } = await running();
 
-    const delivering = broker.deliver(chargeCardV1, charge, { headers });
+      const delivering = broker.deliver(chargeCardV1, charge, { headers });
 
-    await expect(delivering).rejects.toThrow(message);
-    expect(received).toEqual([]);
-  });
+      await expect(delivering).rejects.toBeInstanceOf(InvalidMessageError);
+      await expect(delivering).rejects.toThrow(message);
+      expect(received).toEqual([]);
+    },
+  );
 
-  test('a bad Fact id and bad headers together are refused for the Fact id first', async () => {
-    const { broker, received } = await running();
-    const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
-
-    const delivering = broker.deliver(chargeCardV1, charge, { factId: 'f-1 ', headers });
-
-    await expect(delivering).rejects.toThrow(/^A Fact id is a non-empty string /);
-    expect(received).toEqual([]);
-  });
-
-  test('two bad headers are refused for the first one the record lists', async () => {
+  test('a bad Fact id and bad headers are all listed in one InvalidMessageError, the Fact id first', async () => {
     const { broker, received } = await running();
     const headers = { 'x-a': 'x ', 'Nats-TTL': '1' };
 
-    const delivering = broker.deliver(chargeCardV1, charge, { headers });
+    const rejection = await rejectionOf(
+      broker.deliver(chargeCardV1, charge, { factId: 'f-1 ', headers }),
+    );
 
-    await expect(delivering).rejects.toThrow(/^The transport header x-a has a value /);
+    expect(rejection).toMatchObject({
+      invalid: [
+        { kind: 'id', at: 'factId' },
+        { kind: 'header', name: 'x-a', fit: 'uncarried-value' },
+        { kind: 'header', name: 'Nats-TTL', fit: 'reserved-name' },
+      ],
+    });
     expect(received).toEqual([]);
   });
 
-  test.each([' f-1', 'f-1 ', 'f-1\n', 'f-1\uD800'])(
-    'a Fact id of %j is refused, and no Handler runs',
+  test.each(['', ' f-1', 'f-1 ', 'f-1\n', 'f-1\uD800'])(
+    'deliver refuses a Fact id of %j as publish does, with InvalidMessageError, and no Handler runs',
     async (factId) => {
       const { broker, received } = await running();
 
-      const delivering = broker.deliver(chargeCardV1, charge, { factId });
+      const rejection = await rejectionOf(broker.deliver(chargeCardV1, charge, { factId }));
 
-      await expect(delivering).rejects.toThrow(
-        'A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
-      );
+      expect(rejection).toBeInstanceOf(InvalidMessageError);
+      expect(rejection).toMatchObject({
+        message:
+          'factId: A Fact id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+        invalid: [{ kind: 'id', at: 'factId' }],
+      });
       expect(received).toEqual([]);
     },
   );
 
   test.each(['', ' m-1', 'm-1 ', 'm-1\n', 'm-1\uD800'])(
-    'a broker message id of %j is refused, and no Handler runs',
+    'deliver refuses a broker message id of %j at messageId, and no Handler runs',
     async (messageId) => {
       const { broker, received } = await running();
 
-      const delivering = broker.deliver(chargeCardV1, charge, { messageId });
-
-      await expect(delivering).rejects.toThrow(
-        'A broker message id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+      const rejection = await rejectionOf(
+        broker.deliver(chargeCardV1, charge, { factId: 'f-1', messageId }),
       );
+
+      expect(rejection).toBeInstanceOf(InvalidMessageError);
+      expect(rejection).toMatchObject({
+        message:
+          'messageId: A broker message id is a non-empty string with no CR or LF, no whitespace leading or trailing and no lone surrogate',
+        invalid: [{ kind: 'id', at: 'messageId' }],
+      });
       expect(received).toEqual([]);
     },
   );
@@ -437,7 +438,7 @@ describe('deliver()', () => {
     });
 
     await expect(delivering).rejects.toThrow(
-      'The broker headers of ChargeCard@1 would take 70077 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+      'ChargeCard@1: The broker headers would take 70077 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(received).toEqual([]);
   });
@@ -451,7 +452,7 @@ describe('deliver()', () => {
     });
 
     await expect(delivering).rejects.toThrow(
-      /^The broker headers of ChargeCard@1 would take 65549 bytes, over the 65535 JetStream stores/,
+      /^ChargeCard@1: The broker headers would take 65549 bytes, over the 65535 JetStream stores/,
     );
     expect(received).toEqual([]);
   });
@@ -501,7 +502,7 @@ describe('deliver()', () => {
 
     expect(rejection).not.toBeInstanceOf(InvalidInputError);
     expect(rejection).toMatchObject({
-      message: expect.stringMatching(/^The broker headers of ChargeCard@1 would take 66068 bytes/),
+      message: expect.stringMatching(/^ChargeCard@1: The broker headers would take 66068 bytes/),
     });
     expect(received).toEqual([]);
   });
@@ -862,7 +863,7 @@ describe('pending and redeliver()', () => {
         if (meta.deliveryCount === 1) {
           throw boom;
         }
-        await connection.sender.send('ChargeCard', charge);
+        await connection.sender.send('ChargeCard', charge, { factId: 'f-50' });
         return undefined;
       },
       charge: async () => {

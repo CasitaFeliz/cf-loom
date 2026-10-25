@@ -41,11 +41,11 @@ export type RecordedMessage = {
   readonly body: unknown;
 };
 
-/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out. */
+/** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out, an `undefined` one left out. */
 export type DeliveryMeta = {
   readonly factId?: string;
   readonly messageId?: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  readonly headers?: Readonly<Record<string, string | undefined>>;
 };
 
 /** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */

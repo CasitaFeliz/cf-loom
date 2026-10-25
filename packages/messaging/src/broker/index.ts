@@ -1,5 +1,6 @@
 export type {
   Broker,
+  BrokerAck,
   BrokerConnection,
   BrokerConsumer,
   BrokerService,

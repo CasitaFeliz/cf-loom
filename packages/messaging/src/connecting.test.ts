@@ -14,10 +14,11 @@ import {
   type BrokerConsumer,
   type BrokerService,
   type Delivery,
+  MessageNotSentError,
   type Messaging,
+  MessagingClosedError,
   messaging,
   type OutgoingMessage,
-  PublishError,
   type Settlement,
 } from './index.ts';
 
@@ -95,6 +96,7 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
       return {
         publish: async (message) => {
           recorded.published.push(message);
+          return { duplicate: false };
         },
         consume: async (consumers, closing) => {
           recorded.consumes += 1;
@@ -148,6 +150,7 @@ function aLoggingBroker(held: {
         log.push('publish');
         await held.publish;
         log.push('published');
+        return { duplicate: false };
       },
       consume: async (given) => {
         consumers.push(...given);
@@ -268,7 +271,7 @@ describe('messaging() and close', () => {
     const second = await messaging(contract, broker);
 
     await first.close();
-    await second.publisher.publish('OrderCreated', { v1: body });
+    await second.publisher.publish('OrderCreated', { v1: body }, { factId: 'f-1' });
 
     expect(recorded.connectedWith).toHaveLength(2);
     expect(recorded.closes).toBe(1);
@@ -296,13 +299,13 @@ describe('messaging() and close', () => {
 
   test('a Handler running during close can still publish', async () => {
     const gate = aGate();
-    let publish = (): Promise<void> => Promise.resolve();
+    let publish = (): Promise<unknown> => Promise.resolve();
     const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await gate.opened;
       await publish();
     });
     const { recorded, deliver, close, publisher } = await consumingWith(notifying);
-    publish = () => publisher.publish('OrderCreated', { v1: body });
+    publish = () => publisher.publish('OrderCreated', { v1: body }, { factId: 'f-2' });
     const delivered = deliver('orders-service.event.OrderCreated.v1', body);
 
     const closing = close();
@@ -333,8 +336,11 @@ describe('messaging() and close', () => {
   });
 
   test.each([
-    ['publish', (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body })],
-    ['send', (opened: Opened) => opened.sender.send('ChargeCard', body)],
+    [
+      'publish',
+      (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body }, { factId: 'f-3' }),
+    ],
+    ['send', (opened: Opened) => opened.sender.send('ChargeCard', body, { factId: 'f-4' })],
   ])('close waits for a %s in flight before it closes the connection', async (_name, call) => {
     const gate = aGate();
     const { broker, log } = aLoggingBroker({ publish: gate.opened });
@@ -349,10 +355,10 @@ describe('messaging() and close', () => {
   });
 
   test.each([
-    ['right after it', async (publish: () => Promise<void>) => publish()],
+    ['right after it', async (publish: () => Promise<unknown>) => publish()],
     [
       'after one more await',
-      async (publish: () => Promise<void>) => {
+      async (publish: () => Promise<unknown>) => {
         await Promise.resolve();
         await publish();
       },
@@ -363,7 +369,7 @@ describe('messaging() and close', () => {
       const gate = aGate();
       const { broker, log } = aLoggingBroker({ publish: gate.opened });
       const { publisher, close } = await messaging(contract, broker);
-      const publish = () => publisher.publish('OrderCreated', { v1: body });
+      const publish = () => publisher.publish('OrderCreated', { v1: body }, { factId: 'f-5' });
       const chained = (async () => {
         await publish();
         await chain(publish);
@@ -381,13 +387,13 @@ describe('messaging() and close', () => {
   test('a Handler running during close that publishes twice is waited for, both publishes included', async () => {
     const gate = aGate();
     const { broker, log, consumers } = aLoggingBroker({ publish: gate.opened });
-    let publish = (): Promise<void> => Promise.resolve();
+    let publish = (): Promise<unknown> => Promise.resolve();
     const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await publish();
       await publish();
     });
     const { publisher, consume, close } = await messaging(contract, broker);
-    publish = () => publisher.publish('OrderCreated', { v1: body });
+    publish = () => publisher.publish('OrderCreated', { v1: body }, { factId: 'f-6' });
     await consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
     const consumer = consumers.find(
       (candidate) => candidate.subject === 'orders-service.event.OrderCreated.v1',
@@ -469,8 +475,11 @@ describe('messaging() and close', () => {
   });
 
   test.each([
-    ['publishing', (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body })],
-    ['sending', (opened: Opened) => opened.sender.send('ChargeCard', body)],
+    [
+      'publishing',
+      (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body }, { factId: 'f-7' }),
+    ],
+    ['sending', (opened: Opened) => opened.sender.send('ChargeCard', body, { factId: 'f-8' })],
     ['consuming', (opened: Opened) => opened.consume(handlers)],
   ])(
     '%s after close throws messaging is closed, and nothing reaches the broker',
@@ -491,7 +500,7 @@ describe('messaging() and close', () => {
     const error = new Error('the broker hung up');
     const broker: Broker = {
       connect: async () => ({
-        publish: async () => undefined,
+        publish: async () => ({ duplicate: false }),
         consume: async () => undefined,
         close: async () => {
           throw error;
@@ -511,13 +520,13 @@ describe('messaging() and close', () => {
     const rejected = gate.opened.then(() => Promise.reject(new Error('broker down')));
     const { broker, log } = aLoggingBroker({ publish: rejected });
     const { publisher, close } = await messaging(contract, broker);
-    const publishing = publisher.publish('OrderCreated', { v1: body });
+    const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-9' });
 
     const closing = close();
     gate.open();
     await closing;
 
-    await expect(publishing).rejects.toBeInstanceOf(PublishError);
+    await expect(publishing).rejects.toBeInstanceOf(MessageNotSentError);
     expect(log.filter((call) => call === 'close')).toHaveLength(1);
   });
 
@@ -526,18 +535,18 @@ describe('messaging() and close', () => {
     const { publisher, close } = await messaging(contract, broker);
     const closing = close();
 
-    const publishing = publisher.publish('OrderCreated', { v1: body });
+    const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-10' });
     await closing;
 
     await expect(publishing).rejects.toThrow('messaging is closed');
     expect(log).not.toContain('publish');
   });
 
-  test('consuming while closing throws, and the broker consumes nothing', async () => {
+  test('consume while closing throws MessagingClosedError, and the broker consumes nothing', async () => {
     const gate = aGate();
     const { broker, log } = aLoggingBroker({ publish: gate.opened });
     const { consume, close, publisher } = await messaging(contract, broker);
-    const publishing = publisher.publish('OrderCreated', { v1: body });
+    const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-11' });
     const closing = close();
 
     const consuming = consume(handlers);
@@ -545,7 +554,23 @@ describe('messaging() and close', () => {
     await Promise.all([publishing, closing]);
 
     await expect(consuming).rejects.toThrow('messaging is closing');
+    await expect(consuming).rejects.toBeInstanceOf(MessagingClosedError);
     expect(log).not.toContain('consume');
+  });
+
+  test('a Broker adapter’s duplicate reaches send', async () => {
+    const broker: Broker = {
+      connect: async () => ({
+        publish: async () => ({ duplicate: true }),
+        consume: async () => undefined,
+        close: async () => undefined,
+      }),
+    };
+    const { sender } = await messaging(contract, broker);
+
+    const sent = await sender.send('ChargeCard', body, { factId: 'o-1:charge' });
+
+    expect(sent).toEqual({ factId: 'o-1:charge', duplicate: true });
   });
 
   test('a consume the broker rejects can be retried', async () => {
@@ -566,8 +591,8 @@ describe('messaging() and close', () => {
     const { send } = sender;
 
     await consume(handlers);
-    await publish('OrderCreated', { v1: body });
-    await send('ChargeCard', body);
+    await publish('OrderCreated', { v1: body }, { factId: 'f-13' });
+    await send('ChargeCard', body, { factId: 'f-14' });
     await close();
 
     expect(recorded.published).toHaveLength(2);

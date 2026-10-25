@@ -11,10 +11,11 @@ import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
 import { consumerDetailsOf } from '../consuming/index.ts';
 import {
-  checkedHeaderPartsOf,
-  checkedIdOf,
-  factIdOf,
-  transportHeadersOf,
+  headerPartsOf,
+  InvalidMessageError,
+  type InvalidPart,
+  idPartsOf,
+  sizePartsOf,
 } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
@@ -67,22 +68,30 @@ function attemptsOf(
   reached: readonly BrokerConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
-  const factId = factIdOf(meta.factId);
-  const messageId = messageIdOf(message, factId, meta.messageId);
-  const headers = transportHeadersOf(meta.headers ?? {});
-  const parts = checkedHeaderPartsOf(message, { messageId, factId, headers });
+  const factId = meta.factId ?? globalThis.crypto.randomUUID();
+  const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
+  const { headers, invalid: refusedHeaders } = headerPartsOf(meta.headers ?? {});
+  const parts = { messageId, factId, headers };
+  const invalid: InvalidPart[] = [
+    ...givenIdPartsOf(meta),
+    ...refusedHeaders,
+    ...sizePartsOf(message, parts),
+  ];
+  if (invalid.length > 0) {
+    throw new InvalidMessageError(invalid);
+  }
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
     return { consumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
   });
 }
 
-/** The broker message id a test gave, which must arrive as given as a Fact id must, or the one a Message of the Fact id has. */
-function messageIdOf(message: Event | Command, factId: string, given: string | undefined): string {
-  if (given === undefined) {
-    return brokerMessageIdOf(message, factId);
-  }
-  return checkedIdOf('broker message id', given);
+/** The ids a test gave that would not arrive as given; a random one, or one derived from an accepted Fact id, always does. */
+function givenIdPartsOf({ factId, messageId }: DeliveryMeta): readonly InvalidPart[] {
+  return [
+    ...(factId === undefined ? [] : idPartsOf('factId', factId)),
+    ...(messageId === undefined ? [] : idPartsOf('messageId', messageId)),
+  ];
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {

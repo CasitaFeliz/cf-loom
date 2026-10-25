@@ -138,7 +138,7 @@ describe('settled()', () => {
     const { broker, publisher } = await running((connection) => ({
       notify: async () => {
         await gate.opened;
-        await connection.sender.send('ChargeCard', { orderId: 'o-1' });
+        await connection.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-53' });
         return undefined;
       },
       charge: ({ orderId }) => {
@@ -146,7 +146,7 @@ describe('settled()', () => {
         return undefined;
       },
     }));
-    await publisher.publish('OrderCreated', { v1: created });
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-54' });
 
     const settling = broker.settled();
     gate.open();
@@ -179,16 +179,17 @@ describe('settled()', () => {
     });
   });
 
-  test.each<[string, Handlers, (connection: Running) => Promise<void>]>([
+  test.each<[string, Handlers, (connection: Running) => Promise<unknown>]>([
     [
       'a non-retryable Fault',
       { charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }) },
-      ({ sender }) => sender.send('ChargeCard', created),
+      ({ sender }) => sender.send('ChargeCard', created, { factId: 'f-56' }),
     ],
     [
       'a body that fails its Reader',
       {},
-      ({ publisher }) => publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } }),
+      ({ publisher }) =>
+        publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } }, { factId: 'f-57' }),
     ],
   ])('settled() rejects when a Message was ended, for %s', async (_ended, handlers, ending) => {
     const connection = await running(() => handlers);
@@ -241,8 +242,8 @@ describe('settled()', () => {
       },
       charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }),
     }));
-    await publisher.publish('OrderCreated', { v1: created });
-    await sender.send('ChargeCard', created);
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-61' });
+    await sender.send('ChargeCard', created, { factId: 'f-62' });
 
     const rejection = await rejectionOf(broker.settled());
 
@@ -253,7 +254,7 @@ describe('settled()', () => {
     const { broker, sender } = await running(() => ({
       charge: () => fault({ committed: 'no', retryable: false }),
     }));
-    await sender.send('ChargeCard', created);
+    await sender.send('ChargeCard', created, { factId: 'f-63' });
     await rejectionOf(broker.settled());
 
     const settling = broker.settled();
@@ -391,12 +392,18 @@ describe('settled(): a chain of Messages that keeps producing', () => {
     return {
       notify: async () => {
         count.deliveries += 1;
-        await connection.sender.send('ChargeCard', created);
+        await connection.sender.send('ChargeCard', created, {
+          factId: `charge-${count.deliveries}`,
+        });
         return undefined;
       },
       charge: async () => {
         count.deliveries += 1;
-        await connection.publisher.publish('OrderCreated', { v1: created });
+        await connection.publisher.publish(
+          'OrderCreated',
+          { v1: created },
+          { factId: `created-${count.deliveries}` },
+        );
         return undefined;
       },
     };
@@ -405,7 +412,7 @@ describe('settled(): a chain of Messages that keeps producing', () => {
   test('a chain of Messages that keeps producing is cut after 1,000 deliveries, and settled() rejects', async () => {
     const count = { deliveries: 0 };
     const { broker, publisher } = await running((connection) => chaining(connection, count));
-    await publisher.publish('OrderCreated', { v1: created });
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-71' });
 
     const rejection = await rejectionOf(broker.settled());
 
@@ -434,7 +441,7 @@ describe('settled(): a chain of Messages that keeps producing', () => {
         },
       };
     });
-    await publisher.publish('OrderCreated', { v1: created });
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-72' });
     await rejectionOf(broker.settled());
 
     const cut = await lastDelivery;

@@ -1,4 +1,5 @@
-export { InvalidMessageError, PublishError } from './errors.ts';
-export { checkedHeaderPartsOf, checkedIdOf, factIdOf, transportHeadersOf } from './outgoing.ts';
+export { headerPartsOf, idPartsOf, sizePartsOf } from './checks.ts';
+export type { InvalidPart } from './errors.ts';
+export { InvalidMessageError, MessageNotSentError } from './errors.ts';
 export { publishOf, sendOf } from './publishing.ts';
-export type { CommandSender, EventPublisher, MessageOptions } from './types.ts';
+export type { CommandSender, EventPublisher, MessageOptions, Published, Sent } from './types.ts';

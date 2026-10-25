@@ -1,5 +1,6 @@
 import type { BrokerConnection, BrokerConsumer, Delivery } from '../broker/index.ts';
 import type { Settle, Settled } from '../consuming/index.ts';
+import { MessagingClosedError } from './closed.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
@@ -35,7 +36,7 @@ export class MessagingLife {
       case 'closing':
         return this.#connection;
       case 'closed':
-        throw new Error('messaging is closed');
+        throw new MessagingClosedError('closed');
     }
   }
 
@@ -58,7 +59,7 @@ export class MessagingLife {
     switch (state.kind) {
       case 'closing':
       case 'closed':
-        throw new Error(`messaging is ${state.kind}`);
+        throw new MessagingClosedError(state.kind);
       case 'open':
         if (state.consumption === 'taken') {
           throw new Error('consume() was already called on this messaging');
