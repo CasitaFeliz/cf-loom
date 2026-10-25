@@ -10,7 +10,6 @@ import {
   headerTextsOf,
   headerValuesOf,
   invalidInputBodyOf,
-  invalidInputRejectionOf,
   invalidInputResponseOf,
   isQueryText,
   isReservedCode,
@@ -545,10 +544,15 @@ describe('the invalid-input Rejection', () => {
   });
 });
 
-describe('invalidInputRejectionOf', () => {
-  test('invalidInputRejectionOf is the Provider’s code, status and message with cf-loom’s body of the Issues', () => {
+describe('the invalid-input Rejection of a Provider whose Standard Rejections carry a Reader', () => {
+  test('it answers cf-loom’s body of the Issues, never the Reader', async () => {
     const standards = {
-      invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
+      invalidInput: {
+        code: 'BAD_REQUEST',
+        status: 422,
+        message: 'The request is invalid',
+        body: z.object({ issues: z.array(z.unknown()) }),
+      },
       notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
       notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
     } as const;
@@ -556,14 +560,16 @@ describe('invalidInputRejectionOf', () => {
       { part: 'input.body', path: ['amount'], code: 'too_small', message: 'At least 1' },
     ] as const;
 
-    const rejection = invalidInputRejectionOf(issues, standards);
+    const response = invalidInputResponseOf(issues, standards);
 
-    expect(rejection).toStrictEqual({
-      code: 'BAD_REQUEST',
-      status: 422,
-      message: 'The request is invalid',
-      body: {
-        issues: [{ in: 'body', path: ['amount'], code: 'too_small', message: 'At least 1' }],
+    expect(response.status).toBe(422);
+    expect(await response.json()).toStrictEqual({
+      rejection: {
+        code: 'BAD_REQUEST',
+        message: 'The request is invalid',
+        body: {
+          issues: [{ in: 'body', path: ['amount'], code: 'too_small', message: 'At least 1' }],
+        },
       },
     });
   });

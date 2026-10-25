@@ -12,29 +12,8 @@ import { messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { FakeProviderError, fakeEvent } from './index.ts';
-
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
 
 const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
 
@@ -56,16 +35,7 @@ const payments = {
   version: '5.1.0',
   endpoints: {},
   events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: invalidInputBody,
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
+  standardRejections: providedStandardRejections(),
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 

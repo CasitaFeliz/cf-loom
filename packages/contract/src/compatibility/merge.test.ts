@@ -100,7 +100,12 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
 }
 
 const standardCodes = {
-  [standardRejections.invalidInput]: aCode({ origin: 'standard', status: 400, message: 'Invalid' }),
+  [standardRejections.invalidInput]: aCode({
+    origin: 'standard',
+    status: 400,
+    message: 'Invalid',
+    body: { type: 'object', fields: {} },
+  }),
   [standardRejections.notFound]: aCode({ origin: 'standard', status: 404, message: 'Not found' }),
   [standardRejections.notImplemented]: aCode({ origin: 'standard', status: 501, message: 'No' }),
 };

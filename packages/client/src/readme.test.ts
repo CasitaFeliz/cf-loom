@@ -6,35 +6,13 @@ import {
   defineGroup,
   type Endpoint,
   notFound,
-  openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { type Client, client } from './index.ts';
-
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
 
 const getPayment = defineEndpoint({
   name: 'getPayment',
@@ -80,16 +58,7 @@ function contractPackageOf<
   return { name, version: '5.1.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const payments = contractPackageOf({ getPayment }, {
-  invalidInput: {
-    code: 'INVALID_INPUT',
-    status: 400,
-    message: 'Invalid input',
-    body: invalidInputBody,
-  },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const);
+const payments = contractPackageOf({ getPayment }, providedStandardRejections());
 
 const paymentsDependency = defineDependency({
   provider: payments,

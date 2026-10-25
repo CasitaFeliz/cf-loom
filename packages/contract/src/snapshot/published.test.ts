@@ -24,7 +24,7 @@ const standardCodes = {
     origin: 'standard',
     status: 400,
     message: 'Invalid',
-    body: null,
+    body: { type: 'object', fields: {} },
     removed: false,
   },
   [notFoundCode]: {

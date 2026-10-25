@@ -872,6 +872,39 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      { name: 'notFound', code: notFoundCode },
+      { name: 'notImplemented', code: notImplementedCode },
+    ] as const)(
+      'a body on the code the $name Standard Rejection names is malformed at the body',
+      ({ name, code }) => {
+        const codes = { ...standardCodes, [code]: { ...standardCodes[code], body: stringNode } };
+
+        const service = serviceWith({ codes });
+        const definitions = decodedFrom({ ...aDefinitions(), codes });
+
+        const malformed = malformedAt(
+          ['codes', code, 'body'],
+          `holds a body, which the ${name} Standard Rejection never has`,
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
+
+    test('no body on the code the invalidInput Standard Rejection names is malformed at the body', () => {
+      const code = invalidInputCode;
+      const codes = { ...standardCodes, [code]: { ...standardCodes[code], body: null } };
+
+      const service = serviceWith({ codes });
+      const definitions = decodedFrom({ ...aDefinitions(), codes });
+
+      const malformed = malformedAt(
+        ['codes', code, 'body'],
+        'holds no body, which the invalidInput Standard Rejection always has',
+      );
+      expect([service, definitions]).toEqual([malformed, malformed]);
+    });
+
+    test.each([
       [
         'a Dependency’s Endpoint with a key of its own',
         {
@@ -1166,6 +1199,16 @@ describe('decodeSnapshot', () => {
           },
         }),
         ['endpoints', 'GET /orders/{}', 'success', 'headers', 'fields', 'name'],
+      ],
+      [
+        'the invalid-input code’s body',
+        aService({
+          codes: {
+            ...standardCodes,
+            [invalidInputCode]: { ...standardCodes[invalidInputCode], body: aRef('missing') },
+          },
+        }),
+        ['codes', 'INVALID_INPUT', 'body'],
       ],
       [
         'a Command’s body',

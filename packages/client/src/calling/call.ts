@@ -1,12 +1,7 @@
-import { type InputIssue, invalidInputResponseOf } from '@cf-loom/contract/internal';
-import { type DecodedOutcome, outcomeOf } from '../decoding/index.ts';
+import { type InputIssue, invalidInputBodyOf } from '@cf-loom/contract/internal';
+import { type DecodedOutcome, outcomeOf, rejectionOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
-import {
-  type InferFault,
-  type Inferring,
-  notSentFaultOf,
-  thrownFaultOf,
-} from '../inference/index.ts';
+import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
 import { readyInputOf, sendingOf } from '../request/index.ts';
 import type { CallOptions, Fetch } from './client-types.ts';
 import { type ConfiguredHeaders, withConfiguredHeaders } from './configured.ts';
@@ -40,14 +35,14 @@ export function methodOf(
     const passed = fieldsOf(input);
     const headers = await withConfiguredHeaders(called, calling.headers, passed['headers']);
     const ready = await readyInputOf(called.endpoint, { ...passed, headers });
-    const inferring = { signal, inferFault: calling.inferFault };
     if (ready.kind === 'invalid') {
-      return invalidInputOf(called, ready.issues, inferring);
+      return invalidInputOf(called, ready.issues);
     }
     if (signal !== undefined && isAborted(signal)) {
       return notSentFaultOf(signal);
     }
     const { url, init } = sendingOf(called.endpoint, calling.base, ready.input);
+    const inferring = { signal, inferFault: calling.inferFault };
     let response: Response;
     try {
       response = await calling.fetch(url, signal === undefined ? init : { ...init, signal });
@@ -61,12 +56,9 @@ export function methodOf(
 }
 
 /** The invalid-input Rejection the Provider would answer, read as its response would be, never sent. */
-function invalidInputOf(
-  called: CalledEndpoint,
-  issues: readonly InputIssue[],
-  inferring: Inferring,
-): Promise<DecodedOutcome> {
-  return outcomeOf(invalidInputResponseOf(issues, called.standards), called, inferring);
+function invalidInputOf(called: CalledEndpoint, issues: readonly InputIssue[]): DecodedOutcome {
+  const { code, message } = called.standards.invalidInput;
+  return rejectionOf({ code, message, body: invalidInputBodyOf(issues) }, called);
 }
 
 /** Whether a signal is aborted now: a header function awaited before may have aborted it. */

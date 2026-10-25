@@ -7,35 +7,13 @@ import {
   defineRejection,
   type Endpoint,
   notFound,
-  openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { type Client, client, type ReceivedOutcome } from './index.ts';
-
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -110,16 +88,11 @@ function contractPackageOf<
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const standards = {
-  invalidInput: {
-    code: 'BAD_REQUEST',
-    status: 400,
-    message: 'Invalid',
-    body: invalidInputBody,
-  },
+const standards = providedStandardRejections({
+  invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'Invalid' },
   notFound: { code: 'MISSING', status: 404, message: 'Missing' },
   notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
-} as const;
+});
 
 const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
 

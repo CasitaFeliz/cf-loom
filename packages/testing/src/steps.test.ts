@@ -13,29 +13,8 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
-
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
 
 /**
  * The Endpoints of a payments Provider, declared with a schema for each Open Enum: as the
@@ -124,16 +103,9 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     throw new Error('The fixture is no Service');
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: invalidInputBody,
-    },
+  const standardRejections = providedStandardRejections({
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  });
   const name = 'payments-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
@@ -265,12 +237,34 @@ describe('fakeProvider: steps', () => {
     });
   });
 
-  test('reject on invalid input answers its issues as the Provider’s Reader writes them, an Unknown case as its text', async () => {
-    const payments = fakeProvider(paymentsDependency);
+  test('reject on invalid input answers its issues as the Provider’s Reader writes them, a code only that Reader declares included', async () => {
+    const provider = contractPackageOf(readers, Object.values(declared));
+    const providersReader = z.object({
+      issues: z.array(
+        z.object({
+          code: openEnumReader(['too_deep', 'too_small']),
+          in: openEnumReader(['body', 'headers', 'params', 'query']),
+          message: z.string(),
+          path: z.array(z.union([z.string(), z.number()])),
+        }),
+      ),
+    });
+    const { invalidInput } = provider.standardRejections;
+    const dependency = defineDependency({
+      provider: {
+        ...provider,
+        standardRejections: {
+          ...provider.standardRejections,
+          invalidInput: { ...invalidInput, body: providersReader },
+        },
+      },
+      endpoints: [readers.getPayment],
+    });
+    const payments = fakeProvider(dependency);
     const issue = {
       in: 'body' as const,
       path: ['amount'],
-      code: { unknown: 'too_deep' },
+      code: 'too_deep' as const,
       message: 'Too deep',
     };
     payments.on('getPayment').otherwise((r) => r.reject('INVALID_INPUT', { issues: [issue] }));
@@ -280,11 +274,7 @@ describe('fakeProvider: steps', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      rejection: {
-        code: 'INVALID_INPUT',
-        message: 'Invalid input',
-        body: { issues: [{ ...issue, code: 'too_deep' }] },
-      },
+      rejection: { code: 'INVALID_INPUT', message: 'Invalid input', body: { issues: [issue] } },
     });
     expect(outcome).toMatchObject({
       known: true,

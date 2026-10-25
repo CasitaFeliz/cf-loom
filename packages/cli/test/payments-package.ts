@@ -1,6 +1,6 @@
 /** A Provider's Contract Package, written by hand, exporting the Event `PaymentSettled@1`. */
 export const payments = `${[
-  "import { defineEvent } from '@cf-loom/contract';",
+  "import { defineEvent, openEnumReader } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   '',
   'export const paymentSettledV1 = defineEvent({',
@@ -21,7 +21,12 @@ export const payments = `${[
   "      code: 'INVALID_INPUT',",
   '      status: 400,',
   "      message: 'Invalid input',",
-  '      body: z.object({ issues: z.array(z.unknown()) }),',
+  `      body: z.object({ issues: z.array(z.object({ ${[
+    "code: openEnumReader(['invalid_format', 'invalid_type', 'invalid_value', 'malformed', 'not_multiple', 'required', 'too_big', 'too_small', 'unrecognized_key'])",
+    "in: openEnumReader(['body', 'headers', 'params', 'query'])",
+    'message: z.string()',
+    'path: z.array(z.union([z.string(), z.number()]))',
+  ].join(', ')} })) }),`,
   '    },',
   "    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },",
   "    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },",

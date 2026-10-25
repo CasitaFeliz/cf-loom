@@ -179,7 +179,6 @@ export {
   headerValuesOf,
   internalError,
   invalidInputBodyOf,
-  invalidInputRejectionOf,
   invalidInputResponseOf,
   isBrokerPrefix,
   isIdHeaderValue,

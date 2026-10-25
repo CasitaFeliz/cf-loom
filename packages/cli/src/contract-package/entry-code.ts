@@ -1,6 +1,7 @@
 import {
   byCodePoint,
   codeNameOf,
+  type SchemaNode,
   type ServiceSnapshot,
   standardRejectionNames,
 } from '@cf-loom/contract/internal';
@@ -140,13 +141,27 @@ function standardRejectionLinesOf(
       `A Snapshot holds the code of every Standard Rejection: ${code} is missing, a bug.`,
     );
   }
-  const body = held.body === null ? [] : [`    body: ${zodExpressionOf(held.body, reader)},`];
   return [
     `  ${name}: {`,
     `    code: ${stringLiteralOf(code)},`,
     `    status: ${held.status},`,
     `    message: ${stringLiteralOf(held.message)},`,
-    ...body,
+    ...bodyLinesOf(name, held.body, reader),
     '  },',
   ];
+}
+
+/** Only the invalid-input Rejection has a body, which the decoder and `generate` both guarantee. */
+function bodyLinesOf(
+  name: keyof ServiceSnapshot['standardRejections'],
+  body: SchemaNode | null,
+  reader: Writing,
+): readonly string[] {
+  if (name !== 'invalidInput') {
+    return [];
+  }
+  if (body === null) {
+    throw new Error('A Snapshot gives the invalid-input code a body: a bug.');
+  }
+  return [`    body: ${zodExpressionOf(body, reader)},`];
 }

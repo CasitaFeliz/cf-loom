@@ -17,29 +17,8 @@ import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { type ServedFault, serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
-
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
 
 /** The payments Endpoints, with a schema for each Open Enum: as declared, or as read. */
 function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
@@ -107,16 +86,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     throw new Error('The fixture is no Service');
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: invalidInputBody,
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }

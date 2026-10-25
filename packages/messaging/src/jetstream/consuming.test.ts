@@ -1,27 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 
-/** The invalid-input body's Reader as `cf-loom package` writes it. */
-const invalidInputBody = z.object({
-  issues: z.array(
-    z.object({
-      in: openEnumReader(['body', 'headers', 'params', 'query']),
-      path: z.array(z.union([z.string(), z.number()])),
-      code: openEnumReader([
-        'required',
-        'invalid_type',
-        'invalid_value',
-        'invalid_format',
-        'too_small',
-        'too_big',
-        'not_multiple',
-        'unrecognized_key',
-        'malformed',
-      ]),
-      message: z.string(),
-    }),
-  ),
-});
-
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   type ContractPackage,
@@ -31,7 +9,6 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
-  openEnumReader,
 } from '@cf-loom/contract';
 import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
@@ -48,6 +25,7 @@ import {
 } from '../../test/durables.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
+import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import { type ConsumedFault, messaging } from '../index.ts';
 import { memory } from '../memory/index.ts';
@@ -556,16 +534,7 @@ describe('consuming over jetstream()', () => {
       version: '5.1.0',
       endpoints: {},
       events: { paymentSettledV1 },
-      standardRejections: {
-        invalidInput: {
-          code: 'INVALID_INPUT',
-          status: 400,
-          message: 'Invalid input',
-          body: invalidInputBody,
-        },
-        notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-        notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-      },
+      standardRejections: providedStandardRejections(),
       exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
     } as const satisfies ContractPackage;
     const notifyOnSettled = defineSubscription({

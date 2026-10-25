@@ -5,3 +5,4 @@ export type {
   ReceivedRejection,
   ReceivedSuccess,
 } from './outcomes.ts';
+export { rejectionOf } from './rejection.ts';

@@ -42,7 +42,6 @@ export { kebabCaseOf } from './identifiers.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
 export {
   invalidInputBodyOf,
-  invalidInputRejectionOf,
   invalidInputResponseOf,
   rejectionBodyReaderOf,
 } from './invalid-input.ts';
