@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineRejection, invalidInput, notFound } from '../index.ts';
+import { defineRejection, invalidInput, notFound, type ReservedCode } from '../index.ts';
 import {
   allowedMethodsOf,
   bodyOf,
@@ -21,7 +21,6 @@ import {
   jsonOfBytes,
   malformedBodyIssueOf,
   pathSegmentsOf,
-  type ReservedCode,
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionBodyReaderOf,

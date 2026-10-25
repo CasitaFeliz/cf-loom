@@ -1,6 +1,6 @@
+import type { Http } from '@cf-loom/contract';
 import { faultResponseOf } from '@cf-loom/contract/internal';
 import { faultLineOf, logOf, thrownFault } from '@cf-loom/handlers/internal';
-import type { Http } from './serve.ts';
 
 /**
  * What an `Http` answers, or the internal Fault when it rejects, logged on the line given, so no

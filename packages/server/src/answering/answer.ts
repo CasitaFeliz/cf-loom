@@ -1,4 +1,4 @@
-import type { Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, Http, StandardRejections } from '@cf-loom/contract';
 import {
   type Match,
   matchOf,
@@ -23,7 +23,6 @@ import {
   answeredOfNotSuccess,
   answeredOfSuccess,
 } from './runs.ts';
-import type { Http } from './serve.ts';
 
 /**
  * How a request was answered, and the declared Endpoint it matched, if any; or the fallback's

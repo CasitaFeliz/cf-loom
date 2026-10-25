@@ -7,9 +7,10 @@ import {
 } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { Http } from '@cf-loom/contract';
 import { reservedResponseOf } from '@cf-loom/contract/internal';
 import { faultLineOf } from '@cf-loom/handlers/internal';
-import { answeredOf, type Http } from '../answering/index.ts';
+import { answeredOf } from '../answering/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
 const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];

@@ -1,15 +1,16 @@
+import type { Http } from '@cf-loom/contract';
 import { type InputIssue, invalidInputBodyOf } from '@cf-loom/contract/internal';
 import { type DecodedOutcome, outcomeOf, rejectionOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
-import { readyInputOf, sendingOf } from '../request/index.ts';
-import type { CallOptions, Fetch } from './client-types.ts';
+import { readyInputOf, requestOf } from '../request/index.ts';
+import type { CallOptions } from './client-types.ts';
 import { type ConfiguredHeaders, withConfiguredHeaders } from './configured.ts';
 
 /** What every call of one client shares: where it sends, how, and what it does with an answer. */
 export type Calling = {
   readonly base: URL;
-  readonly fetch: Fetch;
+  readonly fetch: Http;
   readonly headers: ConfiguredHeaders;
   readonly inferFault: InferFault | undefined;
 };
@@ -41,11 +42,12 @@ export function methodOf(
     if (signal !== undefined && isAborted(signal)) {
       return notSentFaultOf(signal);
     }
-    const { url, init } = sendingOf(called.endpoint, calling.base, ready.input);
+    const sent = requestOf(called.endpoint, calling.base, ready.input);
+    const request = signal === undefined ? sent : new Request(sent, { signal });
     const inferring = { signal, inferFault: calling.inferFault };
     let response: Response;
     try {
-      response = await calling.fetch(url, signal === undefined ? init : { ...init, signal });
+      response = await calling.fetch(request);
     } catch (e) {
       return thrownFaultOf(e, inferring) ?? rethrown(e);
     }
@@ -57,8 +59,9 @@ export function methodOf(
 
 /** The invalid-input Rejection the Provider would answer, read as its response would be, never sent. */
 function invalidInputOf(called: CalledEndpoint, issues: readonly InputIssue[]): DecodedOutcome {
-  const { code, message } = called.standards.invalidInput;
-  return rejectionOf({ code, message, body: invalidInputBodyOf(issues) }, called);
+  const { code, status, message } = called.standards.invalidInput;
+  const envelope = { code, message, body: invalidInputBodyOf(issues) };
+  return rejectionOf(envelope, { status, source: 'client' }, called);
 }
 
 /** Whether a signal is aborted now: a header function awaited before may have aborted it. */
