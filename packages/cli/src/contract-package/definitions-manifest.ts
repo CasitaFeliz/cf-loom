@@ -1,5 +1,5 @@
-import type { PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
-import { cfLoomOf, manifestFileOf, type Packaging, peerRangesOf } from './manifest.ts';
+import type { PeerRanges, PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
+import { cfLoomOf, manifestFileOf, type Packaging, type Peers, peerRangesOf } from './manifest.ts';
 import type { PackageFile } from './modules.ts';
 import { packagePaths } from './paths.ts';
 
@@ -9,7 +9,7 @@ export type DefinitionsManifest =
   | { readonly kind: 'unpublishable'; readonly line: string };
 
 /** The fields of a package.json whose dependencies npm installs with the package. */
-const installedFields = ['dependencies', 'optionalDependencies'] as const;
+const installedFields = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const;
 
 /** The ranges npm publishes unchanged and no registry can install. */
 const uninstallableRange = /^(workspace|catalog|file|link):/;
@@ -18,30 +18,47 @@ const uninstallableRange = /^(workspace|catalog|file|link):/;
 type Listed = { readonly field: string; readonly name: string; readonly range: string };
 
 /**
- * A Definitions Package's own package.json as published: its version, peers as carets on the
- * versions it is built with and `cfLoom`, `snapshot.json` in its `files` and no `publishConfig.tag`; refused when it
- * depends on a range no registry can install.
+ * A Definitions Package's own package.json as published: its version, its peers with `zod` and
+ * `@cf-loom/contract` set to carets on the versions it is built with, and `cfLoom`, `snapshot.json`
+ * in its `files` and no `publishConfig.tag`; refused when it depends on a range no registry can
+ * install, a peer read after those two are set.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
   published: PublishedDefinitionsSnapshot,
   { peers }: Pick<Packaging, 'peers'>,
 ): DefinitionsManifest {
-  const uninstallable = uninstallableDependencyOf(source);
-  if (uninstallable !== undefined) {
-    const { field, name: dependency, range } = uninstallable;
-    const lists = `package.json lists ${dependency} in ${field} as ${range}`;
-    return unpublishable(`${lists}, which npm cannot install from the registry`);
-  }
   const manifest = {
     ...source,
     version: published.version,
     ...publishConfigWithoutTagOf(source['publishConfig']),
     ...filesWithSnapshotOf(source['files']),
-    peerDependencies: peerRangesOf(peers),
+    peerDependencies: publishedPeersOf(source, peers),
     cfLoom: cfLoomOf(published),
   };
+  const uninstallable = uninstallableDependencyOf(manifest);
+  if (uninstallable !== undefined) {
+    const { field, name: dependency, range } = uninstallable;
+    const lists = `package.json lists ${dependency} in ${field} as ${range}`;
+    return unpublishable(`${lists}, which npm cannot install from the registry`);
+  }
   return { kind: 'manifest', file: manifestFileOf(manifest) };
+}
+
+/**
+ * The peers a Definitions Package is published with: those its package.json lists, `zod` and
+ * `@cf-loom/contract` set to carets on the versions it is built with. The manifest writes them and
+ * the version derivation compares them with the Baseline's, so the two never differ.
+ */
+export function publishedPeersOf(
+  source: Readonly<Record<string, unknown>>,
+  peers: Peers,
+): PeerRanges {
+  const listed = source['peerDependencies'];
+  const isMap = typeof listed === 'object' && listed !== null && !Array.isArray(listed);
+  const entries = isMap ? Object.entries(listed) : [];
+  const ranges = entries.filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  return { ...Object.fromEntries(ranges), ...peerRangesOf(peers) };
 }
 
 function unpublishable(line: string): DefinitionsManifest {

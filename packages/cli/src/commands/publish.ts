@@ -1,6 +1,11 @@
-import { canonicalTextOf, publishedSnapshotOf, versionBumpOf } from '@cf-loom/contract/internal';
-import { type Peers, peerRangesOf } from '../contract-package/index.ts';
-import type { Run } from '../project/index.ts';
+import {
+  canonicalTextOf,
+  type PeerRanges,
+  publishedSnapshotOf,
+  versionBumpOf,
+} from '@cf-loom/contract/internal';
+import { type Peers, peerRangesOf, publishedPeersOf } from '../contract-package/index.ts';
+import type { BuiltProject, Run } from '../project/index.ts';
 import {
   type DerivedVersion,
   type Deriving,
@@ -94,11 +99,19 @@ function derivingOf({ comparison, peers }: Prepared, options: PublishOptions): D
       return { baseline: undefined, versions: [], ...options };
     case 'baseline': {
       const { read, report } = comparison;
-      const bump = versionBumpOf(report, { baseline: read.peers, proposed: peerRangesOf(peers) });
+      const proposed = proposedPeersOf(comparison.built, peers);
+      const bump = versionBumpOf(report, { baseline: read.peers, proposed });
       const baseline = { version: read.snapshot.version, stable: read.stable, bump };
       return { baseline, versions: read.versions, ...options };
     }
   }
+}
+
+/** The peer ranges the package is published with, which the Baseline's are compared with. */
+function proposedPeersOf(built: BuiltProject, peers: Peers): PeerRanges {
+  return built.snapshot.kind === 'definitions'
+    ? publishedPeersOf(built.project.manifest, peers)
+    : peerRangesOf(peers);
 }
 
 /** The Snapshot as published at the derived version, with the Baseline's history merged in. */

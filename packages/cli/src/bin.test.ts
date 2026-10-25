@@ -4153,6 +4153,26 @@ function neverPublished(registry: Registry, packageName = ordersPackage): string
   return `${packageName} has no Baseline: ${why}`;
 }
 
+const anotherPeer = '^2.0.0';
+const otherPeerMeta = { '@org/other': { optional: true } };
+
+/** The manifest fields of a Definitions Package with the peer `@org/other` at `range`, and the two cf-loom peers as a monorepo writes them. */
+function withOtherPeer(range: string): Readonly<Record<string, unknown>> {
+  const peerDependencies = {
+    '@cf-loom/contract': 'workspace:^',
+    zod: 'catalog:',
+    '@org/other': range,
+  };
+  return { peerDependencies, peerDependenciesMeta: otherPeerMeta };
+}
+
+/** A version of `@org/definitions` as its project would publish it with the peer `@org/other` at `range`. */
+function publishedWithOtherPeer(project: string, range: string): ServedVersion {
+  const baseline = publishedAs(project, '1.0.0');
+  const peerDependencies = { ...installedPeers, '@org/other': range };
+  return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
+}
+
 describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   test('publish fails when contract.snapshot.json is out of date, before it reads the registry', async ({
     lab,
@@ -4903,6 +4923,53 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
   });
 
+  test('a Definitions Package’s peers besides zod and @cf-loom/contract are published as written, and the two are set to carets', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer(anotherPeer)));
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(registry.published[0]?.manifest).toMatchObject({
+      peerDependencies: { ...installedPeers, '@org/other': '^2.0.0' },
+      peerDependenciesMeta: otherPeerMeta,
+    });
+  });
+
+  test('a Definitions Package with a peer besides zod and @cf-loom/contract and nothing changed publishes nothing', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer(anotherPeer)));
+    const served = servedAs('@org/definitions', publishedWithOtherPeer(project, '^2.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const nothing =
+      'Nothing to publish: the Snapshot and peer ranges are those of @org/definitions@1.0.0; --force publishes anyway';
+    const checked = 'Checked against @org/definitions@1.0.0';
+    expect(ran).toEqual({ status: 0, stdout: `${checked}\n${nothing}\n`, stderr: '' });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a peer of a Definitions Package besides zod and @cf-loom/contract moving to a new major publishes a major although the Snapshot did not change', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer('^3.0.0')));
+    const served = servedAs('@org/definitions', publishedWithOtherPeer(project, '^2.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const checked = 'Checked against @org/definitions@1.0.0';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\nPublished @org/definitions@2.0.0\n`,
+      stderr: '',
+    });
+    expect(registry.published[0]?.manifest).toMatchObject({
+      peerDependencies: { ...installedPeers, '@org/other': '^3.0.0' },
+    });
+  });
+
   test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
     lab,
   }) => {
@@ -4954,6 +5021,16 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       'lists a link: range in optionalDependencies',
       { optionalDependencies: { left: 'link:./vendor/left' } },
       'package.json lists left in optionalDependencies as link:./vendor/left, which npm cannot install from the registry',
+    ],
+    [
+      'lists a workspace: range in peerDependencies',
+      { peerDependencies: { '@org/shared': 'workspace:*' } },
+      'package.json lists @org/shared in peerDependencies as workspace:*, which npm cannot install from the registry',
+    ],
+    [
+      'lists a catalog: range in peerDependencies',
+      { peerDependencies: { left: 'catalog:' } },
+      'package.json lists left in peerDependencies as catalog:, which npm cannot install from the registry',
     ],
   ] as const)(
     'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
