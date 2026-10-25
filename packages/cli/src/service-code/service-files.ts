@@ -1,5 +1,5 @@
 import { byCodePoint } from '@cf-loom/contract/internal';
-import type { ExportedAt } from '../loading/index.ts';
+import type { ExportedAt, RootPlace } from '../loading/index.ts';
 import {
   defaultImportOf,
   headerOf,
@@ -9,20 +9,29 @@ import {
   namedImportOf,
   relativeSpecifierOf,
   stringLiteralOf,
+  typeImportOf,
 } from '../source-text/index.ts';
 import { handlerLocalOf, nameInCodeOf } from './code-names.ts';
 import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
-import { readersTable } from './readers.ts';
+import { handlersPackage, readersTable } from './readers.ts';
+
+/** Where the Handler map is written, the readers file it imports, and the root it is typed by. */
+type HandlerMapPlace = {
+  readonly file: string;
+  readonly readersFile: string;
+  readonly root: Pick<RootPlace, 'file' | 'exported'>;
+};
 
 /**
  * The Handler map written at `file`: plain data importing each Handler and the `readers` of the
- * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is.
+ * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is; it
+ * `satisfies HandlerMapOf<typeof contract>`, so a missing or misplaced Handler is a type error.
  */
 export function handlerMapTextOf(
   mapped: readonly HandlerPath[],
   stamps: readonly DeprecationStamp[],
-  { file, readersFile }: { readonly file: string; readonly readersFile: string },
+  { file, readersFile, root }: HandlerMapPlace,
 ): string {
   const handlerImports = mapped.map(({ handled, path }) => {
     const specifier = relativeSpecifierOf(file, path);
@@ -33,7 +42,12 @@ export function handlerMapTextOf(
     specifier: readersSpecifier,
     line: namedImportOf([readersTable], readersSpecifier),
   };
-  const imports = [...handlerImports, readersImport]
+  const rootSpecifier = relativeSpecifierOf(file, root.file);
+  const typeImports = [
+    { specifier: rootSpecifier, line: typeImportOf([root.exported], rootSpecifier) },
+    { specifier: handlersPackage, line: typeImportOf(['HandlerMapOf'], handlersPackage) },
+  ];
+  const imports = [...handlerImports, readersImport, ...typeImports]
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ line }) => line);
   const handled = mapped.map(({ handled }) => handled);
@@ -49,7 +63,7 @@ export function handlerMapTextOf(
     ...mapLinesOf('subscriptions', subscriptions),
     `  ${readersTable},`,
     ...stampLinesOf(stamps),
-    '};',
+    `} satisfies HandlerMapOf<typeof ${root.exported}>;`,
   ];
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
 }
@@ -73,7 +87,7 @@ export function exportedTargetOf(imported: ExportedAt, local: string): StubTarge
 export function stubTextOf(path: string, { imported, local, members }: StubTarget): string {
   const specifier = specifierOf(path, imported);
   const imports = [
-    namedImportOf(['handle'], '@cf-loom/handlers'),
+    namedImportOf(['handle'], handlersPackage),
     namedImportOf([importSpecifierOf(imported.name, local)], specifier),
   ];
   return moduleTextOf({

@@ -7,15 +7,7 @@ import {
   defineRejection,
   notFound,
 } from '@cf-loom/contract';
-import {
-  admit,
-  type GuardCall,
-  handle,
-  readersOf,
-  reject,
-  success,
-  type WithResources,
-} from '@cf-loom/handlers';
+import { admit, handle, readersOf, reject, success, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { serve } from './index.ts';
@@ -88,7 +80,7 @@ const seen: unknown[] = [];
 
 const getOrderHandler = handle(
   getOrder,
-  ({ params }, context, { resources: taken }: Needs<'orders'>) => {
+  ({ params }, { context }, { resources: taken }: Needs<'orders'>) => {
     seen.push(taken);
     const name = taken.orders.find(params.orderId);
     return name === undefined
@@ -99,11 +91,7 @@ const getOrderHandler = handle(
 
 const apiKeyHandler = handle(
   apiKey,
-  (
-    { headers },
-    _context,
-    { resources: taken }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
-  ) => {
+  ({ headers }, _call, { resources: taken }: Needs<'callers'>) => {
     seen.push(taken);
     const callerId = taken.callers.byKey(headers['x-api-key']);
     return callerId === undefined ? reject(unauthenticated) : admit({ callerId });
@@ -201,6 +189,18 @@ describe('serve: Resources', () => {
     expect(served).toHaveLength(2);
   });
 
+  test('a map of stubs is served with Resources given', () => {
+    const stubs = {
+      endpoints: { getOrder: handle.stub(getOrder), health: handle.stub(health) },
+      guards: { apiKey: handle.stub(apiKey) },
+      deprecatedAt: {},
+    };
+
+    const http = serve(contract, stubs, { resources: { orders } });
+
+    expect(http).toBeTypeOf('function');
+  });
+
   test('a test that replaces a Handler by spreading the map needs only what the rest take', async () => {
     const replaced = {
       ...handlers,
@@ -212,5 +212,47 @@ describe('serve: Resources', () => {
     const response = await http(getOrderRequest('any'));
 
     expect(await response.json()).toEqual({ name: 'Book', callerId: 'c-9' });
+  });
+});
+
+describe('serve: the request an EndpointHandler receives', () => {
+  test('an EndpointHandler receives the request’s headers as received, x-request-id included', async () => {
+    const received: Headers[] = [];
+    const healthy = handle(health, (_input, { request }) => {
+      received.push(request.headers);
+      return success();
+    });
+    const http = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, health: healthy } },
+      {
+        resources,
+      },
+    );
+
+    await http(new Request('http://test/health', { headers: { 'x-request-id': 'r-1' } }));
+
+    expect(received[0]?.get('x-request-id')).toBe('r-1');
+  });
+
+  test('an EndpointHandler receives the request’s abort signal, which aborts when the Request’s does', async () => {
+    const controller = new AbortController();
+    const received: AbortSignal[] = [];
+    const healthy = handle(health, (_input, { request }) => {
+      received.push(request.signal);
+      controller.abort();
+      return success();
+    });
+    const http = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, health: healthy } },
+      {
+        resources,
+      },
+    );
+
+    await http(new Request('http://test/health', { signal: controller.signal }));
+
+    expect(received[0]?.aborted).toBe(true);
   });
 });

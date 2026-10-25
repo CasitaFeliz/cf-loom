@@ -1,11 +1,12 @@
 import {
   defineContract,
+  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
 } from '@cf-loom/contract';
-import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, type HandledRequest, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type ServedFault, serve } from './index.ts';
@@ -106,12 +107,15 @@ const userTokenHandler = handle(userToken, ({ headers }) => {
   return admit({ userId: 'u-1' });
 });
 
-const permissionHandler = handle(permission, (_demands, { userToken: user }, { qualifier }) => {
-  calls.push('permission');
-  return admit({ granted: [user.userId, ...qualifier] });
-});
+const permissionHandler = handle(
+  permission,
+  (_demands, { context: { userToken: user }, qualifier }) => {
+    calls.push('permission');
+    return admit({ granted: [user.userId, ...qualifier] });
+  },
+);
 
-const updateOrderHandler = handle(updateOrder, (_input, context) => {
+const updateOrderHandler = handle(updateOrder, (_input, { context }) => {
   calls.push('updateOrder');
   return success({ by: context.userToken.userId, granted: context.permission.granted });
 });
@@ -262,6 +266,63 @@ describe('serve: Guards', () => {
       rejection: { code: 'NOT_IMPLEMENTED', message: 'Not implemented' },
     });
     expect(invalid.status).toBe(400);
+  });
+
+  test('a GuardHandler under serve receives the request’s headers and its signal', async () => {
+    const controller = new AbortController();
+    const received: HandledRequest[] = [];
+    const reading = handle(userToken, (_demands, { request }) => {
+      received.push(request);
+      return admit({ userId: 'u-1' });
+    });
+    const served = { ...handlers, guards: { ...handlers.guards, userToken: reading } };
+    const headers = { authorization: 'Bearer u-1', 'x-request-id': 'r-7' };
+
+    await serve(
+      contract,
+      served,
+    )(
+      new Request('http://test/notes', {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'hi' }),
+        signal: controller.signal,
+      }),
+    );
+    controller.abort();
+
+    expect(received[0]?.headers.get('x-request-id')).toBe('r-7');
+    expect(received[0]?.signal.aborted).toBe(true);
+  });
+
+  test('a GuardHandler stub answers the not-implemented code its root resolves', async () => {
+    const definitions = defineDefinitions({
+      standardRejections: {
+        notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Coming soon' },
+      },
+    });
+    const rooted = defineContract({
+      name: 'orders-service',
+      standardRejections: definitions,
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [addNote] })],
+    });
+    const stubbed = {
+      endpoints: { addNote: handlers.endpoints.addNote },
+      guards: { userToken: handle.stub(userToken) },
+      deprecatedAt: {},
+    };
+    const headers = { authorization: 'Bearer u-1', 'content-type': 'application/json' };
+    const body = JSON.stringify({ text: 'hi' });
+
+    const response = await serve(
+      rooted,
+      stubbed,
+    )(new Request('http://test/notes', { method: 'POST', headers, body }));
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NOT_YET_IMPLEMENTED', message: 'Coming soon' },
+    });
   });
 
   test('an EndpointHandler stub answers not implemented', async () => {

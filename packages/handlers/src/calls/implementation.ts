@@ -1,4 +1,4 @@
-import { type HandledElement, isMessageElement } from './elements.ts';
+import type { HandledElement } from './elements.ts';
 import { elementNameOf } from './errors.ts';
 
 /** What an implementation returned: what it built, or a `TypeError` naming a value it may not return. */
@@ -23,9 +23,17 @@ export async function returnedOf<Built>(
   return { kind: 'not-built', cause: new TypeError(`${named} but ${describedOf(built)}`) };
 }
 
-/** What a Handler answers, by its Element: a Message Handler a Fault or nothing, any other an Outcome. */
+/** What a Handler answers, by its Element: an EndpointHandler an Outcome, a GuardHandler an Admission, a Message Handler a Fault or nothing. */
 function answeredOf(element: HandledElement): string {
-  return isMessageElement(element) ? 'Fault' : 'Outcome';
+  switch (element.kind) {
+    case 'endpoint':
+      return 'Outcome';
+    case 'guard':
+      return 'Admission';
+    case 'command':
+    case 'subscription':
+      return 'Fault';
+  }
 }
 
 /** What a Handler returned instead of what it answers, by its type or kind, never its content. */

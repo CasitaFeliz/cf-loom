@@ -10,6 +10,11 @@ export const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as c
  */
 export type Method = (typeof methods)[number];
 
+/** Whether a request's method is one an Endpoint may declare. */
+export function isMethod(method: string): method is Method {
+  return methods.some((declarable) => declarable === method);
+}
+
 /** The statuses a Success may declare, as values, so the runtime repeats the type's rule. */
 export const successStatuses = [200, 201, 202, 203, 204] as const;
 

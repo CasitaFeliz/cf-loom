@@ -1,8 +1,13 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
-import { type HandledElement, isPairing, type MessageElement } from '../calls/index.ts';
+import {
+  elementNameOf,
+  type HandledElement,
+  isPairing,
+  type MessageElement,
+} from '../calls/index.ts';
 import type { HandlerMap } from './handler.ts';
-import { isWrittenFor, isWrittenForPairing } from './written.ts';
+import { isWrittenForPairing, writtenElementOf } from './written.ts';
 
 /** Where in the Handler map a Handler sits: its map and its key there, which an error names. */
 export type MapKey = {
@@ -19,16 +24,31 @@ export function mappedHandlerOf<Element extends HandledElement>(
   at: MapKey,
   element: Element,
 ): { readonly element: Element } {
+  const where = `${at.map}.${at.key}`;
   const handler = ownOf(byName, at.key);
   if (handler === undefined) {
-    throw new Error(`${at.map}.${at.key} has no Handler in the Handler map`);
+    throw new Error(`${where} has no Handler in the Handler map: run cf-loom generate`);
   }
-  if (!isWrittenFor(handler, element)) {
-    throw new Error(
-      `${at.map}.${at.key} holds no Handler handle() returned for it: run cf-loom generate`,
-    );
+  const written = writtenElementOf(handler);
+  if (written !== element) {
+    throw new Error(`${where} ${mismatchOf(written, element)}`);
   }
-  return handler;
+  return handler as { readonly element: Element };
+}
+
+/**
+ * What a key holds instead of the Handler written for its Element: a value `handle()` did not
+ * return, the Handler of another copy of that Element, or the Handler of another Element.
+ */
+function mismatchOf(written: HandledElement | undefined, element: HandledElement): string {
+  if (written === undefined) {
+    return 'holds a value handle() did not return: wrap inside the implementation instead';
+  }
+  const name = elementNameOf(element);
+  if (written.kind === element.kind && elementNameOf(written) === name) {
+    return `holds a Handler written for another copy of ${name}: is @cf-loom/contract or the Contract loaded twice?`;
+  }
+  return `holds the Handler written for ${elementNameOf(written)}`;
 }
 
 /**

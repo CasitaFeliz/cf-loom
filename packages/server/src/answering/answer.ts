@@ -6,13 +6,12 @@ import {
   type Reading,
   type ReadingSource,
   readingOf,
-  reservedResponseOf,
   withDeprecation,
 } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { type EndpointRun, notRunFaultOf, runEndpoint } from '@cf-loom/handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
-import { type Call, partsOf } from './call.ts';
+import { type Call, handledRequestOf, partsOf } from './call.ts';
 import { fallbackAnswerOf } from './fallback.ts';
 import { guardRunsOf } from './guards.ts';
 import type { FaultedBy } from './hooks.ts';
@@ -22,6 +21,7 @@ import {
   answeredOfInvalidInput,
   answeredOfNotSuccess,
   answeredOfSuccess,
+  reservedAnsweredOf,
 } from './runs.ts';
 
 /**
@@ -47,16 +47,14 @@ export async function answerOf(
   }
   switch (match.kind) {
     case 'none':
-      return reservedAnswerOf(reservedResponseOf('NO_SUCH_ENDPOINT'));
-    case 'other-method':
-      return reservedAnswerOf(methodNotAllowedResponseOf(match.allowed));
+      return { kind: 'served', answered: reservedAnsweredOf('NO_SUCH_ENDPOINT') };
+    case 'other-method': {
+      const response = methodNotAllowedResponseOf(match.allowed);
+      return { kind: 'served', answered: reservedAnsweredOf('METHOD_NOT_ALLOWED', response) };
+    }
     case 'matched':
       return await matchedAnswerOf(served, match, request);
   }
-}
-
-function reservedAnswerOf(response: Response): AnsweredFor {
-  return { kind: 'served', answered: { kind: 'fault', response } };
 }
 
 /** A request a declared Endpoint matched: `RETIRED`, or its call answered. */
@@ -67,8 +65,7 @@ async function matchedAnswerOf(
 ): Promise<AnsweredFor> {
   switch (endpoint.kind) {
     case 'retired': {
-      const answered = { kind: 'fault' as const, response: reservedResponseOf('RETIRED') };
-      return { kind: 'served', endpoint, answered };
+      return { kind: 'served', endpoint, answered: reservedAnsweredOf('RETIRED') };
     }
     case 'live': {
       const answered = await answeredCallOf({ endpoint, request, source }, served);
@@ -95,9 +92,10 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
       const given = {
         input: reading.input,
         context: runs.context(),
+        request: handledRequestOf(call.request),
         resources: served.resources,
       };
-      const run = await runEndpoint(call.endpoint.handler, given, served.standards);
+      const run = await runEndpoint(call.endpoint.handler, given);
       return answeredRunOf(run, faultedBy, served.standards);
     }
   }
@@ -131,5 +129,5 @@ function answeredRunOf(
   if (outcome.kind === 'success') {
     return answeredOfSuccess(outcome);
   }
-  return answeredOfNotSuccess(outcome, faultedBy);
+  return answeredOfNotSuccess(outcome, faultedBy, standards);
 }

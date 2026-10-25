@@ -5,9 +5,9 @@ import {
   defineGuard,
   defineSubscription,
   notFound,
+  notImplemented,
   openEnum,
   openEnumReader,
-  type StandardRejections,
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -27,11 +27,7 @@ import {
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
-const standards: StandardRejections = {
-  invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
-  notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
-  notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
-};
+const request = { signal: new AbortController().signal, headers: new Headers() };
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -99,10 +95,11 @@ describe('runEndpoint', () => {
     const call = {
       input: { params: { orderId: 'nope' } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
-    const run = await runEndpoint(getOrderHandler, call, standards);
+    const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toEqual({
       kind: 'invalid-input',
@@ -122,32 +119,28 @@ describe('runEndpoint', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
-    const run = await runEndpoint(brokenHandler, call, standards);
+    const run = await runEndpoint(brokenHandler, call);
 
     expect(run).toMatchObject({ kind: 'invalid-outcome', issues: [{ part: 'success.body' }] });
   });
 
-  test('an answer is the resolved Outcome, Standard Rejections resolved with the given ones', async () => {
+  test('an answer is the checked Outcome, a Standard Rejection as built', async () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
-    const run = await runEndpoint(getOrderHandler, call, standards);
+    const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toEqual({
       kind: 'answered',
-      answer: {
-        kind: 'rejection',
-        rejection: notFound,
-        code: 'MISSING',
-        status: 404,
-        message: 'Nothing here',
-      },
+      answer: { kind: 'rejection', rejection: notFound },
     });
   });
 });
@@ -161,12 +154,13 @@ describe('runGuard', () => {
       demands: {},
       context: { apiKey: {} },
       qualifier: 'orders:delete',
+      request,
       resources: undefined,
     };
 
     const runs = [
-      await runGuard(apiKeyHandler, { ...call, context: {}, qualifier: undefined }, standards),
-      await runGuard(permissionHandler, call, standards),
+      await runGuard(apiKeyHandler, { ...call, context: {}, qualifier: undefined }),
+      await runGuard(permissionHandler, call),
     ];
 
     expect(runs).toMatchObject([
@@ -187,25 +181,30 @@ describe('runGuard', () => {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
-    const run = await runGuard(apiKeyHandler, call, standards);
+    const run = await runGuard(apiKeyHandler, call);
 
     expect(run).toMatchObject({ kind: 'invalid-outcome', issues: [{ part: 'context' }] });
   });
 
-  test('an answer is the resolved Admission, a stub’s Rejection resolved with the given ones', async () => {
+  test('an answer is the checked Admission, a stub’s Rejection as built', async () => {
     const call = {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
-    const run = await runGuard(handle.stub(apiKey), call, standards);
+    const run = await runGuard(handle.stub(apiKey), call);
 
-    expect(run).toMatchObject({ kind: 'answered', answer: { code: 'NOT_YET', status: 501 } });
+    expect(run).toStrictEqual({
+      kind: 'answered',
+      answer: { kind: 'rejection', rejection: notImplemented },
+    });
   });
 });
 
@@ -218,10 +217,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
-    const run = await runEndpoint(getOrderHandler, call, standards);
+    const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toEqual({
       kind: 'thrown',
@@ -241,14 +241,17 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
       qualifier: undefined,
+      request,
       resources: undefined,
     };
 
-    const run = await runGuard(apiKeyHandler, call, standards);
+    const run = await runGuard(apiKeyHandler, call);
 
     expect(run).toMatchObject({
       kind: 'thrown',
-      fault: { cause: new TypeError("apiKey's Handler returned no Outcome but the kind success") },
+      fault: {
+        cause: new TypeError("apiKey's Handler returned no Admission but the kind success"),
+      },
     });
   });
 
@@ -257,10 +260,11 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
+      request,
       resources: undefined,
     };
 
-    const run = await runEndpoint(getOrderHandler, call, standards);
+    const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toMatchObject({ kind: 'answered', answer: { kind: 'fault', committed: 'no' } });
   });
@@ -270,12 +274,14 @@ describe('what a run tells to be no Outcome', () => {
   const endpointCall = {
     input: { params: { orderId: ORDER_ID } },
     context: getContext,
+    request,
     resources: undefined,
   };
   const guardCall = {
     demands: { headers: { 'x-api-key': 'k' } },
     context: {},
     qualifier: undefined,
+    request,
     resources: undefined,
   };
   const fields = { committed: 'no', retryable: true, message: 'Try again' };
@@ -289,7 +295,7 @@ describe('what a run tells to be no Outcome', () => {
   ])('an EndpointHandler returning %s is thrown', async (_name, returned) => {
     const getOrderHandler = handle(getOrder, () => returned as never);
 
-    const run = await runEndpoint(getOrderHandler, endpointCall, standards);
+    const run = await runEndpoint(getOrderHandler, endpointCall);
 
     expect(run.kind).toBe('thrown');
   });
@@ -297,7 +303,7 @@ describe('what a run tells to be no Outcome', () => {
   test('a GuardHandler returning an admission without its Context is thrown', async () => {
     const apiKeyHandler = handle(apiKey, () => ({ kind: 'admitted' }) as never);
 
-    const run = await runGuard(apiKeyHandler, guardCall, standards);
+    const run = await runGuard(apiKeyHandler, guardCall);
 
     expect(run.kind).toBe('thrown');
   });
@@ -305,7 +311,7 @@ describe('what a run tells to be no Outcome', () => {
   test('a Fault a GuardHandler returns is answered', async () => {
     const apiKeyHandler = handle(apiKey, () => fault({ committed: 'no', retryable: true }));
 
-    const run = await runGuard(apiKeyHandler, guardCall, standards);
+    const run = await runGuard(apiKeyHandler, guardCall);
 
     expect(run).toMatchObject({ kind: 'answered', answer: { kind: 'fault', committed: 'no' } });
   });
@@ -314,9 +320,9 @@ describe('what a run tells to be no Outcome', () => {
 describe('a Handler of another kind', () => {
   test('runGuard given an EndpointHandler throws Not a Handler', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
-    const call = { demands: {}, context: {}, qualifier: undefined, resources: undefined };
+    const call = { demands: {}, context: {}, qualifier: undefined, request, resources: undefined };
 
-    const run = () => runGuard(getOrderHandler as never, call, standards);
+    const run = () => runGuard(getOrderHandler as never, call);
 
     expect(run).toThrow('Not a Handler');
   });
@@ -444,9 +450,9 @@ describe('mappedHandlerOf, by its key', () => {
     ];
 
     expect(lookups.map(errorMessageOf)).toEqual([
-      'commands.chargeCardV1 has no Handler in the Handler map',
-      'commands.chargeCardV1 has no Handler in the Handler map',
-      'commands.chargeCardV1 holds no Handler handle() returned for it: run cf-loom generate',
+      'commands.chargeCardV1 has no Handler in the Handler map: run cf-loom generate',
+      'commands.chargeCardV1 has no Handler in the Handler map: run cf-loom generate',
+      'commands.chargeCardV1 holds the Handler written for notifyOnPaid',
     ]);
   });
 

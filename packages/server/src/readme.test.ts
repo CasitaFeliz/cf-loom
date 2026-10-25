@@ -44,7 +44,7 @@ const handlers = {
   endpoints: {
     getOrder: handle(
       getOrder,
-      ({ params }, context, { resources: { orders } }: WithResources<Resources>) =>
+      ({ params }, { context }, { resources: { orders } }: WithResources<Resources>) =>
         success({ id: orders.nameOf(params.orderId), callerId: context.apiKey.callerId }),
     ),
   },
@@ -83,11 +83,23 @@ describe('the READMEs', () => {
     const http = serve(contract, handlers, {
       resources,
       maxBodyBytes: 1_000_000,
-      onServiceFault: (fault) => {
+      onServiceFault: (fault, request) => {
         expectTypeOf(fault.identity).toEqualTypeOf<string>();
+        expectTypeOf(request).toEqualTypeOf<Request>();
       },
-      onOutcome: async ({ method, endpoint, path, status, kind, durationMs }) => {
-        expectTypeOf([method, endpoint, path, status, kind, durationMs]).not.toBeNever();
+      onAnswered: async (answered, request) => {
+        const { method, endpoint, path, status, kind, code, aborted, durationMs } = answered;
+        expectTypeOf([
+          method,
+          endpoint,
+          path,
+          status,
+          kind,
+          code,
+          aborted,
+          durationMs,
+        ]).not.toBeNever();
+        expectTypeOf(request.headers.get('traceparent')).toEqualTypeOf<string | null>();
       },
     });
 
@@ -99,14 +111,14 @@ describe('the READMEs', () => {
   test('a record with an Endpoint has its path and declared method, one without has neither', () => {
     const http = serve(contract, handlers, {
       resources,
-      onOutcome: (record) => {
+      onAnswered: (record) => {
         if (record.endpoint !== undefined) {
           expectTypeOf(record.path).toEqualTypeOf<string>();
           expectTypeOf(record.method).toEqualTypeOf<Method>();
           return;
         }
         expectTypeOf(record.path).toEqualTypeOf<undefined>();
-        expectTypeOf(record.method).toEqualTypeOf<string>();
+        expectTypeOf(record.method).toEqualTypeOf<Method | 'HEAD' | '_OTHER'>();
       },
     });
 

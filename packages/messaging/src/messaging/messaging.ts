@@ -1,5 +1,5 @@
 import type { Contract } from '@cf-loom/contract';
-import type { ResourcesOf } from '@cf-loom/handlers';
+import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import type { Broker, BrokerService } from '../broker/index.ts';
 import {
@@ -30,7 +30,9 @@ export type ConsumeOptions<Resources extends object = NoResources> = ResourcesFi
 export type Messaging<C extends Contract> = {
   readonly publisher: EventPublisher<C>;
   readonly sender: CommandSender<C>;
-  readonly consume: <Handlers extends ConsumedHandlers>(
+  readonly consume: <
+    const Handlers extends Pick<HandlerMapOf<C>, 'commands' | 'subscriptions' | 'readers'>,
+  >(
     handlers: Handlers,
     ...options: CallArgument<
       ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>

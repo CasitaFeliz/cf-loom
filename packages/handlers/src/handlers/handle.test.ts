@@ -13,14 +13,15 @@ import {
   admit,
   type CommandHandler,
   type EndpointHandler,
+  type EndpointImplementation,
   type EventHandler,
   type Fault,
   fault,
-  type GuardCall,
   type GuardHandler,
   type HandlerMap,
   handle,
   type MessageMeta,
+  type ResourcesNotAnnotated,
   type ResourcesOf,
   readersOf,
   reject,
@@ -35,6 +36,13 @@ const apiKey = defineGuard({
   description: 'An API key per Caller',
   demands: { headers: z.object({ 'x-api-key': z.string() }) },
   context: z.object({ callerId: z.string() }),
+});
+
+const permission = defineGuard({
+  name: 'permission',
+  description: 'The Caller holds every listed permission',
+  guards: [apiKey],
+  qualifier: z.array(z.enum(['orders:read', 'orders:edit'])).min(1),
 });
 
 const orderEndpoint = {
@@ -334,7 +342,7 @@ describe('handle', () => {
 
     expect(admission).toMatchObject({
       kind: 'fault',
-      cause: new TypeError("apiKey's Handler returned no Outcome but undefined"),
+      cause: new TypeError("apiKey's Handler returned no Admission but undefined"),
     });
   });
 });
@@ -346,7 +354,7 @@ describe('handle and Resources', () => {
   test('handle() infers the Resources an EndpointHandler takes from its last parameter', () => {
     const getOrderHandler = handle(
       getOrder,
-      (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+      (_input, _call, { resources }: WithResources<OrdersTaken>) =>
         resources.orders.find(ORDER_ID) === undefined
           ? reject(notFound)
           : success({ id: ORDER_ID }),
@@ -357,7 +365,7 @@ describe('handle and Resources', () => {
   });
 
   test('a direct call without the Resources the Handler takes is a type error, and one that takes none needs no last argument', () => {
-    const takes = handle(getOrder, (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+    const takes = handle(getOrder, (_input, _call, { resources }: WithResources<OrdersTaken>) =>
       resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
     );
     const takesNone = handle(getOrder, () => reject(notFound));
@@ -380,7 +388,7 @@ describe('handle and Resources', () => {
     type CallersTaken = { readonly callers: { readonly byKey: (key: string) => string } };
     const apiKeyHandler = handle(
       apiKey,
-      (_demands, _context, { resources }: GuardCall<typeof apiKey, CallersTaken>) =>
+      (_demands, _call, { resources }: WithResources<CallersTaken>) =>
         admit({ callerId: resources.callers.byKey('k') }),
     );
     const demands = { headers: { 'x-api-key': 'k' } };
@@ -397,6 +405,25 @@ describe('handle and Resources', () => {
       { resources: { callers: { byKey: () => 'c-1' } } },
     );
     expect(calls).toBeDefined();
+  });
+
+  test('Needs<…> types a Qualifier Guard’s last parameter, its Qualifier in the second', () => {
+    type Resources = { readonly permissions: { readonly held: readonly string[] } };
+    type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+    const permissionHandler = handle(
+      permission,
+      (_demands, { qualifier }, { resources: { permissions } }: Needs<'permissions'>) =>
+        qualifier.every((code) => permissions.held.includes(code)) ? admit() : admit(),
+    );
+
+    expectTypeOf(permissionHandler).toEqualTypeOf<
+      GuardHandler<typeof permission, Pick<Resources, 'permissions'>>
+    >();
+    expectTypeOf<
+      ResourcesOf<{ guards: { permission: typeof permissionHandler } }>
+    >().toEqualTypeOf<{
+      readonly permissions: { readonly held: readonly string[] };
+    }>();
   });
 
   test('handle() infers the Resources a Message Handler takes from its last parameter', () => {
@@ -432,22 +459,20 @@ describe('handle and Resources', () => {
     expect(calls).toBeDefined();
   });
 
-  test('a Handler that takes none, with an unannotated last parameter, may find its resources undefined', () => {
-    type NoResourcesTaken = Readonly<Record<never, never>>;
-
+  test('a Handler that takes none, with an unannotated last parameter, finds its resources ResourcesNotAnnotated or undefined', () => {
     const handlers = [
-      handle(getOrder, (_input, _context, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(getOrder, (_input, _call, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
         return reject(notFound);
       }),
-      handle(chargeCard, (_body, _meta, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(chargeCard, (_body, _meta, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
       }),
-      handle(notifyOnPaid, (_body, _meta, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(notifyOnPaid, (_body, _meta, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
       }),
-      handle(apiKey, (_demands, _context, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(apiKey, (_demands, _call, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
         return admit({ callerId: 'c-1' });
       }),
     ];
@@ -458,6 +483,39 @@ describe('handle and Resources', () => {
       notifyOnPaidV1,
       apiKey,
     ]);
+  });
+
+  test('an unannotated Handler that destructures its resources is a type error naming ResourcesNotAnnotated', () => {
+    const write = () =>
+      // @ts-expect-error Property 'orders' does not exist on type 'ResourcesNotAnnotated | undefined'
+      handle(getOrder, (_input, _call, { resources: { orders } }) =>
+        orders === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+      );
+
+    expect(write).toBeTypeOf('function');
+  });
+
+  test('an implementation whose last parameter holds anything beside resources is a type error', () => {
+    type Orders = { readonly orders: { readonly find: (orderId: string) => string | undefined } };
+    const written = (
+      _input: unknown,
+      _call: unknown,
+      last: { readonly resources: Orders; readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+    const intersected = (
+      _input: unknown,
+      _call: unknown,
+      last: WithResources<Orders> & { readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+
+    const write = () => [
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, written),
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, intersected),
+    ];
+
+    expect(write).toBeTypeOf('function');
   });
 
   test('a stub takes no Resources', () => {
@@ -483,7 +541,7 @@ describe('ResourcesOf', () => {
   test('a Handler map holds every Resource any of its Handlers takes, and a stub takes none', () => {
     const handlers = {
       endpoints: {
-        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+        getOrder: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
           resources.orders.find(ORDER_ID) === undefined
             ? reject(notFound)
             : success({ id: ORDER_ID }),
@@ -491,13 +549,8 @@ describe('ResourcesOf', () => {
         findOrder: handle.stub(findOrder),
       },
       guards: {
-        apiKey: handle(
-          apiKey,
-          (
-            _demands,
-            _context,
-            { resources }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
-          ) => admit({ callerId: resources.callers.byKey('k') }),
+        apiKey: handle(apiKey, (_demands, _call, { resources }: Needs<'callers'>) =>
+          admit({ callerId: resources.callers.byKey('k') }),
         ),
       },
     };
@@ -507,6 +560,67 @@ describe('ResourcesOf', () => {
       readonly callers: Callers;
     }>();
     expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+  });
+
+  test('an implementation typed by its last parameter gives a Handler that takes those Resources', () => {
+    const implementation: EndpointImplementation<typeof getOrder, Needs<'orders'>> = (
+      _input,
+      _call,
+      { resources },
+    ) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID });
+
+    expectTypeOf(handle(getOrder, implementation)).toEqualTypeOf<
+      EndpointHandler<typeof getOrder, Pick<Resources, 'orders'>>
+    >();
+  });
+
+  test('handle() keeps the any an implementation types its Resources as, every kind alike', () => {
+    /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
+    const handlers = [
+      handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+        resources ? reject(notFound) : success({ id: ORDER_ID }),
+      ),
+      handle(apiKey, (_demands, _call, { resources }: WithResources<any>) =>
+        admit({ callerId: resources.callerId }),
+      ),
+      handle(chargeCard, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+      handle(notifyOnPaid, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+      handle<typeof getOrder, any>(getOrder, () => reject(notFound)),
+      handle(getOrder, (_input, _call, last: any) => (last ? reject(notFound) : reject(notFound))),
+    ] as const;
+
+    expectTypeOf(handlers[0]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[1]).toEqualTypeOf<GuardHandler<typeof apiKey, any>>();
+    expectTypeOf(handlers[2]).toEqualTypeOf<CommandHandler<typeof chargeCard, any>>();
+    expectTypeOf(handlers[3]).toEqualTypeOf<EventHandler<typeof notifyOnPaid, any>>();
+    expectTypeOf(handlers[4]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[5]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
+    expect(handlers.map(({ element }) => element)).toEqual([
+      getOrder,
+      apiKey,
+      chargeCardV1,
+      notifyOnPaidV1,
+      getOrder,
+      getOrder,
+    ]);
+  });
+
+  test('a Handler whose Resources are any makes ResourcesOf name the cause', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
+    const loose = handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+      resources ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+    const handlers = { endpoints: { getOrder: loose } };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(
+      'A Handler types its Resources as any: type them, as Needs<…> does',
+    );
   });
 
   test('a Handler map none of whose Handlers takes Resources holds none', () => {
@@ -526,12 +640,12 @@ describe('ResourcesOf', () => {
     type Narrow = { readonly orders: { readonly find: () => string } };
     const handlers = {
       endpoints: {
-        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+        getOrder: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
           resources.orders.find(ORDER_ID) === undefined
             ? reject(notFound)
             : success({ id: ORDER_ID }),
         ),
-        findOrder: handle(findOrder, (_input, _context, { resources }: WithResources<Narrow>) =>
+        findOrder: handle(findOrder, (_input, _call, { resources }: WithResources<Narrow>) =>
           resources.orders.find() === undefined ? reject(notFound) : success({ id: ORDER_ID }),
         ),
       },

@@ -33,15 +33,12 @@ export function writtenOf<Kind extends AnyWritten>(
   return written;
 }
 
-/** Whether a value is a Handler `handle()` returned for this very Endpoint, Guard, Command or Subscription. */
-export function isWrittenFor<Element extends HandledElement>(
-  handler: unknown,
-  element: Element,
-): handler is { readonly element: Element } {
+/** What a value was written for, when `handle()` returned it; none for any other value. */
+export function writtenElementOf(handler: unknown): HandledElement | undefined {
   if (typeof handler !== 'function') {
-    return false;
+    return undefined;
   }
-  return writtenByHandler.get(handler)?.element === element;
+  return writtenByHandler.get(handler)?.element;
 }
 
 /** Whether a value is a Message Handler `handle()` returned for this very pairing, the one object the readers file exports. */

@@ -1,4 +1,5 @@
 import type { Endpoint, Guard, Method } from '@cf-loom/contract';
+import { isMethod } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -32,6 +33,10 @@ export type AnsweredRequest = {
   readonly status: number;
   /** Whether a Success, a Rejection or a Fault was sent. */
   readonly kind: 'success' | 'rejection' | 'fault';
+  /** The code sent: a Rejection's, as the root resolved it, or a reserved Fault's; none for a Success or a Fault the Service produced. */
+  readonly code?: string;
+  /** Whether the Caller went away before `serve` had its answer: the request's signal when the record is built. */
+  readonly aborted: boolean;
   /** How long the request took, in milliseconds. */
   readonly durationMs: number;
 } & (
@@ -44,49 +49,66 @@ export type AnsweredRequest = {
       readonly path: string;
     }
   | {
-      /** The request's method as the web-standard `Request` holds it, whatever it is. */
-      readonly method: string;
+      /**
+       * The request's method when an Endpoint may declare it, or `HEAD`, else `_OTHER`, so its
+       * cardinality is bounded, as OpenTelemetry's `http.request.method` asks.
+       */
+      readonly method: Method | 'HEAD' | '_OTHER';
       readonly endpoint?: never;
       readonly path?: never;
     }
 );
 
-/** The record `onOutcome` receives: the request's method, and the matched Endpoint's name and path. */
+/**
+ * The record `onAnswered` receives: the method, and the matched Endpoint's name and path, and
+ * whether the request's signal aborted before its answer.
+ */
 export function answeredRequestOf(
-  method: string,
+  request: Request,
   endpoint: Endpoint | undefined,
-  sent: Pick<AnsweredRequest, 'status' | 'kind' | 'durationMs'>,
+  sent: Pick<AnsweredRequest, 'status' | 'kind' | 'code' | 'durationMs'>,
 ): AnsweredRequest {
+  const answered = { ...sent, aborted: request.signal.aborted };
   if (endpoint === undefined) {
-    return { method, ...sent };
+    return { method: recordedMethodOf(request.method), ...answered };
   }
-  return { method: endpoint.method, endpoint: endpoint.name, path: endpoint.path, ...sent };
+  return { method: endpoint.method, endpoint: endpoint.name, path: endpoint.path, ...answered };
 }
 
-/** Hands a Service's Fault to its hook, or to the console without one; a hook that fails is logged. */
+/** An unmatched request's method as recorded: one an Endpoint may declare, or `HEAD`, else `_OTHER`. */
+function recordedMethodOf(method: string): Method | 'HEAD' | '_OTHER' {
+  return isMethod(method) || method === 'HEAD' ? method : '_OTHER';
+}
+
+/** A hook of `serve`: it receives what it hears of, and the Request it came from. */
+export type ServeHook<Heard> = (heard: Heard, request: Request) => void | Promise<void>;
+
+/** Hands a Service's Fault and its Request to its hook, or the Fault to the console without one; a hook that fails is logged. */
 export async function reportServedFault(
   servedFault: ServedFault,
-  onServiceFault: ((fault: ServedFault) => void | Promise<void>) | undefined,
+  request: Request,
+  onServiceFault: ServeHook<ServedFault> | undefined,
 ): Promise<void> {
   if (onServiceFault === undefined) {
     logServedFault(servedFault);
     return;
   }
-  await hookFailureOf(onServiceFault, servedFault, {
+  await hookFailureOf((fault) => onServiceFault(fault, request), servedFault, {
     source: sourceOf(servedFault),
     hook: 'onServiceFault',
   });
 }
 
-/** Hands a request's record to `onOutcome`, if any; one that fails is logged. */
+/** Hands a request's record and the Request to `onAnswered`, if any; one that fails is logged. */
 export async function recordAnswered(
   record: AnsweredRequest,
-  onOutcome: ((request: AnsweredRequest) => void | Promise<void>) | undefined,
+  request: Request,
+  onAnswered: ServeHook<AnsweredRequest> | undefined,
 ): Promise<void> {
-  if (onOutcome !== undefined) {
-    await hookFailureOf(onOutcome, record, {
+  if (onAnswered !== undefined) {
+    await hookFailureOf((answered) => onAnswered(answered, request), record, {
       source: record.endpoint ?? 'serve',
-      hook: 'onOutcome',
+      hook: 'onAnswered',
     });
   }
 }

@@ -43,10 +43,17 @@ export function nodeHttp(http: Http): Server {
 
 /**
  * Answers an incoming message with what `http` returns; one answered before its body arrived whole
- * closes the connection, so a body `serve` did not read never stalls the next request.
+ * closes the connection, so a body `serve` did not read never stalls the next request. The
+ * request's signal aborts when the response closes before it finished, as when the Caller goes away.
  */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const read = incomingOf(incoming);
+  const controller = new AbortController();
+  outgoing.once('close', () => {
+    if (!outgoing.writableFinished) {
+      controller.abort();
+    }
+  });
+  const read = incomingOf(incoming, controller.signal);
   const response =
     read.kind === 'request' ? await answeredOf(http, read.request, rejectedLine) : read.response;
   if (!incoming.complete) {
@@ -63,12 +70,12 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
  * The web-standard `Request` of an incoming message: `NO_SUCH_ENDPOINT` for a method a `Request`
  * refuses, which no Endpoint can have, and 400 when its target or its `Host` names no URL.
  */
-function incomingOf(incoming: IncomingMessage): Incoming {
+function incomingOf(incoming: IncomingMessage, signal: AbortSignal): Incoming {
   if (refusedMethods.includes((incoming.method ?? '').toUpperCase())) {
     return { kind: 'answered', response: reservedResponseOf('NO_SUCH_ENDPOINT') };
   }
   const url = urlOf(incoming);
-  const request = url === undefined ? undefined : requestOf(incoming, url);
+  const request = url === undefined ? undefined : requestOf(incoming, url, signal);
   if (request === undefined) {
     return { kind: 'answered', response: new Response(null, { status: 400 }) };
   }
@@ -103,25 +110,25 @@ function isBareHost(host: string): boolean {
  * The `Request` of an incoming message on its URL, or none when a `Request` refuses what Node
  * accepted, so nothing it is given throws past the listener.
  */
-function requestOf(incoming: IncomingMessage, url: URL): Request | undefined {
+function requestOf(incoming: IncomingMessage, url: URL, signal: AbortSignal): Request | undefined {
   try {
-    return newRequestOf(incoming, url);
+    return newRequestOf(incoming, url, signal);
   } catch {
     return undefined;
   }
 }
 
-function newRequestOf(incoming: IncomingMessage, url: URL): Request {
+function newRequestOf(incoming: IncomingMessage, url: URL, signal: AbortSignal): Request {
   const headers = new Headers();
   for (let index = 0; index + 1 < incoming.rawHeaders.length; index += 2) {
     headers.append(incoming.rawHeaders[index] ?? '', incoming.rawHeaders[index + 1] ?? '');
   }
   const method = incoming.method ?? 'GET';
   if (bodiless.includes(method)) {
-    return new Request(url, { method, headers });
+    return new Request(url, { method, headers, signal });
   }
   const body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
-  return new Request(url, { method, headers, body, duplex: 'half' } as RequestInit);
+  return new Request(url, { method, headers, body, duplex: 'half', signal } as RequestInit);
 }
 
 /** Writes a `Response` to the outgoing message: its status, headers and body. */

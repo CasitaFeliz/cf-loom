@@ -14,7 +14,7 @@ export type HandlerFailure =
   | { readonly kind: 'thrown'; readonly cause: unknown };
 
 /** A hook `serve` or messaging calls. */
-export type HookName = 'onServiceFault' | 'onOutcome' | 'onBrokerTrouble';
+export type HookName = 'onServiceFault' | 'onAnswered' | 'onBrokerTrouble';
 
 /** How a Handler's failure reads on the console, after what it came from: the Fault's message, or `the Handler threw`. */
 export function failureLineOf(source: string, failure: HandlerFailure): string {

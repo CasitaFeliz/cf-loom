@@ -1,12 +1,6 @@
-import type { Command, Endpoint, Guard, StandardRejections, Subscription } from '@cf-loom/contract';
+import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
 import { notImplemented } from '@cf-loom/contract';
-import {
-  isEndpoint,
-  isGuard,
-  type Refusal,
-  standardRejectionDefaults,
-  standardRejectionsOf,
-} from '@cf-loom/contract/internal';
+import { isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
 import {
   answerOf,
   elementNameOf,
@@ -21,10 +15,9 @@ import {
   type Pairing,
   type Written,
 } from '../calls/index.ts';
-import { checkedBody } from '../checks/index.ts';
+import { checkedBody, type HandledRequest } from '../checks/index.ts';
 import { reject } from '../outcomes/index.ts';
 import type {
-  DirectCall,
   EndpointHandler,
   EndpointImplementation,
   GuardHandler,
@@ -36,9 +29,13 @@ import type {
   DirectMeta,
   EventHandler,
   EventImplementation,
-  MessageCall,
 } from './message-handler.ts';
-import type { NoResources } from './resources.ts';
+import type {
+  LastNotAnnotated,
+  NoResources,
+  ResourcesLast,
+  TakenResourcesOf,
+} from './resources.ts';
 import {
   type AnyHandler,
   type AnyWritten,
@@ -60,15 +57,15 @@ type BareMessageRefusal =
 /** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
 type ImplementationOf<
   Target extends HandleArgument,
-  Resources extends object,
+  Last extends ResourcesLast<Last>,
 > = Target extends Endpoint
-  ? EndpointImplementation<Target, Resources>
+  ? EndpointImplementation<Target, Last>
   : Target extends Guard
-    ? GuardImplementation<Target, Resources>
+    ? GuardImplementation<Target, Last>
     : Target extends Pairing<Command>
-      ? CommandImplementation<Target, Resources>
+      ? CommandImplementation<Target, Last>
       : Target extends Pairing<Subscription>
-        ? EventImplementation<Target, Resources>
+        ? EventImplementation<Target, Last>
         : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
@@ -89,13 +86,13 @@ type TargetOf<Target extends HandleArgument> = Target extends MessageElement
 
 function handleImplementation<
   Target extends HandleArgument,
-  Resources extends object = NoResources,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
 >(
   target: TargetOf<Target>,
-  implementation: ImplementationOf<Target, Resources>,
-): HandlerOf<Target, Resources> {
+  implementation: ImplementationOf<Target, Last>,
+): HandlerOf<Target, TakenResourcesOf<Last>> {
   const how = { implementation: implementation as Implementation, stub: false };
-  return handlerOf(target, how) as HandlerOf<Target, Resources>;
+  return handlerOf(target, how) as HandlerOf<Target, TakenResourcesOf<Last>>;
 }
 
 function stubOf<Target extends HandleArgument>(
@@ -156,48 +153,53 @@ function directCallOf(written: AnyWritten) {
   return messageCallOf(written);
 }
 
+/** What a direct call is given beside its Input or demands, before it is checked. */
+type DirectCallGiven = {
+  readonly context?: unknown;
+  readonly qualifier?: unknown;
+  readonly request?: Partial<HandledRequest>;
+};
+
+/** What a direct call is given last, before it is checked: the Resources, passed on unchecked. */
+type DirectLastGiven = { readonly resources?: unknown };
+
 function endpointCallOf(written: Written<Endpoint>) {
-  return async (input: unknown, context: unknown, directCall?: DirectCall<object>) => {
-    const resources = directCall?.resources;
-    const run = await endpointRunOf(
-      written,
-      { input, context, resources },
-      standardsOf(directCall),
-    );
+  return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
+    const given = { input, context: call.context, request: requestOf(call) };
+    const run = await endpointRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
   };
 }
 
-/** A GuardHandler's last argument as a direct call may leave it, before it is checked. */
-type GuardCallGiven = { readonly qualifier?: unknown; readonly resources?: unknown };
-
 function guardCallOf(written: Written<Guard>) {
-  return async (demands: unknown, context: unknown, call?: GuardCallGiven) => {
-    const given = { demands, context, qualifier: call?.qualifier, resources: call?.resources };
-    const run = await guardRunOf(written, given, standardRejectionDefaults);
+  return async (demands: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
+    const { qualifier } = call;
+    const given = { demands, context: call.context, qualifier, request: requestOf(call) };
+    const run = await guardRunOf(written, { ...given, resources: last?.resources });
     return answerOf(written.element, run);
+  };
+}
+
+/** The request a direct call gives its Handler: a signal never aborted and empty headers, unless given. */
+function requestOf({ request }: DirectCallGiven): HandledRequest {
+  return {
+    signal: request?.signal ?? new AbortController().signal,
+    headers: request?.headers ?? new Headers(),
   };
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (body: unknown, given: DirectMeta, call?: MessageCall<object>) => {
+  return async (body: unknown, given: DirectMeta, last?: DirectLastGiven) => {
     const { messageId, factId, deliveryCount, lastAttempt = false, headers = {} } = given;
     const signal = given.signal ?? new AbortController().signal;
     const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
     const run = await messageRunOf(
       written,
-      { body, meta, resources: call?.resources },
+      { body, meta, resources: last?.resources },
       checkedBody,
     );
     return messageAnswerOf(written.element, run);
   };
-}
-
-function standardsOf(directCall: DirectCall<object> | undefined): StandardRejections {
-  if (directCall?.contract === undefined) {
-    return standardRejectionDefaults;
-  }
-  return standardRejectionsOf(directCall.contract);
 }
 
 const notImplementedStub: Implementation = () => reject(notImplemented);

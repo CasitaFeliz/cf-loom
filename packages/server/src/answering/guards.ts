@@ -2,7 +2,7 @@ import type { Endpoint, Guard } from '@cf-loom/contract';
 import { contextProvidersOf, type ReadingSource } from '@cf-loom/contract/internal';
 import { runGuard } from '@cf-loom/handlers/internal';
 import type { ServedContract } from '../served/index.ts';
-import type { Call } from './call.ts';
+import { type Call, handledRequestOf } from './call.ts';
 import { type Answered, answeredOfFailedRun, answeredOfNotSuccess } from './runs.ts';
 
 /** The GuardHandler runs of one request, and the Context the Endpoint receives once they admit. */
@@ -27,14 +27,21 @@ export function guardRunsOf(
       throw new Error(`${endpoint.name} has no Attachment at ${index}`);
     }
     const context = contextOf(attachment.guard, contexts);
-    const given = { demands, context, qualifier: attachment.qualifier, resources };
-    const run = await runGuard(attachment.handler, given, standards);
+    const { qualifier } = attachment;
+    const given = {
+      demands,
+      context,
+      qualifier,
+      request: handledRequestOf(call.request),
+      resources,
+    };
+    const run = await runGuard(attachment.handler, given);
     const faultedBy = { element: endpoint, identity: endpoint.name, guard: attachment.guard };
     if (run.kind !== 'answered') {
       return { kind: 'stopped', answer: answeredOfFailedRun(run, faultedBy, standards) };
     }
     if (run.answer.kind !== 'admitted') {
-      return { kind: 'stopped', answer: answeredOfNotSuccess(run.answer, faultedBy) };
+      return { kind: 'stopped', answer: answeredOfNotSuccess(run.answer, faultedBy, standards) };
     }
     contexts.set(attachment.guard, run.answer.context);
     return { kind: 'admitted' };

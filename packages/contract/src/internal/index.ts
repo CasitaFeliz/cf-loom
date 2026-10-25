@@ -27,9 +27,12 @@ export {
   versionBumpOf,
 } from '../compatibility/index.ts';
 export type {
+  AttachedGuardsOf,
+  CodeNameOf,
   GroupedField,
   GroupedOf,
   IsOneLiteral,
+  LiveOf,
   ProvidedEvent,
   Refusal,
 } from '../declarations/index.ts';
@@ -44,6 +47,7 @@ export {
   isGroup,
   isGuard,
   isLive,
+  isMethod,
   isRejection,
   isReservedCode,
   isStamp,
@@ -51,7 +55,6 @@ export {
   isSubscription,
   kebabCase,
   lifecycleOf,
-  standardRejectionDefaults,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';

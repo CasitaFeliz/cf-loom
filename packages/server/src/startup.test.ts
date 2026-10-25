@@ -93,9 +93,12 @@ describe('serve: what it checks before the first request', () => {
   test('a live Endpoint without a Handler throws, naming it', () => {
     const missing = { ...handlers, endpoints: { getOrder: handlers.endpoints.getOrder } };
 
+    // @ts-expect-error findOrder has no Handler
     const serving = () => serve(contract, missing);
 
-    expect(serving).toThrow('endpoints.findOrder has no Handler in the Handler map');
+    expect(serving).toThrow(
+      'endpoints.findOrder has no Handler in the Handler map: run cf-loom generate',
+    );
   });
 
   test('a Handler written for another Endpoint throws, naming the Endpoint', () => {
@@ -104,28 +107,55 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, findOrder: handlers.endpoints.getOrder },
     };
 
-    const serving = () => serve(contract, swapped as never);
+    // @ts-expect-error findOrder holds the Handler of getOrder
+    const serving = () => serve(contract, swapped);
 
-    expect(serving).toThrow(
-      'endpoints.findOrder holds no Handler handle() returned for it: run cf-loom generate',
-    );
+    expect(serving).toThrow('endpoints.findOrder holds the Handler written for getOrder');
   });
 
   test('a value handle() did not return throws, naming the Endpoint', () => {
     const lookalike = Object.assign(() => undefined, { element: findOrder });
     const forged = { ...handlers, endpoints: { ...handlers.endpoints, findOrder: lookalike } };
 
+    // @ts-expect-error a wrapper is no Handler handle() returned
     const serving = () => serve(contract, forged);
 
-    expect(serving).toThrow('endpoints.findOrder holds no Handler handle() returned for it');
+    expect(serving).toThrow(
+      'endpoints.findOrder holds a value handle() did not return: wrap inside the implementation instead',
+    );
+  });
+
+  test('a Handler written for another copy of the Endpoint throws, asking whether it was loaded twice', () => {
+    const copy = defineEndpoint({
+      name: 'findOrder',
+      method: 'GET',
+      path: '/orders/find',
+      visibility: 'public',
+      description: 'Finds an order',
+      lifecycle: 'deprecated',
+      success: { status: 204 },
+    });
+    const copied = {
+      ...handlers,
+      endpoints: { ...handlers.endpoints, findOrder: handle(copy, () => success()) },
+    };
+
+    const serving = () => serve(contract, copied);
+
+    expect(serving).toThrow(
+      'endpoints.findOrder holds a Handler written for another copy of findOrder: is @cf-loom/contract or the Contract loaded twice?',
+    );
   });
 
   test('a Guard a live Endpoint attaches without a Handler throws, naming it', () => {
     const missing = { ...handlers, guards: {} };
 
+    // @ts-expect-error apiKey has no Handler
     const serving = () => serve(contract, missing);
 
-    expect(serving).toThrow('guards.apiKey has no Handler in the Handler map');
+    expect(serving).toThrow(
+      'guards.apiKey has no Handler in the Handler map: run cf-loom generate',
+    );
   });
 
   test('a Deprecated Endpoint without its deprecatedAt throws, since the map is stale', () => {
@@ -257,15 +287,18 @@ describe('serve: what it checks before the first request', () => {
 
     const serving = () => serve(contract, inherited);
 
-    expect(serving).toThrow('endpoints.getOrder has no Handler in the Handler map');
+    expect(serving).toThrow(
+      'endpoints.getOrder has no Handler in the Handler map: run cf-loom generate',
+    );
   });
 
   test('a GuardHandler written for another Guard throws, naming the Guard', () => {
     const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit()) } };
 
-    const serving = () => serve(contract, swapped as never);
+    // @ts-expect-error apiKey holds the Handler of legacyKey
+    const serving = () => serve(contract, swapped);
 
-    expect(serving).toThrow('guards.apiKey holds no Handler handle() returned for it');
+    expect(serving).toThrow('guards.apiKey holds the Handler written for legacyKey');
   });
 
   test('a text part that holds no zod schema throws, as generate words it', () => {

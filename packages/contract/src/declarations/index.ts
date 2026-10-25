@@ -1,11 +1,11 @@
-export type { Attachment, QualifiedAttachment } from './attachment.ts';
+export type { AttachedGuardsOf, Attachment, QualifiedAttachment } from './attachment.ts';
 export type { Command } from './command.ts';
 export { defineCommand } from './command.ts';
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
 export type { ContractPackage, Dependency, ProvidedEvent } from './dependency.ts';
 export { defineDependency } from './dependency.ts';
-export type { Lifecycle, Visibility } from './element.ts';
+export type { Lifecycle, LiveOf, Visibility } from './element.ts';
 export {
   eventVisibilities,
   isLive,
@@ -36,7 +36,13 @@ export type { GroupedField, GroupedOf } from './grouped.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
-export { isRejectionStatus, methods, reservedHeaderNames, successStatuses } from './http.ts';
+export {
+  isMethod,
+  isRejectionStatus,
+  methods,
+  reservedHeaderNames,
+  successStatuses,
+} from './http.ts';
 export type {
   ContextOf,
   DemandsOf,
@@ -47,6 +53,7 @@ export type {
   RequiredContextOf,
   SuccessOf,
 } from './inference.ts';
+export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
   isApplication,

@@ -46,8 +46,11 @@ type Pairing = {
   readonly reader: string;
 };
 
+/** The package the generated files import `handle`, `readersOf` and `HandlerMapOf` from. */
+export const handlersPackage = '@cf-loom/handlers';
+
 /** `readersOf`, which the table of pairings is built by, and the package it is imported from. */
-const readersOfImport = { name: 'readersOf', specifier: '@cf-loom/handlers' } as const;
+const readersOfImport = { name: 'readersOf', specifier: handlersPackage } as const;
 
 /** The name the readers file exports its table of pairings under, which the Handler map imports and lists. */
 export const readersTable = 'readers';

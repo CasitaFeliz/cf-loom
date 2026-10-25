@@ -26,6 +26,11 @@ export function isLive(element: { readonly lifecycle?: string | undefined }): bo
   return element.lifecycle !== 'retired';
 }
 
+/** The members of a union of declarations that are not Retired: the type twin of `isLive`. */
+export type LiveOf<Declared> = Declared extends { readonly lifecycle: 'retired' }
+  ? never
+  : Declared;
+
 /**
  * Whether a Dependency of a Service or of an Application may target an Element of a Visibility: a
  * Service's any but Private, an Application's Public only, since it runs outside the internal network.
