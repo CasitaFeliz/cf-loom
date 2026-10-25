@@ -8,9 +8,11 @@ import {
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Fault,
   fault,
   handle,
   InvalidInputError,
+  type MessageFault,
   readersOf,
   success,
   type WithResources,
@@ -275,6 +277,27 @@ describe("what a Message Handler's direct call answers", () => {
     const answer = await chargeCardHandler(body, meta);
 
     expect(answer).toBe(returned);
+  });
+
+  test('a Message Handler may return a retryable Fault, but not one with retryAfter', () => {
+    const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
+    const retryable = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
+    // @ts-expect-error the durable consumer's configuration decides when the Message comes again
+    const timed = handle(chargeCard, () => later);
+
+    expect([typeof retryable, typeof timed]).toEqual(['function', 'function']);
+  });
+
+  test('a helper typed MessageFault serves a Message Handler, and one typed Fault does not', () => {
+    function unavailable(): MessageFault {
+      return fault({ committed: 'no', retryable: true });
+    }
+
+    const helped = handle(chargeCard, async (): Promise<MessageFault | undefined> => unavailable());
+    // @ts-expect-error a Message Handler's Fault is a MessageFault, with no retryAfter
+    const typedFault = handle(chargeCard, async (): Promise<Fault | undefined> => undefined);
+
+    expect([typeof helped, typeof typedFault]).toEqual(['function', 'function']);
   });
 
   test('what the Handler throws is rethrown, the same error', async () => {

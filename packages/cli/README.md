@@ -329,8 +329,8 @@ The responses are one per status, in status order; when several answer one statu
 | --- | --- |
 | the Success's | `Success`, with its headers (each with its `description`) and its body; none for a body-less Success such as a 204 |
 | each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it |
-| 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one |
-| 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` |
+| 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one, which may carry `retry-after` |
+| 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` as a number |
 
 A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input.
 

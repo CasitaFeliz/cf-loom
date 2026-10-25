@@ -95,7 +95,7 @@ One of the three Rejections whose code, status and message come from a Definitio
 _Avoid_: generic error, built-in error
 
 **Fault**:
-A technical failure any Handler can produce and no Endpoint, Guard or Message declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it.
+A technical failure any Handler can produce and no Endpoint, Guard or Message declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it; over HTTP, a retryable one may say in whole seconds when to retry.
 _Avoid_: error, server error, operation failure
 
 **Envelope**:

@@ -73,7 +73,7 @@ async function answeredOf(faking: Faking, matched: Matched, request: Request): P
     return taken.response;
   }
   const scripted = await stepAnswerOf(taken.step, matched.listed, taken.input);
-  return responseOf(answerOf(scripted), matched.listed);
+  return responseOf(answerOf(scripted), matched);
 }
 
 /** What a request takes: the invalid-input Rejection, or its step and its parsed Input. */

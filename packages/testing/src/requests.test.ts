@@ -383,4 +383,18 @@ describe('fakeProvider: requests', () => {
       'payments-service: no Endpoint it exports is GET /refunds/r-1 under /payments-api/',
     );
   });
+
+  test('a method the exported path does not take is a mistake naming the path’s methods', async () => {
+    const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
+
+    const answering = fake.fetch(
+      new Request('https://gateway.test/payments-api/payments/pay-1', {
+        method: 'DELETE',
+      }),
+    );
+
+    await expect(answering).rejects.toThrow(
+      'payments-service: no Endpoint it exports is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
+    );
+  });
 });

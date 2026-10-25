@@ -10,7 +10,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
+import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -122,7 +122,9 @@ type Orders = ReturnType<typeof anOrders>;
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
 
-type Behavior = (received: Received) => Promise<Fault | undefined> | Fault | undefined;
+type Behavior = (
+  received: Received,
+) => Promise<MessageFault | undefined> | MessageFault | undefined;
 
 /** The Handler map of Orders, each Handler recording what it receives and then doing as the behavior says. */
 function handlersOf(
@@ -130,7 +132,7 @@ function handlersOf(
   behaviors: { notify?: Behavior; charge?: Behavior } = {},
 ) {
   const recording = (handler: string, behavior: Behavior | undefined) => {
-    return async (body: unknown, meta: MessageMeta): Promise<Fault | undefined> => {
+    return async (body: unknown, meta: MessageMeta): Promise<MessageFault | undefined> => {
       const entry = { handler, body, meta };
       received.push(entry);
       return await behavior?.(entry);
@@ -157,7 +159,7 @@ function handlersOf(
 async function aMessaging(
   prefix: string,
   settings: {
-    readonly onServiceFault?: (fault: ConsumedFault) => void;
+    readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
     readonly replacing?: Replacing;
     readonly servers?: string;
     readonly inboxPrefix?: string;
@@ -791,6 +793,33 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  }, 10_000);
+
+  test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered though its Fault would end it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const hook = new Error('the hook is down');
+    const orders = await aMessaging(prefix, {
+      onServiceFault: async () => Promise.reject(hook),
+    });
+    const refusingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        return fault({ committed: 'no', retryable: false });
+      }
+      return undefined;
+    };
+    await orders.consume(handlersOf(received, { notify: refusingOnce }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    expect(logged).toHaveBeenCalledWith(
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      hook,
+    );
   }, 10_000);
 
   test('a Handler running past the ack wait keeps its Message: another process of the Service is not given it meanwhile', async () => {

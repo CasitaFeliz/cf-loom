@@ -6,21 +6,34 @@ import { answerOf } from './answer.ts';
 import {
   type AnsweredRequest,
   answeredRequestOf,
+  recordAnswered,
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
 
+/** How many bytes of a request body `serve` reads before answering `BODY_TOO_LARGE`: a whole number from 0, or `'unlimited'`. */
+export type BodyLimit = number | 'unlimited';
+
 /** What `serve` takes besides the Contract and the Handler map: the Resources its Handlers take, and what is operational about serving; none of it is part of the Contract. */
 export type ServeOptions<Resources extends object = NoResources> = ResourcesField<Resources> & {
-  /** The most bytes of a body `serve` reads before answering `BODY_TOO_LARGE`; none sets no limit. */
-  readonly maxBodyBytes?: number;
+  /**
+   * The most bytes of a body `serve` reads before answering `BODY_TOO_LARGE`, or `'unlimited'`;
+   * none sets no limit, the host's or the gateway's. Any other value throws at startup.
+   */
+  readonly maxBodyBytes?: BodyLimit;
   /**
    * Receives every Fault the Service's side produced: one a Handler returned or threw, an Outcome
    * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.
    */
-  readonly onServiceFault?: (fault: ServedFault) => void;
-  /** Receives one record per request answered, for metrics and tracing. */
-  readonly onOutcome?: (request: AnsweredRequest) => void;
+  readonly onServiceFault?: (fault: ServedFault) => void | Promise<void>;
+  /**
+   * Answers every request no declared Endpoint matches, such as a health check or CORS preflight,
+   * its Response returned as is, and the internal Fault if it rejects; without it,
+   * `NO_SUCH_ENDPOINT`, or `METHOD_NOT_ALLOWED` on a declared path.
+   */
+  readonly fallback?: Http;
+  /** Receives one record per request answered, for metrics and tracing; never one the fallback answered. */
+  readonly onOutcome?: (request: AnsweredRequest) => void | Promise<void>;
 };
 
 /**
@@ -40,14 +53,21 @@ export function serve(
   const served = servedContractOf(contract, handlers, options);
   return async (request) => {
     const started = performance.now();
-    const { endpoint, answered } = await answerOf(served, request);
+    const answer = await answerOf(served, request, options.fallback);
+    if (answer.kind === 'fallback') {
+      return answer.response;
+    }
+    const { endpoint, answered } = answer;
     if (answered.kind === 'fault' && answered.servedFault !== undefined) {
-      reportServedFault(answered.servedFault, options.onServiceFault);
+      await reportServedFault(answered.servedFault, options.onServiceFault);
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;
     const sent = { status, kind: answered.kind, durationMs };
-    options.onOutcome?.(answeredRequestOf(request.method, endpoint?.declared, sent));
+    await recordAnswered(
+      answeredRequestOf(request.method, endpoint?.declared, sent),
+      options.onOutcome,
+    );
     return answered.response;
   };
 }

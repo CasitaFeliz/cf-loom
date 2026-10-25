@@ -1,9 +1,14 @@
 import { admit, handle } from '@cf-loom/handlers';
-import { type Messaging, messaging } from '@cf-loom/messaging';
+import {
+  type ConsumedFault,
+  type Messaging,
+  type MessagingOptions,
+  messaging,
+} from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
-import { type Http, serve } from '@cf-loom/server';
+import { type Http, type ServedFault, serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
 import type { Resources } from '../src/resources.ts';
@@ -135,5 +140,18 @@ describe('serve', () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ fault: { code: 'NO_SUCH_ENDPOINT' } });
+  });
+});
+
+describe('onServiceFault', () => {
+  test('one async hook for ServedFault and ConsumedFault is accepted by both serve and messaging', () => {
+    const onServiceFault = async (fault: ServedFault | ConsumedFault): Promise<void> => {
+      expectTypeOf(fault.identity).toEqualTypeOf<string>();
+    };
+
+    const served = serve(contract, handlers, { resources, onServiceFault });
+
+    expectTypeOf(onServiceFault).toExtend<NonNullable<MessagingOptions['onServiceFault']>>();
+    expect(typeof served).toBe('function');
   });
 });

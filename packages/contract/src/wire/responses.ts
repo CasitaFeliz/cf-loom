@@ -47,10 +47,22 @@ export function rejectionResponseOf(rejection: SentRejection): Response {
   return jsonResponseOf(rejection.status, rejectionEnvelopeOf(rejection));
 }
 
-/** The response of a Fault the Service produced: only its `committed`, `retryable` and `message` travel. */
-export function faultResponseOf({ committed, retryable, message }: SentFault): Response {
+/**
+ * The response of a Fault the Service produced: only its `committed`, `retryable` and `message`
+ * travel, and its `retryAfter` as `Retry-After` when it has one.
+ */
+export function faultResponseOf({
+  committed,
+  retryable,
+  message,
+  retryAfter,
+}: SentFault & { readonly retryAfter?: number | undefined }): Response {
   const envelope = faultEnvelopeOf({ committed, retryable, message });
-  return jsonResponseOf(faultStatusOf({ retryable }), envelope);
+  const response = jsonResponseOf(faultStatusOf({ retryable }), envelope);
+  if (retryAfter !== undefined) {
+    response.headers.set('retry-after', String(retryAfter));
+  }
+  return response;
 }
 
 /** The status a Fault the Service produced travels with: 503 when retryable, else 500. */
@@ -65,6 +77,13 @@ export function faultStatusOf({ retryable }: Pick<SentFault, 'retryable'>): numb
 export function reservedResponseOf(code: ReservedCode): Response {
   const { status, committed, message } = reservedFaults[code];
   return jsonResponseOf(status, faultEnvelopeOf({ code, committed, retryable: false, message }));
+}
+
+/** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes. */
+export function methodNotAllowedResponseOf(allowed: readonly string[]): Response {
+  const response = reservedResponseOf('METHOD_NOT_ALLOWED');
+  response.headers.set('allow', allowed.join(', '));
+  return response;
 }
 
 function sentHeaderTextsOf(success: SentSuccess): readonly (readonly [string, string])[] {

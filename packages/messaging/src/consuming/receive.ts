@@ -1,9 +1,9 @@
 import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
-import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
+import { hookFailureOf, type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
-import { type About, aboutOf, type Report } from './faults.ts';
+import { type About, aboutOf, type Report, sourceOf } from './faults.ts';
 
 /** A pulled Subscription or Command Version, the Handler the map holds for it and the Resources it runs with. */
 export type Pulled = {
@@ -12,17 +12,26 @@ export type Pulled = {
   readonly resources: unknown;
 };
 
-/** What became of one delivery once its Handler ran, reported when it ended or failed. */
+/**
+ * What became of one delivery once its Handler ran, reported when it ended or failed; a hook that
+ * throws or rejects is logged and rejects it, which leaves the Message for redelivery.
+ */
 export async function settlementOf(
   pulled: Pulled,
   delivery: Delivery,
   report: Report,
 ): Promise<Settlement> {
   const run = await runOf(pulled, delivery);
-  const settlement = settlementOfRun(run, aboutOf(pulled.consumed, delivery));
+  const about = aboutOf(pulled.consumed, delivery);
+  const settlement = settlementOfRun(run, about);
   const fault = faultOf(settlement);
-  if (fault !== undefined) {
-    report(fault);
+  if (fault === undefined) {
+    return settlement;
+  }
+  const called = { source: sourceOf(about), hook: 'onServiceFault' } as const;
+  const failure = await hookFailureOf(report, fault, called);
+  if (failure !== undefined) {
+    throw failure.cause;
   }
   return settlement;
 }

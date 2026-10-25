@@ -366,7 +366,7 @@ describe('row 2, more', () => {
     { name: 'TimeoutError', source: 'timeout', retryable: true, message: 'The request timed out' },
     { name: 'AbortError', source: 'aborted', retryable: false, message: 'The request was aborted' },
   ] as const)(
-    'a $name raised while the body is read is told by its name, with the status that had arrived',
+    'an error named $name raised while the body is read is told by its name, with the status that had arrived',
     async ({ name, source, retryable, message }) => {
       const failure = new DOMException('raised by a wrapper', name);
       const stream = new ReadableStream<Uint8Array>({

@@ -46,12 +46,13 @@ export {
   invalidInputResponseOf,
   rejectionBodyReaderOf,
 } from './invalid-input.ts';
-export type { Matchable } from './match.ts';
-export { matchedOf, matchOf } from './match.ts';
+export type { Match, Matchable } from './match.ts';
+export { allowedMethodsOf, matchedOf, matchOf } from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,
   faultStatusOf,
+  methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
   successResponseOf,

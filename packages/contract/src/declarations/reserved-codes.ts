@@ -2,6 +2,7 @@
 export const reservedCodes = [
   'RETIRED',
   'NO_SUCH_ENDPOINT',
+  'METHOD_NOT_ALLOWED',
   'BODY_TOO_LARGE',
   'INVALID_OUTCOME',
 ] as const;

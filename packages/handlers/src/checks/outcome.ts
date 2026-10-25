@@ -1,11 +1,13 @@
 import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
 import { headerTextsOf, partFieldOf, schemaOf, successParts } from '@cf-loom/contract/internal';
-import type {
-  AnyAdmission,
-  AnyOutcome,
-  BuiltSuccess,
-  ResolvedAdmission,
-  ResolvedOutcome,
+import {
+  type AnyAdmission,
+  type AnyOutcome,
+  type BuiltSuccess,
+  type Fault,
+  type ResolvedAdmission,
+  type ResolvedOutcome,
+  retryAfterProblemOf,
 } from '../outcomes/index.ts';
 import { type Checked, checkedAll, checkedPart, fieldOf, mapValue } from './checked.ts';
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
@@ -26,7 +28,7 @@ export function checkedOutcome(
     case 'rejection':
       return checkedEndpointRejection(endpoint, built, standards);
     case 'fault':
-      return { kind: 'value', value: built };
+      return checkedFault(built);
   }
 }
 
@@ -47,8 +49,18 @@ export function checkedAdmission(
     case 'rejection':
       return checkedGuardRejection(guard, built, standards);
     case 'fault':
-      return { kind: 'value', value: built };
+      return checkedFault(built);
   }
+}
+
+/** A Fault a Handler built, sendable: its `retryAfter`, if any, one `Retry-After` can carry. */
+function checkedFault(built: Fault): Checked<Fault> {
+  const message = retryAfterProblemOf(built);
+  if (message === undefined) {
+    return { kind: 'value', value: built };
+  }
+  const issue = { part: 'fault', path: ['retryAfter'], code: 'invalid_value', message } as const;
+  return { kind: 'issues', issues: [issue] };
 }
 
 /**

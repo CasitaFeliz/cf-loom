@@ -49,14 +49,11 @@ type Bytes =
  * A request's JSON body: its content type first, then its bytes, counted as read against
  * `maxBodyBytes` whatever `Content-Length` says, then UTF-8 JSON; an empty body is no JSON.
  */
-export async function bodyOf(
-  message: BodyMessage,
-  maxBodyBytes: number | undefined,
-): Promise<Body> {
+export async function bodyOf(message: BodyMessage, maxBodyBytes: number): Promise<Body> {
   if (!isJsonContentType(message.headers.get('content-type'))) {
     return notJsonContentType;
   }
-  return await jsonOf(message.body, maxBodyBytes ?? Number.POSITIVE_INFINITY);
+  return await jsonOf(message.body, maxBodyBytes);
 }
 
 /**

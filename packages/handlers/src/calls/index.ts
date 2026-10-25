@@ -11,6 +11,13 @@ export {
   logOf,
   messageAnswerOf,
 } from './errors.ts';
+export type { HandlerFailure, HandlerFaultBase, HookName } from './hooks.ts';
+export {
+  failureCauseOf,
+  failureLineOf,
+  hookFailureOf,
+  hookThrewLineOf,
+} from './hooks.ts';
 export type { MessageGiven, MessageMeta, MessageRun, MessageWritten } from './message-run.ts';
 export { messageRunOf } from './message-run.ts';
 export type { Pairing } from './pairing.ts';
