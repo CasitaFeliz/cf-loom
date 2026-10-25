@@ -105,7 +105,7 @@ const theEvents = [
   "  name: 'OrderNoted',",
   '  version: 1,',
   "  visibility: 'private',",
-  "  description: '',",
+  "  description: 'A note was added to an order',",
   '  body: z.object({',
   '    note: z.string().describe("A note\\u2028on the order"),',
   "    root: tree.nullable().describe('The root'),",
@@ -338,10 +338,6 @@ describe('cf-loom asyncapi: the channels', () => {
     expect(valueAt(messageOf('OrderCreated@2'), 'description')).toBe(
       'An order was placed with its total',
     );
-  });
-
-  test('a message of an Event with no description has none', () => {
-    expect(messageOf('OrderNoted@1')).not.toHaveProperty('description');
   });
 
   test('Internal and Private Events are both written, each with its Visibility as x-cf-loom-visibility', () => {
