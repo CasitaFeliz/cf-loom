@@ -63,7 +63,7 @@ glossary concept or a public API an organization implements, and then asks or de
 An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at
 once. When a third would trigger, the issue is held for the user with its state and what is still open, findings or
 questions, and the main session moves on to the next issue that does not depend on it. The user then decides as after
-round 2 ([Fix](#4-fix)): fix and merge, rework the plan, or split the issue.
+round 2 ([Fix](#4-fix)): fix and merge, rework the plan, or split the issue (only the last two before a PR exists).
 
 ## 1. Plan
 
@@ -121,8 +121,8 @@ Before handing back, the agent runs `pnpm test` and `pnpm check`, pushes the bra
 
 Once `pnpm build`, `pnpm test` and `pnpm check` pass locally, `cf-reviewer` agents read the whole PR in parallel, one
 lens each, the three lenses of C27. A PR that changes fewer than about 400 lines, added and deleted, generated files
-left out, gets one reviewer with all three lenses. [`.claude/workflows/review-pr.js`](.claude/workflows/review-pr.js)
-runs the round.
+and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
+[`.claude/workflows/review-pr.js`](.claude/workflows/review-pr.js) runs the round.
 
 | Lens | Checks |
 | --- | --- |
