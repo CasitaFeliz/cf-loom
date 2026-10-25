@@ -1,7 +1,11 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
-import { JetStreamApiError, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
+import {
+  type ConsumerConfig,
+  JetStreamApiError,
+  jetstream as jetStreamClientOf,
+} from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
@@ -128,6 +132,14 @@ function arrangeOrdersStream(orders: Orders): Promise<void> {
     name: orders.stream,
     subjects: [orders.charge, orders.created],
   });
+}
+
+/** The settings of a durable consumer that pulls Orders’ Command, with `extra` over them. */
+function pullingCharge(
+  orders: Orders,
+  extra: Partial<ConsumerConfig> = {},
+): Partial<ConsumerConfig> {
+  return { ack_policy: 'explicit', filter_subject: orders.charge, ...extra };
 }
 
 /** The Handlers `consume` needs for Orders’ plan: one for its Command, which does nothing. */
@@ -578,17 +590,51 @@ describe('applying a broker plan to a durable consumer cf-loom cannot pull from'
     expect(durable.priority_timeout ?? 0).toBe(0);
   });
 
-  test.each([
-    ['delivers headers only', () => ({ headers_only: true })],
+  test('apply sets filter_subject on a durable consumer filtered on its subject through filter_subjects, and leaves filter_subjects unset', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurable(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      ack_policy: 'explicit',
+      filter_subjects: [orders.charge],
+    });
+    const broker = jetstream({ connect: aConnect().connect, prefix });
+
+    await broker.apply(orders.plan, testLimits);
+
+    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(durable.filter_subject).toBe(orders.charge);
+    expect(durable.filter_subjects ?? []).toEqual([]);
+  });
+
+  test.each<[string, (orders: Orders) => Partial<ConsumerConfig>]>([
+    ['delivers headers only', (orders) => pullingCharge(orders, { headers_only: true })],
     [
       'has priority groups pinned to a client',
-      () => ({ priority_groups: ['g'], priority_policy: 'pinned_client' as const }),
+      (orders) =>
+        pullingCharge(orders, { priority_groups: ['g'], priority_policy: 'pinned_client' }),
     ],
     [
       'has priority groups with the overflow policy',
-      () => ({ priority_groups: ['g', 'h'], priority_policy: 'overflow' as const }),
+      (orders) =>
+        pullingCharge(orders, { priority_groups: ['g', 'h'], priority_policy: 'overflow' }),
     ],
-    ['is filtered on another subject', (orders: Orders) => ({ filter_subject: orders.created })],
+    [
+      'is filtered on another subject',
+      (orders) => pullingCharge(orders, { filter_subject: orders.created }),
+    ],
+    [
+      'is filtered on another subject through filter_subjects',
+      (orders) => ({ ack_policy: 'explicit', filter_subjects: [orders.created] }),
+    ],
+    [
+      'is filtered on two subjects through filter_subjects',
+      (orders) => ({
+        ack_policy: 'explicit',
+        filter_subjects: [orders.charge, orders.created],
+      }),
+    ],
   ])(
     'a durable consumer that %s is refused by consume until apply ran, and accepted after',
     async (_name, settings) => {
@@ -597,8 +643,6 @@ describe('applying a broker plan to a durable consumer cf-loom cannot pull from'
       await arrangeOrdersStream(orders);
       await arrangeDurable(server.url, orders.stream, {
         durable_name: orders.chargeDurable,
-        filter_subject: orders.charge,
-        ack_policy: 'explicit',
         ...settings(orders),
       });
       const broker = jetstream({ connect: aConnect().connect, prefix });
