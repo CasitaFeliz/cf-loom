@@ -316,10 +316,10 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.sender.send('ChargeCard', { orderId: 'o-1' });
+    await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-73' });
 
     await orders.consume(handlersOf(received));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-74' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ handler, body }) => ({ handler, body }))).toEqual(
@@ -338,7 +338,11 @@ describe('consuming over jetstream()', () => {
     await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
-    await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await messagingOfOrders.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-75' },
+    );
 
     const consuming = messagingOfOrders.consume(handlersOf(received));
 
@@ -375,8 +379,12 @@ describe('consuming over jetstream()', () => {
     await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
-    await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
-    await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' });
+    await messagingOfOrders.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-76' },
+    );
+    await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-77' });
     await messagingOfOrders.consume(handlersOf(received)).catch(() => undefined);
     await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
 
@@ -489,7 +497,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
 
     await orders.consume(handlersOf(received));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
     await vi.waitFor(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
   });
@@ -527,7 +535,11 @@ describe('consuming over jetstream()', () => {
     };
 
     await messagingOfOrders.consume(handlers);
-    await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await messagingOfOrders.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-78' },
+    );
 
     await vi.waitFor(() =>
       expect(received.map(({ handler }) => handler)).toEqual(['notifyOnCreated']),
@@ -553,7 +565,7 @@ describe('consuming over jetstream()', () => {
     onTestFinished(() => opened.close());
 
     await opened.consume(handlersOf(received));
-    await opened.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await opened.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-79' });
 
     await vi.waitFor(() => expect(received).toHaveLength(1));
     const info = await durableInfoOf(
@@ -640,6 +652,7 @@ describe('consuming over jetstream()', () => {
       messageId: 'event.OrderCreated.v1:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 1,
+      lastAttempt: false,
       headers: { traceparent: '00-abc-def-01' },
     });
   });
@@ -769,7 +782,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-85' });
 
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
@@ -786,7 +799,7 @@ describe('consuming over jetstream()', () => {
     const failing = () => fault({ committed: 'no', retryable: false, message: 'cannot be done' });
     await orders.consume(handlersOf(received, { notify: failing }));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-86' });
 
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     expect(received).toHaveLength(1);
@@ -806,14 +819,68 @@ describe('consuming over jetstream()', () => {
     };
     await orders.consume(handlersOf(received, { notify: throwingOnce }));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-87' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
   }, 10_000);
 
-  test('a receive that rejects, because onServiceFault threw, leaves the Message for redelivery', async () => {
+  test('a Handler returning a retryable Fault is reported on every delivery, deliveryCounts 1, 2 and 3', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf([], { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ kind, deliveryCount }) => [kind, deliveryCount])).toEqual([
+      ['returned', 1],
+      ['returned', 2],
+      ['returned', 3],
+    ]);
+  }, 10_000);
+
+  test('only the third delivery is the last attempt of a durable consumer with max_deliver 3', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
+    const received: Received[] = [];
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf(received, { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, true]);
+    expect(received.map(({ meta }) => meta.lastAttempt)).toEqual([false, false, true]);
+  }, 10_000);
+
+  test('a durable consumer without a delivery limit never marks the last attempt', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: -1 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf([], { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, false]);
+  }, 10_000);
+
+  test('a delivery whose onServiceFault throws is left for redelivery', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
@@ -830,7 +897,7 @@ describe('consuming over jetstream()', () => {
     };
     await orders.consume(handlersOf(received, { notify: throwingOnce }));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-91' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
@@ -858,7 +925,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(logged).toHaveBeenCalledWith(
-      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       hook,
     );
   }, 10_000);
@@ -874,7 +941,11 @@ describe('consuming over jetstream()', () => {
       await process.consume(handlersOf(received, { notify: slow }));
     }
 
-    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await processes[0]?.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-93' },
+    );
 
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     expect(received).toHaveLength(1);
@@ -898,7 +969,11 @@ describe('consuming over jetstream()', () => {
       await process.consume(handlersOf(received, { notify: throwingThenSlow }));
     }
 
-    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await processes[0]?.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-94' },
+    );
 
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
@@ -915,8 +990,8 @@ describe('consuming over jetstream()', () => {
       return (body as { orderId: string }).orderId === 'o-1' ? firstGate.opened : undefined;
     };
     await orders.consume(handlersOf(received, { notify: holdingTheFirst }));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-95' });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-96' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
     await aWhile();
@@ -939,8 +1014,8 @@ describe('consuming over jetstream()', () => {
       handlersOf(received, { notify: () => gate.opened, charge: () => gate.opened }),
     );
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
-    await orders.sender.send('ChargeCard', { orderId: 'o-2' });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-97' });
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-98' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
     gate.open();
@@ -954,7 +1029,7 @@ describe('consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-99' });
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     await dropDurable(server.url, names.stream, names.notifyDurable);
     await arrangeDurable(server.url, names.stream, {
@@ -964,7 +1039,7 @@ describe('consuming over jetstream()', () => {
       deliver_policy: 'new',
     });
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-100' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
@@ -977,8 +1052,8 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-101' });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-102' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
@@ -1000,8 +1075,16 @@ describe('consuming over jetstream()', () => {
       await process.consume(handlersOf(received, { notify: slowSecond }));
     }
 
-    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
-    await processes[0]?.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } });
+    await processes[0]?.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f-103' },
+    );
+    await processes[0]?.publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-2' } },
+      { factId: 'f-104' },
+    );
 
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
@@ -1017,12 +1100,12 @@ describe('closing while consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     const gate = aGate();
     await orders.consume(handlersOf(received, { notify: () => gate.opened }));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-105' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
     await waitUntilPulling(names.stream, names.chargeDurable);
     const closing = orders.close();
 
-    await orders.sender.send('ChargeCard', { orderId: 'o-2' });
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-106' });
     await aWhile();
     const whileClosing = await durableInfoOf(server.url, names.stream, names.chargeDurable);
     gate.open();
@@ -1049,7 +1132,7 @@ describe('closing while consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     const gate = aGate();
     await orders.consume(handlersOf(received, { notify: () => gate.opened }));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-107' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
     const closing = orders.close();
 
@@ -1132,7 +1215,7 @@ describe('closing while consuming over jetstream()', () => {
       },
     });
     const orders = await aMessaging(prefix, { replacing: holdingTheSearch });
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-108' });
     holding = true;
     const consuming = orders.consume(handlersOf(received));
 
@@ -1152,7 +1235,7 @@ describe('closing while consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     const gate = aGate();
     await orders.consume(handlersOf(received, { notify: () => gate.opened }));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-109' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
     await orders.connections[0]?.close();
@@ -1175,7 +1258,7 @@ describe('pulling over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(received));
 
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-110' });
 
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 3_000 });
   });
@@ -1195,7 +1278,7 @@ describe('pulling over jetstream()', () => {
       },
     });
     const orders = await aMessaging(prefix, { replacing: losingTheFirstTwoPulls });
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-111' });
 
     await orders.consume(handlersOf(received));
 

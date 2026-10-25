@@ -10,10 +10,13 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
+  type BrokerConsumer,
+  type BrokerService,
   type ConsumedFault,
   type Messaging,
   type MessagingOptions,
   messaging,
+  type Settlement,
 } from './index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -93,6 +96,20 @@ const chargeCardV2 = defineCommand({
   body: z.object({ orderId: z.string(), amount: z.number() }),
 });
 
+const shipV1 = defineCommand({
+  name: 'Ship',
+  version: 1,
+  description: 'Ships the order',
+  body: z.object({ orderId: z.string() }),
+});
+
+const shipV2 = defineCommand({
+  name: 'Ship',
+  version: 2,
+  description: 'Ships the order, again Active',
+  body: z.object({ orderId: z.string() }),
+});
+
 const refundV1 = defineCommand({
   name: 'Refund',
   version: 1,
@@ -126,7 +143,7 @@ const contract = defineContract({
         quxWithRetiredWidenedVersion,
         quxV2,
       ],
-      commands: [chargeCardV2, refundV1],
+      commands: [chargeCardV2, refundV1, shipV1, shipV2],
       subscriptions: [notifyOnCreated],
     }),
   ],
@@ -139,7 +156,7 @@ const readers = readersOf({
 
 const broker: Broker = {
   connect: async () => ({
-    publish: async () => undefined,
+    publish: async () => ({ duplicate: false }),
     consume: async () => undefined,
     close: async () => undefined,
   }),
@@ -151,6 +168,8 @@ const v2 = { orderId: 'o-1', total: 12 };
 
 const v3 = { orderId: 'o-1', total: 12, currency: 'EUR' };
 
+const fact = { factId: 'o-1' };
+
 describe('publish and send types', () => {
   test('messaging() takes a Contract and a Broker and resolves to its Messaging', () => {
     const opening = messaging(contract, broker);
@@ -160,18 +179,18 @@ describe('publish and send types', () => {
   });
 
   test('publish takes one body per Active and Deprecated version, keyed v<n>, each typed by its schema, whatever Group lists it', () => {
-    const publishing = () => publisher.publish('OrderCreated', { v2, v3 });
+    const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, fact);
 
     const mistyped = () =>
       // @ts-expect-error: v3's body requires its currency
-      publisher.publish('OrderCreated', { v2, v3: { orderId: 'o-1', total: 12 } });
+      publisher.publish('OrderCreated', { v2, v3: { orderId: 'o-1', total: 12 } }, fact);
 
     expect([publishing, mistyped]).toHaveLength(2);
   });
 
   test('leaving out a live version’s body is a type error', () => {
     // @ts-expect-error: the Deprecated v2 is still published
-    const leftOut = () => publisher.publish('OrderCreated', { v3 });
+    const leftOut = () => publisher.publish('OrderCreated', { v3 }, fact);
 
     expect(leftOut).toBeTypeOf('function');
   });
@@ -180,16 +199,16 @@ describe('publish and send types', () => {
     const bodies = { v1: { orderId: 'o-1' }, v2, v3 };
 
     // @ts-expect-error: v1 is Retired, so it is never published
-    const retired = () => publisher.publish('OrderCreated', bodies);
+    const retired = () => publisher.publish('OrderCreated', bodies, fact);
 
     expect(retired).toBeTypeOf('function');
   });
 
   test('an Event whose version is typed number has no body key, so publishing it is a type error', () => {
     // @ts-expect-error: a version typed number keys no body
-    const bare = () => publisher.publish('Bar', {});
+    const bare = () => publisher.publish('Bar', {}, fact);
     // @ts-expect-error: a version typed number keys no body, whatever is given
-    const given = () => publisher.publish('Bar', { v1: { barId: 'b-1' } });
+    const given = () => publisher.publish('Bar', { v1: { barId: 'b-1' } }, fact);
 
     expect([bare, given]).toHaveLength(2);
   });
@@ -204,25 +223,62 @@ describe('publish and send types', () => {
 
   test('a name the root does not list, or whose every version is Retired, is a type error', () => {
     // @ts-expect-error: the root lists no OrderShipped
-    const unlisted = () => publisher.publish('OrderShipped', {});
+    const unlisted = () => publisher.publish('OrderShipped', {}, fact);
     // @ts-expect-error: OrderArchived's every version is Retired
-    const archived = () => publisher.publish('OrderArchived', {});
+    const archived = () => publisher.publish('OrderArchived', {}, fact);
 
     expect([unlisted, archived]).toHaveLength(2);
   });
 
   test('send takes a Command name with an Active version and that version’s body, whatever Group lists it', () => {
-    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 });
+    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, fact);
 
     // @ts-expect-error: the Active ChargeCard@2 requires its amount
-    const deprecatedBody = () => sender.send('ChargeCard', { orderId: 'o-1' });
+    const deprecatedBody = () => sender.send('ChargeCard', { orderId: 'o-1' }, fact);
 
     expect([sending, deprecatedBody]).toHaveLength(2);
   });
 
+  test('publish without a Fact id is a type error', () => {
+    // @ts-expect-error: every call takes a Fact id
+    const publishing = () => publisher.publish('OrderCreated', { v2, v3 });
+
+    expect(publishing).toBeTypeOf('function');
+  });
+
+  test('send without a Fact id is a type error', () => {
+    // @ts-expect-error: every call takes a Fact id
+    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 });
+
+    expect(sending).toBeTypeOf('function');
+  });
+
+  test('send to a Command with two Active versions is a type error', () => {
+    type Body = Parameters<typeof sender.send<'Ship'>>[1];
+
+    // @ts-expect-error: Ship has two Active versions
+    const shipping = () => sender.send('Ship', { orderId: 'o-1' }, fact);
+
+    expectTypeOf<Body>().toEqualTypeOf<{
+      readonly 'send() takes a Command with one Active version, which Ship is not: cf-loom generate refuses it': never;
+    }>();
+    expect(shipping).toBeTypeOf('function');
+  });
+
+  test('headers take undefined values', () => {
+    const received: Readonly<Record<string, string>> = { traceparent: '00-abc-def-01' };
+    const headers = { traceparent: received['traceparent'] };
+
+    const sending = () =>
+      sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, { ...fact, headers });
+
+    expectTypeOf(headers.traceparent).toEqualTypeOf<string | undefined>();
+    expect(sending).toBeTypeOf('function');
+  });
+
   test('a Command with no Active version is a type error to send', () => {
     // @ts-expect-error: Refund has no Active version
-    const refunding = () => sender.send('Refund', { orderId: 'o-1' });
+    const refunding = () => sender.send('Refund', { orderId: 'o-1' }, fact);
 
     expect(refunding).toBeTypeOf('function');
   });
@@ -274,5 +330,21 @@ describe('publish and send types', () => {
     ];
 
     expect(consuming).toBeTypeOf('function');
+  });
+});
+
+describe('the Broker seam', () => {
+  test('a Broker adapter implements connect with only the stream and subjects', () => {
+    expectTypeOf<keyof BrokerService>().toEqualTypeOf<'stream' | 'subjects'>();
+  });
+
+  test('a BrokerConsumer offers an adapter only its durable consumer, stream, subject and receive', () => {
+    expectTypeOf<keyof BrokerConsumer>().toEqualTypeOf<
+      'durable' | 'stream' | 'subject' | 'receive'
+    >();
+  });
+
+  test('a Settlement is acked, pending or ended', () => {
+    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended'>();
   });
 });

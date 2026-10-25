@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, arrangeStream, dropStream } from '../../test/streams.ts';
-import { messaging, PublishError } from '../index.ts';
+import { InvalidMessageError, MessageNotSentError, messaging } from '../index.ts';
 import { jetstream } from './index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -216,7 +216,7 @@ describe('publishing over jetstream()', () => {
     await expect(stored(2)).resolves.toMatchObject({ headers: expected(2) });
   });
 
-  test('a publish with broker headers one byte over rejects with cf-loom’s error, not a PublishError, and the stream stores nothing', async () => {
+  test('a publish with broker headers one byte over rejects with InvalidMessageError, not MessageNotSentError, and the stream stores nothing', async () => {
     const { publisher, stream } = await aMessaging();
     const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
     const padded = { 'x-pad': 'p'.repeat(65_453) };
@@ -225,11 +225,9 @@ describe('publishing over jetstream()', () => {
       publisher.publish('OrderCreated', bodies, { factId: 'o-1', headers: padded }),
     );
 
-    expect(error).not.toBeInstanceOf(PublishError);
+    expect(error).toBeInstanceOf(InvalidMessageError);
     expect(error).toMatchObject({
-      message: expect.stringMatching(
-        /^The broker headers of OrderCreated@1 would take 65536 bytes/,
-      ),
+      message: expect.stringMatching(/^OrderCreated@1: The broker headers would take 65536 bytes/),
     });
     await expect(messagesIn(stream)).resolves.toBe(0);
   });
@@ -311,42 +309,60 @@ describe('publishing over jetstream()', () => {
     ).resolves.toMatchObject({ headers: { 'Nats-Msg-Id': 'command.Charge.v1:o-1' } });
   });
 
-  test('publishing the same fact again resolves, and the stream keeps one Message per version', async () => {
+  test('publishing the same Fact id twice resolves to every version as a duplicate, and the stream keeps one Message per version', async () => {
     const { publisher, stream } = await aMessaging();
     const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
-    await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
+    const first = await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
 
-    const again = publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
+    const again = await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
 
-    await expect(again).resolves.toBeUndefined();
+    expect(first).toEqual({ factId: 'o-1:created', duplicates: [] });
+    expect(again).toEqual({
+      factId: 'o-1:created',
+      duplicates: ['OrderCreated@1', 'OrderCreated@2'],
+    });
     await expect(messagesIn(stream)).resolves.toBe(2);
+  });
+
+  test('sending the same Fact id twice resolves duplicate true', async () => {
+    const { sender } = await aMessaging();
+    const first = await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'o-1:charge' });
+
+    const again = await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'o-1:charge' });
+
+    expect([first, again]).toEqual([
+      { factId: 'o-1:charge', duplicate: false },
+      { factId: 'o-1:charge', duplicate: true },
+    ]);
   });
 
   test.each([
     [
       { headers: { 'trace id': 'x' } },
-      /^The transport header name "trace id" cannot travel over NATS/,
+      /^headers\."trace id": The transport header name "trace id" cannot travel over NATS/,
     ],
-    [{ factId: 'o-1 ' }, /^A Fact id is a non-empty string /],
+    [{ factId: 'o-1 ' }, /^factId: A Fact id is a non-empty string /],
     [
       { headers: { 'Nats-Expected-Stream': 'other' } },
-      /^The transport header Nats-Expected-Stream takes a name /,
+      /^headers\.Nats-Expected-Stream: The transport header Nats-Expected-Stream takes a name /,
     ],
   ])(
-    'publish with %j rejects with cf-loom’s error, not the NATS client’s, and the stream stores nothing',
+    'publish with %j rejects with InvalidMessageError, not the NATS client’s error, and the stream stores nothing',
     async (options, message) => {
       const { publisher, stream } = await aMessaging();
       const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
 
-      const error = await rejectionOf(publisher.publish('OrderCreated', bodies, options));
+      const error = await rejectionOf(
+        publisher.publish('OrderCreated', bodies, { factId: 'f-120', ...options }),
+      );
 
-      expect(error).not.toBeInstanceOf(PublishError);
+      expect(error).toBeInstanceOf(InvalidMessageError);
       expect(error).toMatchObject({ message: expect.stringMatching(message) });
       await expect(messagesIn(stream)).resolves.toBe(0);
     },
   );
 
-  test('a publish the NATS client rejects rejects with a PublishError whose cause is that very error', async () => {
+  test('a publish the NATS client rejects rejects with a MessageNotSentError whose cause is that very error', async () => {
     const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
@@ -358,32 +374,40 @@ describe('publishing over jetstream()', () => {
     refusing.refuse(refusal);
 
     const error = await rejectionOf(
-      publisher.publish('OrderCreated', {
-        v1: { orderId: 'o-1' },
-        v2: { orderId: 'o-1', total: 1 },
-      }),
+      publisher.publish(
+        'OrderCreated',
+        {
+          v1: { orderId: 'o-1' },
+          v2: { orderId: 'o-1', total: 1 },
+        },
+        { factId: 'f-121' },
+      ),
     );
 
-    expect(error).toBeInstanceOf(PublishError);
-    expect((error as PublishError).cause).toBe(refusal);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect((error as MessageNotSentError).cause).toBe(refusal);
   });
 
-  test('a publish to a stream that no longer exists rejects with a PublishError, sending nothing', async () => {
+  test('a publish to a stream that no longer exists rejects with a MessageNotSentError, sending nothing', async () => {
     const { publisher, stream } = await aMessaging();
     await dropStream(server.url, stream);
 
     const error = await rejectionOf(
-      publisher.publish('OrderCreated', {
-        v1: { orderId: 'o-1' },
-        v2: { orderId: 'o-1', total: 1 },
-      }),
+      publisher.publish(
+        'OrderCreated',
+        {
+          v1: { orderId: 'o-1' },
+          v2: { orderId: 'o-1', total: 1 },
+        },
+        { factId: 'f-122' },
+      ),
     );
 
-    expect(error).toBeInstanceOf(PublishError);
-    expect((error as PublishError).sent).toEqual([]);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect((error as MessageNotSentError).sent).toEqual([]);
   });
 
-  test('a send the NATS client rejects rejects with that very error', async () => {
+  test('a send the NATS client rejects rejects with a MessageNotSentError whose cause is that very error', async () => {
     const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
@@ -391,9 +415,12 @@ describe('publishing over jetstream()', () => {
     const refusal = new Error('the Broker refused it');
     refusing.refuse(refusal);
 
-    const sending = sender.send('ChargeCard', { orderId: 'o-1' });
+    const error = await rejectionOf(
+      sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-123' }),
+    );
 
-    await expect(sending).rejects.toBe(refusal);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect(error).toMatchObject({ factId: 'f-123', sent: [], cause: refusal });
   });
 
   test('close closes the connection the Service’s connect returned', async () => {
@@ -433,7 +460,7 @@ describe('publishing over jetstream()', () => {
       jetstream({ connect: watching.connect, prefix, jetstream: { timeout: 1234 } }),
     );
 
-    await sender.send('ChargeCard', { orderId: 'o-1' });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-124' });
 
     const subject = `${prefix}.orders-service.command.ChargeCard.v1`;
     const published = watching.requests.filter((request) => request.subject === subject);

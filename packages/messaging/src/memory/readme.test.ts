@@ -116,8 +116,8 @@ const handlers = {
   subscriptions: {
     chargeOnCreated: handle(
       readers.subscriptions.chargeOnCreated,
-      async ({ orderId }, _meta, { resources: { sender } }: Needs<'sender'>) => {
-        await sender.send('ChargeCard', { orderId });
+      async ({ orderId }, meta, { resources: { sender } }: Needs<'sender'>) => {
+        await sender.send('ChargeCard', { orderId }, { factId: `${meta.factId}:charge` });
       },
     ),
     notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, ({ paymentId }) => {
@@ -133,10 +133,14 @@ async function createOrderHandler(
   { resources: { publisher } }: Needs<'publisher'>,
 ) {
   const total = { amount: request.body.total, currency: 'EUR' };
-  await publisher.publish('OrderCreated', {
-    v1: { orderId: ORDER_ID, total: total.amount },
-    v2: { orderId: ORDER_ID, total },
-  });
+  await publisher.publish(
+    'OrderCreated',
+    {
+      v1: { orderId: ORDER_ID, total: total.amount },
+      v2: { orderId: ORDER_ID, total },
+    },
+    { factId: `${ORDER_ID}:created` },
+  );
 }
 
 describe('the In memory section of the messaging README', () => {

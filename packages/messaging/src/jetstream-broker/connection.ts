@@ -17,7 +17,8 @@ export function jetStreamConnectionOf(
   return {
     publish: async (message) => {
       const subject = prefixedSubjectOf(prefix, message.subject);
-      await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
+      const ack = await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
+      return { duplicate: ack.duplicate };
     },
     consume: async (consumers, closing) => {
       const manager = await managerOf(natsConnection, options);

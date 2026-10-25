@@ -9,12 +9,8 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import {
-  checkedHeaderPartsOf,
-  checkedIdOf,
-  factIdOf,
-  transportHeadersOf,
-} from '../sending/index.ts';
+import { consumerDetailsOf } from '../consuming/index.ts';
+import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
@@ -26,8 +22,8 @@ export function firstDeliveryOf({
   factId,
   headers,
   body,
-}: Omit<Delivery, 'deliveryCount'>): Delivery {
-  return { messageId, factId, deliveryCount: 1, headers, body };
+}: Omit<Delivery, 'deliveryCount' | 'lastAttempt'>): Delivery {
+  return { messageId, factId, deliveryCount: 1, lastAttempt: false, headers, body };
 }
 
 /** What a test hands `deliver`: the Message Version, its body as a Subscriber reads it, and its meta. */
@@ -66,36 +62,34 @@ function attemptsOf(
   reached: readonly BrokerConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
-  const factId = factIdOf(meta.factId);
-  const messageId = messageIdOf(message, factId, meta.messageId);
-  const headers = transportHeadersOf(meta.headers ?? {});
-  const parts = checkedHeaderPartsOf(message, { messageId, factId, headers });
+  const factId = meta.factId ?? globalThis.crypto.randomUUID();
+  const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
+  const measured = [{ version: message, messageId, factId }];
+  const { headers, invalid } = checkedHeadersOf(meta, meta.headers ?? {}, measured);
+  if (invalid.length > 0) {
+    throw new InvalidMessageError(invalid);
+  }
+  const parts = { messageId, factId, headers };
   return reached.map((consumer) => {
     const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
     return { consumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
   });
 }
 
-/** The broker message id a test gave, which must arrive as given as a Fact id must, or the one a Message of the Fact id has. */
-function messageIdOf(message: Event | Command, factId: string, given: string | undefined): string {
-  if (given === undefined) {
-    return brokerMessageIdOf(message, factId);
-  }
-  return checkedIdOf('broker message id', given);
-}
-
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {
+  const { element } = consumerDetailsOf(consumer);
   if (isCommand(message)) {
-    return consumer.element === message;
+    return element === message;
   }
-  return isSubscription(consumer.element) && consumer.element.event === message;
+  return isSubscription(element) && element.event === message;
 }
 
 /** The body as it travels to a consumer, written back through its Reader; one that breaks it throws as a direct call does. */
 function writtenBodyOf(consumer: BrokerConsumer, body: unknown): unknown {
-  const written = writtenMessageBody(consumer.reader, body);
+  const { element, reader } = consumerDetailsOf(consumer);
+  const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
-    throw new InvalidInputError(consumer.element, written.issues);
+    throw new InvalidInputError(element, written.issues);
   }
   return written.value;
 }

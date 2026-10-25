@@ -1,9 +1,9 @@
 export type {
   Broker,
+  BrokerAck,
   BrokerConnection,
   BrokerConsumer,
   BrokerService,
-  ConsumedFault,
   Delivery,
   OutgoingMessage,
   Settlement,
