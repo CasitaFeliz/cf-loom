@@ -10,6 +10,7 @@ export { declarationsOf, listedDefinitionsOf, providerNameOf } from './declarati
 export type { Listed } from './grouped.ts';
 export {
   commandsOf,
+  declarationsListedBy,
   endpointsOf,
   eventsOf,
   fieldListings,

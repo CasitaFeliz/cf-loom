@@ -8,6 +8,7 @@ import {
   type LocatedDependency,
   type LocatedEndpoint,
   type LocatedEvent,
+  type LocatedGroup,
   type LocatedGuard,
   type LocatedRejection,
   type LocatedSubscription,
@@ -39,13 +40,14 @@ export type ValidatedCode = {
 export type ValidatedSubscription = LocatedSubscription & { readonly service: string };
 
 /**
- * The declarations of a valid root as gathered, in the root's order: the root itself, Endpoints
- * by identity, Guards and codes with whether the root reaches them, each code with its first
+ * The declarations of a valid root as gathered, in the root's order: the root itself, its Groups,
+ * Endpoints by identity, Guards and codes with whether the root reaches them, each code with its first
  * declaration, the Standard Rejections resolved, the Dependencies by Provider, and the Message
  * Versions and Subscriptions. The Snapshot's writer puts them in canonical form.
  */
 export type ValidatedDeclarations = {
   readonly root: Root;
+  readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
   readonly codes: readonly ValidatedCode[];
@@ -60,6 +62,7 @@ export type ValidatedDeclarations = {
 export function validatedDeclarationsOf(declarations: Declarations): ValidatedDeclarations {
   return {
     root: declarations.root,
+    groups: declarations.groups,
     endpoints: declarations.endpoints,
     guards: declarations.guards.map((located) => ({
       ...located,

@@ -147,6 +147,7 @@ describe('validateContract', () => {
     const listedIn = { at: ['definitions', 'definitions'], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
+      groups: [{ at: ['groups', 'orders'], group: ordersGroup }],
       endpoints: [
         {
           at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],

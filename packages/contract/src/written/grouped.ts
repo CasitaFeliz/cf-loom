@@ -121,10 +121,24 @@ export function listingsOf<Field extends GroupedField>(
   { at, group }: LocatedGroup,
   field: Field,
 ): readonly Listed<Field>[] {
-  const { fits, keyOf } = fieldListings[field];
-  return listOf(group[field])
-    .filter(fits)
-    .map((declaration) => ({ at: [...at, field, keyOf(declaration)], declaration, group }));
+  const { keyOf } = fieldListings[field];
+  return declarationsListedIn(group, field).map((declaration) => ({
+    at: [...at, field, keyOf(declaration)],
+    declaration,
+    group,
+  }));
+}
+
+/** Every declaration a Group lists, in any field, whatever sits in its lists that is none left out. */
+export function declarationsListedBy(group: Group): readonly unknown[] {
+  return groupedFields.flatMap((field) => declarationsListedIn(group, field));
+}
+
+function declarationsListedIn<Field extends GroupedField>(
+  group: Group,
+  field: Field,
+): readonly GroupedDeclarations[Field][] {
+  return listOf(group[field]).filter(fieldListings[field].fits);
 }
 
 /** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
