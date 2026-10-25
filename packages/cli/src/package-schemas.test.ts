@@ -136,7 +136,7 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/proto',",
     "  visibility: 'public',",
     "  description: 'Proto',",
-    '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
+    '  input: { body: z.object({ b: z.json().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
     '  success: { status: 204 },',
     '});',
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
@@ -542,7 +542,7 @@ describe('cf-loom package: an exported Event’s body', () => {
     expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
   });
 
-  test('it writes an Unknown case back as its text and refuses one holding a declared value, as fakeEvent writes a body', () => {
+  test('it writes an Unknown case back as its text and refuses one holding a declared value, as a direct call writes a body', () => {
     const read = { ...sample, extra: undefined, status: { unknown: 'refunded' } };
 
     const written = [

@@ -335,6 +335,20 @@ describe('deliver()', () => {
     ]);
   });
 
+  test('deliver given a Fact id gives the Handler the broker message id a direct call given it gives', async () => {
+    const { broker, received } = await running();
+    const direct: MessageMeta[] = [];
+    const directHandler = handle(readers.subscriptions.notifyOnSettled, (_body, meta) => {
+      direct.push(meta);
+    });
+    const settled = { paymentId: PAYMENT_ID };
+
+    await broker.deliver(paymentSettledV1, settled, { factId: 'f-1' });
+    await directHandler(settled, { factId: 'f-1' });
+
+    expect(received[0]?.meta.messageId).toBe(direct[0]?.messageId);
+  });
+
   test('without a Fact id, deliver uses a random one', async () => {
     const { broker, received } = await running();
 

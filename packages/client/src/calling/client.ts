@@ -7,8 +7,9 @@ import type { Client, ClientOptions, ConfiguredName } from './client-types.ts';
 import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
 
 /**
- * A client of the Endpoints a Dependency lists, one method each, named after it: each returns the
- * Outcome and never throws for a Rejection or a Fault.
+ * A client of the Endpoints a Dependency lists, one method each, named after it, calling its
+ * Provider at `baseUrl`, an http or https URL: each returns the Outcome and never throws for a
+ * Rejection or a Fault.
  */
 export function client<const D extends AnyDependency, Configured extends ConfiguredName<D> = never>(
   dependency: D,

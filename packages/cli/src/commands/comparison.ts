@@ -1,7 +1,8 @@
 import {
+  type Change,
   type ComparedReport,
   compatibilityReportOf,
-  type Snapshot,
+  firstPublishChangesOf,
 } from '@cf-loom/contract/internal';
 import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
@@ -26,6 +27,7 @@ export type Comparison =
       readonly built: BuiltProject;
       readonly packageName: string;
       readonly why: NoBaseline;
+      readonly changes: readonly Change[];
     };
 
 /**
@@ -41,7 +43,7 @@ export async function committedBuiltOf(run: Run): Promise<BuiltProject | Stopped
   return stop === undefined ? built : { kind: 'stopped', exit: stop };
 }
 
-/** Reads the package's Baseline, the highest version or the one `against` names, and runs the Compatibility Check of the Snapshot against it. */
+/** Reads the package's Baseline, the highest version or the one `against` names, and runs the Compatibility Check of the Snapshot against it, or alone when it has none. */
 export async function comparisonOf(
   built: BuiltProject,
   run: Run,
@@ -56,10 +58,21 @@ export async function comparisonOf(
       return { kind: 'stopped', exit: toolingError(read.message) };
     case 'no-baseline': {
       const { packageName, why } = read;
-      return { kind: 'no-baseline', built, packageName, why };
+      return {
+        kind: 'no-baseline',
+        built,
+        packageName,
+        why,
+        changes: firstPublishChangesOf(snapshot),
+      };
     }
     case 'baseline':
-      return { kind: 'baseline', built, read, report: reportOf(read, snapshot) };
+      return {
+        kind: 'baseline',
+        built,
+        read,
+        report: compatibilityReportOf(read.snapshot, snapshot),
+      };
   }
 }
 
@@ -68,7 +81,8 @@ export function checkedFrom(comparison: Comparison): Checked {
   switch (comparison.kind) {
     case 'no-baseline': {
       const { packageName, why } = comparison;
-      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes: [] };
+      const changes = comparison.changes.map(checkedChangeOf);
+      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes };
     }
     case 'baseline': {
       const { packageName, snapshot, stable, chosen } = comparison.read;
@@ -77,14 +91,4 @@ export function checkedFrom(comparison: Comparison): Checked {
       return { kind: 'checked', packageName, against, changes };
     }
   }
-}
-
-function reportOf(read: BaselineRead, snapshot: Snapshot): ComparedReport {
-  const report = compatibilityReportOf(read.snapshot, snapshot);
-  if (report.kind === 'no-baseline') {
-    throw new Error(
-      'The Compatibility Check found no Baseline for a Baseline it was given: a bug.',
-    );
-  }
-  return report;
 }

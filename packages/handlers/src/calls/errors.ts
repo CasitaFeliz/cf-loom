@@ -1,5 +1,5 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
-import { isCommand, messageIdentityOf } from '@cf-loom/contract/internal';
+import { isCommand, issueLineOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import type { Issue } from '../checks/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { HandledElement, MessageElement } from './elements.ts';
@@ -66,11 +66,6 @@ export function elementNameOf(element: HandledElement): string {
     return messageIdentityOf(element.name, element.version);
   }
   return element.name;
-}
-
-/** One Issue as a line of an error or a log, after what it came from: where it sits and what broke, never the received value. */
-export function issueLineOf(source: string, { part, path, code, message }: Issue): string {
-  return `${source}: ${[part, ...path].join('.')} ${code}: ${message}`;
 }
 
 /** A Fault as a line of a log or an error, after what it came from: its message, never its `cause`. */

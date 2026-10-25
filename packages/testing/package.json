@@ -24,15 +24,12 @@
     "@cf-loom/client": "workspace:^",
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
-    "@cf-loom/messaging": "workspace:^",
     "@cf-loom/server": "workspace:^",
     "zod": "catalog:"
   },
   "peerDependencies": {
     "@cf-loom/client": "workspace:^",
     "@cf-loom/contract": "workspace:^",
-    "@cf-loom/handlers": "workspace:^",
-    "@cf-loom/messaging": "workspace:^",
     "zod": "catalog:"
   },
   "engines": {

@@ -1,6 +1,6 @@
 import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
-import type { MessageMeta, Pairing } from '../calls/index.ts';
+import type { DirectMeta, MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { HandledBy } from './handler.ts';
 import type {
@@ -13,13 +13,6 @@ import type {
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
 type ReadBodyOf<Target extends Pairing> = core.output<Target['reader']>;
-
-/** The meta a direct call takes: `lastAttempt` left out is `false`, `headers` left out is `{}`, `signal` left out a signal never aborted. */
-export type DirectMeta = Omit<MessageMeta, 'lastAttempt' | 'headers' | 'signal'> & {
-  readonly lastAttempt?: MessageMeta['lastAttempt'];
-  readonly headers?: MessageMeta['headers'];
-  readonly signal?: MessageMeta['signal'];
-};
 
 /** The Fault a Message Handler returns: a `Fault` with no `retryAfter`, since the durable consumer's configuration decides redelivery. */
 export type MessageFault = Fault & { readonly retryAfter?: never };
@@ -45,7 +38,7 @@ export type CommandHandler<
   Resources extends object = NoResources,
 > = ((
   body: ReadBodyOf<Target>,
-  meta: DirectMeta,
+  meta?: DirectMeta,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &
   HandledBy<Target['element']>;
@@ -56,7 +49,7 @@ export type EventHandler<
   Resources extends object = NoResources,
 > = ((
   body: ReadBodyOf<Target>,
-  meta: DirectMeta,
+  meta?: DirectMeta,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &
   HandledBy<Target['element']>;

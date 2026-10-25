@@ -311,9 +311,6 @@ function changeAt(place: Place, difference: Found): PathChange {
 
 function comparedOf(baseline: PublishedSnapshot, proposed: Snapshot): ComparedReport {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -483,7 +480,7 @@ describe('compatibilityReportOf, fields', () => {
 
       const report = reportOf(place, { from, to });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 });
@@ -740,7 +737,7 @@ describe('compatibilityReportOf, unions', () => {
 
       const report = reportOf(place, { from: described, to: redescribed });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 
@@ -764,7 +761,7 @@ describe('compatibilityReportOf, unions', () => {
 
       const report = reportOf(place, { from: withNumberFirst, to: withStringFirst });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 });
@@ -1040,7 +1037,7 @@ describe('compatibilityReportOf, constraints', () => {
   )('an unchanged $constraint is no Change in $place', ({ node, where }) => {
     const report = reportOf(where, { from: node, to: node });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test.each(places)(
@@ -1304,14 +1301,14 @@ describe('compatibilityReportOf, intersections and opaque JSON', () => {
         to: walkedOf(merged),
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [], hashChanged: false });
     },
   );
 
   test.each(places)('an opaque JSON value left as it is is no Change in $name', (place) => {
     const report = reportOf(place, { from: { type: 'json' }, to: { type: 'json' } });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 });
 
@@ -1558,7 +1555,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: defs,
     });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test('a dense set of mutually recursive defs with one change gives that one Change', () => {
@@ -1599,7 +1596,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { branch },
     });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test.each(places)(
@@ -1635,7 +1632,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { alias: aRef('tree'), tree },
     });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test.each(places)(
@@ -1705,7 +1702,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { tree: describedTree },
     });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test.each(
@@ -1724,7 +1721,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { tree: describedTree },
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 
@@ -1742,7 +1739,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { card: card },
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [], hashChanged: false });
     },
   );
 
@@ -1756,7 +1753,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { tree: treeWithName },
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 });

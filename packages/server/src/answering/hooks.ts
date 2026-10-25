@@ -1,5 +1,5 @@
 import type { Endpoint, Guard, Method } from '@cf-loom/contract';
-import { isMethod } from '@cf-loom/contract/internal';
+import { isMethod, issueLineOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -7,7 +7,6 @@ import {
   type HandlerFailure,
   type HandlerFaultBase,
   hookFailureOf,
-  issueLineOf,
   logOf,
 } from '@cf-loom/handlers/internal';
 

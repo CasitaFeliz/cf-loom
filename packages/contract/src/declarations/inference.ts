@@ -90,3 +90,19 @@ export type SuccessOf<Target extends Endpoint> = {
     ? Target['success'][Part]
     : Output<Target['success'][Part]>;
 };
+
+/**
+ * What a Success is built from, by whoever writes one for an Endpoint: the body, `{ headers, body }`
+ * when it declares headers, or nothing; a body where it declares none is refused.
+ */
+export type SuccessValueOf<Target extends Endpoint> = Target['success'] extends {
+  readonly headers: core.$ZodType;
+}
+  ? Omit<SuccessOf<Target>, 'status'> & NoBodyOf<Target>
+  : Target['success'] extends { readonly body: core.$ZodType }
+    ? core.output<Target['success']['body']>
+    : undefined;
+
+type NoBodyOf<Target extends Endpoint> = Target['success'] extends { readonly body: core.$ZodType }
+  ? unknown
+  : { readonly body?: never };

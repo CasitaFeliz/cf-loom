@@ -184,9 +184,10 @@ A CI failure on `main` is fixed before the next merge.
 ## 6. Next
 
 After a merge, the main session starts the next issue in milestone order without asking. Issues that do not depend on
-each other may be planned in parallel, and implemented in parallel when their plans' file lists are disjoint,
-generated files and `pnpm-lock.yaml` included. A PR whose base moved gets `main` merged into its branch, a plain push,
-and `pnpm build`, `pnpm test` and `pnpm check` run again before it merges.
+each other may be planned in parallel, and implemented in parallel when their plans share no code file: documents (`*.md`) and `index.ts` export files may be
+shared, code, tests, generated files and `pnpm-lock.yaml` may not. A PR whose base moved gets `main` merged into its
+branch, a plain push, and `pnpm build`, `pnpm test` and `pnpm check` run again; when the merge touched a file the PR
+changes, a short recheck reads the merge before it merges.
 
 ## Milestone sweep
 

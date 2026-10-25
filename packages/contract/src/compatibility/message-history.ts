@@ -1,11 +1,12 @@
-import type { ByKey, PublishedServiceSnapshot, ServiceSnapshot } from '../snapshot/index.ts';
+import type { ByKey, ServiceSnapshot } from '../snapshot/index.ts';
 import { messageIdentityOf, nameAndVersionOf } from '../written/index.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 type MessageKind = 'event' | 'command';
 
-type Messages = { readonly events: ByKey<unknown>; readonly commands: ByKey<unknown> };
+/** The Message Versions a Snapshot holds by kind, tombstones included. */
+export type Messages = { readonly events: ByKey<unknown>; readonly commands: ByKey<unknown> };
 
 /** What a Message Version added is judged against: its kind's identities on either side, and the names the Baseline holds as the other kind. */
 export type MessageHistory = {
@@ -16,7 +17,7 @@ export type MessageHistory = {
 
 /** One kind of Message's history across the Baseline, tombstones included, and the proposed Snapshot. */
 export function messageHistoryOf(
-  baseline: PublishedServiceSnapshot,
+  baseline: Messages,
   proposed: ServiceSnapshot,
   kind: MessageKind,
 ): MessageHistory {

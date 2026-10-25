@@ -58,6 +58,8 @@ export {
   successResponseOf,
 } from './responses.ts';
 export { isTextValue, textOfValue } from './text.ts';
+export type { TextAcceptance } from './text-acceptance.ts';
+export { textAcceptanceOf } from './text-acceptance.ts';
 export type { TextSource } from './text-parts.ts';
 export { headerValuesOf, textPartsOf } from './text-parts.ts';
 export { isQueryText, isSegmentText, segmentOf } from './url-text.ts';

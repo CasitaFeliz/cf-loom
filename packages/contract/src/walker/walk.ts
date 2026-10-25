@@ -1,5 +1,11 @@
 import type * as core from 'zod/v4/core';
-import { annotatedBy, hasOwnId, type Metadata, metadataOf } from './metadata.ts';
+import {
+  annotatedBy,
+  hasOwnId,
+  type Metadata,
+  metadataOf,
+  withExamplesParsed,
+} from './metadata.ts';
 import type { Field, Origin, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refusedWrapperId } from './not-allowed.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
@@ -84,9 +90,10 @@ function walkSchema(schema: core.$ZodType, at: Path, state: WalkState): Walked {
   }
   const metadata = ownMetadata(schema, at, state.originOf);
   const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
-  return state.recursion.within({ schema, at, id }, () =>
-    annotatedBy(walkDefinition(schema, at, state.walker), metadata),
-  );
+  return state.recursion.within({ schema, at, id }, () => {
+    const annotatedNode = annotatedBy(walkDefinition(schema, at, state.walker), metadata);
+    return withExamplesParsed(schema, annotatedNode, at);
+  });
 }
 
 /** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
@@ -125,7 +132,8 @@ function throughWrapper(wrapper: Wrapper, inner: Walked, state: WalkState): Walk
   const joined = hasOwnId(schema)
     ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
     : checked;
-  return annotatedBy(joined, ownMetadata(schema, at, state.originOf));
+  const annotatedNode = annotatedBy(joined, ownMetadata(schema, at, state.originOf));
+  return withExamplesParsed(schema, annotatedNode, at);
 }
 
 function requiredField(result: Walked): Walked<Field> {

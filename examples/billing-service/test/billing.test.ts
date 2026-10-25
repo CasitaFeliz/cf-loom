@@ -135,7 +135,7 @@ describe('invoiceFor', () => {
           case 'status':
             return respond.status(502);
           case 'unknown-code':
-            return respond.reject({ unknown: 'ORDER_ARCHIVED' }, {});
+            return respond.unknownRejection('ORDER_ARCHIVED');
         }
       });
 

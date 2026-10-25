@@ -38,6 +38,15 @@ export function byCanonicalJson(left: unknown, right: unknown): number {
 }
 
 /**
+ * The values of an array whose order means nothing as a Snapshot holds them: each once, by its
+ * canonical JSON, in that order, which the decoder requires back.
+ */
+export function inCanonicalJsonOrder<Value>(values: readonly Value[]): Value[] {
+  const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
+  return [...valueByJson.values()].sort(byCanonicalJson);
+}
+
+/**
  * A value as a file holds it: canonical JSON indented by two spaces, one member or item per line,
  * so a change to one value is a change to one line of a review's diff.
  */

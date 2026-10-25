@@ -73,9 +73,6 @@ function changesOf(
   proposed: ServiceSnapshot,
 ): readonly Change[] {
   const report = reportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report.changes;
 }
 
@@ -94,7 +91,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
   ])('$name a Subscription gives no Change, only a changed hash', ({ baseline, proposed }) => {
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('a Subscription tombstone the proposed Snapshot leaves out is no Change', () => {
@@ -102,7 +99,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, aProposed());
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test.each([
@@ -150,7 +147,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('moving a Subscription to another Group gives no Change, only a changed hash', () => {
@@ -160,7 +157,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('a Subscription whose Event is unchanged gives no Change', () => {
@@ -169,7 +166,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test('following a new Message Version with a new Subscription beside the old one gives no Change', () => {

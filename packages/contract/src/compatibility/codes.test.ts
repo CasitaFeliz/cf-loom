@@ -118,9 +118,6 @@ function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -287,7 +284,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('a code answered for the first time gives no Change at its code, only rejection-added on its Endpoints', () => {
@@ -321,7 +318,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test.each([

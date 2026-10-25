@@ -271,7 +271,7 @@ const shapes = [
   "  visibility: 'public',",
   "  description: 'Echoes the prototype',",
   '  guards: [optionalBearer],',
-  '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
+  '  input: { body: z.object({ b: z.json().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
   '  success: { status: 204 },',
   '});',
   'export const health = defineEndpoint({',

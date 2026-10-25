@@ -13,6 +13,7 @@ import {
   answerableByCodeOf,
   answerableRejectionsOf,
   contextProvidersOf,
+  declaredByCodeOf,
   resolutionOf,
   schemaOf,
   standardRejectionsOf,
@@ -106,6 +107,49 @@ describe('answerableByCodeOf', () => {
       'NOT_IMPLEMENTED',
     ]);
     expect(byCode.get('NO_ORDER')).toBe(notFound);
+  });
+});
+
+describe('declaredByCodeOf', () => {
+  test('every Standard Rejection and every Rejection the Endpoints answer are found by resolved code', () => {
+    const standards = {
+      ...standardRejectionDefaults,
+      notFound: { code: 'NO_ORDER', status: 404, message: 'No order' } as const,
+    };
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders/all',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+
+    const byCode = declaredByCodeOf([listOrders, getOrder], standards);
+
+    expect([...byCode.keys()].sort()).toEqual([
+      'FORBIDDEN',
+      'INVALID_INPUT',
+      'NOT_IMPLEMENTED',
+      'NO_ORDER',
+      'UNAUTH',
+    ]);
+    expect(byCode.get('NO_ORDER')).toBe(notFound);
+  });
+
+  test('the Standard not-found code is found though no Endpoint lists it', () => {
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders/all',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+
+    const byCode = declaredByCodeOf([listOrders], standardRejectionDefaults);
+
+    expect(byCode.get('NOT_FOUND')).toBe(notFound);
   });
 });
 

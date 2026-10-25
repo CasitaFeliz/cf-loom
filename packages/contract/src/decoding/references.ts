@@ -2,7 +2,7 @@ import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapsho
 import type { Problem } from '../validation/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
-import { standardBodyProblemsOf } from './standard-bodies.ts';
+import { codeStatusProblemsOf, standardBodyProblemsOf } from './standard-codes.ts';
 import { usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
@@ -11,14 +11,15 @@ type Located = { readonly at: Path; readonly text: string };
 /**
  * The first identity a Snapshot holds that is none, a name it uses and does not hold (a `ref`'s
  * def, a code an Endpoint or Guard lists or a Standard Rejection names, or a Guard), a Standard
- * Rejection's code with a body it does not have, or a def that leads back to itself with no node
- * between; `undefined` when there is none.
+ * Rejection's code with a body it does not have, a code's status no Rejection has, or a def that
+ * leads back to itself with no node between; `undefined` when there is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
     ...identityProblemsOf(snapshot),
     ...unheldProblemsOf(snapshot),
     ...standardBodyProblemsOf(snapshot),
+    ...codeStatusProblemsOf(snapshot),
     ...nodelessCycleProblemsOf(snapshot),
   ][0];
 }

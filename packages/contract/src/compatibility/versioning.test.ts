@@ -68,7 +68,7 @@ function aRefusedChange(site: ChangeSite): Change {
 }
 
 function aReport(changes: readonly Change[], hashChanged = true): ComparedReport {
-  return { kind: 'compared', changes, hashChanged };
+  return { changes, hashChanged };
 }
 
 function peersMoving(baseline: string, proposed: string): PeerMove {
@@ -155,9 +155,6 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
     endpoints: { [orderById]: getOrder, [latestOrder]: anEndpointOf(visibility) },
   };
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -221,9 +218,6 @@ function comparedReportOf(
   proposed: ServiceSnapshot | DefinitionsSnapshot,
 ): ComparedReport {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -508,7 +502,7 @@ describe('versionBumpOf', () => {
     };
     const report = compatibilityReportOf(baseline, proposed);
 
-    const bump = report.kind === 'compared' ? versionBumpOf(report, unmoved) : 'no-baseline';
+    const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('patch');
   });

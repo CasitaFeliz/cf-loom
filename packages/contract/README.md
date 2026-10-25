@@ -150,6 +150,8 @@ The body of the invalid-input Rejection is cf-loom's, whatever the Definitions P
 
 `code` is one of a set cf-loom owns, not zod's issue codes: `required`, `invalid_type`, `invalid_value`, `invalid_format`, `too_small`, `too_big`, `not_multiple`, `unrecognized_key` and `malformed` (an unparseable body or a wrong content type). `in` and `code` are Open Enums, which a Caller reads through its Provider's Contract Package with their Unknown case, so a part or a code a later cf-loom adds is an Additive Change. An issue never carries the received value.
 
+Wherever cf-loom writes an issue on one line, in an error, a log or a fake's mistake, it writes `<source>: <part>.<path> <code>: <message>`, the path joined by dots and left out when the issue is at the part itself: `orders: body.orderId invalid_format: Invalid UUID`.
+
 ## Guards
 
 ```ts

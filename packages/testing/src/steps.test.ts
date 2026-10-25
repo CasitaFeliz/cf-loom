@@ -282,27 +282,171 @@ describe('fakeProvider: steps', () => {
     });
   });
 
-  test('reject({ unknown }) answers 422, its message the code unless given, and the client receives an unknown-rejection', async () => {
+  test('unknownRejection(code) answers 422 with the code as its message and no body, and the client receives an unknown code', async () => {
     const payments = fakeProvider(paymentsDependency);
-    payments
-      .on('getPayment')
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { expiredAt: '2026-01' }))
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED', message: 'The card expired' }, null));
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED'));
 
     const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
-      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: { expiredAt: '2026-01' } },
+      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED' },
     });
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'unknown-rejection',
       source: 'provider',
       code: 'CARD_EXPIRED',
       status: 422,
-      message: 'The card expired',
-      body: null,
+      message: 'CARD_EXPIRED',
+    });
+  });
+
+  test('unknownRejection(code, { message, body }) carries both', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { message: 'The card expired', body: { expiredAt: '2026-01' } };
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED', scripted));
+
+    const response = await payments.fetch(new Request(at));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ rejection: { code: 'CARD_EXPIRED', ...scripted } });
+  });
+
+  test('unknownRejection of a code another Endpoint declares answers its declared status, message and body, as a later Provider adding it would', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: { unknown: 'chargeback' } };
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body }));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      rejection: {
+        code: 'PAYMENT_LOCKED',
+        message: 'The payment is locked',
+        body: { lockedAt: '2026-10-19T10:00:00Z', reason: 'chargeback' },
+      },
+    });
+  });
+
+  test('unknownRejection of a code another Endpoint declares takes the message given', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: 'fraud' };
+    const message = 'Locked for review';
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { message, body }));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(await response.json()).toMatchObject({ rejection: { code: 'PAYMENT_LOCKED', message } });
+  });
+
+  test('unknownRejection of a code another Endpoint declares, with a body that breaks its reader, is a mistake listing the Issues', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body: { lockedAt: 'now' } }));
+
+    const calling = capture(payments, '{"amount":1}');
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: capturePayment: the scripted PAYMENT_LOCKED body breaks its reader',
+        'payments-service: capturePayment: body.lockedAt invalid_format: ',
+      ].join('\n'),
+    );
+  });
+
+  test('unknownRejection of a code an exported Endpoint the Dependency does not list declares answers it as declared', async () => {
+    const dependency = defineDependency({
+      provider: paymentsDependency.provider,
+      endpoints: [readers.capturePayment],
+    });
+    const payments = fakeProvider(dependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: 'fraud' };
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body }));
+
+    const response = await payments.fetch(
+      new Request(`${at}/capture`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{"amount":1}',
+      }),
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  test('unknownRejection of a declared code with no body, given a body, is a mistake', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('NO_PAYMENT', { body: { x: 1 } }));
+
+    const calling = capture(payments, '{"amount":1}');
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: capturePayment: the scripted NO_PAYMENT body breaks its reader',
+        'payments-service: capturePayment: body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('a body scripted for a Success that declares none is a mistake at success.body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    // @ts-expect-error cancelPayment's Success declares no body
+    payments.on('cancelPayment').otherwise((r) => r.success({ x: 1 }));
+
+    const calling = payments.fetch(new Request(at, { method: 'DELETE' }));
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: cancelPayment: the scripted Success breaks its readers',
+        'payments-service: cancelPayment: success.body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('a body scripted beside the headers of a headers-only Success is a mistake at success.body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { headers: { 'x-count': 1 }, body: { x: 1 } };
+    payments.on('checkPayment').otherwise((r) => r.success(scripted as never));
+
+    const calling = payments.fetch(new Request(`${at}/check`));
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: checkPayment: the scripted Success breaks its readers',
+        'payments-service: checkPayment: success.body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('unknownRejection options cannot replace the kind or the code it scripts', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { kind: 'success', code: 'NO_PAYMENT' } as never;
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED', options));
+
+    const response = await payments.fetch(new Request(at));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED' },
+    });
+  });
+
+  test('unknownRejection of the Provider’s not-found code, on an Endpoint that does not list it, answers 404 with its message and no body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('NO_PAYMENT'));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NO_PAYMENT', message: 'No such payment' },
     });
   });
 

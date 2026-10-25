@@ -269,3 +269,19 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 });
+
+describe('walkSchemas: choices without options', () => {
+  test('a discriminated union without options fails by that name', () => {
+    const schema = z.discriminatedUnion('type', [] as unknown as [typeof card]);
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(['body'], 'a z.discriminatedUnion() without options'),
+    );
+  });
+
+  test('a union without options fails as a union, not as an enum', () => {
+    const schema = z.union([] as unknown as [typeof card]);
+
+    expect(walkBody(schema)).toEqual(refusedAt(['body'], 'a z.union() without options'));
+  });
+});

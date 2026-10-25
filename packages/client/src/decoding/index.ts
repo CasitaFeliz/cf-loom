@@ -1,8 +1,6 @@
 export { outcomeOf } from './decode.ts';
 export type {
   DecodedOutcome,
-  EndpointRejection,
-  EndpointSuccess,
   ReceivedOutcome,
   ReceivedRejection,
   ReceivedSuccess,

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 import { join, posix, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { targetsOf } from './package-entries.ts';
@@ -43,6 +44,47 @@ function sourcesOf(packageDir: string): string[] {
 
 function byPath(left: { path: string }, right: { path: string }): number {
   return left.path.localeCompare(right.path);
+}
+
+/**
+ * A module statement as `tsc` writes it, one per line: `import`/`export … from '…';`, a bare
+ * `import '…';`, or a type's `import('…')`; a regex literal in emitted code is none.
+ */
+const importPattern =
+  /^(?:(?:import|export)\b[^'"\n;]*?\s|\}\s*)from\s*['"]([^'"]+)['"];$|^import\s*['"]([^'"]+)['"];$|import\(\s*['"]([^'"]+)['"]\s*\)/gm;
+
+/** The package a bare specifier names: `@scope/name` or `name`, without its subpath. */
+function packageNameOf(specifier: string): string {
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? specifier);
+}
+
+function isBareSpecifier(specifier: string): boolean {
+  return (
+    !specifier.startsWith('.') &&
+    !specifier.startsWith('node:') &&
+    !builtinModules.includes(specifier)
+  );
+}
+
+/** The packages a package's built `.js` and `.d.ts` files import, itself left out. */
+function importedPackagesOf(packageDir: string, self: string): Set<string> {
+  const entries = readdirSync(join(packageDir, 'dist'), { recursive: true, withFileTypes: true });
+  const built = entries.filter(
+    (entry) => entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.d.ts')),
+  );
+  const imported = new Set<string>();
+  for (const file of built) {
+    const text = readFileSync(join(file.parentPath, file.name), 'utf8');
+    for (const match of text.matchAll(importPattern)) {
+      const specifier = match[1] ?? match[2] ?? match[3] ?? '';
+      if (isBareSpecifier(specifier)) {
+        imported.add(packageNameOf(specifier));
+      }
+    }
+  }
+  imported.delete(self);
+  return imported;
 }
 
 describe('the packages pnpm publishes', () => {
@@ -106,5 +148,22 @@ describe('the packages pnpm publishes', () => {
 
       expect(packing.map(({ name }) => name)).toEqual([]);
     });
+  });
+
+  it('import from their built files only the packages their peers and dependencies list', () => {
+    const undeclared = readdirSync(join(root, 'packages')).flatMap((folder) => {
+      const packageDir = join(root, 'packages', folder);
+      const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
+      const declared = new Set([
+        ...Object.keys(manifest.peerDependencies ?? {}),
+        ...Object.keys(manifest.dependencies ?? {}),
+      ]);
+      const imported = [...importedPackagesOf(packageDir, manifest.name)];
+      return imported
+        .filter((name) => !declared.has(name))
+        .map((name) => `${manifest.name}: ${name}`);
+    });
+
+    expect(undeclared).toEqual([]);
   });
 });

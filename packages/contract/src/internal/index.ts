@@ -11,7 +11,6 @@ export type {
   ChangeClass,
   ChangeSite,
   ComparedReport,
-  CompatibilityReport,
   Difference,
   PeerMove,
   PeerRanges,
@@ -22,6 +21,7 @@ export type {
 } from '../compatibility/index.ts';
 export {
   compatibilityReportOf,
+  firstPublishChangesOf,
   publishedSnapshotOf,
   snapshotPathOf,
   versionBumpOf,
@@ -35,6 +35,7 @@ export type {
   LiveOf,
   ProvidedEvent,
   Refusal,
+  SuccessValueOf,
 } from '../declarations/index.ts';
 export {
   codeNameOf,
@@ -60,8 +61,14 @@ export {
 } from '../declarations/index.ts';
 export type { DecodedSnapshot } from '../decoding/index.ts';
 export { decodeSnapshot } from '../decoding/index.ts';
-export type { Parsed, SchemaIssue } from '../issues/index.ts';
-export { encodedValueOf, parsedPartsOf, parseValue } from '../issues/index.ts';
+export type { Checked, GivenPart, Parsed, SchemaIssue } from '../issues/index.ts';
+export {
+  encodedValueOf,
+  parsedPartOf,
+  parsedPartsOf,
+  parseValue,
+  writtenPartOf,
+} from '../issues/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
 export { readingOf } from '../reading/index.ts';
 export type {
@@ -106,8 +113,10 @@ export {
   isDeclaredRejection,
   isSemanticVersion,
   isSubscriptionTombstone,
+  nestingFailureOf,
   ownRejectionsOf,
   semanticVersionPartsOf,
+  snapshotFormatOf,
   snapshotOf,
   textPartNodesOf,
 } from '../snapshot/index.ts';
@@ -244,6 +253,7 @@ export {
   commandsOf,
   contextProvidersOf,
   declarationsListedBy,
+  declaredByCodeOf,
   demandParts,
   endpointsOf,
   eventServiceOf,
@@ -254,6 +264,7 @@ export {
   isPlainObject,
   isSameRejection,
   isSchema,
+  issueLineOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,
@@ -269,5 +280,6 @@ export {
   standardRejectionsOf,
   standardRejectionsSourceOf,
   subscriptionsOf,
+  successFieldsOf,
   successParts,
 } from '../written/index.ts';

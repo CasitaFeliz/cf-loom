@@ -794,3 +794,72 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     });
   });
 });
+
+describe('walkSchemas: constraints that admit no value', () => {
+  const noValue = 'bounds that admit no value';
+  const nonPositiveStep = 'a multipleOf of 0 or less';
+  const lengthBound = 'a length bound that is not a non-negative integer';
+
+  test.each<[string, z.ZodType]>([
+    ['multipleOf(0)', z.number().multipleOf(0)],
+    ['a negative multipleOf', z.number().multipleOf(-2)],
+  ])('%s fails', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(refused(nonPositiveStep));
+  });
+
+  test.each<[string, z.ZodType]>([
+    ['a string min above its max', z.string().min(5).max(3)],
+    ['an array min above its max', z.array(z.string()).min(5).max(3)],
+    ['a number min above its max', z.number().min(5).max(3)],
+    ['.gt(5).lt(5)', z.number().gt(5).lt(5)],
+    ['.gt(5).max(5)', z.number().gt(5).max(5)],
+  ])('%s admits no value and fails', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(refused(noValue));
+  });
+
+  test.each<[string, z.ZodType]>([
+    ['a string', z.string().min(5).max(5)],
+    ['an array', z.array(z.string()).length(0)],
+    ['a number', z.number().min(5).max(5)],
+  ])('%s bounded at one value walks', (_name, schema) => {
+    expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
+  });
+
+  test.each<[string, z.ZodType]>([
+    ['a negative string length', z.string().min(-1)],
+    ['a fractional string length', z.string().length(2.5)],
+    ['a negative array length', z.array(z.string()).min(-1)],
+    ['a fractional array length', z.array(z.string()).max(1.5)],
+  ])('%s fails', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(refused(lengthBound));
+  });
+
+  test('bounds set across a .nullable() are judged together', () => {
+    const schema: z.ZodType = z.string().min(5).nullable();
+
+    expect(walkBody(schema.check(z.maxLength(3)))).toEqual(refused(noValue));
+  });
+
+  test('crossed bounds are reported beside items that fail', () => {
+    const schema = z.array(z.date()).min(5).max(3);
+
+    expect(walkBody(schema)).toEqual(
+      refusedAll([
+        failureAt(['body', 'items'], 'z.date()', 'z.iso.datetime()'),
+        failureAt(['body'], noValue),
+      ]),
+    );
+  });
+
+  test('crossed bounds are reported beside a .refine() on the same schema', () => {
+    const schema = z
+      .string()
+      .min(5)
+      .max(3)
+      .refine((value) => value !== '');
+
+    expect(walkBody(schema)).toEqual(
+      refusedAll([failureAt(['body'], '.refine()'), failureAt(['body'], noValue)]),
+    );
+  });
+});

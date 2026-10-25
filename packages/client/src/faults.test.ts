@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client, type Happened, type Http, type InferredFault } from './index.ts';
+import { networkFailureOf } from './internal/index.ts';
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -444,6 +445,34 @@ describe('row 2, more', () => {
       status: 503,
       message: 'The connection failed',
       retryAfter: '30',
+    });
+  });
+});
+
+describe('networkFailureOf, the failure a fake fetch throws', () => {
+  test('a refused connection is no connection, committed no and retryable', async () => {
+    const orders = ordersOver(throwing(networkFailureOf('no-connection')));
+
+    const outcome = await orders.getOrder(input);
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'no-connection',
+      committed: 'no',
+      retryable: true,
+    });
+  });
+
+  test('a connection lost after sending is committed unknown and retryable', async () => {
+    const orders = ordersOver(throwing(networkFailureOf('connection-lost')));
+
+    const outcome = await orders.getOrder(input);
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'connection-lost',
+      committed: 'unknown',
+      retryable: true,
     });
   });
 });
