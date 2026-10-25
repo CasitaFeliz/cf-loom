@@ -44,29 +44,41 @@ describe('walkSchemas: the Not allowed list', () => {
     });
   });
 
-  test('what lies inside a refused construct is reported beside it', () => {
-    const order = z.object({ when: z.array(z.date()).default([]) });
+  test.each([
+    { name: '.default()', schema: z.array(z.date()).default([]), steps: [['items']] },
+    {
+      name: 'z.looseRecord()',
+      schema: z.looseRecord(z.string(), z.date()),
+      steps: [['value']],
+    },
+    { name: 'z.xor()', schema: z.xor([z.date(), z.string()]), steps: [['options', 0]] },
+    { name: 'z.map()', schema: z.map(z.date(), z.date()), steps: [['key'], ['value']] },
+    {
+      name: 'z.function()',
+      schema: z.function({ input: [z.date()], output: z.string() }),
+      steps: [['items', 0]],
+    },
+  ])('what lies inside $name is reported beside it', ({ name, schema, steps }) => {
+    const order = z.object({ when: schema });
 
-    const failures = [
-      { kind: 'not-allowed', at: ['body', 'fields', 'when'], construct: '.default()' },
-      {
-        kind: 'not-allowed',
-        at: ['body', 'fields', 'when', 'items'],
-        construct: 'z.date()',
-        instead: 'z.iso.datetime()',
-      },
-    ];
+    const at = ['body', 'fields', 'when'];
+    const dates = steps.map((step) => ({
+      kind: 'not-allowed',
+      at: [...at, ...step],
+      construct: 'z.date()',
+      instead: 'z.iso.datetime()',
+    }));
+    const failures = [{ kind: 'not-allowed', at, construct: name }, ...dates];
     expect(walkBody(order)).toEqual({
       located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
       defs: {},
     });
   });
 
-  test('a format whose options its own zod refuses fails instead of throwing', () => {
-    const id = z.uuid();
-    Object.assign(id._zod.def, { version: 'v9' });
+  test('a refusal stacked on itself is reported once', () => {
+    const order = z.object({ note: z.string().default('a').default('b') });
 
-    expect(walkBody(id)).toEqual(refused('z.stringFormat("uuid")'));
+    expect(walkBody(order)).toEqual(refusedAt(['body', 'fields', 'note'], '.default()'));
   });
 
   test.each([

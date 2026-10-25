@@ -719,6 +719,11 @@ describe('walkSchemas: recursion', () => {
       ['z.set()', (tree: z.ZodType) => z.set(tree), 'z.set()'],
       ['z.promise()', (tree: z.ZodType) => z.promise(tree), 'z.promise()'],
       ['z.success()', (tree: z.ZodType) => z.success(tree), 'z.success()'],
+      [
+        'z.function()',
+        (tree: z.ZodType) => z.function({ input: [tree], output: z.string() }),
+        'z.function()',
+      ],
     ])(
       'a recursive schema with %s on its cycle fails with that construct alone',
       (_name, through, construct) => {

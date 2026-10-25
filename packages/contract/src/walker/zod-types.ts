@@ -99,13 +99,15 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'success':
       return refusedAround({ refusal: refused[def.type], inside: [def.innerType] }, at, walker);
     case 'map':
+      return refusedMap(def, at, walker);
+    case 'set':
+      return refusedAround({ refusal: refused.set, inside: [def.valueType] }, at, walker);
+    case 'function':
       return refusedAround(
-        { refusal: refused.map, inside: [def.keyType, def.valueType] },
+        { refusal: refused.function, inside: [def.input, def.output] },
         at,
         walker,
       );
-    case 'set':
-      return refusedAround({ refusal: refused.set, inside: [def.valueType] }, at, walker);
     case 'transform':
     case 'custom':
     case 'date':
@@ -119,7 +121,6 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'never':
     case 'nan':
     case 'file':
-    case 'function':
       return notAllowed(at, refused[def.type]);
     case 'template_literal':
       return notAllowed(at, refused.templateLiteral);
@@ -148,6 +149,13 @@ type Around = { readonly refusal: Refused; readonly inside: readonly core.$ZodTy
 function refusedAround({ refusal, inside }: Around, at: Path, walker: Walker): Walked {
   const walkedInside = inside.map((schema) => walker.schema(schema, at));
   return failed(failuresOf([notAllowed(at, refusal), ...walkedInside]));
+}
+
+/** A refused map, reported beside its key and its value, each at its own place as a record's are. */
+function refusedMap(def: core.$ZodMapDef, at: Path, walker: Walker): Walked {
+  const key = walker.schema(def.keyType, [...at, 'key']);
+  const value = walker.schema(def.valueType, [...at, 'value']);
+  return failed(failuresOf([notAllowed(at, refused.map), key, value]));
 }
 
 /** The schemas of a pipe other than its transform, which the pipe's own refusal already names. */
