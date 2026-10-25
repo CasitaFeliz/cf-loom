@@ -1,15 +1,15 @@
 import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
-import type { ConsumedFault, HookFailure } from './faults.ts';
+import type { ConsumedFault } from './faults.ts';
 
 /** A run as the Broker settles it, with the Fault built and how the hook told of it failed, if it did. */
 export type Settled = {
   readonly settlement: Settlement;
   /** The Fault built, whether or not the hook told of it failed. */
   readonly fault: ConsumedFault | undefined;
-  /** The `onServiceFault threw` line and what the hook threw or rejected with, already on the console. */
-  readonly hookFailure: HookFailure | undefined;
+  /** The `onServiceFault threw` line the core wrote, when the hook failed. */
+  readonly hookFailure: string | undefined;
 };
 
 /** Runs a delivery through its Handler and answers how it settled. */

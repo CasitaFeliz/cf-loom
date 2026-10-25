@@ -16,7 +16,6 @@ export {
   failureCauseOf,
   failureLineOf,
   hookFailureOf,
-  hookThrewLineOf,
 } from './hooks.ts';
 export type { MessageGiven, MessageMeta, MessageRun, MessageWritten } from './message-run.ts';
 export { messageRunOf } from './message-run.ts';

@@ -5,9 +5,8 @@ import { waitOf, whileWorking } from './in-progress.ts';
 import type { PulledMessage } from './pulled-message.ts';
 
 /**
- * Hands one Message to its Handler and applies the Settlement it comes back with; one whose
- * `receive` rejects, through a bug, is left to NATS, and one without cf-loom's ids is ended, since
- * cf-loom never published it.
+ * Hands one Message to its Handler and applies the Settlement it comes back with; one without
+ * cf-loom's ids is ended, since cf-loom never published it.
  */
 export async function deliver(message: PulledMessage, durable: FoundDurable): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
@@ -20,12 +19,8 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   const lastAttempt = isLastDelivery(durable.maxDeliver, deliveryCount);
   const delivery = { messageId, factId, deliveryCount, lastAttempt, headers, body: message.data };
   const wait = waitOf(durable.waits, deliveryCount);
-  const settlement = await whileWorking(message, wait, () =>
-    durable.consumer.receive(delivery),
-  ).catch(() => undefined);
-  if (settlement !== undefined) {
-    applySettlement(message, settlement);
-  }
+  const receiving = () => durable.consumer.receive(delivery);
+  applySettlement(message, await whileWorking(message, wait, receiving));
 }
 
 /** Whether NATS delivers no more after this delivery: a limit set, and reached. */

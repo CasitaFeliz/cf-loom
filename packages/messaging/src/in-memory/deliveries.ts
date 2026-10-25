@@ -1,11 +1,5 @@
 import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
-import {
-  consumedFaultLinesOf,
-  consumerDetailsOf,
-  leftPending,
-  receiveFailureLineOf,
-  type Settled,
-} from '../consuming/index.ts';
+import { consumedFaultLinesOf, consumerDetailsOf, type Settled } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
 import { DeliveryLine } from './line.ts';
@@ -70,20 +64,9 @@ export class Deliveries {
   }
 
   async #attempt(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
-    const settled = await this.#received(consumer, delivery);
+    const settled = await consumerDetailsOf(consumer).settle(delivery);
     this.#apply(consumer, delivery, settled);
     return settled.settlement;
-  }
-
-  async #received(consumer: BrokerConsumer, delivery: Delivery): Promise<Settled> {
-    const { element, settle } = consumerDetailsOf(consumer);
-    try {
-      return await settle(delivery);
-    } catch (cause) {
-      const lines = [receiveFailureLineOf({ element, subject: consumer.subject }, delivery)];
-      this.#failures.record({ lines, cause });
-      return leftPending;
-    }
   }
 
   /** What became of a delivery, kept in the list of pending Messages and the failures. */
@@ -108,7 +91,7 @@ export class Deliveries {
       this.#failures.record({ lines: consumedFaultLinesOf(fault), cause: fault });
     }
     if (hookFailure !== undefined) {
-      this.#failures.record({ lines: [hookFailure.line], cause: hookFailure.cause });
+      this.#failures.record({ lines: [hookFailure], cause: undefined });
     }
   }
 }

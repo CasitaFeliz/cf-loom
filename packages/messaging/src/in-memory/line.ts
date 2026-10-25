@@ -24,10 +24,10 @@ export class DeliveryLine {
     this.#onCut = onCut;
   }
 
-  /** Lines a delivery up; resolves to what it returns once it ran, or rejects with the cut that dropped it. */
+  /** Lines a delivery up; settles as it settles once it ran, or rejects with the cut that dropped it. */
   add<Result>(run: () => Promise<Result>): Promise<Result> {
     return new Promise((resolve, reject) => {
-      this.#lined.push({ run: async () => resolve(await run()), drop: reject });
+      this.#lined.push({ run: () => run().then(resolve, reject), drop: reject });
       this.#start();
     });
   }

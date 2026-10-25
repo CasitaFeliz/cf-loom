@@ -321,6 +321,7 @@ describe('settled()', () => {
         'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       ].join('\n'),
     );
+    expect(rejection?.cause).toMatchObject({ kind: 'returned', identity: 'notifyOnCreated' });
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
   });
 

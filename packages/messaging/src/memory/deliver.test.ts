@@ -637,6 +637,37 @@ describe('pending and redeliver()', () => {
     expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, false, false]);
   });
 
+  test('a delivery whose settling rejects rejects deliver with that error, lists nothing pending, and the next delivery runs', async () => {
+    const broken = new Error('the console broke');
+    const broker = memory();
+    const { consume } = await messaging(contract, broker);
+    await consume({
+      commands: { chargeCardV1: handle(readers.commands.chargeCardV1, throwing) },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+        auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
+        notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+      },
+      readers,
+    });
+    const logging = vi.spyOn(console, 'error').mockImplementation(() => {
+      throw broken;
+    });
+
+    const rejection = await rejectionOf(broker.deliver(chargeCardV1, charge, { factId: 'f-1' }));
+    const pendingAfter = broker.pending;
+    logging.mockImplementation(() => undefined);
+    const next = await broker.deliver(chargeCardV1, charge, { factId: 'f-2' });
+    const settling = await rejectionOf(broker.settled());
+
+    expect(rejection).toBe(broken);
+    expect(pendingAfter).toEqual([]);
+    expect(next).toBe('pending');
+    expect((settling as Error).message).toBe(
+      'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-2 f-2 attempt 1: the Handler threw',
+    );
+  });
+
   test('pending lists the wire body, not the form the Handler read', async () => {
     const { broker, received } = await running(() => ({ notify: throwing }));
 

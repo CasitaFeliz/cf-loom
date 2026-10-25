@@ -45,8 +45,7 @@ export type BrokerConsumer = {
   readonly subject: string;
   /**
    * Runs the Handler and resolves with the Settlement to apply, even when `onServiceFault` throws
-   * or rejects, which the core logs and answers `'pending'`; should it reject, through a bug, the
-   * adapter leaves the Message for redelivery.
+   * or rejects, which the core logs and answers `'pending'`.
    */
   readonly receive: (delivery: Delivery) => Promise<Settlement>;
 };

@@ -7,7 +7,6 @@ import {
   type HandlerFailure,
   type HandlerFaultBase,
   hookFailureOf,
-  hookThrewLineOf,
   issueLineOf,
   logOf,
 } from '@cf-loom/handlers/internal';
@@ -31,11 +30,8 @@ export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
 /** The Service's `onServiceFault`, which may be async and is awaited. */
 export type ServiceFaultHook = (fault: ConsumedFault) => void | Promise<void>;
 
-/** An `onServiceFault` that threw or rejected: its `onServiceFault threw` line, already on the console, and what it threw. */
-export type HookFailure = { readonly line: string; readonly cause: unknown };
-
-/** Tells of a fault and never rejects: it answers how the hook failed, if it did. */
-export type Report = (fault: ConsumedFault) => Promise<HookFailure | undefined>;
+/** Tells of a fault and never rejects: it answers the `onServiceFault threw` line when the hook failed. */
+export type Report = (fault: ConsumedFault) => Promise<string | undefined>;
 
 /** The Service's hook, contained so that its failure is logged and answered, or the console line of every fault. */
 export function reportOf(onServiceFault: ServiceFaultHook | undefined): Report {
@@ -46,13 +42,8 @@ export function reportOf(onServiceFault: ServiceFaultHook | undefined): Report {
     };
   }
   return async (fault) => {
-    const source = sourceOf(fault);
-    const called = { source, hook: 'onServiceFault' } as const;
-    const failure = await hookFailureOf(onServiceFault, fault, called);
-    if (failure === undefined) {
-      return undefined;
-    }
-    return { line: hookThrewLineOf(source, 'onServiceFault'), cause: failure.cause };
+    const called = { source: sourceOf(fault), hook: 'onServiceFault' } as const;
+    return await hookFailureOf(onServiceFault, fault, called);
   };
 }
 
@@ -84,15 +75,6 @@ export function aboutOf(
 ): About {
   const identity = elementNameOf(element);
   return { element, identity, subject, messageId, factId, deliveryCount, lastAttempt };
-}
-
-/** The `onServiceFault threw` line of a delivery, which `settled()` also reports for a `receive` that rejected, through a bug. */
-export function receiveFailureLineOf(
-  consumed: Pick<Consumed, 'element' | 'subject'>,
-  delivery: Delivered,
-): string {
-  const source = sourceOf(aboutOf(consumed, delivery));
-  return hookThrewLineOf(source, 'onServiceFault');
 }
 
 /** A fault on the console: each of its lines, then its cause when it has one. */
