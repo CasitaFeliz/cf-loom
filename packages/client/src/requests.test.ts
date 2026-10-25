@@ -7,7 +7,8 @@ import {
   defineGuard,
   type Endpoint,
   type ExportedSnapshot,
-  type StandardRejections,
+  openEnumReader,
+  type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { handle, success } from '@cf-loom/handlers';
@@ -15,6 +16,28 @@ import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { client } from './index.ts';
+
+/** The invalid-input body's Reader as `cf-loom package` writes it. */
+const invalidInputBody = z.object({
+  issues: z.array(
+    z.object({
+      in: openEnumReader(['body', 'headers', 'params', 'query']),
+      path: z.array(z.union([z.string(), z.number()])),
+      code: openEnumReader([
+        'required',
+        'invalid_type',
+        'invalid_value',
+        'invalid_format',
+        'too_small',
+        'too_big',
+        'not_multiple',
+        'unrecognized_key',
+        'malformed',
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
 
 const searchOrders = defineEndpoint({
   name: 'searchOrders',
@@ -76,7 +99,7 @@ const priceOrder = defineEndpoint({
  */
 function contractPackageOf<
   const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
@@ -101,7 +124,12 @@ function contractPackageOf<
 }
 
 const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  invalidInput: {
+    code: 'INVALID_INPUT',
+    status: 400,
+    message: 'Invalid input',
+    body: invalidInputBody,
+  },
   notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 } as const;
@@ -342,6 +370,42 @@ describe('Input that cannot be sent', () => {
       body: { issues: [{ in: 'query', path: ['ids'], code: 'required' }] },
     });
     expect(calls()).toBe(0);
+  });
+
+  test('an issue code the Provider’s Reader does not declare is its Unknown case, as the Caller’s cf-loom may know more', async () => {
+    const olderReader = z.object({
+      issues: z.array(
+        z.object({
+          in: openEnumReader(['body', 'headers', 'params', 'query']),
+          path: z.array(z.union([z.string(), z.number()])),
+          code: openEnumReader(['invalid_type', 'too_small']),
+          message: z.string(),
+        }),
+      ),
+    });
+    const older = contractPackageOf(
+      { searchOrders },
+      {
+        ...defaultStandards,
+        invalidInput: { ...defaultStandards.invalidInput, body: olderReader },
+      },
+    );
+    const olderOrders = client(defineDependency({ provider: older, endpoints: [searchOrders] }), {
+      baseUrl: 'http://orders.test',
+      fetch: async () => counted(),
+    });
+
+    const outcome = await olderOrders.searchOrders({
+      params: { shopId: 's' },
+      query: { ids: [] },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      known: true,
+      code: 'INVALID_INPUT',
+      body: { issues: [{ in: 'query', path: ['ids'], code: { unknown: 'required' } }] },
+    });
   });
 
   test('a query value or header with a lone surrogate cannot travel', async () => {
