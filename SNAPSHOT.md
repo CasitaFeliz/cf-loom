@@ -104,9 +104,11 @@ A Definitions Package's Snapshot:
 ## Messages
 
 ```json
-"events":   { "OrderCreated@2": { "visibility": "internal", "lifecycle": "active", "description": "", "body": {} } },
-"commands": { "ChargeCard@1":   { "lifecycle": "active", "description": "", "body": {} } }
+"events":   { "OrderCreated@2": { "group": "orders", "visibility": "internal", "lifecycle": "active", "description": "", "body": {} } },
+"commands": { "ChargeCard@1":   { "group": "orders", "lifecycle": "active", "description": "", "body": {} } }
 ```
+
+`group` names the Group that lists the Message Version, as an Endpoint's does; a tombstone has none.
 
 Subjects, stream names and durable consumer names are derived from these identities, by the adapter and by `cf-loom broker-plan`, and subjects also by `cf-loom asyncapi`, and are not stored.
 
@@ -145,6 +147,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 ```json
 "subscriptions": {
   "notifyOnSettled": {
+    "group": "orders",
     "description": "Notifies the customer of each payment settled",
     "event": "payments-service:PaymentSettled@1"
   },
@@ -159,7 +162,8 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
+- A Subscription records the Group that lists it.
+- A removed Subscription stays as a tombstone that keeps its Event and drops its Group and description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones

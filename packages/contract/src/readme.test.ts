@@ -112,12 +112,6 @@ const createOrder = defineEndpoint({
   success: { status: 201, body: z.object({ id: z.uuid() }) },
 });
 
-const ordersGroup = defineGroup({
-  name: 'orders',
-  description: 'Order lifecycle',
-  endpoints: [getOrder, createOrder],
-});
-
 const getPayment = defineEndpoint({
   name: 'getPayment',
   method: 'GET',
@@ -194,26 +188,26 @@ const notifyOnSettled = defineSubscription({
   event: paymentsDeps.events.paymentSettledV1,
 });
 
+const ordersGroup = defineGroup({
+  name: 'orders',
+  description: 'Order lifecycle',
+  endpoints: [getOrder, createOrder],
+  events: [orderCreatedV1, orderCreatedV2],
+  commands: [chargeCardV1],
+  subscriptions: [notifyOnSettled],
+});
+
 describe('the README’s declaration examples', () => {
-  test('a Service root lists its Definitions Packages, Groups, Messages, Subscriptions and Dependencies', () => {
+  test('a Service root lists its Definitions Packages, its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions],
-      groups: [
-        ordersGroup,
-        defineGroup({
-          name: 'messages',
-          description: 'Messages',
-          events: [orderCreatedV1, orderCreatedV2],
-          commands: [chargeCardV1],
-          subscriptions: [notifyOnSettled],
-        }),
-      ],
+      groups: [ordersGroup],
       dependencies: [paymentsDeps],
     });
 
     expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
-    expect(contract.groups[1].subscriptions[0].event).toBe(payments.events.paymentSettledV1);
+    expect(contract.groups[0].subscriptions[0].event).toBe(payments.events.paymentSettledV1);
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {

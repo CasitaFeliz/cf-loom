@@ -21,7 +21,7 @@ await publisher.publish('OrderCreated', {
 await sender.send('ChargeCard', { orderId });
 ```
 
-`publish` takes an Event's name and one body for each of its Active and Deprecated versions: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it throws `InvalidMessageError`, whose `invalid` lists each such version by its identity with its `issues` at `body`, and nothing is sent. `publish` sends the versions in version order.
+`publish` takes an Event's name and one body for each of its Active and Deprecated versions, whatever Groups its versions sit in: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it throws `InvalidMessageError`, whose `invalid` lists each such version by its identity with its `issues` at `body`, and nothing is sent. `publish` sends the versions in version order.
 
 All the Messages of one call share a Fact id, which every Message Handler receives to recognize a fact it already handled. The Fact id is random unless the calling code passes one, a non-empty string that arrives as given on every Broker (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md):
 
@@ -36,8 +36,8 @@ Each Message is sent with `<Name>.v<version>:<factId>` as its broker message id 
 ## Message Handlers
 
 ```ts
-// src/subscriptions/notify-on-settled.handler.ts
-import { readers } from '../readers.generated.ts';
+// src/subscriptions/orders/notify-on-settled.handler.ts
+import { readers } from '../../readers.generated.ts';
 
 export default handle(
   readers.subscriptions.notifyOnSettled,

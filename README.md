@@ -23,7 +23,7 @@ How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages)
 
 ## A first Service
 
-Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider` and `fakeEvent`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through the in-memory adapter in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' CommandHandler for `ChargeCard` handle.
+Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider` and `fakeEvent`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through the in-memory adapter in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' CommandHandler for `ChargeCard` handle.
 
 ### Layout
 
@@ -31,9 +31,10 @@ Two fictional Services in `examples/` follow these steps, from their declaration
 src/
 ├── contract/                              declarations only
 │   ├── index.ts                           export const contract = defineContract({...})
-│   ├── endpoints/
+│   ├── groups/
+│   │   └── orders.group.ts                what the Group orders lists
+│   ├── endpoints/                         each Element's file under its kind, then its Group
 │   │   └── orders/
-│   │       ├── orders.group.ts
 │   │       ├── get-order.endpoint.ts
 │   │       └── create-order.endpoint.ts
 │   ├── guards/
@@ -43,18 +44,21 @@ src/
 │   ├── schemas/                           zod schemas the declarations share
 │   │   └── order.schema.ts
 │   ├── events/
-│   │   ├── order-created.v1.event.ts
-│   │   └── order-created.v2.event.ts
+│   │   └── orders/
+│   │       ├── order-created.v1.event.ts
+│   │       └── order-created.v2.event.ts
 │   ├── commands/
-│   │   └── charge-card.v1.command.ts
+│   │   └── orders/
+│   │       └── charge-card.v1.command.ts
 │   ├── subscriptions/
-│   │   └── notify-on-settled.subscription.ts
+│   │   └── orders/
+│   │       └── notify-on-settled.subscription.ts
 │   └── dependencies/
 │       └── payments-service.dependencies.ts
 ├── endpoints/orders/get-order.handler.ts  Handlers by Group and name, by default (see Stubs and the Handler map)
 ├── guards/api-key.handler.ts
-├── commands/charge-card.v1.handler.ts
-├── subscriptions/notify-on-settled.handler.ts
+├── commands/orders/charge-card.v1.handler.ts
+├── subscriptions/orders/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  the Handler map, carrying the `readers`; regenerated, never edited
 ├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
