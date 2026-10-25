@@ -773,7 +773,10 @@ describe('cf-loom package: the files', () => {
   });
 });
 
-describe('cf-loom package: the built package', () => {
+/** Each test here builds Contract Packages with tsc, which takes several seconds on a CI runner with shared cores. */
+const builtPackageTimeout = 60_000;
+
+describe('cf-loom package: the built package', { timeout: builtPackageTimeout }, () => {
   test('tsc builds it with only zod and @cf-loom/contract installed', () => {
     const out = builtPackage();
 
