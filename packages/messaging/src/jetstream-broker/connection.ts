@@ -33,23 +33,84 @@ export function jetStreamConnectionOf(
         void pullFrom(durable, natsConnection, { stopping, troubled });
       }
     },
-    close: () => drainOnce(natsConnection),
+    close: async () => {
+      const ended = await drainOrClose(natsConnection);
+      if (ended.kind === 'unanswered') {
+        throw unansweredDrainError(ended.cause);
+      }
+    },
   };
 }
 
+/** How a connection cf-loom ended came to be closed: by its drain or by the Service, or by nats.js under a drain NATS did not answer. */
+export type Ended =
+  | { readonly kind: 'closed' }
+  | { readonly kind: 'unanswered'; readonly cause: unknown };
+
 /**
- * Drains the connection the Service opened, unless it is closed already, or draining because the
- * Service started that, and then waits for it; so no drain replaces the error that led to it.
+ * Ends a connection the Service opened by draining it, or by flushing it while the Service drains it, and
+ * resolves once it is closed, whoever closed it. NATS did not answer when nats.js rejects the drain, which
+ * leaves the connection open and is closed here, or, before it answers, closes the connection with an error
+ * or reports a `disconnect`.
  */
-export async function drainOnce(natsConnection: NatsConnection): Promise<void> {
+export async function drainOrClose(natsConnection: NatsConnection): Promise<Ended> {
   if (natsConnection.isClosed()) {
-    return;
+    return { kind: 'closed' };
   }
-  if (natsConnection.isDraining()) {
-    await natsConnection.closed();
-    return;
+  const dropped = droppedBeforeClosed(natsConnection);
+  const answer = answerOf(
+    natsConnection.isDraining() ? natsConnection.flush() : natsConnection.drain(),
+  );
+  const first = await Promise.race([answer, closedUnder(natsConnection)]);
+  switch (first.kind) {
+    case 'answered':
+      await natsConnection.closed();
+      return { kind: 'closed' };
+    case 'rejected':
+      await natsConnection.close();
+      return { kind: 'unanswered', cause: first.cause };
+    case 'closed-under':
+      return first.why !== undefined || (await dropped)
+        ? { kind: 'unanswered', cause: first.why }
+        : { kind: 'closed' };
   }
-  await natsConnection.drain();
+}
+
+/** The error `close()` and `apply` reject with when the drain was not answered, NATS's error as `cause` when it gave one. */
+export function unansweredDrainError(cause: unknown): Error {
+  return new Error('NATS did not answer the drain, so the connection was closed without it', {
+    cause,
+  });
+}
+
+type Answer =
+  | { readonly kind: 'answered' }
+  | { readonly kind: 'rejected'; readonly cause: unknown };
+
+function answerOf(asked: Promise<void>): Promise<Answer> {
+  return asked.then(
+    () => ({ kind: 'answered' }),
+    (cause: unknown) => ({ kind: 'rejected', cause }),
+  );
+}
+
+/** The connection closed while the drain or the flush was still pending, with why nats.js says it closed. */
+async function closedUnder(
+  natsConnection: NatsConnection,
+): Promise<{ readonly kind: 'closed-under'; readonly why: Error | undefined }> {
+  const why = await natsConnection.closed();
+  return { kind: 'closed-under', why: why ?? undefined };
+}
+
+/** Whether nats.js reported a `disconnect` before the connection closed, as it does before closing a connection it does not reconnect. */
+async function droppedBeforeClosed(natsConnection: NatsConnection): Promise<boolean> {
+  let dropped = false;
+  for await (const status of natsConnection.status()) {
+    if (status.type === 'disconnect') {
+      dropped = true;
+    }
+  }
+  return dropped;
 }
 
 /** A signal that aborts when the connection closes, so a pause or a pull ends with it. */

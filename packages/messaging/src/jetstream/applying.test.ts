@@ -10,7 +10,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
-import { withMethods } from '../../test/connections.ts';
+import { stopServerUnder, withMethods } from '../../test/connections.ts';
 import { arrangeDurable, durableConfigOf, durableInfoOf } from '../../test/durables.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, planOf, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
@@ -1057,6 +1057,89 @@ describe('the connection applying a broker plan uses', () => {
     await rejectionOf(broker.apply(aBilling(prefix).plan, testLimits));
 
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test.each([
+    ['keeps reconnecting', -1],
+    ['gives up reconnecting after one attempt', 1],
+  ])(
+    'apply, when the server goes away before its drain after applying everything and the Service’s connect %s, closes its connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause',
+    async (_reconnecting, maxReconnectAttempts) => {
+      const prefix = aPrefix();
+      const own = await aNatsServer();
+      onTestFinished(() => own.stop());
+      const opened: NatsConnection[] = [];
+      const connectLosingServerAtDrain = async (): Promise<NatsConnection> => {
+        const connection = await connect({
+          servers: own.url,
+          maxReconnectAttempts,
+          reconnectTimeWait: 200,
+        });
+        onTestFinished(() => connection.close());
+        opened.push(connection);
+        const drain = async () => {
+          await stopServerUnder(connection, own);
+          return await connection.drain();
+        };
+        return withMethods(connection, { drain });
+      };
+      const broker = jetstream({ connect: connectLosingServerAtDrain, prefix });
+
+      const error = await rejectionOf(broker.apply(anOrders(prefix).plan, testLimits));
+
+      expect(error.message).toBe(
+        'NATS did not answer the drain, so the connection was closed without it',
+      );
+      expect(error.cause).toBeInstanceOf(Error);
+      expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+    },
+  );
+
+  test('apply, when its JetStream manager cannot be made and the drain is not answered either, rejects with that error unchanged and closes its connection', async () => {
+    const prefix = aPrefix();
+    const opened: NatsConnection[] = [];
+    const connectUndrainable = async (): Promise<NatsConnection> => {
+      const connection = await connect({ servers: server.url });
+      onTestFinished(() => connection.close());
+      opened.push(connection);
+      return withMethods(connection, { drain: () => Promise.reject(new Error('no answer')) });
+    };
+    const broker = jetstream({
+      connect: connectUndrainable,
+      prefix,
+      jetstream: { apiPrefix: '' },
+    });
+
+    const error = await rejectionOf(broker.apply(anOrders(prefix).plan, testLimits));
+
+    expect(error.message).toBe("'prefix' cannot be empty");
+    expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test('apply, when applying fails and the drain is not answered either, rejects naming the stream it could not apply, with the client’s error as its cause, and closes its connection', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const own = await aNatsServer();
+    onTestFinished(() => own.stop());
+    const opened: NatsConnection[] = [];
+    const connectToGoneServer = async (): Promise<NatsConnection> => {
+      const connection = await connect({
+        servers: own.url,
+        maxReconnectAttempts: -1,
+        reconnectTimeWait: 200,
+      });
+      onTestFinished(() => connection.close());
+      opened.push(connection);
+      await stopServerUnder(connection, own);
+      return connection;
+    };
+    const broker = jetstream({ connect: connectToGoneServer, prefix, jetstream: { timeout: 500 } });
+
+    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+
+    expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 
   test('apply rejects with the error the Service’s connect rejected with', async () => {
