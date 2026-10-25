@@ -22,32 +22,46 @@ import { historyDifferencesOf, type MessageHistory, messageHistoryOf } from './m
 import { type Pair, pairsOf } from './pairs.ts';
 import { presenceDifferenceOf } from './presence.ts';
 import { renameDifferenceOf } from './renames.ts';
-import type {
-  Change,
-  ChangeSite,
-  CompatibilityReport,
-  Difference,
-  SiteDifferences,
-} from './report.ts';
+import type { Change, ChangeSite, ComparedReport, Difference, SiteDifferences } from './report.ts';
 import { type EndpointPaths, endpointPathsOf, shadowingDifferencesOf } from './shadowing.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
 /** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified. */
 export function compatibilityReportOf(
-  baseline: PublishedSnapshot | undefined,
+  baseline: PublishedSnapshot,
   proposed: Snapshot,
-): CompatibilityReport {
-  if (baseline === undefined) {
-    return { kind: 'no-baseline' };
-  }
+): ComparedReport {
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
   return {
-    kind: 'compared',
     changes: changesOf(baseline, proposed),
     hashChanged: hashedTextOf(merged) !== hashedTextOf(baseline),
   };
 }
+
+/**
+ * The Compatibility Check of a package with no Baseline: its declared Snapshot is the whole
+ * history, so only the numbering of its Message Versions is judged, a version after one it does
+ * not hold.
+ */
+export function firstPublishChangesOf(proposed: Snapshot): readonly Change[] {
+  if (proposed.kind !== 'service') {
+    return [];
+  }
+  const events = messageHistoryOf(noMessages, proposed, 'event');
+  const commands = messageHistoryOf(noMessages, proposed, 'command');
+  return [
+    ...pairsOf({}, proposed.events).flatMap((pair) =>
+      changesAt(eventSiteOf(pair), historyDifferencesOf(pair, events)),
+    ),
+    ...pairsOf({}, proposed.commands).flatMap((pair) =>
+      changesAt(commandSiteOf(pair), historyDifferencesOf(pair, commands)),
+    ),
+  ];
+}
+
+/** The Messages of a package never published: none. */
+const noMessages = { events: {}, commands: {} } as const;
 
 /** An Application holds only Dependencies, so it has no Change to judge. */
 function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
@@ -124,9 +138,7 @@ function eventPairChangesOf(
   defs: BothDefs,
   history: MessageHistory,
 ): readonly Change[] {
-  const visibility = siteVisibilityOf(pair);
-  const site: ChangeSite = { kind: 'event', identity: pair.identity, visibility };
-  return changesAt(site, [
+  return changesAt(eventSiteOf(pair), [
     presenceDifferenceOf(pair),
     ...historyDifferencesOf(pair, history),
     lifecycleDifferenceOf(pair),
@@ -142,13 +154,22 @@ function commandChangesOf(
   const defs = bothDefsOf(baseline, proposed);
   const history = messageHistoryOf(baseline, proposed, 'command');
   return pairsOf(baseline.commands, proposed.commands).flatMap((pair) =>
-    changesAt({ kind: 'command', identity: pair.identity, visibility: 'private' }, [
+    changesAt(commandSiteOf(pair), [
       presenceDifferenceOf(pair),
       ...historyDifferencesOf(pair, history),
       lifecycleDifferenceOf(pair),
       ...messageBodyDifferencesOf(pair, defs),
     ]),
   );
+}
+
+function eventSiteOf(pair: Pair<EventSnapshot>): ChangeSite {
+  return { kind: 'event', identity: pair.identity, visibility: siteVisibilityOf(pair) };
+}
+
+/** A Command's site: a Command is always Private. */
+function commandSiteOf(pair: Pair<unknown>): ChangeSite {
+  return { kind: 'command', identity: pair.identity, visibility: 'private' };
 }
 
 /** The differences found at a site, in the order the rules ran, each classified as a Change. */

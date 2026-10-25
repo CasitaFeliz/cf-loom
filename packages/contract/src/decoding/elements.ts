@@ -1,21 +1,25 @@
 import { z } from 'zod';
-import { lifecycles, visibilities } from '../declarations/index.ts';
+import { successStatuses, visibilities } from '../declarations/index.ts';
 import type { PublishedCommand, PublishedEndpoint, PublishedEvent } from '../snapshot/index.ts';
+import { byCodePoint } from '../walker/index.ts';
+import { inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText, stampText } from './texts.ts';
 
 const retired = { lifecycle: z.literal('retired'), retiredIn: semanticVersionText };
 
 /**
- * A published Element: still declared with its lifecycle, a Retired one also with the version that
- * first published it so, or its tombstone.
+ * A published Element: still declared with its lifecycle, a Deprecated one also with what only
+ * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone.
  */
-function published<Fields extends z.core.$ZodShape, Tombstone extends z.core.$ZodType>(
-  fields: Fields,
-  tombstone: Tombstone,
-) {
+function published<
+  Fields extends z.core.$ZodShape,
+  Deprecation extends z.core.$ZodShape,
+  Tombstone extends z.core.$ZodType,
+>(fields: Fields, deprecation: Deprecation, tombstone: Tombstone) {
   return z.union([
-    z.strictObject({ ...fields, lifecycle: z.enum(lifecycles).exclude(['retired']) }),
+    z.strictObject({ ...fields, lifecycle: z.literal('active') }),
+    z.strictObject({ ...fields, ...deprecation, lifecycle: z.literal('deprecated') }),
     z.strictObject({ ...fields, ...retired }),
     tombstone,
   ]);
@@ -30,7 +34,7 @@ const input = z.strictObject({
   body: schemaNode.nullable(),
 });
 const success = z.strictObject({
-  status: z.number(),
+  status: z.literal(successStatuses),
   headers: objectNode.nullable(),
   body: schemaNode.nullable(),
 });
@@ -46,9 +50,9 @@ export const publishedEndpoint: z.ZodType<PublishedEndpoint> = published(
     guards: z.array(attachment),
     input,
     success,
-    rejections: z.array(z.string()),
-    deprecatedAt: stampText.exactOptional(),
+    rejections: inCanonicalOrder(z.string(), byCodePoint),
   },
+  { deprecatedAt: stampText.exactOptional() },
   z.strictObject({ ...retired, name: z.string() }),
 );
 
@@ -60,11 +64,13 @@ export const publishedEvent: z.ZodType<PublishedEvent> = published(
     description: z.string(),
     body: schemaNode,
   },
+  {},
   messageTombstone,
 );
 
 /** Format 1's Command Message Version in a published Snapshot: declared, or its tombstone. */
 export const publishedCommand: z.ZodType<PublishedCommand> = published(
   { group: z.string(), description: z.string(), body: schemaNode },
+  {},
   messageTombstone,
 );

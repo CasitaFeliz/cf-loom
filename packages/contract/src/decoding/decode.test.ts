@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { schemaExports } from '../../test/snapshots.ts';
 import {
@@ -22,14 +24,19 @@ import {
   type EventSnapshot,
   type GuardSnapshot,
   type ObjectNode,
+  type Path,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  publishedSnapshotOf,
   type RefNode,
   type SchemaNode,
+  type ServiceSnapshot,
+  type Snapshot,
   snapshotOf,
   validateContract,
+  walkSchemas,
 } from '../internal/index.ts';
 
 const invalidInputCode = 'INVALID_INPUT';
@@ -279,7 +286,7 @@ const everyNode: SchemaNode = {
     },
     both: {
       required: true,
-      schema: { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] },
+      schema: { type: 'allOf', items: [{ type: 'json' }, { type: 'string' }] },
     },
   },
 };
@@ -566,14 +573,15 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    test('a Snapshot too large or nested too deeply to decode is malformed at the root, never a throw', () => {
+    test('a Snapshot nested far too deeply to decode is malformed at its depth limit, never a throw', () => {
       const nested =
         '{"type":"array","items":'.repeat(5000) + '{"type":"string"}' + '}'.repeat(5000);
       const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
 
       const result = decodeSnapshot(text);
 
-      expect(result).toEqual(malformedAt([], 'is too large or nests too deeply to decode'));
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
     });
 
     test('a shallow Snapshot whose canonical text outgrows a string is malformed at the root, never a throw', () => {
@@ -1350,6 +1358,202 @@ describe('decodeSnapshot', () => {
       });
     });
 
+    test.each<[string, SchemaNode]>([
+      ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
+      ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
+      ['a number whose min passes its max', { type: 'number', min: 5, max: 3 }],
+      ['a number bounded exclusively at one value', { type: 'number', exclusiveMin: 5, max: 5 }],
+      ['a multipleOf of 0', { type: 'number', multipleOf: 0 }],
+      ['a negative string length', { type: 'string', min: -1 }],
+      ['a fractional array length', { type: 'array', items: stringNode, max: 1.5 }],
+    ])('%s is malformed at the node', (_name, node) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a']));
+    });
+
+    test('a record key whose min passes its max is malformed at the key', () => {
+      const node = { type: 'record', key: { type: 'string', min: 5, max: 3 }, value: stringNode };
+
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', 'key']));
+    });
+
+    test('a node bounded at one value decodes', () => {
+      const result = serviceWith({ defs: { a: { type: 'number', min: 5, max: 5 } } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each<[string, object, string]>([
+      ['an enum without values', { type: 'enum', values: [], open: false }, 'values'],
+      ['a union without options', { type: 'union', options: [] }, 'options'],
+      [
+        'a tagged node without variants',
+        { type: 'tagged', discriminator: 'k', variants: {} },
+        'variants',
+      ],
+    ])('%s is malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('a Dependency’s against that is not a semantic version is malformed', () => {
+      const dependencies = { 'payments-service': { against: 'not-a-version', endpoints: [] } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'against']));
+    });
+
+    test('a deprecatedAt on an Active Endpoint is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, deprecatedAt: '2026-10-17T09:30:00Z' };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test.each([
+      ['out of order', [orderLocked, gone]],
+      ['with a code twice', [gone, gone]],
+    ])('an Endpoint’s rejections %s are malformed in the Endpoint', (_name, rejections) => {
+      const endpoint = { ...anEndpoint, rejections };
+      const codes = { ...standardCodes, [orderLocked]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint }, codes });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Guard’s rejections out of order are malformed at its rejections', () => {
+      const guard = { ...aGuard, rejections: [unauthenticated, gone] };
+      const codes = { ...standardCodes, [unauthenticated]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ guards: { apiKey: guard }, codes });
+
+      expect(result).toEqual(malformedAt(['guards', 'apiKey', 'rejections']));
+    });
+
+    test('a Dependency’s endpoints out of id order are malformed at its endpoints', () => {
+      const endpoints = [
+        { id: 'POST /payments', name: 'charge' },
+        { id: 'GET /payments/{}', name: 'getPayment' },
+      ];
+      const dependencies = { 'payments-service': { against: '5.1.0', endpoints } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'endpoints']));
+    });
+
+    test.each<[string, object, string]>([
+      ['enum values', { type: 'enum', values: ['b', 'a'], open: false }, 'values'],
+      ['enum values with one twice', { type: 'enum', values: ['a', 'a'], open: false }, 'values'],
+      ['allOf items', { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] }, 'items'],
+    ])('%s out of canonical order are malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('a union’s options in any order decode', () => {
+      const node = { type: 'union', options: [{ type: 'string' }, { type: 'boolean' }] };
+      const reversed = { type: 'union', options: [{ type: 'boolean' }, { type: 'string' }] };
+
+      const results = [serviceWith({ defs: { a: node } }), serviceWith({ defs: { a: reversed } })];
+
+      expect(results.map(({ kind }) => kind)).toEqual(['decoded', 'decoded']);
+    });
+
+    test.each<[string, object]>([
+      ['a precision that is no integer', { format: 'datetime', formatOptions: { precision: 'x' } }],
+      ['an offset that is no boolean', { format: 'datetime', formatOptions: { offset: 1 } }],
+      ['a version that is no string', { format: 'uuid', formatOptions: { version: 4 } }],
+      ['a protocol that is no regex', { format: 'url', formatOptions: { protocol: 'https' } }],
+    ])('a string format option of the wrong type is malformed: %s', (_name, options) => {
+      const result = serviceWith({ defs: { a: { type: 'string', ...options } } });
+
+      expect(result.kind).toBe('malformed');
+    });
+
+    test('a string format option of its type decodes', () => {
+      const protocol = { source: '^https$', flags: '' };
+      const node = { type: 'string', format: 'url', formatOptions: { protocol } };
+
+      expect(serviceWith({ defs: { a: node } }).kind).toBe('decoded');
+    });
+
+    test.each([4.5, 399, 500, 200])('a code status of %s is malformed at its status', (status) => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a code that is neither the not-implemented one nor removed is malformed', () => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status: 501 } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a removed code, as publish carries a former not-implemented code, decodes', () => {
+      const { version: _version, ...declared } = aService();
+      const proposed: ServiceSnapshot = {
+        ...declared,
+        endpoints: {},
+        events: {},
+        commands: {},
+        subscriptions: {},
+        standardRejections: { ...standardRejections, notImplemented: gone },
+        codes: {
+          [invalidInputCode]: standardCodes[invalidInputCode],
+          [notFoundCode]: standardCodes[notFoundCode],
+          [gone]: standardCodes[notImplementedCode],
+        },
+      };
+      const published = publishedSnapshotOf(aService(), proposed, '3.5.0');
+
+      const result = roundTrip(published);
+
+      expect(published.codes[notImplementedCode]).toMatchObject({ status: 501, removed: true });
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a Success status no Endpoint may declare is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, status: 299 } };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Snapshot nested past 256 levels is malformed at its deepest path, before its structure is read', () => {
+      const depth = 300;
+      const nested =
+        '{"type":"array","items":'.repeat(depth) + '{"type":"nothing"}' + '}'.repeat(depth);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      const result = decodeSnapshot(text);
+
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+    });
+
+    test('a Snapshot nested to 256 levels is read', () => {
+      const depth = 253;
+      const nested =
+        '{"type":"array","items":'.repeat(depth) + '{"type":"string"}' + '}'.repeat(depth);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      expect(decodeSnapshot(text).kind).toBe('decoded');
+    });
+
     test('only the first problem is reported, with its path', () => {
       const result = serviceWith({
         version: 'latest',
@@ -1543,3 +1747,257 @@ const formatOneFixture = `{
   "version": "3.4.0"
 }
 `;
+
+describe('walkSchemas and decodeSnapshot agree on bounds', () => {
+  type Drawn = { readonly schema: z.ZodType; readonly node: SchemaNode; readonly empty: boolean };
+
+  test('a node is refused by both exactly when its bounds admit no value', () => {
+    const next = seededNext(222);
+    for (let draw = 0; draw < 500; draw += 1) {
+      const { schema, node, empty } = aBoundedDraw(next);
+
+      const [walked] = walkSchemas([{ at: ['body'], schema }], () => undefined).located;
+      const decoded = serviceWith({ defs: { a: node } });
+
+      const label = `draw ${draw}: ${JSON.stringify(node)}`;
+      expect(walked?.walked.kind, label).toBe(empty ? 'not-allowed' : 'walked');
+      expect(decoded.kind, label).toBe(empty ? 'malformed' : 'decoded');
+    }
+  });
+
+  function pick<Value>(next: () => number, values: readonly Value[]): Value {
+    return values[Math.floor(next() * values.length)] as Value;
+  }
+
+  function aBoundedDraw(next: () => number): Drawn {
+    const kind = pick(next, ['number', 'string', 'array'] as const);
+    return kind === 'number' ? aNumberDraw(next) : aLengthDraw(next, kind);
+  }
+
+  /** A number's drawn bounds: each side inclusive, exclusive or absent, and a step or none. */
+  type NumberBounds = {
+    readonly lower: { readonly key: 'min' | 'exclusiveMin'; readonly value: number } | undefined;
+    readonly upper: { readonly key: 'max' | 'exclusiveMax'; readonly value: number } | undefined;
+    readonly step: number | undefined;
+  };
+
+  function aNumberDraw(next: () => number): Drawn {
+    const values = [-2, 0, 0.5, 3, 5, 5.5];
+    const lowerKey = pick(next, [undefined, 'min', 'exclusiveMin'] as const);
+    const upperKey = pick(next, [undefined, 'max', 'exclusiveMax'] as const);
+    const lowerValue = pick(next, values);
+    const upperValue = pick(next, values);
+    const bounds: NumberBounds = {
+      lower: lowerKey === undefined ? undefined : { key: lowerKey, value: lowerValue },
+      upper: upperKey === undefined ? undefined : { key: upperKey, value: upperValue },
+      step: pick(next, [undefined, -2, 0, 0.5, 3]),
+    };
+    return {
+      schema: numberSchemaOf(bounds),
+      node: numberNodeOf(bounds),
+      empty: admitsNone(bounds),
+    };
+  }
+
+  function numberSchemaOf({ lower, upper, step }: NumberBounds): z.ZodType {
+    let schema = z.number();
+    if (lower !== undefined) {
+      schema = lower.key === 'min' ? schema.gte(lower.value) : schema.gt(lower.value);
+    }
+    if (upper !== undefined) {
+      schema = upper.key === 'max' ? schema.lte(upper.value) : schema.lt(upper.value);
+    }
+    return step === undefined ? schema : schema.multipleOf(step);
+  }
+
+  function numberNodeOf({ lower, upper, step }: NumberBounds): SchemaNode {
+    return {
+      type: 'number',
+      ...(lower !== undefined && { [lower.key]: lower.value }),
+      ...(upper !== undefined && { [upper.key]: upper.value }),
+      ...(step !== undefined && { multipleOf: step }),
+    };
+  }
+
+  function admitsNone({ lower, upper, step }: NumberBounds): boolean {
+    if (step !== undefined && step <= 0) {
+      return true;
+    }
+    const low = lower && { value: lower.value, open: lower.key === 'exclusiveMin' };
+    const high = upper && { value: upper.value, open: upper.key === 'exclusiveMax' };
+    return !someNumberBetween(low, high);
+  }
+
+  /** Whether some number lies between two bounds, found by trying values around them. */
+  function someNumberBetween(
+    lower: { readonly value: number; readonly open: boolean } | undefined,
+    upper: { readonly value: number; readonly open: boolean } | undefined,
+  ): boolean {
+    const around = [lower?.value, upper?.value].filter((value) => value !== undefined);
+    const candidates = [0, ...around.flatMap((value) => [value - 0.1, value, value + 0.1])];
+    return candidates.some(
+      (candidate) =>
+        (lower === undefined ||
+          (lower.open ? candidate > lower.value : candidate >= lower.value)) &&
+        (upper === undefined || (upper.open ? candidate < upper.value : candidate <= upper.value)),
+    );
+  }
+
+  function aLengthDraw(next: () => number, kind: 'string' | 'array'): Drawn {
+    const lengths = [undefined, -1, 0, 1, 2.5, 3, 5];
+    const min = pick(next, lengths);
+    const max = pick(next, lengths);
+    let schema: z.ZodString | z.ZodArray<z.ZodString> =
+      kind === 'string' ? z.string() : z.array(z.string());
+    if (min !== undefined) {
+      schema = schema.min(min);
+    }
+    if (max !== undefined) {
+      schema = schema.max(max);
+    }
+    const node = {
+      ...(kind === 'string' ? { type: 'string' } : { type: 'array', items: stringNode }),
+      ...(min !== undefined && { min }),
+      ...(max !== undefined && { max }),
+    } as SchemaNode;
+    const declared = [min, max].filter((length) => length !== undefined);
+    const badLength = declared.some((length) => !Number.isInteger(length) || length < 0);
+    const lengthsBetween = Array.from({ length: 7 }, (_, length) => length).filter(
+      (length) => (min === undefined || length >= min) && (max === undefined || length <= max),
+    );
+    return { schema, node, empty: badLength || lengthsBetween.length === 0 };
+  }
+});
+
+describe('decodeSnapshot reads what publish writes, and nothing else in order', () => {
+  const examples = ['org-definitions', 'orders-service', 'billing-service'];
+  const examplesDirectory = new URL('../../../../examples/', import.meta.url);
+
+  /** Each example's committed Snapshot published at a version, and the format-1 fixture. */
+  function publishedSnapshots(): readonly (readonly [string, PublishedSnapshot])[] {
+    const published = examples.map((example) => {
+      const file = new URL(`${example}/contract.snapshot.json`, examplesDirectory);
+      const declared: Snapshot = JSON.parse(readFileSync(file, 'utf8'));
+      return [example, publishedSnapshotOf(undefined, declared, '1.0.0')] as const;
+    });
+    return [...published, ['the format-1 fixture', JSON.parse(formatOneFixture)]];
+  }
+
+  /** Where a Snapshot holds an array whose order means nothing, by what holds it. */
+  function orderFreeArraysOf(json: unknown, at: Path = []): readonly Path[] {
+    if (typeof json !== 'object' || json === null) {
+      return [];
+    }
+    const own = Array.isArray(json) ? [] : orderFreeKeysOf(json, at).map((key) => [...at, key]);
+    const entries = Object.entries(json);
+    const nested = entries.flatMap(([key, value]) => orderFreeArraysOf(value, [...at, key]));
+    return [...own, ...nested];
+  }
+
+  function orderFreeKeysOf(object: object, at: Path): readonly string[] {
+    const type = Reflect.get(object, 'type');
+    const section = at.length === 2 ? at[0] : undefined;
+    return [
+      ...(type === 'enum' ? ['values'] : []),
+      ...(type === 'allOf' ? ['items'] : []),
+      ...(section === 'endpoints' || section === 'guards' ? ['rejections'] : []),
+      ...(section === 'dependencies' ? ['endpoints'] : []),
+    ].filter((key) => Array.isArray(Reflect.get(object, key)));
+  }
+
+  /** A copy of a Snapshot's JSON with the array at a path replaced by what `change` makes of it. */
+  function withArrayAt(json: unknown, at: Path, change: (items: unknown[]) => unknown[]): unknown {
+    const copy: unknown = structuredClone(json);
+    let holder = copy;
+    for (const key of at.slice(0, -1)) {
+      holder = Reflect.get(holder as object, key);
+    }
+    const key = String(at.at(-1));
+    Reflect.set(holder as object, key, change([...(Reflect.get(holder as object, key) as [])]));
+    return copy;
+  }
+
+  function arrayAt(json: unknown, at: Path): readonly unknown[] {
+    let value = json;
+    for (const key of at) {
+      value = Reflect.get(value as object, key);
+    }
+    return value as readonly unknown[];
+  }
+
+  test('an intersection of a schema with itself, as generate writes it, decodes', () => {
+    const schema = z.intersection(z.string(), z.string());
+    const [located] = walkSchemas([{ at: ['defs', 'a'], schema }], () => undefined).located;
+    const node = located?.walked.kind === 'walked' ? located.walked.value : undefined;
+    const published = aService({ defs: { a: node ?? { type: 'json' } } });
+
+    const result = roundTrip(published);
+
+    expect(node?.type).toBe('allOf');
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk. */
+  function publishedHolding(committed: ServiceSnapshot, schema: z.ZodType) {
+    const walk = walkSchemas([{ at: ['defs', 'probe'], schema }], () => undefined);
+    const [located] = walk.located;
+    if (located?.walked.kind !== 'walked') {
+      return undefined;
+    }
+    const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };
+    return publishedSnapshotOf(undefined, { ...committed, defs }, '1.0.0');
+  }
+
+  /** What the decoder makes of each order-free array of the probe def reversed or holding an item twice. */
+  function reorderedKindsOf(published: PublishedSnapshot): readonly string[] {
+    const arrays = orderFreeArraysOf(published).filter(
+      (at) => at[0] === 'defs' && at[1] === 'probe' && arrayAt(published, at).length > 0,
+    );
+    const twice = arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]]));
+    const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+    const reversed = reversible.map((at) => withArrayAt(published, at, (list) => list.reverse()));
+    return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+  }
+
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', () => {
+    const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
+    const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
+    const { schemaOf } = randomSchemas(seededNext(2231));
+    const drawn = Array.from({ length: 2000 }, () => publishedHolding(committed, schemaOf(3)));
+    const published = drawn.filter((snapshot) => snapshot !== undefined).slice(0, 200);
+
+    const readBack = published.map((snapshot) => {
+      const decoded = decodeSnapshot(canonicalTextOf(snapshot));
+      return decoded.kind === 'decoded' ? canonicalTextOf(decoded.snapshot) : decoded;
+    });
+    const reordered = published.flatMap(reorderedKindsOf);
+
+    expect(published).toHaveLength(200);
+    expect(readBack).toEqual(published.map(canonicalTextOf));
+    expect(reordered.length).toBeGreaterThan(50);
+    expect(new Set(reordered)).toEqual(new Set(['malformed']));
+  });
+
+  test.each(publishedSnapshots())('%s decodes as it was published', (_name, published) => {
+    const result = decodeSnapshot(canonicalTextOf(published));
+
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  test.each(publishedSnapshots())(
+    '%s is malformed with any order-free array reversed or holding an item twice',
+    (_name, published) => {
+      const arrays = orderFreeArraysOf(published).filter((at) => arrayAt(published, at).length > 0);
+      const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+      const changed = [
+        ...arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]])),
+        ...reversible.map((at) => withArrayAt(published, at, (list) => list.reverse())),
+      ];
+
+      const kinds = changed.map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+
+      expect(arrays.length).toBeGreaterThan(0);
+      expect(new Set(kinds)).toEqual(new Set(['malformed']));
+    },
+  );
+});

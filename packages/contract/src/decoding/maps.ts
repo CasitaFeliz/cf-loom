@@ -15,3 +15,22 @@ const withoutProtoKey = z.unknown().superRefine((input, ctx) => {
 export function byKey<Value extends z.core.$ZodType>(value: Value) {
   return z.pipe(withoutProtoKey, z.record(z.string(), value));
 }
+
+/**
+ * A list in canonical order, each item once: every item strictly after the one before by
+ * `compare`, the order `generate` writes an array whose order means nothing in.
+ */
+export function inCanonicalOrder<Item extends z.ZodType>(
+  item: Item,
+  compare: (left: z.output<Item>, right: z.output<Item>) => number,
+) {
+  return z.array(item).superRefine((items, ctx) => {
+    const unordered = items.some((current, index) => {
+      const previous = items[index - 1];
+      return previous !== undefined && compare(previous, current) >= 0;
+    });
+    if (unordered) {
+      ctx.addIssue({ code: 'custom', message: 'is not in canonical order, each item once' });
+    }
+  });
+}

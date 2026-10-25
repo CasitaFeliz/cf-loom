@@ -11,7 +11,6 @@ export type {
   ChangeClass,
   ChangeSite,
   ComparedReport,
-  CompatibilityReport,
   Difference,
   PeerMove,
   PeerRanges,
@@ -22,6 +21,7 @@ export type {
 } from '../compatibility/index.ts';
 export {
   compatibilityReportOf,
+  firstPublishChangesOf,
   publishedSnapshotOf,
   snapshotPathOf,
   versionBumpOf,
@@ -113,8 +113,10 @@ export {
   isDeclaredRejection,
   isSemanticVersion,
   isSubscriptionTombstone,
+  nestingFailureOf,
   ownRejectionsOf,
   semanticVersionPartsOf,
+  snapshotFormatOf,
   snapshotOf,
   textPartNodesOf,
 } from '../snapshot/index.ts';

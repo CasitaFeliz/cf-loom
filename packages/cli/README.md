@@ -77,11 +77,11 @@ Each command prints one line per thing it did or found, never a stack trace; `op
 | `generate` | `Moved <old> to <new>` for each Handler it moved, in code point order of `<old>`, then `Wrote <path>` for each file it wrote, `contract.snapshot.json` first, then the Handler map, the readers and each new stub, then `Deleted <path>` for each file it wrote that is left at a path the layout no longer names, in code point order |
 | `verify` | `<path> is up to date` for each file it compared |
 | `package` | `Wrote <dir>` |
-| `check` | `Checked against <package>@<version>`, followed by `(version from <stable>)` when the Baseline is a prerelease above the highest version that is not one, `(no stable version: the first is <first>)` when the package lists only prereleases, `<first>` being 1.0.0 or, when higher, the numbers of the highest prerelease, or `(--against)` when `--against` named the version; then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is refused or needs one; with no Baseline, only `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it` |
+| `check` | `Checked against <package>@<version>`, followed by `(version from <stable>)` when the Baseline is a prerelease above the highest version that is not one, `(no stable version: the first is <first>)` when the package lists only prereleases, `<first>` being 1.0.0 or, when higher, the numbers of the highest prerelease, or `(--against)` when `--against` named the version; then one line per Change, then `No Change against <package>@<version>` when there is none, or `No Change needs a Breaking Change Approval` when no Change is refused or needs one; with no Baseline, `<package> has no Baseline: it is not in <registry> for the npm user <username>: never published, or that login cannot read it`, then one line per refused Change (a Message Version numbered after a gap) |
 | `broker-plan` | `Stream <stream>: <subject> …`, each subject separated by a space, then `Durable consumer <durable> on <stream>: <subject>` for each durable consumer, each in code point order, or `<service> needs no stream and no durable consumer` |
 | `openapi` | the OpenAPI document as JSON indented by two spaces (see [openapi](#openapi)) |
 | `asyncapi` | the AsyncAPI document as JSON indented by two spaces (see [asyncapi](#asyncapi)) |
-| `publish` | `Checked against <package>@<version>` and one line per Change, or `<package> has no Baseline: <reason>`, as `check` prints them; then `Published <package>@<version>`, or `Nothing to publish: the Snapshot and peer ranges are those of <package>@<version>; --force publishes anyway`; and on stderr, with the exit status the publish had, `node_modules/.cache/cf-loom/publish-<id> was left behind: <reason>: delete it` when it could not remove the folder it staged the package in |
+| `publish` | `Checked against <package>@<version>`, or `<package> has no Baseline: <reason>`, and one line per Change, as `check` prints them; then `Published <package>@<version>`, or `Nothing to publish: the Snapshot and peer ranges are those of <package>@<version>; --force publishes anyway`; and on stderr, with the exit status the publish had, `node_modules/.cache/cf-loom/publish-<id> was left behind: <reason>: delete it` when it could not remove the folder it staged the package in |
 
 Every line on stdout or stderr, the `--json` document included, is written with each line break inside it (`\r`, `\n`, U+0085, U+2028 and U+2029) replaced by the visible text `\r`, `\n`, `\u0085`, `\u2028` and `\u2029`, so no reader splits a line there.
 
@@ -121,7 +121,7 @@ The kinds of a Difference, and the fields it carries besides the ones the line h
 | `tombstoned` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): delete the declaration of an Element Retired in the Baseline |
 | `deleted` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): delete an Element not Retired in the Baseline |
 | `identity-reused` |  | [Elements](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#elements): reuse the identity of a Retired Element, and [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions): a removed Subscription's name is never reused |
-| `version-gap` | `missing` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added whose previous version neither the Baseline nor the declared Snapshot holds |
+| `version-gap` | `missing` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added whose previous version neither the Baseline nor the declared Snapshot holds, or, with no Baseline, the declared Snapshot |
 | `name-kind-changed` | `from` | [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages): a Message Version added under a name the Baseline holds as the other kind |
 | `event-changed` | `from`, `to` | [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions): a Subscription's Event never changes |
 | `export-changed` | `from`, `to` | [The Compatibility Check](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#the-compatibility-check): a Definitions Package's export now names another Guard or Rejection, or another kind (`guard apiKey`, `rejection FORBIDDEN`, `schema`) |
@@ -209,6 +209,7 @@ Exit 3, a tooling error:
 | `standardRejections is exported by no package the Contract's files import: name the definitions a Definitions Package exports`, `standardRejections is exported by both <package> and <package>, and neither imports it from the other: import it from one package`, `<package> has no version in its package.json`, `<path to its package.json> has no name`, for the Definitions Package `standardRejections` belongs to, the one exporting it that imports it from none of the others that do | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `asyncapi`, `publish` |
 | `contract.snapshot.json cannot be read: …` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `asyncapi`, `publish` |
 | `contract.snapshot.json is no JSON (<reason>): restore it or delete it, then run cf-loom generate` | `generate`, `package`, `check`, `broker-plan`, `openapi`, `asyncapi`, `publish` |
+| `contract.snapshot.json is in format <n>, newer than this cf-loom reads: upgrade @cf-loom/cli` | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `asyncapi`, `publish` |
 | `npm cannot be run: <reason>: cf-loom reads the registry through npm, which must be on PATH`, `<npm call> failed (<code>: <summary>)`, `<npm call> failed: <first line npm printed on stderr, or exit status <n>>`, `<npm call> printed no JSON: <line>`, `<npm call> printed more than 16 MiB`, `<npm call> did not finish within 10 minutes`, `<npm call> was stopped by <signal>`, where `<npm call>` is `npm view <package>`, `npm view <package> dist-tags`, `npm view <package>@<version>`, `npm pack <package>@<version>`, `npm publish <package>@<version>`, `npm pack --dry-run` or `npm config get <key>`, and `<summary>` is the first line of the summary npm printed, here and in the rows below | `check`, `publish` |
 | `<package> was unpublished: <summary>; its Baseline is gone, so nothing can be checked against it`, `<package> lists no version, or has no latest dist-tag, which npm view needs to list them`, `<package> lists <key>, which is no semantic version` | `check`, `publish` |
 | `<package> lists no version or dist-tag <name>: --against takes one of them`, which a package npm cannot find also gets | `check` |
@@ -276,7 +277,7 @@ type CheckJson =
       baseline: string | null;            // the version compared with: the Baseline, or the one --against names
       stable: string | null;              // the highest version the package lists that is not a prerelease
       reason: string | null;              // why there is no Baseline, as the line says it
-      changes: {
+      changes: {                          // with no Baseline too: the Message Versions numbered after a gap
         site:                             // where the Change is, with the Visibility that decides its bump
           | { kind: 'endpoint'; identity: string; name: string; visibility: Visibility }
           | { kind: 'event' | 'command'; identity: string; visibility: Visibility }
@@ -293,7 +294,7 @@ type CheckJson =
 type Visibility = 'public' | 'internal' | 'private';
 ```
 
-A package that npm cannot find has no Baseline, and `check` still exits 0 without `--against`. To fail a pipeline when nothing was compared, test `baseline`, keeping `check`'s own status: `set -o pipefail; cf-loom check --json | jq -e '.baseline != null'`.
+A package that npm cannot find has no Baseline, and `check` exits 0 without `--against` unless a version gap is refused. To fail a pipeline when nothing was compared, test `baseline`, keeping `check`'s own status: `set -o pipefail; cf-loom check --json | jq -e '.baseline != null'`.
 
 ### broker-plan --json
 

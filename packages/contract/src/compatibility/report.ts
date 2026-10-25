@@ -205,10 +205,6 @@ export type Change = {
 
 /** A Compatibility Check that compared, with its Changes in order and whether the Snapshot's hash moved. */
 export type ComparedReport = {
-  readonly kind: 'compared';
   readonly changes: readonly Change[];
   readonly hashChanged: boolean;
 };
-
-/** What the Compatibility Check found: nothing to compare without a Baseline, or every Change against it. */
-export type CompatibilityReport = { readonly kind: 'no-baseline' } | ComparedReport;

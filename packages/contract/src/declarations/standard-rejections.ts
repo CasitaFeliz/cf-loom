@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { openEnum } from '../open/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { RejectionStatus } from './http.ts';
+import { notImplementedStatus, type RejectionStatus } from './http.ts';
 
 /** The three Standard Rejections by name, as values, so the runtime resolves each. */
 export const standardRejectionNames = ['invalidInput', 'notFound', 'notImplemented'] as const;
@@ -54,7 +54,7 @@ export type StandardRejectionDeclaration<Status extends number = RejectionStatus
 export type StandardRejectionDeclarations = {
   readonly invalidInput?: StandardRejectionDeclaration<RejectionStatus>;
   readonly notFound?: StandardRejectionDeclaration<RejectionStatus>;
-  readonly notImplemented?: StandardRejectionDeclaration<501>;
+  readonly notImplemented?: StandardRejectionDeclaration<typeof notImplementedStatus>;
 };
 
 /** Every Standard Rejection resolved: its code, status and message. */
@@ -72,7 +72,11 @@ export type ProvidedStandardRejections = StandardRejections & {
 export const standardRejectionDefaults: StandardRejections = {
   invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
   notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+  notImplemented: {
+    code: 'NOT_IMPLEMENTED',
+    status: notImplementedStatus,
+    message: 'Not implemented',
+  },
 };
 
 /** What an issue of invalid Input says went wrong: a set cf-loom owns, never zod's codes. */

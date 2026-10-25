@@ -40,6 +40,7 @@ export {
   isMethod,
   isRejectionStatus,
   methods,
+  notImplementedStatus,
   reservedHeaderNames,
   successStatuses,
 } from './http.ts';

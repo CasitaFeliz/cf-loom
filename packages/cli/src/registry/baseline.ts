@@ -6,6 +6,7 @@ import {
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
+import { newerFormatTextOf } from '../loading/index.ts';
 import { type ChosenVersion, chosenVersionOf, unlistedAgainstOf } from './against.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import { versionsOf } from './package-versions.ts';
@@ -143,10 +144,8 @@ function snapshotFrom(
   switch (decoded.kind) {
     case 'no-json':
       return failed(`${spec}'s snapshot.json is no JSON (${decoded.reason})`);
-    case 'newer-format': {
-      const newer = `in format ${decoded.format}, newer than this cf-loom reads: upgrade @cf-loom/cli`;
-      return failed(`${spec}'s snapshot.json is ${newer}`);
-    }
+    case 'newer-format':
+      return failed(newerFormatTextOf(`${spec}'s snapshot.json`, decoded.format));
     case 'malformed':
       return failed(`${spec}'s snapshot.json is malformed: ${problemLineOf(decoded)}`);
     case 'decoded': {

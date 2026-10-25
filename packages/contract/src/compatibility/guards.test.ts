@@ -86,9 +86,6 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
 
 function reportOf(baseline: PublishedDefinitionsSnapshot, proposed: DefinitionsSnapshot) {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -231,7 +228,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test.each([
@@ -255,7 +252,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('a Guard’s Changes come: query, headers, then Rejections', () => {
@@ -334,7 +331,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
     const report = reportOf(baseline, aDefinitions());
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
   test('a removed code declared again is added and compared with what it last had', () => {

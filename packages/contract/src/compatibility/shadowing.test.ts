@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import {
   type Change,
   type ComparedReport,
@@ -8,6 +9,7 @@ import {
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
+  walkSchemas,
 } from '../internal/index.ts';
 
 type Visibility = EndpointSnapshot['visibility'];
@@ -103,9 +105,6 @@ function reportOf(
   tombstones: readonly string[] = [],
 ): ComparedReport {
   const report = compatibilityReportOf(aBaseline(baseline, tombstones), aProposed(proposed));
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -149,18 +148,14 @@ describe('compatibilityReportOf, shadowing', () => {
     expect(report.changes).toEqual([added(latestOrder), shadowing(orderById, latestOrder)]);
   });
 
-  test('a literal takes a uuid param’s URLs: the param’s schema is not read', () => {
-    const uuid: SchemaNode = { type: 'string', format: 'uuid' };
-    const byUuid = {
-      params: ['orderId'],
-      input: { params: paramsNodeOf(['orderId'], uuid), query: null, headers: null, body: null },
-    };
+  test('a literal a uuid param refuses takes nothing from it', () => {
+    const byUuid = byParam({ type: 'string', format: 'uuid' });
     const baseline = { [orderById]: byUuid };
     const proposed = { [orderById]: byUuid, [latestOrder]: {} };
 
     const changes = shadowedOf(baseline, proposed);
 
-    expect(changes).toEqual([shadowing(orderById, latestOrder)]);
+    expect(changes).toEqual([]);
   });
 
   test('an added Endpoint with a param where the existing one has a literal takes nothing', () => {
@@ -223,6 +218,218 @@ describe('compatibilityReportOf, shadowing', () => {
     const changes = shadowedOf(baseline, proposed);
 
     expect(changes).toEqual([]);
+  });
+});
+
+/** An Endpoint whose one param has this schema. */
+function byParam(schema: SchemaNode): Partial<EndpointSnapshot> {
+  return {
+    params: ['orderId'],
+    input: { params: paramsNodeOf(['orderId'], schema), query: null, headers: null, body: null },
+  };
+}
+
+describe('compatibilityReportOf, shadowing reads the param’s schema on both sides', () => {
+  const stats = 'GET /orders/stats';
+
+  test('a literal a string param accepts is taken', () => {
+    const baseline = { [orderById]: byParam(aString) };
+    const proposed = { ...baseline, [stats]: {} };
+
+    expect(shadowedOf(baseline, proposed)).toEqual([shadowing(orderById, stats)]);
+  });
+
+  test.each([
+    ['12', 'GET /orders/12', true],
+    ['latest', latestOrder, false],
+  ])('beside an int param, the literal %s shadows: %s', (_text, added, shadows) => {
+    const baseline = { [orderById]: byParam({ type: 'number', int: true }) };
+    const proposed = { ...baseline, [added]: {} };
+
+    const expected = shadows ? [shadowing(orderById, added)] : [];
+    expect(shadowedOf(baseline, proposed)).toEqual(expected);
+  });
+
+  test.each([
+    ['one of its values', 'GET /orders/open', true],
+    ['none of its values', latestOrder, false],
+  ])('beside an enum param, a literal that is %s', (_name, added, shadows) => {
+    const baseline = {
+      [orderById]: byParam({ type: 'enum', values: ['open', 'paid'], open: false }),
+    };
+    const proposed = { ...baseline, [added]: {} };
+
+    const expected = shadows ? [shadowing(orderById, added)] : [];
+    expect(shadowedOf(baseline, proposed)).toEqual(expected);
+  });
+
+  test('a literal a regex param refuses takes nothing', () => {
+    const digits = byParam({ type: 'string', regex: { source: '^[0-9]+$', flags: '' } });
+    const baseline = { [orderById]: digits };
+    const proposed = { ...baseline, [latestOrder]: {} };
+
+    expect(shadowedOf(baseline, proposed)).toEqual([]);
+  });
+
+  test('a uuid param widened to a string in the change that adds the literal is shadowed', () => {
+    const baseline = { [orderById]: byParam({ type: 'string', format: 'uuid' }) };
+    const proposed = { [orderById]: byParam(aString), [stats]: {} };
+
+    expect(shadowedOf(baseline, proposed)).toEqual([shadowing(orderById, stats)]);
+  });
+
+  test('a param whose schema is a union, which the Snapshot alone does not decide, is shadowed', () => {
+    const uuidOrNumber: SchemaNode = {
+      type: 'union',
+      options: [{ type: 'string', format: 'uuid' }, { type: 'number' }],
+    };
+    const baseline = { [orderById]: byParam(uuidOrNumber) };
+    const proposed = { ...baseline, [stats]: {} };
+
+    expect(shadowedOf(baseline, proposed)).toEqual([shadowing(orderById, stats)]);
+  });
+});
+
+describe('compatibilityReportOf, shadowing, each rule a param refuses a literal by', () => {
+  test.each<{ name: string; schema: SchemaNode; text: string; shadows: boolean }>([
+    {
+      name: 'an int param, a fraction',
+      schema: { type: 'number', int: true },
+      text: '7.5',
+      shadows: false,
+    },
+    {
+      name: 'a multipleOf(4) param, 6',
+      schema: { type: 'number', multipleOf: 4 },
+      text: '6',
+      shadows: false,
+    },
+    {
+      name: 'a multipleOf(4) param, 8',
+      schema: { type: 'number', multipleOf: 4 },
+      text: '8',
+      shadows: true,
+    },
+    {
+      name: 'a multipleOf(3) param, a large multiple',
+      schema: { type: 'number', multipleOf: 3 },
+      text: '4111111111111111',
+      shadows: true,
+    },
+    {
+      name: 'a .gt(5) param, 5',
+      schema: { type: 'number', exclusiveMin: 5 },
+      text: '5',
+      shadows: false,
+    },
+    {
+      name: 'a .lt(5) param, 5',
+      schema: { type: 'number', exclusiveMax: 5 },
+      text: '5',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a shorter text',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'ab',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a longer text',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'abcdef',
+      shadows: false,
+    },
+    {
+      name: 'a length-bounded param, a text within',
+      schema: { type: 'string', min: 3, max: 5 },
+      text: 'abcd',
+      shadows: true,
+    },
+    {
+      name: 'an open enum param, a value it does not list',
+      schema: { type: 'enum', values: ['open'], open: true },
+      text: 'latest',
+      shadows: true,
+    },
+  ])('$name: the literal is taken: $shadows', ({ schema, text, shadows }) => {
+    const added = `GET /orders/${text}`;
+    const baseline = { [orderById]: byParam(schema) };
+    const proposed = { ...baseline, [added]: {} };
+
+    const expected = shadows ? [shadowing(orderById, added)] : [];
+    expect(shadowedOf(baseline, proposed)).toEqual(expected);
+  });
+});
+
+describe('compatibilityReportOf, shadowing agrees with what the author’s schemas accept', () => {
+  const schemas: readonly z.ZodType[] = [
+    z.string(),
+    z.uuid(),
+    z.email(),
+    z.iso.date(),
+    z.string().regex(/^[a-z]+$/),
+    z.string().min(3).max(5),
+    z.int(),
+    z.int().min(0).max(100),
+    z.number().gt(5),
+    z.number().multipleOf(4),
+    z.number().multipleOf(3),
+    z.boolean(),
+    z.enum(['open', 'paid']),
+    z.literal('stats'),
+  ];
+  const texts = [
+    'stats',
+    'open',
+    '12',
+    '7.5',
+    '-3',
+    'true',
+    'abcd',
+    '2026-01-02',
+    'a@b.co',
+    '4111111111111111',
+  ];
+
+  function nodeOf(schema: z.ZodType): SchemaNode {
+    const [located] = walkSchemas([{ at: ['param'], schema }], () => undefined).located;
+    if (located?.walked.kind !== 'walked') {
+      throw new Error('A drawn param schema walks.');
+    }
+    return located.walked.value;
+  }
+
+  /** Whether a schema accepts a text under any reading the runtime could give it. */
+  function accepts(schema: z.ZodType, text: string): boolean {
+    const booleans: Readonly<Record<string, boolean>> = { true: true, false: false };
+    const readings = [text, Number(text), booleans[text] ?? text];
+    return readings.some((reading) => schema.safeParse(reading).success);
+  }
+
+  test('a literal is taken whenever either side’s schema may accept it, and only then', () => {
+    let state = 2235;
+    const next = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 2 ** 32;
+    };
+    const pick = <Value>(values: readonly Value[]) =>
+      values[Math.floor(next() * values.length)] as Value;
+    let untaken = 0;
+    for (let draw = 0; draw < 300; draw += 1) {
+      const [before, after, text] = [pick(schemas), pick(schemas), pick(texts)];
+      const added = `GET /orders/${text}`;
+      const baseline = { [orderById]: byParam(nodeOf(before)) };
+      const proposed = { [orderById]: byParam(nodeOf(after)), [added]: {} };
+
+      const isShadowed = shadowedOf(baseline, proposed).length > 0;
+
+      const label = `draw ${draw}: ${text} beside ${JSON.stringify([nodeOf(before), nodeOf(after)])}`;
+      const mayAccept = accepts(before, text) || accepts(after, text);
+      untaken += isShadowed ? 0 : 1;
+      expect(isShadowed || !mayAccept, label).toBe(true);
+    }
+    expect(untaken).toBeGreaterThan(30);
   });
 });
 

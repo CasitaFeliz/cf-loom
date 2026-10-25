@@ -1,6 +1,13 @@
 import { z } from 'zod';
-import { formatOptionKeysOf, type SchemaNode, type StringNode } from '../walker/index.ts';
-import { byKey } from './maps.ts';
+import {
+  byCanonicalJson,
+  emptyConstraintOf,
+  formatOptionKeysOf,
+  isFormatOptionValue,
+  type SchemaNode,
+  type StringNode,
+} from '../walker/index.ts';
+import { byKey, inCanonicalOrder } from './maps.ts';
 import { stringFormatText } from './texts.ts';
 
 const keyAnnotations = {
@@ -41,23 +48,33 @@ function checkedFormatOptions(
   ctx: z.RefinementCtx,
 ): void {
   const taken = formatOptionKeysOf(format);
-  for (const option of Object.keys(formatOptions ?? {})) {
+  for (const [option, value] of Object.entries(formatOptions ?? {})) {
+    const path = ['formatOptions', option];
     if (!taken.includes(option)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'is no option of the string format',
-        path: ['formatOptions', option],
-      });
+      ctx.addIssue({ code: 'custom', message: 'is no option of the string format', path });
+    } else if (!isFormatOptionValue(option, value)) {
+      ctx.addIssue({ code: 'custom', message: 'is not a value that option takes', path });
     }
   }
 }
 
-const stringNode = node('string', stringOptions).superRefine(checkedFormatOptions);
+/** A node's bounds admit a value, by the rule the walker writes them with. */
+function checkedBounds(bounded: SchemaNode, ctx: z.RefinementCtx): void {
+  const refusal = emptyConstraintOf(bounded);
+  if (refusal !== undefined) {
+    ctx.addIssue({ code: 'custom', message: `holds ${refusal.construct}`, path: [] });
+  }
+}
+
+const stringNode = node('string', stringOptions)
+  .superRefine(checkedFormatOptions)
+  .superRefine(checkedBounds);
 
 /** A record's key: a string node that is never nullable, since the walker refuses a nullable key. */
 const recordKeyNode = z
   .strictObject({ type: z.literal('string'), ...keyAnnotations, ...stringOptions })
-  .superRefine(checkedFormatOptions);
+  .superRefine(checkedFormatOptions)
+  .superRefine(checkedBounds);
 
 const nodes = [
   stringNode,
@@ -68,19 +85,22 @@ const nodes = [
     exclusiveMin: bound,
     exclusiveMax: bound,
     multipleOf: bound,
-  }),
+  }).superRefine(checkedBounds),
   node('boolean', {}),
-  node('enum', { values: z.array(primitive), open: z.boolean() }),
+  node('enum', { values: inCanonicalOrder(primitive, byCanonicalJson).min(1), open: z.boolean() }),
   objectNode,
   node('record', { key: recordKeyNode, value: child }),
-  node('array', { items: child, min: bound, max: bound }),
+  node('array', { items: child, min: bound, max: bound }).superRefine(checkedBounds),
   node('tuple', { items: z.array(child), rest: child.exactOptional() }),
-  node('union', { options: z.array(child) }),
+  node('union', { options: z.array(child).min(1) }),
   node('tagged', {
     discriminator: z.string(),
-    variants: byKey(z.discriminatedUnion('type', [objectNode, refNode])),
+    variants: byKey(z.discriminatedUnion('type', [objectNode, refNode])).refine(
+      (variants) => Object.keys(variants).length > 0,
+      'holds no variant',
+    ),
   }),
-  node('allOf', { items: z.array(child) }),
+  node('allOf', { items: inCanonicalOrder(child, byCanonicalJson) }),
   node('json', {}),
   refNode,
 ] as const;

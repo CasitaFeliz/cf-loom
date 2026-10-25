@@ -5,9 +5,9 @@ import {
   type ServiceSnapshot,
 } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-import { type Matchable, matchedOf } from '../wire/index.ts';
+import { type Matchable, matchedOf, textAcceptanceOf } from '../wire/index.ts';
 import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
-import type { Pair } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 /** A declared Endpoint as routing reads it: its identity, method and path segments. */
@@ -48,10 +48,12 @@ export function shadowingDifferencesOf(
   pair: Pair<EndpointSnapshot>,
   paths: EndpointPaths,
 ): readonly Difference[] {
-  if (pair.kind !== 'kept' || pair.proposed.lifecycle === 'retired') {
+  const compared = comparedShapesOf(pair);
+  if (compared === undefined) {
     return [];
   }
-  const kept = pathOf(pair.identity);
+  const sides = [compared.baseline, compared.proposed] as const;
+  const kept: KeptPath = { ...pathOf(pair.identity), sides };
   const takers = new Set<string>();
   for (const added of paths.added) {
     const taker = takerOf(kept, added, paths);
@@ -62,18 +64,20 @@ export function shadowingDifferencesOf(
   return [...takers].sort(byCodePoint).map((by) => ({ kind: 'shadowed', by }));
 }
 
+/** A kept Endpoint as routing reads it, with its declaration on both sides, whose params read a URL. */
+type KeptPath = EndpointPath & {
+  readonly sides: readonly [EndpointSnapshot, EndpointSnapshot];
+};
+
 /**
  * The Endpoint that wins a URL the kept Endpoint won in the Baseline, among those competing for
- * the URL both it and the added Endpoint match.
+ * the URL both it and the added Endpoint match, when the kept Endpoint's params may take it.
  */
-function takerOf(
-  kept: EndpointPath,
-  added: EndpointPath,
-  paths: EndpointPaths,
-): string | undefined {
+function takerOf(kept: KeptPath, added: EndpointPath, paths: EndpointPaths): string | undefined {
   const texts = overlapOf(kept, added);
   if (
     texts === undefined ||
+    !kept.sides.some((side) => mayTake(side, kept, texts)) ||
     matchedOf(paths.baseline, kept.method, texts)?.identity !== kept.identity
   ) {
     return undefined;
@@ -99,6 +103,25 @@ function overlapOf(kept: EndpointPath, added: EndpointPath): readonly string[] |
     texts.push(text);
   }
   return texts;
+}
+
+/**
+ * Whether one side's declaration of the kept Endpoint may take a URL: no param refuses the text it
+ * reads there; a text no literal spells stands for any text, so it is not judged.
+ */
+function mayTake(side: EndpointSnapshot, kept: EndpointPath, texts: readonly string[]): boolean {
+  const paramTexts = texts.filter((_text, index) => kept.segments[index]?.kind === 'param');
+  return paramTexts.every(
+    (text, index) => text === unmatchedText || paramMayTake(side, index, text),
+  );
+}
+
+/** Whether the param at a position may take a text, by its schema; one with none takes any. */
+function paramMayTake(side: EndpointSnapshot, index: number, text: string): boolean {
+  const fields = side.input.params?.fields ?? {};
+  const name = side.params[index];
+  const field = name !== undefined && Object.hasOwn(fields, name) ? fields[name] : undefined;
+  return field === undefined || textAcceptanceOf(field.schema, text) !== 'refused';
 }
 
 function textAt(kept: PathSegment, added: PathSegment | undefined): string | undefined {

@@ -15,6 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { decodeSnapshot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
@@ -1289,6 +1290,85 @@ describe('cf-loom generate and verify: contract.snapshot.json on disk', () => {
       expect(read(project, 'contract.snapshot.json')).toBe(committed);
     },
   );
+});
+
+describe('cf-loom generate and verify: a contract.snapshot.json in a newer format', () => {
+  const newer =
+    'contract.snapshot.json is in format 2, newer than this cf-loom reads: upgrade @cf-loom/cli\n';
+
+  test.each(['generate', 'verify'])(
+    '%s stops with a tooling error and leaves the file as it is',
+    (command) => {
+      const committed = `${JSON.stringify({ format: 2, kind: 'service', name: 'orders-service' })}\n`;
+      const project = aProject({
+        'cf-loom.config.ts': config,
+        ...aRoot(),
+        'contract.snapshot.json': committed,
+      });
+
+      const ran = cfLoom(project, command);
+
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: newer });
+      expect(read(project, 'contract.snapshot.json')).toBe(committed);
+    },
+  );
+});
+
+/** `aRoot` whose Success body holds a field nested in arrays that many times. */
+function aRootNestedIn(arrays: number): Files {
+  const nested = `${'z.array('.repeat(arrays)}z.boolean()${')'.repeat(arrays)}`;
+  return aRoot({ body: `z.object({ a: ${nested} })` });
+}
+
+/** The levels the Snapshot of `aRootNestedIn` nests to: the body sits at level 5, its field at 8. */
+const nestedBeyondArrays = 8;
+
+describe('cf-loom generate: how deep a Snapshot nests', () => {
+  test('a Contract whose Snapshot would nest past 256 levels fails generate, naming the path', () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(260) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toMatch(
+      /^endpoints\.GET \/ping\.success\.body\.fields\.a\.schema(\.items)+ not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n$/,
+    );
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
+  test.each([255, 256, 257])(
+    'at %s levels, generate writes a Snapshot exactly when the decoder reads it back',
+    (levels) => {
+      const arrays = levels - nestedBeyondArrays;
+      const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(arrays) });
+
+      const ran = cfLoom(project, 'generate');
+
+      const fits = levels <= 256;
+      expect(ran.status).toBe(fits ? 0 : 1);
+      const written = fits ? read(project, 'contract.snapshot.json') : nestedOnceMore(levels);
+      const decoded = decodeSnapshot(withVersion(written));
+      expect(decoded.kind).toBe(fits ? 'decoded' : 'malformed');
+    },
+  );
+
+  /** The Snapshot one level shallower `generate` writes, its innermost node nested once more. */
+  function nestedOnceMore(levels: number): string {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRootNestedIn(levels - 1 - nestedBeyondArrays),
+    });
+    cfLoom(project, 'generate');
+    const boolean = /\{\s*"type": "boolean"\s*\}/;
+    return read(project, 'contract.snapshot.json').replace(
+      boolean,
+      '{ "type": "array", "items": { "type": "boolean" } }',
+    );
+  }
+
+  function withVersion(snapshotJson: string): string {
+    return JSON.stringify({ ...JSON.parse(snapshotJson), version: '1.0.0' });
+  }
 });
 
 describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {
@@ -2865,6 +2945,39 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     });
   });
 
+  test('with no Baseline, a Message Version numbered after a gap is refused: check prints it and exits 1', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aMessagingRoot({ eventVersions: [1, 3] }));
+
+    const { ran, registry } = await checkedAgainst(lab, { project, served: {} });
+
+    const [noBaseline, gap, ...others] = ran.stdout.split('\n');
+    expect(noBaseline).toBe(neverPublished(registry));
+    expect(gap).toMatch(
+      /^events\.OrderCreated@3 version-gap missing=OrderCreated@2: Additive, refused/,
+    );
+    expect(others).toEqual(['']);
+    expect(ran).toMatchObject({ status: 1, stderr: 'The check failed: 1 Change(s) refused\n' });
+  });
+
+  test('with no Baseline, check --json lists the refused gap', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aMessagingRoot({ eventVersions: [2] }));
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+    const document = JSON.parse(ran.stdout);
+    expect(ran.status).toBe(1);
+    expect(document).toMatchObject({ status: 1, baseline: null });
+    expect(document.changes).toMatchObject([
+      {
+        site: { kind: 'event', identity: 'OrderCreated@2' },
+        difference: { kind: 'version-gap', missing: 'OrderCreated@1' },
+        verdict: 'refused',
+      },
+    ]);
+  });
+
   test('an unscoped Contract Package npm cannot find is read from npm’s registry, and has no Baseline', async ({
     lab,
   }) => {
@@ -4043,6 +4156,19 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
         'name package-name: A root is named as its package.json, without the scope: billing-service\n',
     });
     expect(registry.requests).toEqual([]);
+  });
+
+  test('a Service never published whose Message Versions leave a gap publishes nothing and exits 1', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aMessagingRoot({ eventVersions: [1, 3] }));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran.status).toBe(1);
+    expect(ran.stdout).toContain(`${neverPublished(registry)}\nevents.OrderCreated@3 version-gap`);
+    expect(ran.stderr).toBe('The check failed: 1 Change(s) refused\n');
+    expect(putsOf(registry)).toEqual([]);
   });
 
   test('a Service never published publishes 1.0.0 with the latest dist-tag, with the login of its environment, and check reads it back', async ({

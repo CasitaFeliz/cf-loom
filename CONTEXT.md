@@ -211,7 +211,7 @@ Where a shape is read, which decides what makes a change to it Breaking: Input (
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:
-The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change and gives it a Verdict.
+The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change and gives it a Verdict; with no Baseline, its declared Snapshot is judged alone as the whole history, for the numbering of its Message Versions.
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
