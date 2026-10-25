@@ -41,24 +41,15 @@ export function handlerLocalOf(handled: Handled): string {
   }
 }
 
-/** A name the readers file declares or imports, and what it names: `commands.ChargeCard@1`. */
-export type NamedInCode = { readonly code: string; readonly names: string };
-
 /**
- * The line saying which Subscription is paired under a name the file already takes, the first in
- * the order given; only a Subscription's name in code is free enough to meet another.
+ * The name the readers file imports a Command's Message Version or a Subscription under, suffixed
+ * by its kind so it never meets a Reader, a def or another kind's import: `chargeCardV1Command`.
  */
-export function collidingSubscriptionLineOf(
-  taken: readonly NamedInCode[],
-  subscriptions: readonly string[],
-): string | undefined {
-  const namesByCode = new Map(taken.map(({ code, names }) => [code, names]));
-  for (const name of subscriptions) {
-    const code = pairingNameOf({ kind: 'subscription', name });
-    const earlier = namesByCode.get(code);
-    if (earlier !== undefined) {
-      return `subscriptions.${name} is ${code} in code, as ${earlier} is: rename the Subscription`;
-    }
+export function importAliasOf(handled: MessageHandled): string {
+  switch (handled.kind) {
+    case 'command':
+      return `${pairingNameOf(handled)}Command`;
+    case 'subscription':
+      return `${pairingNameOf(handled)}Subscription`;
   }
-  return undefined;
 }

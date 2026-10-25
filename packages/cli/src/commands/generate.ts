@@ -1,3 +1,4 @@
+import { contractExportsOf } from '../loading/index.ts';
 import { type BuiltService, builtOf, isBuiltService, type Run } from '../project/index.ts';
 import { type GeneratedFile, writeFiles } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
@@ -27,27 +28,33 @@ export async function generate(run: Run): Promise<Exit> {
 
 /**
  * A Service's files, or every line that stops them: two Elements at one Handler path, a name the
- * readers cannot write, an Element no stub could import, a file nothing names, a Handler path that
- * is no file.
+ * readers cannot write, an Element no stub or the readers could import, a file nothing names, a
+ * Handler path that is no file.
  */
 async function generateService(run: Run, built: BuiltService): Promise<Exit> {
   const service = placedOf(built);
   if (service.kind === 'tooling') {
     return toolingError(service.message);
   }
-  const regenerated = serviceFilesOf(service);
+  const exports = await contractExportsOf(service.project.directory);
+  if (exports.kind === 'failed') {
+    return toolingError(exports.message);
+  }
+  const regenerated = serviceFilesOf(service, exports.exportsOf);
   if (regenerated.kind === 'unnamed') {
     return toolingError(regenerated.line);
   }
-  const stubs = await stubsOf(service);
-  if (stubs.kind === 'tooling') {
-    return toolingError(stubs.message);
-  }
+  const stubs = stubsOf(service, exports.exportsOf);
   const orphans = orphanLinesOf(service);
   if (orphans.kind === 'tooling') {
     return toolingError(orphans.message);
   }
-  const failures = [...stubs.failureLines, ...noFileLinesOf(service), ...orphans.lines];
+  const failures = [
+    ...stubs.failureLines,
+    ...regenerated.failureLines,
+    ...noFileLinesOf(service),
+    ...orphans.lines,
+  ];
   if (failures.length > 0) {
     return checkFailed(failures);
   }

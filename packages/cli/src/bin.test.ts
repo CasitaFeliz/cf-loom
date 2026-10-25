@@ -1670,7 +1670,7 @@ function aMessagingRoot({
     "import { defineCommand, defineEvent } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...events,
-    'export const chargeCard = defineCommand({',
+    'export const chargeCardV1 = defineCommand({',
     "  name: 'ChargeCard', version: 1, description: 'Charge',",
     `  lifecycle: '${commandLifecycle}', body: z.object({ card: z.string() }),`,
     '});',
@@ -1680,11 +1680,11 @@ function aMessagingRoot({
   const index = (root['src/contract/index.ts'] ?? '')
     .replace(
       "import { ping } from './ping.endpoint.ts';",
-      `import { ping } from './ping.endpoint.ts';\nimport { chargeCard, ${listed} } from './messages.ts';`,
+      `import { ping } from './ping.endpoint.ts';\nimport { chargeCardV1, ${listed} } from './messages.ts';`,
     )
     .replace(
       'groups: [health] }',
-      `groups: [health], events: [${listed}], commands: [chargeCard] }`,
+      `groups: [health], events: [${listed}], commands: [chargeCardV1] }`,
     );
   return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
 }

@@ -228,6 +228,7 @@ export {
   partFieldOf,
   pathSegmentsOf,
   readEndpointIdentity,
+  readEventReference,
   resolutionOf,
   schemaOf,
   standardRejectionsOf,

@@ -31,20 +31,18 @@ export type ExportedAt =
 /** A file of the Contract exporting a declaration. */
 export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
 
-/**
- * The files of the Contract that export each declaration, by identity, in code point order of
- * file and name; or the file that could not be imported.
- */
+/** The files of the Contract that export a declaration, by identity, in code point order of file and name. */
+export type ExportsOf = (declaration: unknown) => readonly FileExport[];
+
+/** What `src/contract/` exports, or the file that could not be imported. */
 export type ContractExports =
-  | {
-      readonly kind: 'exported';
-      readonly exportsOf: (declaration: unknown) => readonly FileExport[];
-    }
+  | { readonly kind: 'exported'; readonly exportsOf: ExportsOf }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
  * Imports every `.ts` under `src/contract/`, through linked folders too, tests aside, so a stub
- * imports its declaration from where it is exported: Node gives each the instance the root holds.
+ * and the readers file import a declaration from where it is exported: Node gives each the
+ * instance the root holds.
  */
 export async function contractExportsOf(directory: string): Promise<ContractExports> {
   const files = filesUnder(directory, contractFolder, { keeps: isContractSource });

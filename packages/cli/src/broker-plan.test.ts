@@ -160,11 +160,27 @@ const messages = lines([
   '});',
 ]);
 
-const notifyOnSettled =
-  "defineSubscription({ name: 'notifyOnSettled', description: 'Notify on settled', event: paymentSettledV1 })";
+const subscriptions = lines([
+  "import { defineSubscription } from '@cf-loom/contract';",
+  "import { orderCreatedV2 } from './messages.ts';",
+  "import { paymentSettledV1 } from './payments.ts';",
+  '',
+  'export const notifyOnSettled = defineSubscription({',
+  "  name: 'notifyOnSettled',",
+  "  description: 'Notify on settled',",
+  '  event: paymentSettledV1,',
+  '});',
+  '',
+  'export const auditCreated = defineSubscription({',
+  "  name: 'auditCreated',",
+  "  description: 'Audit created',",
+  '  event: orderCreatedV2,',
+  '});',
+]);
 
-const auditCreated =
-  "defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 })";
+const notifyOnSettled = 'notifyOnSettled';
+
+const auditCreated = 'auditCreated';
 
 /** What a messaging root lists, each as the text of one of `defineContract`'s fields. */
 type MessagingLists = {
@@ -182,15 +198,16 @@ type MessagingLists = {
 function aMessagingService({
   events = '[orderCreatedV1, orderCreatedV2, orderPurgedV1]',
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
-  subscriptions = [notifyOnSettled, auditCreated],
+  subscriptions: listed = [notifyOnSettled, auditCreated],
 }: MessagingLists = {}): Readonly<Record<string, string>> {
   const root = lines([
-    "import { defineContract, defineDependencies, defineSubscription } from '@cf-loom/contract';",
+    "import { defineContract, defineDependencies } from '@cf-loom/contract';",
     importOf(
       '{ chargeCardV1, chargeCardV2, orderCreatedV1, orderCreatedV2, orderPurgedV1, refundCardV1 }',
       './messages.ts',
     ),
     importOf('{ paymentSettledV1, payments }', './payments.ts'),
+    importOf('{ auditCreated, notifyOnSettled }', './subscriptions.ts'),
     '',
     'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
     '',
@@ -198,7 +215,7 @@ function aMessagingService({
     "  name: 'orders-service',",
     `  events: ${events},`,
     `  commands: ${commands},`,
-    `  subscriptions: [${subscriptions.join(', ')}],`,
+    `  subscriptions: [${listed.join(', ')}],`,
     '  dependencies: [paymentsDeps],',
     '});',
   ]);
@@ -207,6 +224,7 @@ function aMessagingService({
     'cf-loom.config.ts': config,
     'src/contract/messages.ts': messages,
     'src/contract/payments.ts': payments,
+    'src/contract/subscriptions.ts': subscriptions,
     'src/contract/index.ts': root,
   };
 }

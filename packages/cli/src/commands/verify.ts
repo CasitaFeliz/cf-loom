@@ -1,3 +1,4 @@
+import { contractExportsOf } from '../loading/index.ts';
 import {
   type BuiltProject,
   builtOf,
@@ -16,6 +17,7 @@ import {
 } from './handler-files.ts';
 import { orphanLinesOf } from './orphans.ts';
 import { serviceFilesOf } from './regenerated.ts';
+import { stubsOf } from './stubs.ts';
 
 /**
  * Fails when a file `generate` regenerates is not what it would write, edited by hand or left
@@ -35,12 +37,23 @@ export async function verify(run: Run): Promise<Exit> {
   if (service.kind === 'tooling') {
     return toolingError(service.message);
   }
-  return verifyService(run, service, snapshotLines);
+  return await verifyService(run, service, snapshotLines);
 }
 
-/** A Service's regenerated files compared with what `generate` would write, and its Handler files. */
-function verifyService(run: Run, service: PlacedService, snapshotLines: readonly string[]): Exit {
-  const regenerated = serviceFilesOf(service);
+/**
+ * A Service's regenerated files compared with what `generate` would write, the Elements it could
+ * not import as they are named, and its Handler files.
+ */
+async function verifyService(
+  run: Run,
+  service: PlacedService,
+  snapshotLines: readonly string[],
+): Promise<Exit> {
+  const exports = await contractExportsOf(service.project.directory);
+  if (exports.kind === 'failed') {
+    return toolingError(exports.message);
+  }
+  const regenerated = serviceFilesOf(service, exports.exportsOf);
   if (regenerated.kind === 'unnamed') {
     return toolingError(regenerated.line);
   }
@@ -59,6 +72,8 @@ function verifyService(run: Run, service: PlacedService, snapshotLines: readonly
     ...outdated.map(
       ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
     ),
+    ...stubsOf(service, exports.exportsOf).failureLines,
+    ...regenerated.failureLines,
     ...serviceFailuresOf(service),
     ...orphans.lines,
   ];
@@ -73,10 +88,7 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
   return done(compared.map((path) => `${path} is up to date`));
 }
 
-/**
- * What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them.
- * Exports are not loaded.
- */
+/** What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them. */
 function serviceFailuresOf(service: PlacedService): readonly string[] {
   return [
     ...missingHandlerPathsOf(service).map((path) => `${path} is missing: run cf-loom generate`),

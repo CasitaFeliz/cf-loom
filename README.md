@@ -56,7 +56,7 @@ src/
 ├── commands/charge-card.v1.handler.ts
 ├── subscriptions/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  the Handler map; regenerated, never edited
-├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
+├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 .cf-loom/
@@ -79,7 +79,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Implement
 
-Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub imports from the readers (`handle(chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
+Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
 
 ### Serve
 
