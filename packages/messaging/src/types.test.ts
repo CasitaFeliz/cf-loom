@@ -14,9 +14,11 @@ import {
   type BrokerConsumer,
   type BrokerService,
   type BrokerTrouble,
+  type CloseOptions,
   type ConsumedFault,
   type ConsumeRun,
   type ConsumerTrouble,
+  type Delivery,
   type Messaging,
   type MessagingOptions,
   messaging,
@@ -319,6 +321,13 @@ describe('publish and send types', () => {
     expect(options.onBrokerTrouble).toBeTypeOf('function');
   });
 
+  test('close takes an optional signal', () => {
+    expectTypeOf<Messaging<typeof contract>['close']>().toEqualTypeOf<
+      (options?: CloseOptions) => Promise<void>
+    >();
+    expectTypeOf<CloseOptions>().toEqualTypeOf<{ readonly signal?: AbortSignal | undefined }>();
+  });
+
   test('consume without the Resources its Message Handlers take is a type error', () => {
     type Notifications = { readonly notifications: { readonly send: () => void } };
     const notifying = handle(
@@ -382,7 +391,14 @@ describe('the Broker seam', () => {
     >();
   });
 
-  test('a Settlement is acked, pending or ended', () => {
-    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended'>();
+  test('a Settlement is acked, pending, ended or handed-back', () => {
+    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended' | 'handed-back'>();
+  });
+
+  test('a Delivery says its waitMs, a number or undefined', () => {
+    expectTypeOf<Delivery['waitMs']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<keyof Delivery>().toEqualTypeOf<
+      'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt' | 'waitMs' | 'headers' | 'body'
+    >();
   });
 });

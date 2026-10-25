@@ -27,7 +27,13 @@ import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
-import { type BrokerTrouble, type ConsumedFault, messaging } from '../index.ts';
+import {
+  type BrokerTrouble,
+  CloseAbortedError,
+  type ConsumedFault,
+  DeadlineError,
+  messaging,
+} from '../index.ts';
 import { memory } from '../memory/index.ts';
 import { type BrokerPlan, jetstream } from './index.ts';
 
@@ -171,8 +177,15 @@ async function aMessaging(
   const onServiceFault = settings.onServiceFault ?? (() => undefined);
   const onBrokerTrouble = settings.onBrokerTrouble ?? (() => undefined);
   const opened = await messaging(contract, broker, { onServiceFault, onBrokerTrouble });
-  onTestFinished(() => opened.close());
+  onTestFinished(() => opened.close().catch(unlessHandedBack));
   return { ...opened, connections: service.opened };
+}
+
+/** Lets a test that handed Messages back end, since its closing already rejected as it expected; rethrows anything else. */
+function unlessHandedBack(error: unknown): void {
+  if (!(error instanceof CloseAbortedError)) {
+    throw error;
+  }
 }
 
 /** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
@@ -713,6 +726,7 @@ describe('consuming over jetstream()', () => {
       deliveryCount: 1,
       lastAttempt: false,
       headers: { traceparent: '00-abc-def-01' },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -989,53 +1003,63 @@ describe('consuming over jetstream()', () => {
     );
   }, 10_000);
 
-  test('a Handler running past the ack wait keeps its Message: another process of the Service is not given it meanwhile', async () => {
+  test('a Handler that never settles is given up at its 1 s ack wait: onServiceFault receives a thrown DeadlineError, and NATS delivers the Message again with delivery count 2', async () => {
     const prefix = aPrefix();
-    const names = anOrders(prefix);
-    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
     const received: Received[] = [];
-    const slow = () => sleep(2_500).then(() => undefined);
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: slow }));
-    }
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
 
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-93' },
-    );
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-93' });
 
-    await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    expect(received).toHaveLength(1);
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    const cause = (faults[0] as { cause: unknown }).cause;
+    expect(faults[0]).toMatchObject({ kind: 'thrown', deliveryCount: 1 });
+    expect(cause).toBeInstanceOf(DeadlineError);
+    expect(cause).toHaveProperty('message', "The Handler ran past its delivery's wait of 1000 ms");
   }, 10_000);
 
-  test('a durable consumer with a backoff whose later wait is shorter keeps that delivery’s Message too', async () => {
+  test('past the wait the durable consumer pulls its next Message while the first Handler still runs', async () => {
     const prefix = aPrefix();
-    const names = anOrders(prefix);
-    const waits = [2_400_000_000, 600_000_000];
-    await arrangeOrders(prefix, { ack_wait: waits[0] as number, backoff: waits });
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
-    const throwingThenSlow = async ({ meta }: Received) => {
-      if (meta.deliveryCount === 1) {
-        throw new Error('the database is down');
-      }
-      await sleep(1_500);
-      return undefined;
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    const holdingTheFirstDelivery = ({ body, meta }: Received) => {
+      const first = (body as { orderId: string }).orderId === 'o-1' && meta.deliveryCount === 1;
+      return first ? gate.opened : undefined;
     };
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: throwingThenSlow }));
-    }
+    await orders.consume(handlersOf(received, { notify: holdingTheFirstDelivery }));
 
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-94' },
-    );
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-94' });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-95' });
 
-    await waitUntilSettled(names.stream, names.notifyDurable, 2);
-    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    const bodies = () => received.map(({ body }) => body);
+    await vi.waitFor(() => expect(bodies()).toContainEqual({ orderId: 'o-2' }), { timeout: 4_000 });
+    expect(received[0]?.body).toEqual({ orderId: 'o-1' });
+  }, 10_000);
+
+  test('with a backoff, a delivery’s wait is its backoff entry', async () => {
+    const prefix = aPrefix();
+    const waits = [oneSecond / 2, 2 * oneSecond];
+    await arrangeOrders(prefix, { ack_wait: oneSecond / 2, backoff: waits, max_deliver: 3 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-96' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 8_000 });
+    const waited = faults.map((consumed) => (consumed as { cause: DeadlineError }).cause.waitMs);
+    expect(waited).toEqual([500, 2_000, 2_000]);
   }, 15_000);
 
   test('each durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
@@ -1247,37 +1271,6 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
   });
-
-  test('the wait of a second fresh Message is the first entry of the backoff, so a slow Handler keeps it too', async () => {
-    const prefix = aPrefix();
-    const names = anOrders(prefix);
-    const waits = [oneSecond, 6 * oneSecond];
-    await arrangeOrders(prefix, { ack_wait: oneSecond, backoff: waits });
-    const received: Received[] = [];
-    const slowSecond = ({ body }: Received) => {
-      return (body as { orderId: string }).orderId === 'o-2'
-        ? sleep(2_500).then(() => undefined)
-        : undefined;
-    };
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: slowSecond }));
-    }
-
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-103' },
-    );
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-2' } },
-      { factId: 'f-104' },
-    );
-
-    await waitUntilSettled(names.stream, names.notifyDurable, 2);
-    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
-  }, 15_000);
 });
 
 describe('closing while consuming over jetstream()', () => {
@@ -1365,6 +1358,43 @@ describe('closing while consuming over jetstream()', () => {
     await next.consume(handlersOf(received));
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 4_000 });
     expect(received[0]?.meta.deliveryCount).toBe(2);
+  }, 10_000);
+
+  test('close({ signal }) with a Handler that never settles hands its Message back, so the next consumer gets it at once with delivery count 2', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: 30 * oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-112' });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    const closing = orders.close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    const next = await aMessaging(prefix);
+    await next.consume(handlersOf(received));
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
+    expect(received[1]?.meta.deliveryCount).toBe(2);
+  }, 10_000);
+
+  test('close after a wait passed leaves no timer behind', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 1 });
+    const timersBefore = activeTimers();
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-113' });
+    await vi.waitFor(() => expect(faults).toHaveLength(1), { timeout: 4_000 });
+
+    await orders.close();
+
+    expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
   }, 10_000);
 
   test('close with pulls open leaves no timer or pull behind: the connection is closed and no durable consumer has a pull open', async () => {

@@ -15,8 +15,11 @@ export type Settled = {
 /** Runs a delivery through its Handler and answers how it settled. */
 export type Settle = (delivery: Delivery) => Promise<Settled>;
 
+/** What names a consumer's deliveries when `close` hands them back: its identity and subject. */
+export type Named = { readonly identity: string; readonly subject: string };
+
 /** Wraps a consumer's `settle` as the messaging's life allows it: run while open, left pending once closing. */
-export type Received = (settle: Settle) => Settle;
+export type Received = (settle: Settle, named: Named) => Settle;
 
 /** A delivery left for redelivery without running its Handler, so with nothing reported. */
 export const leftPending: Settled = {

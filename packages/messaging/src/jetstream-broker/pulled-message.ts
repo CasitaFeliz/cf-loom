@@ -13,7 +13,6 @@ export type PulledMessage = {
   readonly ack: () => void;
   readonly nak: () => void;
   readonly term: (reason?: string) => void;
-  readonly working: () => void;
 };
 
 /** A delivered Message read for its delivery count, answerable with each acknowledgement. */
@@ -26,7 +25,6 @@ export function pulledMessageOf(message: Msg): PulledMessage {
     ack: () => answer('+ACK'),
     nak: () => answer('-NAK'),
     term: (reason) => answer(reason ? `+TERM ${reason}` : '+TERM'),
-    working: () => answer('+WPI'),
   };
 }
 

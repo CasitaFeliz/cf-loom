@@ -12,6 +12,7 @@ import {
 } from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
 import { type Subjects, subjectsOf } from '../subjects/index.ts';
+import type { CloseOptions } from './closed.ts';
 import { MessagingLife } from './life.ts';
 
 /** What is operational about messaging and no part of the Contract: the hooks for what Message Handlers end or fail with, and for durable consumers no longer pulled from. */
@@ -35,7 +36,8 @@ export type Messaging<C extends Contract> = {
       ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>
     >
   ) => Promise<void>;
-  readonly close: () => Promise<void>;
+  /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back the Messages whose Handlers still run, closes, and rejects naming them. */
+  readonly close: (options?: CloseOptions) => Promise<void>;
 };
 
 /** Connects a Contract's messaging through a broker, so it publishes, sends and consumes the Contract's Messages. */
@@ -56,10 +58,10 @@ export async function messaging<const C extends Contract>(
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
       life.consume(
-        (received) => consumersOf(subjects.consumed, handlers, { report, resources, received }),
+        (lived) => consumersOf(subjects.consumed, handlers, { report, resources, ...lived }),
         troubleReport,
       ),
-    close: () => life.close(),
+    close: (options?: CloseOptions) => life.close(options),
   };
 }
 

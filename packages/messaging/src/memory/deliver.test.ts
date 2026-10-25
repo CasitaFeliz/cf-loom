@@ -781,6 +781,7 @@ describe('pending and redeliver()', () => {
         deliveryCount: 1,
         lastAttempt: false,
         headers,
+        signal: expect.any(AbortSignal),
       },
       {
         messageId: 'command.ChargeCard.v1:f-1',
@@ -788,6 +789,7 @@ describe('pending and redeliver()', () => {
         deliveryCount: 2,
         lastAttempt: false,
         headers,
+        signal: expect.any(AbortSignal),
       },
     ]);
   });

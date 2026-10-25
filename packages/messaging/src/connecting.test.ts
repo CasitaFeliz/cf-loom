@@ -14,6 +14,7 @@ import {
   type BrokerConsumer,
   type BrokerService,
   type BrokerTrouble,
+  CloseAbortedError,
   type ConsumeRun,
   type Delivery,
   MessageNotSentError,
@@ -118,12 +119,16 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
       };
     },
   };
-  const deliver = (subject: string, delivered: unknown): Promise<Settlement> => {
+  const deliver = (
+    subject: string,
+    delivered: unknown,
+    delivery: Partial<Delivery> = {},
+  ): Promise<Settlement> => {
     const consumer = recorded.consumers.find((candidate) => candidate.subject === subject);
     if (consumer === undefined) {
       throw new Error(`Nothing consumes ${subject}`);
     }
-    return consumer.receive(aDelivery(delivered));
+    return consumer.receive({ ...aDelivery(delivered), ...delivery });
   };
   return { broker, recorded, deliver };
 }
@@ -131,7 +136,7 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
 function aDelivery(delivered: unknown): Delivery {
   const bytes = new TextEncoder().encode(JSON.stringify(delivered));
   const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1, lastAttempt: false };
-  return { ...meta, headers: {}, body: bytes };
+  return { ...meta, waitMs: undefined, headers: {}, body: bytes };
 }
 
 /** A promise a test settles itself, to hold a Handler while it runs. */
@@ -729,5 +734,122 @@ describe('onBrokerTrouble', () => {
     expect(reporting).toThrow(
       new Error('a BrokerConsumer the core did not build was handed back to it'),
     );
+  });
+});
+
+describe('close and a Handler’s wait', () => {
+  const created = 'orders-service.event.OrderCreated.v1';
+
+  /** A Handler of `notifyOnCreated` that never answers. */
+  const neverAnswering = handle(
+    readers.subscriptions.notifyOnCreated,
+    () => new Promise(() => undefined),
+  );
+
+  test('close does not wait for a Handler past its wait', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body, { waitMs: 20 });
+
+    await close();
+
+    await expect(delivered).resolves.toBe('pending');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('close({ signal }) with a Handler that never settles hands its Message back, closes the connection and rejects with CloseAbortedError naming it', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+    const stopping = new AbortController();
+    const reason = new Error('the grace period is over');
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort(reason);
+
+    const error = await closing.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CloseAbortedError);
+    expect(error).toMatchObject({
+      name: 'CloseAbortedError',
+      message: `close stopped waiting and handed back 1 Message: notifyOnCreated ${created} m-1 f-1`,
+      handedBack: [
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
+      ],
+      cause: reason,
+    });
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('close({ signal }) with nothing running resolves as close does', async () => {
+    const { recorded, close } = await consumingWith(neverAnswering);
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+
+    await expect(closing).resolves.toBeUndefined();
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a signal already aborted makes close hand back at once', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+
+    const closing = close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a second close call’s signal bounds the closing the first started', async () => {
+    const { recorded, deliver, close } = await consumingWith(neverAnswering);
+    const delivered = deliver(created, body);
+    const stopping = new AbortController();
+    const first = close();
+
+    const second = close({ signal: stopping.signal });
+    stopping.abort();
+
+    expect(second).toBe(first);
+    await expect(first).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('a publish in flight when close’s signal aborts is not waited for', async () => {
+    const gate = aGate();
+    const { broker, log } = aLoggingBroker({ publish: gate.opened });
+    const { publisher, close } = await messaging(contract, broker);
+    const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-15' });
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+    await closing;
+    const loggedAtClose = [...log];
+    gate.open();
+    await publishing;
+
+    expect(loggedAtClose).toEqual(['publish', 'close', 'closed']);
+  });
+
+  test('an onServiceFault in flight when close’s signal aborts is not waited for, and its delivery is handed back', async () => {
+    const throwing = handle(readers.subscriptions.notifyOnCreated, () => {
+      throw new Error('the database is down');
+    });
+    const recording = aBroker();
+    const { consume, close } = await messaging(contract, recording.broker, {
+      onServiceFault: () => new Promise(() => undefined),
+    });
+    await consume({ ...handlers, subscriptions: { notifyOnCreated: throwing } });
+    const delivered = recording.deliver(created, body);
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(recording.recorded.closes).toBe(1);
   });
 });

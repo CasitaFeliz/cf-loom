@@ -1,33 +1,50 @@
 import type { BrokerConnection, BrokerConsumer, ConsumeRun, Delivery } from '../broker/index.ts';
 import {
   leftPending,
+  type Named,
   type Received,
   type Settle,
   type Settled,
   type TroubleReport,
 } from '../consuming/index.ts';
-import { MessagingClosedError } from './closed.ts';
+import { CloseAbortedError, type CloseOptions, MessagingClosedError } from './closed.ts';
+import { DeliveriesInFlight } from './handing-back.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
 
+/** How closing ended: with nothing left in flight, or with `close`'s signal aborted, and why. */
+type Ended = { readonly kind: 'idle' } | { readonly kind: 'stopped'; readonly reason: unknown };
+
 /** Where one messaging is in its life: open, closing while what is in flight settles, or closed. */
 type State =
   | { readonly kind: 'open'; readonly consumption: Consumption }
-  | { readonly kind: 'closing'; readonly closed: Promise<void>; readonly idle: () => void }
+  | {
+      readonly kind: 'closing';
+      readonly closed: Promise<void>;
+      readonly ended: (ended: Ended) => void;
+    }
   | { readonly kind: 'closed'; readonly closed: Promise<void> };
+
+/** What the consumers of one `consume` are built with: `received`, and the signals of closing and of handing back. */
+export type ConsumerLife = {
+  readonly received: Received;
+  readonly closing: AbortSignal;
+  readonly handingBack: AbortSignal;
+};
 
 /**
  * The life of one messaging over its broker connection: publishing while open or closing, since a
  * Handler running may still publish; consuming once; and closed the moment nothing is in flight,
- * the Handlers running, a `publish`, a `send` or a `consume`. The core, not the adapter, keeps what
- * is in flight.
+ * the Handlers running, a `publish`, a `send`, a `consume` or a trouble report, or once `close`'s
+ * signal aborts, handing back what still runs. The core, not the adapter, keeps what is in flight.
  */
 export class MessagingLife {
   readonly #connection: BrokerConnection;
   #state: State = { kind: 'open', consumption: 'none' };
   readonly #closing = new AbortController();
   readonly #inFlight = new Set<Promise<unknown>>();
+  readonly #delivering = new DeliveriesInFlight();
 
   constructor(connection: BrokerConnection) {
     this.#connection = connection;
@@ -57,7 +74,7 @@ export class MessagingLife {
    * open, and where it reports their trouble; a broker that rejects them leaves `consume` to retry.
    */
   async consume(
-    consumersOf: (received: Received) => readonly BrokerConsumer[],
+    consumersOf: (life: ConsumerLife) => readonly BrokerConsumer[],
     report: TroubleReport,
   ): Promise<void> {
     const state = this.#state;
@@ -70,7 +87,11 @@ export class MessagingLife {
           throw new Error('consume() was already called on this messaging');
         }
     }
-    const consumers = consumersOf((settle) => (delivery) => this.#received(settle, delivery));
+    const consumers = consumersOf({
+      received: (settle, named) => (delivery) => this.#received(settle, named, delivery),
+      closing: this.#closing.signal,
+      handingBack: this.#delivering.handingBack,
+    });
     this.#consumption('taken');
     const run: ConsumeRun = {
       closing: this.#closing.signal,
@@ -84,19 +105,25 @@ export class MessagingLife {
     }
   }
 
-  /** Stops consuming, waits for everything in flight and closes the broker connection; called again, the same promise. */
-  close(): Promise<void> {
+  /**
+   * Stops consuming, waits for everything in flight and closes the broker connection; once a call's
+   * `signal` aborts, it hands back the Messages whose Handlers still run instead. Called again, the same promise.
+   */
+  close({ signal }: CloseOptions = {}): Promise<void> {
     const state = this.#state;
     switch (state.kind) {
       case 'open': {
-        this.#closing.abort();
-        const idle = Promise.withResolvers<void>();
-        const closed = idle.promise.then(() => this.#connection.close());
-        this.#state = { kind: 'closing', closed, idle: idle.resolve };
+        this.#closing.abort(new MessagingClosedError('closing'));
+        const ended = Promise.withResolvers<Ended>();
+        const closed = ended.promise.then((end) => this.#closedAfter(end));
+        this.#state = { kind: 'closing', closed, ended: ended.resolve };
         this.#endedIfIdle();
+        this.#stoppedBy(signal, closed);
         return closed;
       }
       case 'closing':
+        this.#stoppedBy(signal, state.closed);
+        return state.closed;
       case 'closed':
         return state.closed;
     }
@@ -115,13 +142,44 @@ export class MessagingLife {
   }
 
   /** A delivery while open runs its Handler; one while closing or closed is left pending, its Handler never run. */
-  #received(settle: Settle, delivery: Delivery): Promise<Settled> {
+  #received(settle: Settle, named: Named, delivery: Delivery): Promise<Settled> {
     switch (this.#state.kind) {
       case 'closing':
       case 'closed':
         return Promise.resolve(leftPending);
-      case 'open':
-        return this.tracked(settle(delivery));
+      case 'open': {
+        const settling = settle(delivery);
+        this.#delivering.add(settling, named, delivery);
+        return this.tracked(settling);
+      }
+    }
+  }
+
+  /** Closing stops waiting once the signal aborts, or at once if it has; its listener goes once closed. */
+  #stoppedBy(signal: AbortSignal | undefined, closed: Promise<void>): void {
+    if (signal === undefined) {
+      return;
+    }
+    const stop = () => this.#ended({ kind: 'stopped', reason: signal.reason });
+    if (signal.aborted) {
+      stop();
+      return;
+    }
+    signal.addEventListener('abort', stop, { once: true });
+    const forget = () => signal.removeEventListener('abort', stop);
+    closed.then(forget, forget);
+  }
+
+  /** Closes the broker connection once closing ended; stopped, after handing back what still runs, naming it. */
+  async #closedAfter(end: Ended): Promise<void> {
+    if (end.kind === 'idle') {
+      await this.#connection.close();
+      return;
+    }
+    const handedBack = await this.#delivering.handBack();
+    await this.#connection.close();
+    if (handedBack.length > 0) {
+      throw new CloseAbortedError(handedBack, end.reason);
     }
   }
 
@@ -130,15 +188,20 @@ export class MessagingLife {
     this.#endedIfIdle();
   }
 
-  /** Closing ends closed the moment nothing is in flight, so a call is either waited for or throws. */
+  /** Closing ends the moment nothing is in flight, so a call is either waited for or throws. */
   #endedIfIdle(): void {
+    if (this.#inFlight.size === 0) {
+      this.#ended({ kind: 'idle' });
+    }
+  }
+
+  /** Closing ends once, idle or stopped, whichever comes first; messaging is closed from then on. */
+  #ended(end: Ended): void {
     const state = this.#state;
     switch (state.kind) {
       case 'closing':
-        if (this.#inFlight.size === 0) {
-          this.#state = { kind: 'closed', closed: state.closed };
-          state.idle();
-        }
+        this.#state = { kind: 'closed', closed: state.closed };
+        state.ended(end);
         return;
       case 'open':
       case 'closed':

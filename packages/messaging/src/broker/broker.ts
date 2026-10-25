@@ -22,7 +22,10 @@ export type BrokerConnection = {
    * `receive`; a Message still handed over is left pending by the core.
    */
   readonly consume: (consumers: readonly BrokerConsumer[], run: ConsumeRun) => Promise<void>;
-  /** Called once every `receive` has settled; ends what `consume` started and finishes applying any Settlement. */
+  /**
+   * Called once every `receive` has settled, or once `close`'s signal aborted and each Handler still
+   * running was handed back; ends what `consume` started and finishes applying any Settlement.
+   */
   readonly close: () => Promise<void>;
 };
 
@@ -67,16 +70,26 @@ export type BrokerConsumer = {
   readonly receive: (delivery: Delivery) => Promise<Settlement>;
 };
 
-/** One Message as an adapter hands it to `receive`: its ids, which attempt, whether the Broker will deliver it again, its transport headers and its body as received. */
+/** One Message as an adapter hands it to `receive`: its ids, which attempt, whether the Broker will deliver it again, how long the Broker waits for its acknowledgement, its transport headers and its body as received. */
 export type Delivery = {
   readonly messageId: string;
   readonly factId: string;
   readonly deliveryCount: number;
   /** Whether this is the last delivery the Broker makes; `false` when the Broker sets no limit or the adapter cannot know. */
   readonly lastAttempt: boolean;
+  /**
+   * How long, in milliseconds, the Broker waits for this delivery's acknowledgement before it delivers
+   * the Message again, which is how long the core waits for its Handler; `undefined` when the Broker
+   * has no such wait or the adapter cannot know, and the Handler is waited for however long it runs.
+   */
+  readonly waitMs: number | undefined;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 };
 
-/** What the adapter does with a delivery: acknowledge it, leave it for redelivery, or end it (JetStream `term`). */
-export type Settlement = 'acked' | 'pending' | 'ended';
+/**
+ * What the adapter does with a delivery: acknowledge it, leave it for redelivery, end it (JetStream
+ * `term`), or hand it back for redelivery now (JetStream `nak`), which only the core answers, once
+ * `close`'s signal aborted, never for a Handler's answer.
+ */
+export type Settlement = 'acked' | 'pending' | 'ended' | 'handed-back';

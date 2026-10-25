@@ -11,8 +11,14 @@ export type {
   Settlement,
 } from './broker/index.ts';
 export type { BrokerTrouble, ConsumedFault } from './consuming/index.ts';
-export type { ConsumeOptions, Messaging, MessagingOptions } from './messaging/index.ts';
-export { MessagingClosedError, messaging } from './messaging/index.ts';
+export { DeadlineError } from './consuming/index.ts';
+export type {
+  CloseOptions,
+  ConsumeOptions,
+  Messaging,
+  MessagingOptions,
+} from './messaging/index.ts';
+export { CloseAbortedError, MessagingClosedError, messaging } from './messaging/index.ts';
 export type {
   CommandSender,
   EventPublisher,

@@ -16,14 +16,15 @@ import type { DeliveryMeta } from './types.ts';
 /** One delivery to one consumer: the Delivery it receives. */
 export type Attempt = { readonly consumer: BrokerConsumer; readonly delivery: Delivery };
 
-/** The Delivery of a Message the first time a consumer receives it. */
+/** The Delivery of a Message the first time a consumer receives it, with no wait: memory models no broker configuration. */
 export function firstDeliveryOf({
   messageId,
   factId,
   headers,
   body,
-}: Omit<Delivery, 'deliveryCount' | 'lastAttempt'>): Delivery {
-  return { messageId, factId, deliveryCount: 1, lastAttempt: false, headers, body };
+}: Omit<Delivery, 'deliveryCount' | 'lastAttempt' | 'waitMs'>): Delivery {
+  const first = { deliveryCount: 1, lastAttempt: false, waitMs: undefined };
+  return { messageId, factId, ...first, headers, body };
 }
 
 /** What a test hands `deliver`: the Message Version, its body as a Subscriber reads it, and its meta. */

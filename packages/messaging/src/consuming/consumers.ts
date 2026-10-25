@@ -11,12 +11,15 @@ export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | '
 
 /**
  * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
- * and `received`, which wraps each consumer's run as the messaging's life allows it.
+ * `received`, which wraps each consumer's run as the messaging's life allows it, and the signals
+ * of messaging closing and of `close` handing back what still runs.
  */
 type ConsumersRun = {
   readonly report: Report;
   readonly resources: unknown;
   readonly received: Received;
+  readonly closing: AbortSignal;
+  readonly handingBack: AbortSignal;
 };
 
 /**
@@ -28,7 +31,7 @@ type ConsumersRun = {
 export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { report, resources, received }: ConsumersRun,
+  { resources, received, ...settling }: ConsumersRun,
 ): readonly BrokerConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
@@ -42,17 +45,18 @@ export function consumersOf(
   return pulled
     .filter(({ handler }) => !isStub(handler))
     .map(({ consumed, handler, reader }) => {
-      const settle = received((delivery) =>
-        settlementOf({ consumed, handler, resources }, delivery, report),
-      );
       const { durable, stream, subject, element } = consumed;
+      const identity = elementNameOf(element);
+      const settle = received(
+        (delivery) => settlementOf({ consumed, handler, resources }, delivery, settling),
+        { identity, subject },
+      );
       const consumer: BrokerConsumer = {
         durable,
         stream,
         subject,
         receive: async (delivery) => (await settle(delivery)).settlement,
       };
-      const identity = elementNameOf(element);
       registerConsumerDetails(consumer, { element, identity, reader, settle });
       return consumer;
     });

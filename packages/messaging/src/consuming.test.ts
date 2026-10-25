@@ -17,7 +17,10 @@ import {
   type Broker,
   type BrokerConsumer,
   type ConsumedFault,
+  DeadlineError,
   type Delivery,
+  MessagingClosedError,
+  type MessagingOptions,
   messaging,
   type Settlement,
 } from './index.ts';
@@ -166,6 +169,7 @@ function aBroker() {
       factId: 'f-1',
       deliveryCount: 1,
       lastAttempt: false,
+      waitMs: undefined,
       headers: {},
     };
     return consumer.receive({ ...meta, body: bytes, ...delivery });
@@ -176,20 +180,22 @@ function aBroker() {
 /** A messaging connected and consuming, its Handlers replaced by those given and its faults kept. */
 async function consuming(
   replaced: { readonly commands?: object; readonly subscriptions?: object } = {},
+  options: MessagingOptions = {},
 ) {
   const faults: ConsumedFault[] = [];
   const recording = aBroker();
-  const { consume } = await messaging(contract, recording.broker, {
+  const { consume, close } = await messaging(contract, recording.broker, {
     onServiceFault: (consumedFault) => {
       faults.push(consumedFault);
     },
+    ...options,
   });
   await consume({
     commands: { ...handlers.commands, ...replaced.commands },
     subscriptions: { ...handlers.subscriptions, ...replaced.subscriptions },
     readers,
   });
-  return { ...recording, faults };
+  return { ...recording, faults, close };
 }
 
 /** A Handler of `notifyOnCreated` that keeps what it receives and answers what it is given. */
@@ -202,8 +208,24 @@ function receiving(answer: () => unknown = () => undefined) {
   return { received, subscriptions: { notifyOnCreated: notifying } };
 }
 
+/** A Handler of `notifyOnCreated` that keeps the signal it receives and runs until `until` settles. */
+function runningUntil(until: Promise<unknown>) {
+  const signals: AbortSignal[] = [];
+  const notifying = handle(readers.subscriptions.notifyOnCreated, async (_body, meta) => {
+    signals.push(meta.signal);
+    await until;
+  });
+  return { signals, subscriptions: { notifyOnCreated: notifying } };
+}
+
+/** A promise that never settles: a Handler that never answers. */
+const never = new Promise<never>(() => undefined);
+
+const oneDayMs = 86_400_000;
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('consume', () => {
@@ -429,7 +451,7 @@ describe('a Message delivered', () => {
 
     await deliver(created, body, meta);
 
-    expect(received[1]).toEqual(meta);
+    expect(received[1]).toEqual({ ...meta, signal: expect.any(AbortSignal) });
   });
 
   test('returning nothing acknowledges it', async () => {
@@ -710,5 +732,200 @@ describe('a Message delivered', () => {
         error,
       ],
     ]);
+  });
+});
+
+describe('a Handler’s signal and its delivery’s wait', () => {
+  test('the Handler’s signal aborts when close starts, its reason a MessagingClosedError', async () => {
+    const stopped = Promise.withResolvers<void>();
+    const { signals, subscriptions } = runningUntil(stopped.promise);
+    const { deliver, close } = await consuming({ subscriptions });
+    const delivered = deliver(created, body);
+    signals[0]?.addEventListener('abort', () => stopped.resolve());
+
+    await close();
+
+    await expect(delivered).resolves.toBe('acked');
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[0]?.reason).toBeInstanceOf(MessagingClosedError);
+    expect(signals[0]?.reason).toHaveProperty('message', 'messaging is closing');
+  });
+
+  test('past the delivery’s waitMs, receive resolves pending without waiting for the Handler, and onServiceFault receives a thrown DeadlineError naming the wait', async () => {
+    vi.useFakeTimers();
+    const { subscriptions } = runningUntil(never);
+    const { deliver, faults } = await consuming({ subscriptions });
+
+    const delivered = deliver(created, body, { waitMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(delivered).resolves.toBe('pending');
+    expect(faults).toMatchObject([{ kind: 'thrown', identity: 'notifyOnCreated' }]);
+    const cause = (faults[0] as { cause: unknown }).cause;
+    expect(cause).toBeInstanceOf(DeadlineError);
+    expect(cause).toMatchObject({
+      name: 'DeadlineError',
+      waitMs: 1_000,
+      message: "The Handler ran past its delivery's wait of 1000 ms",
+    });
+  });
+
+  test('past the delivery’s waitMs, the Handler’s signal aborts with the DeadlineError', async () => {
+    vi.useFakeTimers();
+    const { signals, subscriptions } = runningUntil(never);
+    const { deliver, faults } = await consuming({ subscriptions });
+
+    const delivered = deliver(created, body, { waitMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await delivered;
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[0]?.reason).toBe((faults[0] as { cause: unknown }).cause);
+  });
+
+  test('a Handler that answers within its waitMs settles as it answered, and its signal never aborts', async () => {
+    vi.useFakeTimers();
+    const answered = new Promise((resolve) => setTimeout(resolve, 500));
+    const { signals, subscriptions } = runningUntil(answered);
+    const { deliver, faults } = await consuming({ subscriptions });
+
+    const delivered = deliver(created, body, { waitMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(500);
+    const settlement = await delivered;
+    await vi.advanceTimersByTimeAsync(oneDayMs);
+
+    expect(settlement).toBe('acked');
+    expect(faults).toEqual([]);
+    expect(signals[0]?.aborted).toBe(false);
+  });
+
+  test('a delivery without a waitMs is waited for however long its Handler runs', async () => {
+    vi.useFakeTimers();
+    const answer = Promise.withResolvers<void>();
+    const { subscriptions } = runningUntil(answer.promise);
+    const { deliver, faults } = await consuming({ subscriptions });
+    const settlements: Settlement[] = [];
+
+    const delivered = deliver(created, body).then((settlement) => settlements.push(settlement));
+    await vi.advanceTimersByTimeAsync(oneDayMs);
+    const settledWithinOneDay = [...settlements];
+    answer.resolve();
+    await delivered;
+
+    expect(settledWithinOneDay).toEqual([]);
+    expect(settlements).toEqual(['acked']);
+    expect(faults).toEqual([]);
+  });
+
+  const events = ['answer', 'wait', 'close'] as const;
+  const orders = events.flatMap((first) =>
+    events
+      .filter((second) => second !== first)
+      .map((second) => [
+        first,
+        second,
+        events.find((third) => third !== first && third !== second),
+      ]),
+  ) as (readonly (typeof events)[number][])[];
+  const firstOf = {
+    answer: { settlement: 'pending', faults: [['thrown', 'Error']] },
+    wait: { settlement: 'pending', faults: [['thrown', 'DeadlineError']] },
+    close: { settlement: 'handed-back', faults: [] },
+  };
+
+  test.each(orders)(
+    'a delivery settles once, by whichever comes first of its Handler throwing, its wait passing and close’s signal aborting: %s, then %s, then %s',
+    async (...order) => {
+      vi.useFakeTimers();
+      const answer = Promise.withResolvers<void>();
+      const { subscriptions } = runningUntil(answer.promise);
+      const { deliver, faults, close } = await consuming({ subscriptions });
+      const settlements: Settlement[] = [];
+      const delivered = deliver(created, body, { waitMs: 1_000 }).then((settlement) =>
+        settlements.push(settlement),
+      );
+      const stopping = new AbortController();
+      const closing = close({ signal: stopping.signal }).catch(() => undefined);
+      const happen = {
+        answer: () => answer.reject(new Error('the database is down')),
+        wait: () => vi.advanceTimersByTimeAsync(1_000),
+        close: () => stopping.abort(),
+      };
+
+      for (const event of order) {
+        await happen[event]();
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      await Promise.all([delivered, closing]);
+
+      const expected = firstOf[order[0] as (typeof events)[number]];
+      expect(settlements).toEqual([expected.settlement]);
+      const reported = faults.map((fault) => [fault.kind, (fault as { cause: Error }).cause.name]);
+      expect(reported).toEqual(expected.faults);
+    },
+  );
+
+  test.each([
+    ['1 ms', 1],
+    ['2,147,483,647 ms', 2_147_483_647],
+    ['2,147,483,648 ms', 2_147_483_648],
+    ['30 days', 30 * oneDayMs],
+    ['one year', 365 * oneDayMs],
+  ])(
+    'a Handler is waited for its whole wait and no longer, however long the wait: %s',
+    async (_name, waitMs) => {
+      vi.useFakeTimers();
+      const { subscriptions } = runningUntil(never);
+      const { deliver } = await consuming({ subscriptions });
+      const settlements: Settlement[] = [];
+
+      const delivered = deliver(created, body, { waitMs }).then((settlement) =>
+        settlements.push(settlement),
+      );
+      await vi.advanceTimersByTimeAsync(waitMs - 1);
+      const settledBefore = [...settlements];
+      await vi.advanceTimersByTimeAsync(1);
+      await delivered;
+
+      expect(settledBefore).toEqual([]);
+      expect(settlements).toEqual(['pending']);
+    },
+  );
+
+  test('a delivery close({ signal }) hands back leaves no wait timer behind', async () => {
+    vi.useFakeTimers();
+    const { subscriptions } = runningUntil(never);
+    const { deliver, close } = await consuming({ subscriptions });
+    const delivered = deliver(created, body, { waitMs: 30_000 });
+
+    await close({ signal: AbortSignal.abort() }).catch(() => undefined);
+
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('a Handler that answers within its wait is not cut short by a slow onServiceFault: one Fault, settled as it answered', async () => {
+    vi.useFakeTimers();
+    const hook = Promise.withResolvers<void>();
+    const told: ConsumedFault[] = [];
+    const refusing = handle(readers.subscriptions.notifyOnCreated, () =>
+      fault({ committed: 'no', retryable: false }),
+    );
+    const { deliver } = await consuming(
+      { subscriptions: { notifyOnCreated: refusing } },
+      {
+        onServiceFault: async (consumedFault) => {
+          told.push(consumedFault);
+          await hook.promise;
+        },
+      },
+    );
+
+    const delivered = deliver(created, body, { waitMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(2_000);
+    hook.resolve();
+
+    await expect(delivered).resolves.toBe('ended');
+    expect(told.map(({ kind }) => kind)).toEqual(['returned']);
   });
 });
