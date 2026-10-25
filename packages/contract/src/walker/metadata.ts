@@ -8,8 +8,8 @@ import {
   type Refused,
   refused,
   refusedExamples,
-  refusedId,
   refusedMetaKey,
+  refusedNonCamelCaseId,
 } from './not-allowed.ts';
 import { failed, failuresOf, type Walked, walked } from './walked.ts';
 
@@ -87,7 +87,7 @@ function idRefusalOf(id: unknown): Refused | undefined {
   if (typeof id !== 'string') {
     return refused.nonStringId;
   }
-  return follows(camelCase, id) ? undefined : refusedId(id);
+  return follows(camelCase, id) ? undefined : refusedNonCamelCaseId(id);
 }
 
 function descriptionRefusalOf(description: unknown): Refused | undefined {

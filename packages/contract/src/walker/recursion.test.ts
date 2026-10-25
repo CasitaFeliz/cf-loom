@@ -702,49 +702,60 @@ describe('walkSchemas: recursion', () => {
   });
 
   describe('an id on a field wrapper', () => {
-    test('an id on .optional() fails, and nothing inside it is walked', () => {
-      const node: z.ZodType = z.object({
-        get next() {
-          return node.optional().meta({ id: 'node' });
+    const leaf: z.ZodType = z
+      .object({
+        get up() {
+          return z.array(leaf);
         },
-      });
+      })
+      .meta({ id: 'leaf' });
 
-      const failure = {
-        at: ['body', 'fields', 'next'],
-        construct: '.meta({ id }) on .optional()',
-        instead: wrapperIdInstead,
-      };
-      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+    function wrapperFailure(construct: string) {
+      return { at: ['body', 'fields', 'next'], construct, instead: wrapperIdInstead };
+    }
+
+    test('an id on .optional() fails, and nothing inside it is walked', () => {
+      const order = z.object({ next: leaf.optional().meta({ id: 'next' }) });
+
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        defs: {},
+      });
     });
 
     test('an id on .nonoptional() fails, and nothing inside it is walked', () => {
-      const node: z.ZodType = z.object({
-        get next() {
-          return node.optional().nonoptional().meta({ id: 'node' });
-        },
-      });
+      const order = z.object({ next: leaf.optional().nonoptional().meta({ id: 'next' }) });
 
-      const failure = {
-        at: ['body', 'fields', 'next'],
-        construct: '.meta({ id }) on .nonoptional()',
-        instead: wrapperIdInstead,
-      };
-      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .nonoptional()')])],
+        defs: {},
+      });
     });
 
     test('an id on the .optional() inside .nonoptional() fails the same', () => {
-      const node: z.ZodType = z.object({
-        get next() {
-          return node.optional().meta({ id: 'node' }).nonoptional();
-        },
-      });
+      const order = z.object({ next: leaf.optional().meta({ id: 'next' }).nonoptional() });
 
-      const failure = {
-        at: ['body', 'fields', 'next'],
-        construct: '.meta({ id }) on .optional()',
-        instead: wrapperIdInstead,
-      };
-      expect(walkBody(node)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+      expect(walkBody(order)).toEqual({
+        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        defs: {},
+      });
+    });
+
+    test('the wrapper’s other .meta() keys fail beside its id', () => {
+      const order = z.object({ next: leaf.optional().meta({ id: 'next', title: 'Next' }) });
+
+      expect(walkBody(order)).toEqual({
+        located: [
+          refusedAt(
+            ['body'],
+            [
+              { at: ['body', 'fields', 'next'], construct: '.meta({ title })' },
+              wrapperFailure('.meta({ id }) on .optional()'),
+            ],
+          ),
+        ],
+        defs: {},
+      });
     });
   });
 

@@ -62,7 +62,7 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
-  const result = isOnCycle ? writeDef(state, ancestor, node) : refusedIdOf(ancestor, node);
+  const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
   closeGroup(state, ancestor);
   return result;
 }
@@ -131,7 +131,7 @@ function closeGroup(state: State, ancestor: Ancestor): void {
 }
 
 /** An id names a cycle: on a schema that lies on none it is refused, beside any other failure. */
-function refusedIdOf(ancestor: Ancestor, node: Walked): Walked {
+function offCycle(ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
     return node;
   }

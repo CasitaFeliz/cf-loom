@@ -104,13 +104,14 @@ type Wrapper = LocatedSchema & { readonly kind: 'optional' | 'nonoptional' };
  */
 function wrapped(wrapper: Wrapper, walkInner: () => Walked, state: WalkState): Walked {
   const { schema, at, kind } = wrapper;
+  const metadata = ownMetadata(schema, at, state.originOf);
   if (hasOwnId(schema)) {
-    return notAllowed(at, refusedWrapperId(kind));
+    return annotatedBy(notAllowed(at, refusedWrapperId(kind)), metadata);
   }
   const inner = walkInner();
   const checks = checksOf(schema);
   const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
-  return annotatedBy(checked, ownMetadata(schema, at, state.originOf));
+  return annotatedBy(checked, metadata);
 }
 
 function requiredField(result: Walked): Walked<Field> {

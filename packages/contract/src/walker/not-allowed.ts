@@ -112,7 +112,7 @@ export function refusedMetaKey(key: string): Refused {
 export const refusedExamples: Refused = { construct: '.meta({ examples }) that is not a list' };
 
 /** A recursion id that is no camelCase name, so code could not name its def. */
-export function refusedId(id: string): Refused {
+export function refusedNonCamelCaseId(id: string): Refused {
   return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
 }
 
@@ -124,7 +124,7 @@ export function refusedWrapperId(wrapper: 'optional' | 'nonoptional'): Refused {
   };
 }
 
-/** A recursion id on a schema that lies on no cycle, which an id names. */
+/** A recursion id on a schema that lies on no cycle, though an id names a cycle. */
 export function refusedAcyclicId(id: string): Refused {
   return {
     construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
