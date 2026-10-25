@@ -1,10 +1,10 @@
+import type { ReservedCode } from '@cf-loom/contract';
 import {
   faultResponseOf,
   follows,
   isJsonValue,
   isReservedCode,
   methodNotAllowedResponseOf,
-  type ReservedCode,
   rejectionResponseOf,
   reservedResponseOf,
   upperSnakeCase,

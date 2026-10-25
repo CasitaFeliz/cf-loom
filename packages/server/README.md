@@ -78,7 +78,7 @@ Both hooks may be async and are awaited before the response is returned; what on
 
 ## Types
 
-- `Http`, `(request: Request) => Promise<Response>`: the fetch-style handler `serve` returns.
+- `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
 - `ServeOptions<Resources>`, `{ resources, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onOutcome? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take and what is operational about serving; none of it is part of the Contract.
 - `BodyLimit`, `number | 'unlimited'`: what `maxBodyBytes` takes, a whole number of bytes from 0 or no limit.
 - `ServedFault`: what `onServiceFault` receives, `{ element, identity, guard? }` and `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.

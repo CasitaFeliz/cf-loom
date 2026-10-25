@@ -90,7 +90,9 @@ describe('fakeProvider: Deprecation', () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
 
-    const response = await payments.fetch('https://payments-service.test/payments/pay-1', {});
+    const response = await payments.fetch(
+      new Request('https://payments-service.test/payments/pay-1'),
+    );
 
     expect(response.headers.get('deprecation')).toBe(deprecation);
   });
@@ -98,7 +100,7 @@ describe('fakeProvider: Deprecation', () => {
   test('the invalid-input Rejection of a Deprecated Endpoint carries Deprecation', async () => {
     const payments = fakeProvider(paymentsDependency);
 
-    const response = await payments.fetch('https://payments-service.test/payments/ab', {});
+    const response = await payments.fetch(new Request('https://payments-service.test/payments/ab'));
 
     expect([response.status, response.headers.get('deprecation')]).toEqual([400, deprecation]);
   });
@@ -112,7 +114,7 @@ describe('fakeProvider: Deprecation', () => {
 
     await client.getPayment({ params: { paymentId: 'pay-1' } });
     await client.getPayment({ params: { paymentId: 'pay-2' } });
-    const listed = await payments.fetch('https://payments-service.test/payments', {});
+    const listed = await payments.fetch(new Request('https://payments-service.test/payments'));
     await client.listPayments();
 
     expect(listed.headers.has('deprecation')).toBe(false);

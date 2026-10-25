@@ -1,8 +1,9 @@
+import type { Http } from '@cf-loom/contract';
 import { checkExportedFormat } from '@cf-loom/contract/internal';
 import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
-import type { Client, ClientOptions, ConfiguredName, Fetch } from './client-types.ts';
+import type { Client, ClientOptions, ConfiguredName } from './client-types.ts';
 import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
 
 /**
@@ -30,4 +31,4 @@ export function client<const D extends AnyDependency, Configured extends Configu
 }
 
 /** The global `fetch` as it is when a call is made, not when the client was created. */
-const globalFetch: Fetch = (url, init) => fetch(url, init);
+const globalFetch: Http = (request) => fetch(request);

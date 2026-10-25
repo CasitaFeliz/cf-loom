@@ -1,17 +1,23 @@
+import type { Issue } from '@cf-loom/contract';
 import {
   discardBodyOf,
   headerValuesOf,
-  type Issue,
   parseValue,
   receivedBodyOf,
 } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
-import { answeredFaultOf, type Inferring } from '../inference/index.ts';
-import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
+import { type Answered, answeredFaultOf, type Inferring } from '../inference/index.ts';
+import {
+  type DecodedOutcome,
+  type DecodedSuccess,
+  invalidOutcomeOf,
+  issuesAt,
+} from './outcomes.ts';
 
-/** A Success body as read: its value, the Issues that keep it from being one, or a failed stream. */
+/** A Success body as read: its value with the Issues that keep it from being one, bytes that are no JSON, or a failed stream. */
 type SuccessBody =
   | { readonly kind: 'value'; readonly value: unknown; readonly issues: readonly Issue[] }
+  | { readonly kind: 'not-json' }
   | { readonly kind: 'unreadable'; readonly error: unknown };
 
 /** A Success's headers as read, and the Issues that keep them from being its own. */
@@ -20,10 +26,7 @@ type SuccessHeaders = {
   readonly issues: readonly Issue[];
 };
 
-/**
- * A response with the declared Success status: its headers and body read with their Reader
- * schemas; one that breaks them is the Provider's committed answer the Contract does not describe.
- */
+/** The Outcome a Caller receives for a response with the declared Success status. */
 export async function successOf(
   response: Response,
   called: CalledEndpoint,
@@ -31,21 +34,39 @@ export async function successOf(
 ): Promise<DecodedOutcome> {
   const headers = successHeadersOf(response.headers, called);
   const body = await successBodyOf(response, called);
+  const { status, headers: received } = response;
   if (body.kind === 'unreadable') {
-    const { status, headers: received } = response;
-    const happened = {
+    const happened: Answered = {
       kind: 'unreadable-body',
       status,
       headers: received,
       error: body.error,
-    } as const;
+    };
     return answeredFaultOf(happened, inferring);
+  }
+  if (body.kind === 'not-json') {
+    return answeredFaultOf({ kind: 'status', status, headers: received }, inferring);
   }
   const issues = [...headers.issues, ...body.issues];
   if (issues.length > 0) {
-    return invalidOutcomeOf({ committed: 'yes', issues });
+    return invalidOutcomeOf({ status, committed: 'yes', issues });
   }
-  return { kind: 'success', value: body.value, headers: headers.value };
+  return declaredSuccessOf(called, status, { headers, body });
+}
+
+/** The Success with only the parts its Endpoint declares, so it is what a direct call of its Handler returns. */
+function declaredSuccessOf(
+  called: CalledEndpoint,
+  status: number,
+  read: { readonly headers: SuccessHeaders; readonly body: { readonly value: unknown } },
+): DecodedSuccess {
+  const { headers, body } = called.endpoint.success;
+  return {
+    kind: 'success',
+    status,
+    ...(headers === undefined ? {} : { headers: read.headers.value }),
+    ...(body === undefined ? {} : { body: read.body.value }),
+  };
 }
 
 /** The declared Success headers, each text converted by its node, then read with its schema. */
@@ -73,13 +94,8 @@ async function successBodyOf(response: Response, called: CalledEndpoint): Promis
       return { kind: 'value', value, issues: issuesAt('success.body', parsed) };
     }
     case 'malformed':
-      return { kind: 'value', value: undefined, issues: [malformedSuccessIssueOf(read.message)] };
+      return { kind: 'not-json' };
     case 'unreadable':
       return { kind: 'unreadable', error: read.error };
   }
-}
-
-/** A Success body that is no JSON: an Issue at the whole of `success.body`. */
-function malformedSuccessIssueOf(message: string): Issue {
-  return { part: 'success.body', path: [], code: 'malformed', message };
 }

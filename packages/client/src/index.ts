@@ -4,9 +4,23 @@ export type {
   Client,
   ClientOptions,
   DeprecationNotice,
-  Fetch,
+  Http,
   OnDeprecation,
 } from './calling/index.ts';
 export { client } from './calling/index.ts';
-export type { ReceivedOutcome, ReceivedRejection, ReceivedSuccess } from './decoding/index.ts';
-export type { Happened, InferFault, InferredFault, ReceivedFault } from './inference/index.ts';
+export type {
+  ReceivedOutcome,
+  ReceivedRejection,
+  ReceivedSuccess,
+  ReceivedUnknownRejection,
+} from './decoding/index.ts';
+export type {
+  Committed,
+  FaultSource,
+  Happened,
+  InferFault,
+  InferredFault,
+  Issue,
+  ReceivedFault,
+  ReservedCode,
+} from './inference/index.ts';

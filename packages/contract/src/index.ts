@@ -24,6 +24,7 @@ export type {
   RejectionStatus,
   RejectionsOf,
   RequiredContextOf,
+  ReservedCode,
   StandardRejection,
   StandardRejections,
   Subscription,
@@ -50,3 +51,5 @@ export {
 export type { OpenEnum } from './open/index.ts';
 export { openEnum, openEnumReader } from './open/index.ts';
 export type { ExportedSnapshot } from './snapshot/index.ts';
+export type { Committed, Http } from './wire/index.ts';
+export type { Issue } from './written/index.ts';

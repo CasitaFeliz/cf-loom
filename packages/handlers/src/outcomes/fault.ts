@@ -1,4 +1,5 @@
-import { type Committed, internalError } from '@cf-loom/contract/internal';
+import type { Committed } from '@cf-loom/contract';
+import { internalError } from '@cf-loom/contract/internal';
 
 /** What every Fault carries: whether the change was committed, its message and its `cause`. */
 type FaultBase = {

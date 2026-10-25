@@ -1,7 +1,7 @@
+import type { Issue } from '@cf-loom/contract';
 import {
   encodedValueOf,
   headerTextsOf,
-  type Issue,
   type IssuePart,
   type Parsed,
   rejectionBodyReaderOf,

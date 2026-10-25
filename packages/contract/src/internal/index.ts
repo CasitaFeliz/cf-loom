@@ -32,7 +32,6 @@ export type {
   IsOneLiteral,
   ProvidedEvent,
   Refusal,
-  ReservedCode,
 } from '../declarations/index.ts';
 export {
   codeNameOf,
@@ -150,7 +149,6 @@ export {
   walkSchemas,
 } from '../walker/index.ts';
 export type {
-  Committed,
   DurableConsumed,
   InputIssue,
   InvalidInputBody,
@@ -219,7 +217,7 @@ export {
   transportHeaderFitOf,
   withDeprecation,
 } from '../wire/index.ts';
-export type { AnswerableRejection, Issue, IssuePart, Part, PathSegment } from '../written/index.ts';
+export type { AnswerableRejection, IssuePart, Part, PathSegment } from '../written/index.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,
