@@ -18,7 +18,6 @@ import {
 } from './index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
-const pagination = z.object({ page: z.int(), size: z.int() });
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
@@ -44,10 +43,6 @@ const permission = defineGuard({
 });
 
 const definitions = defineDefinitions({
-  name: 'definitions',
-  guards: [userToken, permission],
-  schemas: { money, pagination },
-  rejections: [unauthenticated, forbidden],
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -203,10 +198,10 @@ const ordersGroup = defineGroup({
 });
 
 describe('the README’s declaration examples', () => {
-  test('a Service root lists its Definitions Packages, its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
+  test('a Service root names its Standard Rejections’ package, lists its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [ordersGroup],
       dependencies: [paymentsDependency],
     });

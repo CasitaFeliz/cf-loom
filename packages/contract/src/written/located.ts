@@ -32,29 +32,27 @@ export type LocatedEndpoint = {
 };
 
 /**
- * A Guard, where it sits by name, since Endpoints and other Guards only reference it, and whether
- * the root reaches it: an Endpoint attaches it, directly or through a Guard's `guards`, or the
- * root is a Definitions Package, which reaches all of its own.
+ * A Guard the root reaches, where it sits by name, since Endpoints and other Guards only
+ * reference it: an Endpoint attaches it, directly or through a Guard's `guards`, or a Definitions
+ * root exports it.
  */
-export type LocatedGuard = { readonly at: Path; readonly guard: Guard; readonly reached: boolean };
+export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
 
 /** A Rejection and where it sits, by code, since Endpoints and Guards only reference it. */
 export type LocatedRejection = { readonly at: Path; readonly rejection: Rejection };
 
 /**
- * A code and every declaration of it, the first met first, in the root's order: a listed
- * Definitions Package's, then the Guards', then the Endpoints'; reached when an Endpoint or a
- * reached Guard answers it, or the root is a Definitions Package.
+ * A code the root reaches and every declaration of it, which a valid root has one of, in the
+ * root's order: a Definitions root's exports, then the Guards', then the Endpoints'.
  */
 export type LocatedCode = {
   readonly code: string;
   readonly at: Path;
   readonly rejections: readonly [LocatedRejection, ...LocatedRejection[]];
-  readonly reached: boolean;
 };
 
-/** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
-export type LocatedDefinitions = { readonly at: Path; readonly definitions: Definitions };
+/** The Definitions Package that declares a root's Standard Rejections, and where it sits: named by a Contract at `['standardRejections']`, or the Definitions root itself at `[]`. */
+export type NamedDefinitions = { readonly at: Path; readonly definitions: Definitions };
 
 /**
  * A Dependency and where it sits in its root, by its Provider's name, or by its position when its
@@ -62,12 +60,11 @@ export type LocatedDefinitions = { readonly at: Path; readonly definitions: Defi
  */
 export type LocatedDependency = { readonly at: Path; readonly dependency: Dependency };
 
-/** A Standard Rejection as a Definitions Package declares it, by name, where it sits and the package. */
+/** A Standard Rejection as a Definitions Package declares it, by name, and where it sits. */
 export type LocatedStandardRejection = {
   readonly at: Path;
   readonly name: string;
   readonly declaration: StandardRejectionDeclaration<number>;
-  readonly listedIn: LocatedDefinitions;
 };
 
 /**

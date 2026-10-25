@@ -1,5 +1,4 @@
 import {
-  isDefinitions,
   isDependency,
   isEndpoint,
   isGroup,
@@ -15,6 +14,7 @@ import {
   isPlainObject,
   type LocatedGroup,
   listOf,
+  standardRejectionsSourceOf,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -37,13 +37,26 @@ type ObjectPart = { readonly at: Path; readonly value: unknown; readonly require
 /** Every list is a list, every object part an object, and every item the declaration that belongs there. */
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
+    ...standardsSourceFailures(declarations.root),
     ...listsOf(declarations).flatMap(listingFailures),
     ...readableOf(declarations).flatMap(objectPartsOf).flatMap(objectPartFailures),
   ];
 }
 
+/** What a Contract names as `standardRejections`, when it names one, is a Definitions Package's definitions. */
+function standardsSourceFailures(root: Declarations['root']): readonly DeclarationFailure[] {
+  if (root.kind !== 'contract' || root.standardRejections === undefined) {
+    return [];
+  }
+  if (standardRejectionsSourceOf(root) !== undefined) {
+    return [];
+  }
+  const message = "A Contract's standardRejections is a Definitions Package's definitions";
+  return [failure(['standardRejections'], 'not-a-declaration', message)];
+}
+
 function listsOf(declarations: Declarations): readonly Listing[] {
-  const { root, groups, endpoints, guards, allPackages, dependencies } = declarations;
+  const { root, groups, endpoints, guards, dependencies } = declarations;
   return [
     ...rootListings(root),
     ...groups.flatMap(groupListings),
@@ -71,15 +84,6 @@ function listsOf(declarations: Declarations): readonly Listing[] {
         fits: isListedRejection,
       },
     ]),
-    ...allPackages.flatMap(({ at, definitions }) => [
-      { at: [...at, 'guards'], list: definitions.guards, noun: 'a Guard', fits: isGuard },
-      {
-        at: [...at, 'rejections'],
-        list: definitions.rejections,
-        noun: 'a Rejection',
-        fits: isRejection,
-      },
-    ]),
   ];
 }
 
@@ -97,12 +101,6 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
   switch (root.kind) {
     case 'contract':
       return [
-        {
-          at: ['definitions'],
-          list: root.definitions,
-          noun: 'a Definitions Package',
-          fits: isDefinitions,
-        },
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
         {
           at: ['dependencies'],

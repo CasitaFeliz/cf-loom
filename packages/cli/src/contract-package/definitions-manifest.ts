@@ -1,5 +1,4 @@
 import type { PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
-import { publishedNameOf } from '../loading/index.ts';
 import { cfLoomOf, manifestFileOf, type Packaging, peerRangesOf } from './manifest.ts';
 import type { PackageFile } from './modules.ts';
 import { packagePaths } from './paths.ts';
@@ -20,21 +19,14 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 
 /**
  * A Definitions Package's own package.json as published: its version, peers as carets on the
- * versions it is built with and `cfLoom`, `snapshot.json` in its `files` and no `publishConfig.tag`; refused when it is
- * not named as the package it publishes as, or depends on a range no registry can install.
+ * versions it is built with and `cfLoom`, `snapshot.json` in its `files` and no `publishConfig.tag`; refused when it
+ * depends on a range no registry can install.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
   published: PublishedDefinitionsSnapshot,
-  { scope, peers }: Pick<Packaging, 'scope' | 'peers'>,
+  { peers }: Pick<Packaging, 'peers'>,
 ): DefinitionsManifest {
-  const name = publishedNameOf(scope, published);
-  if (source['name'] !== name) {
-    const named = `package.json names ${String(source['name'])}`;
-    return unpublishable(
-      `${named}, but a Definitions Package of scope ${scope} publishes as ${name}`,
-    );
-  }
   const uninstallable = uninstallableDependencyOf(source);
   if (uninstallable !== undefined) {
     const { field, name: dependency, range } = uninstallable;

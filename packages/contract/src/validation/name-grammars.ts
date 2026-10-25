@@ -17,12 +17,10 @@ type Named = { readonly at: Path; readonly value: unknown; readonly noun: string
 
 /** Every name of a root follows the grammar of its kind; a name that is no string is another rule's. */
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, groups, listedDefinitions, endpoints, guards, rejections, standardRejections } =
-    declarations;
+  const { root, groups, endpoints, guards, rejections, standardRejections } = declarations;
   const { events, commands, subscriptions } = declarations;
   const kebab = [
-    { at: ['name'], value: root.name, noun: rootNoun(root.kind) },
-    ...named(listedDefinitions, (listed) => listed.definitions.name, 'A Definitions Package name'),
+    ...rootNamed(root),
     ...named(groups, (listed) => listed.group.name, 'A Group name'),
   ];
   const camel = [
@@ -82,13 +80,14 @@ function hintFor(grammar: Grammar, text: string): string {
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
-function rootNoun(kind: Declarations['root']['kind']): string {
-  switch (kind) {
+/** A Service's or Application's name; a Definitions Package has none but its package.json's. */
+function rootNamed(root: Declarations['root']): readonly Named[] {
+  switch (root.kind) {
     case 'contract':
-      return 'A Service name';
+      return [{ at: ['name'], value: root.name, noun: 'A Service name' }];
     case 'application':
-      return 'An Application name';
+      return [{ at: ['name'], value: root.name, noun: 'An Application name' }];
     case 'definitions':
-      return 'A Definitions Package name';
+      return [];
   }
 }

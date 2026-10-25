@@ -2,7 +2,6 @@ import type { Contract } from '@cf-loom/contract';
 import {
   type BrokerPlan,
   brokerPlanOf,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '@cf-loom/contract/internal';
@@ -73,16 +72,15 @@ export async function arrangePlanOf(
 }
 
 function serviceSnapshotOf(contract: Contract) {
-  const originOf = schemaOriginsOf([]);
   const validated = validateContract(contract, {
-    originOf,
     packageName: contract.name,
-    exportsOf: () => [],
+    packages: [],
+    rootExports: {},
   });
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');

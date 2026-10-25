@@ -31,6 +31,6 @@ export { openCompositionsOf } from './open-compositions.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
 export type { StringFormat } from './string-formats.ts';
 export { isStringFormat } from './string-formats.ts';
-export type { Defs, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
-export { walkSchemas } from './walk.ts';
+export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
+export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema } from './walked.ts';

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -26,7 +28,6 @@ import {
   type PublishedSnapshot,
   type RefNode,
   type SchemaNode,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -72,7 +73,6 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
-    definitions: {},
     standardRejections,
     defs: {},
     endpoints: {},
@@ -111,7 +111,7 @@ function aDefinitions(
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: standardCodes,
     ...fields,
@@ -293,7 +293,6 @@ describe('decodeSnapshot', () => {
   describe('what decodes', () => {
     test('a Service’s published Snapshot, written as canonical text, decodes to the same Snapshot', () => {
       const published = aService({
-        definitions: { '@org/definitions': '4.2.0' },
         defs: { tree: treeDef },
         endpoints: {
           'GET /orders/{}': {
@@ -369,7 +368,7 @@ describe('decodeSnapshot', () => {
 
     test('a Definitions Package’s published Snapshot decodes, its shared schemas and removed codes included', () => {
       const published = aDefinitions({
-        schemas: { money: { type: 'object', fields: {} } },
+        exports: schemaExports({ money: { type: 'object', fields: {} } }),
         guards: { apiKey: { ...aGuard, rejections: ['UNAUTHENTICATED'] } },
         codes: {
           ...standardCodes,
@@ -635,11 +634,6 @@ describe('decodeSnapshot', () => {
         at: ['subscriptions', '__proto__'],
       },
       {
-        where: 'definitions',
-        snapshot: { ...aService(), definitions: protoKeyed('1.0.0') },
-        at: ['definitions', '__proto__'],
-      },
-      {
         where: 'an Application’s dependencies',
         snapshot: {
           ...anApplication(),
@@ -648,9 +642,12 @@ describe('decodeSnapshot', () => {
         at: ['dependencies', '__proto__'],
       },
       {
-        where: 'a Definitions Package’s schemas',
-        snapshot: { ...aDefinitions(), schemas: protoKeyed({ type: 'string' }) },
-        at: ['schemas', '__proto__'],
+        where: 'a Definitions Package’s exports',
+        snapshot: {
+          ...aDefinitions(),
+          exports: protoKeyed({ kind: 'schema', schema: { type: 'string' } }),
+        },
+        at: ['exports', '__proto__'],
       },
       {
         where: 'an object node’s fields',
@@ -706,9 +703,15 @@ describe('decodeSnapshot', () => {
       ['a list', []],
       ['a number', 3],
     ])('a map given as %s is malformed at the map', (_, map) => {
-      const result = serviceWith({ definitions: map });
+      const result = serviceWith({ defs: map });
 
-      expect(result).toEqual(malformedAt(['definitions']));
+      expect(result).toEqual(malformedAt(['defs']));
+    });
+
+    test('a Service’s Snapshot with a definitions map is malformed: its origins say which packages it uses', () => {
+      const result = decodedFrom({ ...aService(), definitions: { '@org/definitions': '4.2.0' } });
+
+      expect(result).toEqual(malformedAt(['definitions'], 'is a key its format does not define'));
     });
 
     test('keys named like an Object’s own properties are kept as the keys they are', () => {
@@ -1169,8 +1172,8 @@ describe('decodeSnapshot', () => {
       ],
       [
         'a Definitions Package’s shared schema',
-        aDefinitions({ schemas: { money: aRef('missing') } }),
-        ['schemas', 'money'],
+        aDefinitions({ exports: schemaExports({ money: aRef('missing') }) }),
+        ['exports', 'money', 'schema'],
       ],
       [
         'a Guard’s qualifier',
@@ -1451,15 +1454,11 @@ function declaredSnapshot() {
     ],
     dependencies: [defineDependency({ provider: payments })],
   });
-  const validated = validateContract(root, {
-    packageName: 'orders-service',
-    originOf: schemaOriginsOf([]),
-    exportsOf: () => [],
-  });
+  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, { generator: 'test', packages: [], committed: undefined, now: 0 });
+  return snapshotOf(validated, { generator: 'test', committed: undefined, now: 0 });
 }
 
 const formatOneFixture = `{
@@ -1476,7 +1475,6 @@ const formatOneFixture = `{
     "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
-  "definitions": { "@org/definitions": "4.2.0" },
   "defs": {},
   "dependencies": {
     "payments-service": {

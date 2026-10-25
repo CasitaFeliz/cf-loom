@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -20,7 +21,6 @@ import {
   type ResolvedDefinitions,
   type SchemaNode,
   type ServiceSnapshot,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -31,7 +31,6 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
     kind: 'service',
     name: 'orders-service',
     generator: 'test',
-    definitions: {},
     standardRejections: {
       invalidInput: 'INVALID_INPUT',
       notFound: 'NOT_FOUND',
@@ -284,7 +283,8 @@ describe('exportedSnapshotOf', () => {
     { reach: 'only a Public Endpoint lists', code: orderLocked, kept: true },
     { reach: 'only a Private Endpoint lists', code: 'PURGED', kept: false },
     {
-      reach: 'only a listed Definitions Package declares, which the declared Snapshot never writes',
+      reach:
+        'only an imported Definitions Package declares, which the declared Snapshot never writes',
       code: 'UNUSED',
       kept: false,
     },
@@ -578,18 +578,16 @@ function serviceSnapshotOf(
   root: ReturnType<typeof defineContract>,
   packages: readonly ResolvedDefinitions[] = [],
 ): ServiceSnapshot {
-  const rootPackage = {
+  const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
-    originOf: schemaOriginsOf(packages),
-    exportsOf: () => [],
-  };
+    packages,
+  });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
   const snapshot = snapshotOf(validated, {
     generator: 'test',
-    packages,
     committed: undefined,
     now: 0,
   });
@@ -600,7 +598,7 @@ function serviceSnapshotOf(
 }
 
 /**
- * A Service whose one Public Endpoint attaches a listed Definitions Package's Guard and the Guard it
+ * A Service whose one Public Endpoint attaches an imported Definitions Package's Guard and the Guard it
  * builds on, the package's other Guard attached by none.
  */
 function sharedGuardsSnapshot(): ServiceSnapshot {
@@ -611,10 +609,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     guards: [userToken],
   });
   const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
-  const definitions = defineDefinitions({
-    name: 'definitions',
-    guards: [userToken, permission, unusedGuard],
-  });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -627,11 +622,17 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineContract({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   const packages: readonly ResolvedDefinitions[] = [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    {
+      kind: 'identified',
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      reaches: [],
+      exports: { definitions, userToken, permission, unusedGuard },
+    },
   ];
   return serviceSnapshotOf(root, packages);
 }
@@ -648,7 +649,7 @@ function codeReachSnapshot(): ServiceSnapshot {
   const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
   const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
   const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
-  const definitions = defineDefinitions({ name: 'definitions', rejections: [unused] });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -675,10 +676,16 @@ function codeReachSnapshot(): ServiceSnapshot {
   });
   const root = defineContract({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   return serviceSnapshotOf(root, [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    {
+      kind: 'identified',
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      reaches: [],
+      exports: { definitions, unused },
+    },
   ]);
 }

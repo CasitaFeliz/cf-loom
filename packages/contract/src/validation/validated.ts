@@ -1,10 +1,8 @@
-import type { Definitions } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
   eventServiceOf,
   type LocatedCommand,
-  type LocatedDefinitions,
   type LocatedDependency,
   type LocatedEndpoint,
   type LocatedEvent,
@@ -12,28 +10,26 @@ import {
   type LocatedGuard,
   type LocatedRejection,
   type LocatedSubscription,
-  listOf,
+  type Members,
   type ResolvedStandard,
   type Root,
   resolvedStandards,
 } from '../written/index.ts';
+import { definitionsPackageOf } from './provenance.ts';
+import type { ImportedDefinitions, ResolvedDefinitions, RootPackage } from './validate.ts';
+
+/** A Guard a valid root reaches, and the Definitions Package it belongs to; none for the root's own. */
+export type ValidatedGuard = LocatedGuard & { readonly from: ResolvedDefinitions | undefined };
 
 /**
- * A Guard of a valid root, whether the root reaches it, and the listed Definitions Package that
- * lists it, which says where it came from; none for the root's own.
- */
-export type ValidatedGuard = LocatedGuard & { readonly listedIn: LocatedDefinitions | undefined };
-
-/**
- * A code of a valid root: its first declaration, where it sits, whether the root reaches it, and
- * the listed Definitions Package that lists that declaration; none for the root's own.
+ * A code a valid root reaches: its one declaration, where it sits, and the Definitions Package
+ * that declaration belongs to; none for the root's own.
  */
 export type ValidatedCode = {
   readonly code: string;
   readonly at: Path;
   readonly rejection: LocatedRejection['rejection'];
-  readonly reached: boolean;
-  readonly listedIn: LocatedDefinitions | undefined;
+  readonly from: ResolvedDefinitions | undefined;
 };
 
 /** A Subscription of a valid root and the Service whose Event it receives, its own included. */
@@ -41,17 +37,23 @@ export type ValidatedSubscription = LocatedSubscription & { readonly service: st
 
 /**
  * The declarations of a valid root as gathered, in the root's order: the root itself, its Groups,
- * Endpoints by identity, Guards and codes with whether the root reaches them, each code with its first
- * declaration, the Standard Rejections resolved, the Dependencies by Provider, and the Message
+ * Endpoints by identity, the Guards and codes it reaches, each code with its one declaration and
+ * the Definitions Package each came from, the Standard Rejections resolved, the Dependencies by Provider, and the Message
  * Versions and Subscriptions. The Snapshot's writer puts them in canonical form.
  */
 export type ValidatedDeclarations = {
   readonly root: Root;
+  /** The package.json name of the package the root sits in, scope included. */
+  readonly packageName: string;
+  /** What a Definitions root's file exports that it shares; none for another root. */
+  readonly ownMembers: Members | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
   readonly codes: readonly ValidatedCode[];
   readonly standardRejections: readonly ResolvedStandard[];
+  /** The installed package a Contract names as `standardRejections`; none for cf-loom's defaults or a Definitions root's own. */
+  readonly standardRejectionsSource: ResolvedDefinitions | undefined;
   readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
   readonly commands: readonly LocatedCommand[];
@@ -59,23 +61,28 @@ export type ValidatedDeclarations = {
 };
 
 /** What a valid root declares, so the Snapshot's writer never gathers it again. */
-export function validatedDeclarationsOf(declarations: Declarations): ValidatedDeclarations {
+export function validatedDeclarationsOf(
+  declarations: Declarations,
+  { packageName, packages }: Pick<RootPackage, 'packageName' | 'packages'>,
+): ValidatedDeclarations {
+  const { root, ownMembers, standardRejectionsSource } = declarations;
+  const fromOf = (declaration: unknown) => foundIn(packages, declaration);
+  const named = standardRejectionsSource?.definitions;
   return {
-    root: declarations.root,
+    root,
+    packageName,
+    ownMembers,
     groups: declarations.groups,
     endpoints: declarations.endpoints,
-    guards: declarations.guards.map((located) => ({
-      ...located,
-      listedIn: listedInOf(declarations, located.guard, (definitions) => definitions.guards),
-    })),
-    codes: declarations.codes.map(({ code, at, rejections: [first], reached }) => ({
+    guards: declarations.guards.map((located) => ({ ...located, from: fromOf(located.guard) })),
+    codes: declarations.codes.map(({ code, at, rejections: [first] }) => ({
       code,
       at,
       rejection: first.rejection,
-      reached,
-      listedIn: listedInOf(declarations, first.rejection, (definitions) => definitions.rejections),
+      from: fromOf(first.rejection),
     })),
     standardRejections: resolvedStandards(declarations),
+    standardRejectionsSource: named === undefined ? undefined : fromOf(named),
     dependencies: declarations.dependencies,
     events: declarations.events,
     commands: declarations.commands,
@@ -97,13 +104,8 @@ function validatedSubscriptionsOf({
   });
 }
 
-/** The first listed Definitions Package whose list holds a declaration; none for the root's own. */
-function listedInOf(
-  { listedDefinitions }: Declarations,
-  declaration: unknown,
-  listed: (definitions: Definitions) => readonly unknown[] | undefined,
-): LocatedDefinitions | undefined {
-  return listedDefinitions.find(({ definitions }) =>
-    listOf(listed(definitions)).includes(declaration),
-  );
+/** The Definitions Package a declaration belongs to, when exactly one does. */
+function foundIn(packages: readonly ImportedDefinitions[], declaration: unknown) {
+  const provenance = definitionsPackageOf(packages, declaration);
+  return provenance.kind === 'found' ? provenance.package : undefined;
 }

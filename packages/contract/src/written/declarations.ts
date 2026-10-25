@@ -5,7 +5,6 @@ import { groupedOf, groupsOf } from './grouped.ts';
 import type {
   LocatedCode,
   LocatedCommand,
-  LocatedDefinitions,
   LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
@@ -14,10 +13,12 @@ import type {
   LocatedRejection,
   LocatedStandardRejection,
   LocatedSubscription,
+  NamedDefinitions,
   Root,
 } from './located.ts';
+import { type Members, membersOf } from './members.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
-import { entriesOf, isPlainObject, listOf, partOf, textOf } from './written.ts';
+import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
 
 /**
  * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
@@ -25,17 +26,19 @@ import { entriesOf, isPlainObject, listOf, partOf, textOf } from './written.ts';
  */
 export type Declarations = {
   readonly root: Root;
-  /** Every Definitions Package in play: the ones a Contract lists, or the root itself when it is one. */
-  readonly allPackages: readonly LocatedDefinitions[];
-  /** The Definitions Packages a Contract lists; never the root. */
-  readonly listedDefinitions: readonly LocatedDefinitions[];
+  /** What a Definitions root's file exports that it shares; none for another root. */
+  readonly ownMembers: Members | undefined;
+  /** The Definitions Package a Contract names as `standardRejections`, at `['standardRejections']`; none for another root. */
+  readonly standardRejectionsSource: NamedDefinitions | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
+  /** Every Guard the root reaches, each once. */
   readonly guards: readonly LocatedGuard[];
-  /** Every Rejection, each once, in the root's order. */
+  /** Every Rejection the root reaches, each once, in the root's order. */
   readonly rejections: readonly LocatedRejection[];
-  /** Every code, each once, with every declaration of it. */
+  /** Every code the root reaches, each once, with every declaration of it. */
   readonly codes: readonly LocatedCode[];
+  /** The Standard Rejections the root's declaring package declares. */
   readonly standardRejections: readonly LocatedStandardRejection[];
   readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
@@ -43,26 +46,32 @@ export type Declarations = {
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
-export function declarationsOf(root: Root): Declarations {
-  const listedDefinitions = definitionsOf(root);
+/**
+ * Gathers what a root reaches, Guards and Rejections included, each where it was first met: what
+ * its Endpoints reach, and for a Definitions root the members its file exports, by `rootExports`.
+ */
+export function declarationsOf(
+  root: Root,
+  rootExports: Readonly<Record<string, unknown>>,
+): Declarations {
   const groups = groupsOf(root);
   const { endpoints, events, commands, subscriptions } = groupedOf(groups);
-  const allPackages =
-    root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
-  const sources = { root, allPackages, endpoints };
+  const ownMembers = root.kind === 'definitions' ? membersOf(rootExports) : undefined;
+  const standardRejectionsSource = namedSourceOf(root);
+  const sources = { ownMembers, endpoints };
   const guards = guardsOf(sources);
   const rejections = rejectionsOf(sources, guards);
+  const declarer = standardRejectionsDeclarerOf({ root, standardRejectionsSource });
   return {
     root,
-    allPackages,
-    listedDefinitions,
+    ownMembers,
+    standardRejectionsSource,
     groups,
     endpoints,
     guards,
     rejections,
-    codes: codesOf(sources, { guards, rejections }),
-    standardRejections: allPackages.flatMap(standardRejectionsOf),
+    codes: codesOf(rejections),
+    standardRejections: declarer === undefined ? [] : standardRejectionsOf(declarer),
     dependencies: dependenciesOf(root),
     events,
     commands,
@@ -70,20 +79,32 @@ export function declarationsOf(root: Root): Declarations {
   };
 }
 
+/**
+ * The Definitions Package whose `standardRejections` a root's Standard Rejections come from: the
+ * one a Contract names, or a Definitions root itself.
+ */
+export function standardRejectionsDeclarerOf({
+  root,
+  standardRejectionsSource,
+}: Pick<Declarations, 'root' | 'standardRejectionsSource'>): NamedDefinitions | undefined {
+  return root.kind === 'definitions' ? { at: [], definitions: root } : standardRejectionsSource;
+}
+
 /** A Standard Rejection declaration as written, before the structure rule has judged it. */
 type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & {
   readonly declaration: unknown;
 };
 
-function standardRejectionsOf(listedIn: LocatedDefinitions): readonly LocatedStandardRejection[] {
-  const { at, definitions } = listedIn;
+function standardRejectionsOf({
+  at,
+  definitions,
+}: NamedDefinitions): readonly LocatedStandardRejection[] {
   const entries: readonly WrittenStandardRejection[] = entriesOf(
     definitions.standardRejections,
   ).map(([name, declaration]) => ({
     at: [...at, 'standardRejections', name],
     name,
     declaration,
-    listedIn,
   }));
   return entries.filter(isLocatedStandardRejection);
 }
@@ -95,19 +116,22 @@ function isLocatedStandardRejection(
   return isPlainObject(entry.declaration);
 }
 
-/**
- * The Definitions Packages a Contract lists, whatever a root file exported: the CLI resolves them
- * before validating; what else sits there is the structure rules' to report.
- */
-export function listedDefinitionsOf(root: unknown): readonly Definitions[] {
-  return isContract(root) ? listOf(root.definitions).filter(isDefinitions) : [];
+function namedSourceOf(root: Root): NamedDefinitions | undefined {
+  const definitions = standardRejectionsSourceOf(root);
+  return definitions === undefined ? undefined : { at: ['standardRejections'], definitions };
 }
 
-function definitionsOf(root: Root): readonly LocatedDefinitions[] {
-  return listedDefinitionsOf(root).map((definitions) => ({
-    at: ['definitions', textOf(definitions.name)],
-    definitions,
-  }));
+/**
+ * The Definitions object a Contract names as `standardRejections`, whatever a root file exported;
+ * none for any other root, or when what it names is no Definitions object, which the structure
+ * rule reports.
+ */
+export function standardRejectionsSourceOf(root: unknown): Definitions | undefined {
+  if (!isContract(root)) {
+    return undefined;
+  }
+  const named: unknown = root.standardRejections;
+  return isDefinitions(named) ? named : undefined;
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependency[] {

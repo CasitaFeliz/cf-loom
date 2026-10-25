@@ -29,6 +29,7 @@ export function hintOf(change: Change): string | null {
     case 'tombstoned':
     case 'version-gap':
     case 'event-changed':
+    case 'export-changed':
     case 'renamed':
     case 'shadowed':
     case 'visibility-widened':

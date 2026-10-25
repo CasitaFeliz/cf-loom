@@ -51,7 +51,7 @@ export type GuardSnapshot = {
   readonly rejections: readonly string[];
 };
 
-/** A code with its one status and body shape and its first declaration's message. */
+/** A code with its declaration's status, message and body shape. */
 export type CodeSnapshot = {
   readonly origin: Origin;
   readonly status: number;
@@ -101,7 +101,6 @@ export type ByKey<Value> = Readonly<Record<string, Value>>;
 
 /** The declared Snapshot of a Service's Contract. */
 export type ServiceSnapshot = Heading<'service'> & {
-  readonly definitions: ByKey<string>;
   readonly standardRejections: StandardRejectionsSnapshot;
   readonly defs: ByKey<SchemaNode>;
   readonly endpoints: ByKey<EndpointSnapshot>;
@@ -118,11 +117,17 @@ export type ApplicationSnapshot = Heading<'application'> & {
   readonly dependencies: ByKey<DependencySnapshot>;
 };
 
-/** The declared Snapshot of a Definitions Package: everything it declares, reached or not. */
+/** One export of a Definitions Package: a Guard by name, a Rejection by code, or a shared schema's node. */
+export type ExportSnapshot =
+  | { readonly kind: 'guard'; readonly guard: string }
+  | { readonly kind: 'rejection'; readonly code: string }
+  | { readonly kind: 'schema'; readonly schema: SchemaNode };
+
+/** The declared Snapshot of a Definitions Package: everything its root file exports, and what that reaches. */
 export type DefinitionsSnapshot = Heading<'definitions'> & {
   readonly standardRejections: StandardRejectionsSnapshot;
   readonly defs: ByKey<SchemaNode>;
-  readonly schemas: ByKey<SchemaNode>;
+  readonly exports: ByKey<ExportSnapshot>;
   readonly guards: ByKey<GuardSnapshot>;
   readonly codes: ByKey<CodeSnapshot>;
 };

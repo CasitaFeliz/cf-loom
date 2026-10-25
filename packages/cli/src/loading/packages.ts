@@ -1,45 +1,51 @@
 import {
-  follows,
-  kebabCase,
-  listedDefinitionsOf,
-  type ResolvedDefinitions,
+  definitionsPackageOf,
+  type ImportedDefinitions,
+  identityLineOf,
+  packageLabelOf,
+  standardRejectionsSourceOf,
 } from '@cf-loom/contract/internal';
-import { installedPackageOf, type LookedUp } from './installed-package.ts';
-import { publishedNameOf } from './published-name.ts';
+import { definitionsPackagesOf } from './definitions-packages.ts';
+import type { ImportedPackage } from './imported-packages.ts';
 
-/** A listed Definitions Package as installed, with what its module exports, by name. */
-export type InstalledDefinitions = ResolvedDefinitions & {
-  readonly exports: Readonly<Record<string, unknown>>;
-};
-
-/** The Definitions Packages a root lists as installed, or the first that is not. */
+/** The Definitions Packages the root's import reached, or why the Contract cannot take its Standard Rejections. */
 export type ResolvedPackages =
-  | { readonly kind: 'resolved'; readonly packages: readonly InstalledDefinitions[] }
+  | { readonly kind: 'resolved'; readonly packages: readonly ImportedDefinitions[] }
   | { readonly kind: 'failed'; readonly message: string };
 
-/** What a listed Definitions Package is resolved from: where it is looked up and the scope. */
-export type Resolving = LookedUp & { readonly scope: string };
-
 /**
- * Resolves each Definitions Package a root lists to the package `<scope>/<name>` as the root
- * file imports it, at its exact version, with what its module exports; a name that breaks the
- * grammar names no package and is left to the validation.
+ * The Definitions Packages the root's import reached, as their package.json names them or not; the
+ * one a Contract names as `standardRejections` must belong to exactly one of them, with a name and
+ * a version.
  */
-export async function resolvePackages(
+export function resolvePackages(
   root: unknown,
-  resolving: Resolving,
-): Promise<ResolvedPackages> {
-  const packages: InstalledDefinitions[] = [];
-  const named = listedDefinitionsOf(root).filter(({ name }) => follows(kebabCase, name));
-  for (const definitions of named) {
-    const { name } = definitions;
-    const packageName = publishedNameOf(resolving.scope, { kind: 'definitions', name });
-    const installed = await installedPackageOf(packageName, resolving);
-    if (installed.kind === 'failed') {
-      return installed;
-    }
-    const { version, exports } = installed;
-    packages.push({ definitions, packageName, version, exports });
+  imported: readonly ImportedPackage[],
+): ResolvedPackages {
+  const packages = definitionsPackagesOf(imported);
+  const named = standardRejectionsSourceOf(root);
+  if (named === undefined) {
+    return { kind: 'resolved', packages };
   }
-  return { kind: 'resolved', packages };
+  const provenance = definitionsPackageOf(packages, named);
+  switch (provenance.kind) {
+    case 'found':
+      return { kind: 'resolved', packages };
+    case 'unidentified':
+      return failed(identityLineOf(provenance.package));
+    case 'none': {
+      const none = "standardRejections is exported by no package the Contract's files import";
+      return failed(`${none}: name the definitions a Definitions Package exports`);
+    }
+    case 'ambiguous': {
+      const [first, second] = provenance.packages.map(packageLabelOf);
+      const both = `exported by both ${first} and ${second}`;
+      const neither = 'and neither imports it from the other: import it from one package';
+      return failed(`standardRejections is ${both}, ${neither}`);
+    }
+  }
+}
+
+function failed(message: string): ResolvedPackages {
+  return { kind: 'failed', message };
 }

@@ -7,13 +7,12 @@ import {
   type ServiceSnapshot,
   type Snapshot,
   type SnapshotContext,
-  schemaOriginsOf,
   snapshotOf,
   type ValidatedContract,
   type ValidContract,
   validateContract,
 } from '@cf-loom/contract/internal';
-import { oneLineOf } from '../loading/index.ts';
+import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type Project, projectOf } from './project.ts';
@@ -75,7 +74,6 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
   const context: SnapshotContext = {
     generator: generatorOf(generator, parsed),
-    packages: project.packages,
     committed: parsed,
     now: run.now,
   };
@@ -96,14 +94,10 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
 function validatedOf(project: Project): ValidatedContract | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
-  const exportsByDefinitions = new Map(
-    packages.map((installed) => [installed.definitions, Object.values(installed.exports)]),
-  );
   const rootPackage: RootPackage = {
-    originOf: schemaOriginsOf(packages),
-    packageName: packageName.name,
-    exportsOf: (definitions) =>
-      definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? []),
+    packageName: packageJsonNameOf(packageName),
+    packages,
+    rootExports,
   };
   try {
     return validateContract(root, rootPackage);

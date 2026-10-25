@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -45,7 +46,6 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
   guards: {},
   codes: {},
@@ -132,7 +132,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: noDefs,
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -248,12 +248,12 @@ const message: Place = {
 const shared: Place = {
   name: 'a shared schema',
   position: 'message',
-  site: { kind: 'shared-schema', name: 'money', visibility: 'public' },
+  site: { kind: 'export', name: 'money', visibility: 'public' },
   root: [],
   breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 3,
-  baseline: (node, defs) => aBaselineDefinitions({ defs, schemas: { money: node } }),
-  proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
+  baseline: (node, defs) => aBaselineDefinitions({ defs, exports: schemaExports({ money: node }) }),
+  proposed: (node, defs) => aDefinitions({ defs, exports: schemaExports({ money: node }) }),
 };
 const places = [input, success, message, shared];
 
@@ -1875,13 +1875,17 @@ type SharedClass =
   | { readonly class: 'breaking'; readonly verdict: 'approval-needed' };
 
 function sharedChange(name: string, difference: unknown, rest: SharedClass): PathChange {
-  return { site: { kind: 'shared-schema', name, visibility: 'public' }, difference, ...rest };
+  return { site: { kind: 'export', name, visibility: 'public' }, difference, ...rest };
 }
 
 describe('compatibilityReportOf, shared schemas', () => {
   test('a shared schema is judged as a Message: a value added to its closed enum is Breaking', () => {
-    const baseline = aBaselineDefinitions({ schemas: { currency: aClosedEnum('CLP') } });
-    const proposed = aDefinitions({ schemas: { currency: aClosedEnum('CLP', 'USD') } });
+    const baseline = aBaselineDefinitions({
+      exports: schemaExports({ currency: aClosedEnum('CLP') }),
+    });
+    const proposed = aDefinitions({
+      exports: schemaExports({ currency: aClosedEnum('CLP', 'USD') }),
+    });
 
     const report = comparedOf(baseline, proposed);
 
@@ -1895,8 +1899,10 @@ describe('compatibilityReportOf, shared schemas', () => {
   });
 
   test('a Breaking Change to a shared schema needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject({ cents: required(aNumber) }) } });
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({
+      exports: schemaExports({ money: anObject({ cents: required(aNumber) }) }),
+    });
 
     const report = comparedOf(baseline, proposed);
 
@@ -1911,8 +1917,10 @@ describe('compatibilityReportOf, shared schemas', () => {
   });
 
   test('adding a shared schema is Additive', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject(), page: anObject() } });
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({
+      exports: schemaExports({ money: anObject(), page: anObject() }),
+    });
 
     const report = comparedOf(baseline, proposed);
 
@@ -1922,8 +1930,10 @@ describe('compatibilityReportOf, shared schemas', () => {
   });
 
   test('removing a shared schema is Breaking and needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject(), page: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject() } });
+    const baseline = aBaselineDefinitions({
+      exports: schemaExports({ money: anObject(), page: anObject() }),
+    });
+    const proposed = aDefinitions({ exports: schemaExports({ money: anObject() }) });
 
     const report = comparedOf(baseline, proposed);
 
@@ -1933,8 +1943,8 @@ describe('compatibilityReportOf, shared schemas', () => {
   });
 
   test('renaming a shared schema is a removal plus an addition', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { amount: anObject() } });
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({ exports: schemaExports({ amount: anObject() }) });
 
     const report = comparedOf(baseline, proposed);
 
@@ -1946,15 +1956,20 @@ describe('compatibilityReportOf, shared schemas', () => {
 
   test('shared schemas’ Changes come by name in code point order', () => {
     const baseline = aBaselineDefinitions({
-      schemas: { page: anObject(), money: anObject(), zone: anObject(), amount: anObject() },
+      exports: schemaExports({
+        page: anObject(),
+        money: anObject(),
+        zone: anObject(),
+        amount: anObject(),
+      }),
     });
     const proposed = aDefinitions({
-      schemas: { page: aString, money: aString, zone: aString, amount: aString },
+      exports: schemaExports({ page: aString, money: aString, zone: aString, amount: aString }),
     });
 
     const report = comparedOf(baseline, proposed);
 
-    expect(report.changes.map(({ site }) => site.kind === 'shared-schema' && site.name)).toEqual([
+    expect(report.changes.map(({ site }) => site.kind === 'export' && site.name)).toEqual([
       'amount',
       'money',
       'page',
@@ -1964,11 +1979,11 @@ describe('compatibilityReportOf, shared schemas', () => {
 
   test('a shared schema is compared with the defs of its own Definitions Package', () => {
     const baseline = aBaselineDefinitions({
-      schemas: { forest: aRef('tree') },
+      exports: schemaExports({ forest: aRef('tree') }),
       defs: { tree: tree },
     });
     const proposed = aDefinitions({
-      schemas: { forest: aRef('tree') },
+      exports: schemaExports({ forest: aRef('tree') }),
       defs: { tree: treeWithName },
     });
 

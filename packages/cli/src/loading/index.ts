@@ -8,7 +8,6 @@ export type {
 export {
   contractExportsOf,
   contractFolder,
-  exportNamesOf,
   insideContractOf,
   isUnderContract,
 } from './exported.ts';
@@ -16,12 +15,13 @@ export type { FileFilter, FilesUnder } from './files-under.ts';
 export { filesUnder } from './files-under.ts';
 export type { Imported } from './imported.ts';
 export { importedModuleOf, oneLineOf } from './imported.ts';
+export type { ImportedPackage } from './imported-packages.ts';
 export type { InstalledManifest, InstalledVersion } from './installed-package.ts';
 export { installedManifestOf, installedVersionOf } from './installed-package.ts';
-export type { InstalledDefinitions, ResolvedPackages, Resolving } from './packages.ts';
+export type { ResolvedPackages } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';
-export { projectPackageOf } from './project-package.ts';
+export { packageJsonNameOf, projectPackageOf } from './project-package.ts';
 export { publishedNameOf } from './published-name.ts';
 export { realPathOf } from './real-path.ts';
 export type { LoadedRoot } from './root.ts';

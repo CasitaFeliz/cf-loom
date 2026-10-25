@@ -106,7 +106,7 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 /** A `cf-loom.config.ts` setting `layout` to the source text given, as its author wrote it. */
@@ -114,7 +114,7 @@ function configWith(layout: string): string {
   return lines([
     "import { defineConfig } from '@cf-loom/cli';",
     '',
-    `export const config = defineConfig({ scope: '@org', layout: ${layout} });`,
+    `export const config = defineConfig({ layout: ${layout} });`,
   ]);
 }
 
@@ -374,7 +374,7 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
     'node_modules/@org/definitions/index.js': lines([
       "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
       "export const userToken = defineGuard({ name: 'userToken', description: 'A user' });",
-      "export const definitions = defineDefinitions({ name: 'definitions', guards: [userToken] });",
+      'export const definitions = defineDefinitions({});',
     ]),
     'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
       name: 'createOrder',
@@ -388,7 +388,10 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
         "import { defineContract, defineGroup } from '@cf-loom/contract';",
         "import { defineContract, defineGroup } from '@cf-loom/contract';\nimport { definitions } from '@org/definitions';",
       )
-      .replace("name: 'orders-service',", "name: 'orders-service', definitions: [definitions],"),
+      .replace(
+        "name: 'orders-service',",
+        "name: 'orders-service', standardRejections: definitions,",
+      ),
   };
 }
 
@@ -2199,7 +2202,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Guard a listed Definitions Package reaches but its entry does not export exits 1 naming the package', () => {
+  test('a Guard an imported Definitions Package’s entry does not export is the Service’s own, and needs a file that exports it', () => {
     const definitions = withDefinitionsGuard();
     const project = aProject({
       ...definitions,
@@ -2220,7 +2223,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'guards.userToken is not exported by @org/definitions\n',
+      stderr: 'guards.userToken is exported by no file under src/contract/\n',
     });
   });
 
@@ -2819,7 +2822,7 @@ describe('cf-loom generate: roots that offer no Elements', () => {
       {
         'src/definitions/index.ts': lines([
           "import { defineDefinitions } from '@cf-loom/contract';",
-          "export const definitions = defineDefinitions({ name: 'orders-service' });",
+          'export const definitions = defineDefinitions({});',
         ]),
       },
     ],

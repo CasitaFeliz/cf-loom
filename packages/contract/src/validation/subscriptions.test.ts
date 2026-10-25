@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -77,11 +78,7 @@ function validateSubscriptions(
     groups: [ordersGroup],
     dependencies: [defineDependency({ provider })],
   });
-  return validateContract(contract, {
-    originOf: () => undefined,
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  return validateContract(contract, aRootPackage(contract, { packageName: 'orders-service' }));
 }
 
 const notifyOnSettled = defineSubscription({

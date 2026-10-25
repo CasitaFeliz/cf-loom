@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { configFile } from '../config/index.ts';
 import {
   oneLineOf,
   type PackageName,
@@ -11,14 +10,14 @@ import {
 } from '../loading/index.ts';
 import type { Run } from '../project/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
-import { configTemplateOf, rootTemplateOf } from './templates.ts';
+import { rootTemplateOf } from './templates.ts';
 
 /** The files `init` writes, each path relative to the project with its text. */
 type Written = readonly { readonly path: string; readonly text: string }[];
 
 /**
- * Creates a root that declares nothing yet, and `cf-loom.config.ts` when the project has none. It
- * checks every target before writing and never overwrites, so it writes everything or nothing.
+ * Creates a root that declares nothing yet. It checks every target before writing and never
+ * overwrites, so it writes everything or nothing.
  */
 export function init({ cwd }: Run, kind: RootKind): Exit {
   const projectPackage = projectPackageOf(cwd);
@@ -54,17 +53,7 @@ function plannedOf(
     return { kind: 'refused', message: `${blocking} is no folder: init cannot write ${file}` };
   }
   const root = { path: file, text: rootTemplateOf(kind, packageName.name) };
-  if (existsSync(join(cwd, configFile))) {
-    const refused = { kind: 'refused', message: `${configFile} is no file` } as const;
-    return statSync(join(cwd, configFile)).isFile()
-      ? { kind: 'planned', written: [root] }
-      : refused;
-  }
-  if (packageName.scope === undefined) {
-    return { kind: 'refused', message: `package.json names no scope to write ${configFile} with` };
-  }
-  const config = { path: configFile, text: configTemplateOf(packageName.scope) };
-  return { kind: 'planned', written: [root, config] };
+  return { kind: 'planned', written: [root] };
 }
 
 /** The folders a file sits in under the project, outermost first. */

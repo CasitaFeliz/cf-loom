@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineEndpoint,
@@ -42,16 +43,12 @@ const updateOrder = defineEndpoint({
 function declaredSnapshot(): ServiceSnapshot {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [updateOrder] });
   const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');

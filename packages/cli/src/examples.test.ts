@@ -119,6 +119,59 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
     expect(published).toEqual(publishedExamples.map(({ packageName }) => `${packageName}@1.0.0`));
   });
 
+  test('renaming org-definitions’ money export to amount is Breaking, and check exits 2', async ({
+    examples,
+  }) => {
+    const { folder, env } = examples;
+    const definitions = aCopyOf('org-definitions', folder);
+    const index = join(definitions, 'src/definitions/index.ts');
+    replacedIn(
+      index,
+      'export { apiKey, money, unauthenticated };',
+      'export { apiKey, money as amount, unauthenticated };',
+    );
+    const generated = await cfLoomWith(definitions, env, 'generate');
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+
+    const checked = await cfLoomWith(definitions, env, 'check');
+
+    expect(checked).toEqual({
+      status: 2,
+      stdout: [
+        'Checked against @org/definitions@1.0.0',
+        'exports.amount added: Additive',
+        'exports.money removed: Breaking, needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr:
+        '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it\n',
+    });
+  });
+
+  test('billing without standardRejections writes cf-loom’s standard codes, and check reports the change', async ({
+    examples,
+  }) => {
+    const { folder, env } = examples;
+    const billing = aCopyOf('billing-service', folder);
+    const root = join(billing, 'src/contract/index.ts');
+    replacedIn(root, '  standardRejections: orgDefinitions,\n', '');
+    const generated = await cfLoomWith(billing, env, 'generate');
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(readFileSync(join(billing, 'contract.snapshot.json'), 'utf8'));
+
+    const checked = await cfLoomWith(billing, env, 'check');
+
+    expect(snapshot.standardRejections.notFound).toBe('NOT_FOUND');
+    expect(snapshot.codes.NOT_FOUND.origin).toBe('standard');
+    expect(checked.status).toBe(0);
+    expect(checked.stdout).toContain(
+      'endpoints.POST /invoices (createInvoice) rejection-added code=NOT_FOUND: Additive',
+    );
+    expect(checked.stdout).toContain(
+      'endpoints.POST /invoices (createInvoice) rejection-removed code=RESOURCE_NOT_FOUND: Additive',
+    );
+  });
+
   test('removing a Success field from GET /orders/:orderId needs a Breaking Change Approval, and check exits 2', async ({
     examples,
   }) => {

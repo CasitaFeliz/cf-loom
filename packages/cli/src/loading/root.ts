@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { importedModuleOf } from './imported.ts';
+import { type ImportedPackage, importedRootOf } from './imported-packages.ts';
 import { type RootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
 
 /**
- * What a project's root file exports as its root, the kind of root it is, the file, and everything
- * the file exports, which a Definitions Package lists; or why it could not be loaded.
+ * What a project's root file exports as its root, the kind of root it is, the file, everything
+ * else the file exports by name, which a Definitions Package shares, and every package its import reached; or
+ * why it could not be loaded.
  */
 export type LoadedRoot =
   | {
@@ -13,7 +14,8 @@ export type LoadedRoot =
       readonly root: unknown;
       readonly rootKind: RootKind;
       readonly file: string;
-      readonly exports: readonly unknown[];
+      readonly exports: Readonly<Record<string, unknown>>;
+      readonly imported: readonly ImportedPackage[];
     }
   | { readonly kind: 'failed'; readonly message: string };
 
@@ -30,7 +32,7 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (others.length > 0) {
     return failed(`A project has one root: both ${present.join(' and ')} exist`);
   }
-  const imported = await importedModuleOf(join(directory, file), directory);
+  const imported = await importedRootOf(join(directory, file), directory);
   if (imported.kind === 'failed') {
     return failed(`${file} cannot be loaded: ${imported.message}`);
   }
@@ -44,8 +46,8 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (more.length > 0) {
     return failed(`${file} exports one root, not ${kinds.map(exportedAs).join(' and ')}`);
   }
-  const exports = Object.values(imported.exports);
-  return { kind: 'loaded', root: imported.exports[exportedAs(rootKind)], rootKind, file, exports };
+  const { [exportedAs(rootKind)]: root, ...exports } = imported.exports;
+  return { kind: 'loaded', root, rootKind, file, exports, imported: imported.imported };
 }
 
 function exportedAs(rootKind: RootKind): string {

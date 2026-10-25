@@ -62,7 +62,6 @@ const orderTotal = defineEndpoint({
 });
 
 const definitions = defineDefinitions({
-  name: 'definitions',
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
     notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
@@ -71,7 +70,7 @@ const definitions = defineDefinitions({
 
 const contract = defineContract({
   name: 'orders-service',
-  definitions: [definitions],
+  standardRejections: definitions,
   groups: [
     defineGroup({
       name: 'orders',
@@ -309,7 +308,7 @@ describe('serve: a Rejection', () => {
     });
   });
 
-  test('a Standard Rejection resolves to the listed Definitions Package’s code, status and message, with no body key', async () => {
+  test('a Standard Rejection resolves to the code, status and message of the Definitions Package named as standardRejections, with no body key', async () => {
     const { http } = serveWith(() => reject(notFound));
 
     const response = await http(getRequest.clone());

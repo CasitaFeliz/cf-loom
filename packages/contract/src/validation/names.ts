@@ -4,6 +4,7 @@ import {
   identityOf,
   type LocatedDependency,
   type LocatedEndpoint,
+  packageNamePartsOf,
   providerNameOf,
   type Root,
   textOf,
@@ -12,44 +13,31 @@ import { type DeclarationFailure, failure } from './failures.ts';
 import { isCanonicalPath } from './paths.ts';
 
 /**
- * A root is named as its package.json without the scope, so its Contract Package's name follows
- * from it; a name that is no string is another rule's.
+ * A Service or an Application is named as its package.json without the scope, so its Contract
+ * Package's name follows from it; a Definitions Package has no name but its package.json's, and a
+ * name that is no string is another rule's.
  */
 export function packageNameFailures(
   root: Root,
   packageName: string,
 ): readonly DeclarationFailure[] {
-  if (typeof root.name !== 'string' || root.name === packageName) {
+  const unscoped = packageNamePartsOf(packageName).name;
+  if (root.kind === 'definitions' || typeof root.name !== 'string' || root.name === unscoped) {
     return [];
   }
-  const message = `A root is named as its package.json, without the scope: ${packageName}`;
+  const message = `A root is named as its package.json, without the scope: ${unscoped}`;
   return [failure(['name'], 'package-name', message)];
 }
 
-/** Definitions Package and Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
+/** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
 export function uniquenessFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
-    ...uniqueDefinitionsNames(declarations),
     ...uniqueGroupNames(declarations),
     ...uniqueEndpointNames(declarations),
     ...uniqueEndpointIdentities(declarations),
     ...uniqueGuardNames(declarations),
     ...uniqueProviders(declarations),
   ];
-}
-
-function uniqueDefinitionsNames({
-  listedDefinitions,
-}: Declarations): readonly DeclarationFailure[] {
-  const nameOf = (located: Declarations['listedDefinitions'][number]) =>
-    textOf(located.definitions.name);
-  return repeated(listedDefinitions, nameOf).map(({ at, definitions }) =>
-    failure(
-      [...at, 'name'],
-      'duplicate-definitions-name',
-      `A Contract lists each Definitions Package once, under a name of its own: ${textOf(definitions.name)}`,
-    ),
-  );
 }
 
 function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure[] {

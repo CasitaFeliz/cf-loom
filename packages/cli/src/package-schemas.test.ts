@@ -104,7 +104,7 @@ const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
     "import { defineConfig } from '@cf-loom/cli';",
-    "export const config = defineConfig({ scope: '@org' });",
+    'export const config = defineConfig({});',
   ]),
   'src/contract/index.ts': lines([
     'import {',

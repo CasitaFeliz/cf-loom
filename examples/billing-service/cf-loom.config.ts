@@ -1,7 +1,6 @@
 import { defineConfig } from '@cf-loom/cli';
 
 export const config = defineConfig({
-  scope: '@org',
   layout: {
     endpoint: 'src/{group}/{name}.handler.ts',
     subscription: 'src/{group}/{name}.handler.ts',

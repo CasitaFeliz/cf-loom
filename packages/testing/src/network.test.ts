@@ -10,6 +10,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
 
@@ -30,11 +31,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   const listed = Object.values(endpoints) as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
   const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);

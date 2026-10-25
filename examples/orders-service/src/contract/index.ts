@@ -6,5 +6,5 @@ import { ordersGroup } from './groups/orders.group.ts';
 export const contract = defineContract({
   name: 'orders-service',
   groups: [ordersGroup, infrastructureGroup],
-  definitions: [orgDefinitions],
+  standardRejections: orgDefinitions,
 });

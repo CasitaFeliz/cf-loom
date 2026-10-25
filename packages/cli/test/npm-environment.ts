@@ -30,6 +30,11 @@ export function loginTo(registry: Address): string {
   return `@org:registry=${registry.url}/\n//${registry.host}/:_authToken=${token}\n`;
 }
 
+/** The user config that makes a registry npm's default for every package and logs in there with the lab's token. */
+export function defaultLoginTo(registry: Address): string {
+  return `registry=${registry.url}/\n//${registry.host}/:_authToken=${token}\n`;
+}
+
 /** The environment of an npm whose user config, global config and cache sit in `folder`. */
 export function anNpmEnvironment(folder: string, options: EnvironmentOptions): NpmEnvironment {
   writeFileSync(join(folder, 'user.npmrc'), options.userConfig ?? '');

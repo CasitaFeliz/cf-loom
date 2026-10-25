@@ -6,28 +6,28 @@ import { layoutOf, type ServiceLayout } from './layout.ts';
 /** The file the tools are configured in, next to the project's package.json. */
 export const configFile = 'cf-loom.config.ts';
 
-/** An npm scope, as a Contract Package's and a Definitions Package's names start with. */
-const scopePattern = /^@[a-z0-9][a-z0-9._~-]*$/;
+/** The fields a configuration takes. */
+const configFields: readonly string[] = ['layout'];
 
 /**
- * What every command reads of the project's configuration, or why it is missing or wrong. The
- * layout is there only when the configuration sets one.
+ * What every command reads of the project's configuration, or why it is wrong. The layout is
+ * there only when the configuration sets one.
  */
 export type LoadedConfig =
   | {
       readonly kind: 'loaded';
-      readonly config: { readonly scope: string; readonly layout: ServiceLayout | undefined };
+      readonly config: { readonly layout: ServiceLayout | undefined };
     }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * Loads `cf-loom.config.ts` from `directory` and checks what every command needs, since a cast or
- * a plain object skips `defineConfig`'s types.
+ * Loads `cf-loom.config.ts` from `directory`, when there is one, and checks what every command
+ * needs, since a cast or a plain object skips `defineConfig`'s types.
  */
 export async function loadConfig(directory: string): Promise<LoadedConfig> {
   const path = join(directory, configFile);
   if (!existsSync(path)) {
-    return failed(`${configFile} not found: run cf-loom init`);
+    return { kind: 'loaded', config: { layout: undefined } };
   }
   const imported = await importedModuleOf(path, directory);
   if (imported.kind === 'failed') {
@@ -45,19 +45,20 @@ export async function loadConfig(directory: string): Promise<LoadedConfig> {
 }
 
 function loadedOf(config: object): LoadedConfig {
-  const scope = Reflect.get(config, 'scope');
-  if (typeof scope !== 'string' || !scopePattern.test(scope)) {
-    return failed(`${configFile}: scope is required, an npm scope such as '@org'`);
+  const unknown = Object.keys(config).find((key) => !configFields.includes(key));
+  if (unknown !== undefined) {
+    const takes = `it takes ${configFields.join(', ')}`;
+    return failed(`${configFile}: ${unknown} is no field of the configuration: ${takes}`);
   }
   const written = Reflect.get(config, 'layout');
   if (written === undefined) {
-    return { kind: 'loaded', config: { scope, layout: undefined } };
+    return { kind: 'loaded', config: { layout: undefined } };
   }
   const layout = layoutOf(written);
   if (layout.kind === 'failed') {
     return failed(`${configFile}: ${layout.message}`);
   }
-  return { kind: 'loaded', config: { scope, layout: layout.layout } };
+  return { kind: 'loaded', config: { layout: layout.layout } };
 }
 
 function failed(message: string): LoadedConfig {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -10,17 +11,11 @@ import {
   defineGroup,
   defineSubscription,
 } from '../index.ts';
-import { type RootPackage, validateContract } from '../internal/index.ts';
+import { validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
-}
-
-function noOrigin() {
-  return undefined;
+function validateInPackage(root: unknown) {
+  return validateContract(root, aRootPackage(root));
 }
 
 const getPayment = defineEndpoint({
@@ -110,7 +105,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       dependencies: [paymentsDependency],
     });
 
-    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(contract).kind).toBe('valid');
   });
 
   test('a Dependency only a Subscription uses, through its Provider’s Event, validates', () => {
@@ -121,14 +116,14 @@ describe('validateContract: a Service’s Dependencies', () => {
       dependencies: [paymentsDependency],
     });
 
-    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(contract).kind).toBe('valid');
   });
 
   test('a Dependency that selects no Endpoint and whose Event no Subscription receives fails', () => {
     const paymentsDependency = defineDependency({ provider: payments, endpoints: [] });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service'],
         'unused-dependency',
@@ -148,7 +143,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       ],
     });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'mirror-service'],
         'unused-dependency',
@@ -182,7 +177,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       dependencies: [dependencyAsWritten({ provider: { ...payments, name: 'orders-service' } })],
     });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'orders-service'],
         'unused-dependency',
@@ -195,7 +190,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints: [getReceipt] });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
@@ -217,7 +212,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     const paymentsDependency = dependencyAsWritten({ provider, endpoints: [healthCheck] });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
@@ -231,7 +226,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 1],
         'not-a-declaration',
@@ -248,7 +243,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'events'],
         'undeclared-field',
@@ -264,7 +259,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     });
     const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 2],
         'dependency-selection',
@@ -278,7 +273,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     const second = defineDependency({ provider: payments, endpoints: [refundPayment] });
     const contract = defineContract({ name: 'orders-service', dependencies: [first, second] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateInPackage(contract)).toEqual(
       failed(
         ['dependencies', 'payments-service'],
         'duplicate-dependency',
@@ -385,7 +380,7 @@ describe('validateContract: a Dependency written as the types refuse', () => {
     const dependency = dependencyAsWritten(declaration);
     const contract = defineContract({ name: 'orders-service', dependencies: [dependency] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(failed(line.at, line.rule, line.message));
+    expect(validateInPackage(contract)).toEqual(failed(line.at, line.rule, line.message));
   });
 });
 
@@ -396,7 +391,7 @@ describe('validateContract: Dependencies whose providers have no name', () => {
     const contract = defineContract({ name: 'orders-service', dependencies: [first, second] });
 
     const message = "A Dependency's provider is the contract a Contract Package exports";
-    expect(validateInPackage(contract, noOrigin)).toEqual({
+    expect(validateInPackage(contract)).toEqual({
       kind: 'invalid',
       failures: [
         { kind: 'declaration', at: ['dependencies', 0], rule: 'dependency-provider', message },
@@ -414,7 +409,7 @@ describe('validateContract: an Application’s Dependencies', () => {
       dependencies: [paymentsDependency],
     });
 
-    expect(validateInPackage(application, noOrigin).kind).toBe('valid');
+    expect(validateInPackage(application).kind).toBe('valid');
   });
 
   test('an Application depending on an Internal Endpoint fails', () => {
@@ -425,7 +420,7 @@ describe('validateContract: an Application’s Dependencies', () => {
     const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
     const application = defineApplication({ name: 'web-admin', dependencies });
 
-    expect(validateInPackage(application, noOrigin)).toEqual(
+    expect(validateInPackage(application)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 0],
         'application-dependency',
@@ -440,7 +435,7 @@ describe('validateContract: an Application’s Dependencies', () => {
     const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
     const application = defineApplication({ name: 'web-admin', dependencies });
 
-    expect(validateInPackage(application, noOrigin)).toEqual(
+    expect(validateInPackage(application)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 0],
         'application-dependency',
@@ -463,7 +458,7 @@ describe('validateContract: an Application’s Dependencies', () => {
     const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
     const application = defineApplication({ name: 'web-admin', dependencies });
 
-    expect(validateInPackage(application, noOrigin)).toEqual(
+    expect(validateInPackage(application)).toEqual(
       failed(
         ['dependencies', 'payments-service', 'endpoints', 0],
         'dependency-selection',
@@ -479,7 +474,7 @@ describe('validateContract: an Application’s Dependencies', () => {
       dependencies: [paymentsDependency],
     });
 
-    expect(validateInPackage(application, noOrigin)).toEqual(
+    expect(validateInPackage(application)).toEqual(
       failed(
         ['dependencies', 'payments-service'],
         'unused-dependency',

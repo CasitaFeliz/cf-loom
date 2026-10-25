@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
   defineContract,
@@ -353,13 +354,19 @@ function aCommand(body: core.$ZodType) {
   return defineCommand({ ...written, description: 'Charge' } as never);
 }
 
+/** What each Definitions root of a row exports beside it. */
+const exportedBy = new Map<unknown, Readonly<Record<string, unknown>>>();
+
+/** A Definitions root whose file exports the schemas given. */
+function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) {
+  const definitions = defineDefinitions({});
+  exportedBy.set(definitions, schemas);
+  return definitions;
+}
+
 function failuresIn(root: unknown) {
-  const name = Reflect.get(root as object, 'name');
-  const validated = validateContract(root, {
-    originOf: () => undefined,
-    packageName: String(name),
-    exportsOf: () => [],
-  });
+  const rootExports = exportedBy.get(root) ?? {};
+  const validated = validateContract(root, aRootPackage(root, { rootExports }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -414,8 +421,8 @@ describe('validateContract: a strict object fails wherever it sits', () => {
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ name: 'definitions', schemas: { scope: strictObject() } }),
-      ['schemas', 'scope'],
+      () => definitionsExporting({ scope: strictObject() }),
+      ['exports', 'scope'],
     ],
   ])('a strict object %s fails with one line naming z.object()', (_position, rootOf, at) => {
     const failures = failuresIn(rootOf());
@@ -495,8 +502,8 @@ describe('validateContract: a record keyed by an enum or literal fails wherever 
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ name: 'definitions', schemas: { totals: keyed() } }),
-      ['schemas', 'totals'],
+      () => definitionsExporting({ totals: keyed() }),
+      ['exports', 'totals'],
     ],
   ])(
     'a record keyed by an enum %s fails with one line naming z.object()',

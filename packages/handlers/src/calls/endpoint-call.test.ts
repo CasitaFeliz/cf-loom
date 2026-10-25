@@ -153,12 +153,11 @@ describe('an EndpointHandler’s Resources', () => {
 
   test('given the root and the Resources, a Standard Rejection resolves as serve resolves it', async () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
     });
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });
     const orders: Orders = { find: () => undefined };
@@ -454,14 +453,13 @@ describe('an EndpointHandler’s Rejections', () => {
     expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
-  test('given the root, a Standard Rejection resolves to the listed Definitions Package’s', async () => {
+  test('given the root, a Standard Rejection resolves to the standardRejections package’s', async () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
     });
     const contract = defineContract({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });
     const getOrderHandler = handle(getOrder, () => reject(notFound));

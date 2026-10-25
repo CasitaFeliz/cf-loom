@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Command,
   defineCommand,
@@ -45,11 +46,7 @@ function validateMessages(events: readonly unknown[], commands: readonly unknown
     commands,
   } as unknown as Parameters<typeof defineGroup>[0]);
   const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
-  return validateContract(contract, {
-    originOf: () => undefined,
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  return validateContract(contract, aRootPackage(contract, { packageName: 'orders-service' }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {

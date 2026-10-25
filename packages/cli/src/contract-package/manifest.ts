@@ -13,7 +13,6 @@ import {
   type ServiceSnapshot,
   type Snapshot,
 } from '@cf-loom/contract/internal';
-import { publishedNameOf } from '../loading/index.ts';
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
@@ -21,7 +20,7 @@ import { builtFolder, packagePaths } from './paths.ts';
 export type Peers = { readonly contract: string; readonly zod: string };
 
 /** Who the package is published as, at which version, and what it is built with. */
-export type Packaging = { readonly scope: string; readonly version: string; readonly peers: Peers };
+export type Packaging = { readonly name: string; readonly version: string; readonly peers: Peers };
 
 /** The Snapshot a Contract Package is generated from: declared by `package`, published by `publish`. */
 export type ContractSnapshot =
@@ -31,16 +30,16 @@ export type ContractSnapshot =
   | PublishedApplicationSnapshot;
 
 /**
- * The package.json: named `<scope>/contract-<name>`, at its version, peers on `zod` and
+ * The package.json: named as the project publishes, at its version, peers on `zod` and
  * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom` metadata:
  * the hash and kind the check reads without downloading the package, and its Dependencies.
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
-  { scope, version, peers }: Packaging,
+  { name, version, peers }: Packaging,
 ): PackageFile {
   const manifest = {
-    name: publishedNameOf(scope, snapshot),
+    name,
     version,
     type: 'module',
     exports: {

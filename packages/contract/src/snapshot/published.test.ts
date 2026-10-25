@@ -52,7 +52,6 @@ function aPublishedService(
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
-    definitions: {},
     standardRejections: {
       invalidInput: invalidInputCode,
       notFound: notFoundCode,
