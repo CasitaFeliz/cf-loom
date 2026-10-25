@@ -11,7 +11,7 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { admit, fault, handle, reject, success, withReader } from '../index.ts';
+import { admit, fault, handle, readersOf, reject, success } from '../index.ts';
 import {
   checkedMessageBody,
   faultLineOf,
@@ -85,8 +85,13 @@ const notifyOnPaidV1 = defineSubscription({
   event: orderPaidV1,
 });
 
-const chargeCard = withReader(chargeCardV1, orderBody);
-const notifyOnPaid = withReader(notifyOnPaidV1, orderBody);
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: orderBody } },
+});
+
+const chargeCard = readers.commands.chargeCardV1;
+const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
@@ -384,10 +389,15 @@ describe('runMessage', () => {
     description: 'Ships the order',
     body: z.object({ orderId: z.uuid(), status: openEnum(statuses) }),
   });
-  const shipping = withReader(
-    shippedV1,
-    z.object({ orderId: z.uuid(), status: openEnumReader(statuses) }),
-  );
+  const shipping = readersOf({
+    commands: {
+      shipV1: {
+        element: shippedV1,
+        reader: z.object({ orderId: z.uuid(), status: openEnumReader(statuses) }),
+      },
+    },
+    subscriptions: {},
+  }).commands.shipV1;
   const meta = { messageId: 'Ship.v1:o-1', factId: 'o-1', deliveryCount: 1, headers: {} };
 
   test('runMessage reads a received body with its Reader, without writing it back', async () => {

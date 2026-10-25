@@ -13,6 +13,8 @@ export {
 } from './errors.ts';
 export type { MessageGiven, MessageMeta, MessageRun, MessageWritten } from './message-run.ts';
 export { messageRunOf } from './message-run.ts';
+export type { Pairing } from './pairing.ts';
+export { isPairing } from './pairing.ts';
 export type {
   EndpointRun,
   GuardRun,

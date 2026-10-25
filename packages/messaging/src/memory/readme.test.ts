@@ -6,7 +6,7 @@ import {
   defineEvent,
   defineSubscription,
 } from '@cf-loom/contract';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
@@ -95,23 +95,32 @@ const charged: string[] = [];
 
 const notified: string[] = [];
 
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+  subscriptions: {
+    chargeOnCreated: { element: chargeOnCreated, reader: orderCreatedV2.body },
+    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+  },
+});
+
 const handlers = {
   commands: {
-    chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), ({ orderId }) => {
+    chargeCardV1: handle(readers.commands.chargeCardV1, ({ orderId }) => {
       charged.push(orderId);
     }),
   },
   subscriptions: {
     chargeOnCreated: handle(
-      withReader(chargeOnCreated, orderCreatedV2.body),
+      readers.subscriptions.chargeOnCreated,
       async ({ orderId }, _meta, { resources: { sender } }: Needs<'sender'>) => {
         await sender.send('ChargeCard', { orderId });
       },
     ),
-    notifyOnSettled: handle(withReader(notifyOnSettled, paymentSettledV1.body), ({ paymentId }) => {
+    notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, ({ paymentId }) => {
       notified.push(paymentId);
     }),
   },
+  readers,
 };
 
 /** An Endpoint Handler of the Service, which publishes the Event of the order it created. */

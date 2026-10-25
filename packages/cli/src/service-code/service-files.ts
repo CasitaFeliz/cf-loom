@@ -14,21 +14,26 @@ import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
 
 /**
- * The Handler map written at `file`: plain data importing each Handler, with the stamps of the
- * Deprecated Endpoints, which `serve` takes as it is.
+ * The Handler map written at `file`: plain data importing each Handler and the `readers` of the
+ * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is.
  */
 export function handlerMapTextOf(
   mapped: readonly HandlerPath[],
   stamps: readonly DeprecationStamp[],
-  file: string,
+  { file, readersFile }: { readonly file: string; readonly readersFile: string },
 ): string {
-  const imports = mapped
-    .map(({ handled, path }) => ({
-      local: handlerLocalOf(handled),
-      specifier: relativeSpecifierOf(file, path),
-    }))
+  const handlerImports = mapped.map(({ handled, path }) => {
+    const specifier = relativeSpecifierOf(file, path);
+    return { specifier, line: defaultImportOf(handlerLocalOf(handled), specifier) };
+  });
+  const readersSpecifier = relativeSpecifierOf(file, readersFile);
+  const readersImport = {
+    specifier: readersSpecifier,
+    line: namedImportOf(['readers'], readersSpecifier),
+  };
+  const imports = [...handlerImports, readersImport]
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
-    .map(({ local, specifier }) => defaultImportOf(local, specifier));
+    .map(({ line }) => line);
   const handled = mapped.map(({ handled }) => handled);
   const endpoints = handled.filter((element) => element.kind === 'endpoint');
   const guards = handled.filter((element) => element.kind === 'guard');
@@ -40,6 +45,7 @@ export function handlerMapTextOf(
     ...mapLinesOf('guards', guards),
     ...mapLinesOf('commands', commands),
     ...mapLinesOf('subscriptions', subscriptions),
+    '  readers,',
     ...stampLinesOf(stamps),
     '};',
   ];

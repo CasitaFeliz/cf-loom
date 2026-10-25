@@ -4,6 +4,7 @@ import {
   type HandledElement,
   isMessageElement,
   type MessageWritten,
+  type Pairing,
   type Written,
 } from '../calls/index.ts';
 
@@ -41,6 +42,15 @@ export function isWrittenFor<Element extends HandledElement>(
     return false;
   }
   return writtenByHandler.get(handler)?.element === element;
+}
+
+/** Whether a value is a Message Handler `handle()` returned for this very pairing, the one object the readers file exports. */
+export function isWrittenForPairing(handler: unknown, pairing: Pairing): boolean {
+  if (typeof handler !== 'function') {
+    return false;
+  }
+  const written = writtenByHandler.get(handler);
+  return written !== undefined && isMessageWritten(written) && written.pairing === pairing;
 }
 
 /** Whether a Handler was written for an Endpoint. */

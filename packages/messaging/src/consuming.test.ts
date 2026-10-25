@@ -8,7 +8,7 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { fault, handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
@@ -103,22 +103,27 @@ const contract = defineContract({
   dependencies: [paymentsDeps],
 });
 
-const pairings = {
-  chargeCardV1: withReader(chargeCardV1, orderReader),
-  chargeCardV2: withReader(chargeCardV2, orderReader),
-  notifyOnCreated: withReader(notifyOnCreated, orderReader),
-  notifyOnSettled: withReader(notifyOnSettled, paymentSettledV1.body),
-};
+const readers = readersOf({
+  commands: {
+    chargeCardV1: { element: chargeCardV1, reader: orderReader },
+    chargeCardV2: { element: chargeCardV2, reader: orderReader },
+  },
+  subscriptions: {
+    notifyOnCreated: { element: notifyOnCreated, reader: orderReader },
+    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+  },
+});
 
 const handlers = {
   commands: {
-    chargeCardV1: handle(pairings.chargeCardV1, () => undefined),
-    chargeCardV2: handle(pairings.chargeCardV2, () => undefined),
+    chargeCardV1: handle(readers.commands.chargeCardV1, () => undefined),
+    chargeCardV2: handle(readers.commands.chargeCardV2, () => undefined),
   },
   subscriptions: {
-    notifyOnCreated: handle(pairings.notifyOnCreated, () => undefined),
-    notifyOnSettled: handle(pairings.notifyOnSettled, () => undefined),
+    notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+    notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
   },
+  readers,
 };
 
 const created = 'orders-service.event.OrderCreated.v1';
@@ -170,6 +175,7 @@ async function consuming(
   await consume({
     commands: { ...handlers.commands, ...replaced.commands },
     subscriptions: { ...handlers.subscriptions, ...replaced.subscriptions },
+    readers,
   });
   return { ...recording, faults };
 }
@@ -177,7 +183,7 @@ async function consuming(
 /** A Handler of `notifyOnCreated` that keeps what it receives and answers what it is given. */
 function receiving(answer: () => unknown = () => undefined) {
   const received: unknown[] = [];
-  const notifying = handle(pairings.notifyOnCreated, (given, meta) => {
+  const notifying = handle(readers.subscriptions.notifyOnCreated, (given, meta) => {
     received.push(given, meta);
     return answer() as undefined;
   });
@@ -200,7 +206,7 @@ describe('consume', () => {
         commands: {
           ...handlers.commands,
           chargeCardV2: handle(
-            pairings.chargeCardV2,
+            readers.commands.chargeCardV2,
             (_given, _meta, call: WithResources<Notifications>) => {
               taken.push(call.resources);
             },
@@ -209,12 +215,13 @@ describe('consume', () => {
         subscriptions: {
           ...handlers.subscriptions,
           notifyOnCreated: handle(
-            pairings.notifyOnCreated,
+            readers.subscriptions.notifyOnCreated,
             (_given, _meta, call: WithResources<Notifications>) => {
               taken.push(call.resources);
             },
           ),
         },
+        readers,
       },
       { resources },
     );
@@ -256,16 +263,16 @@ describe('consume', () => {
     ]);
   });
 
-  test('each consumer carries the Command or Subscription it consumes and the Reader its Handler reads with', async () => {
+  test('each consumer carries the Command or Subscription it consumes and the Reader the Handler map pairs with it', async () => {
     const { consumers } = await consuming();
 
     const carried = consumers.map(({ element, reader }) => ({ element, reader }));
 
     expect(carried).toEqual([
-      pairings.chargeCardV1,
-      pairings.chargeCardV2,
-      pairings.notifyOnCreated,
-      pairings.notifyOnSettled,
+      readers.commands.chargeCardV1,
+      readers.commands.chargeCardV2,
+      readers.subscriptions.notifyOnCreated,
+      readers.subscriptions.notifyOnSettled,
     ]);
   });
 
@@ -293,8 +300,8 @@ describe('consume', () => {
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const { consumers } = await consuming({
-      commands: { chargeCardV1: handle.stub(pairings.chargeCardV1) },
-      subscriptions: { notifyOnCreated: handle.stub(pairings.notifyOnCreated) },
+      commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
+      subscriptions: { notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated) },
     });
 
     expect(consumers.map((consumer) => consumer.element)).toEqual([chargeCardV2, notifyOnSettled]);
@@ -333,6 +340,55 @@ describe('consume', () => {
     );
   });
 
+  test('a Handler written for another pairing than the Handler map’s throws, naming its key', async () => {
+    const looseReader = z.looseObject({});
+    const written = handle({ element: notifyOnCreated, reader: looseReader }, () => undefined);
+    const { consume } = await messaging(contract, aBroker().broker);
+
+    const consumingWritten = consume({
+      ...handlers,
+      subscriptions: { ...handlers.subscriptions, notifyOnCreated: written },
+    });
+
+    await expect(consumingWritten).rejects.toThrow(
+      'subscriptions.notifyOnCreated holds a Handler written for another pairing than readers.subscriptions.notifyOnCreated: run cf-loom generate',
+    );
+  });
+
+  test.each([
+    ['subscriptions', 'notifyOnSettled'],
+    ['commands', 'chargeCardV1'],
+  ] as const)(
+    'readers that lack the pairing of a %s Handler throw, naming it',
+    async (table, key) => {
+      const { [key]: _missing, ...kept } = readers[table] as Record<string, unknown>;
+      const { consume } = await messaging(contract, aBroker().broker);
+
+      const consumingAll = consume({ ...handlers, readers: { ...readers, [table]: kept } });
+
+      await expect(consumingAll).rejects.toThrow(
+        `readers.${table}.${key} is not in the Handler map: run cf-loom generate`,
+      );
+    },
+  );
+
+  test('readers that pair another declaration than the Contract’s throw, naming the pairing', async () => {
+    const mispaired = readersOf({
+      ...readers,
+      subscriptions: {
+        ...readers.subscriptions,
+        notifyOnSettled: { element: notifyOnCreated, reader: orderReader },
+      },
+    });
+    const { consume } = await messaging(contract, aBroker().broker);
+
+    const consumingAll = consume({ ...handlers, readers: mispaired });
+
+    await expect(consumingAll).rejects.toThrow(
+      "readers.subscriptions.notifyOnSettled pairs another declaration than the Contract's: run cf-loom generate",
+    );
+  });
+
   test('a Handler the map only inherits throws, as if it had none', async () => {
     const inherited = Object.create(handlers.subscriptions);
     const { consume } = await messaging(contract, aBroker().broker);
@@ -364,7 +420,7 @@ describe('consume', () => {
 });
 
 describe('a Message delivered', () => {
-  test('the Handler receives the body read with its Reader, an undeclared Open Enum value as { unknown }, unknown keys stripped', async () => {
+  test('the Handler receives the body read with the Reader the Handler map pairs: an undeclared Open Enum value reaches it as its Unknown case, { unknown }, unknown keys stripped', async () => {
     const { received, subscriptions } = receiving();
     const { deliver } = await consuming({ subscriptions });
 
@@ -560,7 +616,7 @@ describe('a Message delivered', () => {
     await consume({
       commands: {
         ...handlers.commands,
-        chargeCardV2: handle(pairings.chargeCardV2, () => refused),
+        chargeCardV2: handle(readers.commands.chargeCardV2, () => refused),
       },
       subscriptions: {
         ...handlers.subscriptions,
@@ -568,6 +624,7 @@ describe('a Message delivered', () => {
           throw error;
         }).subscriptions,
       },
+      readers,
     });
 
     await deliver(chargeCard, body);

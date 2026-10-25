@@ -46,8 +46,9 @@ export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): Se
 }
 
 function handlerMapFileOf(service: PlacedService): GeneratedFile {
-  const { handlerMap } = service.project.layout;
+  const { handlerMap, readers } = service.project.layout;
   const stamps = deprecationStampsOf(service.snapshot);
-  const text = handlerMapTextOf(mappedPathsOf(service), stamps, handlerMap);
+  const where = { file: handlerMap, readersFile: readers };
+  const text = handlerMapTextOf(mappedPathsOf(service), stamps, where);
   return { path: handlerMap, text, written: 'always' };
 }

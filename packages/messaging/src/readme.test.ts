@@ -1,5 +1,5 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Broker, type BrokerConsumer, messaging, type OutgoingMessage } from './index.ts';
@@ -100,8 +100,12 @@ describe('the messaging README', () => {
     const resources: Resources = {
       notifications: { send: async (orderId) => void received.push(orderId) },
     };
+    const readers = readersOf({
+      commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+      subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV2.body } },
+    });
     const notifyOnCreatedHandler = handle(
-      withReader(notifyOnCreated, orderCreatedV2.body),
+      readers.subscriptions.notifyOnCreated,
       async (
         body,
         { messageId, factId, deliveryCount, headers },
@@ -114,8 +118,9 @@ describe('the messaging README', () => {
     const running = await messaging(contract, broker);
     await running.consume(
       {
-        commands: { chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), () => {}) },
+        commands: { chargeCardV1: handle(readers.commands.chargeCardV1, () => {}) },
         subscriptions: { notifyOnCreated: notifyOnCreatedHandler },
+        readers,
       },
       { resources },
     );

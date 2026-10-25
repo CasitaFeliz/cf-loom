@@ -16,10 +16,10 @@ import {
   handle,
   isRejectionOf,
   type ResourcesOf,
+  readersOf,
   reject,
   success,
   type WithResources,
-  withReader,
 } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -166,14 +166,20 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.string(), method: openEnumReader(['card', 'transfer']) }),
 });
 
-const notifyOnSettled = withReader(
-  defineSubscription({
-    name: 'notifyOnSettled',
-    description: 'Notify on settled',
-    event: paymentSettledV1,
-  }),
-  paymentSettledV1.body,
-);
+const notifyOnSettledSubscription = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
+
+const readers = readersOf({
+  commands: {},
+  subscriptions: {
+    notifyOnSettled: { element: notifyOnSettledSubscription, reader: paymentSettledV1.body },
+  },
+});
+
+const notifyOnSettled = readers.subscriptions.notifyOnSettled;
 
 const notifyOnSettledHandler = handle(
   notifyOnSettled,

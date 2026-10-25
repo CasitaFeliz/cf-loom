@@ -511,6 +511,7 @@ describe('cf-loom generate: the Handler map', () => {
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
+        importOf('{ readers }', './readers.generated.ts'),
         '',
         'export default {',
         '  endpoints: {',
@@ -522,6 +523,7 @@ describe('cf-loom generate: the Handler map', () => {
         '  },',
         '  commands: {},',
         '  subscriptions: {},',
+        '  readers,',
         '  deprecatedAt: {},',
         '};',
       ]),
@@ -540,12 +542,22 @@ describe('cf-loom generate: the Handler map', () => {
     );
   });
 
-  test('readers.generated.ts holds no reader while the Service declares no Message', () => {
+  test('readers.generated.ts pairs nothing while the Service declares no Message, and the Handler map still imports its readers', () => {
     const project = aProject(aService());
 
     cfLoom(project, 'generate');
 
-    expect(read(project, 'src/readers.generated.ts')).toBe(lines([header, 'export {};']));
+    expect(read(project, 'src/readers.generated.ts')).toBe(
+      lines([
+        header,
+        "import { readersOf } from '@cf-loom/handlers';",
+        '',
+        'export const readers = readersOf({',
+        '  commands: {},',
+        '  subscriptions: {},',
+        '});',
+      ]),
+    );
   });
 
   test('generate says each file it wrote', () => {
@@ -577,6 +589,7 @@ describe('cf-loom generate: the Handler map', () => {
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
+        importOf('{ readers }', './readers.generated.ts'),
         importOf('auditCreatedSubscriptionHandler', './subscriptions/audit-created.handler.ts'),
         importOf(
           'notifyOnSettledSubscriptionHandler',
@@ -599,6 +612,7 @@ describe('cf-loom generate: the Handler map', () => {
         '    auditCreated: auditCreatedSubscriptionHandler,',
         '    notifyOnSettled: notifyOnSettledSubscriptionHandler,',
         '  },',
+        '  readers,',
         '  deprecatedAt: {},',
         '};',
       ]),
@@ -645,7 +659,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
           './contract/subscriptions.ts',
         ),
         "import * as loom from '@cf-loom/contract';",
-        "import { withReader } from '@cf-loom/handlers';",
+        "import { readersOf } from '@cf-loom/handlers';",
         "import { z } from 'zod';",
         '',
         'export type TreeReaderDef = { children: Array<TreeReaderDef>; label: string };',
@@ -657,17 +671,17 @@ describe('cf-loom generate: readers.generated.ts', () => {
         "export const orderCreatedV2Reader = z.object({ items: treeReaderDef, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
         'export const refundCardV1Reader = z.object({ orderId: z.uuid() });',
         '',
-        'export const readers = {',
+        'export const readers = readersOf({',
         '  commands: {',
-        '    chargeCardV1: withReader(chargeCardV1Command, chargeCardV1Reader),',
-        '    chargeCardV2: withReader(chargeCardV2Command, chargeCardV2Reader),',
-        '    refundCardV1: withReader(refundCardV1Command, refundCardV1Reader),',
+        '    chargeCardV1: { element: chargeCardV1Command, reader: chargeCardV1Reader },',
+        '    chargeCardV2: { element: chargeCardV2Command, reader: chargeCardV2Reader },',
+        '    refundCardV1: { element: refundCardV1Command, reader: refundCardV1Reader },',
         '  },',
         '  subscriptions: {',
-        '    auditCreated: withReader(auditCreatedSubscription, orderCreatedV2Reader),',
-        '    notifyOnSettled: withReader(notifyOnSettledSubscription, notifyOnSettledSubscription.event.body),',
+        '    auditCreated: { element: auditCreatedSubscription, reader: orderCreatedV2Reader },',
+        '    notifyOnSettled: { element: notifyOnSettledSubscription, reader: notifyOnSettledSubscription.event.body },',
         '  },',
-        '};',
+        '});',
       ]),
     );
   });
@@ -882,10 +896,10 @@ describe('cf-loom generate: readers.generated.ts', () => {
       '    shipOrderV10: shipOrderV10CommandHandler,',
       '    shipV1: shipV1CommandHandler,',
     ]);
-    expect(readers.match(/^ {4}ship\w+: withReader\(\w+Command,/gm)).toEqual([
-      '    shipOrderV1: withReader(shipOrderV1Command,',
-      '    shipOrderV10: withReader(shipOrderV10Command,',
-      '    shipV1: withReader(shipV1Command,',
+    expect(readers.match(/^ {4}ship\w+: \{ element: \w+Command,/gm)).toEqual([
+      '    shipOrderV1: { element: shipOrderV1Command,',
+      '    shipOrderV10: { element: shipOrderV10Command,',
+      '    shipV1: { element: shipV1Command,',
     ]);
   });
 
@@ -1165,6 +1179,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         importOf('apiKeyGuardHandler', '../guards/api-key.handler.ts'),
         importOf('createOrderEndpointHandler', '../http/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', '../http/orders/get-order.handler.ts'),
+        importOf('{ readers }', '../readers.generated.ts'),
         '',
         'export default {',
         '  endpoints: {',
@@ -1176,6 +1191,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         '  },',
         '  commands: {},',
         '  subscriptions: {},',
+        '  readers,',
         '  deprecatedAt: {},',
         '};',
       ]),
@@ -1842,6 +1858,25 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked.stdout).toContain('error TS2307');
     expect(checked.stdout).toContain('./guards/api-key.handler.ts');
   });
+
+  test('a Service without Messages generates a Handler map that is a HandlerMap, with empty readers', () => {
+    const project = aProject({ ...aService(), 'tsconfig.json': tsconfig });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+    write(project, {
+      'src/check.ts': lines([
+        "import type { HandlerMap } from '@cf-loom/handlers';",
+        importOf('handlers', './handlers.generated.ts'),
+        '',
+        'handlers satisfies HandlerMap;',
+        'export const readers: { commands: Record<never, never>; subscriptions: Record<never, never> } = handlers.readers;',
+      ]),
+    });
+
+    const checked = typeCheck(project);
+
+    expect(checked).toEqual({ status: 0, stdout: '' });
+  });
+
   test('a Service generated with a layout passes tsc: the map, the readers and the stubs are all relocated', () => {
     const project = aProject({
       ...withLayout(aMessagingService(), movedLayout),
@@ -1968,38 +2003,34 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
-  test.each([
-    'chargeCardV1',
-    'withReader',
-    'z',
-    'readers',
-    'orderCreatedV2Reader',
-    'treeReaderDef',
-  ])('a Subscription named %s generates a Service that passes tsc', (name) => {
-    const service = aMessagingService({
-      subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
-    });
-    const project = aProject({
-      ...service,
-      'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
-        "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
-        lines([
-          'import {',
-          '  auditCreated,',
-          `  ${name} as ${name}Subscription,`,
-          '  notifyOnSettled,',
-          "} from './subscriptions.ts';",
-        ]).trimEnd(),
-      ),
-      'tsconfig.json': tsconfig,
-    });
+  test.each(['chargeCardV1', 'readersOf', 'z', 'readers', 'orderCreatedV2Reader', 'treeReaderDef'])(
+    'a Subscription named %s generates a Service that passes tsc',
+    (name) => {
+      const service = aMessagingService({
+        subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
+      });
+      const project = aProject({
+        ...service,
+        'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
+        'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+          "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
+          lines([
+            'import {',
+            '  auditCreated,',
+            `  ${name} as ${name}Subscription,`,
+            '  notifyOnSettled,',
+            "} from './subscriptions.ts';",
+          ]).trimEnd(),
+        ),
+        'tsconfig.json': tsconfig,
+      });
 
-    const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(0);
-    expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
-  });
+      expect(ran.status).toBe(0);
+      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+    },
+  );
 });
 
 describe('cf-loom verify: the Handler map, readers and Handlers', () => {

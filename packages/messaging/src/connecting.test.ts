@@ -5,7 +5,7 @@ import {
   defineEvent,
   defineSubscription,
 } from '@cf-loom/contract';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -52,11 +52,17 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated],
 });
 
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+});
+
 const handlers = {
-  commands: { chargeCardV1: handle(withReader(chargeCardV1, orderBody), () => undefined) },
+  commands: { chargeCardV1: handle(readers.commands.chargeCardV1, () => undefined) },
   subscriptions: {
-    notifyOnCreated: handle(withReader(notifyOnCreated, orderBody), () => undefined),
+    notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
   },
+  readers,
 };
 
 const body = { orderId: ORDER_ID };
@@ -253,7 +259,7 @@ describe('messaging() and close', () => {
 
   test('close waits for the Handlers running before it closes the connection', async () => {
     const gate = aGate();
-    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await gate.opened;
     });
     const { recorded, deliver, close } = await consumingWith(notifying);
@@ -273,7 +279,7 @@ describe('messaging() and close', () => {
   test('a Handler running during close can still publish', async () => {
     const gate = aGate();
     let publish = (): Promise<void> => Promise.resolve();
-    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await gate.opened;
       await publish();
     });
@@ -292,7 +298,7 @@ describe('messaging() and close', () => {
   test('a Message delivered while closing is left pending and its Handler never runs', async () => {
     const gate = aGate();
     const runs: unknown[] = [];
-    const notifying = handle(withReader(notifyOnCreated, orderBody), async (given) => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, async (given) => {
       runs.push(given);
       await gate.opened;
     });
@@ -358,7 +364,7 @@ describe('messaging() and close', () => {
     const gate = aGate();
     const { broker, log, consumers } = aLoggingBroker({ publish: gate.opened });
     let publish = (): Promise<void> => Promise.resolve();
-    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await publish();
       await publish();
     });
@@ -387,7 +393,7 @@ describe('messaging() and close', () => {
 
   test('close aborts the signal consume handed the broker as soon as it starts, before the Handlers running finish', async () => {
     const gate = aGate();
-    const notifying = handle(withReader(notifyOnCreated, orderBody), async () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, async () => {
       await gate.opened;
     });
     const { recorded, deliver, close } = await consumingWith(notifying);

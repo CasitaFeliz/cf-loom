@@ -51,7 +51,7 @@ export function runMessage(
   return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedMessageBody);
 }
 
-/** The Reader schema a Message Handler reads a body with, as `withReader` paired it. */
+/** The Reader schema a Message Handler reads a body with, as the readers file pairs it. */
 export function readerOf(handler: { readonly element: MessageElement }): core.$ZodType {
-  return writtenOf(handler, isMessageWritten).reader;
+  return writtenOf(handler, isMessageWritten).pairing.reader;
 }

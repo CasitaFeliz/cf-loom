@@ -12,10 +12,12 @@ import {
   endpointRunOf,
   guardRunOf,
   type Implementation,
+  isPairing,
   type MessageElement,
   type MessageWritten,
   messageAnswerOf,
   messageRunOf,
+  type Pairing,
   type Written,
 } from '../calls/index.ts';
 import { checkedBody } from '../checks/index.ts';
@@ -35,7 +37,6 @@ import type {
   EventImplementation,
   MessageCall,
 } from './message-handler.ts';
-import { isWithReader, type WithReader } from './reader.ts';
 import type { NoResources } from './resources.ts';
 import {
   type AnyHandler,
@@ -45,50 +46,61 @@ import {
   register,
 } from './written.ts';
 
-/** What `handle()` writes a Handler for: an Endpoint, a Guard, or a Command or Subscription with its Reader. */
-type HandleTarget = Endpoint | Guard | WithReader;
+/** What `handle()` writes a Handler for: an Endpoint, a Guard, or a Command or Subscription with its Reader, as the readers file pairs them. */
+type HandleTarget = Endpoint | Guard | Pairing;
+
+/** What `handle()` may be given: a target, or a bare Command or Subscription, which its types refuse. */
+type Given = HandleTarget | MessageElement;
+
+/** A parameter no value satisfies, whose message is the name of the property it lacks. */
+type Refusal<Message extends string> = { readonly [Text in Message]: never };
+
+/** What a bare Command or Subscription is told: its Handler is written for its pairing in the readers file. */
+type BareMessageRefusal =
+  Refusal<'A Message Handler takes its pairing from the readers file (readers.generated.ts by default): readers.commands.<name> or readers.subscriptions.<name>'>;
 
 /** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
-type ImplementationOf<
-  Target extends HandleTarget,
-  Resources extends object,
-> = Target extends Endpoint
+type ImplementationOf<Target extends Given, Resources extends object> = Target extends Endpoint
   ? EndpointImplementation<Target, Resources>
   : Target extends Guard
     ? GuardImplementation<Target, Resources>
-    : Target extends WithReader<Command>
+    : Target extends Pairing<Command>
       ? CommandImplementation<Target, Resources>
-      : Target extends WithReader<Subscription>
+      : Target extends Pairing<Subscription>
         ? EventImplementation<Target, Resources>
         : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
-type HandlerOf<Target extends HandleTarget, Resources extends object> = Target extends Endpoint
+type HandlerOf<Target extends Given, Resources extends object> = Target extends Endpoint
   ? EndpointHandler<Target, Resources>
   : Target extends Guard
     ? GuardHandler<Target, Resources>
-    : Target extends WithReader<Command>
+    : Target extends Pairing<Command>
       ? CommandHandler<Target, Resources>
-      : Target extends WithReader<Subscription>
+      : Target extends Pairing<Subscription>
         ? EventHandler<Target, Resources>
         : never;
 
-function handleImplementation<Target extends HandleTarget, Resources extends object = NoResources>(
-  target: Target,
+/** The type `handle()` takes a target as: itself, or the refusal for a Command or Subscription that is not paired. */
+type TargetOf<Target extends Given> = Target extends MessageElement ? BareMessageRefusal : Target;
+
+function handleImplementation<Target extends Given, Resources extends object = NoResources>(
+  target: TargetOf<Target>,
   implementation: ImplementationOf<Target, Resources>,
 ): HandlerOf<Target, Resources> {
   const how = { implementation: implementation as Implementation, stub: false };
   return handlerOf(target, how) as HandlerOf<Target, Resources>;
 }
 
-function stubOf<Target extends HandleTarget>(target: Target): HandlerOf<Target, NoResources> {
-  const implementation = isWithReader(target) ? messageStubOf(target.element) : notImplementedStub;
+function stubOf<Target extends Given>(target: TargetOf<Target>): HandlerOf<Target, NoResources> {
+  const implementation = isPairing(target) ? messageStubOf(target.element) : notImplementedStub;
   return handlerOf(target, { implementation, stub: true }) as HandlerOf<Target, NoResources>;
 }
 
 /**
- * Wraps the implementation of an Endpoint, a Guard, or a Command or Subscription with its Reader,
- * as its Handler: the function the runtime and a test call.
+ * Wraps the implementation of an Endpoint, a Guard, or a Command or Subscription with its Reader
+ * (`readers.commands.chargeCardV1` of the readers file), as its Handler: the function the runtime
+ * and a test call.
  */
 export const handle = Object.assign(handleImplementation, {
   /** A Handler not written yet: it answers the not-implemented Rejection, so the Release deploys; a Message Handler's throws, since `consume` never runs it. */
@@ -97,7 +109,7 @@ export const handle = Object.assign(handleImplementation, {
 
 /** The Handler of an Element: its direct call, carrying its `element`, kept with what it was written with. */
 function handlerOf(
-  target: HandleTarget,
+  target: unknown,
   how: Pick<Written<Endpoint>, 'implementation' | 'stub'>,
 ): AnyHandler {
   const written = writtenFor(target, how);
@@ -109,7 +121,7 @@ function handlerOf(
 }
 
 function writtenFor(
-  target: HandleTarget,
+  target: unknown,
   how: Pick<Written<Endpoint>, 'implementation' | 'stub'>,
 ): AnyWritten {
   if (isEndpoint(target)) {
@@ -118,11 +130,11 @@ function writtenFor(
   if (isGuard(target)) {
     return { element: target, ...how };
   }
-  if (isWithReader(target)) {
-    return { element: target.element, reader: target.reader, ...how };
+  if (isPairing(target)) {
+    return { element: target.element, pairing: target, ...how };
   }
   throw new Error(
-    'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader by withReader()',
+    'handle() takes an Endpoint or a Guard, or a Command or Subscription paired by readersOf(), as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>',
   );
 }
 

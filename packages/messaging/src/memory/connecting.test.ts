@@ -1,5 +1,5 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { messaging } from '../index.ts';
@@ -35,10 +35,10 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated],
 });
 
-const pairings = {
-  chargeCard: withReader(chargeCardV1, orderBody),
-  notifyOnCreated: withReader(notifyOnCreated, orderBody),
-};
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+});
 
 const oneConnection =
   'memory() serves one connection: create another memory() for another messaging()';
@@ -51,11 +51,17 @@ async function running(chargeCard: (orderId: string, deliveryCount: number) => P
   const started = await messaging(contract, broker, { onServiceFault: () => undefined });
   await started.consume({
     commands: {
-      chargeCardV1: handle(pairings.chargeCard, async ({ orderId }, { deliveryCount }) => {
-        await chargeCard(orderId, deliveryCount);
-      }),
+      chargeCardV1: handle(
+        readers.commands.chargeCardV1,
+        async ({ orderId }, { deliveryCount }) => {
+          await chargeCard(orderId, deliveryCount);
+        },
+      ),
     },
-    subscriptions: { notifyOnCreated: handle(pairings.notifyOnCreated, () => undefined) },
+    subscriptions: {
+      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+    },
+    readers,
   });
   return { broker, ...started };
 }

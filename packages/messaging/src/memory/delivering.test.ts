@@ -6,7 +6,7 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { handle, type MessageMeta, withReader } from '@cf-loom/handlers';
+import { handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
@@ -89,13 +89,15 @@ const contract = defineContract({
 
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });
 
-const pairings = {
-  chargeCard: withReader(chargeCardV1, orderBody),
-  notifyOnV1: withReader(notifyOnV1, orderBody),
-  notifyOnCreated: withReader(notifyOnCreated, readerV2),
-  auditCreated: withReader(auditCreated, readerV2),
-  onAudited: withReader(onAudited, z.object({ orderId: z.uuid() })),
-};
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: {
+    notifyOnV1: { element: notifyOnV1, reader: orderBody },
+    notifyOnCreated: { element: notifyOnCreated, reader: readerV2 },
+    auditCreated: { element: auditCreated, reader: readerV2 },
+    onAudited: { element: onAudited, reader: z.object({ orderId: z.uuid() }) },
+  },
+});
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
 
@@ -122,16 +124,20 @@ async function connected() {
 function handlersOf(received: Received[], replaced: Replaced = {}) {
   return {
     commands: {
-      chargeCardV1: handle(pairings.chargeCard, recorder(received, 'ChargeCard@1')),
+      chargeCardV1: handle(readers.commands.chargeCardV1, recorder(received, 'ChargeCard@1')),
       ...replaced.commands,
     },
     subscriptions: {
-      notifyOnV1: handle(pairings.notifyOnV1, recorder(received, 'notifyOnV1')),
-      notifyOnCreated: handle(pairings.notifyOnCreated, recorder(received, 'notifyOnCreated')),
-      auditCreated: handle(pairings.auditCreated, recorder(received, 'auditCreated')),
-      onAudited: handle(pairings.onAudited, recorder(received, 'onAudited')),
+      notifyOnV1: handle(readers.subscriptions.notifyOnV1, recorder(received, 'notifyOnV1')),
+      notifyOnCreated: handle(
+        readers.subscriptions.notifyOnCreated,
+        recorder(received, 'notifyOnCreated'),
+      ),
+      auditCreated: handle(readers.subscriptions.auditCreated, recorder(received, 'auditCreated')),
+      onAudited: handle(readers.subscriptions.onAudited, recorder(received, 'onAudited')),
       ...replaced.subscriptions,
     },
+    readers,
   };
 }
 
@@ -196,12 +202,12 @@ describe('memory(): what the Service publishes and sends', () => {
     const log: string[] = [];
     const { publisher, broker } = await running(() => ({
       subscriptions: {
-        notifyOnCreated: handle(pairings.notifyOnCreated, async () => {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, async () => {
           log.push('notify starts');
           await gate.opened;
           log.push('notify ends');
         }),
-        auditCreated: handle(pairings.auditCreated, () => {
+        auditCreated: handle(readers.subscriptions.auditCreated, () => {
           log.push('audit');
         }),
       },
@@ -253,7 +259,7 @@ describe('memory(): what the Service publishes and sends', () => {
     const log: string[] = [];
     const { sender, broker } = await running((started) => ({
       commands: {
-        chargeCardV1: handle(pairings.chargeCard, async ({ orderId }) => {
+        chargeCardV1: handle(readers.commands.chargeCardV1, async ({ orderId }) => {
           log.push(`${orderId} starts`);
           if (orderId === 'a') {
             await gate.opened;
@@ -278,7 +284,7 @@ describe('memory(): what the Service publishes and sends', () => {
     const handled: unknown[] = [];
     const { publisher, broker } = await running(() => ({
       subscriptions: {
-        notifyOnCreated: handle(pairings.notifyOnCreated, async (body) => {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, async (body) => {
           await gate.opened;
           handled.push(body);
         }),
@@ -311,7 +317,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('an Event whose only Subscription is a stub is recorded and delivered nowhere', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { publisher, broker, received } = await running(() => ({
-      subscriptions: { notifyOnV1: handle.stub(pairings.notifyOnV1) },
+      subscriptions: { notifyOnV1: handle.stub(readers.subscriptions.notifyOnV1) },
     }));
 
     await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });

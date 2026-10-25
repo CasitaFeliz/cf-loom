@@ -6,7 +6,7 @@ import {
   defineSubscription,
   openEnumReader,
 } from '@cf-loom/contract';
-import { handle, withReader } from '@cf-loom/handlers';
+import { handle, readersOf } from '@cf-loom/handlers';
 import { messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { describe, expect, test } from 'vitest';
@@ -57,12 +57,17 @@ const contract = defineContract({
   dependencies: [paymentsDeps],
 });
 
+const readers = readersOf({
+  commands: {},
+  subscriptions: { notifyOnSettled: { element: notifyOnSettled, reader: settledEvent.body } },
+});
+
 const meta = { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 };
 
 /** The Subscription's Handler, keeping every body it receives. */
 function aNotifier() {
   const received: unknown[] = [];
-  const handler = handle(withReader(notifyOnSettled, settledEvent.body), (body) => {
+  const handler = handle(readers.subscriptions.notifyOnSettled, (body) => {
     received.push(body);
     return undefined;
   });
@@ -218,7 +223,7 @@ describe('fakeEvent', () => {
     const { handler, received } = aNotifier();
     const broker = memory();
     const running = await messaging(contract, broker);
-    await running.consume({ commands: {}, subscriptions: { notifyOnSettled: handler } });
+    await running.consume({ commands: {}, subscriptions: { notifyOnSettled: handler }, readers });
     const faked = fakeEvent(settledEvent, {
       paymentId: PAYMENT_ID,
       amount: 1200,

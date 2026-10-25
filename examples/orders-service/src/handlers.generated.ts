@@ -4,6 +4,7 @@ import healthEndpointHandler from './endpoints/infrastructure/health.handler.ts'
 import createOrderEndpointHandler from './endpoints/orders/create-order.handler.ts';
 import getOrderEndpointHandler from './endpoints/orders/get-order.handler.ts';
 import apiKeyGuardHandler from './guards/api-key.handler.ts';
+import { readers } from './readers.generated.ts';
 import chargeOnCreatedSubscriptionHandler from './subscriptions/charge-on-created.handler.ts';
 
 export default {
@@ -21,5 +22,6 @@ export default {
   subscriptions: {
     chargeOnCreated: chargeOnCreatedSubscriptionHandler,
   },
+  readers,
   deprecatedAt: {},
 };
