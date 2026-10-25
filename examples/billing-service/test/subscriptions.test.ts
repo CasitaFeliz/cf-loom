@@ -1,6 +1,5 @@
 import { type Messaging, messaging } from '@cf-loom/messaging';
 import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
-import { fakeEvent } from '@cf-loom/testing';
 import { contract as orders } from '@org/contract-orders-service';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import draftInvoiceOnCreatedHandler from '../src/billing/draft-invoice-on-created.handler.ts';
@@ -15,8 +14,9 @@ const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const orderCreated = orders.events.orderCreatedV1;
 const total = { amount: 1500, currency: 'EUR' };
 
+/** An OrderCreated body as a Subscriber reads it. */
 function anOrderCreated(orderId: string) {
-  return fakeEvent(orderCreated, { orderId, customerId: CUSTOMER_ID, total });
+  return { orderId, customerId: CUSTOMER_ID, total };
 }
 
 describe('draftInvoiceOnCreated over the memory adapter', () => {
@@ -54,12 +54,10 @@ describe('draftInvoiceOnCreated over the memory adapter', () => {
 });
 
 describe('draftInvoiceOnCreated called directly', () => {
-  test('with a faked OrderCreated, the Handler drafts the invoice', async () => {
+  test('with an OrderCreated as a Subscriber reads it, the Handler drafts the invoice', async () => {
     const body = anOrderCreated(CALLED_ORDER_ID);
-    const factId = `${CALLED_ORDER_ID}:created`;
-    const meta = { messageId: `event.OrderCreated.v1:${factId}`, factId, deliveryCount: 1 };
 
-    const answer = await draftInvoiceOnCreatedHandler(body, meta);
+    const answer = await draftInvoiceOnCreatedHandler(body);
 
     expect(answer).toBeUndefined();
     expect(draftsOf(CALLED_ORDER_ID)).toEqual([{ orderId: CALLED_ORDER_ID, total }]);

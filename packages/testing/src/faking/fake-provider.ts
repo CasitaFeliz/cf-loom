@@ -6,10 +6,10 @@ import {
   type ListedEndpoint,
   type ListedName,
 } from '@cf-loom/client/internal';
-import type { Http } from '@cf-loom/contract';
+import type { Http, InputOf } from '@cf-loom/contract';
 import { providedOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
-import type { FakeCall } from './calls.ts';
+import type { InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
 
 /** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
@@ -23,17 +23,18 @@ export type FakeClientOptions<
 
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed
- * Endpoint's script, and the calls each received.
+ * Endpoint's script, and the calls each received, valid and invalid.
  */
 export type FakeProvider<D extends AnyDependency> = {
   readonly fetch: Http;
   client<Configured extends ConfiguredName<D> = never>(
     options?: FakeClientOptions<D, Configured>,
   ): Client<D, Configured>;
-  on<Name extends ListedName<D>>(
-    name: Name,
-  ): Script<ListedEndpoint<D, Name>, D['provider']['standardRejections']>;
-  calls<Name extends ListedName<D>>(name: Name): readonly FakeCall<ListedEndpoint<D, Name>>[];
+  on<Name extends ListedName<D>>(name: Name): Script<D, Name>;
+  /** The requests the Endpoint read as valid, in the order they reached `fetch`, each its parsed Input. */
+  calls<Name extends ListedName<D>>(name: Name): readonly InputOf<ListedEndpoint<D, Name>>[];
+  /** The requests the Endpoint answered with the invalid-input Rejection, in the order they reached `fetch`. */
+  invalidCalls<Name extends ListedName<D>>(name: Name): readonly InvalidCall[];
 };
 
 /**
@@ -50,18 +51,10 @@ export function fakeProvider<const D extends AnyDependency>(
   const fake: FakeProvider<D> = {
     fetch,
     client: (clientOptions) => client(dependency, { ...clientOptions, baseUrl: base, fetch }),
-    on: (name) => faking.scriptedByNameOf(name).script as ScriptOf<D, typeof name>,
-    calls: (name) => faking.calls.callsOf(name) as readonly FakeCallOf<D, typeof name>[],
+    on: (name) => faking.scriptedByNameOf(name).script as Script<D, typeof name>,
+    calls: (name) =>
+      faking.calls.callsOf(name) as readonly InputOf<ListedEndpoint<D, typeof name>>[],
+    invalidCalls: (name) => faking.calls.invalidCallsOf(name),
   };
   return Object.freeze(fake);
 }
-
-/** One script for every Endpoint, typed where a test reaches it by name. */
-type ScriptOf<D extends AnyDependency, Name extends ListedName<D>> = Script<
-  ListedEndpoint<D, Name>,
-  D['provider']['standardRejections']
->;
-
-type FakeCallOf<D extends AnyDependency, Name extends ListedName<D>> = FakeCall<
-  ListedEndpoint<D, Name>
->;

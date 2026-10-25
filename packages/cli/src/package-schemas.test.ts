@@ -542,7 +542,7 @@ describe('cf-loom package: an exported Event’s body', () => {
     expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
   });
 
-  test('it writes an Unknown case back as its text and refuses one holding a declared value, as fakeEvent writes a body', () => {
+  test('it writes an Unknown case back as its text and refuses one holding a declared value, as a direct call writes a body', () => {
     const read = { ...sample, extra: undefined, status: { unknown: 'refunded' } };
 
     const written = [

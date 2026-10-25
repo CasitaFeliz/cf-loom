@@ -5,7 +5,8 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { describe, expect, test } from 'vitest';
+import { brokerMessageIdOf } from '@cf-loom/contract/internal';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Fault,
@@ -268,6 +269,67 @@ describe("a Message Handler's meta", () => {
       headers,
       signal: expect.any(AbortSignal),
     });
+  });
+});
+
+describe("a Message Handler's meta, left out", () => {
+  function receivingEvents() {
+    const received: unknown[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaidReader, (_given, givenMeta) => {
+      received.push(givenMeta);
+    });
+    return { received, notifyOnPaidHandler };
+  }
+
+  test('a direct EventHandler call with no meta gives attempt 1, not the last, and no headers', async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body);
+
+    expect(received[0]).toMatchObject({ deliveryCount: 1, lastAttempt: false, headers: {} });
+  });
+
+  test('a direct call given only a Fact id gives the broker message id deliver derives from it', async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body, { factId: 'f-1' });
+
+    const messageId = brokerMessageIdOf(orderPaidV1, 'f-1');
+    expect(received[0]).toMatchObject({ factId: 'f-1', messageId });
+  });
+
+  test('two direct calls with no Fact id each get a different one', async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body);
+    await notifyOnPaidHandler(body);
+
+    const [first, second] = received as { factId: string }[];
+    expect(first?.factId).not.toBe(second?.factId);
+  });
+
+  test("a direct CommandHandler call's derived broker message id names its Command's Message Version", async () => {
+    const { received, chargeCardHandler } = receiving();
+
+    await chargeCardHandler(body, { factId: 'f-1' });
+
+    expect(received[1]).toMatchObject({ messageId: 'command.ChargeCard.v1:f-1' });
+  });
+
+  test('the meta may be left out unless Resources are required, which the call then gives after it', () => {
+    type Taken = { readonly notifications: { readonly send: () => void } };
+    const plain = handle(chargeCard, () => undefined);
+    const withResources = handle(chargeCard, (_body, _meta, _last: WithResources<Taken>) => {
+      return undefined;
+    });
+    const resources = { notifications: { send: () => undefined } };
+
+    expectTypeOf(plain).toBeCallableWith(body);
+    expectTypeOf(plain).toBeCallableWith(body, { factId: 'f-1' });
+    // @ts-expect-error Resources required are given after the meta
+    const missing = () => withResources(body);
+    expectTypeOf(withResources).toBeCallableWith(body, {}, { resources });
+    expect(missing).toBeTypeOf('function');
   });
 });
 

@@ -3,17 +3,11 @@ import {
   contextProvidersOf,
   demandParts,
   inputParts,
+  parsedPartOf,
   parsedPartsOf,
   schemaOf,
 } from '@cf-loom/contract/internal';
-import {
-  type Checked,
-  checkedAll,
-  checkedPart,
-  fieldOf,
-  type Issue,
-  withIssues,
-} from './checked.ts';
+import { type Checked, checkedAll, fieldOf, type Issue, withIssues } from './checked.ts';
 
 /**
  * What a request carries beside its Input, for cancelling and tracing: its abort signal and its
@@ -66,7 +60,7 @@ export function checkedGuardCall(
   return checkedAll({
     demands: parsedPartsOf(demandParts, schemaAt, given.demands),
     context: checkedContext(guard, given.context),
-    qualifier: checkedPart('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
+    qualifier: parsedPartOf('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
   });
 }
 
@@ -78,7 +72,7 @@ function checkedContext(receiving: Endpoint | Guard, context: unknown): Checked<
   const providers = contextProvidersOf(receiving);
   const checks = providers.map((guard) => {
     const given = { value: fieldOf(context, guard.name), at: [guard.name] };
-    return [guard.name, checkedPart('context', schemaOf(guard, 'context'), given)] as const;
+    return [guard.name, parsedPartOf('context', schemaOf(guard, 'context'), given)] as const;
   });
   const provided = providers.map((guard) => guard.name);
   return withIssues(checkedAll(Object.fromEntries(checks)), unrecognizedIssues(context, provided));

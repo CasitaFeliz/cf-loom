@@ -53,6 +53,7 @@ export type {
   RejectionsOf,
   RequiredContextOf,
   SuccessOf,
+  SuccessValueOf,
 } from './inference.ts';
 export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';

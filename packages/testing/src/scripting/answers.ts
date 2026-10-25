@@ -11,8 +11,8 @@ export type Answer =
   | {
       readonly kind: 'unknown-rejection';
       readonly code: string;
-      readonly message: string;
-      readonly body: unknown;
+      readonly message?: string;
+      readonly body?: unknown;
     }
   | {
       readonly kind: 'fault';

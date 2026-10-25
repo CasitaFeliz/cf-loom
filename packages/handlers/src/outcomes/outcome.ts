@@ -6,7 +6,7 @@ import type {
   StandardRejection,
   SuccessOf,
 } from '@cf-loom/contract';
-import type * as core from 'zod/v4/core';
+import type { SuccessValueOf } from '@cf-loom/contract/internal';
 import type { BuiltAdmitted, BuiltRejection, BuiltSuccess } from './built.ts';
 import type { Fault } from './fault.ts';
 
@@ -15,22 +15,6 @@ type BuildableOf<Target extends Endpoint> = Exclude<
   RejectionsOf<Target>,
   StandardRejection<'invalidInput'>
 >;
-
-/**
- * What `success()` is given: the body, `{ headers, body }` when headers are declared, or nothing;
- * a body where the Endpoint declares none is refused.
- */
-type SuccessValueOf<Target extends Endpoint> = Target['success'] extends {
-  readonly headers: core.$ZodType;
-}
-  ? Omit<SuccessOf<Target>, 'status'> & NoBodyOf<Target>
-  : Target['success'] extends { readonly body: core.$ZodType }
-    ? core.output<Target['success']['body']>
-    : undefined;
-
-type NoBodyOf<Target extends Endpoint> = Target['success'] extends { readonly body: core.$ZodType }
-  ? unknown
-  : { readonly body?: never };
 
 /** What an EndpointHandler builds: a Success, one of the Endpoint's Rejections with its body, or a Fault. */
 export type Outcome<Target extends Endpoint> =
