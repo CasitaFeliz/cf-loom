@@ -19,6 +19,16 @@ export { defineEndpoint } from './endpoint.ts';
 export type { Event } from './event.ts';
 export { defineEvent } from './event.ts';
 export { isDeclaration } from './freeze-declaration.ts';
+export type { Grammar } from './grammars.ts';
+export {
+  camelCase,
+  elementName,
+  follows,
+  isReserved,
+  kebabCase,
+  pascalCase,
+  upperSnakeCase,
+} from './grammars.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';
 export type { GroupedField, GroupedOf } from './grouped.ts';

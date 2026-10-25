@@ -4,7 +4,7 @@ import {
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
-import { type DefUse, defNamesLineOf, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
+import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
 import {
   applicationEntryOf,
@@ -79,7 +79,7 @@ function serviceSourcesOf(
     exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
-  const unnamed = unnamedLineOf(Object.keys(exported.codes), defUses);
+  const unnamed = unnamedLineOf(Object.keys(exported.codes));
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
@@ -111,13 +111,13 @@ function schemaFilesOf(
   ];
 }
 
-/** The codes or recursion ids the package writes that cannot be names of their own, in one line. */
-function unnamedLineOf(codes: readonly string[], defUses: readonly DefUse[]): string | undefined {
+/** The codes the package writes that cannot be names of their own, in one line. */
+function unnamedLineOf(codes: readonly string[]): string | undefined {
   const colliding = collidingCodesOf(codes);
-  if (colliding !== undefined) {
-    return `The codes ${colliding[0]} and ${colliding[1]} are one name in code: rename one of them`;
+  if (colliding === undefined) {
+    return undefined;
   }
-  return defNamesLineOf(defUses);
+  return `The codes ${colliding[0]} and ${colliding[1]} are one name in code: rename one of them`;
 }
 
 function defsFilesOf(

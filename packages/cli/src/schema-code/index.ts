@@ -1,4 +1,4 @@
-export { defIdentifierOf, defNamesLineOf, defTypeNameOf } from './def-names.ts';
+export { defIdentifierOf, defTypeNameOf } from './def-names.ts';
 export type { DefsCode } from './defs.ts';
 export { defsCodeOf, reachedDefUsesOf } from './defs.ts';
 export type { DefUse, ImportedModule, ImportLine, Needs, SchemaMode, Writing } from './needs.ts';

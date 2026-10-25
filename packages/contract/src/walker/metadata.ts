@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { globalRegistry } from 'zod/v4/core';
+import { camelCase, follows } from '../declarations/index.ts';
 import { isJsonValue } from './canonical-json.ts';
 import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
 import {
@@ -8,6 +9,7 @@ import {
   refused,
   refusedExamples,
   refusedMetaKey,
+  refusedNonCamelCaseId,
 } from './not-allowed.ts';
 import { failed, failuresOf, type Walked, walked } from './walked.ts';
 
@@ -21,7 +23,7 @@ const allowedKeys: ReadonlySet<string> = new Set(['description', 'examples', 'id
  * any key but `description`, `examples` and `id` fails.
  */
 export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
-  const meta: Readonly<Record<string, unknown>> = globalRegistry.get(schema) ?? {};
+  const meta = ownMetaOf(schema);
   const failures = metaFailures(meta, at);
   if (failures.length > 0) {
     return failed(failures);
@@ -34,6 +36,11 @@ export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
     },
     ...(typeof id === 'string' && { id }),
   });
+}
+
+/** Whether the schema's own `.meta()` holds an id, which names a schema on a cycle. */
+export function hasOwnId(schema: core.$ZodType): boolean {
+  return ownMetaOf(schema)['id'] !== undefined;
 }
 
 /** A node with annotations laid over it, so the outer schema's say wins over the inner one's. */
@@ -53,13 +60,41 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
   return annotated(result, metadata.value.annotations);
 }
 
+function ownMetaOf(schema: core.$ZodType): Readonly<Record<string, unknown>> {
+  return globalRegistry.get(schema) ?? {};
+}
+
 function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readonly NotAllowed[] {
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
-  const keyFailures = unknownKeys.map((key) => notAllowed(at, refusedMetaKey(key)));
-  const examplesRefusal = examplesRefusalOf(meta['examples']);
-  const examplesFailure = examplesRefusal === undefined ? [] : [notAllowed(at, examplesRefusal)];
-  return failuresOf([...keyFailures, ...examplesFailure]);
+  const keyRefusals = unknownKeys.map(refusedMetaKey);
+  const valueRefusals = [
+    examplesRefusalOf(meta['examples']),
+    idRefusalOf(meta['id']),
+    descriptionRefusalOf(meta['description']),
+  ].filter(isRefusal);
+  return failuresOf([...keyRefusals, ...valueRefusals].map((refusal) => notAllowed(at, refusal)));
+}
+
+function isRefusal(refusal: Refused | undefined): refusal is Refused {
+  return refusal !== undefined;
+}
+
+function idRefusalOf(id: unknown): Refused | undefined {
+  if (id === undefined) {
+    return undefined;
+  }
+  if (typeof id !== 'string') {
+    return refused.nonStringId;
+  }
+  return follows(camelCase, id) ? undefined : refusedNonCamelCaseId(id);
+}
+
+function descriptionRefusalOf(description: unknown): Refused | undefined {
+  if (description === undefined || typeof description === 'string') {
+    return undefined;
+  }
+  return refused.nonStringDescription;
 }
 
 function examplesRefusalOf(examples: unknown): Refused | undefined {

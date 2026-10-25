@@ -29,8 +29,8 @@ export async function generate(run: Run): Promise<Exit> {
 
 /**
  * A Service's files, or every line that stops them: a Handler path under `src/contract/` or two
- * Elements at one, a name the readers cannot write, an Element no stub or the readers could
- * import, a file nothing names, a Handler path that is no file.
+ * Elements at one, an Element no stub or the readers could import, a file nothing names, a
+ * Handler path that is no file.
  */
 async function generateService(run: Run, built: BuiltService): Promise<Exit> {
   const service = placedOf(built);
@@ -42,9 +42,6 @@ async function generateService(run: Run, built: BuiltService): Promise<Exit> {
     return toolingError(exports.message);
   }
   const regenerated = serviceFilesOf(service, exports.exportsOf);
-  if (regenerated.kind === 'unnamed') {
-    return toolingError(regenerated.line);
-  }
   const stubs = stubsOf(service, exports.exportsOf);
   const orphans = orphanLinesOf(service);
   if (orphans.kind === 'tooling') {

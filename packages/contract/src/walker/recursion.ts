@@ -1,16 +1,16 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
 import type { SchemaNode } from './nodes.ts';
-import { notAllowed, refused, refusedDuplicateId } from './not-allowed.ts';
-import { type LocatedSchema, type Walked, walked } from './walked.ts';
+import { notAllowed, refused, refusedAcyclicId, refusedDuplicateId } from './not-allowed.ts';
+import { failed, failuresOf, type LocatedSchema, type Walked, walked } from './walked.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
 export type Entering = LocatedSchema & { readonly id: string | undefined };
 
 /**
- * The cycles of one walk: every schema with an id in a strongly connected group of schemas
- * that holds a cycle is written once under `defs` and is a `ref` wherever it is used,
- * whichever schema the walk enters the group at.
+ * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
+ * strongly connected group of schemas is written once under `defs` and is a `ref` wherever it
+ * is used, whichever schema the walk enters the group at.
  */
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walked) => Walked;
@@ -62,7 +62,7 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
-  const result = isOnCycle ? writeDef(state, ancestor, node) : node;
+  const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
   closeGroup(state, ancestor);
   return result;
 }
@@ -128,6 +128,15 @@ function closeGroup(state: State, ancestor: Ancestor): void {
   }
   const remaining = state.openDefs.filter((def) => def.index < ancestor.index);
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
+}
+
+/** An id names a cycle: on a schema that lies on none it is refused, beside any other failure. */
+function offCycle(ancestor: Ancestor, node: Walked): Walked {
+  if (ancestor.id === undefined) {
+    return node;
+  }
+  const refusal = notAllowed(ancestor.at, refusedAcyclicId(ancestor.id));
+  return failed(failuresOf([refusal, node]));
 }
 
 /** A schema with an id on a cycle is walked once: its def, or its failures, kept for every use. */

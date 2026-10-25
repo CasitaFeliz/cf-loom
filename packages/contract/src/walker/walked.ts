@@ -40,11 +40,26 @@ export function failed(failures: readonly NotAllowed[]): Walked<never> {
   return { kind: 'not-allowed', failures: [first, ...others] };
 }
 
-/** Failures with each one once, as a failure reported for a cycle comes back wherever it is met. */
+/**
+ * Failures with each refusal once where it was written, as a failure reported for a cycle comes
+ * back wherever it is met and a construct stacked on itself refuses itself again.
+ */
 export function distinctFailures(failures: Failures): Failures {
   const [first, ...others] = failures;
-  const distinctOthers = [...new Set(others)].filter((failure) => failure !== first);
+  const written = new Set([writtenKeyOf(first)]);
+  const distinctOthers: NotAllowed[] = [];
+  for (const failure of others) {
+    const key = writtenKeyOf(failure);
+    if (!written.has(key)) {
+      written.add(key);
+      distinctOthers.push(failure);
+    }
+  }
   return [first, ...distinctOthers];
+}
+
+function writtenKeyOf({ at, construct }: NotAllowed): string {
+  return JSON.stringify([at, construct]);
 }
 
 /** Every failure among walked values, each once, in order. */
