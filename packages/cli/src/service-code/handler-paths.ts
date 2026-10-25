@@ -78,11 +78,12 @@ function contractLineOf(paths: readonly HandlerPath[], directory: string): strin
 function collidingLineOf(paths: readonly HandlerPath[], directory: string): string | undefined {
   const placedByFile = new Map<string, HandlerPath>();
   for (const placed of paths) {
-    const earlier = placedByFile.get(realPathOf(directory, placed.path));
+    const file = realPathOf(directory, placed.path);
+    const earlier = placedByFile.get(file);
     if (earlier !== undefined) {
       return `${bothLineOf(earlier, placed)}: give each its own path in the layout of ${configFile}`;
     }
-    placedByFile.set(realPathOf(directory, placed.path), placed);
+    placedByFile.set(file, placed);
   }
   return undefined;
 }

@@ -1650,6 +1650,35 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(read(project, 'src/guards/a.handler.ts')).toBe(guard);
   });
 
+  test('two Elements whose Handler paths are one file once a dangling link’s target exists fail the collision check', () => {
+    const layout =
+      "{ endpoint: 'src/missing/{name}.handler.ts', guard: 'src/zlink/{name}.handler.ts' }";
+    const project = aProject(withLayout(anEndpointWithItsGuard(), layout));
+    symlinkSync(join(project, 'src/missing'), join(project, 'src/zlink'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'endpoints.a and guards.a are both the same file, src/missing/a.handler.ts and src/zlink/a.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+    expect(existsSync(join(project, 'src/missing'))).toBe(false);
+  });
+
+  test('a link that loops is read in a bounded number of steps, and the write that meets it fails in one line', () => {
+    const project = aProject(
+      withLayout(anEndpointWithItsGuard(), "{ guard: 'src/loop/{name}.handler.ts' }"),
+    );
+    symlinkSync(join(project, 'src/loop'), join(project, 'src/loop'), 'dir');
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toMatch(/^src\/loop\/a\.handler\.ts cannot be written: ELOOP[^\n]*\n$/);
+  });
+
   test('a Handler path that reaches src/contract/ through a link fails like one that names it', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');

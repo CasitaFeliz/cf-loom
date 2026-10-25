@@ -249,7 +249,7 @@ Exit 3, a tooling error:
 | `npm pack --dry-run listed no files` | `publish` |
 | `The codes <code> and <code> are one name in code: rename one of them` | `package`, `publish` |
 | `<element> is <path>, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts`, for the first Handler path in the Handler map's order that lies there once filled, where `<element>` is as in the next row | `generate`, `verify` |
-| `<element> and <element> are both <path>: give each its own path in the layout of cf-loom.config.ts`, where `<element>` is `endpoints.<name>`, `guards.<name>`, `commands.<Name>@<version>` or `subscriptions.<name>` | `generate`, `verify` |
+| `<element> and <element> are both <path>: give each its own path in the layout of cf-loom.config.ts`, or `<element> and <element> are both the same file, <path> and <path>: give each its own path in the layout of cf-loom.config.ts` when a link makes two paths one file, where `<element>` is `endpoints.<name>`, `guards.<name>`, `commands.<Name>@<version>` or `subscriptions.<name>` | `generate`, `verify` |
 | `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"format":1,"status":3,"errors":[…]}` | every command |
 
 Exit 3, a usage error, each followed on the same line by the usage:
