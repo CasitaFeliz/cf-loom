@@ -64,6 +64,14 @@ function read(project: string, path: string): string {
   return readFileSync(join(project, path), 'utf8');
 }
 
+/** The files of a project without the one at `path`. */
+function without(
+  files: Readonly<Record<string, string>>,
+  path: string,
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(files).filter(([file]) => file !== path));
+}
+
 /** Runs `cf-loom` in the background, so two runs can overlap. */
 function cfLoomAsync(project: string, ...args: string[]) {
   return new Promise<{ status: number | null }>((resolve) => {
@@ -490,6 +498,22 @@ function aMessagingService(lists: MessagingLists = {}): Readonly<Record<string, 
   };
 }
 
+/**
+ * `aMessagingService` before the Command's Message Version `name` was declared: its file does not
+ * export it and the root does not import it, so a root that lists it later is a Contract change.
+ */
+function aMessagingServiceWithout(
+  name: string,
+  lists: MessagingLists,
+): Readonly<Record<string, string>> {
+  const service = aMessagingService(lists);
+  return {
+    ...service,
+    'src/contract/messages.ts': messages.replace(`export const ${name} =`, `const ${name} =`),
+    'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(`  ${name},\n`, ''),
+  };
+}
+
 /** Runs a module in Node from the project's folder and returns what it logs as JSON. */
 function probe(project: string, script: string): unknown {
   const ran = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
@@ -785,7 +809,9 @@ describe('cf-loom generate: readers.generated.ts', () => {
   });
 
   test('a Command’s Message Version is imported from the file that exports it', () => {
-    const project = aProject(aMessagingService({ commands: '[chargeCardV1, shipOrderV1]' }));
+    const project = aProject(
+      aMessagingService({ commands: '[chargeCardV1, chargeCardV2, refundCardV1, shipOrderV1]' }),
+    );
     write(project, {
       'src/contract/commands/ship-order.v1.command.ts': lines([
         "import { defineCommand } from '@cf-loom/contract';",
@@ -818,7 +844,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
 
   test('a Subscription is imported from the file that exports it', () => {
     const project = aProject(
-      aMessagingService({ subscriptions: ['notifyOnSettled', 'auditOrders'] }),
+      aMessagingService({ subscriptions: ['notifyOnSettled', 'auditCreated', 'auditOrders'] }),
     );
     write(project, {
       'src/contract/subscriptions/audit-orders.subscription.ts': lines([
@@ -876,7 +902,9 @@ describe('cf-loom generate: readers.generated.ts', () => {
 
   test('Commands are paired in code point order of their names in code, whatever the root’s order', () => {
     const project = aProject(
-      aMessagingService({ commands: '[shipOrderV10, shipV1, shipOrderV1]' }),
+      aMessagingService({
+        commands: '[chargeCardV1, chargeCardV2, refundCardV1, shipOrderV10, shipV1, shipOrderV1]',
+      }),
     );
     const ship = (name: string, version: number, lifecycle = 'active') =>
       lines([
@@ -903,7 +931,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     const map = read(project, 'src/handlers.generated.ts');
     const readers = read(project, 'src/readers.generated.ts');
-    expect(map.match(/^ {4}\w+: \w+CommandHandler,$/gm)).toEqual([
+    expect(map.match(/^ {4}ship\w+: \w+CommandHandler,$/gm)).toEqual([
       '    shipOrderV1: shipOrderV1CommandHandler,',
       '    shipOrderV10: shipOrderV10CommandHandler,',
       '    shipV1: shipV1CommandHandler,',
@@ -1448,7 +1476,7 @@ describe('cf-loom generate: what it refuses', () => {
   test('an Endpoint exported by no file under src/contract exits 1 naming it, and writes nothing', () => {
     const service = aService();
     const project = aProject({
-      ...service,
+      ...without(service, 'src/contract/endpoints/orders/create-order.endpoint.ts'),
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
         .replace(
           `${importOf('{ createOrder }', './endpoints/orders/create-order.endpoint.ts')}\n`,
@@ -1689,7 +1717,9 @@ describe('cf-loom generate: what it refuses', () => {
 
   test('a Subscription exported by no file exits 1 naming it, and writes nothing', () => {
     const project = aProject(
-      aMessagingService({ subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')] }),
+      aMessagingService({
+        subscriptions: ['notifyOnSettled', 'auditCreated', inlineSubscription('auditOrders')],
+      }),
     );
 
     const ran = cfLoom(project, 'generate');
@@ -1743,7 +1773,7 @@ describe('cf-loom generate: what it refuses', () => {
 
   test('every Endpoint, Command and Subscription not exported under its name is named, the Endpoints first', () => {
     const service = aMessagingService({
-      subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
+      subscriptions: ['notifyOnSettled', 'auditCreated', inlineSubscription('auditOrders')],
     });
     const project = aProject({
       ...service,
@@ -2187,9 +2217,14 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
   });
 
   test('verify exits 1 when a Retired Command’s Message Version was added since generate: its Reader and pairing are new', () => {
-    const project = aProject(aMessagingService({ commands: '[chargeCardV1, chargeCardV2]' }));
+    const project = aProject(
+      aMessagingServiceWithout('refundCardV1', { commands: '[chargeCardV1, chargeCardV2]' }),
+    );
     cfLoom(project, 'generate');
-    write(project, { 'src/contract/index.ts': aMessagingRoot() });
+    write(project, {
+      'src/contract/messages.ts': messages,
+      'src/contract/index.ts': aMessagingRoot(),
+    });
 
     const ran = cfLoom(project, 'verify');
 
@@ -2204,9 +2239,14 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
   });
 
   test('verify exits 1 when a Command whose Handler the map imports was added since generate', () => {
-    const project = aProject(aMessagingService({ commands: '[chargeCardV1, refundCardV1]' }));
+    const project = aProject(
+      aMessagingServiceWithout('chargeCardV2', { commands: '[chargeCardV1, refundCardV1]' }),
+    );
     cfLoom(project, 'generate');
-    write(project, { 'src/contract/index.ts': aMessagingRoot() });
+    write(project, {
+      'src/contract/messages.ts': messages,
+      'src/contract/index.ts': aMessagingRoot(),
+    });
 
     const ran = cfLoom(project, 'verify');
 
@@ -2880,5 +2920,309 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
     expect(ran.stderr).toContain(
       "src/subscriptions/payments/audit-created.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     );
+  });
+});
+
+/** The line `generate` and `verify` print for a declaration no Group lists, exported from `path`. */
+function unreachedLine(path: string, name: string): string {
+  return `${path} exports ${name}, which no Group lists: list it in a Group or delete it`;
+}
+
+const archivedEndpointFile = 'src/contract/endpoints/archive/list-archived.endpoint.ts';
+
+/** An Endpoint exported under `src/contract/` that no Group lists. */
+function withUnlistedEndpoint(
+  service: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  return {
+    ...service,
+    [archivedEndpointFile]: anEndpoint({ name: 'listArchived', path: '/archived' }),
+  };
+}
+
+/** One Endpoint, one Event, one Command's Message Version and one Subscription, none of them listed. */
+const archiveFile = lines([
+  "import { defineCommand, defineEndpoint, defineEvent, defineSubscription } from '@cf-loom/contract';",
+  "import { z } from 'zod';",
+  importOf('{ orderCreatedV2 }', './messages.ts'),
+  '',
+  'export const listArchived = defineEndpoint({',
+  "  name: 'listArchived',",
+  "  method: 'GET',",
+  "  path: '/archived',",
+  "  visibility: 'public',",
+  "  description: 'listArchived',",
+  '  success: { status: 200, body: z.object({ id: z.string() }) },',
+  '});',
+  '',
+  'export const orderShippedV1 = defineEvent({',
+  "  name: 'OrderShipped',",
+  '  version: 1,',
+  "  visibility: 'internal',",
+  "  description: 'An order was shipped',",
+  '  body: z.object({ orderId: z.uuid() }),',
+  '});',
+  '',
+  'export const cancelCardV1 = defineCommand({',
+  "  name: 'CancelCard',",
+  '  version: 1,',
+  "  description: 'Cancel a card',",
+  '  body: z.object({ orderId: z.uuid() }),',
+  '});',
+  '',
+  'export const auditShipped = defineSubscription({',
+  "  name: 'auditShipped',",
+  "  description: 'Audit shipped',",
+  '  event: orderCreatedV2,',
+  '});',
+]);
+
+describe('cf-loom generate and verify: a declaration the root does not reach', () => {
+  test('an Endpoint exported under src/contract that no Group lists exits 1 naming its file, and writes nothing', () => {
+    const project = aProject(withUnlistedEndpoint(aService()));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${unreachedLine(archivedEndpointFile, 'listArchived')}\n`,
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+    expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(false);
+  });
+
+  test.each([
+    {
+      kind: 'an Event',
+      path: 'src/contract/order-shipped.event.ts',
+      name: 'orderShippedV1',
+      text: lines([
+        "import { defineEvent } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        'export const orderShippedV1 = defineEvent({',
+        "  name: 'OrderShipped',",
+        '  version: 1,',
+        "  visibility: 'internal',",
+        "  description: 'An order was shipped',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]),
+    },
+    {
+      kind: 'a Command’s Message Version',
+      path: 'src/contract/cancel-card.command.ts',
+      name: 'cancelCardV1',
+      text: lines([
+        "import { defineCommand } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        'export const cancelCardV1 = defineCommand({',
+        "  name: 'CancelCard',",
+        '  version: 1,',
+        "  description: 'Cancel a card',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]),
+    },
+    {
+      kind: 'a Subscription',
+      path: 'src/contract/audit-shipped.subscription.ts',
+      name: 'auditShipped',
+      text: lines([
+        "import { defineSubscription } from '@cf-loom/contract';",
+        importOf('{ orderCreatedV2 }', './messages.ts'),
+        '',
+        'export const auditShipped = defineSubscription({',
+        "  name: 'auditShipped',",
+        "  description: 'Audit shipped',",
+        '  event: orderCreatedV2,',
+        '});',
+      ]),
+    },
+  ])(
+    '$kind exported under src/contract that no Group lists exits 1 naming its file, and writes nothing',
+    ({ path, name, text }) => {
+      const project = aProject({ ...aMessagingService(), [path]: text });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({ status: 1, stdout: '', stderr: `${unreachedLine(path, name)}\n` });
+      expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+      expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
+    },
+  );
+
+  test('every declaration no Group lists is named, in code point order of its file', () => {
+    const project = aProject({
+      ...withUnlistedEndpoint(aMessagingService()),
+      'src/contract/order-shipped.event.ts': lines([
+        "import { defineEvent } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        'export const orderShippedV1 = defineEvent({',
+        "  name: 'OrderShipped',",
+        '  version: 1,',
+        "  visibility: 'internal',",
+        "  description: 'An order was shipped',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(
+      lines([
+        unreachedLine('src/contract/endpoints/archive/list-archived.endpoint.ts', 'listArchived'),
+        unreachedLine('src/contract/order-shipped.event.ts', 'orderShippedV1'),
+      ]),
+    );
+  });
+
+  test('a Guard that no Endpoint attaches does not fail generate', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/guards/idle-key.guard.ts': lines([
+        "import { defineGuard } from '@cf-loom/contract';",
+        '',
+        "export const idleKey = defineGuard({ name: 'idleKey', description: 'Attached by none' });",
+      ]),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Rejection that nothing answers does not fail generate', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/rejections/order-locked.rejection.ts': lines([
+        "import { defineRejection } from '@cf-loom/contract';",
+        '',
+        'export const orderLocked = defineRejection({',
+        "  code: 'ORDER_LOCKED',",
+        '  status: 409,',
+        "  message: 'The order is locked',",
+        '});',
+      ]),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Provider’s Event that a file under src/contract exports is not reported', () => {
+    const project = aProject(aMessagingService());
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Provider’s Endpoint that a file under src/contract exports is not reported', () => {
+    const service = aMessagingService();
+    const project = aProject({
+      ...service,
+      'src/contract/payments.ts': payments
+        .replace(
+          'export const payments = {',
+          [
+            'export const getPayment = defineEndpoint({',
+            "  name: 'getPayment',",
+            "  method: 'GET',",
+            "  path: '/payments',",
+            "  visibility: 'internal',",
+            "  description: 'getPayment',",
+            '  success: { status: 200, body: z.object({ id: z.string() }) },',
+            '});',
+            '',
+            'export const payments = {',
+          ].join('\n'),
+        )
+        .replace('import { defineEvent }', 'import { defineEndpoint, defineEvent }')
+        .replace('endpoints: {},', 'endpoints: { getPayment },'),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace(
+          'import { paymentSettledV1, payments }',
+          'import { getPayment, paymentSettledV1, payments }',
+        )
+        .replace(
+          'defineDependency({ provider: payments })',
+          'defineDependency({ provider: payments, endpoints: [getPayment] })',
+        ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a declaration exported from two files is reported once, at the first file in code point order', () => {
+    const project = aProject({
+      ...withUnlistedEndpoint(aService()),
+      'src/contract/archive.ts': lines([
+        importOf('{ listArchived }', './endpoints/archive/list-archived.endpoint.ts'),
+        'export { listArchived };',
+      ]),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(`${unreachedLine('src/contract/archive.ts', 'listArchived')}\n`);
+  });
+
+  test('a Group the root does not list is reported once, and what it lists is not', () => {
+    const project = aProject({
+      ...aMessagingService(),
+      'src/contract/archive.ts': archiveFile,
+      'src/contract/groups/archive.group.ts': lines([
+        "import { defineGroup } from '@cf-loom/contract';",
+        importOf('{ auditShipped, cancelCardV1, listArchived, orderShippedV1 }', '../archive.ts'),
+        '',
+        'export const archiveGroup = defineGroup({',
+        "  name: 'archive',",
+        "  description: 'Archived orders',",
+        '  endpoints: [listArchived],',
+        '  events: [orderShippedV1],',
+        '  commands: [cancelCardV1],',
+        '  subscriptions: [auditShipped],',
+        '});',
+      ]),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/contract/groups/archive.group.ts exports archiveGroup, which the root does not list: list it in groups or delete it\n',
+    });
+  });
+
+  test('verify exits 1 naming the same line', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withUnlistedEndpoint({}));
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${unreachedLine(archivedEndpointFile, 'listArchived')}\n`,
+    });
+  });
+
+  test('a Retired Endpoint that a Group still lists is not reported', () => {
+    const project = aProject(aService());
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
 });

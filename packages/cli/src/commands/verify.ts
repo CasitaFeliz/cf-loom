@@ -18,6 +18,7 @@ import {
 import { orphanLinesOf } from './orphans.ts';
 import { serviceFilesOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
+import { unreachedLinesOf } from './unreached.ts';
 
 /**
  * Fails when a file `generate` regenerates is not what it would write, edited by hand or left
@@ -74,6 +75,7 @@ async function verifyService(
     ),
     ...stubsOf(service, exports.exportsOf).failureLines,
     ...regenerated.failureLines,
+    ...unreachedLinesOf(service, exports.exports),
     ...serviceFailuresOf(service),
     ...orphans.lines,
   ];

@@ -1,4 +1,10 @@
-export type { ContractExports, ExportedAt, ExportsOf, FileExport } from './exported.ts';
+export type {
+  ContractExports,
+  ExportedAt,
+  ExportedValue,
+  ExportsOf,
+  FileExport,
+} from './exported.ts';
 export {
   contractExportsOf,
   contractFolder,

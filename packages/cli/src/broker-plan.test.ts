@@ -160,27 +160,56 @@ const messages = lines([
   '});',
 ]);
 
-const subscriptions = lines([
-  "import { defineSubscription } from '@cf-loom/contract';",
-  "import { orderCreatedV2 } from './messages.ts';",
-  "import { paymentSettledV1 } from './payments.ts';",
-  '',
-  'export const notifyOnSettled = defineSubscription({',
-  "  name: 'notifyOnSettled',",
-  "  description: 'Notify on settled',",
-  '  event: paymentSettledV1,',
-  '});',
-  '',
-  'export const auditCreated = defineSubscription({',
-  "  name: 'auditCreated',",
-  "  description: 'Audit created',",
-  '  event: orderCreatedV2,',
-  '});',
-]);
-
 const notifyOnSettled = 'notifyOnSettled';
 
 const auditCreated = 'auditCreated';
+
+/** The Subscriptions among `listed`, each exported under its name, with the imports they need. */
+function subscriptionsFile(listed: readonly string[]): string {
+  const subscriptions: Readonly<Record<string, readonly string[]>> = {
+    [notifyOnSettled]: [
+      importOf('{ paymentSettledV1 }', './payments.ts'),
+      '',
+      'export const notifyOnSettled = defineSubscription({',
+      "  name: 'notifyOnSettled',",
+      "  description: 'Notify on settled',",
+      '  event: paymentSettledV1,',
+      '});',
+    ],
+    [auditCreated]: [
+      importOf('{ orderCreatedV2 }', './messages.ts'),
+      '',
+      'export const auditCreated = defineSubscription({',
+      "  name: 'auditCreated',",
+      "  description: 'Audit created',",
+      '  event: orderCreatedV2,',
+      '});',
+    ],
+  };
+  return lines([
+    "import { defineSubscription } from '@cf-loom/contract';",
+    ...listed.flatMap((name) => subscriptions[name] ?? []),
+  ]);
+}
+
+/** The names a root lists in one field, from the text of its list. */
+function namesListed(list: string): readonly string[] {
+  return list
+    .slice(1, -1)
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '');
+}
+
+/** The file of `messages` without the declarations that no list names, so each one it exports is listed. */
+function messagesFile(listed: readonly string[]): string {
+  const blocks = messages.trimEnd().split('\n\n');
+  const kept = blocks.filter((block) => {
+    const name = /^export const (\w+) =/.exec(block)?.[1];
+    return name === undefined || listed.includes(name);
+  });
+  return lines([kept.join('\n\n')]);
+}
 
 /** What a messaging root's Group lists, each as the text of one of `defineGroup`'s fields; an empty one is left out. */
 type MessagingLists = {
@@ -193,13 +222,15 @@ type MessagingLists = {
  * A Service named `orders-service` with the Events `OrderCreated@1` (Deprecated), `OrderCreated@2`
  * and `OrderPurged@1` (Retired), the Commands `ChargeCard@1` (Deprecated), `ChargeCard@2` and
  * `RefundCard@1` (Retired), and the Subscriptions `notifyOnSettled`, to the Event `PaymentSettled@1`
- * of the Dependency `payments-service`, and `auditCreated`, to its own `OrderCreated@2`.
+ * of the Dependency `payments-service`, and `auditCreated`, to its own `OrderCreated@2`; a list
+ * that names fewer leaves the others out of the files, since a file exports only what is listed.
  */
 function aMessagingService({
   events = '[orderCreatedV1, orderCreatedV2, orderPurgedV1]',
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
   subscriptions: listed = [notifyOnSettled, auditCreated],
 }: MessagingLists = {}): Readonly<Record<string, string>> {
+  const messageNames = [...namesListed(events), ...namesListed(commands)];
   const grouped = [
     ['events', events],
     ['commands', commands],
@@ -209,12 +240,11 @@ function aMessagingService({
     .map(([field, list]) => `  ${field}: ${list},`);
   const root = lines([
     "import { defineContract, defineDependency, defineGroup } from '@cf-loom/contract';",
-    importOf(
-      '{ chargeCardV1, chargeCardV2, orderCreatedV1, orderCreatedV2, orderPurgedV1, refundCardV1 }',
-      './messages.ts',
-    ),
-    importOf('{ paymentSettledV1, payments }', './payments.ts'),
-    importOf('{ auditCreated, notifyOnSettled }', './subscriptions.ts'),
+    ...(messageNames.length > 0
+      ? [importOf(`{ ${[...messageNames].sort().join(', ')} }`, './messages.ts')]
+      : []),
+    importOf('{ payments }', './payments.ts'),
+    importOf(`{ ${[...listed].sort().join(', ')} }`, './subscriptions.ts'),
     '',
     'const paymentsDependency = defineDependency({ provider: payments });',
     '',
@@ -233,9 +263,9 @@ function aMessagingService({
   return {
     'package.json': manifest,
     'cf-loom.config.ts': config,
-    'src/contract/messages.ts': messages,
+    'src/contract/messages.ts': messagesFile(messageNames),
     'src/contract/payments.ts': payments,
-    'src/contract/subscriptions.ts': subscriptions,
+    'src/contract/subscriptions.ts': subscriptionsFile(listed),
     'src/contract/index.ts': root,
   };
 }
