@@ -79,11 +79,17 @@ function anEndpointReading(input: SchemaNode | null, success: SchemaNode | null)
 }
 
 function anEvent(body: SchemaNode): EventSnapshot {
-  return { visibility: 'internal', lifecycle: 'active', description: 'Placed', body };
+  return {
+    group: 'orders',
+    visibility: 'internal',
+    lifecycle: 'active',
+    description: 'Placed',
+    body,
+  };
 }
 
 function aCommand(body: SchemaNode): CommandSnapshot {
-  return { lifecycle: 'active', description: 'Charge a card', body };
+  return { group: 'orders', lifecycle: 'active', description: 'Charge a card', body };
 }
 
 function aLive<Element extends { readonly lifecycle: string }>(

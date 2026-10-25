@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineCommand, defineContract, defineEvent } from '../index.ts';
+import { defineCommand, defineContract, defineEvent, defineGroup } from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
@@ -28,8 +28,14 @@ const chargeCardV1 = defineCommand({
 function aServicePlan(prefix: string | null): BrokerPlan {
   const root = defineContract({
     name: 'orders-service',
-    events: [orderCreatedV1],
-    commands: [chargeCardV1],
+    groups: [
+      defineGroup({
+        name: 'messages',
+        description: 'Messages',
+        events: [orderCreatedV1],
+        commands: [chargeCardV1],
+      }),
+    ],
   });
   const validated = validateContract(root, {
     originOf: schemaOriginsOf([]),

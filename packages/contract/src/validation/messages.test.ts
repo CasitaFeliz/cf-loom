@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Command, defineCommand, defineContract, defineEvent, type Event } from '../index.ts';
+import {
+  type Command,
+  defineCommand,
+  defineContract,
+  defineEvent,
+  defineGroup,
+  type Event,
+} from '../index.ts';
 import { validateContract } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
@@ -31,11 +38,13 @@ function aCommand(overrides: Record<string, unknown> = {}): Command {
 }
 
 function validateMessages(events: readonly unknown[], commands: readonly unknown[] = []) {
-  const contract = defineContract({
-    name: 'orders-service',
-    events: events as readonly Event[],
-    commands: commands as readonly Command[],
-  });
+  const ordersGroup = defineGroup({
+    name: 'orders',
+    description: 'Orders',
+    events,
+    commands,
+  } as unknown as Parameters<typeof defineGroup>[0]);
+  const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
   return validateContract(contract, {
     originOf: () => undefined,
     packageName: 'orders-service',
@@ -59,7 +68,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'orderCreated@1', 'name'],
+        ['groups', 'orders', 'events', 'orderCreated@1', 'name'],
         'name-grammar',
         'A Message name is PascalCase: orderCreated',
       ),
@@ -71,7 +80,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@0', 'version'],
+        ['groups', 'orders', 'commands', 'ChargeCard@0', 'version'],
         'message-version',
         'A Message version is a whole number from 1: 0',
       ),
@@ -83,7 +92,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'visibility'],
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'visibility'],
         'visibility',
         "An Event's Visibility is internal or private: public",
       ),
@@ -95,7 +104,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'visibility'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'visibility'],
         'undeclared-field',
         'visibility is not a declared field',
       ),
@@ -107,7 +116,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'lifecycle'],
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'lifecycle'],
         'lifecycle',
         'A lifecycle is active, deprecated or retired: gone',
       ),
@@ -118,7 +127,11 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([anEvent({ body: undefined })]);
 
     expect(result).toEqual(
-      failed(['events', 'OrderCreated@1', 'body'], 'required-field', 'body is a required field'),
+      failed(
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'body'],
+        'required-field',
+        'body is a required field',
+      ),
     );
   });
 
@@ -126,7 +139,11 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([anEvent({ body: { orderId: 'uuid' } })]);
 
     expect(result).toEqual(
-      failed(['events', 'OrderCreated@1', 'body'], 'not-a-schema', 'body is not a zod schema'),
+      failed(
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'body'],
+        'not-a-schema',
+        'body is not a zod schema',
+      ),
     );
   });
 
@@ -139,7 +156,7 @@ describe('validateContract: Events and Commands', () => {
       failures: [
         {
           kind: 'not-allowed',
-          at: ['events', 'OrderCreated@1', 'body', 'fields', 'totals'],
+          at: ['groups', 'orders', 'events', 'OrderCreated@1', 'body', 'fields', 'totals'],
           construct: 'a record keyed by an enum or literal in a Read shape',
         },
       ],
@@ -149,7 +166,9 @@ describe('validateContract: Events and Commands', () => {
   test('something listed under events that is not an Event fails', () => {
     const result = validateMessages([{ kind: 'event', name: 'OrderCreated', version: 1 }]);
 
-    expect(result).toEqual(failed(['events', 0], 'not-a-declaration', 'events.0 is not an Event'));
+    expect(result).toEqual(
+      failed(['groups', 'orders', 'events', 0], 'not-a-declaration', 'events.0 is not an Event'),
+    );
   });
 
   test('two Message Versions with one name and version fail', () => {
@@ -157,7 +176,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'version'],
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'version'],
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: OrderCreated@1',
       ),
@@ -172,7 +191,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'name'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'name'],
         'message-kind',
         'A Message name belongs to one kind: ChargeCard is an Event and a Command',
       ),
@@ -184,7 +203,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@2', 'lifecycle'],
+        ['groups', 'orders', 'commands', 'ChargeCard@2', 'lifecycle'],
         'command-active-versions',
         'A Command has at most one Active version: ChargeCard',
       ),
@@ -217,7 +236,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'description'],
+        ['groups', 'orders', 'events', 'OrderCreated@1', 'description'],
         'required-field',
         'description is a required string',
       ),
@@ -229,7 +248,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1.5', 'version'],
+        ['groups', 'orders', 'events', 'OrderCreated@1.5', 'version'],
         'message-version',
         'A Message version is a whole number from 1: 1.5',
       ),
@@ -240,7 +259,11 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([], [anEvent({ name: 'ChargeCard' })]);
 
     expect(result).toEqual(
-      failed(['commands', 0], 'not-a-declaration', 'commands.0 is not a Command'),
+      failed(
+        ['groups', 'orders', 'commands', 0],
+        'not-a-declaration',
+        'commands.0 is not a Command',
+      ),
     );
   });
 
@@ -249,7 +272,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'charge_card@1', 'name'],
+        ['groups', 'orders', 'commands', 'charge_card@1', 'name'],
         'name-grammar',
         'A Message name is PascalCase: charge_card',
       ),
@@ -261,7 +284,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'description'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'description'],
         'required-field',
         'description is a required string',
       ),
@@ -275,7 +298,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'version'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'version'],
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: ChargeCard@1',
       ),
@@ -287,7 +310,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'version'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'version'],
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: ChargeCard@1',
       ),
@@ -302,7 +325,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'name'],
+        ['groups', 'orders', 'commands', 'ChargeCard@1', 'name'],
         'message-kind',
         'A Message name belongs to one kind: ChargeCard is an Event and a Command',
       ),
@@ -329,13 +352,13 @@ describe('validateContract: Events and Commands', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['commands', 'ChargeCard@1', 'version'],
+          at: ['groups', 'orders', 'commands', 'ChargeCard@1', 'version'],
           rule: 'duplicate-message-identity',
           message: 'A Message Version is identified by its name and version, once: ChargeCard@1',
         },
         {
           kind: 'declaration',
-          at: ['commands', 'ChargeCard@2', 'lifecycle'],
+          at: ['groups', 'orders', 'commands', 'ChargeCard@2', 'lifecycle'],
           rule: 'command-active-versions',
           message: 'A Command has at most one Active version: ChargeCard',
         },

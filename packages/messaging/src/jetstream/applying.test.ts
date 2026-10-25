@@ -1,5 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
+import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
 import { JetStreamApiError, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -33,8 +33,14 @@ const chargeCardV1 = defineCommand({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+    }),
+  ],
 });
 
 let server: NatsServer;

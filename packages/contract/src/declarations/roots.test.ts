@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type ContractPackage,
@@ -41,6 +41,19 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
+const refundCardV1 = defineCommand({
+  name: 'RefundCard',
+  version: 1,
+  description: 'Refunds the payment’s card',
+  body: z.object({ paymentId: z.uuid() }),
+});
+
+const auditOnSettled = defineSubscription({
+  name: 'auditOnSettled',
+  description: 'Audits each payment settled',
+  event: paymentSettledV1,
+});
+
 const payments = {
   name: 'payments-service',
   version: '5.1.0',
@@ -77,36 +90,20 @@ describe('defineContract', () => {
     expect(contract.kind).toBe('contract');
   });
 
-  test('a Contract keeps its Events, Commands and Subscriptions by identity', () => {
-    const orderCreatedV1 = defineEvent({
-      name: 'OrderCreated',
-      version: 1,
-      visibility: 'internal',
-      description: 'An order was placed',
-      body: z.object({ orderId: z.uuid() }),
-    });
-    const chargeCardV1 = defineCommand({
-      name: 'ChargeCard',
-      version: 1,
-      description: 'Charges the order’s card',
-      body: z.object({ orderId: z.uuid() }),
-    });
-    const notifyOnCreated = defineSubscription({
-      name: 'notifyOnCreated',
-      description: 'Notifies the customer of each order created',
-      event: orderCreatedV1,
+  test('a Contract keeps each Group’s Command and Subscription with its exact type', () => {
+    const paymentsGroup = defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      events: [paymentSettledV1],
+      commands: [refundCardV1],
+      subscriptions: [auditOnSettled],
     });
 
-    const contract = defineContract({
-      name: 'orders-service',
-      events: [orderCreatedV1],
-      commands: [chargeCardV1],
-      subscriptions: [notifyOnCreated],
-    });
+    const contract = defineContract({ name: 'payments-service', groups: [paymentsGroup] });
 
-    expect(contract.events[0]).toBe(orderCreatedV1);
-    expect(contract.commands[0]).toBe(chargeCardV1);
-    expect(contract.subscriptions[0]).toBe(notifyOnCreated);
+    expectTypeOf(contract.groups[0].commands[0]).toEqualTypeOf(refundCardV1);
+    expectTypeOf(contract.groups[0].subscriptions[0]).toEqualTypeOf(auditOnSettled);
+    expect(contract.groups[0].commands[0]).toBe(refundCardV1);
   });
 });
 
@@ -150,6 +147,26 @@ describe('the roots’ fields', () => {
     // @ts-expect-error a Contract lists its Endpoints through its Groups
     const declare = () => defineContract({ name: 'orders-service', endpoints: [] });
 
+    expect(declare).not.toThrow();
+  });
+
+  test.each([
+    [
+      'events',
+      // @ts-expect-error a Contract lists its Events through its Groups
+      () => defineContract({ name: 'payments-service', events: [paymentSettledV1] }),
+    ],
+    [
+      'commands',
+      // @ts-expect-error a Contract lists its Commands through its Groups
+      () => defineContract({ name: 'payments-service', commands: [refundCardV1] }),
+    ],
+    [
+      'subscriptions',
+      // @ts-expect-error a Contract lists its Subscriptions through its Groups
+      () => defineContract({ name: 'payments-service', subscriptions: [auditOnSettled] }),
+    ],
+  ])('a Contract’s root that lists %s is a type error', (_field, declare) => {
     expect(declare).not.toThrow();
   });
 

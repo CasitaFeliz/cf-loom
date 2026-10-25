@@ -199,15 +199,21 @@ describe('the README’s declaration examples', () => {
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions],
-      groups: [ordersGroup],
-      events: [orderCreatedV1, orderCreatedV2],
-      commands: [chargeCardV1],
-      subscriptions: [notifyOnSettled],
+      groups: [
+        ordersGroup,
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV1, orderCreatedV2],
+          commands: [chargeCardV1],
+          subscriptions: [notifyOnSettled],
+        }),
+      ],
       dependencies: [paymentsDeps],
     });
 
     expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
-    expect(contract.subscriptions[0].event).toBe(payments.events.paymentSettledV1);
+    expect(contract.groups[1].subscriptions[0].event).toBe(payments.events.paymentSettledV1);
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {

@@ -378,6 +378,7 @@ describe('versionBumpOf', () => {
 
   test('narrowing an Internal Event bumps major', () => {
     const event: EventSnapshot = {
+      group: 'orders',
       visibility: 'internal',
       lifecycle: 'active',
       description: 'An order was placed',

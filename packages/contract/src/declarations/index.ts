@@ -26,6 +26,7 @@ export { defineEvent } from './event.ts';
 export { isDeclaration } from './freeze-declaration.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';
+export type { GroupedField, GroupedOf } from './grouped.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';

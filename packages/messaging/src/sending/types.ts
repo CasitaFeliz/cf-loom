@@ -1,4 +1,5 @@
 import type { Command, Contract, Event } from '@cf-loom/contract';
+import type { GroupedOf } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 
 /** What a `publish` or `send` call may add: the Fact id its Messages share, random when left out, and transport headers. */
@@ -7,19 +8,11 @@ export type MessageOptions = {
   readonly headers?: Readonly<Record<string, string>>;
 };
 
-/** The Event Message Versions a root lists, each with its exact type. */
-type OwnEventOf<C extends Contract> = C extends {
-  readonly events: readonly (infer E extends Event)[];
-}
-  ? E
-  : never;
+/** The Event Message Versions a root's Groups list, each with its exact type. */
+type OwnEventOf<C extends Contract> = Extract<GroupedOf<C, 'events'>, Event>;
 
-/** The Command Message Versions a root lists, each with its exact type. */
-type OwnCommandOf<C extends Contract> = C extends {
-  readonly commands: readonly (infer M extends Command)[];
-}
-  ? M
-  : never;
+/** The Command Message Versions a root's Groups list, each with its exact type. */
+type OwnCommandOf<C extends Contract> = Extract<GroupedOf<C, 'commands'>, Command>;
 
 /** The Message Versions that still work: Active and Deprecated, never Retired. */
 type LiveOf<M> = Exclude<M, { readonly lifecycle: 'retired' }>;

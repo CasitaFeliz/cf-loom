@@ -18,9 +18,6 @@ const contractFields = {
     name: true,
     definitions: true,
     groups: true,
-    events: true,
-    commands: true,
-    subscriptions: true,
     dependencies: true,
   },
   required: { kind: true, name: true },
@@ -98,8 +95,16 @@ export const definitionsFields = {
 
 /** The fields of a Group. */
 export const groupFields = {
-  declared: { kind: true, name: true, description: true, endpoints: true },
-  required: { kind: true, name: true, description: true, endpoints: true },
+  declared: {
+    kind: true,
+    name: true,
+    description: true,
+    endpoints: true,
+    events: true,
+    commands: true,
+    subscriptions: true,
+  },
+  required: { kind: true, name: true, description: true },
   strings: { kind: true, name: true, description: true },
   objects: {},
 } satisfies Fields<Group>;

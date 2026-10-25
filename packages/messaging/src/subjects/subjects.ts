@@ -1,13 +1,16 @@
 import type { Command, Contract, Event, Subscription } from '@cf-loom/contract';
 import {
   codeNameOf,
+  commandsOf,
   durableNameOf,
   eventServiceOf,
+  eventsOf,
   isContract,
   isLive,
   lifecycleOf,
   streamNameOf,
   subjectOf,
+  subscriptionsOf,
 } from '@cf-loom/contract/internal';
 
 /** A live version of one of the Service's own Events and the subject it is published on. */
@@ -41,8 +44,8 @@ export type Subjects = {
 export function subjectsOf(root: unknown): Subjects {
   const contract = contractOf(root);
   const service = contract.name;
-  const events = (contract.events ?? []).filter(isLive).toSorted(byVersion);
-  const commands = contract.commands ?? [];
+  const events = eventsOf(contract).filter(isLive).toSorted(byVersion);
+  const commands = commandsOf(contract);
   const active = commands.filter((command) => lifecycleOf(command) === 'active');
   return {
     service,
@@ -51,7 +54,7 @@ export function subjectsOf(root: unknown): Subjects {
     sent: active.map((command) => ({ message: command, subject: subjectOf(service, command) })),
     consumed: [
       ...commands.filter(isLive).map((command) => consumedCommandOf(service, command)),
-      ...(contract.subscriptions ?? []).map((subscription) =>
+      ...subscriptionsOf(contract).map((subscription) =>
         consumedSubscriptionOf(contract, subscription),
       ),
     ],
@@ -100,7 +103,7 @@ function consumedCommandOf(service: string, command: Command): Consumed {
 function consumedSubscriptionOf(contract: Contract, subscription: Subscription): Consumed {
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
-    const message = `${subscription.name} subscribes to an Event neither the root nor a Dependency lists`;
+    const message = `${subscription.name} subscribes to an Event neither a Group nor a Dependency lists`;
     throw new Error(message);
   }
   return {

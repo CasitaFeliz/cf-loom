@@ -110,13 +110,19 @@ const anEndpoint = {
 } as const satisfies EndpointSnapshot;
 
 const anEvent = {
+  group: 'orders',
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',
   body: { type: 'object', mode: 'strict', fields: {} },
 } as const satisfies EventSnapshot;
 
-const aCommand = { lifecycle: 'active', description: 'Charge', body: anEvent.body } as const;
+const aCommand = {
+  group: 'orders',
+  lifecycle: 'active',
+  description: 'Charge',
+  body: anEvent.body,
+} as const;
 
 const aGuard = {
   origin: 'local',
@@ -281,7 +287,11 @@ describe('decodeSnapshot', () => {
         guards: { apiKey: aGuard },
         codes: { [orderLocked]: aCode },
         subscriptions: {
-          notifyOnPlaced: { description: 'Receives it', event: 'orders-service:OrderPlaced@1' },
+          notifyOnPlaced: {
+            group: 'orders',
+            description: 'Receives it',
+            event: 'orders-service:OrderPlaced@1',
+          },
         },
         dependencies: {
           'payments-service': {
@@ -596,7 +606,11 @@ describe('decodeSnapshot', () => {
         where: 'subscriptions',
         snapshot: {
           ...aService(),
-          subscriptions: protoKeyed({ description: 'Receives it', event: 'orders-service:A@1' }),
+          subscriptions: protoKeyed({
+            group: 'orders',
+            description: 'Receives it',
+            event: 'orders-service:A@1',
+          }),
         },
         at: ['subscriptions', '__proto__'],
       },
@@ -897,10 +911,31 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      { kind: 'an Event', map: 'events', key: 'OrderPlaced@1', declared: anEvent },
+      { kind: 'a Command', map: 'commands', key: 'ChargeCard@1', declared: aCommand },
+    ])('$kind declared without a Group is malformed in it', ({ map, key, declared }) => {
+      const { group: _group, ...ungrouped } = declared;
+
+      const result = serviceWith({ [map]: { [key]: ungrouped } });
+
+      expect(elementOf(result)).toEqual([map, key]);
+    });
+
+    test.each([
       ['no description', { event: 'orders-service:OrderPlaced@1' }],
+      ['no Group', { description: 'Receives it', event: 'orders-service:OrderPlaced@1' }],
+      [
+        'a Group and a removedIn',
+        { group: 'orders', event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+      ],
       [
         'a description and a removedIn',
-        { description: 'Receives it', event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        {
+          group: 'orders',
+          description: 'Receives it',
+          event: 'orders-service:OrderPlaced@1',
+          removedIn: '3.2.0',
+        },
       ],
       [
         'a removedIn that is no semantic version',
@@ -996,7 +1031,7 @@ describe('decodeSnapshot', () => {
       'a Subscription’s Event that is no service and identity is malformed at the Event: %s',
       (event) => {
         const result = serviceWith({
-          subscriptions: { notifyOnPlaced: { description: 'Receives it', event } },
+          subscriptions: { notifyOnPlaced: { group: 'orders', description: 'Receives it', event } },
         });
 
         expect(result).toEqual(malformedAt(['subscriptions', 'notifyOnPlaced', 'event']));
@@ -1293,14 +1328,20 @@ function declaredSnapshot() {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineContract({
     name: 'orders-service',
-    groups: [group],
-    events: [orderPlaced],
-    commands: [chargeCard],
-    subscriptions: [
-      defineSubscription({
-        name: 'notifyOnPlaced',
-        description: 'Receives it',
-        event: orderPlaced,
+    groups: [
+      group,
+      defineGroup({
+        name: 'messages',
+        description: 'Messages',
+        events: [orderPlaced],
+        commands: [chargeCard],
+        subscriptions: [
+          defineSubscription({
+            name: 'notifyOnPlaced',
+            description: 'Receives it',
+            event: orderPlaced,
+          }),
+        ],
       }),
     ],
     dependencies: [defineDependencies(payments, { endpoints: [], events: [] })],
@@ -1364,6 +1405,7 @@ const formatOneFixture = `{
     "OrderPlaced@1": {
       "body": { "fields": {}, "mode": "open", "type": "object" },
       "description": "An order was placed",
+      "group": "orders",
       "lifecycle": "active",
       "visibility": "internal"
     }
@@ -1396,7 +1438,11 @@ const formatOneFixture = `{
   },
   "subscriptions": {
     "legacySync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },
-    "notifyOnPlaced": { "description": "Receives it", "event": "payments-service:PaymentSettled@1" }
+    "notifyOnPlaced": {
+      "description": "Receives it",
+      "event": "payments-service:PaymentSettled@1",
+      "group": "orders"
+    }
   },
   "version": "3.4.0"
 }

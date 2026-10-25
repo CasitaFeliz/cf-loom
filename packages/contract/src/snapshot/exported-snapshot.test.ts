@@ -91,6 +91,7 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
 
 function anEventEntry(fields: Partial<EventSnapshot> = {}): EventSnapshot {
   return {
+    group: 'orders',
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
@@ -159,6 +160,14 @@ describe('exportedSnapshotOf', () => {
     const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
 
     expect(cut.events).toEqual({ 'OrderPlaced@1': events['OrderPlaced@1'] });
+  });
+
+  test('an exported Event keeps its Group', () => {
+    const events = { 'OrderPlaced@1': anEventEntry({ group: 'billing' }) };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
+
+    expect(cut.events['OrderPlaced@1']?.group).toBe('billing');
   });
 
   test('a Deprecated Internal Event is kept', () => {
@@ -559,7 +568,8 @@ function eventsSnapshot(): ServiceSnapshot {
       body: z.object({ sku: z.string() }),
     }),
   ];
-  const root = defineContract({ name: 'orders-service', events });
+  const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', events } as never);
+  const root = defineContract({ name: 'orders-service', groups: [ordersGroup] });
   return serviceSnapshotOf(root);
 }
 

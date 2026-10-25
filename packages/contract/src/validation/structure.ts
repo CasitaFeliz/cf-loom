@@ -11,7 +11,13 @@ import {
   isSubscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import { type Declarations, isPlainObject, listOf, textOf } from '../written/index.ts';
+import {
+  type Declarations,
+  isPlainObject,
+  type LocatedGroup,
+  listOf,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { type Readable, readableOf } from './fields.ts';
 
@@ -43,13 +49,7 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
   const { root, groups, endpoints, guards, allPackages } = declarations;
   return [
     ...rootListings(root),
-    ...groups.map(({ at, group }) => ({
-      at: [...at, 'endpoints'],
-      list: group.endpoints,
-      noun: 'an Endpoint',
-      fits: isEndpoint,
-      required: true as const,
-    })),
+    ...groups.flatMap(groupListings),
     ...endpoints.flatMap(({ at, endpoint }) => [
       { at: [...at, 'guards'], list: endpoint.guards, noun: 'an Attachment' },
       {
@@ -80,6 +80,21 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
   ];
 }
 
+/** A Group's four lists, none required, since a list left out is empty. */
+function groupListings({ at, group }: LocatedGroup): readonly Listing[] {
+  return [
+    { at: [...at, 'endpoints'], list: group.endpoints, noun: 'an Endpoint', fits: isEndpoint },
+    { at: [...at, 'events'], list: group.events, noun: 'an Event', fits: isEvent },
+    { at: [...at, 'commands'], list: group.commands, noun: 'a Command', fits: isCommand },
+    {
+      at: [...at, 'subscriptions'],
+      list: group.subscriptions,
+      noun: 'a Subscription',
+      fits: isSubscription,
+    },
+  ];
+}
+
 function rootListings(root: Declarations['root']): readonly Listing[] {
   switch (root.kind) {
     case 'contract':
@@ -91,14 +106,6 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           fits: isDefinitions,
         },
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
-        { at: ['events'], list: root.events, noun: 'an Event', fits: isEvent },
-        { at: ['commands'], list: root.commands, noun: 'a Command', fits: isCommand },
-        {
-          at: ['subscriptions'],
-          list: root.subscriptions,
-          noun: 'a Subscription',
-          fits: isSubscription,
-        },
         {
           at: ['dependencies'],
           list: root.dependencies,

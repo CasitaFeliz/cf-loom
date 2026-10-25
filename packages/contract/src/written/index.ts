@@ -6,7 +6,9 @@ export {
   resolutionOf,
 } from './answerable.ts';
 export type { Declarations } from './declarations.ts';
-export { declarationsOf, endpointAt, endpointsOf, listedDefinitionsOf } from './declarations.ts';
+export { declarationsOf, listedDefinitionsOf } from './declarations.ts';
+export type { Listed } from './grouped.ts';
+export { commandsOf, endpointsOf, eventsOf, listedIn, subscriptionsOf } from './grouped.ts';
 export type { PathSegment } from './identity.ts';
 export {
   endpointSegmentsOf,

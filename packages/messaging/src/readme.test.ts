@@ -1,4 +1,10 @@
-import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
+import {
+  defineCommand,
+  defineContract,
+  defineEvent,
+  defineGroup,
+  defineSubscription,
+} from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -38,9 +44,15 @@ const notifyOnCreated = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 type Resources = { readonly notifications: { readonly send: (orderId: string) => Promise<void> } };

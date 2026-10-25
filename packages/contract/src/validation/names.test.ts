@@ -346,26 +346,6 @@ describe('validateContract: listed Definitions Packages', () => {
 });
 
 describe('validateContract: Groups', () => {
-  test('an Endpoint listed in two Groups fails', () => {
-    expect(validateGroups([aGroup('orders', [listOrders]), aGroup('sales', [listOrders])])).toEqual(
-      failed(
-        ['groups', 'sales', 'endpoints', 'GET /orders'],
-        'group-membership',
-        'An Endpoint belongs to exactly one Group: listOrders is also in orders',
-      ),
-    );
-  });
-
-  test('an Endpoint listed twice in one Group fails', () => {
-    expect(validateGroups([aGroup('orders', [listOrders, listOrders])])).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders'],
-        'group-membership',
-        'An Endpoint belongs to exactly one Group: listOrders is also in orders',
-      ),
-    );
-  });
-
   test('two Groups with one name fail', () => {
     expect(
       validateGroups([aGroup('orders', [listOrders]), aGroup('orders', [createOrder])]),
@@ -374,18 +354,6 @@ describe('validateContract: Groups', () => {
         ['groups', 'orders', 'name'],
         'duplicate-group-name',
         'A Group name is unique in the Contract: orders',
-      ),
-    );
-  });
-
-  test('an empty Group fails', () => {
-    const endpoints = [] as unknown as readonly [Endpoint];
-
-    expect(validateGroups([aGroup('orders', endpoints)])).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints'],
-        'empty-group',
-        'A Group lists at least one Endpoint',
       ),
     );
   });

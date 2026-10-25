@@ -4,6 +4,7 @@ import {
   defineContract,
   defineDependencies,
   defineEvent,
+  defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
@@ -79,9 +80,15 @@ const notifyOnSettled = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
-  subscriptions: [chargeOnCreated, notifyOnSettled],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+      subscriptions: [chargeOnCreated, notifyOnSettled],
+    }),
+  ],
   dependencies: [paymentsDeps],
 });
 

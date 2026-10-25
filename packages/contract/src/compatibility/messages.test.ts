@@ -58,11 +58,11 @@ const withOptionalNote = anObject({
 });
 
 function anEvent(lifecycle: Lifecycle, body: ObjectNode, visibility: Visibility = 'internal') {
-  return { visibility, lifecycle, description: 'An order was placed', body };
+  return { group: 'orders', visibility, lifecycle, description: 'An order was placed', body };
 }
 
 function aCommand(lifecycle: Lifecycle, body: ObjectNode) {
-  return { lifecycle, description: 'Charge a card', body };
+  return { group: 'orders', lifecycle, description: 'Charge a card', body };
 }
 
 function publishedEvent(held: Held, body: ObjectNode, visibility: Visibility = 'internal') {
@@ -268,6 +268,28 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
       },
       { site, difference: bodyChange(true), class: 'not-allowed' },
     ]);
+  });
+});
+
+describe('compatibilityReportOf, a Message Version’s Group', () => {
+  test('moving an Event’s Message Version to another Group gives no Change, only a changed hash', () => {
+    const baseline = aBaseline(event.held({ 'OrderPlaced@1': 'active' }));
+    const moved = { ...anEvent('active', plain), group: 'billing' };
+    const proposed = aProposed({ events: { 'OrderPlaced@1': moved } });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+  });
+
+  test('moving a Command’s Message Version to another Group gives no Change, only a changed hash', () => {
+    const baseline = aBaseline(command.held({ 'ChargeCard@1': 'active' }));
+    const moved = { ...aCommand('active', plain), group: 'billing' };
+    const proposed = aProposed({ commands: { 'ChargeCard@1': moved } });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
   });
 });
 

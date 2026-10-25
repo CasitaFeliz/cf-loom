@@ -91,11 +91,17 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
 }
 
 function anEvent(): EventSnapshot {
-  return { visibility: 'internal', lifecycle: 'active', description: '', body: anOpenObject() };
+  return {
+    group: 'orders',
+    visibility: 'internal',
+    lifecycle: 'active',
+    description: '',
+    body: anOpenObject(),
+  };
 }
 
 function aCommand(): CommandSnapshot {
-  return { lifecycle: 'active', description: '', body: anOpenObject() };
+  return { group: 'orders', lifecycle: 'active', description: '', body: anOpenObject() };
 }
 
 function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
