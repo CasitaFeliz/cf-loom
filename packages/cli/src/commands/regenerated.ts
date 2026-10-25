@@ -12,8 +12,8 @@ export function snapshotFileOf(built: BuiltProject): GeneratedFile {
 
 /**
  * The files a Service regenerates beside its Snapshot, and a line for every Command's Message
- * Version or Subscription the readers could not import as it is named, which leaves the readers
- * file out.
+ * Version or Subscription that nothing exports for the readers to import, which leaves the
+ * readers file out.
  */
 export type ServiceFiles = {
   readonly files: readonly GeneratedFile[];

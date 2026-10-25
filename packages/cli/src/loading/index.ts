@@ -8,6 +8,7 @@ export type {
 export {
   contractExportsOf,
   contractFolder,
+  exportNamesOf,
   insideContractOf,
   isUnderContract,
 } from './exported.ts';
