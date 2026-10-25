@@ -1,3 +1,4 @@
+import { kebabCase } from '@cf-loom/contract/internal';
 import { contractFolder, isUnderContract } from '../loading/index.ts';
 import type { Layout } from './config.ts';
 
@@ -83,10 +84,45 @@ export function filledPathOf(template: string, values: VariableValues): string {
   return template.replace(variablePattern, (_, name: string) => {
     const value = isVariable(name) ? values[name] : undefined;
     if (value === undefined) {
-      throw new Error(`The layout holds {${name}}, which was checked at load: a bug.`);
+      throw uncheckedVariable(name);
     }
     return String(value);
   });
+}
+
+/** Every value a variable takes, as a pattern: names are kebab-case words, a version a positive integer. */
+const valuePatterns: Readonly<Record<Variable, string>> = {
+  group: unanchoredSourceOf(kebabCase.pattern),
+  name: unanchoredSourceOf(kebabCase.pattern),
+  version: '[1-9][0-9]*',
+};
+
+/** The pattern every path fits that a template can fill in, whatever Element the values come from. */
+export function templatePatternOf(template: string): RegExp {
+  const parts = template.split(variablePattern);
+  const sources = parts.map((part, index) =>
+    index % 2 === 0 ? escapedSourceOf(part) : valuePatternOf(part),
+  );
+  return new RegExp(`^${sources.join('')}$`);
+}
+
+function valuePatternOf(name: string): string {
+  if (!isVariable(name)) {
+    throw uncheckedVariable(name);
+  }
+  return `(?:${valuePatterns[name]})`;
+}
+
+function uncheckedVariable(name: string): Error {
+  return new Error(`The layout holds {${name}}, which was checked at load: a bug.`);
+}
+
+function unanchoredSourceOf(pattern: RegExp): string {
+  return pattern.source.replace(/^\^|\$$/g, '');
+}
+
+function escapedSourceOf(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 type PathRule = (field: LayoutField, path: string) => string | undefined;

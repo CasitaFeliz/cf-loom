@@ -1373,19 +1373,17 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
-  test('a Handler file anywhere under src/ that nothing declared names is an orphan', () => {
+  test('a .handler.ts file outside every Handler template of the layout is no Handler', () => {
     const project = aProject({
       ...aService(),
-      'src/http/error.handler.ts': "export default 'x';\n",
+      'src/lib/error.handler.ts': 'export const onError = () => {};\n',
     });
 
-    const ran = cfLoom(project, 'generate');
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: `${orphanLine('src/http/error.handler.ts')}\n`,
-    });
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('a Handler file under src/contract/ is no Handler', () => {
@@ -1667,20 +1665,20 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran.status).toBe(0);
     expect(read(project, 'src/handlers.generated.ts')).not.toContain('listOrders');
   });
-  test.each(['src/commands/capture-card.v1.handler.ts', 'src/subscriptions/old-audit.handler.ts'])(
-    'a Handler file %s that nothing declared names exits 1 naming it',
-    (path) => {
-      const project = aProject({ ...aMessagingService(), [path]: "export default 'old';\n" });
+  test.each([
+    'src/commands/payments/capture-card.v1.handler.ts',
+    'src/subscriptions/payments/old-audit.handler.ts',
+  ])('a Handler file %s that nothing declared names exits 1 naming it', (path) => {
+    const project = aProject({ ...aMessagingService(), [path]: "export default 'old';\n" });
 
-      const ran = cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-      expect(ran).toEqual({
-        status: 1,
-        stdout: '',
-        stderr: `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n`,
-      });
-    },
-  );
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n`,
+    });
+  });
 
   test('the Handler of a Retired Command’s Message Version that is still declared is no orphan', () => {
     const project = aProject({
@@ -2391,7 +2389,9 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
   test('verify exits 1 on a Handler file under src/subscriptions no declared Subscription names', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
-    write(project, { 'src/subscriptions/old-audit.handler.ts': "export default 'old';\n" });
+    write(project, {
+      'src/subscriptions/payments/old-audit.handler.ts': "export default 'old';\n",
+    });
 
     const ran = cfLoom(project, 'verify');
 
@@ -2399,7 +2399,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       status: 1,
       stdout: '',
       stderr:
-        "src/subscriptions/old-audit.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+        "src/subscriptions/payments/old-audit.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
   });
 });
@@ -2546,6 +2546,27 @@ describe('cf-loom generate: linked folders and other runs', () => {
       stderr:
         "src/endpoints/other/old.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
     });
+  });
+
+  test.each(['aa', 'zz'])('a folder link src/%s to src/endpoints gives no orphan', (name) => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    symlinkSync(join(project, 'src/endpoints'), join(project, `src/${name}`), 'dir');
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Handler reached only through a folder link counts as named by its real path', () => {
+    const layout = "{ endpoint: 'src/{group}/{name}.handler.ts' }";
+    const project = aProject(withLayout(aService(), layout));
+    cfLoom(project, 'generate');
+    symlinkSync(join(project, 'src/orders'), join(project, 'src/zz'), 'dir');
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('a Handler file reached through a link into src/contract/ is no orphan', () => {

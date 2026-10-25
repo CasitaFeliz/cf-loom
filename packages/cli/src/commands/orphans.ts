@@ -1,7 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
-import { generatedEnding, handlerEnding, layoutFolder } from '../config/index.ts';
+import {
+  generatedEnding,
+  handlerEnding,
+  layoutFolder,
+  templatePatternOf,
+} from '../config/index.ts';
 import { filesUnder, insideContractOf, oneLineOf } from '../loading/index.ts';
 import { isWrittenByGenerate } from '../service-code/index.ts';
 import type { PlacedService } from './handler-files.ts';
@@ -10,6 +15,9 @@ import type { PlacedService } from './handler-files.ts';
 export type OrphanLines =
   | { readonly kind: 'lines'; readonly lines: readonly string[] }
   | { readonly kind: 'tooling'; readonly message: string };
+
+/** The fields of the layout that place a kind of Handler. */
+const handlerFields = ['endpoint', 'guard', 'command', 'subscription'] as const;
 
 /** A file that sits where nothing declared or configured puts one, with the line saying so. */
 type Orphan = { readonly path: string; readonly line: string };
@@ -43,15 +51,30 @@ export function orphanLinesOf(service: PlacedService): OrphanLines {
 }
 
 /**
- * The Handler files among some files that no declared Element names, a Retired Endpoint or
- * Command's Message Version still declared counting as naming its Handler.
+ * The Handler files among some files that fit a Handler template of the layout and that no
+ * declared Element names, a Retired Endpoint or Command's Message Version still declared counting
+ * as naming its Handler; a file names an Element when both have one real path.
  */
 function handlerOrphansOf(service: PlacedService, files: readonly string[]): readonly Orphan[] {
-  const named = new Set(service.handlerPaths.map(({ path }) => path));
+  const { directory, layout } = service.project;
+  const patterns = handlerFields.map((field) => templatePatternOf(layout[field]));
+  const named = new Set(service.handlerPaths.map(({ path }) => realPathOf(directory, path)));
   const rule = "names no declared Endpoint, Guard, Command's Message Version or Subscription";
   return files
-    .filter((path) => path.endsWith(handlerEnding) && !named.has(path))
+    .filter((path) => path.endsWith(handlerEnding))
+    .filter((path) => patterns.some((pattern) => pattern.test(path)))
+    .filter((path) => !named.has(realPathOf(directory, path)))
     .map((path) => ({ path, line: `${path} ${rule}: delete it` }));
+}
+
+/** A path's real path, links followed, or the path itself where nothing resolves. */
+function realPathOf(directory: string, path: string): string {
+  const absolute = join(directory, path);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
 }
 
 /** The files among some files that `generate` wrote and the layout places neither the map nor the readers at. */
