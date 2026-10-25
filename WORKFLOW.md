@@ -59,6 +59,9 @@ the wrong place. It says whether a documented decision causes it, and offers two
 cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
 glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
 
+A PR gets at most two Root-cause checks. When a third would trigger, the PR is held for the user with its state and
+the findings still open, and the main session moves on to the next issue.
+
 ## 1. Plan
 
 A `cf-planner` agent writes the plan from the issue's problem and constraints; the main session never prescribes the
@@ -114,7 +117,7 @@ Before handing back, the agent runs `pnpm test` and `pnpm check`, pushes the bra
 ## 3. Review
 
 Once `pnpm build`, `pnpm test` and `pnpm check` pass locally, `cf-reviewer` agents read the whole PR in parallel, one
-lens each, the three lenses of C27. A PR that changes fewer than about 200 lines gets one reviewer with all three
+lens each, the three lenses of C27. A PR that changes fewer than about 400 lines gets one reviewer with all three
 lenses. [`.claude/workflows/review-pr.js`](.claude/workflows/review-pr.js) runs the round.
 
 | Lens | Checks |
@@ -169,8 +172,9 @@ A CI failure on `main` is fixed before the next merge.
 
 ## 6. Next
 
-After a merge, the main session starts the next issue in milestone order without asking. Plans of issues that do not
-depend on each other may be written in parallel; one issue is implemented at a time.
+After a merge, the main session starts the next issue in milestone order without asking. Issues that do not depend on
+each other may be planned in parallel, and implemented in parallel when they change disjoint files, each in its own
+worktree and PR.
 
 ## Milestone sweep
 
