@@ -139,15 +139,15 @@ _Avoid_: deployment, build, instance
 ### Dependencies
 
 **Dependency**:
-A declaration, in a Contract, that its owner uses a Public or Internal Element of another Service, the Provider: an Endpoint it calls or an Event it subscribes to.
+A declaration, in a Contract, of what its owner uses of one other Service, the Provider: it holds the Provider's Contract Package and the Public or Internal Endpoints its owner calls. A Subscription to an Event that Contract Package exports needs the Dependency listed.
 _Avoid_: import, integration, upstream
 
 **Provider**:
-The Service whose Element a Dependency targets.
+The Service whose Contract Package a Dependency holds.
 _Avoid_: upstream, producer, server
 
 **Subscription**:
-A declaration that a Service receives an Event, its own or another Service's. A Subscription to another Service's Event is also a Dependency.
+A declaration that a Service receives an Event, its own or one a listed Dependency's Provider exports, taken from that Provider's Contract Package.
 _Avoid_: listener, binding
 
 ### Implementation

@@ -107,11 +107,11 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract (see [Over the Broker](#over-the-broker)). A Group adds nothing to a Message: its subject, stream and durable consumer never name it.
 - cf-loom derives the Broker's desired state, the streams and durable consumers each Service needs, but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README), and so does whether the Broker enforces Visibility.
-- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that dropped its Dependency on it; and a Release that retires a Command Version is deployed only once that version's durable consumer has been drained by the Release that deprecated it (see [Leftover durable consumers](packages/messaging/README.md#leftover-durable-consumers) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
+- **Deploy rule:** a Release that retires an Element is never deployed before the Release that deprecated it, nor before every Consumer has deployed the Release that stopped using it, by dropping the Endpoint from its Dependency or removing its Subscription to the Event; and a Release that retires a Command Version is deployed only once that version's durable consumer has been drained by the Release that deprecated it (see [Leftover durable consumers](packages/messaging/README.md#leftover-durable-consumers) in the messaging README). The tools do not know when a Release is deployed; this is an operating rule.
 
 ## Dependencies
 
-- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which then enable the typed client or the EventHandler stub. Code cannot call what was not declared.
+- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which holds the Provider's Contract Package: a Dependency enables the typed client of the Endpoints it selects, and a Subscription to an Event its Provider exports enables the EventHandler stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
 
 ## Wire protocol

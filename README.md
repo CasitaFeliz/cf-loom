@@ -8,7 +8,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 | Package | Used by | Provides |
 | --- | --- | --- |
-| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
+| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependency`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
 | [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `readersOf`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`), `Pairing`, `Readers`, `CommandImplementation`, `EventImplementation` and `MessageMeta`; `WithResources`, `ResourcesOf`, and `DirectCall`, `GuardCall` and `MessageCall`, the last argument of a direct call; `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
@@ -54,7 +54,7 @@ src/
 │   │   └── orders/
 │   │       └── notify-on-settled.subscription.ts
 │   └── dependencies/
-│       └── payments-service.dependencies.ts
+│       └── payments-service.dependency.ts
 ├── endpoints/orders/get-order.handler.ts  Handlers by Group and name, by default (see Stubs and the Handler map)
 ├── guards/api-key.handler.ts
 ├── commands/orders/charge-card.v1.handler.ts
