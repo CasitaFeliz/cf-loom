@@ -6,8 +6,9 @@ import {
   isMissing,
   isPlainObject,
   isWithoutValue,
-  type ListedDefinitions,
   listOf,
+  type NamedDefinitions,
+  standardRejectionsDeclarerOf,
   type WrittenObject,
 } from '../written/index.ts';
 import type { KnownFields } from './declared-fields.ts';
@@ -55,12 +56,20 @@ export function readableOf(declarations: Declarations): readonly Readable[] {
 }
 
 function writtenOf(declarations: Declarations): readonly Written[] {
-  const { root, standardsSource, groups, endpoints, guards, rejections, dependencies } =
+  const { root, standardRejectionsSource, groups, endpoints, guards, rejections, dependencies } =
     declarations;
-  const named = root.kind === 'contract' ? standardsSource : undefined;
+  const declarer = standardRejectionsDeclarerOf(declarations);
   return [
     { at: [], value: root, fields: rootFields[root.kind] },
-    ...(named === undefined ? [] : [written(named.at, named.definitions, definitionsFields)]),
+    ...(standardRejectionsSource === undefined
+      ? []
+      : [
+          written(
+            standardRejectionsSource.at,
+            standardRejectionsSource.definitions,
+            definitionsFields,
+          ),
+        ]),
     ...groups.map(({ at, group }) => written(at, group, groupFields)),
     ...endpoints.flatMap(({ at, endpoint }) => [
       written(at, endpoint, endpointFields),
@@ -74,7 +83,7 @@ function writtenOf(declarations: Declarations): readonly Written[] {
     ]),
     ...rejections.map(({ at, rejection }) => written(at, rejection, rejectionFields)),
     ...dependencies.map(({ at, dependency }) => written(at, dependency, dependencyFields)),
-    ...(standardsSource === undefined ? [] : standardRejectionsOf(standardsSource)),
+    ...(declarer === undefined ? [] : standardRejectionsOf(declarer)),
     ...messagingWrittenOf(declarations),
   ];
 }
@@ -99,7 +108,7 @@ function attachmentsOf(at: Path, attachments: unknown): readonly Written[] {
 }
 
 /** The `standardRejections` map of a Definitions Package and each declaration in it. */
-function standardRejectionsOf({ at, definitions }: ListedDefinitions): readonly Written[] {
+function standardRejectionsOf({ at, definitions }: NamedDefinitions): readonly Written[] {
   const mapAt = [...at, 'standardRejections'];
   return [
     written(mapAt, definitions.standardRejections, standardRejectionsFields),

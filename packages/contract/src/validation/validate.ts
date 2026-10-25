@@ -5,7 +5,7 @@ import {
   isDefinitions,
 } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
-import { openCompositionsOf, walkSchemas } from '../walker/index.ts';
+import { openCompositionsOf, walkMeetingSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
 import { codeOnceFailures } from './code-once.ts';
 import { exportFailures } from './definitions.ts';
@@ -19,7 +19,7 @@ import { messageBodyFailures, messageFailures } from './messages.ts';
 import { nameFailures } from './name-grammars.ts';
 import { packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
-import { ambiguousFailures, ambiguousSchemaFailure, schemaOriginsOf } from './provenance.ts';
+import { provenanceFailures, schemaOriginsOf } from './provenance.ts';
 import { rejectionFailures } from './rejections.ts';
 import {
   failuresAt,
@@ -59,13 +59,23 @@ export type ResolvedDefinitions = {
 };
 
 /**
+ * An installed package exporting a Definitions object whose package.json lacks its name or its
+ * version, so nothing it exports can be recorded: what it exports, and why, in one line.
+ */
+export type UnidentifiedDefinitions = {
+  readonly exports: Readonly<Record<string, unknown>>;
+  readonly why: string;
+};
+
+/**
  * The package a root sits in: its package.json name, scope included; every Definitions Package its
- * files import, as Node resolved them; and what the root file exports, by name, which a Definitions
- * root's members are.
+ * files import, as Node resolved them, and those that cannot be named; and what the root file
+ * exports beside the root, by name, which a Definitions root's members are.
  */
 export type RootPackage = {
   readonly packageName: string;
   readonly packages: readonly ResolvedDefinitions[];
+  readonly unidentified: readonly UnidentifiedDefinitions[];
   readonly rootExports: Readonly<Record<string, unknown>>;
 };
 
@@ -97,16 +107,14 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
   const { packages, rootExports } = rootPackage;
   const declarations = declarationsOf(root, rootExports);
   const slots = schemaSlotsOf(declarations);
-  const origins = schemaOriginsOf(packages);
-  const walked = walkSchemas(locatedSchemasOf(slots.slots), origins.originOf);
+  const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
   const nodes = nodesOf(slots.slots, walked);
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
     ...exportFailures(declarations, rootExports),
-    ...ambiguousFailures(declarations, packages),
+    ...provenanceFailures(declarations, rootPackage, walked.met),
     ...codeOnceFailures(declarations, packages),
-    ...origins.ambiguous.map(ambiguousSchemaFailure),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),

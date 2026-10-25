@@ -1,5 +1,4 @@
 import {
-  isDefinitions,
   isDependency,
   isEndpoint,
   isGroup,
@@ -15,6 +14,7 @@ import {
   isPlainObject,
   type LocatedGroup,
   listOf,
+  standardRejectionsSourceOf,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -48,7 +48,7 @@ function standardsSourceFailures(root: Declarations['root']): readonly Declarati
   if (root.kind !== 'contract' || root.standardRejections === undefined) {
     return [];
   }
-  if (isDefinitions(root.standardRejections)) {
+  if (standardRejectionsSourceOf(root) !== undefined) {
     return [];
   }
   const message = "A Contract's standardRejections is a Definitions Package's definitions";

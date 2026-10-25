@@ -39,7 +39,7 @@ function nameOf(next: () => number): string {
 /** The Snapshot of a Definitions root whose file exports what is given beside it. */
 function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
-  const rootPackage = aRootPackage(root, { rootExports: { definitions: root, ...exported } });
+  const rootPackage = aRootPackage(root, { rootExports: exported });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
@@ -155,7 +155,17 @@ describe('snapshotOf: what a Service takes from a Definitions Package’s export
     expect(total).toMatchObject({ origin: '@org/definitions@1.0.0#amount' });
   });
 
-  test('a Guard a listed package exports takes the package’s origin, with no list', () => {
+  test('a schema a package exports under two names takes the first name in code point order', () => {
+    const orgPackage = aPackage('@org/definitions', { money, amount: money });
+
+    const snapshot = serviceSnapshotOf([orgPackage], aPing([], z.object({ total: money })));
+
+    const body = snapshot.endpoints['GET /ping']?.success.body;
+    const total = body?.type === 'object' ? body.fields['total']?.schema : undefined;
+    expect(total).toMatchObject({ origin: '@org/definitions@1.0.0#amount' });
+  });
+
+  test('a Guard an imported Definitions Package exports takes the package’s origin, with no list', () => {
     const orgPackage = aPackage('@org/definitions', { apiKey });
 
     const snapshot = serviceSnapshotOf([orgPackage], aPing([apiKey]));
@@ -163,7 +173,7 @@ describe('snapshotOf: what a Service takes from a Definitions Package’s export
     expect(snapshot.guards['apiKey']?.origin).toBe('@org/definitions@1.0.0');
   });
 
-  test('each reached Guard has the origin of the first listed package exporting that very object, else local', () => {
+  test('each reached Guard has the origin of the Definitions Package exporting that very object, else local', () => {
     const next = seededNext(1790);
     for (let draw = 0; draw < 40; draw += 1) {
       const guards = Array.from({ length: 4 }, (_, index) =>

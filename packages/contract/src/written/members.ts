@@ -2,30 +2,50 @@ import type * as core from 'zod/v4/core';
 import { type Guard, isGuard, isRejection, type Rejection } from '../declarations/index.ts';
 import { isSchema } from './parts.ts';
 
-/** A Definitions Package's members, by kind, each with every name it is exported under. */
-export type Members = {
-  readonly guards: readonly Guard[];
-  readonly rejections: readonly Rejection[];
-  readonly schemas: readonly (readonly [name: string, schema: core.$ZodType])[];
-};
+/** One export of a Definitions Package's root file that it shares: a Guard, a Rejection or a zod schema, under its export name. */
+export type Member =
+  | { readonly name: string; readonly kind: 'guard'; readonly value: Guard }
+  | { readonly name: string; readonly kind: 'rejection'; readonly value: Rejection }
+  | { readonly name: string; readonly kind: 'schema'; readonly value: core.$ZodType };
+
+/** A Definitions Package's members, one per export, in the order its module lists them. */
+export type Members = readonly Member[];
 
 /**
  * What a Definitions Package holds: each export that is a Guard, a Rejection or a zod schema, by
  * export name; the Definitions object and anything else are left out.
  */
 export function membersOf(exports: Readonly<Record<string, unknown>>): Members {
-  const names = Object.keys(exports);
-  const values = Object.values(exports);
-  const schemas: (readonly [string, core.$ZodType])[] = [];
-  for (const name of names) {
-    const value = exports[name];
-    if (isSchema(value)) {
-      schemas.push([name, value]);
+  const members: Member[] = [];
+  for (const [name, value] of Object.entries(exports)) {
+    const member = memberOf(name, value);
+    if (member !== undefined) {
+      members.push(member);
     }
   }
-  return {
-    guards: [...new Set(values.filter(isGuard))],
-    rejections: [...new Set(values.filter(isRejection))],
-    schemas,
-  };
+  return members;
+}
+
+function memberOf(name: string, value: unknown): Member | undefined {
+  if (isGuard(value)) {
+    return { name, kind: 'guard', value };
+  }
+  if (isRejection(value)) {
+    return { name, kind: 'rejection', value };
+  }
+  return isSchema(value) ? { name, kind: 'schema', value } : undefined;
+}
+
+/** The Guards among a package's members, each once. */
+export function memberGuardsOf(members: Members): readonly Guard[] {
+  const guards = members.map((member) => (member.kind === 'guard' ? member.value : undefined));
+  return [...new Set(guards.filter(isGuard))];
+}
+
+/** The Rejections among a package's members, each once. */
+export function memberRejectionsOf(members: Members): readonly Rejection[] {
+  const rejections = members.map((member) =>
+    member.kind === 'rejection' ? member.value : undefined,
+  );
+  return [...new Set(rejections.filter(isRejection))];
 }

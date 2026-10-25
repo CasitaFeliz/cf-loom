@@ -232,7 +232,8 @@ function snapshotFor(
   context: SnapshotContext = aContext(),
   packages: readonly ResolvedDefinitions[] = [orgPackage],
 ): Snapshot {
-  const rootExports = root === orgDefinitions ? orgPackage.exports : {};
+  const { definitions: _root, ...exported } = orgPackage.exports;
+  const rootExports = root === orgDefinitions ? exported : {};
   const validated = validateContract(root, aRootPackage(root, { packages, rootExports }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);

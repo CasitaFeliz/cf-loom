@@ -10,6 +10,7 @@ export {
   declarationsOf,
   providerExportsOf,
   providerNameOf,
+  standardRejectionsDeclarerOf,
   standardRejectionsSourceOf,
 } from './declarations.ts';
 export type { Listed } from './grouped.ts';
@@ -41,10 +42,8 @@ export {
   subjectVersionOf,
 } from './identity.ts';
 export type {
-  ListedDefinitions,
   LocatedCode,
   LocatedCommand,
-  LocatedDefinitions,
   LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
@@ -53,11 +52,14 @@ export type {
   LocatedRejection,
   LocatedStandardRejection,
   LocatedSubscription,
+  NamedDefinitions,
   Root,
 } from './located.ts';
-export type { Members } from './members.ts';
-export { membersOf } from './members.ts';
+export type { Member, Members } from './members.ts';
+export { memberGuardsOf, memberRejectionsOf, membersOf } from './members.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
+export type { PackageNameParts } from './package-names.ts';
+export { packageNamePartsOf } from './package-names.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,

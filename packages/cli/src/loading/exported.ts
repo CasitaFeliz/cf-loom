@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { byCodePoint } from '@cf-loom/contract/internal';
+import { byCodePoint, exportNamesOf } from '@cf-loom/contract/internal';
 import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 
@@ -90,16 +90,6 @@ function exportsOfIn(modules: readonly Module[], declaration: unknown): readonly
   return modules.flatMap(({ path, exports }) =>
     exportNamesOf(exports, declaration).map((name): FileExport => ({ kind: 'file', path, name })),
   );
-}
-
-/**
- * The names a module exports `value` under, by identity, `default` included, in code point order.
- */
-export function exportNamesOf(
-  moduleExports: Readonly<Record<string, unknown>>,
-  value: unknown,
-): readonly string[] {
-  return namesOf(moduleExports).filter((name) => moduleExports[name] === value);
 }
 
 function isContractSource(file: string): boolean {

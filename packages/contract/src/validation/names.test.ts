@@ -248,7 +248,7 @@ describe('validateContract: name grammars', () => {
     (name) => {
       const guard = defineGuard({ name, description: 'A guard' });
       const definitions = defineDefinitions({});
-      const rootExports = { definitions, guard };
+      const rootExports = { guard };
 
       expect(validateContract(definitions, aRootPackage(definitions, { rootExports }))).toEqual(
         failed(

@@ -1,6 +1,6 @@
-import { type Contract, type Definitions, isGuard, isRejection } from '../declarations/index.ts';
+import type { Contract } from '../declarations/index.ts';
 import type { ValidContract } from '../validation/index.ts';
-import { isSchema } from '../written/index.ts';
+import type { Member } from '../written/index.ts';
 import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
 import type { SnapshotContext, SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
@@ -27,7 +27,7 @@ export function snapshotOf(validated: ValidContract, context: SnapshotContext): 
         dependencies: dependencySnapshotsOf(validated.declarations.dependencies),
       };
     case 'definitions':
-      return definitionsSnapshotOf(validated, root, context);
+      return definitionsSnapshotOf(validated, context);
   }
 }
 
@@ -58,14 +58,18 @@ function serviceSnapshotOf(
 
 function definitionsSnapshotOf(
   validated: ValidContract,
-  root: Definitions,
   context: SnapshotContext,
 ): DefinitionsSnapshot {
   const { schemas, declarations } = validated;
   const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
-  const exported = Object.entries(declarations.exports).filter(([, value]) => value !== root);
-  const exports = exported.map(([name, value]) => [name, exportSnapshotOf(value, sources)]);
+  const exports: (readonly [string, ExportSnapshot])[] = [];
+  for (const member of declarations.ownMembers ?? []) {
+    const exported = exportSnapshotOf(member, sources);
+    if (exported !== undefined) {
+      exports.push([member.name, exported]);
+    }
+  }
   return {
     format: 1,
     kind: 'definitions',
@@ -79,25 +83,24 @@ function definitionsSnapshotOf(
   };
 }
 
-/** An export as its Snapshot records it; validation lets nothing else through. */
-function exportSnapshotOf(value: unknown, sources: SnapshotSources): ExportSnapshot {
-  if (isGuard(value)) {
-    return { kind: 'guard', guard: value.name };
+/** A member as its Snapshot records it: a Guard by name, a Rejection by code, a schema by its walked node. */
+function exportSnapshotOf(member: Member, { nodeOf }: SnapshotSources): ExportSnapshot | undefined {
+  switch (member.kind) {
+    case 'guard':
+      return { kind: 'guard', guard: member.value.name };
+    case 'rejection':
+      return { kind: 'rejection', code: member.value.code };
+    case 'schema': {
+      const schema = nodeOf(member.value, 'schema');
+      return schema === undefined ? undefined : { kind: 'schema', schema };
+    }
   }
-  if (isRejection(value)) {
-    return { kind: 'rejection', code: value.code };
-  }
-  const schema = isSchema(value) ? sources.nodeOf(value, 'schema') : undefined;
-  if (schema !== undefined) {
-    return { kind: 'schema', schema };
-  }
-  throw new Error('A valid Definitions root exported what it does not share: a bug.');
 }
 
 function sourcesOf({ schemas, declarations }: ValidContract): SnapshotSources {
   return {
     nodeOf: schemas.nodeOf,
     standards: declarations.standardRejections,
-    standardsFrom: declarations.standardsFrom,
+    standardRejectionsSource: declarations.standardRejectionsSource,
   };
 }

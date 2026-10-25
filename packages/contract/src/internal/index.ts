@@ -114,11 +114,13 @@ export type {
   ResolvedDefinitions,
   RootPackage,
   TextPartNodes,
+  UnidentifiedDefinitions,
   ValidatedContract,
   ValidContract,
 } from '../validation/index.ts';
 export {
   definitionsPackageOf,
+  exportNamesOf,
   failureLineOf,
   locationOf,
   oneOf,
@@ -219,7 +221,13 @@ export {
   transportHeaderFitOf,
   withDeprecation,
 } from '../wire/index.ts';
-export type { AnswerableRejection, IssuePart, Part, PathSegment } from '../written/index.ts';
+export type {
+  AnswerableRejection,
+  IssuePart,
+  PackageNameParts,
+  Part,
+  PathSegment,
+} from '../written/index.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,
@@ -241,6 +249,7 @@ export {
   methodAndPathOf,
   nameAndVersionOf,
   ownOf,
+  packageNamePartsOf,
   partFieldOf,
   pathSegmentsOf,
   providerExportsOf,

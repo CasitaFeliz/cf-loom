@@ -149,11 +149,10 @@ describe('validateContract', () => {
 
     const validated = validateContract(contract, aRootPackage(contract, { packages: [installed] }));
 
-    const listedIn = { at: ['standardRejections'], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
       packageName: 'orders-service',
-      exports: {},
+      ownMembers: undefined,
       groups: [{ at: ['groups', 'orders'], group: ordersGroup }],
       endpoints: [
         {
@@ -196,7 +195,6 @@ describe('validateContract', () => {
             at: ['standardRejections', 'standardRejections', 'notFound'],
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
-            listedIn,
           },
         },
         {
@@ -208,7 +206,7 @@ describe('validateContract', () => {
           declared: undefined,
         },
       ],
-      standardsFrom: installed,
+      standardRejectionsSource: installed,
       dependencies: [],
       events: [],
       commands: [],
@@ -224,7 +222,7 @@ describe('validateContract', () => {
       guards: [userToken],
     });
     const definitions = defineDefinitions({});
-    const rootExports = { definitions, permission, userToken };
+    const rootExports = { permission, userToken };
 
     const validated = validateContract(definitions, aRootPackage(definitions, { rootExports }));
 
@@ -236,7 +234,7 @@ describe('validateContract', () => {
 
   test('a valid Definitions Package reaches every Guard and code it exports', () => {
     const definitions = defineDefinitions({});
-    const rootExports = { definitions, apiKey, orderLocked, unauthenticated };
+    const rootExports = { apiKey, orderLocked, unauthenticated };
 
     const validated = validateContract(definitions, aRootPackage(definitions, { rootExports }));
 
@@ -459,7 +457,7 @@ describe('validateContract', () => {
       { at: ['exports', 'money'], schema: money },
     ];
     const walked = walkSchemas(located, noOrigin);
-    const rootExports = { definitions, apiKey, money, unauthenticated, orderLocked };
+    const rootExports = { apiKey, money, unauthenticated, orderLocked };
 
     const validated = validateContract(definitions, aRootPackage(definitions, { rootExports }));
 
@@ -685,7 +683,7 @@ describe('validateContract: the README’s examples', () => {
 
     const exported = { userToken, permission, money, pagination, unauthenticated, forbidden };
     const packages = [anInstalledPackage(definitions, exported)];
-    const rootExports = { definitions, ...exported };
+    const rootExports = exported;
 
     const validated = [contract, definitions, application].map(
       (root) => validateContract(root, aRootPackage(root, { packages, rootExports })).kind,

@@ -1,4 +1,5 @@
 export { oneOf } from './closed-values.ts';
+export { exportNamesOf } from './export-names.ts';
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';
 export type { Problem } from './problem.ts';
@@ -8,6 +9,7 @@ export { definitionsPackageOf, originTextOf } from './provenance.ts';
 export type {
   ResolvedDefinitions,
   RootPackage,
+  UnidentifiedDefinitions,
   ValidatedContract,
   ValidatedSchemas,
   ValidContract,

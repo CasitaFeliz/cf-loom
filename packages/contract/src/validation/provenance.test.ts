@@ -223,7 +223,7 @@ describe('validateContract and snapshotOf: where a reached declaration came from
 
     const validated = validateContract(
       root,
-      aRootPackage(root, { packages: [p2], rootExports: { definitions: root, apiKey, own } }),
+      aRootPackage(root, { packages: [p2], rootExports: { apiKey, own } }),
     );
     const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
 
@@ -315,36 +315,52 @@ function seededNext(seed: number): () => number {
 }
 
 describe('validateContract and snapshotOf: origins are exactly the packages used', () => {
-  test('the origins name exactly the packages whose members the Contract reaches, two copies of one name counted as two', () => {
+  test('the origins name exactly the packages whose Guards, codes and schemas the Contract reaches, two copies of one name counted as two', () => {
     const next = seededNext(178);
+    const versions = ['1.0.0', '2.0.0', '3.0.0'];
     for (let draw = 0; draw < 40; draw += 1) {
-      const guards = Array.from({ length: 3 }, (_, index) =>
-        defineGuard({ name: `gate${index}`, description: 'A gate' }),
-      );
-      const versions = ['1.0.0', '2.0.0', '3.0.0'];
-      const owners = guards.map(() => Math.floor(next() * 4));
-      const reached = guards.filter(() => next() < 0.6);
+      const members: readonly { readonly name: string; readonly value: unknown }[] = [
+        { name: 'gate', value: defineGuard({ name: 'gate', description: 'A gate' }) },
+        { name: 'taken', value: defineRejection({ code: 'TAKEN', status: 409, message: 'Taken' }) },
+        { name: 'money', value: z.object({ amount: z.int() }) },
+      ];
+      const owners = members.map(() => Math.floor(next() * 4));
+      const isReached = members.map(() => next() < 0.6);
       const packages = versions.map((version, index) =>
         anInstalledPackage(
           defineDefinitions({}),
           Object.fromEntries(
-            guards.filter((_, at) => owners[at] === index).map((guard) => [guard.name, guard]),
+            members.filter((_, at) => owners[at] === index).map(({ name, value }) => [name, value]),
           ),
           { packageName: '@org/definitions', version },
         ),
       );
+      const [gate, taken, schema] = members.map(({ value }, at) =>
+        isReached[at] ? value : undefined,
+      );
+      const root = aService({
+        guards: gate === undefined ? [] : [gate as Guard],
+        rejections: taken === undefined ? [] : [taken as Rejection],
+        body: z.object({ total: (schema as z.ZodObject | undefined) ?? z.string() }),
+      });
 
-      const snapshot = serviceIn(aService({ guards: reached }), packages);
+      const snapshot = serviceIn(root, packages);
 
-      const origins = new Set(Object.values(snapshot.guards).map(({ origin }) => origin));
-      origins.delete('local');
+      const origins = new Set(
+        [
+          ...Object.values(snapshot.guards).map(({ origin }) => origin),
+          snapshot.codes['TAKEN']?.origin,
+          totalOrigin(snapshot),
+        ].map((origin) => (typeof origin === 'string' ? origin.split('#')[0] : origin)),
+      );
       const used = new Set(
-        reached
-          .map((guard) => owners[guards.indexOf(guard)] ?? 3)
-          .filter((owner) => owner < 3)
+        owners
+          .filter((owner, at) => isReached[at] && owner < 3)
           .map((owner) => `@org/definitions@${versions[owner]}`),
       );
-      expect(origins).toEqual(used);
+      expect(new Set([...origins].filter((origin) => String(origin).startsWith('@')))).toEqual(
+        used,
+      );
     }
   });
 });

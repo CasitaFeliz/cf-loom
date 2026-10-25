@@ -10,6 +10,7 @@ import {
   type LocatedGuard,
   type LocatedRejection,
   type LocatedSubscription,
+  type Members,
   type ResolvedStandard,
   type Root,
   resolvedStandards,
@@ -44,15 +45,15 @@ export type ValidatedDeclarations = {
   readonly root: Root;
   /** The package.json name of the package the root sits in, scope included. */
   readonly packageName: string;
-  /** What a Definitions root's file exports, by name: what it shares, beside the root; nothing for another root. */
-  readonly exports: Readonly<Record<string, unknown>>;
+  /** What a Definitions root's file exports that it shares; none for another root. */
+  readonly ownMembers: Members | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
   readonly codes: readonly ValidatedCode[];
   readonly standardRejections: readonly ResolvedStandard[];
-  /** The installed package a Contract takes its Standard Rejections from; none for cf-loom's defaults or a Definitions root's own. */
-  readonly standardsFrom: ResolvedDefinitions | undefined;
+  /** The installed package a Contract names as `standardRejections`; none for cf-loom's defaults or a Definitions root's own. */
+  readonly standardRejectionsSource: ResolvedDefinitions | undefined;
   readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
   readonly commands: readonly LocatedCommand[];
@@ -62,15 +63,15 @@ export type ValidatedDeclarations = {
 /** What a valid root declares, so the Snapshot's writer never gathers it again. */
 export function validatedDeclarationsOf(
   declarations: Declarations,
-  { packageName, packages, rootExports }: RootPackage,
+  { packageName, packages }: Pick<RootPackage, 'packageName' | 'packages'>,
 ): ValidatedDeclarations {
-  const { root, standardsSource } = declarations;
+  const { root, ownMembers, standardRejectionsSource } = declarations;
   const fromOf = (declaration: unknown) => foundIn(packages, declaration);
-  const named = root.kind === 'contract' ? standardsSource?.definitions : undefined;
+  const named = standardRejectionsSource?.definitions;
   return {
     root,
     packageName,
-    exports: root.kind === 'definitions' ? rootExports : {},
+    ownMembers,
     groups: declarations.groups,
     endpoints: declarations.endpoints,
     guards: declarations.guards.map((located) => ({ ...located, from: fromOf(located.guard) })),
@@ -81,7 +82,7 @@ export function validatedDeclarationsOf(
       from: fromOf(first.rejection),
     })),
     standardRejections: resolvedStandards(declarations),
-    standardsFrom: named === undefined ? undefined : fromOf(named),
+    standardRejectionsSource: named === undefined ? undefined : fromOf(named),
     dependencies: declarations.dependencies,
     events: declarations.events,
     commands: declarations.commands,

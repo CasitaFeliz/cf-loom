@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { findPackageJSON } from 'node:module';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { noVersionLineOf, packageManifestAt } from './package-manifest.ts';
 
 /** A package's version as installed where the root imports it, or why it has none. */
 export type InstalledVersion =
@@ -59,35 +59,26 @@ function missingMessageOf(
 ): string {
   return missing.kind === 'not-installed'
     ? `${packageName} is not installed`
-    : `${packageName} has no version in its package.json`;
+    : noVersionLineOf(packageName);
 }
 
 function foundOf(packageName: string, rootPath: string): Found {
   const manifestPath = manifestPathOf(packageName, rootPath);
-  const manifest = manifestPath === undefined ? undefined : manifestIn(manifestPath);
+  const manifest = manifestPath === undefined ? undefined : packageManifestAt(manifestPath);
   if (manifestPath === undefined || manifest === undefined) {
     return { kind: 'not-installed' };
   }
-  const version = manifest['version'];
-  if (typeof version !== 'string') {
+  const { version, fields } = manifest;
+  if (version === undefined) {
     return { kind: 'no-version' };
   }
-  return { kind: 'found', manifestPath, manifest, version };
+  return { kind: 'found', manifestPath, manifest: fields, version };
 }
 
 /** Where Node finds the package's package.json from the root file, as the root imports it. */
 function manifestPathOf(packageName: string, rootPath: string): string | undefined {
   try {
     return findPackageJSON(packageName, pathToFileURL(rootPath));
-  } catch {
-    return undefined;
-  }
-}
-
-function manifestIn(path: string): Readonly<Record<string, unknown>> | undefined {
-  try {
-    const manifest: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    return typeof manifest === 'object' && manifest !== null ? { ...manifest } : undefined;
   } catch {
     return undefined;
   }

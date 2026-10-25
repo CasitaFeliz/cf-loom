@@ -13,7 +13,6 @@ import type {
   Subscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { Members } from './members.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
 export type Root = Contract | Application | Definitions;
@@ -52,11 +51,8 @@ export type LocatedCode = {
   readonly rejections: readonly [LocatedRejection, ...LocatedRejection[]];
 };
 
-/** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
-export type ListedDefinitions = { readonly at: Path; readonly definitions: Definitions };
-
-/** A Definitions Package where it sits, with what its root file exports that it shares. */
-export type LocatedDefinitions = ListedDefinitions & { readonly members: Members };
+/** The Definitions Package that declares a root's Standard Rejections, and where it sits: named by a Contract at `['standardRejections']`, or the Definitions root itself at `[]`. */
+export type NamedDefinitions = { readonly at: Path; readonly definitions: Definitions };
 
 /**
  * A Dependency and where it sits in its root, by its Provider's name, or by its position when its
@@ -64,13 +60,11 @@ export type LocatedDefinitions = ListedDefinitions & { readonly members: Members
  */
 export type LocatedDependency = { readonly at: Path; readonly dependency: Dependency };
 
-/** A Standard Rejection as a Definitions Package declares it, by name, where it sits and the package. */
+/** A Standard Rejection as a Definitions Package declares it, by name, and where it sits. */
 export type LocatedStandardRejection = {
   readonly at: Path;
   readonly name: string;
   readonly declaration: StandardRejectionDeclaration<number>;
-  /** The Definitions Package declaring it. */
-  readonly listedIn: ListedDefinitions;
 };
 
 /**

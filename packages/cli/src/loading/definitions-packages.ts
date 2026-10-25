@@ -1,8 +1,22 @@
-import { isDefinitions, type ResolvedDefinitions } from '@cf-loom/contract/internal';
+import type { Definitions } from '@cf-loom/contract';
+import {
+  isDefinitions,
+  type ResolvedDefinitions,
+  type UnidentifiedDefinitions,
+} from '@cf-loom/contract/internal';
 import type { ImportedPackage } from './imported-packages.ts';
 
-/** A module that exports a Definitions object, with its version. */
-type Versioned = ImportedPackage & { readonly version: string };
+/**
+ * The Definitions Packages the root's import reached: those a Snapshot can name, each with the
+ * others its files import, and those whose package.json lacks the name or version to name them.
+ */
+export type DefinitionsPackages = {
+  readonly packages: readonly ResolvedDefinitions[];
+  readonly unidentified: readonly UnidentifiedDefinitions[];
+};
+
+/** A Definitions object of one package, read from the first of its modules that exports it. */
+type Exporter = { readonly module: ImportedPackage; readonly definitions: Definitions };
 
 /** A Definitions Package found, the package.json it sits under, and the list its reach fills. */
 type Found = {
@@ -12,14 +26,28 @@ type Found = {
 };
 
 /**
- * Every imported module that exports a Definitions object, with that object, and the other ones
- * its package's files import, directly or through any package: the Definitions Packages.
+ * Every Definitions object an imported package exports, once per package however many of its
+ * modules export it; with the other packages its files import, directly or through any package.
  */
-export function definitionsPackagesOf(
-  imported: readonly ImportedPackage[],
-): readonly ResolvedDefinitions[] {
+export function definitionsPackagesOf(imported: readonly ImportedPackage[]): DefinitionsPackages {
+  const found: Found[] = [];
+  const unidentified: UnidentifiedDefinitions[] = [];
+  for (const { module, definitions } of exportersOf(imported)) {
+    const { identity, exports, manifestPath } = module;
+    switch (identity.kind) {
+      case 'identified': {
+        const reaches: ResolvedDefinitions[] = [];
+        const { packageName, version } = identity;
+        const resolved = { definitions, packageName, version, exports, reaches };
+        found.push({ manifestPath, resolved, reaches });
+        break;
+      }
+      case 'unidentified':
+        unidentified.push({ exports, why: identity.why });
+        break;
+    }
+  }
   const graph = importGraphOf(imported);
-  const found = imported.filter(isVersioned).flatMap(definitionsIn);
   for (const entry of found) {
     const reachable = reachableFrom(entry.manifestPath, graph);
     const reached = found.filter(
@@ -27,26 +55,25 @@ export function definitionsPackagesOf(
     );
     entry.reaches.push(...reached.map(({ resolved }) => resolved));
   }
-  return found.map(({ resolved }) => resolved);
+  return { packages: found.map(({ resolved }) => resolved), unidentified };
 }
 
-/** The imported modules that export a Definitions object but whose package.json has no version. */
-export function unversionedDefinitionsOf(
-  imported: readonly ImportedPackage[],
-): readonly ImportedPackage[] {
-  return imported.filter(
-    (module) => module.version === undefined && Object.values(module.exports).some(isDefinitions),
-  );
-}
-
-function definitionsIn(module: Versioned): readonly Found[] {
-  const { manifestPath, packageName, version, exports } = module;
-  const exported = new Set(Object.values(exports).filter(isDefinitions));
-  return [...exported].map((definitions) => {
-    const reaches: ResolvedDefinitions[] = [];
-    const resolved = { definitions, packageName, version, exports, reaches };
-    return { manifestPath, resolved, reaches };
-  });
+/** Each Definitions object once per package, with the first of the package's modules exporting it. */
+function exportersOf(imported: readonly ImportedPackage[]): readonly Exporter[] {
+  const exporters: Exporter[] = [];
+  for (const module of imported) {
+    for (const definitions of new Set(Object.values(module.exports).filter(isDefinitions))) {
+      const known = exporters.some(
+        (exporter) =>
+          exporter.definitions === definitions &&
+          exporter.module.manifestPath === module.manifestPath,
+      );
+      if (!known) {
+        exporters.push({ module, definitions });
+      }
+    }
+  }
+  return exporters;
 }
 
 /** Which packages each package's files import, each by its package.json's path. */
@@ -76,8 +103,4 @@ function reachableFrom(
     }
   }
   return reached;
-}
-
-function isVersioned(module: ImportedPackage): module is Versioned {
-  return module.version !== undefined;
 }

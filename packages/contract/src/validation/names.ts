@@ -4,6 +4,7 @@ import {
   identityOf,
   type LocatedDependency,
   type LocatedEndpoint,
+  packageNamePartsOf,
   providerNameOf,
   type Root,
   textOf,
@@ -20,7 +21,7 @@ export function packageNameFailures(
   root: Root,
   packageName: string,
 ): readonly DeclarationFailure[] {
-  const unscoped = packageName.split('/').at(-1);
+  const unscoped = packageNamePartsOf(packageName).name;
   if (root.kind === 'definitions' || typeof root.name !== 'string' || root.name === unscoped) {
     return [];
   }

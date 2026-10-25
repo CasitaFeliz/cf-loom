@@ -194,7 +194,7 @@ describe('validateContract: a code is declared once', () => {
 
   test('a Definitions Package exporting two Rejections with one code fails code-once', () => {
     const root = defineDefinitions({});
-    const rootExports = { definitions: root, first: locked('One'), second: locked('Two') };
+    const rootExports = { first: locked('One'), second: locked('Two') };
 
     const validated = validateContract(root, aRootPackage(root, { rootExports }));
 

@@ -46,10 +46,7 @@ const ping = defineEndpoint({
 /** The failures of a Definitions root whose file exports what is given beside it. */
 function failuresOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
-  const validated = validateContract(
-    root,
-    aRootPackage(root, { rootExports: { definitions: root, ...exported } }),
-  );
+  const validated = validateContract(root, aRootPackage(root, { rootExports: exported }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -88,7 +85,7 @@ describe('validateContract: a Definitions Package exports what its Guards reach'
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['exports', 'permission'],
+        at: ['exports', 'userToken'],
         rule: 'definitions-unexported',
         message: `${unexportedMessage}: UNAUTHENTICATED`,
       },
@@ -139,7 +136,7 @@ describe('validateContract: a Definitions Package’s root file exports only wha
 
   test('the Definitions object exported under a second name fails definitions-export', () => {
     const root = defineDefinitions({});
-    const rootExports = { definitions: root, again: root };
+    const rootExports = { again: root };
 
     const validated = validateContract(root, aRootPackage(root, { rootExports }));
 
@@ -150,7 +147,7 @@ describe('validateContract: a Definitions Package’s root file exports only wha
           kind: 'declaration',
           at: ['exports', 'again'],
           rule: 'definitions-export',
-          message: `${exportsOnly}: its definitions once, as definitions, not as again`,
+          message: `${exportsOnly}: its definitions once, not as again`,
         },
       ],
     });

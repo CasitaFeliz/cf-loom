@@ -5,7 +5,7 @@ import { type RootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
 
 /**
  * What a project's root file exports as its root, the kind of root it is, the file, everything
- * the file exports by name, which a Definitions Package shares, and every package its import reached; or
+ * else the file exports by name, which a Definitions Package shares, and every package its import reached; or
  * why it could not be loaded.
  */
 export type LoadedRoot =
@@ -46,8 +46,7 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (more.length > 0) {
     return failed(`${file} exports one root, not ${kinds.map(exportedAs).join(' and ')}`);
   }
-  const root = imported.exports[exportedAs(rootKind)];
-  const { exports } = imported;
+  const { [exportedAs(rootKind)]: root, ...exports } = imported.exports;
   return { kind: 'loaded', root, rootKind, file, exports, imported: imported.imported };
 }
 

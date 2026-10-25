@@ -360,7 +360,7 @@ const exportedBy = new Map<unknown, Readonly<Record<string, unknown>>>();
 /** A Definitions root whose file exports the schemas given. */
 function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) {
   const definitions = defineDefinitions({});
-  exportedBy.set(definitions, { definitions, ...schemas });
+  exportedBy.set(definitions, schemas);
   return definitions;
 }
 

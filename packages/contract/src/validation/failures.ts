@@ -61,6 +61,7 @@ export type Rule =
   | 'definitions-export'
   | 'definitions-unexported'
   | 'definitions-ambiguous'
+  | 'definitions-unidentified'
   | 'code-once'
   | 'package-name';
 

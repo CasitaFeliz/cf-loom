@@ -1,5 +1,5 @@
-import { byCodePoint, isLive } from '@cf-loom/contract/internal';
-import { type ExportsOf, exportNamesOf, type ImportedPackage } from '../loading/index.ts';
+import { byCodePoint, exportNamesOf, isLive } from '@cf-loom/contract/internal';
+import type { ExportsOf, ImportedPackage } from '../loading/index.ts';
 import {
   type DeclarationHandled,
   elementLabelOf,

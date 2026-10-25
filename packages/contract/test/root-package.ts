@@ -11,6 +11,7 @@ export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): R
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
     packages: [],
+    unidentified: [],
     rootExports: {},
     ...given,
   };

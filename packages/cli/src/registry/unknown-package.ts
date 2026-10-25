@@ -1,3 +1,4 @@
+import { packageNamePartsOf } from '@cf-loom/contract/internal';
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
 import { jsonFromNpm, type NpmPlace, textFromNpm } from './npm.ts';
 
@@ -50,7 +51,7 @@ export async function unknownPackageOf(
  * refuses one that holds credentials.
  */
 async function registryOf(npm: NpmPlace, packageName: string): Promise<Registry | Failed> {
-  const [scope] = packageName.startsWith('@') ? packageName.split('/') : [];
+  const { scope } = packageNamePartsOf(packageName);
   const scoped = scope === undefined ? unset : await registryAt(npm, `${scope}:registry`);
   if (scoped.kind !== 'unset') {
     return scoped;

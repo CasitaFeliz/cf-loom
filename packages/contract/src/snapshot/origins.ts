@@ -13,7 +13,7 @@ export function packageOriginOf(from: ResolvedDefinitions | undefined): Origin {
  */
 export function standardOriginOf(
   { declared }: ResolvedStandard,
-  standardsFrom: ResolvedDefinitions | undefined,
+  standardRejectionsSource: ResolvedDefinitions | undefined,
 ): Origin {
-  return declared === undefined ? 'standard' : packageOriginOf(standardsFrom);
+  return declared === undefined ? 'standard' : packageOriginOf(standardRejectionsSource);
 }

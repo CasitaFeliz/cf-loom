@@ -17,6 +17,7 @@ import {
   type LocatedCode,
   type LocatedEndpoint,
   type LocatedGuard,
+  type Member,
   type ObjectPart,
   type Part,
   slotAt,
@@ -159,11 +160,8 @@ function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
 }
 
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
-function sharedSlots({ ownPackage }: Declarations): readonly Slot[] {
-  if (ownPackage === undefined) {
-    return [];
-  }
-  return ownPackage.members.schemas.map(([name, value]) => ({
+function sharedSlots({ ownMembers = [] }: Declarations): readonly Slot[] {
+  return ownMembers.filter(isSchemaMember).map(({ name, value }) => ({
     at: ['exports', name],
     owner: value,
     part: 'schema' as const,
@@ -193,4 +191,8 @@ function isFilled(slot: Slot): boolean {
 
 function holdsSchema(slot: Slot): slot is SchemaSlot {
   return isSchema(slot.value);
+}
+
+function isSchemaMember(member: Member): member is Extract<Member, { readonly kind: 'schema' }> {
+  return member.kind === 'schema';
 }

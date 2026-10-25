@@ -1,7 +1,9 @@
-import { byCodePoint, type Origin, type Path } from '../walker/index.ts';
-import { type Declarations, membersOf } from '../written/index.ts';
+import type * as core from 'zod/v4/core';
+import type { Origin, OriginOf, Path } from '../walker/index.ts';
+import type { Declarations } from '../written/index.ts';
+import { exportNamesOf } from './export-names.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type { ResolvedDefinitions } from './validate.ts';
+import type { ResolvedDefinitions, RootPackage } from './validate.ts';
 
 /** Which Definitions Package a value belongs to: the one exporting it that reaches none of the others exporting it. */
 export type Provenance =
@@ -18,17 +20,18 @@ export function definitionsPackageOf(
   value: unknown,
 ): Provenance {
   const exporting = packages.filter(({ exports }) => Object.values(exports).includes(value));
-  const [first, second] = exporting;
-  if (first === undefined) {
+  if (exporting.length === 0) {
     return { kind: 'none' };
   }
   const origins = exporting.filter((resolved) => !reachesAnother(resolved, exporting));
-  const [origin, other] = origins;
-  if (origin !== undefined && other === undefined) {
+  const [origin] = origins;
+  if (origin !== undefined && origins.length === 1) {
     return { kind: 'found', package: origin };
   }
-  const [one, two] =
-    origin !== undefined && other !== undefined ? [origin, other] : [first, second ?? first];
+  const [one, two] = origins.length > 1 ? origins : exporting;
+  if (one === undefined || two === undefined) {
+    throw new Error('Two exporters, neither found the origin: a bug.');
+  }
   return { kind: 'ambiguous', packages: [one, two] };
 }
 
@@ -44,67 +47,51 @@ export function originTextOf({ packageName, version }: ResolvedDefinitions): Ori
   return `${packageName}@${version}`;
 }
 
-/** A schema met where a declaration belongs to two Definitions Packages, neither importing it from the other. */
-export type AmbiguousSchema = {
-  readonly at: Path;
-  readonly packages: readonly [ResolvedDefinitions, ResolvedDefinitions];
-};
-
 /**
  * Where each shared schema came from, as the walk writes it on the node: the package it belongs
  * to and the first name, in code point order, that package exports it under; a clone of one is a
- * new schema and has none. A schema two packages claim is recorded, once, where the walk first
- * meets it.
+ * new schema and has none.
  */
-export function schemaOriginsOf(packages: readonly ResolvedDefinitions[]) {
-  const ambiguous: AmbiguousSchema[] = [];
-  const met = new Set<unknown>();
-  const originOf = (schema: unknown, at: Path): Origin | undefined => {
+export function schemaOriginsOf(packages: readonly ResolvedDefinitions[]): OriginOf {
+  return (schema) => {
     const provenance = definitionsPackageOf(packages, schema);
-    switch (provenance.kind) {
-      case 'none':
-        return undefined;
-      case 'found':
-        return `${originTextOf(provenance.package)}#${exportNameOf(provenance.package, schema)}`;
-      case 'ambiguous':
-        if (!met.has(schema)) {
-          ambiguous.push({ at, packages: provenance.packages });
-        }
-        met.add(schema);
-        return undefined;
+    if (provenance.kind !== 'found') {
+      return undefined;
     }
+    const [name] = exportNamesOf(provenance.package.exports, schema);
+    return `${originTextOf(provenance.package)}#${name ?? ''}`;
   };
-  return { originOf, ambiguous };
 }
 
-function exportNameOf(resolved: ResolvedDefinitions, schema: unknown): string {
-  const names = membersOf(resolved.exports)
-    .schemas.filter(([, exported]) => exported === schema)
-    .map(([name]) => name);
-  return names.sort(byCodePoint)[0] ?? '';
-}
-
-/** Each reached Guard and code whose declaration two Definitions Packages export, neither importing it from the other. */
-export function ambiguousFailures(
+/**
+ * Each reached Guard, code and met schema that no one Definitions Package can be named for: two
+ * export it and neither imports it from the other, or the one exporting it has no name or version.
+ */
+export function provenanceFailures(
   { guards, codes }: Declarations,
-  packages: readonly ResolvedDefinitions[],
+  { packages, unidentified }: Pick<RootPackage, 'packages' | 'unidentified'>,
+  met: ReadonlyMap<core.$ZodType, Path>,
 ): readonly DeclarationFailure[] {
-  const declared = [
-    ...guards.map(({ at, guard }) => ({ at, declaration: guard as unknown })),
-    ...codes.map(({ at, rejections: [first] }) => ({
-      at,
-      declaration: first.rejection as unknown,
-    })),
+  const declared: { readonly at: Path; readonly declaration: unknown }[] = [
+    ...guards.map(({ at, guard }) => ({ at, declaration: guard })),
+    ...codes.map(({ at, rejections: [first] }) => ({ at, declaration: first.rejection })),
+    ...[...met].map(([schema, at]) => ({ at, declaration: schema })),
   ];
   return declared.flatMap(({ at, declaration }) => {
     const provenance = definitionsPackageOf(packages, declaration);
-    return provenance.kind === 'ambiguous' ? [ambiguousFailureAt(at, provenance.packages)] : [];
+    if (provenance.kind === 'ambiguous') {
+      return [ambiguousFailureAt(at, provenance.packages)];
+    }
+    const exporter = provenance.kind === 'none' ? exporterIn(unidentified, declaration) : undefined;
+    return exporter === undefined ? [] : [unidentifiedFailureAt(at, exporter.why)];
   });
 }
 
-/** A schema two Definitions Packages claim, reported where the walk first met it. */
-export function ambiguousSchemaFailure({ at, packages }: AmbiguousSchema): DeclarationFailure {
-  return ambiguousFailureAt(at, packages);
+function exporterIn(
+  unidentified: RootPackage['unidentified'],
+  declaration: unknown,
+): RootPackage['unidentified'][number] | undefined {
+  return unidentified.find(({ exports }) => Object.values(exports).includes(declaration));
 }
 
 function ambiguousFailureAt(
@@ -114,4 +101,9 @@ function ambiguousFailureAt(
   const both = `exported by both ${first.packageName} and ${second.packageName}`;
   const message = `A declaration belongs to one Definitions Package: ${both}, and neither imports it from the other`;
   return failure(at, 'definitions-ambiguous', message);
+}
+
+function unidentifiedFailureAt(at: Path, why: string): DeclarationFailure {
+  const message = `A Definitions Package a declaration comes from has a name and a version: ${why}`;
+  return failure(at, 'definitions-unidentified', message);
 }

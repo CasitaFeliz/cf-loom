@@ -43,7 +43,7 @@ export function codeSnapshotsOf(
 ): Readonly<Record<string, CodeSnapshot>> {
   const declared = codes.map((code) => codeOf(code, sources));
   const standard = sources.standards.map((resolved) =>
-    standardCodeOf(resolved, sources.standardsFrom),
+    standardCodeOf(resolved, sources.standardRejectionsSource),
   );
   return Object.fromEntries([...declared, ...standard]);
 }
@@ -71,10 +71,10 @@ function codeOf(
 
 function standardCodeOf(
   standard: ResolvedStandard,
-  standardsFrom: ResolvedDefinitions | undefined,
+  standardRejectionsSource: ResolvedDefinitions | undefined,
 ): readonly [string, CodeSnapshot] {
   const { name, code, status, message } = standard;
-  const origin = standardOriginOf(standard, standardsFrom);
+  const origin = standardOriginOf(standard, standardRejectionsSource);
   const body = name === 'invalidInput' ? invalidInputNode(code) : null;
   return [code, { origin, status, message, body, removed: false }];
 }

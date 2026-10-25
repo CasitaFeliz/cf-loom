@@ -16,5 +16,5 @@ export type SnapshotContext = {
 export type SnapshotSources = {
   readonly nodeOf: ValidatedSchemas['nodeOf'];
   readonly standards: readonly ResolvedStandard[];
-  readonly standardsFrom: ResolvedDefinitions | undefined;
+  readonly standardRejectionsSource: ResolvedDefinitions | undefined;
 };
