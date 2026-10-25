@@ -1086,6 +1086,7 @@ describe('decodeSnapshot', () => {
       'OrderPlaced@1.5',
       'OrderPlaced@v1',
       'OrderPlaced@01',
+      'OrderPlaced@9007199254740992',
     ])(
       'a Message identity that is not a name and a version from 1 is malformed at its key: %s',
       (identity) => {

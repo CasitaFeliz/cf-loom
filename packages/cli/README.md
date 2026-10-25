@@ -315,7 +315,7 @@ A path is the Endpoint's, each param written in braces (`GET /orders/{}` with `[
 
 | Field | From the Endpoint |
 | --- | --- |
-| `operationId`, `tags`, `description` | its name, its Group in a list, its description (left out when empty) |
+| `operationId`, `tags`, `description` | its name, its Group in a list, its description |
 | `deprecated: true` | a Deprecated or Retired Endpoint |
 | `x-cf-loom-visibility`, `x-cf-loom-guards` | its Visibility, and its Guards as `[{ "guard": "apiKey", "qualifier": null }]`, as the Snapshot lists them |
 | `parameters` | the path params in the path's order (`in: path`, required), then each query field, then each header field, Guards' demands included but the `authorization` header, names as the Snapshot stores them; `required` as declared, a list query param has an `array` schema, and the schema's `description` is also on the parameter. OpenAPI tools ignore a header parameter named `accept`, which is written all the same |
@@ -351,7 +351,7 @@ Each Message Version is a channel keyed by its identity (`OrderCreated@2`), in c
 | `channels.<identity>.address` | its subject, `orders-service.event.OrderCreated.v2`, with the prefix in front when `--prefix` is given (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md) |
 | `channels.<identity>.x-cf-loom-visibility` | its Visibility, `internal` or `private` |
 | `messages.<identity>.name`, `title` | the Event's name, and the identity |
-| `messages.<identity>.description` | the Event's description (left out when empty) |
+| `messages.<identity>.description` | the Event's description |
 | `messages.<identity>.headers` | `{ "$ref": "#/components/schemas/BrokerHeaders" }` |
 | `messages.<identity>.payload` | the body as JSON Schema draft-07, which AsyncAPI's Schema Object extends (see [JSON Schema](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#json-schema) in SNAPSHOT.md); since AsyncAPI ignores what sits beside a `$ref`, a recursive def with a `description` or `examples` is `{ "allOf": [{ "$ref": … }], "description": … }`, and `deprecated: true` is added for a Deprecated Message Version, beside that `allOf` (which a body that is a bare `$ref` gets for the purpose) |
 | `operations.<identity>` | `{ "action": "send", "channel": { "$ref": "#/channels/<identity>" }, "tags": [{ "name": "<its Group>" }], "messages": [{ "$ref": "#/channels/<identity>/messages/<identity>" }] }` |

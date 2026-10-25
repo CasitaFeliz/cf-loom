@@ -336,6 +336,8 @@ const reservedHeaderNames = [
   'trailer',
   'host',
   'content-type',
+  'content-encoding',
+  'content-range',
   'deprecation',
 ];
 
@@ -371,6 +373,12 @@ describe('validateContract: header names are lower-case RFC 9110 tokens no host 
 
   test.each(positions)('a %s header named cookie validates', (position) => {
     const validated = validateEndpoint(headerPositions[position]('cookie'));
+
+    expect(validated.kind).toBe('valid');
+  });
+
+  test.each(positions)('a %s header named content-location validates', (position) => {
+    const validated = validateEndpoint(headerPositions[position]('content-location'));
 
     expect(validated.kind).toBe('valid');
   });

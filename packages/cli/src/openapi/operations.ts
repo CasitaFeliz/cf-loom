@@ -12,7 +12,7 @@ export function operationOf(endpoint: EndpointSnapshot, served: Served): OpenApi
   const head = definedOf({
     operationId: endpoint.name,
     tags: [endpoint.group],
-    description: endpoint.description === '' ? undefined : endpoint.description,
+    description: endpoint.description,
     deprecated: endpoint.lifecycle === 'active' ? undefined : true,
     'x-cf-loom-visibility': endpoint.visibility,
     'x-cf-loom-guards': endpoint.guards,

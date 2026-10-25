@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
   type ContractPackage,
+  defineCommand,
   defineContract,
   defineDependency,
   defineEvent,
@@ -259,6 +260,26 @@ describe('validateContract: Subscriptions', () => {
     );
   });
 
+  test('a Subscription whose event is a Command fails, saying a Command has its CommandHandler', () => {
+    const chargeCardV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const subscribedToCommand = aSubscription('onCharge', chargeCardV1);
+
+    const result = validateSubscriptions([notifyOnSettled, subscribedToCommand]);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onCharge', 'event'],
+        'not-a-declaration',
+        'A Subscription receives an Event; a Command is handled by its CommandHandler',
+      ),
+    );
+  });
+
   test('a kebab-case Subscription name fails the camelCase grammar', () => {
     const named = defineSubscription({
       name: 'charge-on-created',
@@ -272,18 +293,23 @@ describe('validateContract: Subscriptions', () => {
       failed(
         ['groups', 'orders', 'subscriptions', 'charge-on-created', 'name'],
         'name-grammar',
-        'A Subscription name is camelCase: charge-on-created',
+        'A Subscription name is camelCase words: charge-on-created',
       ),
     );
   });
 
   test.each([
-    ['NotifyOnSettled', 'A Subscription name is camelCase: NotifyOnSettled'],
-    ['1stAudit', 'A Subscription name is camelCase: 1stAudit'],
-    ['delete', 'A Subscription name is camelCase and no reserved word: delete'],
-    ['handle', 'A Subscription name is camelCase and no reserved word: handle'],
-    ['then', 'A Subscription name is camelCase and no reserved word: then'],
-    ['toJSON', 'A Subscription name is camelCase and no reserved word: toJSON'],
+    ['NotifyOnSettled', 'A Subscription name is camelCase words: NotifyOnSettled'],
+    ['1stAudit', 'A Subscription name is camelCase words: 1stAudit'],
+    ['delete', 'A Subscription name is camelCase words and no reserved word: delete'],
+    ['handle', 'A Subscription name is camelCase words and no reserved word: handle'],
+    ['then', 'A Subscription name is camelCase words and no reserved word: then'],
+    [
+      'toJSON',
+      'A Subscription name is camelCase words and no reserved word: toJSON (write toJson)',
+    ],
+    ['notifyOnURL', 'A Subscription name is camelCase words: notifyOnURL (write notifyOnUrl)'],
+    ['notifyOnX', 'A Subscription name is camelCase words: notifyOnX'],
   ])('a Subscription name %s, which code cannot name, fails the name grammar', (name, message) => {
     const named = defineSubscription({
       name,

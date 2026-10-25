@@ -323,6 +323,79 @@ describe('validateContract: one status and one body per code', () => {
   });
 });
 
+describe('validateContract: an Endpoint or a Guard lists each Rejection once', () => {
+  const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
+
+  test('an Endpoint listing one Rejection twice fails at the second listing, naming the code', () => {
+    const rejections: readonly Rejection[] = [
+      orderLocked,
+      notFound as unknown as Rejection,
+      orderLocked,
+    ];
+
+    const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
+
+    expect(validated).toEqual(
+      failed([...endpointAt, 'rejections', 2], 'rejection-once', 'ORDER_LOCKED is listed twice'),
+    );
+  });
+
+  test('an Endpoint listing two Rejections with one code fails at the second listing', () => {
+    const lockedAgain = defineRejection({
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body: z.object({ lockedAt: z.iso.datetime() }),
+    });
+    const rejections: readonly Rejection[] = [orderLocked, lockedAgain];
+
+    const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
+
+    expect(validated).toEqual(
+      failed([...endpointAt, 'rejections', 1], 'rejection-once', 'ORDER_LOCKED is listed twice'),
+    );
+  });
+
+  test('an Endpoint listing notFound twice fails at the second listing, naming it', () => {
+    const rejections: readonly Rejection[] = [
+      notFound,
+      notFound,
+    ] as unknown as readonly Rejection[];
+
+    const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
+
+    expect(validated).toEqual(
+      failed([...endpointAt, 'rejections', 1], 'rejection-once', 'notFound is listed twice'),
+    );
+  });
+
+  test('a Guard listing one Rejection twice fails at the second listing, naming the code', () => {
+    const rejections: readonly Rejection[] = [orderLocked, orderLocked];
+    const tenant = defineGuard({ name: 'tenant', description: 'A tenant', rejections });
+
+    const validated = validateEndpoints([defineEndpoint({ ...listing, guards: [tenant] })]);
+
+    expect(validated).toEqual(
+      failed(
+        ['guards', 'tenant', 'rejections', 1],
+        'rejection-once',
+        'ORDER_LOCKED is listed twice',
+      ),
+    );
+  });
+
+  test('an Endpoint and its Guard listing one Rejection each validates', () => {
+    const tenant = defineGuard({
+      name: 'tenant',
+      description: 'A tenant',
+      rejections: [orderLocked],
+    });
+    const endpoint = defineEndpoint({ ...listing, guards: [tenant], rejections: [orderLocked] });
+
+    expect(validateEndpoints([endpoint]).kind).toBe('valid');
+  });
+});
+
 describe('validateContract: reserved codes', () => {
   test.each(['RETIRED', 'NO_SUCH_ENDPOINT', 'BODY_TOO_LARGE', 'INVALID_OUTCOME'])(
     'a Rejection with the reserved code %s fails',

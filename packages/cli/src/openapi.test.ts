@@ -269,7 +269,7 @@ const shapes = [
   "  method: 'POST',",
   "  path: '/proto',",
   "  visibility: 'public',",
-  "  description: '',",
+  "  description: 'Echoes the prototype',",
   '  guards: [optionalBearer],',
   '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
   '  success: { status: 204 },',
@@ -740,10 +740,6 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
 
   test('an Endpoint’s description is its OpenAPI operation’s description', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'description')).toBe('Places a pending order');
-  });
-
-  test('an Endpoint with no description has an OpenAPI operation with none', () => {
-    expect(operationOf('/proto', 'post')).not.toHaveProperty('description');
   });
 
   test('an Endpoint’s Group is its OpenAPI operation’s tag', () => {

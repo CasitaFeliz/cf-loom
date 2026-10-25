@@ -44,6 +44,7 @@ export const endpointFields = {
     description: true,
     lifecycle: true,
   },
+  nonBlank: { description: true },
   objects: { input: true, success: true },
 } satisfies Fields<Endpoint>;
 
@@ -52,6 +53,7 @@ export const inputFields = {
   declared: { params: true, query: true, headers: true, body: true },
   required: {},
   strings: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<NonNullable<Endpoint['input']>>;
 
@@ -60,6 +62,7 @@ export const successFields = {
   declared: { status: true, headers: true, body: true },
   required: { status: true },
   strings: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<Endpoint['success']>;
 
@@ -77,6 +80,7 @@ export const guardFields = {
   },
   required: { kind: true, name: true, description: true },
   strings: { kind: true, name: true, description: true },
+  nonBlank: { description: true },
   objects: { demands: true },
 } satisfies Fields<Guard>;
 
@@ -85,6 +89,7 @@ export const demandsFields = {
   declared: { headers: true, query: true, params: true, body: true },
   required: {},
   strings: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<Demanded> & {
   readonly declared: Record<keyof NonNullable<Guard['demands']>, true>;
@@ -95,6 +100,7 @@ export const rejectionFields = {
   declared: { kind: true, code: true, status: true, message: true, body: true },
   required: { kind: true, code: true, status: true, message: true },
   strings: { kind: true, code: true, message: true },
+  nonBlank: { message: true },
   objects: {},
 } satisfies Fields<Rejection>;
 
@@ -103,6 +109,7 @@ export const attachmentFields = {
   declared: { guard: true, qualifier: true },
   required: { guard: true, qualifier: true },
   strings: {},
+  nonBlank: {},
   objects: {},
 } satisfies Fields<QualifiedAttachment>;
 
@@ -111,6 +118,7 @@ export const standardRejectionsFields = {
   declared: { invalidInput: true, notFound: true, notImplemented: true },
   required: {},
   strings: {},
+  nonBlank: {},
   objects: { invalidInput: true, notFound: true, notImplemented: true },
 } satisfies Fields<StandardRejectionDeclarations>;
 
@@ -119,5 +127,6 @@ export const standardRejectionFields = {
   declared: { code: true, status: true, message: true },
   required: { code: true, status: true, message: true },
   strings: { code: true, message: true },
+  nonBlank: { message: true },
   objects: {},
 } satisfies Fields<StandardRejectionDeclaration>;

@@ -282,6 +282,53 @@ describe('defineEndpoint Rejections', () => {
     expect(endpoint.rejections).toEqual([notFound, orderLocked]);
   });
 
+  test('an Endpoint listing one Rejection twice is a type error', () => {
+    const orderLocked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error ORDER_LOCKED is listed twice
+        rejections: [orderLocked, notFound, orderLocked],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing two Rejections with one code is a type error', () => {
+    const locked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+    const lockedAgain = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error ORDER_LOCKED is listed twice
+        rejections: [locked, lockedAgain],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing notFound twice is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error notFound is listed twice
+        rejections: [notFound, notFound],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing two different Rejections is not an error', () => {
+    const locked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+    const gone = defineRejection({ code: 'ORDER_GONE', status: 410, message: 'Gone' });
+
+    const endpoint = defineEndpoint({ ...listOrders, rejections: [locked, gone, notFound] });
+
+    expect(endpoint.rejections).toEqual([locked, gone, notFound]);
+  });
+
   test('an Endpoint listing invalidInput is a type error', () => {
     // @ts-expect-error invalidInput is always added
     const declare = () => defineEndpoint({ ...listOrders, rejections: [invalidInput] });

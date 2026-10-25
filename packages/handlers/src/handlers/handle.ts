@@ -3,6 +3,7 @@ import { notImplemented } from '@cf-loom/contract';
 import {
   isEndpoint,
   isGuard,
+  type Refusal,
   standardRejectionDefaults,
   standardRejectionsOf,
 } from '@cf-loom/contract/internal';
@@ -51,9 +52,6 @@ type HandleTarget = Endpoint | Guard | Pairing;
 
 /** What `handle()` may be given: a target, or a bare Command or Subscription, which its types refuse. */
 type HandleArgument = HandleTarget | MessageElement;
-
-/** A parameter no value satisfies, whose message is the name of the property it lacks. */
-type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
 /** What a bare Command or Subscription is told: its Handler is written for its pairing in the readers file. */
 type BareMessageRefusal =

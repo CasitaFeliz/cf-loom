@@ -30,6 +30,7 @@ export type {
   GroupedField,
   GroupedOf,
   ProvidedEvent,
+  Refusal,
   ReservedCode,
 } from '../declarations/index.ts';
 export {

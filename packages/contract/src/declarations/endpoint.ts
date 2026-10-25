@@ -11,6 +11,7 @@ import type {
   IsOneLiteral,
   JoinedNames,
   LiteralNames,
+  RejectionsOnceRule,
   ReservedNameRule,
 } from './rules.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
@@ -140,6 +141,10 @@ type GuardsRule<Declaration extends EndpointDeclaration> = {
     AttachmentsRule<NonNullable<Declaration['guards']>>;
 };
 
+type RejectionsRule<Declaration extends EndpointDeclaration> = {
+  readonly rejections?: RejectionsOnceRule<Declaration['rejections']>;
+};
+
 type NestedFieldsRule<Declaration extends EndpointDeclaration> = {
   readonly input?: DeclaredFieldsRule<InputOfDeclaration<Declaration>, InputDeclaration>;
   readonly success?: DeclaredFieldsRule<Declaration['success'], SuccessDeclaration>;
@@ -150,6 +155,7 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
   SuccessBodyRule<Declaration> &
   HeadersRule<Declaration> &
   GuardsRule<Declaration> &
+  RejectionsRule<Declaration> &
   NoInfer<
     ReservedNameRule<Declaration> &
       DeclaredFieldsRule<Declaration, EndpointDeclaration> &

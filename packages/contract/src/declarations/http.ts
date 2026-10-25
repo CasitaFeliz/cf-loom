@@ -18,7 +18,8 @@ export type SuccessStatus = (typeof successStatuses)[number];
 
 /**
  * The header names the host or cf-loom owns, which no Contract declares: the framing and
- * connection headers, `host`, and the `content-type` and `deprecation` cf-loom sends itself.
+ * connection headers, `host`, the body's `content-type`, `content-encoding` and `content-range`,
+ * and the `deprecation` cf-loom sends itself.
  */
 export const reservedHeaderNames: readonly string[] = [
   'content-length',
@@ -31,6 +32,8 @@ export const reservedHeaderNames: readonly string[] = [
   'trailer',
   'host',
   'content-type',
+  'content-encoding',
+  'content-range',
   'deprecation',
 ];
 

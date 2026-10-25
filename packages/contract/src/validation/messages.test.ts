@@ -8,7 +8,7 @@ import {
   defineGroup,
   type Event,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { messageIdentityOf, nameAndVersionOf, validateContract } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -70,10 +70,32 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'orderCreated@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase: orderCreated',
+        'A Message name is PascalCase words: orderCreated',
       ),
     );
   });
+
+  test.each([
+    ['URLRefresh', 'A Message name is PascalCase words: URLRefresh (write UrlRefresh)'],
+    ['OrderID', 'A Message name is PascalCase words: OrderID (write OrderId)'],
+    ['PlanA', 'A Message name is PascalCase words: PlanA'],
+    ['A', 'A Message name is PascalCase words: A'],
+  ])('a Message name %s, with a capital that starts no word, fails', (name, message) => {
+    const result = validateMessages([anEvent({ name })]);
+
+    expect(result).toEqual(
+      failed(['groups', 'orders', 'events', `${name}@1`, 'name'], 'name-grammar', message),
+    );
+  });
+
+  test.each(['UrlRefresh', 'OrderV2', 'Order2Items', 'Plan2'])(
+    'a Message name %s, whose every capital starts a word, validates',
+    (name) => {
+      const result = validateMessages([anEvent({ name })]);
+
+      expect(result.kind).toBe('valid');
+    },
+  );
 
   test('a version that is not a whole number from 1 fails, as a cast lets it through', () => {
     const result = validateMessages([], [aCommand({ version: 0 })]);
@@ -82,7 +104,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'commands', 'ChargeCard@0', 'version'],
         'message-version',
-        'A Message version is a whole number from 1: 0',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 0',
       ),
     );
   });
@@ -234,7 +256,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'OrderCreated@1.5', 'version'],
         'message-version',
-        'A Message version is a whole number from 1: 1.5',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 1.5',
       ),
     );
   });
@@ -258,7 +280,7 @@ describe('validateContract: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'commands', 'charge_card@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase: charge_card',
+        'A Message name is PascalCase words: charge_card',
       ),
     );
   });
@@ -360,6 +382,155 @@ function rulesOf(result: ReturnType<typeof validateMessages>): readonly unknown[
     broken.kind === 'declaration' ? broken.rule : broken.kind,
   );
 }
+
+/** A seeded generator of the same sequence every run, so a failing version can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** Versions from 1 below `2 ** 53`: the boundaries, then pseudo-random ones. */
+function safeVersions(): readonly number[] {
+  const next = seededNext(190);
+  const random = Array.from({ length: 1000 }, () => {
+    const high = Math.floor(next() * 2 ** 21);
+    const low = Math.floor(next() * 2 ** 32);
+    return Math.max(1, high * 2 ** 32 + low);
+  });
+  return [1, 2, 2 ** 53 - 1, ...random];
+}
+
+describe('validateContract: a Message Version’s version keeps its text and its predecessor exact', () => {
+  test('every whole number from 1 to the largest safe integer validates, reads back from its identity and differs from its predecessor', () => {
+    const versions = safeVersions();
+
+    const results = versions.map((version) => ({
+      version,
+      validated: validateMessages([anEvent({ version })], [aCommand({ version })]).kind,
+      readBack: nameAndVersionOf(messageIdentityOf('OrderCreated', version)).version,
+      isAfterPredecessor: version - 1 !== version,
+    }));
+
+    expect(results).toEqual(
+      versions.map((version) => ({
+        version,
+        validated: 'valid',
+        readBack: version,
+        isAfterPredecessor: true,
+      })),
+    );
+  });
+
+  test('a version past Number.MAX_SAFE_INTEGER fails saying the bound', () => {
+    const validated = validateMessages([anEvent({ version: 2 ** 53 })]);
+
+    expect(validated).toEqual(
+      failed(
+        ['groups', 'orders', 'events', 'OrderCreated@9007199254740992', 'version'],
+        'message-version',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 9007199254740992',
+      ),
+    );
+  });
+
+  test.each([2 ** 53, 1e16, 1e21, 0, 1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'the version %s fails, for an Event and for a Command',
+    (version) => {
+      const validated = validateMessages([anEvent({ version })], [aCommand({ version })]);
+
+      expect(validated).toMatchObject({
+        kind: 'invalid',
+        failures: [
+          { rule: 'message-version', at: expect.arrayContaining(['events']) },
+          { rule: 'message-version', at: expect.arrayContaining(['commands']) },
+        ],
+      });
+    },
+  );
+});
+
+const recursiveArray: z.ZodType = z.array(z.lazy(() => recursiveArray)).meta({ id: 'rs' });
+
+const tree = z
+  .object({
+    value: z.string(),
+    get children() {
+      return z.array(tree);
+    },
+  })
+  .meta({ id: 'tree' });
+
+const lazyNode: z.ZodType = z
+  .object({ value: z.string(), next: z.lazy(() => lazyNode).optional() })
+  .meta({ id: 'lazyNode' });
+
+const notObjects = {
+  'a string': z.string(),
+  'a literal': z.literal('created'),
+  'an array of objects': z.array(z.object({ orderId: z.uuid() })),
+  'a record': z.record(z.string(), z.string()),
+  'a discriminated union': z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('a') }),
+    z.object({ kind: z.literal('b') }),
+  ]),
+  'a nullable object': z.object({ orderId: z.uuid() }).nullable(),
+  'a recursive array': recursiveArray,
+};
+
+const objects = {
+  'an object': z.object({ orderId: z.uuid() }),
+  'an intersection of objects': z.intersection(
+    z.object({ orderId: z.uuid() }),
+    z.object({ total: z.int() }),
+  ),
+  'a z.lazy() object': z.lazy(() => z.object({ orderId: z.uuid() })),
+  'a recursive object written with a getter': tree,
+  'a recursive object written with z.lazy()': lazyNode,
+};
+
+describe('validateContract: a Message body is an object of its fields', () => {
+  const eventAt = ['groups', 'orders', 'events', 'OrderCreated@1', 'body'];
+  const commandAt = ['groups', 'orders', 'commands', 'ChargeCard@1', 'body'];
+
+  test.each(Object.entries(notObjects))('an Event whose body is %s fails', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        eventAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: OrderCreated@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(notObjects))('a Command whose body is %s fails', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        commandAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: ChargeCard@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(objects))('an Event whose body is %s validates', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test.each(Object.entries(objects))('a Command whose body is %s validates', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+});
 
 describe('validateContract: Message Versions that fail only as fields', () => {
   test.each([

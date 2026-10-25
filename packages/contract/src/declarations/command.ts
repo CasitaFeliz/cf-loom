@@ -1,6 +1,6 @@
 import type { EventDeclaration } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { DeclaredFieldsRule, VersionRule } from './rules.ts';
+import type { DeclaredFieldsRule, MessageBodyRule, VersionRule } from './rules.ts';
 
 /** What an author writes to declare one Message Version of a Command; it takes no Visibility, being always Private. */
 type CommandDeclaration = Omit<EventDeclaration, 'visibility'>;
@@ -13,6 +13,7 @@ export type Command<Declaration extends CommandDeclaration = CommandDeclaration>
 export function defineCommand<const Declaration extends CommandDeclaration>(
   declaration: Declaration &
     VersionRule<Declaration> &
+    MessageBodyRule<Declaration> &
     NoInfer<DeclaredFieldsRule<Declaration, CommandDeclaration>>,
 ): Command<Declaration> {
   return freezeDeclaration('command', declaration);

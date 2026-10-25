@@ -51,6 +51,33 @@ const orderArchivedV1 = defineEvent({
   body: z.object({ orderId: z.string() }),
 });
 
+const widenedVersion: number = 1;
+
+const barWithWidenedVersion = defineEvent({
+  name: 'Bar',
+  version: widenedVersion,
+  visibility: 'internal',
+  description: 'A Bar whose version is typed number',
+  body: z.object({ barId: z.string() }),
+});
+
+const quxWithRetiredWidenedVersion = defineEvent({
+  name: 'Qux',
+  version: widenedVersion,
+  visibility: 'internal',
+  lifecycle: 'retired',
+  description: 'A retired Qux whose version is typed number',
+  body: z.object({ quxId: z.string() }),
+});
+
+const quxV2 = defineEvent({
+  name: 'Qux',
+  version: 2,
+  visibility: 'internal',
+  description: 'A Qux with a literal version',
+  body: z.object({ quxId: z.string() }),
+});
+
 const chargeCardV1 = defineCommand({
   name: 'ChargeCard',
   version: 1,
@@ -92,7 +119,13 @@ const contract = defineContract({
     defineGroup({
       name: 'payments',
       description: 'Payments',
-      events: [orderCreatedV3, orderArchivedV1],
+      events: [
+        orderCreatedV3,
+        orderArchivedV1,
+        barWithWidenedVersion,
+        quxWithRetiredWidenedVersion,
+        quxV2,
+      ],
       commands: [chargeCardV2, refundV1],
       subscriptions: [notifyOnCreated],
     }),
@@ -150,6 +183,23 @@ describe('publish and send types', () => {
     const retired = () => publisher.publish('OrderCreated', bodies);
 
     expect(retired).toBeTypeOf('function');
+  });
+
+  test('an Event whose version is typed number has no body key, so publishing it is a type error', () => {
+    // @ts-expect-error: a version typed number keys no body
+    const bare = () => publisher.publish('Bar', {});
+    // @ts-expect-error: a version typed number keys no body, whatever is given
+    const given = () => publisher.publish('Bar', { v1: { barId: 'b-1' } });
+
+    expect([bare, given]).toHaveLength(2);
+  });
+
+  test('a Retired version typed number refuses the Event’s bodies with the reason, whatever its live versions', () => {
+    type Bodies = Parameters<typeof publisher.publish<'Qux'>>[1];
+
+    expectTypeOf<Bodies>().toEqualTypeOf<{
+      readonly 'An Event version typed number keys no body: declare the version as one literal': never;
+    }>();
   });
 
   test('a name the root does not list, or whose every version is Retired, is a type error', () => {

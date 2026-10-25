@@ -37,6 +37,22 @@ describe('defineCommand', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a body that is no object of its fields is a type error', () => {
+    const base = {
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+    } as const;
+    const declare = () => [
+      // @ts-expect-error a string cannot grow
+      defineCommand({ ...base, body: z.string() }),
+      // @ts-expect-error a list cannot grow
+      defineCommand({ ...base, body: z.array(z.object({ orderId: z.uuid() })) }),
+    ];
+
+    expect(declare).not.toThrow();
+  });
+
   test('a version that is not a whole number from 1 is a type error', () => {
     const declare = () =>
       defineCommand({

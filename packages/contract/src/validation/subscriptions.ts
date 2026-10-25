@@ -1,4 +1,10 @@
-import { isEvent, isLive, reaches } from '../declarations/index.ts';
+import {
+  commandSubscribedRefusal,
+  isCommand,
+  isEvent,
+  isLive,
+  reaches,
+} from '../declarations/index.ts';
 import {
   type Declarations,
   eventSourceOf,
@@ -29,6 +35,9 @@ function eventFailures(
   const eventAt = [...at, 'event'];
   if (isWithoutValue(event)) {
     return [];
+  }
+  if (isCommand(event)) {
+    return [failure(eventAt, 'not-a-declaration', commandSubscribedRefusal)];
   }
   if (!isEvent(event)) {
     return [failure(eventAt, 'not-a-declaration', 'event is not an Event')];

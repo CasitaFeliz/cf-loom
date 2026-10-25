@@ -8,7 +8,7 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a root's and a Group's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a root's and a Group's lists left out are empty. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included, and a `description` or a `message` is never blank.
 
 ## The root
 
@@ -26,7 +26,7 @@ export const contract = defineContract({
 
 The root lists everything in the Contract, its Elements and Subscriptions through its Groups: what it lists is exactly what the Snapshot describes, so an Endpoint, Event, Command's Message Version or Subscription that a file under `src/contract/` exports and no Group lists fails a Service's `generate` and `verify`, and so does a Group such a file exports that the root does not list, reported once and without what it lists; what a listed Dependency's Provider exports is the Provider's, never reported, and a Guard or Rejection needs no listing, since an Endpoint or a Guard reaches it. A root's `name`, a Service's, an Application's or a Definitions Package's, must equal the unscoped part of the `name` in its package.json, or `generate` fails. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections. A Group reaches the root as `defineGroup` typed it, never annotated `Group`, so each Message Version keeps its exact type and `publish` and `send` know every version of an Event or a Command, whatever Group lists it (see [Publishing and sending](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#publishing-and-sending) in the messaging README).
 
-Names follow fixed grammars, so they are safe in code, as keys of an object, and in subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package or Group name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint, Guard or Subscription name is camelCase (`^[a-z][a-zA-Z0-9]*$`) and none of the names code cannot use safely: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports, nor a name every object already has, `Object.prototype`'s `constructor`, `hasOwnProperty`, `isPrototypeOf`, `propertyIsEnumerable`, `toLocaleString`, `toString` and `valueOf`, or one JavaScript calls on its own, `then` and `toJSON`, since a client has a method per Endpoint and the Handler map a Handler per name, and a literal reserved name is _a type error_; a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`); a recursion id (`.meta({ id })`) is camelCase (`^[a-z][a-zA-Z0-9]*$`; see [Recursion](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#recursion) in SNAPSHOT.md). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
+Names follow fixed grammars, so they are safe in code, as keys of an object, and in subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package or Group name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint, Guard or Subscription name is camelCase words (`^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$`) and none of the names code cannot use safely: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports, nor a name every object already has, `Object.prototype`'s `constructor`, `hasOwnProperty`, `isPrototypeOf`, `propertyIsEnumerable`, `toLocaleString`, `toString` and `valueOf`, or one JavaScript calls on its own, `then` and `toJSON`, since a client has a method per Endpoint and the Handler map a Handler per name, and a literal reserved name is _a type error_; a Message name is PascalCase words (`^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)*$`); in both, each capital starts a word of at least one lower-case letter or digit after it, so a name derives to readable file and code names: `UrlRefresh` and `getUrl`, not `URLRefresh` or `getURL`; a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`); a recursion id (`.meta({ id })`) is camelCase (`^[a-z][a-zA-Z0-9]*$`; see [Recursion](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#recursion) in SNAPSHOT.md). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
 ## Applications
 
@@ -50,7 +50,7 @@ export const application = defineApplication({
 });
 ```
 
-A Dependency of an Application on an Endpoint that is not Public is a type error, and an Application has no Subscriptions, so each of its Dependencies selects Endpoints.
+A Dependency of an Application on an Endpoint that is not Public is a type error that names the Endpoint, and `generate` fails on one the types did not catch; an Application has no Subscriptions, so each of its Dependencies selects Endpoints.
 
 ## Definitions Packages
 
@@ -122,13 +122,13 @@ export const getOrder = defineEndpoint({
 - `visibility` is required: `public`, `internal` or `private`.
 - `success` declares a `status`, 200, 201, 202, 203 or 204, a `body` and optionally `headers`, an object of the HTTP headers the Endpoint promises with its Success; nothing is implied. A 204 has no body (`success: { status: 204 }`), and its Handler returns `success()`. A body where none belongs, or a missing one elsewhere, is a type error. Headers follow the text rules of Input headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md).
 - `input` may hold `params`, `query`, `headers` and `body`. `params` must declare exactly the `:names` in the path, and is absent when the path has none; a body on `GET` is not allowed. Both are type errors. The EndpointHandler receives only the Endpoint's own query params, not those its Guards demand. `generate` fails on an optional path param and on `nullable` anywhere in params, query or headers.
-- Header names, in `input.headers`, `success.headers` and a Guard's `demands.headers`, are lower-case: headers are case-insensitive, so each has one spelling, and an upper-case letter is a type error. A name is also an RFC 9110 token (`^[!#$%&'*+\-.^_`|~0-9a-z]+$`) and none of the names the host or cf-loom owns: `content-length`, `transfer-encoding`, `connection`, `keep-alive`, `proxy-connection`, `upgrade`, `te`, `trailer`, `host`, `content-type` and `deprecation`; `generate` fails on either (`cookie` is allowed).
+- Header names, in `input.headers`, `success.headers` and a Guard's `demands.headers`, are lower-case: headers are case-insensitive, so each has one spelling, and an upper-case letter is a type error. A name is also an RFC 9110 token (`^[!#$%&'*+\-.^_`|~0-9a-z]+$`) and none of the names the host or cf-loom owns: `content-length`, `transfer-encoding`, `connection`, `keep-alive`, `proxy-connection`, `upgrade`, `te`, `trailer`, `host`, `content-type`, `content-encoding`, `content-range` and `deprecation`; `generate` fails on either (`cookie` and `content-location` are allowed).
 - `rejections` lists the Endpoint's own Rejections, `notFound` among them when it answers it. Those of its Guards, and the two Rejections cf-loom's runtime produces, invalid input and not implemented, are added without listing them, so listing `invalidInput` or `notImplemented` is a type error (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md).
 - Only shapes and declarative constraints are allowed: see [Not allowed in a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#not-allowed-in-a-contract).
 
 ## Rejections
 
-A Rejection is declared once and referenced wherever it can be answered.
+A Rejection is declared once and referenced wherever it can be answered. An Endpoint or a Guard lists each code once, and an Endpoint each Standard Rejection once; listing one twice is a type error.
 
 ```ts
 // src/contract/rejections/order-locked.rejection.ts
@@ -221,7 +221,7 @@ export const chargeCardV1 = defineCommand({
 
 An Event takes `visibility`, a Command none, and a Public Event is a type error; which Visibilities each kind of Element may have is in [Visibility and Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#visibility-and-guards) in ARCHITECTURE.md.
 
-A literal `version` that is not a whole number from 1 is a type error; which Message Versions `generate` refuses, how versions are numbered, and that a Command has at most one Active version are in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
+A Message body is an object of its fields, so a Message can grow without a new Message Version; a scalar, a list, a record, a union or a nullable object as a body is a type error, and `generate` fails on one the types cannot tell. A `version` is a whole number from 1 to `Number.MAX_SAFE_INTEGER`: a literal that is not one, one written with an exponent (`1e21`) and a union of versions are type errors, and `generate` fails on any other number; which Message Versions `generate` refuses, how versions are numbered, and that a Command has at most one Active version are in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
 
 ## Lifecycle
 
@@ -299,7 +299,7 @@ export const notifyOnSettled = defineSubscription({
 });
 ```
 
-`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one a listed Dependency's Provider exports, taken from its Contract Package, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one a listed Dependency's Provider exports, taken from its Contract Package, and not Retired; another fails `generate`, and a Retired one is also a type error. A Command in `event` is a type error too, and fails `generate`: a Command is handled by its CommandHandler. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 
