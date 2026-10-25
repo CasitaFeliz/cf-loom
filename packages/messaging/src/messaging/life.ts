@@ -10,12 +10,8 @@ import {
   troubledOf,
   whenAborted,
 } from '../consuming/index.ts';
-import {
-  CloseAbortedError,
-  type CloseOptions,
-  type HandedBack,
-  MessagingClosedError,
-} from './closed.ts';
+import { CloseAbortedError, type CloseOptions, MessagingClosedError } from './closed.ts';
+import { InFlight } from './in-flight.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
@@ -47,9 +43,7 @@ export class MessagingLife {
   readonly #connection: BrokerConnection;
   #state: State = { kind: 'open', consumption: 'none' };
   readonly #closing = new AbortController();
-  readonly #handingBack = new AbortController();
-  /** What `close` waits for, each delivery with what names it when it is handed back. */
-  readonly #inFlight = new Map<Promise<unknown>, HandedBack | undefined>();
+  readonly #inFlight = new InFlight(() => this.#endedIfIdle());
 
   constructor(connection: BrokerConnection) {
     this.#connection = connection;
@@ -66,12 +60,9 @@ export class MessagingLife {
     }
   }
 
-  /** A call in flight, a `publish`, a `send`, the adapter's `consume`, a delivery settling or a trouble report, which `close` waits for. */
-  tracked<Settled>(call: Promise<Settled>, delivery?: HandedBack): Promise<Settled> {
-    this.#inFlight.set(call, delivery);
-    const forget = () => this.#forget(call);
-    call.then(forget, forget);
-    return call;
+  /** A call in flight, a `publish`, a `send`, the adapter's `consume` or a trouble report, which `close` waits for. */
+  tracked<Result>(call: Promise<Result>): Promise<Result> {
+    return this.#inFlight.tracked(call);
   }
 
   /**
@@ -96,7 +87,7 @@ export class MessagingLife {
     const closing = this.#closing.signal;
     const consumers = consumersOf({
       received: (settle, named) => (delivery) => this.#received(settle, named, delivery),
-      ends: { closing, handingBack: this.#handingBack.signal },
+      ends: { closing, handingBack: this.#inFlight.handingBack },
     });
     this.#consumption('taken');
     const track = (telling: Promise<void>) => void this.tracked(telling);
@@ -153,7 +144,7 @@ export class MessagingLife {
         return Promise.resolve(leftPending);
       case 'open': {
         const { messageId, factId } = delivery;
-        return this.tracked(settle(delivery), { ...named, messageId, factId });
+        return this.#inFlight.delivering(settle(delivery), { ...named, messageId, factId });
       }
     }
   }
@@ -175,29 +166,16 @@ export class MessagingLife {
       await this.#connection.close();
       return;
     }
-    const handedBack = await this.#handedBack();
+    const handedBack = await this.#inFlight.handedBack();
     await this.#connection.close();
     if (handedBack.length > 0) {
       throw new CloseAbortedError(handedBack, end.reason);
     }
   }
 
-  /** Hands back every delivery still settling, each of which then settles at once, and names them. */
-  async #handedBack(): Promise<readonly HandedBack[]> {
-    this.#handingBack.abort();
-    const deliveries = [...this.#inFlight].filter(isDelivery);
-    await Promise.all(deliveries.map(([settling]) => settling));
-    return deliveries.map(([, handedBack]) => handedBack);
-  }
-
-  #forget(call: Promise<unknown>): void {
-    this.#inFlight.delete(call);
-    this.#endedIfIdle();
-  }
-
   /** Closing ends the moment nothing is in flight, so a call is either waited for or throws. */
   #endedIfIdle(): void {
-    if (this.#inFlight.size === 0) {
+    if (this.#inFlight.isIdle) {
       this.#ended({ kind: 'idle' });
     }
   }
@@ -215,10 +193,4 @@ export class MessagingLife {
         return;
     }
   }
-}
-
-function isDelivery(
-  call: [Promise<unknown>, HandedBack | undefined],
-): call is [Promise<unknown>, HandedBack] {
-  return call[1] !== undefined;
 }

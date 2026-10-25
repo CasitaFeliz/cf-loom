@@ -812,6 +812,51 @@ describe('close and a Handler’s wait', () => {
     expect(recorded.closes).toBe(1);
   });
 
+  test('close({ signal }) with two Handlers that never settle hands back and names both', async () => {
+    const { deliver, close } = await consumingWith(neverAnswering);
+    const first = deliver(created, body);
+    const second = deliver(created, body, { messageId: 'm-2', factId: 'f-2' });
+
+    const error = await close({ signal: AbortSignal.abort() }).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      handedBack: [
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
+        { identity: 'notifyOnCreated', subject: created, messageId: 'm-2', factId: 'f-2' },
+      ],
+    });
+    expect(await Promise.all([first, second])).toEqual(['handed-back', 'handed-back']);
+  });
+
+  test('close({ signal }) names a delivery as handed back exactly when it settled handed-back, however close to its answer the signal aborts', async () => {
+    const rows: string[] = [];
+    for (let ticks = 0; ticks < 25; ticks += 1) {
+      const gate = aGate();
+      const answering = handle(readers.subscriptions.notifyOnCreated, () =>
+        gate.opened.then(() => undefined),
+      );
+      const { deliver, close } = await consumingWith(answering);
+      const delivered = deliver(created, body);
+      await Promise.resolve();
+      const stopping = new AbortController();
+      const closing = close({ signal: stopping.signal });
+      gate.open();
+      for (let tick = 0; tick < ticks; tick += 1) {
+        await Promise.resolve();
+      }
+      stopping.abort();
+      const named = await closing.then(
+        () => 0,
+        (e: unknown) => (e as CloseAbortedError).handedBack.length,
+      );
+      const settlement = await delivered;
+      rows.push(`${settlement}:${named}`);
+    }
+
+    const misnamed = rows.filter((row) => row === 'acked:1' || row === 'handed-back:0');
+    expect(misnamed).toEqual([]);
+  });
+
   test('close({ signal }) with nothing running resolves as close does', async () => {
     const { recorded, close } = await consumingWith(neverAnswering);
     const stopping = new AbortController();
