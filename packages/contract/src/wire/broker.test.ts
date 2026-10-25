@@ -41,6 +41,31 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV2,
 });
 
+function messageTuples(): {
+  readonly message: {
+    readonly kind: 'event' | 'command';
+    readonly name: string;
+    readonly version: number;
+  };
+  readonly factId: string;
+}[] {
+  const kinds = ['event', 'command'] as const;
+  const names = ['A', 'Ab'];
+  const versions = [1, 2, 12];
+  const factIds = ['x', '1:x', 'v1:x', '.x'];
+  const tuples = [];
+  for (const kind of kinds) {
+    for (const name of names) {
+      for (const version of versions) {
+        for (const factId of factIds) {
+          tuples.push({ message: { kind, name, version }, factId });
+        }
+      }
+    }
+  }
+  return tuples;
+}
+
 describe('the Wire protocol over the broker', () => {
   test('a subject is <service>.<event|command>.<Name>.v<n>', () => {
     const subjects = [
@@ -178,10 +203,36 @@ describe('the Wire protocol over the broker', () => {
     expect(accepted).toEqual([true, true, false, false, false, false, false, false, false]);
   });
 
-  test('a broker message id is <Name>.v<n>:<factId>', () => {
-    const messageId = brokerMessageIdOf(orderCreatedV2, 'o-1:created');
+  test('a broker message id is <event|command>.<Name>.v<n>:<factId>', () => {
+    const messageIds = [
+      brokerMessageIdOf(orderCreatedV2, 'o-1:created'),
+      brokerMessageIdOf(chargeCardV1, 'o-1'),
+    ];
 
-    expect(messageId).toBe('OrderCreated.v2:o-1:created');
+    expect(messageIds).toEqual(['event.OrderCreated.v2:o-1:created', 'command.ChargeCard.v1:o-1']);
+  });
+
+  test('broker message ids are distinct for every kind, name, version and Fact id', () => {
+    const tuples = messageTuples();
+
+    const messageIds = new Set(
+      tuples.map(({ message, factId }) => brokerMessageIdOf(message, factId)),
+    );
+
+    expect(messageIds.size).toBe(tuples.length);
+  });
+
+  test('a broker message id is the Message’s subject after the Service’s name, then the Fact id', () => {
+    const tuples = messageTuples();
+
+    const subjectsWithFactId = tuples.map(
+      ({ message, factId }) => `${subjectOf('orders-service', message)}:${factId}`,
+    );
+    const serviceWithMessageId = tuples.map(
+      ({ message, factId }) => `orders-service.${brokerMessageIdOf(message, factId)}`,
+    );
+
+    expect(serviceWithMessageId).toEqual(subjectsWithFactId);
   });
 
   test('a transport header in cf-loom’s or NATS’s namespace is reserved in any case', () => {
@@ -262,7 +313,7 @@ describe('the Wire protocol over the broker', () => {
 
   test('a Message’s broker headers are its transport headers with its broker message id in Nats-Msg-Id and its Fact id in Cf-Loom-Fact-Id', () => {
     const message = {
-      messageId: 'OrderCreated.v2:o-1:created',
+      messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       headers: { traceparent: '00-abc-def-01' },
     };
@@ -271,7 +322,7 @@ describe('the Wire protocol over the broker', () => {
 
     expect(headers).toEqual({
       traceparent: '00-abc-def-01',
-      'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
+      'Nats-Msg-Id': 'event.OrderCreated.v2:o-1:created',
       'Cf-Loom-Fact-Id': 'o-1:created',
     });
   });
@@ -281,28 +332,28 @@ describe('the Wire protocol over the broker', () => {
   });
 
   test('a Message’s broker headers take 12 bytes plus each header’s name, value and 4, as nats-core writes them', () => {
-    const message = { messageId: 'OrderCreated.v1:o-1', factId: 'o-1', headers: {} };
+    const message = { messageId: 'event.OrderCreated.v1:o-1', factId: 'o-1', headers: {} };
 
     const bytes = [
       brokerHeaderBytesOf(message),
       brokerHeaderBytesOf({ ...message, headers: { traceparent: 'A' } }),
     ];
 
-    expect(bytes).toEqual([68, 84]);
+    expect(bytes).toEqual([74, 90]);
   });
 
   test('broker headers are counted in UTF-8 bytes, so a Fact id counts twice', () => {
-    const ascii = { messageId: 'OrderCreated.v1:n', factId: 'n', headers: {} };
-    const accented = { messageId: 'OrderCreated.v1:ñ', factId: 'ñ', headers: {} };
+    const ascii = { messageId: 'event.OrderCreated.v1:n', factId: 'n', headers: {} };
+    const accented = { messageId: 'event.OrderCreated.v1:ñ', factId: 'ñ', headers: {} };
 
     const bytes = [brokerHeaderBytesOf(ascii), brokerHeaderBytesOf(accented)];
 
-    expect(bytes).toEqual([64, 66]);
+    expect(bytes).toEqual([70, 72]);
   });
 
   test('a Message’s broker headers read back give its broker message id, its Fact id and its transport headers', () => {
     const message = {
-      messageId: 'OrderCreated.v2:o-1:created',
+      messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       headers: { traceparent: '00-abc-def-01' },
     };
@@ -314,7 +365,7 @@ describe('the Wire protocol over the broker', () => {
   });
 
   test('broker headers without Cf-Loom-Fact-Id or Nats-Msg-Id, or with an empty one, read as missing, naming each', () => {
-    const withoutFactId: [string, string][] = [['Nats-Msg-Id', 'OrderCreated.v2:o-1']];
+    const withoutFactId: [string, string][] = [['Nats-Msg-Id', 'event.OrderCreated.v2:o-1']];
     const withoutMessageId: [string, string][] = [['Cf-Loom-Fact-Id', 'o-1']];
     const emptyBoth: [string, string][] = [
       ['Nats-Msg-Id', ''],
@@ -333,7 +384,7 @@ describe('the Wire protocol over the broker', () => {
 
   test('an id the Fact id’s rule refuses reads as missing', () => {
     const entries: [string, string][] = [
-      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v2:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1 '],
     ];
 
@@ -344,7 +395,7 @@ describe('the Wire protocol over the broker', () => {
 
   test('a header named as one of cf-loom’s own in another case is neither an id nor a transport header', () => {
     const entries: [string, string][] = [
-      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v2:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['nats-msg-id', 'other'],
       ['CF-LOOM-FACT-ID', 'other'],
@@ -355,7 +406,7 @@ describe('the Wire protocol over the broker', () => {
 
     expect(read).toEqual({
       kind: 'read',
-      messageId: 'OrderCreated.v2:o-1',
+      messageId: 'event.OrderCreated.v2:o-1',
       factId: 'o-1',
       headers: { traceparent: '00-abc-def-01' },
     });
@@ -363,7 +414,7 @@ describe('the Wire protocol over the broker', () => {
 
   test('broker headers in a namespace a transport header may not take read back as neither ids nor transport headers', () => {
     const entries: [string, string][] = [
-      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v2:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['Nats-TTL', '1h'],
       ['nats-expected-stream', 'other'],
@@ -375,7 +426,7 @@ describe('the Wire protocol over the broker', () => {
 
     expect(read).toEqual({
       kind: 'read',
-      messageId: 'OrderCreated.v2:o-1',
+      messageId: 'event.OrderCreated.v2:o-1',
       factId: 'o-1',
       headers: { traceparent: '00-abc-def-01' },
     });
@@ -383,7 +434,7 @@ describe('the Wire protocol over the broker', () => {
 
   test('a header given several values reads as one value, its values joined with ", "', () => {
     const entries: [string, string][] = [
-      ['Nats-Msg-Id', 'OrderCreated.v2:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v2:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['tracestate', 'a=1'],
       ['traceparent', '00-abc-def-01'],

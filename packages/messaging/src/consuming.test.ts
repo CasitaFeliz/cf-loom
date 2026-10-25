@@ -423,7 +423,7 @@ describe('a Message delivered', () => {
     const { received, subscriptions } = receiving();
     const { deliver } = await consuming({ subscriptions });
     const meta = {
-      messageId: 'OrderCreated.v1:o-1',
+      messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
       deliveryCount: 3,
       headers: { traceparent: '00-abc-def-01' },

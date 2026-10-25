@@ -173,7 +173,7 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
   });
   const answer = await notifyOnSettledHandler(
     settled,
-    { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+    { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
     { resources: { notifications } },
   );
 

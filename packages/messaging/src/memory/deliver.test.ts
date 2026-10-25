@@ -307,14 +307,14 @@ describe('deliver()', () => {
     },
   );
 
-  test('the broker message id defaults to <Name>.v<n>:<factId>, and meta.messageId replaces it', async () => {
+  test('the broker message id defaults to command.<Name>.v<n>:<factId>, and meta.messageId replaces it', async () => {
     const { broker, received } = await running();
 
     await broker.deliver(chargeCardV1, charge, { factId: 'f-1' });
     await broker.deliver(chargeCardV1, charge, { factId: 'f-2', messageId: 'custom-id' });
 
     expect(received.map(({ meta }) => [meta.messageId, meta.factId])).toEqual([
-      ['ChargeCard.v1:f-1', 'f-1'],
+      ['command.ChargeCard.v1:f-1', 'f-1'],
       ['custom-id', 'f-2'],
     ]);
   });
@@ -327,7 +327,7 @@ describe('deliver()', () => {
 
     const [first, second] = received.map(({ meta }) => meta);
     expect(first?.factId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(first?.messageId).toBe(`ChargeCard.v1:${first?.factId}`);
+    expect(first?.messageId).toBe(`command.ChargeCard.v1:${first?.factId}`);
     expect(second?.factId).not.toBe(first?.factId);
   });
 
@@ -438,12 +438,12 @@ describe('deliver()', () => {
     });
 
     await expect(delivering).rejects.toThrow(
-      'The broker headers of ChargeCard@1 would take 70069 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
+      'The broker headers of ChargeCard@1 would take 70077 bytes, over the 65535 JetStream stores; the Fact id counts twice, in Cf-Loom-Fact-Id and in Nats-Msg-Id',
     );
     expect(received).toEqual([]);
   });
 
-  test('a broker message id given is counted in place of <Name>.v<n>:<factId>, so a long one is refused and no Handler runs', async () => {
+  test('a broker message id given is counted in place of command.<Name>.v<n>:<factId>, so a long one is refused and no Handler runs', async () => {
     const { broker, received } = await running();
 
     const delivering = broker.deliver(chargeCardV1, charge, {
@@ -459,7 +459,7 @@ describe('deliver()', () => {
 
   test('broker headers of exactly the bytes JetStream stores are delivered as given', async () => {
     const { broker, received } = await running();
-    const headers = { 'x-pad': 'p'.repeat(65_460) };
+    const headers = { 'x-pad': 'p'.repeat(65_452) };
 
     await broker.deliver(chargeCardV1, charge, { factId: 'f-1', headers });
 
@@ -502,7 +502,7 @@ describe('deliver()', () => {
 
     expect(rejection).not.toBeInstanceOf(InvalidInputError);
     expect(rejection).toMatchObject({
-      message: expect.stringMatching(/^The broker headers of ChargeCard@1 would take 66060 bytes/),
+      message: expect.stringMatching(/^The broker headers of ChargeCard@1 would take 66068 bytes/),
     });
     expect(received).toEqual([]);
   });
@@ -581,7 +581,7 @@ describe('pending and redeliver()', () => {
         {
           element: notifyOnCreated,
           subject: 'orders-service.event.OrderCreated.v2',
-          messageId: 'OrderCreated.v2:o-1',
+          messageId: 'event.OrderCreated.v2:o-1',
           factId: 'o-1',
           deliveryCount: 1,
           headers,
@@ -655,8 +655,8 @@ describe('pending and redeliver()', () => {
     await broker.redeliver();
 
     expect(received.map(({ meta }) => meta)).toEqual([
-      { messageId: 'ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 1, headers },
-      { messageId: 'ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 2, headers },
+      { messageId: 'command.ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 1, headers },
+      { messageId: 'command.ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 2, headers },
     ]);
   });
 

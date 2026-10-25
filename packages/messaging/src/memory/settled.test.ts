@@ -169,7 +169,7 @@ describe('settled()', () => {
     expect(rejection?.cause).toEqual({
       element: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
-      messageId: 'OrderCreated.v1:o-1',
+      messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
       kind: 'thrown',
       cause: error,
@@ -222,8 +222,8 @@ describe('settled()', () => {
 
     expect(rejection?.message).toBe(
       [
-        'notifyOnCreated orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: the Handler threw',
-        'ChargeCard@1 orders-service.command.ChargeCard.v1 ChargeCard.v1:o-1 o-1: Card refused',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: the Handler threw',
+        'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1: Card refused',
       ].join('\n'),
     );
   });
@@ -288,7 +288,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.message).toBe(
-      'notifyOnCreated orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
     );
     expect(rejection?.cause).toBe(hook);
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);

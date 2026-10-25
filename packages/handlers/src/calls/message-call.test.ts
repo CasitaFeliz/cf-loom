@@ -71,7 +71,7 @@ const chargeCard = readers.commands.chargeCardV1;
 const notifyOnPaidReader = readers.subscriptions.notifyOnPaid;
 const notifyOnSettledReader = readers.subscriptions.notifyOnSettled;
 
-const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+const meta = { messageId: 'command.ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 
 const body = { orderId: ORDER_ID, status: 'paid' } as const;
 

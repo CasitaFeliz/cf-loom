@@ -597,7 +597,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(1));
     expect(received[0]?.meta).toEqual({
-      messageId: 'OrderCreated.v1:o-1:created',
+      messageId: 'event.OrderCreated.v1:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 1,
       headers: { traceparent: '00-abc-def-01' },
@@ -639,7 +639,7 @@ describe('consuming over jetstream()', () => {
   });
 
   test('a Message whose broker headers take exactly the bytes JetStream stores reaches the Handler with its Fact id and transport headers as given, over jetstream() as over memory()', async () => {
-    const given = { factId: 'o-1', headers: { 'x-pad': 'p'.repeat(65_458) } };
+    const given = { factId: 'o-1', headers: { 'x-pad': 'p'.repeat(65_452) } };
     const prefix = aPrefix();
     await arrangeOrders(prefix);
     const overJetstream: Received[] = [];
@@ -671,7 +671,7 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf(received));
 
     await publishRaw(names.created, { orderId: 'o-1' }, [
-      ['Nats-Msg-Id', 'OrderCreated.v1:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v1:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
       ['tracestate', 'a=1'],
       ['tracestate', 'b=2'],
@@ -1009,7 +1009,7 @@ describe('closing while consuming over jetstream()', () => {
     await waitUntilPulling(names.stream, names.notifyDurable);
     proxy.hold();
     await publishRaw(names.created, { orderId: 'o-1' }, [
-      ['Nats-Msg-Id', 'OrderCreated.v1:o-1'],
+      ['Nats-Msg-Id', 'event.OrderCreated.v1:o-1'],
       ['Cf-Loom-Fact-Id', 'o-1'],
     ]);
     await vi.waitFor(async () => {

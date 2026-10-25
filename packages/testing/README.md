@@ -50,7 +50,7 @@ import notifyOnSettledHandler from '../src/subscriptions/orders/notify-on-settle
 const settled = fakeEvent(payments.events.paymentSettledV1, { paymentId: PAYMENT_ID });
 await notifyOnSettledHandler(
   settled,
-  { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+  { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
   { resources: { notifications } },
 );
 ```

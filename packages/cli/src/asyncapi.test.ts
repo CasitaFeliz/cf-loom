@@ -537,6 +537,14 @@ describe('cf-loom asyncapi: the headers', () => {
     });
   });
 
+  test('the broker headers describe Nats-Msg-Id as event.<Name>.v<version>:<Fact id>', () => {
+    const headers = componentOf('BrokerHeaders');
+
+    expect(valueAt(headers, 'properties', 'Nats-Msg-Id')).toMatchObject({
+      description: expect.stringContaining('event.<Name>.v<version>:<Fact id>'),
+    });
+  });
+
   test('the broker headers admit any other header as a string', () => {
     expect(valueAt(componentOf('BrokerHeaders'), 'additionalProperties')).toMatchObject({
       type: 'string',

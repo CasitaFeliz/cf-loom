@@ -93,7 +93,7 @@ const chargeCard = readers.commands.chargeCardV1;
 const refundCard = readers.commands.refundCardV1;
 const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 
-const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+const meta = { messageId: 'command.ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 
 const handleRefusal =
   'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
