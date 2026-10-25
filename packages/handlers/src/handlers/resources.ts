@@ -11,28 +11,23 @@ export type ResourcesNotAnnotated = {
   readonly [unannotated]?: 'annotate the last parameter, as Needs<…> does';
 };
 
-/** The keys of Resources a Handler takes: any but the one `ResourcesNotAnnotated` names itself by. */
-type TakenKeyOf<Resources> = Exclude<keyof Resources, typeof unannotated>;
-
-/**
- * The Resources a Handler returned by `handle()` takes: none when its implementation's last
- * parameter is not annotated, so a direct call or a map may still hand it any; `any` stays `any`,
- * for `ResourcesOf` to refuse.
- */
-export type HandledResourcesOf<Resources extends object> = 0 extends 1 & Resources
-  ? Resources
-  : [ResourcesNotAnnotated] extends [Resources]
-    ? NoResources
-    : Resources;
-
 /** What a Handler takes beside what it is given: the Service's Resources, which `serve` and `consume` hand it unread. */
 export type WithResources<Resources extends object> = { readonly resources: Resources };
 
+/** What an implementation's last parameter may hold: `resources`, when it takes some. */
+export type ResourcesLast = { readonly resources?: object };
+
+/** The last parameter of an implementation that leaves it unannotated: `resources` optional, since it takes none, and typed to name the fix. */
+export type LastNotAnnotated = { readonly resources?: ResourcesNotAnnotated };
+
+/** The Resources an implementation takes: its last parameter's `resources` when it requires them, none otherwise. */
+export type TakenResourcesOf<Last extends ResourcesLast> =
+  Last extends WithResources<object> ? Last['resources'] : NoResources;
+
 /** `resources`, required exactly when some Handler takes one. */
-export type ResourcesField<Resources extends object> =
-  TakenKeyOf<Resources> extends never
-    ? { readonly resources?: Resources }
-    : { readonly resources: Resources };
+export type ResourcesField<Resources extends object> = keyof Resources extends never
+  ? { readonly resources?: Resources }
+  : { readonly resources: Resources };
 
 /** A last argument that may be left out when every field it holds is optional. */
 export type CallArgument<Call> = Partial<Call> extends Call ? [call?: Call] : [call: Call];
@@ -57,14 +52,14 @@ type AnyResourcesRefusal = {
 /** The Resources one Handler takes, none for a Handler that takes none; distributes, so a Handler that takes none never narrows the others. */
 type ResourcesOfHandler<Handler> = Handler extends unknown
   ? NonNullable<CallOf<Handler>> extends { readonly resources?: infer Resources }
-    ? TakenResourcesOf<NonNullable<Resources>>
+    ? HandedResourcesOf<NonNullable<Resources>>
     : never
   : never;
 
-/** The Resources a Handler's last argument holds, none when it takes none, the refusal when `any`. */
-type TakenResourcesOf<Resources> = 0 extends 1 & Resources
+/** The Resources a map hands one Handler: none when it takes none, the refusal when `any`. */
+type HandedResourcesOf<Resources> = 0 extends 1 & Resources
   ? AnyResourcesRefusal
-  : TakenKeyOf<Resources> extends never
+  : keyof Resources extends never
     ? never
     : Resources;
 

@@ -5,9 +5,10 @@ import type { Fault } from '../outcomes/index.ts';
 import type { HandledBy } from './handler.ts';
 import type {
   CallArgument,
+  LastNotAnnotated,
   NoResources,
   ResourcesField,
-  ResourcesNotAnnotated,
+  ResourcesLast,
 } from './resources.ts';
 
 /** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
@@ -26,25 +27,17 @@ export type MessageFault = Fault & { readonly retryAfter?: never };
 /** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a MessageFault. */
 type Answered = undefined | MessageFault;
 
-/** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a `MessageFault`; may be async. */
+/** What a CommandHandler's implementation returns, given the body, its meta, and last the Resources it takes, `Needs<'payments'>`: nothing, which acknowledges the Command, or a `MessageFault`; may be async. */
 export type CommandImplementation<
   Target extends Pairing<Command>,
-  Resources extends object = ResourcesNotAnnotated,
-> = (
-  body: ReadBodyOf<Target>,
-  meta: MessageMeta,
-  last: ResourcesField<Resources>,
-) => Answered | Promise<Answered>;
+  Last extends ResourcesLast = LastNotAnnotated,
+> = (body: ReadBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
-/** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a `MessageFault`; may be async. */
+/** What an EventHandler's implementation returns, given the body, its meta, and last the Resources it takes, `Needs<'payments'>`: nothing, which acknowledges the Event, or a `MessageFault`; may be async. */
 export type EventImplementation<
   Target extends Pairing<Subscription>,
-  Resources extends object = ResourcesNotAnnotated,
-> = (
-  body: ReadBodyOf<Target>,
-  meta: MessageMeta,
-  last: ResourcesField<Resources>,
-) => Answered | Promise<Answered>;
+  Last extends ResourcesLast = LastNotAnnotated,
+> = (body: ReadBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
 /** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type CommandHandler<

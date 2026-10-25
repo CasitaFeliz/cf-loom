@@ -13,6 +13,7 @@ import {
   admit,
   type CommandHandler,
   type EndpointHandler,
+  type EndpointImplementation,
   type EventHandler,
   type Fault,
   fault,
@@ -538,9 +539,54 @@ describe('ResourcesOf', () => {
     expect(handlers.endpoints.getOrder.element).toBe(getOrder);
   });
 
+  test('an implementation typed by its last parameter gives a Handler that takes those Resources', () => {
+    const implementation: EndpointImplementation<typeof getOrder, Needs<'orders'>> = (
+      _input,
+      _call,
+      { resources },
+    ) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID });
+
+    expectTypeOf(handle(getOrder, implementation)).toEqualTypeOf<
+      EndpointHandler<typeof getOrder, Pick<Resources, 'orders'>>
+    >();
+  });
+
+  test('handle() keeps the any an implementation types its Resources as, every kind alike', () => {
+    /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
+    const handlers = [
+      handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+        resources ? reject(notFound) : success({ id: ORDER_ID }),
+      ),
+      handle(apiKey, (_demands, _call, { resources }: WithResources<any>) =>
+        admit({ callerId: resources.callerId }),
+      ),
+      handle(chargeCard, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+      handle(notifyOnPaid, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+    ] as const;
+
+    expectTypeOf(handlers[0]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[1]).toEqualTypeOf<GuardHandler<typeof apiKey, any>>();
+    expectTypeOf(handlers[2]).toEqualTypeOf<CommandHandler<typeof chargeCard, any>>();
+    expectTypeOf(handlers[3]).toEqualTypeOf<EventHandler<typeof notifyOnPaid, any>>();
+    /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
+    expect(handlers.map(({ element }) => element)).toEqual([
+      getOrder,
+      apiKey,
+      chargeCardV1,
+      notifyOnPaidV1,
+    ]);
+  });
+
   test('a Handler whose Resources are any makes ResourcesOf name the cause', () => {
     // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
-    const loose: EndpointHandler<typeof getOrder, any> = handle(getOrder, () => reject(notFound));
+    const loose = handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+      resources ? reject(notFound) : success({ id: ORDER_ID }),
+    );
     const handlers = { endpoints: { getOrder: loose } };
 
     expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(

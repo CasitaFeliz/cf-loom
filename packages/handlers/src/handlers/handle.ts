@@ -30,7 +30,12 @@ import type {
   EventHandler,
   EventImplementation,
 } from './message-handler.ts';
-import type { HandledResourcesOf, NoResources, ResourcesNotAnnotated } from './resources.ts';
+import type {
+  LastNotAnnotated,
+  NoResources,
+  ResourcesLast,
+  TakenResourcesOf,
+} from './resources.ts';
 import {
   type AnyHandler,
   type AnyWritten,
@@ -52,15 +57,15 @@ type BareMessageRefusal =
 /** The function `handle()` wraps for a target: the implementation its Endpoint, Guard, Command or Subscription takes. */
 type ImplementationOf<
   Target extends HandleArgument,
-  Resources extends object,
+  Last extends ResourcesLast,
 > = Target extends Endpoint
-  ? EndpointImplementation<Target, Resources>
+  ? EndpointImplementation<Target, Last>
   : Target extends Guard
-    ? GuardImplementation<Target, Resources>
+    ? GuardImplementation<Target, Last>
     : Target extends Pairing<Command>
-      ? CommandImplementation<Target, Resources>
+      ? CommandImplementation<Target, Last>
       : Target extends Pairing<Subscription>
-        ? EventImplementation<Target, Resources>
+        ? EventImplementation<Target, Last>
         : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
@@ -81,13 +86,13 @@ type TargetOf<Target extends HandleArgument> = Target extends MessageElement
 
 function handleImplementation<
   Target extends HandleArgument,
-  Resources extends object = ResourcesNotAnnotated,
+  Last extends ResourcesLast = LastNotAnnotated,
 >(
   target: TargetOf<Target>,
-  implementation: ImplementationOf<Target, Resources>,
-): HandlerOf<Target, HandledResourcesOf<Resources>> {
+  implementation: ImplementationOf<Target, Last>,
+): HandlerOf<Target, TakenResourcesOf<Last>> {
   const how = { implementation: implementation as Implementation, stub: false };
-  return handlerOf(target, how) as HandlerOf<Target, HandledResourcesOf<Resources>>;
+  return handlerOf(target, how) as HandlerOf<Target, TakenResourcesOf<Last>>;
 }
 
 function stubOf<Target extends HandleArgument>(

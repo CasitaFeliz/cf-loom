@@ -15,9 +15,10 @@ import type { Admission, CheckedAdmission, CheckedOutcome, Outcome } from '../ou
 import type { Readers } from './reader.ts';
 import type {
   CallArgument,
+  LastNotAnnotated,
   NoResources,
   ResourcesField,
-  ResourcesNotAnnotated,
+  ResourcesLast,
 } from './resources.ts';
 
 declare const handled: unique symbol;
@@ -53,24 +54,24 @@ type ContextField<Context> = keyof Context extends never
 /** `request` in a direct call: each field left out is a signal never aborted, or empty headers. */
 type DirectRequestField = { readonly request?: Partial<HandledRequest> };
 
-/** What an EndpointHandler's implementation returns, given the Input, the Context and request, and the Resources it takes; may be async. */
+/** What an EndpointHandler's implementation returns, given the Input, the Context and request, and last the Resources it takes, `Needs<'orders'>`; may be async. */
 export type EndpointImplementation<
   Target extends Endpoint,
-  Resources extends object = ResourcesNotAnnotated,
+  Last extends ResourcesLast = LastNotAnnotated,
 > = (
   input: InputOf<Target>,
   call: EndpointCall<Target>,
-  last: ResourcesField<Resources>,
+  last: Last,
 ) => Outcome<Target> | Promise<Outcome<Target>>;
 
-/** What a GuardHandler's implementation returns, given its demands, its Context, Qualifier and request, and the Resources it takes; may be async. */
+/** What a GuardHandler's implementation returns, given its demands, its Context, Qualifier and request, and last the Resources it takes, `Needs<'callers'>`; may be async. */
 export type GuardImplementation<
   Target extends Guard,
-  Resources extends object = ResourcesNotAnnotated,
+  Last extends ResourcesLast = LastNotAnnotated,
 > = (
   demands: DemandsOf<Target>,
   call: GuardCall<Target>,
-  last: ResourcesField<Resources>,
+  last: Last,
 ) => Admission<Target> | Promise<Admission<Target>>;
 
 /** The Handler of one Endpoint: calling it runs the Contract's checks and answers what `serve` would. */

@@ -1,5 +1,5 @@
 import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
-import { admit, type EndpointHandler, handle, success } from '@cf-loom/handlers';
+import { admit, handle, success, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { serve } from './index.ts';
 
@@ -130,15 +130,22 @@ describe('serve: the Handler map, typed by the Contract', () => {
 
   test('a Handler whose Resources are any makes resources name the cause', () => {
     // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
-    const loose: EndpointHandler<typeof findOrder, any> = handle(findOrder, () => success());
+    const loose = handle(findOrder, async (_input, _call, { resources }: WithResources<any>) => {
+      await resources.ready;
+      return success();
+    });
     const handlers = {
       endpoints: { getOrder: getOrderHandler, findOrder: loose },
       guards: { apiKey: apiKeyHandler },
       deprecatedAt: {},
     };
 
-    // @ts-expect-error the Resources of findOrder are any
-    const serving = () => serve(contract, handlers, { resources: { orders: {} } });
+    const serving = () => [
+      // @ts-expect-error the Resources of findOrder are any
+      serve(contract, handlers),
+      // @ts-expect-error the Resources of findOrder are any
+      serve(contract, handlers, { resources: { orders: {} } }),
+    ];
 
     expect(serving).toBeTypeOf('function');
   });
