@@ -26,10 +26,8 @@ export type AsyncApiDocument = {
   readonly components: { readonly schemas: Readonly<Record<string, JsonSchema>> };
 };
 
-/** The document of a Service's Events, or the line saying what of its Snapshot AsyncAPI cannot name. */
-export type AsyncApiWritten =
-  | { readonly kind: 'written'; readonly document: AsyncApiDocument }
-  | { readonly kind: 'unnamed'; readonly line: string };
+/** The document of a Service's Events. */
+export type AsyncApiWritten = { readonly kind: 'written'; readonly document: AsyncApiDocument };
 
 /** The AsyncAPI document of the Events a Service publishes at a version, each subject under the prefix, if one is given. */
 export function asyncApiDocumentOf(
@@ -43,16 +41,13 @@ export function asyncApiDocumentOf(
     snapshot.defs,
     'draft-07',
   );
-  if (defs.kind === 'unnamed') {
-    return { kind: 'unnamed', line: defs.line };
-  }
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
     info: { title: snapshot.name, version, tags: tagsOf(published) },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
-    components: { schemas: schemasOf(defs.schemas, published) },
+    components: { schemas: schemasOf(defs, published) },
   };
   return { kind: 'written', document };
 }

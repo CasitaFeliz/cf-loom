@@ -13,15 +13,13 @@ export function snapshotFileOf(built: BuiltProject): GeneratedFile {
 /**
  * The files a Service regenerates beside its Snapshot, and a line for every Command's Message
  * Version or Subscription the readers could not import as it is named, which leaves the readers
- * file out; or the line saying which name cannot be written as code.
+ * file out.
  */
-export type ServiceFiles =
-  | {
-      readonly kind: 'files';
-      readonly files: readonly GeneratedFile[];
-      readonly failureLines: readonly string[];
-    }
-  | { readonly kind: 'unnamed'; readonly line: string };
+export type ServiceFiles = {
+  readonly kind: 'files';
+  readonly files: readonly GeneratedFile[];
+  readonly failureLines: readonly string[];
+};
 
 /** The files a Service regenerates beside its Snapshot: its Handler map and its readers. */
 export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): ServiceFiles {
@@ -30,8 +28,6 @@ export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): Se
   const messages = messageExportsOf(service, exportsOf);
   const readers = readersTextOf(service.snapshot, readersFile, messages);
   switch (readers.kind) {
-    case 'unnamed':
-      return readers;
     case 'refused':
       return { kind: 'files', files: [mapFile], failureLines: readers.lines };
     case 'text': {
