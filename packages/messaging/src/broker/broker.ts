@@ -48,11 +48,13 @@ export type BrokerConsumer = {
   readonly receive: (delivery: Delivery) => Promise<Settlement>;
 };
 
-/** One Message as an adapter hands it to `receive`: its ids, which attempt, its transport headers and its body as received. */
+/** One Message as an adapter hands it to `receive`: its ids, which attempt, whether the Broker will deliver it again, its transport headers and its body as received. */
 export type Delivery = {
   readonly messageId: string;
   readonly factId: string;
   readonly deliveryCount: number;
+  /** Whether this is the last delivery the Broker makes; `false` when the Broker sets no limit or the adapter cannot know. */
+  readonly lastAttempt: boolean;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 };

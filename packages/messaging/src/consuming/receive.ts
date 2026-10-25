@@ -43,8 +43,8 @@ async function runOf({ handler, resources }: Pulled, delivery: Delivery): Promis
   if (json.kind === 'malformed') {
     return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
   }
-  const { messageId, factId, deliveryCount, headers } = delivery;
-  const meta = { messageId, factId, deliveryCount, headers };
+  const { messageId, factId, deliveryCount, lastAttempt, headers } = delivery;
+  const meta = { messageId, factId, deliveryCount, lastAttempt, headers };
   return await runMessage(handler, { body: json.value, meta, resources });
 }
 
@@ -65,8 +65,6 @@ function answeredOf(answer: Fault | undefined, about: About): Ran {
   if (answer === undefined) {
     return { settlement: 'acked', fault: undefined };
   }
-  if (answer.retryable) {
-    return { settlement: 'pending', fault: undefined };
-  }
-  return { settlement: 'ended', fault: { ...about, kind: 'returned', fault: answer } };
+  const fault: ConsumedFault = { ...about, kind: 'returned', fault: answer };
+  return { settlement: answer.retryable ? 'pending' : 'ended', fault };
 }

@@ -172,6 +172,8 @@ describe('settled()', () => {
       subject: 'orders-service.event.OrderCreated.v1',
       messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
+      deliveryCount: 1,
+      lastAttempt: false,
       kind: 'thrown',
       cause: error,
     });
@@ -197,15 +199,18 @@ describe('settled()', () => {
     expect(rejection).toBeInstanceOf(Error);
   });
 
-  test('a retryable Fault does not make settled() reject', async () => {
+  test('a retryable Fault makes settled() reject with its line', async () => {
     const { broker, sender } = await running(() => ({
-      charge: () => fault({ committed: 'no', retryable: true }),
+      charge: () => fault({ committed: 'no', retryable: true, message: 'card 503' }),
     }));
-    await sender.send('ChargeCard', created);
+    await sender.send('ChargeCard', created, { factId: 'o-1' });
 
-    const settling = broker.settled();
+    const rejection = await rejectionOf(broker.settled());
 
-    await expect(settling).resolves.toBeUndefined();
+    expect(rejection?.message).toBe(
+      'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1 attempt 1: card 503',
+    );
+    expect(rejection?.cause).toMatchObject({ kind: 'returned', deliveryCount: 1 });
     expect(broker.pending).toHaveLength(1);
   });
 
@@ -223,8 +228,8 @@ describe('settled()', () => {
 
     expect(rejection?.message).toBe(
       [
-        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: the Handler threw',
-        'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1: Card refused',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: the Handler threw',
+        'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1 attempt 1: Card refused',
       ].join('\n'),
     );
   });
@@ -290,8 +295,8 @@ describe('settled()', () => {
 
     expect(rejection?.message).toBe(
       [
-        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: the Handler threw',
-        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: the Handler threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       ].join('\n'),
     );
     expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
@@ -311,8 +316,8 @@ describe('settled()', () => {
 
     expect(rejection?.message).toBe(
       [
-        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: Not notified',
-        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: Not notified',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       ].join('\n'),
     );
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);

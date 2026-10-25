@@ -599,6 +599,7 @@ describe('consuming over jetstream()', () => {
       messageId: 'event.OrderCreated.v1:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 1,
+      lastAttempt: false,
       headers: { traceparent: '00-abc-def-01' },
     });
   });
@@ -772,7 +773,61 @@ describe('consuming over jetstream()', () => {
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
   }, 10_000);
 
-  test('a receive that rejects, because onServiceFault threw, leaves the Message for redelivery', async () => {
+  test('a Handler returning a retryable Fault is reported on every delivery, deliveryCounts 1, 2 and 3', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf([], { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ kind, deliveryCount }) => [kind, deliveryCount])).toEqual([
+      ['returned', 1],
+      ['returned', 2],
+      ['returned', 3],
+    ]);
+  }, 10_000);
+
+  test('only the third delivery is the last attempt of a durable consumer with max_deliver 3', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
+    const received: Received[] = [];
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf(received, { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, true]);
+    expect(received.map(({ meta }) => meta.lastAttempt)).toEqual([false, false, true]);
+  }, 10_000);
+
+  test('a durable consumer without a delivery limit never marks the last attempt', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: -1 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await orders.consume(handlersOf([], { notify: failing }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
+    expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, false]);
+  }, 10_000);
+
+  test('a delivery whose onServiceFault throws is left for redelivery', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
@@ -817,7 +872,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(logged).toHaveBeenCalledWith(
-      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       hook,
     );
   }, 10_000);

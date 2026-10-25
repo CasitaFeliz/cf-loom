@@ -17,7 +17,8 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   }
   const { messageId, factId, headers } = read;
   const { deliveryCount } = message;
-  const delivery = { messageId, factId, deliveryCount, headers, body: message.data };
+  const lastAttempt = isLastDelivery(durable.maxDeliver, deliveryCount);
+  const delivery = { messageId, factId, deliveryCount, lastAttempt, headers, body: message.data };
   const wait = waitOf(durable.waits, deliveryCount);
   const settlement = await whileWorking(message, wait, () =>
     durable.consumer.receive(delivery),
@@ -25,6 +26,11 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   if (settlement !== undefined) {
     applySettlement(message, settlement);
   }
+}
+
+/** Whether NATS delivers no more after this delivery: a limit set, and reached. */
+function isLastDelivery(maxDeliver: number, deliveryCount: number): boolean {
+  return maxDeliver > 0 && deliveryCount >= maxDeliver;
 }
 
 function headerEntriesOf(message: PulledMessage): readonly (readonly [string, string])[] {

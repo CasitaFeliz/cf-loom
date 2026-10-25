@@ -8,7 +8,7 @@ import type { Broker, Settlement } from '../broker/index.ts';
 export type MemoryBroker = Broker & {
   /**
    * Waits until nothing is in flight, Messages Handlers publish or send meanwhile included; rejects
-   * when a Handler threw, a Message was ended, an `onServiceFault` threw or deliveries were cut
+   * when a Handler threw or returned a Fault, a Message was ended, an `onServiceFault` threw or deliveries were cut
    * since the last `settled()`.
    */
   readonly settled: () => Promise<void>;

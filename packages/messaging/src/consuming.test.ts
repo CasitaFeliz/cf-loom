@@ -161,7 +161,13 @@ function aBroker() {
       delivered instanceof Uint8Array
         ? delivered
         : new TextEncoder().encode(JSON.stringify(delivered));
-    const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1, headers: {} };
+    const meta = {
+      messageId: 'm-1',
+      factId: 'f-1',
+      deliveryCount: 1,
+      lastAttempt: false,
+      headers: {},
+    };
     return consumer.receive({ ...meta, body: bytes, ...delivery });
   };
   return { broker, consumers, deliver };
@@ -410,13 +416,14 @@ describe('a Message delivered', () => {
     expect(received[0]).toEqual({ orderId: ORDER_ID, status: { unknown: 'refunded' } });
   });
 
-  test('the Handler receives messageId, factId, deliveryCount and headers as delivered', async () => {
+  test('the Handler receives messageId, factId, deliveryCount, lastAttempt and headers as delivered', async () => {
     const { received, subscriptions } = receiving();
     const { deliver } = await consuming({ subscriptions });
     const meta = {
       messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
       deliveryCount: 3,
+      lastAttempt: false,
       headers: { traceparent: '00-abc-def-01' },
     };
 
@@ -434,14 +441,80 @@ describe('a Message delivered', () => {
     expect(faults).toEqual([]);
   });
 
-  test('a retryable Fault leaves it pending, and onServiceFault receives nothing', async () => {
+  test('a retryable Fault leaves it pending, and onServiceFault receives it as returned with its deliveryCount', async () => {
+    const returned = fault({ committed: 'no', retryable: true, message: 'card 503' });
+    const { subscriptions } = receiving(() => returned);
+    const { deliver, faults } = await consuming({ subscriptions });
+
+    const settlement = await deliver(created, body, { deliveryCount: 2 });
+
+    expect(settlement).toBe('pending');
+    expect(faults).toEqual([
+      {
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
+        subject: created,
+        messageId: 'm-1',
+        factId: 'f-1',
+        deliveryCount: 2,
+        lastAttempt: false,
+        kind: 'returned',
+        fault: returned,
+      },
+    ]);
+  });
+
+  test('a delivery’s lastAttempt reaches onServiceFault', async () => {
     const { subscriptions } = receiving(() => fault({ committed: 'no', retryable: true }));
     const { deliver, faults } = await consuming({ subscriptions });
 
-    const settlement = await deliver(created, body);
+    await deliver(created, body, { deliveryCount: 3, lastAttempt: true });
 
-    expect(settlement).toBe('pending');
-    expect(faults).toEqual([]);
+    expect(faults).toMatchObject([{ deliveryCount: 3, lastAttempt: true }]);
+  });
+
+  test('a delivery’s lastAttempt reaches the Handler’s meta', async () => {
+    const { received, subscriptions } = receiving();
+    const { deliver } = await consuming({ subscriptions });
+
+    await deliver(created, body, { deliveryCount: 3, lastAttempt: true });
+
+    expect(received[1]).toMatchObject({ deliveryCount: 3, lastAttempt: true });
+  });
+
+  test('without onServiceFault, a retryable Fault is one console line with its attempt, and the last attempt says so', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { broker, deliver } = aBroker();
+    const { consume } = await messaging(contract, broker);
+    await consume({
+      ...handlers,
+      subscriptions: {
+        ...handlers.subscriptions,
+        ...receiving(() => fault({ committed: 'no', retryable: true, message: 'card 503' }))
+          .subscriptions,
+      },
+    });
+
+    await deliver(created, body, { deliveryCount: 2 });
+    await deliver(created, body, { deliveryCount: 3, lastAttempt: true });
+
+    expect(logged.mock.calls).toEqual([
+      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 2: card 503'],
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 3, the last: card 503',
+      ],
+    ]);
+  });
+
+  test('a throw’s fault carries its deliveryCount', async () => {
+    const { subscriptions } = receiving(() => {
+      throw new Error('gateway down');
+    });
+    const { deliver, faults } = await consuming({ subscriptions });
+
+    await deliver(created, body, { deliveryCount: 4 });
+
+    expect(faults).toMatchObject([{ kind: 'thrown', deliveryCount: 4, lastAttempt: false }]);
   });
 
   test('a non-retryable Fault ends it, and onServiceFault receives it as returned, unchanged', async () => {
@@ -459,6 +532,8 @@ describe('a Message delivered', () => {
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
+        deliveryCount: 1,
+        lastAttempt: false,
         kind: 'returned',
         fault: returned,
       },
@@ -483,6 +558,8 @@ describe('a Message delivered', () => {
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
+        deliveryCount: 1,
+        lastAttempt: false,
         kind: 'thrown',
         cause: error,
       },
@@ -514,6 +591,8 @@ describe('a Message delivered', () => {
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
+        deliveryCount: 1,
+        lastAttempt: false,
         kind: 'invalid-body',
         issues: [
           { part: 'body', path: ['orderId'], code: 'invalid_format', message: expect.any(String) },
@@ -562,12 +641,12 @@ describe('a Message delivered', () => {
     expect(logged.mock.calls).toEqual([
       [
         expect.stringMatching(
-          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.orderId invalid_format: /,
+          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.orderId invalid_format: /,
         ),
       ],
       [
         expect.stringMatching(
-          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1: body\.status invalid_value: /,
+          /^notifyOnCreated orders-service\.event\.OrderCreated\.v1 m-1 f-1 attempt 1: body\.status invalid_value: /,
         ),
       ],
     ]);
@@ -603,8 +682,11 @@ describe('a Message delivered', () => {
     await deliver(created, body);
 
     expect(logged.mock.calls).toEqual([
-      ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1: Card refused', error],
-      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1: the Handler threw', error],
+      ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1 attempt 1: Card refused', error],
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: the Handler threw',
+        error,
+      ],
     ]);
   });
 
@@ -623,7 +705,10 @@ describe('a Message delivered', () => {
 
     expect(settlement).toBe('pending');
     expect(logged.mock.calls).toEqual([
-      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1: onServiceFault threw', error],
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: onServiceFault threw',
+        error,
+      ],
     ]);
   });
 });

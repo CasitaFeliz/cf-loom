@@ -9,11 +9,13 @@ import type { Written } from './run.ts';
 /** What a Message Handler was written with: its Command or Subscription, the pairing that gives the Reader schema it reads a body with, its implementation, and whether it is a stub. */
 export type MessageWritten = Written<MessageElement> & { readonly pairing: Pairing };
 
-/** What a Message Handler receives beside its body: the Message's ids, which attempt this is, and the transport headers it was published with. */
+/** What a Message Handler receives beside its body: the Message's ids, which attempt this is, whether it is the last, and the transport headers it was published with. */
 export type MessageMeta = {
   readonly messageId: string;
   readonly factId: string;
   readonly deliveryCount: number;
+  /** Whether the Broker will not deliver this Message again, so a retryable Fault or a throw is its last. */
+  readonly lastAttempt: boolean;
   readonly headers: Readonly<Record<string, string>>;
 };
 

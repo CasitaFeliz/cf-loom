@@ -238,7 +238,7 @@ describe("a Message Handler's meta", () => {
 
     await chargeCardHandler(body, meta);
 
-    expect(received[1]).toEqual({ ...meta, headers: {} });
+    expect(received[1]).toEqual({ ...meta, lastAttempt: false, headers: {} });
   });
 
   test('two direct calls without headers each give the implementation its own headers', async () => {
@@ -257,7 +257,7 @@ describe("a Message Handler's meta", () => {
 
     await chargeCardHandler(body, { ...meta, headers });
 
-    expect(received[1]).toEqual({ ...meta, headers });
+    expect(received[1]).toEqual({ ...meta, lastAttempt: false, headers });
   });
 });
 

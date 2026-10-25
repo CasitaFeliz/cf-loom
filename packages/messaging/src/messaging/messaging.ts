@@ -14,7 +14,7 @@ import { MessagingLife } from './life.ts';
 
 /** What is operational about messaging and no part of the Contract: the hook for what Message Handlers end or fail with. */
 export type MessagingOptions = {
-  /** Receives a Message ended for failing its schema, a Fault with `retryable: false`, and anything thrown; the console without it. */
+  /** Receives a Message ended for failing its schema, every Fault a Handler returned, retryable or not, and anything thrown; the console without it. */
   readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
 };
 

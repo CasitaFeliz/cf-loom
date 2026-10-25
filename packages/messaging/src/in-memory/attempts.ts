@@ -27,8 +27,8 @@ export function firstDeliveryOf({
   factId,
   headers,
   body,
-}: Omit<Delivery, 'deliveryCount'>): Delivery {
-  return { messageId, factId, deliveryCount: 1, headers, body };
+}: Omit<Delivery, 'deliveryCount' | 'lastAttempt'>): Delivery {
+  return { messageId, factId, deliveryCount: 1, lastAttempt: false, headers, body };
 }
 
 /** What a test hands `deliver`: the Message Version, its body as a Subscriber reads it, and its meta. */

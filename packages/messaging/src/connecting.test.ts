@@ -122,7 +122,8 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
 
 function aDelivery(delivered: unknown): Delivery {
   const bytes = new TextEncoder().encode(JSON.stringify(delivered));
-  return { messageId: 'm-1', factId: 'f-1', deliveryCount: 1, headers: {}, body: bytes };
+  const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1, lastAttempt: false };
+  return { ...meta, headers: {}, body: bytes };
 }
 
 /** A promise a test settles itself, to hold a Handler while it runs. */

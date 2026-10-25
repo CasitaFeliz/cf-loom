@@ -609,8 +609,30 @@ describe('pending and redeliver()', () => {
 
     expect(rejection).toBeInstanceOf(Error);
     expect((rejection as Error).message).toBe(
-      'notifyOnCreated orders-service.event.OrderCreated.v2 event.OrderCreated.v2:o-1 o-1: Not notified',
+      'notifyOnCreated orders-service.event.OrderCreated.v2 event.OrderCreated.v2:o-1 o-1 attempt 1: Not notified',
     );
+  });
+
+  test('a redelivered Message’s fault carries deliveryCount 2', async () => {
+    const { broker, faults } = await running(() => ({ notify: throwing }));
+    await broker.deliver(orderCreatedV2, created, { factId: 'o-1' });
+
+    await broker.redeliver();
+
+    expect(faults.map(({ deliveryCount }) => deliveryCount)).toEqual([1, 2]);
+  });
+
+  test('memory never marks a delivery as the last attempt', async () => {
+    const { broker, faults, received } = await running(() => ({ notify: throwing }));
+    await broker.deliver(orderCreatedV2, created, { factId: 'o-1' });
+
+    await broker.redeliver();
+    await broker.redeliver();
+    await broker.redeliver();
+
+    const notified = received.filter(({ handler }) => handler === 'notifyOnCreated');
+    expect(notified.map(({ meta }) => meta.lastAttempt)).toEqual([false, false, false, false]);
+    expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, false, false]);
   });
 
   test('pending lists the wire body, not the form the Handler read', async () => {
@@ -682,8 +704,20 @@ describe('pending and redeliver()', () => {
     await broker.redeliver();
 
     expect(received.map(({ meta }) => meta)).toEqual([
-      { messageId: 'command.ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 1, headers },
-      { messageId: 'command.ChargeCard.v1:f-1', factId: 'f-1', deliveryCount: 2, headers },
+      {
+        messageId: 'command.ChargeCard.v1:f-1',
+        factId: 'f-1',
+        deliveryCount: 1,
+        lastAttempt: false,
+        headers,
+      },
+      {
+        messageId: 'command.ChargeCard.v1:f-1',
+        factId: 'f-1',
+        deliveryCount: 2,
+        lastAttempt: false,
+        headers,
+      },
     ]);
   });
 

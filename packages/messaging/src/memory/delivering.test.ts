@@ -264,6 +264,7 @@ describe('memory(): what the Service publishes and sends', () => {
       messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 1,
+      lastAttempt: false,
       headers,
     });
   });

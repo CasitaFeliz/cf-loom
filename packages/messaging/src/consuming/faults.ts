@@ -23,6 +23,9 @@ export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;
+  readonly deliveryCount: number;
+  /** Whether the Broker will not deliver the Message again. */
+  readonly lastAttempt: boolean;
 } & ({ readonly kind: 'invalid-body'; readonly issues: readonly Issue[] } | HandlerFailure);
 
 /** The Service's `onServiceFault`, which may be async and is awaited. */
@@ -65,24 +68,28 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
   }
 }
 
-/** What a fault says of where it came from: the Element handled and the Message. */
+/** What a fault says of where it came from: the Element handled, the Message and which attempt. */
 export type About = Pick<
   ConsumedFault,
-  'element' | 'identity' | 'subject' | 'messageId' | 'factId'
+  'element' | 'identity' | 'subject' | 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'
 >;
 
-/** Where a delivery went: the Element its consumer handles, its subject and the Message's ids. */
+/** The delivery a fault speaks of: the Message's ids and which attempt. */
+type Delivered = Pick<Delivery, 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'>;
+
+/** Where a delivery went: the Element its consumer handles, its subject, the Message's ids and which attempt. */
 export function aboutOf(
   { element, subject }: Pick<Consumed, 'element' | 'subject'>,
-  { messageId, factId }: Pick<Delivery, 'messageId' | 'factId'>,
+  { messageId, factId, deliveryCount, lastAttempt }: Delivered,
 ): About {
-  return { element, identity: elementNameOf(element), subject, messageId, factId };
+  const identity = elementNameOf(element);
+  return { element, identity, subject, messageId, factId, deliveryCount, lastAttempt };
 }
 
 /** The `onServiceFault threw` line of a delivery, which `settled()` also reports for a `receive` that rejected, through a bug. */
 export function receiveFailureLineOf(
   consumed: Pick<Consumed, 'element' | 'subject'>,
-  delivery: Pick<Delivery, 'messageId' | 'factId'>,
+  delivery: Delivered,
 ): string {
   const source = sourceOf(aboutOf(consumed, delivery));
   return hookThrewLineOf(source, 'onServiceFault');
@@ -105,7 +112,9 @@ function causeOf(fault: ConsumedFault): unknown {
   }
 }
 
-/** What names a Message in a line: the Element handling it, its subject, broker message id and Fact id. */
-export function sourceOf({ identity, subject, messageId, factId }: About): string {
-  return `${identity} ${subject} ${messageId} ${factId}`;
+/** What names a Message in a line: the Element handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
+export function sourceOf(about: About): string {
+  const { identity, subject, messageId, factId, deliveryCount, lastAttempt } = about;
+  const attempt = lastAttempt ? `attempt ${deliveryCount}, the last` : `attempt ${deliveryCount}`;
+  return `${identity} ${subject} ${messageId} ${factId} ${attempt}`;
 }
