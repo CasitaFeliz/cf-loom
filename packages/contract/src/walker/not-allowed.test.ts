@@ -32,11 +32,53 @@ const customPattern = 'a format with a custom pattern';
 const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
-  test('a format whose options its own zod refuses fails instead of throwing', () => {
-    const id = z.uuid();
-    Object.assign(id._zod.def, { version: 'v9' });
+  test('.nonoptional() outside an object field fails, and so does the .optional() inside it', () => {
+    const failures = [
+      { kind: 'not-allowed', at: ['body'], construct: '.nonoptional()' },
+      { kind: 'not-allowed', at: ['body'], construct: '.optional()' },
+    ];
 
-    expect(walkBody(id)).toEqual(refused('z.stringFormat("uuid")'));
+    expect(walkBody(z.string().optional().nonoptional())).toEqual({
+      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
+      defs: {},
+    });
+  });
+
+  test.each([
+    { name: '.default()', schema: z.array(z.date()).default([]), steps: [['items']] },
+    {
+      name: 'z.looseRecord()',
+      schema: z.looseRecord(z.string(), z.date()),
+      steps: [['value']],
+    },
+    { name: 'z.xor()', schema: z.xor([z.date(), z.string()]), steps: [['options', 0]] },
+    { name: 'z.map()', schema: z.map(z.date(), z.date()), steps: [['key'], ['value']] },
+    {
+      name: 'z.function()',
+      schema: z.function({ input: [z.date()], output: z.string() }),
+      steps: [['items', 0]],
+    },
+  ])('what lies inside $name is reported beside it', ({ name, schema, steps }) => {
+    const order = z.object({ when: schema });
+
+    const at = ['body', 'fields', 'when'];
+    const dates = steps.map((step) => ({
+      kind: 'not-allowed',
+      at: [...at, ...step],
+      construct: 'z.date()',
+      instead: 'z.iso.datetime()',
+    }));
+    const failures = [{ kind: 'not-allowed', at, construct: name }, ...dates];
+    expect(walkBody(order)).toEqual({
+      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
+      defs: {},
+    });
+  });
+
+  test('a refusal stacked on itself is reported once', () => {
+    const order = z.object({ note: z.string().default('a').default('b') });
+
+    expect(walkBody(order)).toEqual(refusedAt(['body', 'fields', 'note'], '.default()'));
   });
 
   test.each([
@@ -83,11 +125,6 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.readonly()', z.array(z.string()).readonly(), '.readonly()'],
     ['numeric z.enum() values', z.enum({ low: 1, high: 2 }), 'numeric z.enum() values'],
     ['.optional() outside an object field', z.string().optional(), '.optional()'],
-    [
-      '.nonoptional() outside an object field',
-      z.string().optional().nonoptional(),
-      '.nonoptional()',
-    ],
     ['z.literal(NaN)', z.literal(Number.NaN), nonFinite],
     ['z.literal(Infinity)', z.literal(Number.POSITIVE_INFINITY), nonFinite],
     ['.max(Infinity) on a number', z.number().max(Number.POSITIVE_INFINITY), nonFinite],

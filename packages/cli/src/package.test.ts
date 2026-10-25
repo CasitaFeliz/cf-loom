@@ -1156,10 +1156,10 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     const defs = read(out, 'src/defs.ts');
 
     expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
-    expect(defs).toContain('export type AReaderDef = { b?: BReaderDef };');
-    expect(defs).toContain('export type BReaderDef = { a?: AReaderDef; name: string };');
+    expect(defs).toContain('export type ADefReader = { b?: BDefReader };');
+    expect(defs).toContain('export type BDefReader = { a?: ADefReader; name: string };');
     expect(defs).toContain(
-      'export const aReaderDef: z.ZodType<AReaderDef> & z.core.$ZodTypeDiscriminable =',
+      'export const aDefReader: z.ZodType<ADefReader> & z.core.$ZodTypeDiscriminable =',
     );
   });
 
@@ -1193,7 +1193,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       'export const treeDef: z.ZodType<TreeDef, TreeDef> & z.core.$ZodTypeDiscriminable =',
     );
     expect(defs).toContain('export const nestedDef: z.ZodType<NestedDef, NestedDef> =');
-    expect(defs).toContain('export const nestedReaderDef: z.ZodType<NestedReaderDef> =');
+    expect(defs).toContain('export const nestedDefReader: z.ZodType<NestedDefReader> =');
   });
 
   test('a Consumer that emits declarations names the recursive defs its Dependency reaches', () => {
@@ -1210,7 +1210,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     linkPeers(out);
     expect(typeCheck(out).status).toBe(0);
     expect(read(out, 'src/index.ts')).toContain(
-      "export type { CategoryReaderDef } from './defs.ts';",
+      "export type { CategoryDefReader } from './defs.ts';",
     );
     const consumer = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
@@ -1287,7 +1287,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
     expect(Object.keys(built.contract.exportedSnapshot.defs)).toEqual(['leaf']);
-    expect(read(out, 'src/defs.ts')).toContain('export const leafReaderDef');
+    expect(read(out, 'src/defs.ts')).toContain('export const leafDefReader');
   });
 
   test('defs reached through an array and through a tuple’s rest are both written', () => {
@@ -1308,8 +1308,8 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     const defs = read(out, 'src/defs.ts');
 
     expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
-    expect(defs).toContain('export const leafReaderDef');
-    expect(defs).toContain('export const knotReaderDef');
+    expect(defs).toContain('export const leafDefReader');
+    expect(defs).toContain('export const knotDefReader');
     expect(defs).toContain('.rest(');
   });
 
@@ -1777,65 +1777,45 @@ describe('cf-loom package: what it refuses', () => {
     });
   });
 
-  test.each([
-    ['1tree', 'The recursion id 1tree is no name in code: rename it'],
-    ['!!', 'The recursion id !! is no name in code: rename it'],
-  ])('a recursion id %s that gives no name in code is a tooling error', (id, line) => {
-    const project = aProject(
-      withDeclarations(
-        [
-          `export const tree = z.object({ get children() { return z.array(tree); } }).meta({ id: '${id}' });`,
-        ],
-        '',
-        'tree',
-      ),
-    );
-
-    const ran = packageIn(project);
-
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
-  });
-
-  test('a recursion id only a Private Endpoint reaches does not stop package', () => {
+  test('ids that extend one another each give two names of their own in code, and the package builds', () => {
+    const ids = ['tree', 'treeDef', 'treeReader', 'treeDefReader'];
     const files = withDeclarations(
       [
-        "export const tree = z.object({ get children() { return z.array(tree); } }).meta({ id: '1tree' });",
+        ...ids.map(
+          (id) =>
+            `export const ${id} = z.object({ get next() { return ${id}.optional(); } }).meta({ id: '${id}' });`,
+        ),
+        `export const all = z.object({ ${ids.join(', ')} });`,
       ],
       '',
-      'tree',
+      'all',
     );
     const project = aProject({
       ...files,
-      'src/contract/index.ts': (files['src/contract/index.ts'] ?? '').replace(
-        "visibility: 'public'",
-        "visibility: 'private'",
-      ),
+      'src/contract/index.ts': (files['src/contract/index.ts'] ?? '')
+        .replace("method: 'GET'", "method: 'POST'")
+        .replace(
+          '  success: { status: 200, body: all },',
+          '  input: { body: all },\n  success: { status: 200, body: all },',
+        ),
     });
+    const out = join(aFolder(), 'contract-orders-service');
+    expect(packageIn(project, '--out', out)).toMatchObject({ status: 0, stderr: '' });
+    linkPeers(out);
 
-    const ran = packageIn(project);
+    const written = read(out, 'src/defs.ts').match(/^export const \w+/gm);
 
-    expect(ran).toMatchObject({ status: 0, stderr: '' });
-  });
-
-  test('two recursion ids whose names in code meet in any mode are a tooling error naming both', () => {
-    const project = aProject(
-      withDeclarations(
-        [
-          "export const tree = z.object({ get next() { return tree.optional(); } }).meta({ id: 'tree' });",
-          "export const other = z.object({ get next() { return other.optional(); } }).meta({ id: 'tree-reader' });",
-        ],
-        '',
-        'z.object({ tree, other })',
-      ),
-    );
-
-    const ran = packageIn(project);
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion ids tree and tree-reader are one name in code: rename one of them\n',
-    });
+    expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
+    expect(written?.map((line) => line.replace('export const ', ''))).toEqual([
+      'treeDef',
+      'treeDefDef',
+      'treeDefDefReader',
+      'treeDefReader',
+      'treeDefReaderDef',
+      'treeDefReaderDefReader',
+      'treeReaderDef',
+      'treeReaderDefReader',
+    ]);
   });
 
   test('a local code NOT_FOUND beside the Standard not-found Rejection builds', () => {

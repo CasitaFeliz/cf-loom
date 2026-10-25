@@ -55,9 +55,6 @@ async function verifyService(
     return toolingError(exports.message);
   }
   const regenerated = serviceFilesOf(service, exports.exportsOf);
-  if (regenerated.kind === 'unnamed') {
-    return toolingError(regenerated.line);
-  }
   const compared = regenerated.files.map((file) => ({ file, compared: comparedOf(run.cwd, file) }));
   const unreadable = compared.find(({ compared: { kind } }) => kind === 'failed')?.compared;
   if (unreadable?.kind === 'failed') {

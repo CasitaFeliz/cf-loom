@@ -1422,31 +1422,6 @@ describe('cf-loom openapi: what it refuses', () => {
     expect(written.status).toBe(0);
   });
 
-  test('a recursion id that is no name in code is a tooling error', () => {
-    const project = aGeneratedProject(aServiceWithBodies(['1tree']));
-
-    const refused = cfLoom(project, 'openapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion id 1tree is no name in code: rename it\n',
-    });
-  });
-
-  test('two recursion ids that are one name in code are a tooling error', () => {
-    const project = aGeneratedProject(aServiceWithBodies(['tree-node', 'tree_node']));
-
-    const refused = cfLoom(project, 'openapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr:
-        'The recursion ids tree-node and tree_node are one name in code: rename one of them\n',
-    });
-  });
-
   test('openapi takes no argument', () => {
     const project = aProject({});
 

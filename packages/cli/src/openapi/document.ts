@@ -47,16 +47,13 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot, version: string): O
     snapshot.defs,
     '2020-12',
   );
-  if (defs.kind === 'unnamed') {
-    return { kind: 'unnamed', line: defs.line };
-  }
   const envelopes = envelopeComponentsOf(rejectionsOf(endpoints));
   const document: OpenApiDocument = {
     openapi: '3.1.1',
     info: { title: snapshot.name, version },
     tags: tagsOf(listed),
     paths: pathsOf(endpoints),
-    components: componentsOf({ ...defs.schemas, ...envelopes }, endpoints),
+    components: componentsOf({ ...defs, ...envelopes }, endpoints),
   };
   return { kind: 'written', document };
 }

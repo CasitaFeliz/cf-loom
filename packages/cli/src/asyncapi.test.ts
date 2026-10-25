@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   aContractProject,
@@ -86,8 +84,8 @@ function targetOf(ref: string): unknown {
 const theEvents = [
   "import { defineCommand, defineContract, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';",
   "import { z } from 'zod';",
-  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
-  "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purge-node' });",
+  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
+  "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purgeNode' });",
   'export const orderCreatedV1 = defineEvent({',
   "  name: 'OrderCreated',",
   '  version: 1,',
@@ -171,41 +169,6 @@ const aServiceWithoutEvents = aContractProject([
   "export const contract = defineContract({ name: 'orders-service' });",
 ]);
 
-/** A Service whose Events have the recursive schemas given as their bodies, in the order given. */
-function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<string, string>> {
-  const declared = recursive.map((id, index) => [
-    `const body${index} = z.object({ get next() { return body${index}.optional(); } }).meta({ id: '${id}' });`,
-    `export const posted${index} = defineEvent({`,
-    `  name: 'Posted${index}', version: 1, visibility: 'internal',`,
-    `  description: 'Posted', body: body${index},`,
-    '});',
-  ]);
-  const names = recursive.map((_id, index) => `posted${index}`);
-  return aContractProject([
-    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
-    "import { z } from 'zod';",
-    ...declared.flat(),
-    `const posts = defineGroup({ name: 'posts', description: 'Posts', events: [${names.join(', ')}] });`,
-    "export const contract = defineContract({ name: 'orders-service', groups: [posts] });",
-  ]);
-}
-
-/**
- * A project of `aServiceWithBodies` whose committed Snapshot is current, though `generate` refuses
- * the recursion ids, since the readers could not name them: the Snapshot of named ids, renamed.
- */
-function aProjectCommittedWithBodies(recursive: readonly string[]): string {
-  const placeholders = recursive.map((_id, index) => `tree-${index}`);
-  const named = aGeneratedProject(aServiceWithBodies(placeholders));
-  let snapshot = readFileSync(join(named, 'contract.snapshot.json'), 'utf8');
-  for (const [index, placeholder] of placeholders.entries()) {
-    snapshot = snapshot.replaceAll(JSON.stringify(placeholder), JSON.stringify(recursive[index]));
-  }
-  const project = aProject(aServiceWithBodies(recursive));
-  write(project, { 'contract.snapshot.json': snapshot });
-  return project;
-}
-
 /** A Service whose one Event, in the Lifecycle given, has a recursive def as its body, with a description and an example. */
 function aServiceWithDescribedTree(
   lifecycle: 'active' | 'deprecated',
@@ -213,7 +176,7 @@ function aServiceWithDescribedTree(
   return aContractProject([
     "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
-    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
     'export const treeGrownV1 = defineEvent({',
     `  name: 'TreeGrown', version: 1, visibility: 'internal', lifecycle: '${lifecycle}',`,
     "  description: 'A tree grew',",
@@ -741,31 +704,6 @@ describe('cf-loom asyncapi: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr: 'A Definitions Package has no AsyncAPI document: only a Service publishes Events\n',
-    });
-  });
-
-  test('a recursion id that is no name in code is a tooling error', () => {
-    const project = aProjectCommittedWithBodies(['1tree']);
-
-    const refused = cfLoom(project, 'asyncapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion id 1tree is no name in code: rename it\n',
-    });
-  });
-
-  test('two recursion ids that are one name in code are a tooling error', () => {
-    const project = aProjectCommittedWithBodies(['tree-node', 'tree_node']);
-
-    const refused = cfLoom(project, 'asyncapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr:
-        'The recursion ids tree-node and tree_node are one name in code: rename one of them\n',
     });
   });
 

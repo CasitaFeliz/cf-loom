@@ -654,7 +654,7 @@ describe('snapshotOf: a Service', () => {
           return z.array(category);
         },
       })
-      .meta({ id: 'Category' });
+      .meta({ id: 'category' });
     const tree = defineEndpoint({
       name: 'tree',
       method: 'GET',
@@ -670,9 +670,9 @@ describe('snapshotOf: a Service', () => {
 
     expect(snapshot.endpoints['GET /tree']?.success.body).toEqual({
       type: 'ref',
-      name: 'Category',
+      name: 'category',
     });
-    expect(Object.keys(snapshot.defs)).toEqual(['Category']);
+    expect(Object.keys(snapshot.defs)).toEqual(['category']);
   });
 });
 

@@ -26,7 +26,8 @@ Every session and agent working on an issue reads these before it starts:
 
 The main session asks the user only what changes a public API, a rule or what a document means; what puts a design
 principle of [CLAUDE.md](CLAUDE.md#design-principles) in tension; what adds to or removes from v1; a must-fix or
-should-fix left after round 2; and anything irreversible (a force push, a publish, deleting what is not its own).
+should-fix left after round 2; an issue held after two Root-cause checks; and anything irreversible (a force push,
+a publish, deleting what is not its own).
 
 It decides the rest itself and lists what it decided on the plan or PR comment, where the user can overrule it:
 internal names, what the documents or the standards already settle, the consequences of a decision already made,
@@ -58,6 +59,11 @@ proposes anything: a missing concept, a concept in two places, reimplementing wh
 the wrong place. It says whether a documented decision causes it, and offers two or three fixes at the level of the
 cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
 glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
+
+An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at
+once. When a third would trigger, the issue is held for the user with its state and what is still open, findings or
+questions, and the main session moves on to the next issue that does not depend on it. The user then decides as after
+round 2 ([Fix](#4-fix)): fix and merge, rework the plan, or split the issue (only the last two before a PR exists).
 
 ## 1. Plan
 
@@ -114,8 +120,9 @@ Before handing back, the agent runs `pnpm test` and `pnpm check`, pushes the bra
 ## 3. Review
 
 Once `pnpm build`, `pnpm test` and `pnpm check` pass locally, `cf-reviewer` agents read the whole PR in parallel, one
-lens each, the three lenses of C27. A PR that changes fewer than about 200 lines gets one reviewer with all three
-lenses. [`.claude/workflows/review-pr.js`](.claude/workflows/review-pr.js) runs the round.
+lens each, the three lenses of C27. A PR that changes fewer than about 400 lines, added and deleted, generated files
+and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
+[`.claude/workflows/review-pr.js`](.claude/workflows/review-pr.js) runs the round.
 
 | Lens | Checks |
 | --- | --- |
@@ -169,8 +176,10 @@ A CI failure on `main` is fixed before the next merge.
 
 ## 6. Next
 
-After a merge, the main session starts the next issue in milestone order without asking. Plans of issues that do not
-depend on each other may be written in parallel; one issue is implemented at a time.
+After a merge, the main session starts the next issue in milestone order without asking. Issues that do not depend on
+each other may be planned in parallel, and implemented in parallel when their plans' file lists are disjoint,
+generated files and `pnpm-lock.yaml` included. A PR whose base moved gets `main` merged into its branch, a plain push,
+and `pnpm build`, `pnpm test` and `pnpm check` run again before it merges.
 
 ## Milestone sweep
 

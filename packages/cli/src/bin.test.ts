@@ -1448,6 +1448,30 @@ describe('cf-loom generate: a Definitions Package root', () => {
         'guards definitions-unlisted: A Definitions Package lists every Guard it exports or its Guards reach: apiKey\n',
     });
   });
+
+  test('a shared schema with an id on no cycle fails generate', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'cf-loom.config.ts': config,
+      'src/definitions/index.ts': [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        "export const money = z.object({ amount: z.int() }).meta({ id: 'money' });",
+        "export const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });",
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'schemas.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
+    });
+  });
 });
 
 describe('cf-loom generate: what a listed Definitions Package lists', () => {

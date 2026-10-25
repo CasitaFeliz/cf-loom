@@ -3,7 +3,7 @@
  * the file imports `z` and `openEnum`.
  */
 export const everything: readonly string[] = [
-  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
   'const forest = z',
   '  .object({',
   '    inner: z.object({ a: z.string() }),',
