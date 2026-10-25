@@ -151,7 +151,7 @@ function offCycle(ancestor: Ancestor, node: Walked): Walked {
  */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
-    return withOutlineReported(state, ancestor, node);
+    return onUnnamedCycle(state, ancestor) ? withoutOutline(node) : node;
   }
   const ref: RefNode = { type: 'ref', name: ancestor.id };
   if (node.kind === 'not-allowed') {
@@ -192,16 +192,18 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
   return failure;
 }
 
+/** Whether `metAgain` recorded the schema as lying on a cycle no id names. */
+function onUnnamedCycle(state: State, ancestor: Ancestor): boolean {
+  return state.reportedBySchema.has(ancestor.schema);
+}
+
 /**
- * A schema on a cycle no id names is recorded when it is met again, before its walk ends; once it
- * has, the record says what node it was building, so every later use judges its checks alike.
+ * A schema on a cycle no id names is judged as every schema of the cycle would be with an id: a
+ * `ref` wherever it is used, which takes no check. So its walk was building no node for a use,
+ * met again or ended, and only a check on the schema whose own def builds the node is taken.
  */
-function withOutlineReported(state: State, ancestor: Ancestor, node: Walked): Walked {
-  const reported = state.reportedBySchema.get(ancestor.schema);
-  if (reported !== undefined && node.kind === 'not-allowed') {
-    state.reportedBySchema.set(ancestor.schema, failed(reported.failures, node.outline));
-  }
-  return node;
+function withoutOutline(node: Walked): Walked {
+  return node.kind === 'not-allowed' ? failed(node.failures) : node;
 }
 
 function hasId(ancestor: Ancestor): boolean {

@@ -322,24 +322,27 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
   const field: Path = ['body', 'fields', 'a'];
   const cycle = (at: Path) => [failureAt(at, 'a cycle without .meta({ id })', '.meta({ id })')];
 
+  /** Where a length check on the inner schema is taken: a use of a cycle's schema is a `ref`. */
+  type TakesLength = 'nowhere' | 'anywhere' | 'on itself alone';
+
   const failing = [
     {
       name: 'z.date()',
       make: (decorate: Decorate) => decorate(z.date()),
       refusals: (at: Path) => [failureAt(at, 'z.date()', 'z.iso.datetime()')],
-      takesLength: false,
+      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a refused .default() of an array',
       make: (decorate: Decorate) => decorate(z.array(z.string()).default([])),
       refusals: (at: Path) => [failureAt(at, '.default()')],
-      takesLength: true,
+      takesLength: 'anywhere' as TakesLength,
     },
     {
       name: 'a refused .default() of a number',
       make: (decorate: Decorate) => decorate(z.number().default(0)),
       refusals: (at: Path) => [failureAt(at, '.default()')],
-      takesLength: false,
+      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a cycle through z.lazy()',
@@ -348,7 +351,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         return loop;
       },
       refusals: cycle,
-      takesLength: false,
+      takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a cycle through .nullable()',
@@ -357,7 +360,16 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         return loop;
       },
       refusals: cycle,
-      takesLength: false,
+      takesLength: 'nowhere' as TakesLength,
+    },
+    {
+      name: 'a cycle through an array',
+      make: (decorate: Decorate) => {
+        const loop: z.ZodType = decorate(z.array(z.lazy(() => loop)));
+        return loop;
+      },
+      refusals: (at: Path) => cycle([...at, 'items']),
+      takesLength: 'on itself alone' as TakesLength,
     },
   ];
 
@@ -389,18 +401,21 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'on its own',
       at: body,
+      onItself: true,
       surrounding: [] as Failure[],
       build: (inner: Inner, apply: Decorate) => inner.make(apply),
     },
     {
       name: "in a field's .optional()",
       at: field,
+      onItself: false,
       surrounding: [] as Failure[],
       build: (inner: Inner, apply: Decorate) => z.object({ a: apply(inner.make(asIs).optional()) }),
     },
     {
       name: "in a field's .nonoptional()",
       at: field,
+      onItself: false,
       surrounding: [] as Failure[],
       build: (inner: Inner, apply: Decorate) =>
         z.object({ a: apply(inner.make(asIs).nonoptional()) }),
@@ -408,12 +423,14 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'in .nullable()',
       at: body,
+      onItself: false,
       surrounding: [] as Failure[],
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).nullable()),
     },
     {
       name: 'in z.lazy()',
       at: body,
+      onItself: false,
       surrounding: [] as Failure[],
       build: (inner: Inner, apply: Decorate) => {
         const schema = inner.make(asIs);
@@ -423,6 +440,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'in a refused .default()',
       at: body,
+      onItself: false,
       surrounding: [failureAt(body, '.default()')],
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).default(undefined as never)),
     },
@@ -430,6 +448,13 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
 
   function once(failures: readonly Failure[]): Failure[] {
     return [...new Map(failures.map((failure) => [JSON.stringify(failure), failure])).values()];
+  }
+
+  function takesLength(inner: Inner, place: (typeof places)[number]): boolean {
+    return (
+      inner.takesLength === 'anywhere' ||
+      (inner.takesLength === 'on itself alone' && place.onItself)
+    );
   }
 
   const cases = places.flatMap((place) =>
@@ -440,7 +465,9 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         failures: once([
           ...place.surrounding,
           ...inner.refusals(place.at),
-          ...checks.refusals(inner.takesLength).map((construct) => failureAt(place.at, construct)),
+          ...checks
+            .refusals(takesLength(inner, place))
+            .map((construct) => failureAt(place.at, construct)),
         ]),
       })),
     ),
@@ -580,24 +607,190 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     });
   });
 
-  test('a use of a cycle without an id is judged alike whichever location comes first', () => {
-    const loop: z.ZodType = z.array(z.lazy(() => loop));
-    const use = z.lazy(() => loop).check(z.minLength(1));
-    const located = [
-      { at: ['body'], schema: loop },
-      { at: ['success'], schema: use },
-    ];
+  describe('a schema on a cycle no id names is judged as every schema of it would be with an id', () => {
+    const unnamedCycle = 'a cycle without .meta({ id })';
+    type Located = Parameters<typeof walkSchemas>[0];
+    type WalkedSchemas = ReturnType<typeof walkSchemas>;
 
-    const loopFirst = walkSchemas(located, () => undefined);
-    const useFirst = walkSchemas([...located].reverse(), () => undefined);
-
-    const constructsOf = (walked: ReturnType<typeof walkSchemas>, at: string) => {
+    const constructsAt = (walked: WalkedSchemas, at: string) => {
       const location = walked.located.find((candidate) => candidate.at[0] === at);
       return location?.walked.kind === 'not-allowed'
         ? location.walked.failures.map((failure) => failure.construct)
         : [];
     };
-    expect(constructsOf(loopFirst, 'success')).toEqual(constructsOf(useFirst, 'success'));
-    expect(constructsOf(loopFirst, 'success')).toEqual(['a cycle without .meta({ id })']);
+    const constructsOf = (walked: WalkedSchemas) => [
+      ...new Set(
+        walked.located.flatMap((location) => constructsAt(walked, String(location.at[0]))),
+      ),
+    ];
+
+    /** The two schemas of one cycle: the array that builds the node and the lazy standing for it. */
+    const cycleOf = () => {
+      const children: z.ZodType = z.lazy(() => loop);
+      const loop = z.array(children);
+      return { loop, children };
+    };
+    type Cycle = ReturnType<typeof cycleOf>;
+
+    const orders = [
+      {
+        name: 'the other schema of the cycle walked first',
+        locate: (other: z.ZodType, schema: z.ZodType): Located => [
+          { at: ['body'], schema: other },
+          { at: ['success'], schema },
+        ],
+      },
+      {
+        name: 'walked first',
+        locate: (other: z.ZodType, schema: z.ZodType): Located => [
+          { at: ['success'], schema },
+          { at: ['body'], schema: other },
+        ],
+      },
+      {
+        name: 'walked alone',
+        locate: (_other: z.ZodType, schema: z.ZodType): Located => [{ at: ['success'], schema }],
+      },
+    ];
+
+    describe('a length check on a use of a schema of the cycle is refused', () => {
+      const members = [
+        {
+          name: 'the array',
+          of: (cycle: Cycle) => cycle.loop,
+          other: (cycle: Cycle) => cycle.children,
+        },
+        {
+          name: 'the z.lazy() standing for it',
+          of: (cycle: Cycle) => cycle.children,
+          other: (cycle: Cycle) => cycle.loop,
+        },
+      ];
+      const uses = [
+        {
+          name: 'through z.lazy()',
+          use: (member: z.ZodType) => z.lazy(() => member).check(z.minLength(1)),
+          around: [] as string[],
+        },
+        {
+          name: 'through .nullable()',
+          use: (member: z.ZodType) => member.nullable().check(z.minLength(1)),
+          around: [] as string[],
+        },
+        {
+          name: "through a field's .optional()",
+          use: (member: z.ZodType) => z.object({ a: member.optional().check(z.minLength(1)) }),
+          around: [] as string[],
+        },
+        {
+          name: 'through a refused .default()',
+          use: (member: z.ZodType) => member.default([]).check(z.minLength(1)),
+          around: ['.default()'],
+        },
+      ];
+      const cases = members.flatMap((member) =>
+        uses.flatMap((use) =>
+          orders.map((order) => ({
+            name: `${member.name} ${use.name}, ${order.name}`,
+            member,
+            use,
+            order,
+          })),
+        ),
+      );
+
+      test.each(cases)('$name', ({ member, use, order }) => {
+        const cycle = cycleOf();
+        const located = order.locate(member.other(cycle), use.use(member.of(cycle)));
+
+        const walked = walkSchemas(located, () => undefined);
+
+        expect(constructsAt(walked, 'success')).toEqual([
+          ...use.around,
+          unnamedCycle,
+          'z.minLength()',
+        ]);
+      });
+    });
+
+    describe('the own checks of a schema of the cycle are judged by the node its own def builds', () => {
+      const ownChecks = [
+        {
+          name: 'the array takes its own length check',
+          make: () => {
+            const children: z.ZodType = z.lazy(() => loop);
+            const loop = z.array(children).check(z.minLength(1));
+            return { schema: loop, other: children };
+          },
+          refused: [] as string[],
+        },
+        {
+          name: 'the z.lazy() standing for it refuses its own length check',
+          make: () => {
+            const children: z.ZodType = z.lazy(() => loop).check(z.minLength(1));
+            const loop = z.array(children);
+            return { schema: children, other: loop };
+          },
+          refused: ['z.minLength()'],
+        },
+        {
+          name: 'the .nullable() standing for it refuses its own length check',
+          make: () => {
+            const children: z.ZodType = z.lazy(() => loop);
+            const nullable: z.ZodType = z.array(children).nullable();
+            const loop = nullable.check(z.minLength(1));
+            return { schema: loop, other: children };
+          },
+          refused: ['z.minLength()'],
+        },
+      ];
+      const cases = ownChecks.flatMap((own) =>
+        orders.map((order) => ({ name: `${own.name}, ${order.name}`, own, order })),
+      );
+
+      test.each(cases)('$name', ({ own, order }) => {
+        const { schema, other } = own.make();
+
+        const walked = walkSchemas(order.locate(other, schema), () => undefined);
+
+        expect(constructsOf(walked)).toEqual([unnamedCycle, ...own.refused]);
+      });
+    });
+
+    test.each(orders)(
+      'a schema without an id on a cycle an id names keeps the node it was building, $name',
+      ({ locate }) => {
+        const children: z.ZodType = z.lazy(() => loop).meta({ id: 'children' });
+        const loop: z.ZodType = z.array(z.union([children, z.date()]));
+        const use = loop.nullable().check(z.minLength(1));
+
+        const walked = walkSchemas(locate(loop, use), () => undefined);
+
+        expect(new Set(constructsAt(walked, 'success'))).toEqual(new Set(['z.date()']));
+      },
+    );
+
+    test('a cycle whose only id is refused is one no id names, so a use of it refuses a length check', () => {
+      const treeOf = (id: string) => {
+        const tree: z.ZodType = z.array(z.lazy(() => tree)).meta({ id });
+        return tree;
+      };
+      const useOf = (tree: z.ZodType) => z.lazy(() => tree).check(z.minLength(1));
+
+      const refusedId = walkBody(useOf(treeOf('Tree')));
+
+      expect(refusedId).toEqual(
+        refusedAll([
+          failureAt(['body'], '.meta({ id: "Tree" })', 'a camelCase name'),
+          failureAt(['body', 'items'], unnamedCycle, '.meta({ id })'),
+          failureAt(['body'], 'z.minLength()'),
+        ]),
+      );
+      expect(constructsOf(refusedId)).toEqual([
+        '.meta({ id: "Tree" })',
+        unnamedCycle,
+        ...constructsOf(walkBody(useOf(treeOf('tree')))),
+      ]);
+    });
   });
 });
