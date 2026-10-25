@@ -51,7 +51,6 @@ export {
   isSubscription,
   kebabCase,
   lifecycleOf,
-  standardRejectionDefaults,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';

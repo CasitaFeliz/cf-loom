@@ -3,13 +3,13 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
+  type CheckedAdmission,
   type GuardCall,
   type GuardImplementation,
   handle,
   InvalidInputError,
   InvalidOutcomeError,
   type Issue,
-  type ResolvedAdmission,
   reject,
 } from '../index.ts';
 
@@ -207,18 +207,12 @@ describe('a GuardHandler’s direct call', () => {
     ]);
   });
 
-  test('reject(unauthenticated) resolves with the Guard’s own code, status and message', async () => {
+  test('reject(unauthenticated) comes back as built, its declaration and no code', async () => {
     const apiKeyHandler = handle(apiKey, () => reject(unauthenticated));
 
     const admission = await apiKeyHandler(apiKeyDemands, {});
 
-    expect(admission).toEqual({
-      kind: 'rejection',
-      rejection: unauthenticated,
-      code: 'UNAUTHENTICATED',
-      status: 401,
-      message: 'Unauthenticated',
-    });
+    expect(admission).toStrictEqual({ kind: 'rejection', rejection: unauthenticated });
   });
 
   test('a Rejection the Guard does not list throws InvalidOutcomeError through a cast', async () => {
@@ -260,18 +254,12 @@ describe('a GuardHandler’s direct call', () => {
     });
   });
 
-  test('a Guard stub answers not-implemented and never admits', async () => {
+  test('a Guard stub returns the not-implemented Rejection as built and never admits', async () => {
     const stub = handle.stub(apiKey);
 
     const admission = await stub(apiKeyDemands, {});
 
-    expect(admission).toEqual({
-      kind: 'rejection',
-      rejection: notImplemented,
-      code: 'NOT_IMPLEMENTED',
-      status: 501,
-      message: 'Not implemented',
-    });
+    expect(admission).toStrictEqual({ kind: 'rejection', rejection: notImplemented });
   });
 
   test('a Guard that declares a Qualifier, called without it, is a type error', () => {
@@ -350,7 +338,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a GuardHandler’s direct call answers the Guard’s Rejections and not-implemented', () => {
-    type Rejected = Extract<ResolvedAdmission<typeof apiKey>, { kind: 'rejection' }>;
+    type Rejected = Extract<CheckedAdmission<typeof apiKey>, { kind: 'rejection' }>;
 
     expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
       typeof unauthenticated | typeof notImplemented

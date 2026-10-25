@@ -7,12 +7,13 @@ import {
   isInputPart,
   rejectionResponseOf,
   reservedResponseOf,
+  resolutionOf,
   type SentRejection,
   type SentSuccess,
   successResponseOf,
 } from '@cf-loom/contract/internal';
 import type { Fault, Issue } from '@cf-loom/handlers';
-import type { EndpointRun } from '@cf-loom/handlers/internal';
+import type { EndpointRun, GuardRun } from '@cf-loom/handlers/internal';
 import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
 /** How one request was answered; only a Fault may be the Service's, for `onServiceFault`. */
@@ -23,8 +24,11 @@ export type Answered =
 /** A run that did not answer: given what broke the Contract, built what broke it, or threw. */
 export type FailedRun = Exclude<EndpointRun, { readonly kind: 'answered' }>;
 
-/** What a Handler answered that is not a Success: a resolved Rejection, or a Fault it returned. */
-type NotSuccess = (SentRejection & { readonly kind: 'rejection' }) | Fault;
+/** What a run answered: an EndpointHandler's Outcome or a GuardHandler's Admission, as checked. */
+type RunAnswer = Extract<EndpointRun | GuardRun, { readonly kind: 'answered' }>['answer'];
+
+/** What a Handler answered that is not a Success: a Rejection as built, or a Fault it returned. */
+type NotSuccess = Extract<RunAnswer, { readonly kind: 'rejection' }> | Fault;
 
 /** A run that did not answer, answered: the Caller's invalid input told from the runtime's bug. */
 export function answeredOfFailedRun(
@@ -49,16 +53,35 @@ export function answeredOfSuccess(success: SentSuccess): Answered {
   return { kind: 'success', response: successResponseOf(success) };
 }
 
-/** A Rejection or a Fault a Handler answered, as sent; a returned Fault is the Service's too. */
-export function answeredOfNotSuccess(answer: NotSuccess, faultedBy: FaultedBy): Answered {
+/**
+ * A Rejection or a Fault a Handler answered, as sent: a Rejection with the code, status and message
+ * its root resolves; a returned Fault is the Service's too.
+ */
+export function answeredOfNotSuccess(
+  answer: NotSuccess,
+  faultedBy: FaultedBy,
+  standards: StandardRejections,
+): Answered {
   switch (answer.kind) {
     case 'rejection':
-      return { kind: 'rejection', response: rejectionResponseOf(answer) };
+      return {
+        kind: 'rejection',
+        response: rejectionResponseOf(sentRejectionOf(answer, standards)),
+      };
     case 'fault': {
       const servedFault = { ...faultedBy, kind: 'returned' as const, fault: answer };
       return { kind: 'fault', response: faultResponseOf(answer), servedFault };
     }
   }
+}
+
+/** A Rejection as built, as it travels: its code, status and message as the root resolves them, and its body. */
+function sentRejectionOf(
+  { rejection, ...built }: Extract<NotSuccess, { readonly kind: 'rejection' }>,
+  standards: StandardRejections,
+): SentRejection {
+  const body = 'body' in built ? built.body : undefined;
+  return { ...resolutionOf(rejection, standards), body };
 }
 
 /**

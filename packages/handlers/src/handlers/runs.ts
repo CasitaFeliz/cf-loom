@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   type EndpointRun,
   endpointRunOf,
@@ -28,18 +28,16 @@ export function isStub(handler: AnyHandler): boolean {
 export function runEndpoint(
   handler: { readonly element: Endpoint },
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
-  return endpointRunOf(writtenOf(handler, isEndpointWritten), given, standards);
+  return endpointRunOf(writtenOf(handler, isEndpointWritten), given);
 }
 
 /** Runs one call of a GuardHandler, answering a broken Contract as a value, never a throw. */
 export function runGuard(
   handler: { readonly element: Guard },
   given: GuardGiven,
-  standards: StandardRejections,
 ): Promise<GuardRun> {
-  return guardRunOf(writtenOf(handler, isGuardWritten), given, standards);
+  return guardRunOf(writtenOf(handler, isGuardWritten), given);
 }
 
 /** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */

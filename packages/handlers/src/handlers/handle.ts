@@ -1,12 +1,6 @@
-import type { Command, Endpoint, Guard, StandardRejections, Subscription } from '@cf-loom/contract';
+import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
 import { notImplemented } from '@cf-loom/contract';
-import {
-  isEndpoint,
-  isGuard,
-  type Refusal,
-  standardRejectionDefaults,
-  standardRejectionsOf,
-} from '@cf-loom/contract/internal';
+import { isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
 import {
   answerOf,
   elementNameOf,
@@ -158,12 +152,7 @@ function directCallOf(written: AnyWritten) {
 
 function endpointCallOf(written: Written<Endpoint>) {
   return async (input: unknown, context: unknown, directCall?: DirectCall<object>) => {
-    const resources = directCall?.resources;
-    const run = await endpointRunOf(
-      written,
-      { input, context, resources },
-      standardsOf(directCall),
-    );
+    const run = await endpointRunOf(written, { input, context, resources: directCall?.resources });
     return answerOf(written.element, run);
   };
 }
@@ -174,7 +163,7 @@ type GuardCallGiven = { readonly qualifier?: unknown; readonly resources?: unkno
 function guardCallOf(written: Written<Guard>) {
   return async (demands: unknown, context: unknown, call?: GuardCallGiven) => {
     const given = { demands, context, qualifier: call?.qualifier, resources: call?.resources };
-    const run = await guardRunOf(written, given, standardRejectionDefaults);
+    const run = await guardRunOf(written, given);
     return answerOf(written.element, run);
   };
 }
@@ -191,13 +180,6 @@ function messageCallOf(written: MessageWritten) {
     );
     return messageAnswerOf(written.element, run);
   };
-}
-
-function standardsOf(directCall: DirectCall<object> | undefined): StandardRejections {
-  if (directCall?.contract === undefined) {
-    return standardRejectionDefaults;
-  }
-  return standardRejectionsOf(directCall.contract);
 }
 
 const notImplementedStub: Implementation = () => reject(notImplemented);

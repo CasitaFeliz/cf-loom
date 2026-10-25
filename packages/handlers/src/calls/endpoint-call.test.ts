@@ -1,6 +1,5 @@
 import {
   defineContract,
-  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -12,6 +11,7 @@ import {
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type CheckedOutcome,
   type Fault,
   fault,
   handle,
@@ -20,7 +20,6 @@ import {
   type Issue,
   isRejectionOf,
   type MessageFault,
-  type ResolvedOutcome,
   reject,
   success,
   type WithResources,
@@ -151,15 +150,7 @@ describe('an EndpointHandler’s Resources', () => {
     expect(received[1]).toBe(resources);
   });
 
-  test('given the root and the Resources, a Standard Rejection resolves as serve resolves it', async () => {
-    const definitions = defineDefinitions({
-      standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
-    });
-    const contract = defineContract({
-      name: 'orders-service',
-      standardRejections: definitions,
-      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
-    });
+  test('the Resources a direct call is given decide the Rejection it returns as built', async () => {
     const orders: Orders = { find: () => undefined };
     const getOrderHandler = handle(
       getOrder,
@@ -169,12 +160,9 @@ describe('an EndpointHandler’s Resources', () => {
           : success({ id: ORDER_ID, total: 1 }),
     );
 
-    const outcome = await getOrderHandler(getInput, getContext, {
-      contract,
-      resources: { orders },
-    });
+    const outcome = await getOrderHandler(getInput, getContext, { resources: { orders } });
 
-    expect(outcome).toMatchObject({ code: 'MISSING', status: 410, message: 'Gone' });
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notFound });
   });
 });
 
@@ -438,51 +426,52 @@ describe('an EndpointHandler’s Success', () => {
 });
 
 describe('an EndpointHandler’s Rejections', () => {
-  test('reject(notFound) resolves against cf-loom’s defaults and is told by its declaration', async () => {
+  test('a direct call returns a Standard Rejection as built, with no code', async () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
     const outcome = await getOrderHandler(getInput, getContext);
 
-    expect(outcome).toStrictEqual({
-      kind: 'rejection',
-      rejection: notFound,
-      code: 'NOT_FOUND',
-      status: 404,
-      message: 'Not found',
-    });
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notFound });
+  });
+
+  test('isRejectionOf tells the not-found Rejection a Handler built', async () => {
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+
     expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
-  test('given the root, a Standard Rejection resolves to the standardRejections package’s', async () => {
-    const definitions = defineDefinitions({
-      standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Gone' } },
-    });
-    const contract = defineContract({
-      name: 'orders-service',
-      standardRejections: definitions,
-      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
-    });
-    const getOrderHandler = handle(getOrder, () => reject(notFound));
-
-    const outcome = await getOrderHandler(getInput, getContext, { contract });
-
-    expect(outcome).toMatchObject({ code: 'MISSING', status: 410, message: 'Gone' });
-  });
-
-  test('reject(orderLocked, body) carries the declaration, the parsed body and the declared code', async () => {
+  test('a declared Rejection comes back as its declaration and its parsed body', async () => {
     const lockedAt = '2026-10-18T10:00:00Z';
     const getOrderHandler = handle(getOrder, () => reject(orderLocked, { lockedAt }));
 
     const outcome = await getOrderHandler(getInput, getContext);
 
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'rejection',
       rejection: orderLocked,
       body: { lockedAt },
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'The order can no longer be changed',
     });
+  });
+
+  test('a direct call’s Rejection has no code, and a direct call takes no contract', async () => {
+    const contract = defineContract({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
+    });
+    const getOrderHandler = handle(getOrder, () => reject(notFound));
+
+    const outcome = await getOrderHandler(getInput, getContext);
+    // @ts-expect-error a direct call takes no contract
+    const withContract = () => getOrderHandler(getInput, getContext, { contract });
+
+    expect(outcome.kind).toBe('rejection');
+    expect(withContract).toBeTypeOf('function');
+    if (outcome.kind === 'rejection') {
+      // @ts-expect-error a Rejection as built has no code
+      expect(outcome.code).toBeUndefined();
+    }
   });
 
   test('a Guard’s Rejection is one the Endpoint answers', async () => {
@@ -490,7 +479,7 @@ describe('an EndpointHandler’s Rejections', () => {
 
     const outcome = await getOrderHandler(getInput, getContext);
 
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'UNAUTHENTICATED', status: 401 });
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: unauthenticated });
   });
 
   test('a Rejection body that breaks its schema throws InvalidOutcomeError', async () => {
@@ -833,7 +822,7 @@ describe('more of what a direct call answers', () => {
 });
 
 describe('a Standard Rejection from another copy of @cf-loom/contract', () => {
-  test('the not-implemented Rejection of the contract source resolves', async () => {
+  test('the not-implemented Rejection of the contract source is one the Endpoint answers', async () => {
     const sourceUrl = new URL('../../../contract/src/index.ts', import.meta.url).href;
     const source: { readonly notImplemented: unknown } = await import(sourceUrl);
     const getOrderHandler = handle(getOrder, () => reject(source.notImplemented as never));
@@ -841,23 +830,17 @@ describe('a Standard Rejection from another copy of @cf-loom/contract', () => {
     const outcome = await getOrderHandler(getInput, getContext);
 
     expect(source.notImplemented).not.toBe(notImplemented);
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'NOT_IMPLEMENTED', status: 501 });
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: source.notImplemented });
   });
 });
 
 describe('an EndpointHandler stub', () => {
   const stub = handle.stub(getOrder);
 
-  test('a stub answers the not-implemented Rejection, resolved', async () => {
+  test('a stub returns the not-implemented Rejection as built', async () => {
     const outcome = await stub(getInput, getContext);
 
-    expect(outcome).toEqual({
-      kind: 'rejection',
-      rejection: notImplemented,
-      code: 'NOT_IMPLEMENTED',
-      status: 501,
-      message: 'Not implemented',
-    });
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notImplemented });
   });
 
   test('a stub still throws on Input that breaks the Contract', async () => {
@@ -867,7 +850,7 @@ describe('an EndpointHandler stub', () => {
   });
 
   test('a direct call’s Outcome includes the not-implemented Rejection', () => {
-    type Rejected = Extract<ResolvedOutcome<typeof getOrder>, { kind: 'rejection' }>;
+    type Rejected = Extract<CheckedOutcome<typeof getOrder>, { kind: 'rejection' }>;
 
     expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
       typeof notFound | typeof orderLocked | typeof unauthenticated | typeof notImplemented

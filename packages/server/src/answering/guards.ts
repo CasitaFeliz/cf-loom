@@ -28,13 +28,13 @@ export function guardRunsOf(
     }
     const context = contextOf(attachment.guard, contexts);
     const given = { demands, context, qualifier: attachment.qualifier, resources };
-    const run = await runGuard(attachment.handler, given, standards);
+    const run = await runGuard(attachment.handler, given);
     const faultedBy = { element: endpoint, identity: endpoint.name, guard: attachment.guard };
     if (run.kind !== 'answered') {
       return { kind: 'stopped', answer: answeredOfFailedRun(run, faultedBy, standards) };
     }
     if (run.answer.kind !== 'admitted') {
-      return { kind: 'stopped', answer: answeredOfNotSuccess(run.answer, faultedBy) };
+      return { kind: 'stopped', answer: answeredOfNotSuccess(run.answer, faultedBy, standards) };
     }
     contexts.set(attachment.guard, run.answer.context);
     return { kind: 'admitted' };

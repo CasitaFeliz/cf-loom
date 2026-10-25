@@ -1,5 +1,6 @@
 import {
   defineContract,
+  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -262,6 +263,36 @@ describe('serve: Guards', () => {
       rejection: { code: 'NOT_IMPLEMENTED', message: 'Not implemented' },
     });
     expect(invalid.status).toBe(400);
+  });
+
+  test('a GuardHandler stub answers the not-implemented code its root resolves', async () => {
+    const definitions = defineDefinitions({
+      standardRejections: {
+        notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Coming soon' },
+      },
+    });
+    const rooted = defineContract({
+      name: 'orders-service',
+      standardRejections: definitions,
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [addNote] })],
+    });
+    const stubbed = {
+      endpoints: { addNote: handlers.endpoints.addNote },
+      guards: { userToken: handle.stub(userToken) },
+      deprecatedAt: {},
+    };
+    const headers = { authorization: 'Bearer u-1', 'content-type': 'application/json' };
+    const body = JSON.stringify({ text: 'hi' });
+
+    const response = await serve(
+      rooted,
+      stubbed,
+    )(new Request('http://test/notes', { method: 'POST', headers, body }));
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NOT_YET_IMPLEMENTED', message: 'Coming soon' },
+    });
   });
 
   test('an EndpointHandler stub answers not implemented', async () => {

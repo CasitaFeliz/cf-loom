@@ -97,7 +97,7 @@ async function answeredCallOf(call: Call, served: ServedContract): Promise<Answe
         context: runs.context(),
         resources: served.resources,
       };
-      const run = await runEndpoint(call.endpoint.handler, given, served.standards);
+      const run = await runEndpoint(call.endpoint.handler, given);
       return answeredRunOf(run, faultedBy, served.standards);
     }
   }
@@ -131,5 +131,5 @@ function answeredRunOf(
   if (outcome.kind === 'success') {
     return answeredOfSuccess(outcome);
   }
-  return answeredOfNotSuccess(outcome, faultedBy);
+  return answeredOfNotSuccess(outcome, faultedBy, standards);
 }

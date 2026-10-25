@@ -1,7 +1,6 @@
 import type {
   Command,
   ContextOf,
-  Contract,
   DemandsOf,
   Endpoint,
   Guard,
@@ -11,7 +10,7 @@ import type {
   Subscription,
 } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
-import type { Admission, Outcome, ResolvedAdmission, ResolvedOutcome } from '../outcomes/index.ts';
+import type { Admission, CheckedAdmission, CheckedOutcome, Outcome } from '../outcomes/index.ts';
 import type { Readers } from './reader.ts';
 import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
 
@@ -43,10 +42,8 @@ export type GuardImplementation<Target extends Guard, Resources extends object =
   call: GuardCall<Target, Resources>,
 ) => Admission<Target> | Promise<Admission<Target>>;
 
-/** The last argument of an EndpointHandler's direct call: the root to resolve Standard Rejections against, as `serve` does, and the Resources the Handler takes. */
-export type DirectCall<Resources extends object = NoResources> = {
-  readonly contract?: Contract;
-} & ResourcesField<Resources>;
+/** The last argument of an EndpointHandler's direct call: the Resources the Handler takes. */
+export type DirectCall<Resources extends object = NoResources> = ResourcesField<Resources>;
 
 /** The Handler of one Endpoint: calling it runs the Contract's checks and answers what `serve` would. */
 export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = {
@@ -54,7 +51,7 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
     input: InputOf<Target>,
     context: ContextOf<Target>,
     ...call: CallArgument<DirectCall<Resources>>
-  ): Promise<ResolvedOutcome<Target>>;
+  ): Promise<CheckedOutcome<Target>>;
   readonly element: Target;
 };
 
@@ -80,6 +77,6 @@ export type GuardHandler<Target extends Guard, Resources extends object = NoReso
     demands: DemandsOf<Target>,
     context: RequiredContextOf<Target>,
     ...call: CallArgument<GuardCall<Target, Resources>>
-  ): Promise<ResolvedAdmission<Target>>;
+  ): Promise<CheckedAdmission<Target>>;
   readonly element: Target;
 };

@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   type Checked,
   checkedAdmission,
@@ -10,12 +10,12 @@ import {
   type Issue,
 } from '../checks/index.ts';
 import {
+  type CheckedAdmission,
+  type CheckedOutcome,
   type Fault,
   fault,
   isAdmission,
   isOutcome,
-  type ResolvedAdmission,
-  type ResolvedOutcome,
   thrownFault,
 } from '../outcomes/index.ts';
 import type { HandledElement } from './elements.ts';
@@ -45,37 +45,32 @@ export type Run<Answer> =
  * How one call of an EndpointHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onServiceFault`.
  */
-export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
+export type EndpointRun = Run<CheckedOutcome<Endpoint>>;
 
 /**
  * How one call of a GuardHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
  * to `onServiceFault`.
  */
-export type GuardRun = Run<ResolvedAdmission<Guard>>;
+export type GuardRun = Run<CheckedAdmission<Guard>>;
 
 /**
- * Runs one call of an EndpointHandler: checks what it is given and what it builds, then resolves.
+ * Runs one call of an EndpointHandler: checks what it is given and what it builds.
  * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
  */
 export function endpointRunOf(
   written: Written<Endpoint>,
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
-  return caught(() => endpointCallOf(written, given, standards));
+  return caught(() => endpointCallOf(written, given));
 }
 
 /**
- * Runs one call of a GuardHandler: checks what it is given and what it admits, then resolves.
+ * Runs one call of a GuardHandler: checks what it is given and what it admits.
  * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
  */
-export function guardRunOf(
-  written: Written<Guard>,
-  given: GuardGiven,
-  standards: StandardRejections,
-): Promise<GuardRun> {
-  return caught(() => guardCallOf(written, given, standards));
+export function guardRunOf(written: Written<Guard>, given: GuardGiven): Promise<GuardRun> {
+  return caught(() => guardCallOf(written, given));
 }
 
 async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answer>> {
@@ -89,7 +84,6 @@ async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answ
 async function endpointCallOf(
   { element: endpoint, implementation }: Written<Endpoint>,
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
   const checked = checkedGiven(() => checkedEndpointCall(endpoint, given));
   if (checked.kind !== 'value') {
@@ -101,13 +95,12 @@ async function endpointCallOf(
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
-  return answeredRunOf(checkedOutcome(endpoint, returned.built, standards));
+  return answeredRunOf(checkedOutcome(endpoint, returned.built));
 }
 
 async function guardCallOf(
   { element: guard, implementation }: Written<Guard>,
   given: GuardGiven,
-  standards: StandardRejections,
 ): Promise<GuardRun> {
   const checked = checkedGiven(() => checkedGuardCall(guard, given));
   if (checked.kind !== 'value') {
@@ -119,7 +112,7 @@ async function guardCallOf(
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
-  return answeredRunOf(checkedAdmission(guard, returned.built, standards));
+  return answeredRunOf(checkedAdmission(guard, returned.built));
 }
 
 /**

@@ -1,20 +1,13 @@
-import type {
-  Endpoint,
-  Guard,
-  Rejection,
-  StandardRejection,
-  StandardRejections,
-} from '@cf-loom/contract';
+import type { Endpoint, Guard, Rejection, StandardRejection } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
   isRejection,
   isSameRejection,
   isStandardRejection,
-  resolutionOf,
   schemaOf,
 } from '@cf-loom/contract/internal';
-import type { AnyRejection, ResolvedRejection } from '../outcomes/index.ts';
+import type { AnyRejection, BuiltRejection } from '../outcomes/index.ts';
 import { type Checked, checkedPart, fieldOf, mapValue } from './checked.ts';
 
 /** A Rejection an EndpointHandler may build: any its Endpoint answers but invalid input, the runtime's. */
@@ -23,30 +16,28 @@ type EndpointRejection = Exclude<AnswerableRejection, StandardRejection<'invalid
 /** A Rejection a GuardHandler may build: its Guard's own, or not implemented. */
 type GuardRejection = Rejection | StandardRejection<'notImplemented'>;
 
-/** A Rejection an EndpointHandler built, checked against its Endpoint and resolved. */
+/** A Rejection an EndpointHandler built, checked against its Endpoint, its body parsed. */
 export function checkedEndpointRejection(
   endpoint: Endpoint,
   built: AnyRejection,
-  standards: StandardRejections,
-): Checked<ResolvedRejection<EndpointRejection>> {
+): Checked<BuiltRejection<EndpointRejection>> {
   const { rejection } = built;
   if (!isEndpointRejection(endpoint, rejection)) {
     return notAnswered(endpoint, rejection);
   }
-  return checkedBuilt(rejection, built, standards);
+  return checkedBuilt(rejection, built);
 }
 
-/** A Rejection a GuardHandler built, checked against its Guard and resolved. */
+/** A Rejection a GuardHandler built, checked against its Guard, its body parsed. */
 export function checkedGuardRejection(
   guard: Guard,
   built: AnyRejection,
-  standards: StandardRejections,
-): Checked<ResolvedRejection<GuardRejection>> {
+): Checked<BuiltRejection<GuardRejection>> {
   const { rejection } = built;
   if (!isGuardRejection(guard, rejection)) {
     return notAnswered(guard, rejection);
   }
-  return checkedBuilt(rejection, built, standards);
+  return checkedBuilt(rejection, built);
 }
 
 function isEndpointRejection(
@@ -69,33 +60,24 @@ function isAnsweredBy(answering: Endpoint | Guard, rejection: AnswerableRejectio
   return answerableRejectionsOf(answering).some((listed) => isSameRejection(listed, rejection));
 }
 
-/** A Rejection its Endpoint or Guard answers, with the body it declares and no other. */
-function checkedBuilt<Answered extends EndpointRejection>(
-  rejection: Answered,
-  built: AnyRejection,
-  standards: StandardRejections,
-): Checked<ResolvedRejection<Answered>> {
-  const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
-  const body = checkedPart('body', schema, { value: fieldOf(built, 'body') });
-  return mapValue(body, (parsed) => resolvedRejectionOf(rejection, parsed, standards));
-}
-
 /**
- * A Rejection with its parsed body and its code, status and message resolved. The type
+ * A Rejection its Endpoint or Guard answers, with the body it declares and no other. The type
  * distributes over each Rejection it may be, which no single object literal states, so the
  * checked value is cast once here.
  */
-function resolvedRejectionOf<Answered extends EndpointRejection>(
+function checkedBuilt<Answered extends EndpointRejection>(
   rejection: Answered,
-  body: unknown,
-  standards: StandardRejections,
-): ResolvedRejection<Answered> {
-  const resolution = resolutionOf(rejection, standards);
-  const resolved =
-    body === undefined
-      ? { kind: 'rejection' as const, rejection, ...resolution }
-      : { kind: 'rejection' as const, rejection, body, ...resolution };
-  return resolved as unknown as ResolvedRejection<Answered>;
+  built: AnyRejection,
+): Checked<BuiltRejection<Answered>> {
+  const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
+  const body = checkedPart('body', schema, { value: fieldOf(built, 'body') });
+  return mapValue(body, (parsed) => {
+    const checked =
+      parsed === undefined
+        ? { kind: 'rejection', rejection }
+        : { kind: 'rejection', rejection, body: parsed };
+    return checked as unknown as BuiltRejection<Answered>;
+  });
 }
 
 function notAnswered(answering: Endpoint | Guard, rejection: unknown): Checked<never> {

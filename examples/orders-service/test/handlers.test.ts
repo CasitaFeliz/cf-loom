@@ -1,3 +1,4 @@
+import { notFound } from '@cf-loom/contract';
 import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
 import { type Messaging, messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
@@ -46,12 +47,12 @@ describe('getOrder', () => {
     });
   });
 
-  test('an order nobody placed is answered RESOURCE_NOT_FOUND', async () => {
+  test('an order nobody placed is answered the not-found Rejection', async () => {
     const input = { params: { orderId: UNKNOWN_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context, { contract });
+    const outcome = await getOrderHandler(input, context);
 
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'RESOURCE_NOT_FOUND', status: 404 });
+    expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
   test('a locked order is answered ORDER_LOCKED with the instant it was locked', async () => {
@@ -104,7 +105,7 @@ describe('apiKey', () => {
 
     const admission = await apiKeyHandler(demands, {});
 
-    expect(isRejectionOf(admission, unauthenticated) && admission.status).toBe(401);
+    expect(isRejectionOf(admission, unauthenticated)).toBe(true);
   });
 
   test('a missing key is answered UNAUTHENTICATED', async () => {
@@ -112,7 +113,7 @@ describe('apiKey', () => {
 
     const admission = await apiKeyHandler(demands, {});
 
-    expect(isRejectionOf(admission, unauthenticated) && admission.status).toBe(401);
+    expect(isRejectionOf(admission, unauthenticated)).toBe(true);
   });
 });
 

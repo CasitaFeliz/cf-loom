@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
+  defineContract,
   defineEndpoint,
   defineGuard,
   defineRejection,
@@ -14,7 +15,7 @@ import {
   contextProvidersOf,
   resolutionOf,
   schemaOf,
-  standardRejectionDefaults,
+  standardRejectionsOf,
 } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
@@ -22,6 +23,10 @@ const unauthenticated = defineRejection({
   status: 401,
   message: 'Unauthenticated',
 });
+const standardRejectionDefaults = standardRejectionsOf(
+  defineContract({ name: 'orders-service', groups: [] }),
+);
+
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 
 const apiKey = defineGuard({
