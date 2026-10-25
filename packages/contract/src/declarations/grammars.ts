@@ -1,3 +1,5 @@
+import { reservedNames } from './reserved-names.ts';
+
 /**
  * A grammar a kind of name follows, so it is safe in code, subjects and broker names, and the
  * words it refuses though they match.
@@ -16,64 +18,8 @@ export const kebabCase: Grammar = { name: 'kebab-case', pattern: /^[a-z0-9]+(-[a
  */
 export const camelCase: Grammar = { name: 'camelCase', pattern: /^[a-z][a-zA-Z0-9]*$/ };
 
-/**
- * The words code cannot declare or import a binding by: ECMAScript's reserved words, strict
- * mode's included, `eval` and `arguments`, and `handle`, which every stub imports.
- */
-const reservedWords: ReadonlySet<string> = new Set([
-  'arguments',
-  'await',
-  'break',
-  'case',
-  'catch',
-  'class',
-  'const',
-  'continue',
-  'debugger',
-  'default',
-  'delete',
-  'do',
-  'else',
-  'enum',
-  'eval',
-  'export',
-  'extends',
-  'false',
-  'finally',
-  'for',
-  'function',
-  'handle',
-  'if',
-  'implements',
-  'import',
-  'in',
-  'instanceof',
-  'interface',
-  'let',
-  'new',
-  'null',
-  'package',
-  'private',
-  'protected',
-  'public',
-  'return',
-  'static',
-  'super',
-  'switch',
-  'this',
-  'throw',
-  'true',
-  'try',
-  'typeof',
-  'var',
-  'void',
-  'while',
-  'with',
-  'yield',
-]);
-
-/** The grammar of an Endpoint, Guard or Subscription name: camelCase, and a name its stub can import it by. */
-export const elementName: Grammar = { ...camelCase, reserved: reservedWords };
+/** The grammar of an Endpoint, Guard or Subscription name: camelCase, and no reserved name. */
+export const elementName: Grammar = { ...camelCase, reserved: new Set<string>(reservedNames) };
 
 /** The grammar of a Message name. */
 export const pascalCase: Grammar = { name: 'PascalCase', pattern: /^[A-Z][a-zA-Z0-9]*$/ };
