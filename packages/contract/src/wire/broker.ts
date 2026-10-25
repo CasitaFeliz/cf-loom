@@ -8,20 +8,29 @@ export const factIdHeader = 'Cf-Loom-Fact-Id';
 /** The header the broker message id travels in, which the broker deduplicates by. */
 export const brokerMessageIdHeader = 'Nats-Msg-Id';
 
+/** A Message Version's subject within its Service's stream, `<event|command>.<Name>.v<n>`, which the subject and the broker message id share. */
+function streamSubjectOf(message: {
+  readonly kind: 'event' | 'command';
+  readonly name: string;
+  readonly version: number;
+}): string {
+  return `${message.kind}.${subjectVersionOf(message)}`;
+}
+
 /** The subject a Message Version travels on, unprefixed: `<service>.<event|command>.<Name>.v<n>`. */
 export function subjectOf(
   service: string,
   message: { readonly kind: 'event' | 'command'; readonly name: string; readonly version: number },
 ): string {
-  return `${service}.${message.kind}.${subjectVersionOf(message)}`;
+  return `${service}.${streamSubjectOf(message)}`;
 }
 
-/** The broker message id a Message is sent with, `<Name>.v<n>:<factId>`, unique in its stream since a name has one kind. */
+/** The broker message id a Message is sent with, `<event|command>.<Name>.v<n>:<factId>`: its subject after the Service's name, so it is unique in the Service's stream, then the Fact id. */
 export function brokerMessageIdOf(
-  message: { readonly name: string; readonly version: number },
+  message: { readonly kind: 'event' | 'command'; readonly name: string; readonly version: number },
   factId: string,
 ): string {
-  return `${subjectVersionOf(message)}:${factId}`;
+  return `${streamSubjectOf(message)}:${factId}`;
 }
 
 /** The broker headers a Message travels with: its transport headers, its broker message id in `Nats-Msg-Id` and its Fact id in `Cf-Loom-Fact-Id`. */

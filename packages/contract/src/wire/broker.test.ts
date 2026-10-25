@@ -41,6 +41,31 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV2,
 });
 
+function messageTuples(): {
+  readonly message: {
+    readonly kind: 'event' | 'command';
+    readonly name: string;
+    readonly version: number;
+  };
+  readonly factId: string;
+}[] {
+  const kinds = ['event', 'command'] as const;
+  const names = ['A', 'Ab'];
+  const versions = [1, 2, 12];
+  const factIds = ['x', '1:x', 'v1:x', '.x'];
+  const tuples = [];
+  for (const kind of kinds) {
+    for (const name of names) {
+      for (const version of versions) {
+        for (const factId of factIds) {
+          tuples.push({ message: { kind, name, version }, factId });
+        }
+      }
+    }
+  }
+  return tuples;
+}
+
 describe('the Wire protocol over the broker', () => {
   test('a subject is <service>.<event|command>.<Name>.v<n>', () => {
     const subjects = [
@@ -178,10 +203,36 @@ describe('the Wire protocol over the broker', () => {
     expect(accepted).toEqual([true, true, false, false, false, false, false, false, false]);
   });
 
-  test('a broker message id is <Name>.v<n>:<factId>', () => {
-    const messageId = brokerMessageIdOf(orderCreatedV2, 'o-1:created');
+  test('a broker message id is <event|command>.<Name>.v<n>:<factId>', () => {
+    const messageIds = [
+      brokerMessageIdOf(orderCreatedV2, 'o-1:created'),
+      brokerMessageIdOf(chargeCardV1, 'o-1'),
+    ];
 
-    expect(messageId).toBe('OrderCreated.v2:o-1:created');
+    expect(messageIds).toEqual(['event.OrderCreated.v2:o-1:created', 'command.ChargeCard.v1:o-1']);
+  });
+
+  test('broker message ids are distinct for every kind, name, version and Fact id', () => {
+    const tuples = messageTuples();
+
+    const messageIds = new Set(
+      tuples.map(({ message, factId }) => brokerMessageIdOf(message, factId)),
+    );
+
+    expect(messageIds.size).toBe(tuples.length);
+  });
+
+  test('a broker message id is the Message’s subject after the Service’s name, then the Fact id', () => {
+    const tuples = messageTuples();
+
+    const subjectsWithFactId = tuples.map(
+      ({ message, factId }) => `${subjectOf('orders-service', message)}:${factId}`,
+    );
+    const serviceWithMessageId = tuples.map(
+      ({ message, factId }) => `orders-service.${brokerMessageIdOf(message, factId)}`,
+    );
+
+    expect(serviceWithMessageId).toEqual(subjectsWithFactId);
   });
 
   test('a transport header in cf-loom’s or NATS’s namespace is reserved in any case', () => {
