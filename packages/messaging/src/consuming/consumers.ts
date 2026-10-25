@@ -2,6 +2,7 @@ import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
+import type { DeliveryEnds } from './deadline.ts';
 import { type Received, registerConsumerDetails } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
@@ -11,15 +12,13 @@ export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | '
 
 /**
  * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
- * `received`, which wraps each consumer's run as the messaging's life allows it, and the signals
- * of messaging closing and of `close` handing back what still runs.
+ * `received`, which wraps each consumer's run as the messaging's life allows it, and what ends a delivery early.
  */
 type ConsumersRun = {
   readonly report: Report;
   readonly resources: unknown;
   readonly received: Received;
-  readonly closing: AbortSignal;
-  readonly handingBack: AbortSignal;
+  readonly ends: DeliveryEnds;
 };
 
 /**
@@ -31,7 +30,7 @@ type ConsumersRun = {
 export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { resources, received, ...settling }: ConsumersRun,
+  { report, resources, received, ends }: ConsumersRun,
 ): readonly BrokerConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
@@ -48,7 +47,7 @@ export function consumersOf(
       const { durable, stream, subject, element } = consumed;
       const identity = elementNameOf(element);
       const settle = received(
-        (delivery) => settlementOf({ consumed, handler, resources }, delivery, settling),
+        (delivery) => settlementOf({ consumed, handler, resources }, delivery, { report, ends }),
         { identity, subject },
       );
       const consumer: BrokerConsumer = {

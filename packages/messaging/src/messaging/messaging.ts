@@ -8,7 +8,7 @@ import {
   consumersOf,
   reportOf,
   type ServiceFaultHook,
-  troubleReportOf,
+  troubleTellOf,
 } from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
 import { type Subjects, subjectsOf } from '../subjects/index.ts';
@@ -36,7 +36,7 @@ export type Messaging<C extends Contract> = {
       ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>
     >
   ) => Promise<void>;
-  /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back the Messages whose Handlers still run, closes, and rejects naming them. */
+  /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back each delivery still settling, closes, and rejects naming them. */
   readonly close: (options?: CloseOptions) => Promise<void>;
 };
 
@@ -52,14 +52,14 @@ export async function messaging<const C extends Contract>(
   const publish = publishOf(subjects, connectionOf);
   const send = sendOf(subjects, connectionOf);
   const report = reportOf(options.onServiceFault);
-  const troubleReport = troubleReportOf(options.onBrokerTrouble);
+  const tellTrouble = troubleTellOf(options.onBrokerTrouble);
   return {
     publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
       life.consume(
         (lived) => consumersOf(subjects.consumed, handlers, { report, resources, ...lived }),
-        troubleReport,
+        tellTrouble,
       ),
     close: (options?: CloseOptions) => life.close(options),
   };

@@ -345,20 +345,6 @@ function changesOf(steps: readonly Step[]): readonly string[] {
   return changes;
 }
 
-/** A consuming messaging whose pulls are open and answered, each durable consumer waiting for a Message. */
-async function aConsumingWithAnsweredPulls(
-  prefix: string,
-  onBrokerTrouble: (trouble: BrokerTrouble) => void,
-) {
-  const names = anOrders(prefix);
-  await arrangeOrders(prefix);
-  const orders = await aMessaging(prefix, { onBrokerTrouble });
-  await orders.consume(handlersOf([]));
-  await waitUntilPulling(names.stream, names.notifyDurable);
-  await waitUntilPulling(names.stream, names.chargeDurable);
-  return orders;
-}
-
 /** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
 function aGate() {
   const gate = Promise.withResolvers<undefined>();
@@ -1229,6 +1215,43 @@ describe('consuming over jetstream()', () => {
     ]);
   });
 
+  test('a connection that closes while a durable consumer’s pulls fail reports nothing more for it, and no recovered', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    let lost = 0;
+    const losingEveryNotifyPull: Replacing = (connection) => ({
+      publish: (subject, data, options) => {
+        if (subject.endsWith(`.${names.notifyDurable}`)) {
+          lost += 1;
+          return;
+        }
+        connection.publish(subject, data, options);
+      },
+    });
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aMessaging(prefix, {
+      replacing: losingEveryNotifyPull,
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    await orders.consume(handlersOf([]));
+    await vi.waitFor(() => expect([troubles.length, lost]).toEqual([1, 2]), { timeout: 4_000 });
+
+    await orders.connections[0]?.close();
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    await aWhile();
+    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    expect(reported.sort()).toEqual([
+      ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
+      [
+        'notifyOnCreated',
+        'pull-failed',
+        `NATS did not answer a pull from ${names.notifyDurable} within 1000 ms`,
+      ],
+    ]);
+  }, 10_000);
+
   test(`pulls failing and answered in a random order are reported once per change, failing first (seed ${seed})`, async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
@@ -1662,26 +1685,19 @@ describe('pulling over jetstream()', () => {
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
   }, 10_000);
 
-  test.each([
-    ['fail', 2, aConsumingWithFailingPulls],
-    ['are answered', 0, aConsumingWithAnsweredPulls],
-  ])(
-    'close while pulls %s reports nothing more',
-    async (_name, reports, consumingWith) => {
-      const troubles: BrokerTrouble[] = [];
-      const orders = await consumingWith(aPrefix(), (trouble) => {
-        troubles.push(trouble);
-      });
-      const reportedBefore = troubles.map(({ identity, kind }) => [identity, kind]);
+  test('close while pulls fail reports nothing more', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aConsumingWithFailingPulls(aPrefix(), (trouble) => {
+      troubles.push(trouble);
+    });
+    const reportedBefore = troubles.map(({ identity, kind }) => [identity, kind]);
 
-      await orders.close();
-      await aWhile();
+    await orders.close();
+    await aWhile();
 
-      expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual(reportedBefore);
-      expect(reportedBefore).toHaveLength(reports);
-    },
-    10_000,
-  );
+    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual(reportedBefore);
+    expect(reportedBefore).toHaveLength(2);
+  }, 10_000);
 
   test('the Service closing its own connection while pulls fail leaves no retry pause running', async () => {
     const timersBefore = activeTimers();

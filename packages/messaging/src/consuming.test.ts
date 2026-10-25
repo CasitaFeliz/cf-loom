@@ -908,9 +908,11 @@ describe('a Handler’s signal and its delivery’s wait', () => {
     vi.useFakeTimers();
     const hook = Promise.withResolvers<void>();
     const told: ConsumedFault[] = [];
-    const refusing = handle(readers.subscriptions.notifyOnCreated, () =>
-      fault({ committed: 'no', retryable: false }),
-    );
+    const signals: AbortSignal[] = [];
+    const refusing = handle(readers.subscriptions.notifyOnCreated, (_body, meta) => {
+      signals.push(meta.signal);
+      return fault({ committed: 'no', retryable: false });
+    });
     const { deliver } = await consuming(
       { subscriptions: { notifyOnCreated: refusing } },
       {
@@ -923,9 +925,11 @@ describe('a Handler’s signal and its delivery’s wait', () => {
 
     const delivered = deliver(created, body, { waitMs: 1_000 });
     await vi.advanceTimersByTimeAsync(2_000);
+    const abortedWhileTelling = signals[0]?.aborted;
     hook.resolve();
 
     await expect(delivered).resolves.toBe('ended');
     expect(told.map(({ kind }) => kind)).toEqual(['returned']);
+    expect(abortedWhileTelling).toBe(false);
   });
 });

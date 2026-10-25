@@ -51,7 +51,7 @@ export function registerConsumerDetails(consumer: BrokerConsumer, details: Consu
 export function consumerDetailsOf(consumer: BrokerConsumer): ConsumerDetails {
   const details = detailsByConsumer.get(consumer);
   if (details === undefined) {
-    throw new Error('a BrokerConsumer the core did not build was handed back to it');
+    throw new Error('a BrokerConsumer the core did not build was reported to it');
   }
   return details;
 }

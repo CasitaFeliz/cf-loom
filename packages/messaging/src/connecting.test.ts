@@ -720,6 +720,20 @@ describe('onBrokerTrouble', () => {
     expect(recorded.closes).toBe(1);
   });
 
+  test('a report the adapter makes once close started never reaches onBrokerTrouble', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled, close } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+
+    const closing = close();
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    await closing;
+    troubled({ consumer: notifying, kind: 'recovered' });
+
+    expect(troubles).toEqual([]);
+  });
+
   test('troubled given a consumer the core did not build throws, naming no adapter', async () => {
     const { troubled } = await consumingReported({ onBrokerTrouble: () => undefined });
     const stranger: BrokerConsumer = {
@@ -732,10 +746,29 @@ describe('onBrokerTrouble', () => {
     const reporting = () => troubled({ consumer: stranger, kind: 'recovered' });
 
     expect(reporting).toThrow(
-      new Error('a BrokerConsumer the core did not build was handed back to it'),
+      new Error('a BrokerConsumer the core did not build was reported to it'),
     );
   });
 });
+
+type ListenerSpy = { readonly mock: { readonly calls: unknown[][]; readonly contexts: unknown[] } };
+
+/** The most abort listeners any AbortSignal still holds, from the calls the spies on `addEventListener` and `removeEventListener` saw. */
+function abortListenersLeft(added: ListenerSpy, removed: ListenerSpy): number {
+  const listening = new Map<AbortSignal, number>();
+  for (const [spy, step] of [
+    [added, 1],
+    [removed, -1],
+  ] as const) {
+    spy.mock.calls.forEach(([type], call) => {
+      const target = spy.mock.contexts[call];
+      if (type === 'abort' && target instanceof AbortSignal) {
+        listening.set(target, (listening.get(target) ?? 0) + step);
+      }
+    });
+  }
+  return Math.max(0, ...listening.values());
+}
 
 describe('close and a Handler’s wait', () => {
   const created = 'orders-service.event.OrderCreated.v1';
@@ -814,6 +847,29 @@ describe('close and a Handler’s wait', () => {
     await expect(first).rejects.toBeInstanceOf(CloseAbortedError);
     await expect(delivered).resolves.toBe('handed-back');
     expect(recorded.closes).toBe(1);
+  });
+
+  test('deliveries that settled and a close that handed back leave no abort listener behind, on closing, the hand-back or close’s signal', async () => {
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    const removed = vi.spyOn(EventTarget.prototype, 'removeEventListener');
+    let calls = 0;
+    const answeringThrice = handle(readers.subscriptions.notifyOnCreated, () => {
+      calls += 1;
+      return calls <= 3 ? undefined : new Promise<undefined>(() => undefined);
+    });
+    const { deliver, close } = await consumingWith(answeringThrice);
+    for (const _call of [1, 2, 3]) {
+      await deliver(created, body, { waitMs: 30_000 });
+    }
+    const held = deliver(created, body, { waitMs: 30_000 });
+    const stopping = new AbortController();
+
+    const closing = close({ signal: stopping.signal });
+    stopping.abort();
+    await closing.catch(() => undefined);
+    await held;
+
+    expect(abortListenersLeft(added, removed)).toBe(0);
   });
 
   test('a publish in flight when close’s signal aborts is not waited for', async () => {

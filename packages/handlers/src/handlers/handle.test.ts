@@ -212,15 +212,15 @@ describe('handle', () => {
     expect(given[0]?.signal).toBe(signal);
   });
 
-  test("MessageMeta's signal is an AbortSignal, which a direct call may leave out", () => {
+  test("MessageMeta's signal is an AbortSignal, and a direct call takes one or leaves it out", () => {
     const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
 
     expectTypeOf<MessageMeta['signal']>().toEqualTypeOf<AbortSignal>();
+    expectTypeOf(notifyOnPaidHandler).toBeCallableWith({ orderId: ORDER_ID, status: 'paid' }, meta);
     expectTypeOf(notifyOnPaidHandler).toBeCallableWith(
       { orderId: ORDER_ID, status: 'paid' },
       { ...meta, signal: new AbortController().signal },
     );
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
   });
 
   test("a Message Handler's direct call answers a Fault or nothing", () => {

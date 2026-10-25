@@ -18,7 +18,7 @@ export type HandedBack = {
   readonly factId: string;
 };
 
-/** Thrown by `close` when its signal aborted while Message Handlers still ran: the Messages handed back, its `cause` the signal's reason. */
+/** Thrown by `close` when its signal aborted while deliveries were still settling: the Messages handed back, its `cause` the signal's reason. */
 export class CloseAbortedError extends Error {
   override readonly name = 'CloseAbortedError';
   readonly handedBack: readonly HandedBack[];

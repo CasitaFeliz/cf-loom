@@ -306,6 +306,23 @@ describe('deliver()', () => {
     },
   );
 
+  test('deliver to an Event one Subscription leaves pending and close’s signal hands back from the other resolves to pending, the more severe', async () => {
+    const handling = Promise.withResolvers<void>();
+    const { broker, close } = await running(() => ({
+      notify: () => fault({ committed: 'no', retryable: true }),
+      audit: () => {
+        handling.resolve();
+        return new Promise(() => undefined);
+      },
+    }));
+    const delivered = broker.deliver(orderCreatedV2, created);
+    await handling.promise;
+
+    await close({ signal: AbortSignal.abort() }).catch(() => undefined);
+
+    await expect(delivered).resolves.toBe('pending');
+  });
+
   test('the broker message id defaults to command.<Name>.v<n>:<factId>, and meta.messageId replaces it', async () => {
     const { broker, received } = await running();
 

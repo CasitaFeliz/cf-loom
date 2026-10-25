@@ -3,7 +3,7 @@ import type { Fault } from '@cf-loom/handlers';
 import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
-import { DeliveryEnd, type DeliveryEnds } from './deadline.ts';
+import { type DeliveryEnds, OneDelivery } from './deadline.ts';
 import type { Settled } from './details.ts';
 import { type About, aboutOf, type ConsumedFault, type Report } from './faults.ts';
 
@@ -18,7 +18,7 @@ export type Pulled = {
 type Ran = Omit<Settled, 'hookFailure'>;
 
 /** How one delivery is settled: where its Fault is reported, and what ends it early. */
-export type Settling = DeliveryEnds & { readonly report: Report };
+export type Settling = { readonly report: Report; readonly ends: DeliveryEnds };
 
 /**
  * What became of one delivery, unless `close`'s signal hands it back first: its Handler's run, or a
@@ -27,21 +27,17 @@ export type Settling = DeliveryEnds & { readonly report: Report };
 export async function settlementOf(
   pulled: Pulled,
   delivery: Delivery,
-  { report, ...ends }: Settling,
+  { report, ends }: Settling,
 ): Promise<Settled> {
-  const end = new DeliveryEnd(delivery.waitMs, ends);
-  const running = end.withinWait(runOf(pulled, delivery, end.signal));
-  const told: Report = async (fault) => (end.handedBack ? undefined : await report(fault));
-  return await end.unlessHandedBack(reportedOf(running, aboutOf(pulled.consumed, delivery), told));
+  const one = new OneDelivery(delivery.waitMs, ends);
+  const about = aboutOf(pulled.consumed, delivery);
+  const running = runOf(pulled, delivery, one.signal);
+  return await one.settled(running, (run) => reportedOf(run, about, report));
 }
 
 /** What became of one delivery once its Handler ran or its wait passed; a hook that failed leaves it pending, since the Service did not hear of the Fault. */
-async function reportedOf(
-  running: Promise<MessageRun>,
-  about: About,
-  report: Report,
-): Promise<Settled> {
-  const { settlement, fault } = ranOf(await running, about);
+async function reportedOf(run: MessageRun, about: About, report: Report): Promise<Settled> {
+  const { settlement, fault } = ranOf(run, about);
   if (fault === undefined) {
     return { settlement, fault, hookFailure: undefined };
   }

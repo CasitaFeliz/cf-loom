@@ -30,7 +30,7 @@ export function jetStreamConnectionOf(
       }
       const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
       for (const durable of found.durables) {
-        void pullFrom(durable, natsConnection, { closing, stopping, troubled });
+        void pullFrom(durable, natsConnection, { stopping, troubled });
       }
     },
     close: () => drainOnce(natsConnection),

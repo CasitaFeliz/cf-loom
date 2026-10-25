@@ -21,70 +21,70 @@ export type DeliveryEnds = { readonly closing: AbortSignal; readonly handingBack
 /** A delivery handed back by `close`'s signal: its Handler's answer, if any comes, is not waited for. */
 const handedBack: Settled = { settlement: 'handed-back', fault: undefined, hookFailure: undefined };
 
-/**
- * One delivery's end: the signal its Handler runs with, aborted when messaging starts closing or
- * when its wait passes; the run raced against that wait, and the whole settle against the hand-back.
- */
-export class DeliveryEnd {
+const noWait = () => undefined;
+
+/** One delivery, from its Handler's run to its Settlement: the signal its Handler runs with, and how long it is waited for. */
+export class OneDelivery {
   readonly #controller = new AbortController();
   readonly #waitMs: number | undefined;
   readonly #ends: DeliveryEnds;
-  #stopWaiting: () => void = () => undefined;
 
   constructor(waitMs: number | undefined, ends: DeliveryEnds) {
     this.#waitMs = waitMs;
     this.#ends = ends;
   }
 
-  /** The signal the Handler receives in its meta. */
+  /** The signal the Handler receives in its meta: aborted when messaging starts closing, or once its wait passed. */
   get signal(): AbortSignal {
     return this.#controller.signal;
   }
 
-  /** Whether `close`'s signal handed the delivery back, so nothing more is told of it. */
-  get handedBack(): boolean {
-    return this.#ends.handingBack.aborted;
-  }
-
-  /** The settle, or `'handed-back'` once `close`'s signal aborts first; the Handler's signal follows closing meanwhile, and the wait stops with it. */
-  async unlessHandedBack(settling: Promise<Settled>): Promise<Settled> {
+  /**
+   * The Settlement `settle` makes of the run, or of a `thrown` `DeadlineError` once the wait passed
+   * first; `'handed-back'` once `close`'s signal aborts first. Nothing of it outlives the delivery.
+   */
+  async settled(
+    running: Promise<MessageRun>,
+    settle: (run: MessageRun) => Promise<Settled>,
+  ): Promise<Settled> {
     const { closing, handingBack } = this.#ends;
-    const abort = () => this.#controller.abort(closing.reason);
     const handing = Promise.withResolvers<Settled>();
+    const passed = Promise.withResolvers<MessageRun>();
+    const abort = () => this.#controller.abort(closing.reason);
     const handBack = () => handing.resolve(handedBack);
     whenAborted(closing, abort);
     whenAborted(handingBack, handBack);
+    const stopWaiting = this.#waitFor(passed.resolve);
+    const ran = Promise.race([running, passed.promise]);
+    const reported = ran.then((run) => {
+      stopWaiting();
+      return handingBack.aborted ? handedBack : settle(run);
+    });
     try {
-      return await Promise.race([settling, handing.promise]);
+      return await Promise.race([reported, handing.promise]);
     } finally {
       closing.removeEventListener('abort', abort);
       handingBack.removeEventListener('abort', handBack);
-      this.#stopWaiting();
+      stopWaiting();
     }
   }
 
-  /** The Handler's run, or a `thrown` `DeadlineError` once its wait passes first, aborting its signal. */
-  async withinWait(running: Promise<MessageRun>): Promise<MessageRun> {
+  /** Answers a `thrown` `DeadlineError` once the wait passed, aborting the signal; answers what stops it. */
+  #waitFor(passed: (run: MessageRun) => void): () => void {
     const waitMs = this.#waitMs;
     if (waitMs === undefined) {
-      return await running;
+      return noWait;
     }
-    const passed = Promise.withResolvers<MessageRun>();
-    this.#stopWaiting = afterWait(waitMs, () => {
+    return afterWait(waitMs, () => {
       const deadline = new DeadlineError(waitMs);
       this.#controller.abort(deadline);
-      passed.resolve({ kind: 'thrown', cause: deadline });
+      passed({ kind: 'thrown', cause: deadline });
     });
-    try {
-      return await Promise.race([running, passed.promise]);
-    } finally {
-      this.#stopWaiting();
-    }
   }
 }
 
 /** Calls `aborted` when the signal aborts, or now if it has. */
-function whenAborted(signal: AbortSignal, aborted: () => void): void {
+export function whenAborted(signal: AbortSignal, aborted: () => void): void {
   if (signal.aborted) {
     aborted();
     return;

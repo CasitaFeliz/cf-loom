@@ -20,24 +20,38 @@ export type BrokerTrouble = HandlerFaultBase<Subscription | Command> & {
 /** The Service's `onBrokerTrouble`, which may be async and is awaited. */
 export type BrokerTroubleHook = (trouble: BrokerTrouble) => void | Promise<void>;
 
-/**
- * Tells of an adapter's report: names its consumer at once, so one the core did not build throws
- * to the adapter, then resolves once the hook or the console was told, never rejecting.
- */
-export type TroubleReport = (trouble: ConsumerTrouble) => Promise<void>;
+/** Tells the Service of a `BrokerTrouble`; resolves once told, never rejecting. */
+export type TroubleTell = (trouble: BrokerTrouble) => Promise<void>;
 
 /** The Service's hook, contained so that its failure is logged, or the console line of every report. */
-export function troubleReportOf(onBrokerTrouble: BrokerTroubleHook | undefined): TroubleReport {
-  const tell = onBrokerTrouble === undefined ? logBrokerTrouble : hookedOf(onBrokerTrouble);
-  return (trouble) => tell(brokerTroubleOf(trouble));
+export function troubleTellOf(onBrokerTrouble: BrokerTroubleHook | undefined): TroubleTell {
+  return onBrokerTrouble === undefined ? logBrokerTrouble : hookedOf(onBrokerTrouble);
 }
 
+/**
+ * The `troubled` an adapter reports to: it names the consumer at once, so one the core did not
+ * build throws to the adapter, and hands the telling to `track`; once `closing` aborted, it tells nothing.
+ */
+export function troubledOf(
+  closing: AbortSignal,
+  tell: TroubleTell,
+  track: (telling: Promise<void>) => void,
+): (trouble: ConsumerTrouble) => void {
+  return (trouble) => {
+    const named = brokerTroubleOf(trouble);
+    if (!closing.aborted) {
+      track(tell(named));
+    }
+  };
+}
+
+/** The `BrokerTrouble` of an adapter's report, its consumer named by the core; one the core did not build throws. */
 function brokerTroubleOf({ consumer, ...change }: ConsumerTrouble): BrokerTrouble {
   const { element, identity } = consumerDetailsOf(consumer);
   return { element, identity, durable: consumer.durable, stream: consumer.stream, ...change };
 }
 
-function hookedOf(onBrokerTrouble: BrokerTroubleHook): (trouble: BrokerTrouble) => Promise<void> {
+function hookedOf(onBrokerTrouble: BrokerTroubleHook): TroubleTell {
   return async (trouble) => {
     const called = { source: sourceOf(trouble), hook: 'onBrokerTrouble' } as const;
     await hookFailureOf(onBrokerTrouble, trouble, called);

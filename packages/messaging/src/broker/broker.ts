@@ -23,8 +23,8 @@ export type BrokerConnection = {
    */
   readonly consume: (consumers: readonly BrokerConsumer[], run: ConsumeRun) => Promise<void>;
   /**
-   * Called once every `receive` has settled, or once `close`'s signal aborted and each Handler still
-   * running was handed back; ends what `consume` started and finishes applying any Settlement.
+   * Called once every `receive` has settled, or once `close`'s signal aborted and each delivery
+   * still settling was handed back; ends what `consume` started and finishes applying any Settlement.
    */
   readonly close: () => Promise<void>;
 };
@@ -34,8 +34,8 @@ export type ConsumeRun = {
   readonly closing: AbortSignal;
   /**
    * Called once when a consumer stops being pulled from, with why, and once when its pulls are
-   * answered again; never once `closing` has aborted. Returns at once; a consumer the core did not
-   * build throws.
+   * answered again; the core drops what comes once `closing` has aborted. Returns at once; a
+   * consumer the core did not build throws.
    */
   readonly troubled: (trouble: ConsumerTrouble) => void;
 };
