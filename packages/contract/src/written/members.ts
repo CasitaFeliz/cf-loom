@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { type Guard, isGuard, isRejection, type Rejection } from '../declarations/index.ts';
+import { byCodePoint } from '../walker/index.ts';
 import { isSchema } from './parts.ts';
 
 /** One export of a Definitions Package's root file that it shares: a Guard, a Rejection or a zod schema, under its export name. */
@@ -8,7 +9,7 @@ export type Member =
   | { readonly name: string; readonly kind: 'rejection'; readonly value: Rejection }
   | { readonly name: string; readonly kind: 'schema'; readonly value: core.$ZodType };
 
-/** A Definitions Package's members, one per export, in the order its module lists them. */
+/** A Definitions Package's members, one per export, in code point order of their names. */
 export type Members = readonly Member[];
 
 /**
@@ -17,8 +18,8 @@ export type Members = readonly Member[];
  */
 export function membersOf(exports: Readonly<Record<string, unknown>>): Members {
   const members: Member[] = [];
-  for (const [name, value] of Object.entries(exports)) {
-    const member = memberOf(name, value);
+  for (const name of Object.keys(exports).sort(byCodePoint)) {
+    const member = memberOf(name, exports[name]);
     if (member !== undefined) {
       members.push(member);
     }

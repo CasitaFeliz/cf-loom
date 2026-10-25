@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
+import type { PackageIdentity } from '@cf-loom/contract/internal';
 
 /** A package.json as read: where it is, its fields, and its name and version when it gives them. */
 export type PackageManifest = {
@@ -49,27 +50,14 @@ export function packageRootManifestOf(file: string): PackageManifest | undefined
   }
 }
 
-/** The line saying a package has no version, the one way any command says it. */
-export function noVersionLineOf(packageName: string): string {
-  return `${packageName} has no version in its package.json`;
-}
-
-/**
- * Who a package is, from its package.json: its name and version, which a Snapshot records, or
- * the one line saying which of them it lacks.
- */
-export type PackageIdentity =
-  | { readonly kind: 'identified'; readonly packageName: string; readonly version: string }
-  | { readonly kind: 'unidentified'; readonly why: string };
-
 /** A package's identity from its package.json, the path of one with no name relative to the project. */
 export function packageIdentityOf(manifest: PackageManifest, directory: string): PackageIdentity {
   const { name, version, path } = manifest;
   if (name === undefined) {
-    return { kind: 'unidentified', why: `${relative(directory, path)} has no name` };
+    return { kind: 'unnamed', manifest: relative(directory, path) };
   }
   if (version === undefined) {
-    return { kind: 'unidentified', why: noVersionLineOf(name) };
+    return { kind: 'unversioned', packageName: name };
   }
   return { kind: 'identified', packageName: name, version };
 }

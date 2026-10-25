@@ -5,8 +5,8 @@ import {
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { definitionsPackageOf, originTextOf } from './provenance.ts';
-import type { ResolvedDefinitions } from './validate.ts';
+import { definitionsPackageOf, originTextOf, packageLabelOf } from './provenance.ts';
+import type { ImportedDefinitions } from './validate.ts';
 
 /**
  * A code is declared once: by one Rejection the root reaches, or one Standard Rejection resolving
@@ -14,7 +14,7 @@ import type { ResolvedDefinitions } from './validate.ts';
  */
 export function codeOnceFailures(
   declarations: Declarations,
-  packages: readonly ResolvedDefinitions[],
+  packages: readonly ImportedDefinitions[],
 ): readonly DeclarationFailure[] {
   const standards = resolvedStandards(declarations);
   const sourcesByCode = new Map<string, string[]>();
@@ -39,14 +39,19 @@ export function codeOnceFailures(
 /** Where a declared Rejection came from, as the line names it. */
 function sourceOf(
   { root }: Declarations,
-  packages: readonly ResolvedDefinitions[],
+  packages: readonly ImportedDefinitions[],
   rejection: unknown,
 ): string {
   const provenance = definitionsPackageOf(packages, rejection);
-  if (provenance.kind === 'found') {
-    return originTextOf(provenance.package);
+  switch (provenance.kind) {
+    case 'found':
+      return originTextOf(provenance.package);
+    case 'unidentified':
+      return packageLabelOf(provenance.package);
+    case 'none':
+    case 'ambiguous':
+      return root.kind === 'definitions' ? 'the Definitions Package' : 'the Contract';
   }
-  return root.kind === 'definitions' ? 'the Definitions Package' : 'the Contract';
 }
 
 function standardSourceOf({ name }: ResolvedStandard): string {

@@ -85,7 +85,7 @@ describe('validateContract: a Definitions Package exports what its Guards reach'
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['exports', 'userToken'],
+        at: ['exports', 'permission'],
         rule: 'definitions-unexported',
         message: `${unexportedMessage}: UNAUTHENTICATED`,
       },

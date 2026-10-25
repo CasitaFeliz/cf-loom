@@ -97,7 +97,6 @@ function validatedOf(project: Project): ValidatedContract | Tooling {
   const rootPackage: RootPackage = {
     packageName: packageJsonNameOf(packageName),
     packages,
-    unidentified: project.unidentified,
     rootExports,
   };
   try {

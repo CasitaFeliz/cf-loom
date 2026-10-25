@@ -109,12 +109,14 @@ export {
 } from '../snapshot/index.ts';
 export type {
   Failure,
+  ImportedDefinitions,
+  PackageIdentity,
   Problem,
   Provenance,
   ResolvedDefinitions,
   RootPackage,
   TextPartNodes,
-  UnidentifiedDefinitions,
+  Unidentified,
   ValidatedContract,
   ValidContract,
 } from '../validation/index.ts';
@@ -122,8 +124,11 @@ export {
   definitionsPackageOf,
   exportNamesOf,
   failureLineOf,
+  identityLineOf,
   locationOf,
+  noVersionLineOf,
   oneOf,
+  packageLabelOf,
   problemLineOf,
   problemOf,
   validateContract,

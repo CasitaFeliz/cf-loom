@@ -626,6 +626,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
   });
   const packages: readonly ResolvedDefinitions[] = [
     {
+      kind: 'identified',
       definitions,
       packageName: '@org/definitions',
       version: '1.0.0',
@@ -679,6 +680,7 @@ function codeReachSnapshot(): ServiceSnapshot {
   });
   return serviceSnapshotOf(root, [
     {
+      kind: 'identified',
       definitions,
       packageName: '@org/definitions',
       version: '1.0.0',

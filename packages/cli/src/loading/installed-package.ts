@@ -1,7 +1,8 @@
 import { findPackageJSON } from 'node:module';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { noVersionLineOf, packageManifestAt } from './package-manifest.ts';
+import { noVersionLineOf } from '@cf-loom/contract/internal';
+import { packageManifestAt } from './package-manifest.ts';
 
 /** A package's version as installed where the root imports it, or why it has none. */
 export type InstalledVersion =

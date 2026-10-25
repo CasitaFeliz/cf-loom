@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
+import {
+  anInstalledPackage,
+  anUnidentifiedPackage,
+  aRootPackage,
+} from '../../test/root-package.ts';
 import {
   type Definitions,
   defineContract,
@@ -13,7 +17,7 @@ import {
   type Rejection,
 } from '../index.ts';
 import {
-  type ResolvedDefinitions,
+  type ImportedDefinitions,
   type Snapshot,
   snapshotOf,
   validateContract,
@@ -50,11 +54,11 @@ type Reached = {
   readonly body?: z.ZodObject;
 };
 
-function validatedOf(root: unknown, packages: readonly ResolvedDefinitions[]) {
+function validatedOf(root: unknown, packages: readonly ImportedDefinitions[]) {
   return validateContract(root, aRootPackage(root, { packages }));
 }
 
-function snapshotIn(root: unknown, packages: readonly ResolvedDefinitions[]): Snapshot {
+function snapshotIn(root: unknown, packages: readonly ImportedDefinitions[]): Snapshot {
   const validated = validatedOf(root, packages);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
@@ -62,7 +66,7 @@ function snapshotIn(root: unknown, packages: readonly ResolvedDefinitions[]): Sn
   return snapshotOf(validated, context);
 }
 
-function serviceIn(root: unknown, packages: readonly ResolvedDefinitions[]) {
+function serviceIn(root: unknown, packages: readonly ImportedDefinitions[]) {
   const snapshot = snapshotIn(root, packages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
@@ -74,10 +78,19 @@ function serviceIn(root: unknown, packages: readonly ResolvedDefinitions[]) {
 function aPackage(
   packageName: string,
   exported: Readonly<Record<string, unknown>>,
-  reaches: readonly ResolvedDefinitions[] = [],
-): ResolvedDefinitions {
+  reaches: readonly ImportedDefinitions[] = [],
+): ImportedDefinitions {
   const installed = { packageName, version: '1.0.0', reaches };
   return anInstalledPackage(defineDefinitions({}), exported, installed);
+}
+
+/** A Definitions Package installed under `name` whose package.json has no version, exporting what is given. */
+function anUnversionedPackage(
+  packageName: string,
+  exported: Readonly<Record<string, unknown>>,
+  reaches: readonly ImportedDefinitions[] = [],
+): ImportedDefinitions {
+  return anUnidentifiedPackage({ kind: 'unversioned', packageName }, exported, { reaches });
 }
 
 /** The origin of the `total` field of the ping's Success body. */
@@ -177,8 +190,88 @@ describe('validateContract and snapshotOf: where a reached declaration came from
     expect(both.guards['apiKey']?.origin).toBe('@p2/defs@1.0.0');
   });
 
+  test('a Guard an identified package re-exports from one with no version belongs to that one, and fails definitions-unidentified', () => {
+    const base = anUnversionedPackage('@org/base', { apiKey });
+    const org = aPackage('@org/definitions', { apiKey }, [base]);
+
+    const validated = validatedOf(aService({ guards: [apiKey] }), [org, base]);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['guards', 'apiKey'],
+          rule: 'definitions-unidentified',
+          message:
+            'A Definitions Package a declaration comes from has a name and a version: @org/base has no version in its package.json',
+        },
+      ],
+    });
+  });
+
+  test('a Guard an identified and a nameless package export, neither importing the other, fails definitions-ambiguous naming the package.json', () => {
+    const manifest = 'node_modules/other/package.json';
+    const other = anUnidentifiedPackage({ kind: 'unnamed', manifest }, { apiKey });
+    const org = aPackage('@org/definitions', { apiKey });
+
+    const validated = validatedOf(aService({ guards: [apiKey] }), [org, other]);
+
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [
+        {
+          at: ['guards', 'apiKey'],
+          rule: 'definitions-ambiguous',
+          message: `A declaration belongs to one Definitions Package: exported by both @org/definitions and ${manifest}, and neither imports it from the other`,
+        },
+      ],
+    });
+  });
+
+  test('a code and a schema from a package with no version fail definitions-unidentified where each sits', () => {
+    const base = anUnversionedPackage('@org/base', { forbidden, money });
+    const root = aService({ rejections: [forbidden], body: z.object({ total: money }) });
+
+    const validated = validatedOf(root, [base]);
+
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [
+        { at: ['rejections', 'FORBIDDEN'], rule: 'definitions-unidentified' },
+        {
+          at: ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields', 'total'],
+          rule: 'definitions-unidentified',
+        },
+      ],
+    });
+  });
+
+  test('a schema from a package with no version met at two places fails once, where the walk first met it', () => {
+    const base = anUnversionedPackage('@org/base', { money });
+    const root = aService({ body: z.object({ first: money, second: money }) });
+
+    const validated = validatedOf(root, [base]);
+
+    const at = ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields'];
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [{ at: [...at, 'first'], rule: 'definitions-unidentified' }],
+    });
+    expect(validated.kind === 'invalid' && validated.failures).toHaveLength(1);
+  });
+
+  test('a package with no version the Contract reaches nothing of fails nothing', () => {
+    const base = anUnversionedPackage('@org/base', { forbidden });
+    const org = aPackage('@org/definitions', { apiKey });
+
+    const snapshot = serviceIn(aService({ guards: [apiKey] }), [org, base]);
+
+    expect(snapshot.guards['apiKey']?.origin).toBe('@org/definitions@1.0.0');
+  });
+
   test('a Guard two packages export, each importing the other, fails definitions-ambiguous', () => {
-    const p1Reaches: ResolvedDefinitions[] = [];
+    const p1Reaches: ImportedDefinitions[] = [];
     const p1 = aPackage('@p1/defs', { apiKey }, p1Reaches);
     const p2 = aPackage('@p2/defs', { apiKey }, [p1]);
     p1Reaches.push(p2);
@@ -240,24 +333,43 @@ type Edge = 'direct' | 'none';
 /** Which packages export a member in a row: P1, P2, both, or neither. */
 type Exporters = 'p1' | 'p2' | 'both' | 'none';
 
+/** Whether P2's package.json names it in a row. */
+type P2Identity = 'identified' | 'unversioned';
+
+/** What the rule does with a member in a row: the origin it writes, or the rule it fails. */
+type Expected = string | 'ambiguous' | 'unidentified';
+
 /** The origin the rule gives a member, from a reference model of it written apart from the code. */
-function expectedOrigin(exporters: Exporters, edge: Edge): string | 'ambiguous' {
+function expectedOrigin(exporters: Exporters, edge: Edge, p2: P2Identity): Expected {
+  const ofP2 = p2 === 'identified' ? '@p2/defs@1.0.0' : 'unidentified';
   switch (exporters) {
     case 'none':
       return 'local';
     case 'p1':
       return '@p1/defs@1.0.0';
     case 'p2':
-      return '@p2/defs@1.0.0';
+      return ofP2;
     case 'both':
-      return edge === 'direct' ? '@p2/defs@1.0.0' : 'ambiguous';
+      return edge === 'direct' ? ofP2 : 'ambiguous';
   }
+}
+
+function isFailing(expected: Expected): expected is 'ambiguous' | 'unidentified' {
+  return expected === 'ambiguous' || expected === 'unidentified';
 }
 
 const exporterRows: readonly Exporters[] = ['p1', 'p2', 'both', 'none'];
 const edgeRows: readonly Edge[] = ['direct', 'none'];
-const rows = edgeRows.flatMap((edge) =>
-  exporterRows.flatMap((guardBy) => exporterRows.map((codeBy) => ({ edge, guardBy, codeBy }))),
+const p2Rows: readonly P2Identity[] = ['identified', 'unversioned'];
+/** One row of the exhaustive table. */
+type Row = (typeof rows)[number];
+
+const rows = p2Rows.flatMap((p2) =>
+  edgeRows.flatMap((edge) =>
+    exporterRows.flatMap((guardBy) =>
+      exporterRows.map((codeBy) => ({ p2, edge, guardBy, codeBy })),
+    ),
+  ),
 );
 
 /** Whether a package exports a member in a row. */
@@ -267,32 +379,28 @@ function isExportedBy(owner: 'p1' | 'p2', by: Exporters): boolean {
 
 describe('validateContract and snapshotOf: provenance follows identity and imports', () => {
   test.each(rows)(
-    'a Guard exported by $guardBy and a code by $codeBy, P1 reaching P2: $edge',
-    ({ edge, guardBy, codeBy }) => {
+    'a Guard exported by $guardBy and a code by $codeBy, P1 reaching P2: $edge, P2 $p2',
+    (row) => {
       const guard = defineGuard({ name: 'gate', description: 'A gate' });
       const rejection = defineRejection({ code: 'TAKEN', status: 409, message: 'Taken' });
-      const p2 = aPackage('@p2/defs', {
-        ...(isExportedBy('p2', guardBy) ? { gate: guard } : {}),
-        ...(isExportedBy('p2', codeBy) ? { taken: rejection } : {}),
-      });
+      const members = { gate: guard, taken: rejection };
+      const p2 = p2PackageOf(row.p2, exportedBy('p2', row, members));
       const p1 = aPackage(
         '@p1/defs',
-        {
-          ...(isExportedBy('p1', guardBy) ? { gate: guard } : {}),
-          ...(isExportedBy('p1', codeBy) ? { taken: rejection } : {}),
-        },
-        edge === 'direct' ? [p2] : [],
+        exportedBy('p1', row, members),
+        row.edge === 'direct' ? [p2] : [],
       );
       const root = aService({ guards: [guard], rejections: [rejection] });
 
       const validated = validatedOf(root, [p1, p2]);
 
-      const expected = [expectedOrigin(guardBy, edge), expectedOrigin(codeBy, edge)];
-      if (expected.includes('ambiguous')) {
+      const expected = [
+        expectedOrigin(row.guardBy, row.edge, row.p2),
+        expectedOrigin(row.codeBy, row.edge, row.p2),
+      ];
+      if (expected.some(isFailing)) {
         const rules = validated.kind === 'invalid' ? validated.failures.map(ruleOf) : [];
-        expect(rules).toEqual(
-          expected.filter((origin) => origin === 'ambiguous').map(() => 'definitions-ambiguous'),
-        );
+        expect(rules).toEqual(expected.filter(isFailing).map((rule) => `definitions-${rule}`));
         return;
       }
       const snapshot = serviceIn(root, [p1, p2]);
@@ -300,6 +408,28 @@ describe('validateContract and snapshotOf: provenance follows identity and impor
     },
   );
 });
+
+/** A row's members as the package `owner` exports them: `gate` and `taken`, each when the row says so. */
+function exportedBy(
+  owner: 'p1' | 'p2',
+  { guardBy, codeBy }: Row,
+  { gate, taken }: { readonly gate: Guard; readonly taken: Rejection },
+): Readonly<Record<string, unknown>> {
+  return {
+    ...(isExportedBy(owner, guardBy) ? { gate } : {}),
+    ...(isExportedBy(owner, codeBy) ? { taken } : {}),
+  };
+}
+
+/** P2 as a row installs it: named `@p2/defs@1.0.0`, or with no version in its package.json. */
+function p2PackageOf(
+  identity: P2Identity,
+  exported: Readonly<Record<string, unknown>>,
+): ImportedDefinitions {
+  return identity === 'identified'
+    ? aPackage('@p2/defs', exported)
+    : anUnversionedPackage('@p2/defs', exported);
+}
 
 function ruleOf(failure: { readonly kind: string; readonly rule?: string }): string {
   return failure.rule ?? failure.kind;

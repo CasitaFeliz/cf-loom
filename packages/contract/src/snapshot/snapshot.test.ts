@@ -174,6 +174,7 @@ const paymentsDependency = defineDependency({
 });
 
 const orgPackage: ResolvedDefinitions = {
+  kind: 'identified',
   definitions: orgDefinitions,
   packageName: '@org/definitions',
   version: '4.2.0',

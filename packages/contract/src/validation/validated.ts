@@ -16,7 +16,7 @@ import {
   resolvedStandards,
 } from '../written/index.ts';
 import { definitionsPackageOf } from './provenance.ts';
-import type { ResolvedDefinitions, RootPackage } from './validate.ts';
+import type { ImportedDefinitions, ResolvedDefinitions, RootPackage } from './validate.ts';
 
 /** A Guard a valid root reaches, and the Definitions Package it belongs to; none for the root's own. */
 export type ValidatedGuard = LocatedGuard & { readonly from: ResolvedDefinitions | undefined };
@@ -105,7 +105,7 @@ function validatedSubscriptionsOf({
 }
 
 /** The Definitions Package a declaration belongs to, when exactly one does. */
-function foundIn(packages: readonly ResolvedDefinitions[], declaration: unknown) {
+function foundIn(packages: readonly ImportedDefinitions[], declaration: unknown) {
   const provenance = definitionsPackageOf(packages, declaration);
   return provenance.kind === 'found' ? provenance.package : undefined;
 }

@@ -2158,6 +2158,105 @@ describe('cf-loom generate: the package a module belongs to', () => {
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
+  test('a Guard an imported package re-exports from one whose package.json has no version belongs to that one, and is refused', () => {
+    const project = aProject({
+      ...aServiceGuardedFrom('@org/definitions', '@org/definitions'),
+      ...aDefinitionsPackage(
+        '@org/definitions',
+        { exports: './index.js' },
+        {
+          'index.js': `export { apiKey } from '@org/base';\n${definitionsModuleOf('MISSING').replace(/export const apiKey.*\n/, '')}`,
+        },
+      ),
+      ...aDefinitionsPackage('@org/base', { exports: './index.js', version: undefined }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'guards.apiKey definitions-unidentified: A Definitions Package a declaration comes from has a name and a version: @org/base has no version in its package.json\n',
+    });
+  });
+
+  test('a Guard an imported package and one whose package.json has no version both export, neither importing the other, is ambiguous', () => {
+    const shared = [
+      "import { defineGuard } from '@cf-loom/contract';",
+      "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
+      '',
+    ].join('\n');
+    const reexporting = `export { apiKey } from '@org/shared';\n${definitionsModuleOf('MISSING').replace(/export const apiKey.*\n/, '')}`;
+    const project = aProject({
+      ...aServiceGuardedFrom('@org/definitions', '@org/definitions'),
+      'src/contract/other.ts': "import '@org/other';\n",
+      ...anInstalledPackage('@org/shared', { exports: './index.js' }, { 'index.js': shared }),
+      ...aDefinitionsPackage(
+        '@org/definitions',
+        { exports: './index.js' },
+        { 'index.js': reexporting },
+      ),
+      ...aDefinitionsPackage(
+        '@org/other',
+        { exports: './index.js', version: undefined },
+        { 'index.js': reexporting },
+      ),
+    });
+    edit(project, 'src/contract/index.ts', (text) => `import './other.ts';\n${text}`);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'guards.apiKey definitions-ambiguous: A declaration belongs to one Definitions Package: exported by both @org/definitions and @org/other, and neither imports it from the other\n',
+    });
+  });
+
+  test('a standardRejections an imported package re-exports from one whose package.json has no version is a tooling error naming that one', () => {
+    const project = aProject({
+      ...aServiceTaking(["import { definitions } from '@org/definitions';"], 'definitions'),
+      ...aDefinitionsPackage(
+        '@org/definitions',
+        { exports: './index.js' },
+        { 'index.js': "export { definitions } from '@org/base';\n" },
+      ),
+      ...aDefinitionsPackage('@org/base', { exports: './index.js', version: undefined }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: '@org/base has no version in its package.json\n',
+    });
+  });
+
+  test('a Guard of a scoped package whose package.json has no name is refused, naming that package.json', () => {
+    const project = aProject({
+      ...aServiceGuardedFrom('@org/definitions', '@x/defs'),
+      ...aDefinitionsPackage('@org/definitions'),
+      'node_modules/@x/defs/package.json': JSON.stringify({
+        version: '1.0.0',
+        type: 'module',
+        exports: './index.js',
+      }),
+      'node_modules/@x/defs/index.js': definitionsModuleOf('OTHER'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'guards.apiKey definitions-unidentified: A Definitions Package a declaration comes from has a name and a version: node_modules/@x/defs/package.json has no name\n',
+    });
+  });
+
   test('a Definitions Package imported through the package.json imports field is found as Node resolves it', () => {
     const project = aProject({
       ...aServiceGuardedFrom('#defs', '#defs'),

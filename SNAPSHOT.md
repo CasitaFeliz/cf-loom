@@ -116,7 +116,7 @@ Subjects, stream names and durable consumer names are derived from these identit
 
 ## Origin
 
-`origin`, on a Guard, a code or a schema node, says where it was declared: `"local"`, `"standard"` (a Standard Rejection's code with cf-loom's defaults) or the Definitions Package and version it came from, the one that exports it and imports it from none of the others that do, `"@org/definitions@4.2.0"`, with `#<name>` for a shared schema, the first name in code point order it is exported under, `"@org/definitions@4.2.0#money"`. A clone of a shared schema (`money.describe('…')`) is a new schema and carries no `origin`. Which Definitions Packages a Contract uses, at which versions, is read from its origins alone; two installed copies of one package are two origins. `origin` is Neutral.
+`origin`, on a Guard, a code or a schema node, says where it was declared: `"local"`, `"standard"` (a Standard Rejection's code with cf-loom's defaults) or the Definitions Package and version it came from, the one that exports it and imports it from none of the others that do, `"@org/definitions@4.2.0"`. Which package that is never depends on package.json: a declaration that belongs to a package whose package.json has no name or no version fails `generate` (`definitions-unidentified`), however it was re-exported. An origin is written with `#<name>` for a shared schema, the first name in code point order it is exported under, `"@org/definitions@4.2.0#money"`. A clone of a shared schema (`money.describe('…')`) is a new schema and carries no `origin`. Which Definitions Packages a Contract uses, at which versions, is read from its origins alone; two installed copies of one package are two origins. `origin` is Neutral.
 
 ## Guards
 

@@ -49,7 +49,7 @@ function protoFailure({ name }: { readonly name: string }): DeclarationFailure {
   return failure(['exports', name], 'definitions-export', message);
 }
 
-/** Each Guard or Rejection an exported Guard reaches unexported, reported once, at the first export that reaches it. */
+/** Each Guard or Rejection an exported Guard reaches unexported, reported once, at the first export, in code point order, that reaches it. */
 function unexportedFailures(members: Members): readonly DeclarationFailure[] {
   const exported = new Set<unknown>(members.map(({ value }) => value));
   const reported = new Set<Guard | Rejection>();

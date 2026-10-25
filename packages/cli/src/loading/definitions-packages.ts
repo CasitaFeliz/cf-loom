@@ -1,19 +1,6 @@
 import type { Definitions } from '@cf-loom/contract';
-import {
-  isDefinitions,
-  type ResolvedDefinitions,
-  type UnidentifiedDefinitions,
-} from '@cf-loom/contract/internal';
+import { type ImportedDefinitions, isDefinitions } from '@cf-loom/contract/internal';
 import type { ImportedPackage } from './imported-packages.ts';
-
-/**
- * The Definitions Packages the root's import reached: those a Snapshot can name, each with the
- * others its files import, and those whose package.json lacks the name or version to name them.
- */
-export type DefinitionsPackages = {
-  readonly packages: readonly ResolvedDefinitions[];
-  readonly unidentified: readonly UnidentifiedDefinitions[];
-};
 
 /** A Definitions object of one package, read from the first of its modules that exports it. */
 type Exporter = { readonly module: ImportedPackage; readonly definitions: Definitions };
@@ -21,41 +8,32 @@ type Exporter = { readonly module: ImportedPackage; readonly definitions: Defini
 /** A Definitions Package found, the package.json it sits under, and the list its reach fills. */
 type Found = {
   readonly manifestPath: string;
-  readonly resolved: ResolvedDefinitions;
-  readonly reaches: ResolvedDefinitions[];
+  readonly imported: ImportedDefinitions;
+  readonly reaches: ImportedDefinitions[];
 };
 
 /**
  * Every Definitions object an imported package exports, once per package however many of its
- * modules export it; with the other packages its files import, directly or through any package.
+ * modules export it, each package as its package.json names it or not; with the other packages
+ * its files import, directly or through any package.
  */
-export function definitionsPackagesOf(imported: readonly ImportedPackage[]): DefinitionsPackages {
-  const found: Found[] = [];
-  const unidentified: UnidentifiedDefinitions[] = [];
-  for (const { module, definitions } of exportersOf(imported)) {
+export function definitionsPackagesOf(
+  imported: readonly ImportedPackage[],
+): readonly ImportedDefinitions[] {
+  const found: Found[] = exportersOf(imported).map(({ module, definitions }) => {
     const { identity, exports, manifestPath } = module;
-    switch (identity.kind) {
-      case 'identified': {
-        const reaches: ResolvedDefinitions[] = [];
-        const { packageName, version } = identity;
-        const resolved = { definitions, packageName, version, exports, reaches };
-        found.push({ manifestPath, resolved, reaches });
-        break;
-      }
-      case 'unidentified':
-        unidentified.push({ exports, why: identity.why });
-        break;
-    }
-  }
+    const reaches: ImportedDefinitions[] = [];
+    return { manifestPath, imported: { ...identity, definitions, exports, reaches }, reaches };
+  });
   const graph = importGraphOf(imported);
   for (const entry of found) {
     const reachable = reachableFrom(entry.manifestPath, graph);
     const reached = found.filter(
       (other) => other.manifestPath !== entry.manifestPath && reachable.has(other.manifestPath),
     );
-    entry.reaches.push(...reached.map(({ resolved }) => resolved));
+    entry.reaches.push(...reached.map((other) => other.imported));
   }
-  return { packages: found.map(({ resolved }) => resolved), unidentified };
+  return found.map((entry) => entry.imported);
 }
 
 /** Each Definitions object once per package, with the first of the package's modules exporting it. */

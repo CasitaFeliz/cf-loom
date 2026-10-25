@@ -2,10 +2,9 @@ import { realpathSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { byCodePoint } from '@cf-loom/contract/internal';
+import { byCodePoint, type PackageIdentity } from '@cf-loom/contract/internal';
 import { type Imported, importedModuleOf } from './imported.ts';
 import {
-  type PackageIdentity,
   type PackageManifest,
   packageIdentityOf,
   packageRootManifestOf,

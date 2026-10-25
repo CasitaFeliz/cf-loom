@@ -45,37 +45,41 @@ export type ValidatedSchemas = {
 };
 
 /**
- * A Definitions Package installed where the root is validated: its Definitions object, the
- * package.json name and exact version, what its module exports by name, and the other installed
- * Definitions Packages its files import, directly or through any package, which says which of two
- * exporters of one object imports it from the other.
+ * An installed package whose package.json does not name it, so no origin can: which of the name
+ * and the version it lacks, with the path of a nameless package.json as lines name it.
  */
-export type ResolvedDefinitions = {
-  readonly definitions: Definitions;
-  readonly packageName: string;
-  readonly version: string;
-  readonly exports: Readonly<Record<string, unknown>>;
-  readonly reaches: readonly ResolvedDefinitions[];
-};
+export type Unidentified =
+  | { readonly kind: 'unnamed'; readonly manifest: string }
+  | { readonly kind: 'unversioned'; readonly packageName: string };
+
+/** Who an installed package is, from its package.json: the name and exact version an origin names it by, or what it lacks. */
+export type PackageIdentity =
+  | { readonly kind: 'identified'; readonly packageName: string; readonly version: string }
+  | Unidentified;
 
 /**
- * An installed package exporting a Definitions object whose package.json lacks its name or its
- * version, so nothing it exports can be recorded: what it exports, and why, in one line.
+ * A Definitions Package the root's files import, as Node resolved it: who its package.json says it
+ * is, its Definitions object, what its module exports by name, and the other imported Definitions
+ * Packages its files import, directly or through any package, which says which of two exporters of
+ * one object imports it from the other.
  */
-export type UnidentifiedDefinitions = {
+export type ImportedDefinitions = PackageIdentity & {
+  readonly definitions: Definitions;
   readonly exports: Readonly<Record<string, unknown>>;
-  readonly why: string;
+  readonly reaches: readonly ImportedDefinitions[];
 };
+
+/** An imported Definitions Package whose package.json names it, the only kind an origin can name. */
+export type ResolvedDefinitions = Extract<ImportedDefinitions, { readonly kind: 'identified' }>;
 
 /**
  * The package a root sits in: its package.json name, scope included; every Definitions Package its
- * files import, as Node resolved them, and those that cannot be named; and what the root file
+ * files import, as Node resolved them, named by their package.json or not; and what the root file
  * exports beside the root, by name, which a Definitions root's members are.
  */
 export type RootPackage = {
   readonly packageName: string;
-  readonly packages: readonly ResolvedDefinitions[];
-  readonly unidentified: readonly UnidentifiedDefinitions[];
+  readonly packages: readonly ImportedDefinitions[];
   readonly rootExports: Readonly<Record<string, unknown>>;
 };
 
@@ -113,7 +117,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
     ...exportFailures(declarations, rootExports),
-    ...provenanceFailures(declarations, rootPackage, walked.met),
+    ...provenanceFailures(declarations, packages, walked.met),
     ...codeOnceFailures(declarations, packages),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),

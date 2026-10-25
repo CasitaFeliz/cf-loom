@@ -5,11 +5,19 @@ export { failureLineOf, locationOf } from './failures.ts';
 export type { Problem } from './problem.ts';
 export { problemLineOf, problemOf } from './problem.ts';
 export type { Provenance } from './provenance.ts';
-export { definitionsPackageOf, originTextOf } from './provenance.ts';
+export {
+  definitionsPackageOf,
+  identityLineOf,
+  noVersionLineOf,
+  originTextOf,
+  packageLabelOf,
+} from './provenance.ts';
 export type {
+  ImportedDefinitions,
+  PackageIdentity,
   ResolvedDefinitions,
   RootPackage,
-  UnidentifiedDefinitions,
+  Unidentified,
   ValidatedContract,
   ValidatedSchemas,
   ValidContract,
