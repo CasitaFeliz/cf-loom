@@ -14,6 +14,7 @@ export type {
   GuardImplementation,
   HandlerMap,
   MessageCall,
+  MessageFault,
   Readers,
   ResourcesOf,
   WithResources,

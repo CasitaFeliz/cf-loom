@@ -10,10 +10,10 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import {
-  type Fault,
   fault,
   handle,
   InvalidInputError,
+  type MessageFault,
   type MessageMeta,
   readersOf,
 } from '@cf-loom/handlers';
@@ -129,9 +129,6 @@ const readers = readersOf({
 });
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
-
-/** A Fault a Message Handler returns, which carries no `retryAfter`. */
-type MessageFault = Fault & { readonly retryAfter?: never };
 
 type Implementation = (
   body: unknown,

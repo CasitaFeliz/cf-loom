@@ -5,7 +5,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
+import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Messaging, type MessagingOptions, messaging } from '../index.ts';
@@ -68,9 +68,6 @@ const readers = readersOf({
     onAudited: { element: onAudited, reader: z.object({ orderId: z.uuid() }) },
   },
 });
-
-/** A Fault a Message Handler returns, which carries no `retryAfter`. */
-type MessageFault = Fault & { readonly retryAfter?: never };
 
 type Implementation = (
   body: { readonly orderId: string },

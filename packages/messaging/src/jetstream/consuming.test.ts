@@ -10,7 +10,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
+import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -121,9 +121,6 @@ type Replacing = (connection: NatsConnection) => Partial<NatsConnection>;
 type Orders = ReturnType<typeof anOrders>;
 
 type Received = { readonly handler: string; readonly body: unknown; readonly meta: MessageMeta };
-
-/** A Fault a Message Handler returns, which carries no `retryAfter`. */
-type MessageFault = Fault & { readonly retryAfter?: never };
 
 type Behavior = (
   received: Received,

@@ -15,6 +15,7 @@ export type {
   EventHandler,
   EventImplementation,
   MessageCall,
+  MessageFault,
 } from './message-handler.ts';
 export type { Readers } from './reader.ts';
 export { readersOf } from './reader.ts';
