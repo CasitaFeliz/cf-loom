@@ -4,20 +4,14 @@ import {
   isStandardRejection,
 } from '../declarations/index.ts';
 import {
-  type Declarations,
   isWithoutValue,
   type LocatedEndpoint,
   type LocatedGuard,
-  type LocatedRejection,
   type LocatedStandardRejection,
   listOf,
-  type ResolvedStandard,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-
-const redefinedStandard =
-  'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
 
 /** A declared Standard Rejection is 4xx too, except not-implemented, which is always 501. */
 export function standardStatusFailures({
@@ -69,62 +63,6 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
       [...at, 'rejections', index],
       'standard-rejection-on-guard',
       `A Guard lists declared Rejections only: ${textOf(name)}`,
-    ),
-  );
-}
-
-/** Each Standard Rejection resolves to a code of its own; the ones after the first sharing a code fail. */
-export function distinctCodeFailures(
-  resolved: readonly ResolvedStandard[],
-): readonly DeclarationFailure[] {
-  return resolved
-    .filter(
-      (standard, index) => resolved.findIndex((other) => other.code === standard.code) < index,
-    )
-    .map((standard) => {
-      const names = resolved
-        .filter((other) => other.code === standard.code)
-        .map((other) => other.name)
-        .join(' and ');
-      const message = `Each Standard Rejection resolves to a code of its own: ${standard.code} is ${names}`;
-      return failure([...standard.at, 'code'], 'standard-codes-distinct', message);
-    });
-}
-
-/** No declared Rejection takes the code a Standard Rejection resolves to. */
-export function redefinitionFailures(
-  rejections: readonly LocatedRejection[],
-  resolved: readonly ResolvedStandard[],
-): readonly DeclarationFailure[] {
-  const standardCodes = resolved.map(({ code }) => code);
-  return rejections
-    .filter(({ rejection }) => standardCodes.includes(textOf(rejection.code)))
-    .map(({ at, rejection }) =>
-      failure(
-        [...at, 'code'],
-        'standard-code-redefined',
-        `${redefinedStandard}: ${textOf(rejection.code)}`,
-      ),
-    );
-}
-
-/** At most one listed Definitions Package declares Standard Rejections; one listed twice is one. */
-export function onceFailures({ listedDefinitions }: Declarations): readonly DeclarationFailure[] {
-  const once = [
-    ...new Map(listedDefinitions.map((located) => [located.definitions, located])).values(),
-  ];
-  const declaring = once.filter(({ definitions: listed }) =>
-    Object.values(listed.standardRejections ?? {}).some((declaration) => declaration !== undefined),
-  );
-  const [first, ...others] = declaring;
-  if (first === undefined) {
-    return [];
-  }
-  return others.map(({ at }) =>
-    failure(
-      [...at, 'standardRejections'],
-      'standard-rejections-once',
-      `At most one listed Definitions Package declares Standard Rejections: ${textOf(first.definitions.name)} already does`,
     ),
   );
 }

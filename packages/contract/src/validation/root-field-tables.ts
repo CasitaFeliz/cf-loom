@@ -15,7 +15,7 @@ const contractFields = {
   declared: {
     kind: true,
     name: true,
-    definitions: true,
+    standardRejections: true,
     groups: true,
     dependencies: true,
   },
@@ -84,18 +84,11 @@ export const subscriptionFields = {
 
 /** The fields of a Definitions Package. */
 export const definitionsFields = {
-  declared: {
-    kind: true,
-    name: true,
-    guards: true,
-    schemas: true,
-    rejections: true,
-    standardRejections: true,
-  },
-  required: { kind: true, name: true },
-  strings: { kind: true, name: true },
+  declared: { kind: true, standardRejections: true },
+  required: { kind: true },
+  strings: { kind: true },
   nonBlank: {},
-  objects: { schemas: true, standardRejections: true },
+  objects: { standardRejections: true },
 } satisfies Fields<Definitions>;
 
 /** The fields of a Group. */

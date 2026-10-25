@@ -1,9 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { type PackageNameParts, packageNamePartsOf } from '@cf-loom/contract/internal';
 import { oneLineOf } from './imported.ts';
 
 /** A project's package as its package.json names it: the scope, when it has one, and the name. */
-export type PackageName = { readonly scope: string | undefined; readonly name: string };
+export type PackageName = PackageNameParts;
+
+/** A package's name as its package.json writes it, scope included. */
+export function packageJsonNameOf({ scope, name }: PackageName): string {
+  return scope === undefined ? name : `${scope}/${name}`;
+}
 
 /** The project's package with its package.json as read, or why its package.json cannot be used. */
 export type ProjectPackage =
@@ -19,7 +25,7 @@ const packageNamePattern = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 
 /**
  * Reads the package.json of the project in `directory`: its name, which the root's name and the
- * configuration's scope come from, and its `"type": "module"`, since the config and the
+ * published package's name come from, and its `"type": "module"`, since the config and the
  * Contract's files are ES modules.
  */
 export function projectPackageOf(directory: string): ProjectPackage {
@@ -43,8 +49,7 @@ export function projectPackageOf(directory: string): ProjectPackage {
       'package.json has no "type": "module": the config and the Contract\'s files are ES modules',
     );
   }
-  const [scope, unscoped] = name.startsWith('@') ? name.split('/') : [undefined, name];
-  const packageName = { scope, name: unscoped ?? name };
+  const packageName = packageNamePartsOf(name);
   return { kind: 'read', packageName, manifest: manifest.manifest };
 }
 

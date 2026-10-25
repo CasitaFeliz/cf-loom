@@ -1,14 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { aRootPackage } from '../../test/root-package.ts';
 import { defineContract, defineEndpoint, defineEvent, defineGroup, openEnum } from '../index.ts';
 import { validateContract } from '../internal/index.ts';
-
-const options = {
-  originOf: () => undefined,
-  packageName: 'shapes-service',
-  exportsOf: () => [],
-};
 
 /** Validates a Contract whose one Endpoint answers the body given. */
 function validatedWithBody(body: core.$ZodType) {
@@ -21,7 +16,8 @@ function validatedWithBody(body: core.$ZodType) {
     success: { status: 200, body },
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
-  return validateContract(defineContract({ name: 'shapes-service', groups: [group] }), options);
+  const root = defineContract({ name: 'shapes-service', groups: [group] });
+  return validateContract(root, aRootPackage(root));
 }
 
 /** Validates a Contract whose one Endpoint takes the body given as its Input. */
@@ -36,7 +32,8 @@ function validatedWithInputBody(body: core.$ZodType) {
     success: { status: 204 },
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
-  return validateContract(defineContract({ name: 'shapes-service', groups: [group] }), options);
+  const root = defineContract({ name: 'shapes-service', groups: [group] });
+  return validateContract(root, aRootPackage(root));
 }
 
 /** Validates a Contract whose one Event carries the body given. */
@@ -49,7 +46,8 @@ function validatedWithMessageBody(body: core.$ZodType) {
     body,
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', events: [shaped] });
-  return validateContract(defineContract({ name: 'shapes-service', groups: [group] }), options);
+  const root = defineContract({ name: 'shapes-service', groups: [group] });
+  return validateContract(root, aRootPackage(root));
 }
 
 const refusal = {

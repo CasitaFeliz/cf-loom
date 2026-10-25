@@ -97,9 +97,9 @@ export async function publishedPackageOf(
 
 function stagedPackageOf(folder: string, toPublish: ToPublish): StagedPackage {
   const { project, published, tag, highest } = toPublish;
-  const { directory, rootFile, scope } = project;
+  const { directory, rootFile } = project;
   const { version } = published;
-  const packageName = publishedNameOf(scope, published);
+  const packageName = publishedNameOf(project.packageName, published.kind);
   const rootPath = join(directory, rootFile);
   const building = { folder, rootPath, spec: `${packageName}@${version}` };
   const publishing = { folder, packageName, version, tag };
@@ -135,7 +135,8 @@ async function stagedFilesOf(
   switch (published.kind) {
     case 'service':
     case 'application': {
-      const packaging = { scope: project.scope, version: published.version, peers };
+      const name = publishedNameOf(project.packageName, published.kind);
+      const packaging = { name, version: published.version, peers };
       const files = contractPackageFilesOf({ snapshot: published, text }, packaging);
       return { kind: 'files', files, copied: [], build: 'with-tsc' };
     }
@@ -147,10 +148,10 @@ async function stagedFilesOf(
 /** A Definitions Package's files: its own as `npm pack` lists them, with its package.json and `snapshot.json` written over. */
 async function definitionsFilesOf(
   npm: NpmPlace,
-  { directory, scope, manifest: source }: Pick<Project, 'directory' | 'scope' | 'manifest'>,
+  { directory, manifest: source }: Pick<Project, 'directory' | 'manifest'>,
   { published, text, peers }: DefinitionsToStage,
 ): Promise<StagedFiles | Failed> {
-  const manifest = definitionsManifestOf(source, published, { scope, peers });
+  const manifest = definitionsManifestOf(source, published, { peers });
   if (manifest.kind === 'unpublishable') {
     return { kind: 'failed', message: manifest.line };
   }

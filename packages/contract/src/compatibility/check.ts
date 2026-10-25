@@ -13,6 +13,7 @@ import { messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
 import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.ts';
 import { endpointDifferencesOf, endpointSiteOf } from './endpoints.ts';
+import { exportDifferencesOf } from './exports.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import { guardDifferencesOf } from './guards.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
@@ -29,7 +30,6 @@ import type {
   SiteDifferences,
 } from './report.ts';
 import { type EndpointPaths, endpointPathsOf, shadowingDifferencesOf } from './shadowing.ts';
-import { sharedSchemaDifferencesOf } from './shared-schemas.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 
@@ -66,13 +66,13 @@ function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Ch
   return [];
 }
 
-/** A Definitions Package has no Elements: its shared schemas, Guards and codes are what its Changes are on. */
+/** A Definitions Package has no Elements: its exports, Guards and codes are what its Changes are on. */
 function definitionsChangesOf(
   baseline: PublishedDefinitionsSnapshot,
   proposed: DefinitionsSnapshot,
 ): readonly Change[] {
   return siteChangesOf([
-    ...sharedSchemaDifferencesOf(baseline, proposed),
+    ...exportDifferencesOf(baseline, proposed),
     ...guardDifferencesOf(baseline, proposed),
     ...definitionsCodeDifferencesOf(baseline, proposed),
   ]);

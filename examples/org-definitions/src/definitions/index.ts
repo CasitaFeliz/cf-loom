@@ -4,10 +4,6 @@ import { unauthenticated } from './rejections/unauthenticated.rejection.ts';
 import { money } from './schemas/money.schema.ts';
 
 export const definitions = defineDefinitions({
-  name: 'definitions',
-  guards: [apiKey],
-  schemas: { money },
-  rejections: [unauthenticated],
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
     notFound: { code: 'RESOURCE_NOT_FOUND', status: 404, message: 'The resource does not exist' },

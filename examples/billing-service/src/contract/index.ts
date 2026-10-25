@@ -7,5 +7,5 @@ export const contract = defineContract({
   name: 'billing-service',
   groups: [billingGroup],
   dependencies: [ordersDependency],
-  definitions: [orgDefinitions],
+  standardRejections: orgDefinitions,
 });

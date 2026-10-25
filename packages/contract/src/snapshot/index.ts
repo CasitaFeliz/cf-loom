@@ -1,10 +1,9 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
-export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
+export type { SnapshotContext } from './context.ts';
 export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
-export { schemaOriginsOf } from './origins.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {
@@ -36,6 +35,7 @@ export type {
   EndpointSnapshot,
   EventSnapshot,
   ExportedSnapshot,
+  ExportSnapshot,
   GuardSnapshot,
   ServiceSnapshot,
   Snapshot,

@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type CodeSnapshot,
@@ -115,7 +116,6 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
   defs: {},
   guards: {},
@@ -157,7 +157,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,

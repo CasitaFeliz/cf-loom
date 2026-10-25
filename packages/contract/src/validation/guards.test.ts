@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Attachment,
   defineContract,
@@ -10,13 +11,11 @@ import {
   type Endpoint,
   type Guard,
 } from '../index.ts';
-import { type RootPackage, validateContract } from '../internal/index.ts';
+import { validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+function validateInPackage(root: unknown) {
+  return validateContract(root, aRootPackage(root));
 }
 
 /** What a Guard may demand, so a cast can put a part there the types refuse. */
@@ -59,10 +58,7 @@ function validateGuards(guards: readonly Attachment[]) {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(
-    defineContract({ name: 'orders-service', groups: [orders] }),
-    () => undefined,
-  );
+  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {

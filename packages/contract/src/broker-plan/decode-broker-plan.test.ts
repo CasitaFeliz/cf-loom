@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import { defineCommand, defineContract, defineEvent, defineGroup } from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
   decodeBrokerPlan,
-  schemaOriginsOf,
   snapshotOf,
   validateContract,
 } from '../internal/index.ts';
@@ -37,15 +37,11 @@ function aServicePlan(prefix: string | null): BrokerPlan {
       }),
     ],
   });
-  const validated = validateContract(root, {
-    originOf: schemaOriginsOf([]),
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test', committed: undefined, now: 0 };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');

@@ -44,7 +44,6 @@ const standardCodes = {
 
 const serviceBody = {
   kind: 'service',
-  definitions: {},
   standardRejections,
   defs: {},
   endpoints: {},
@@ -62,7 +61,7 @@ const definitionsBody = {
   kind: 'definitions',
   standardRejections,
   defs: {},
-  schemas: {},
+  exports: {},
   guards: {},
   codes: standardCodes,
 } as const;

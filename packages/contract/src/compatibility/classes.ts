@@ -31,6 +31,8 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'name-kind-changed':
     case 'event-changed':
       return breakingRefused;
+    case 'export-changed':
+      return { class: 'breaking', verdict: 'approval-needed' };
     case 'retired-brought-back':
     case 'version-gap':
       return additiveRefused;
@@ -85,7 +87,7 @@ function breakingClassificationOf(site: ChangeSite): Classification {
       return breakingRefused;
     case 'endpoint':
     case 'code':
-    case 'shared-schema':
+    case 'export':
     case 'guard':
     case 'subscription':
       return { class: 'breaking', verdict: 'approval-needed' };
@@ -103,7 +105,7 @@ function retiredOrNarrowedClassificationOf(site: ChangeSite): Classification {
     case 'endpoint':
     case 'event':
     case 'code':
-    case 'shared-schema':
+    case 'export':
     case 'guard':
     case 'subscription':
       return { class: 'breaking', verdict: 'approval-needed' };

@@ -31,7 +31,7 @@ export type WalkedTextParts =
  * shape per header or query name.
  */
 export function walkedTextPartsOf(contract: Contract): WalkedTextParts {
-  const declarations = declarationsOf(contract);
+  const declarations = declarationsOf(contract, {});
   const { slots, failures: notSchemas } = schemaSlotsAmong(textSlotsOf(declarations));
   const walked = walkSchemas(locatedSchemasOf(slots), () => undefined);
   const nodes = nodesOf(slots, walked);

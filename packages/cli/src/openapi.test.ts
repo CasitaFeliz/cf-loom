@@ -93,7 +93,7 @@ const installedDefinitions: Readonly<Record<string, string>> = {
     "import { defineDefinitions } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     'export const money = z.object({ amount: z.int(), currency: z.string() });',
-    "export const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });",
+    'export const definitions = defineDefinitions({});',
   ]),
 };
 
@@ -294,7 +294,7 @@ const theService = aRootProject([
   'export const contract = defineContract({',
   "  name: 'orders-service',",
   '  groups: [ordersGroup, shapesGroup, infrastructureGroup],',
-  '  definitions: [definitions],',
+  '  standardRejections: definitions,',
   '});',
 ]);
 

@@ -8,9 +8,10 @@ export {
 export type { Declarations } from './declarations.ts';
 export {
   declarationsOf,
-  listedDefinitionsOf,
   providerExportsOf,
   providerNameOf,
+  standardRejectionsDeclarerOf,
+  standardRejectionsSourceOf,
 } from './declarations.ts';
 export type { Listed } from './grouped.ts';
 export {
@@ -43,7 +44,6 @@ export {
 export type {
   LocatedCode,
   LocatedCommand,
-  LocatedDefinitions,
   LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
@@ -52,9 +52,14 @@ export type {
   LocatedRejection,
   LocatedStandardRejection,
   LocatedSubscription,
+  NamedDefinitions,
   Root,
 } from './located.ts';
+export type { Member, Members } from './members.ts';
+export { memberGuardsOf, memberRejectionsOf, membersOf } from './members.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
+export type { PackageNameParts } from './package-names.ts';
+export { packageNamePartsOf } from './package-names.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,

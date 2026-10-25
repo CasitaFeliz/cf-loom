@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -46,7 +47,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -116,7 +117,7 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
-    case 'shared-schema':
+    case 'export':
     case 'subscription':
       return site.name;
     case 'endpoint':
@@ -389,7 +390,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
   test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes by code in code point order', () => {
     const proposed = aDefinitions({
-      schemas: { money: anOpenObject() },
+      exports: schemaExports({ money: anOpenObject() }),
       guards: { authenticated: aGuard() },
       codes: { [orderLocked]: aCode(), [orderGone]: aCode() },
     });
@@ -397,7 +398,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     const changes = changesOf(aBaselineDefinitions(), proposed);
 
     expect(changes.map(({ site }) => [site.kind, placeOf(site)])).toEqual([
-      ['shared-schema', 'money'],
+      ['export', 'money'],
       ['guard', 'authenticated'],
       ['code', orderGone],
       ['code', orderLocked],

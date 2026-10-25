@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
@@ -48,7 +49,7 @@ const subscription: ChangeSite = {
   name: 'notifyOnPlaced',
   visibility: 'private',
 };
-const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money', visibility: 'public' };
+const sharedSchema: ChangeSite = { kind: 'export', name: 'money', visibility: 'public' };
 
 function aBreakingChange(site: ChangeSite, verdict: Verdict = 'approval-needed'): Change {
   return { site, difference: { kind: 'retired' }, class: 'breaking', verdict };
@@ -100,7 +101,6 @@ const serviceHeading = {
   kind: 'service',
   name: 'orders-service',
   generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections: {
     invalidInput: 'INVALID_INPUT',
     notFound: 'NOT_FOUND',
@@ -203,7 +203,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     generator: '@cf-loom/cli@2.1.0',
     standardRejections: serviceHeading.standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,

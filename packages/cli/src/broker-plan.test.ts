@@ -103,7 +103,7 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 const messages = lines([
@@ -302,7 +302,7 @@ const aDefinitionsPackage = {
   'cf-loom.config.ts': config,
   'src/definitions/index.ts': lines([
     "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'orders-service' });",
+    'export const definitions = defineDefinitions({});',
   ]),
 };
 

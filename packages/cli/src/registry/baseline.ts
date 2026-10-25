@@ -1,13 +1,11 @@
 import {
   decodeSnapshot,
-  ownOf,
   type PeerRanges,
   type PublishedSnapshot,
   problemLineOf,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
-import { isRootKind, publishedNameOf } from '../loading/index.ts';
 import { type ChosenVersion, chosenVersionOf, unlistedAgainstOf } from './against.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import { versionsOf } from './package-versions.ts';
@@ -20,7 +18,7 @@ import {
   type Versions,
 } from './versions.ts';
 
-/** Why a package has no Baseline: the registry npm reads its scope from does not know it. */
+/** Why a package has no Baseline: the registry npm reads it from does not know it. */
 export type NoBaseline = UnknownPackage;
 
 /** A package's Baseline as its registry holds it, why it has none, or why it cannot be read. */
@@ -44,33 +42,30 @@ export type ReadBaseline =
 
 type Declared = Pick<Snapshot, 'kind' | 'name'>;
 
-/** The package whose Baseline is read: the declared Snapshot it publishes, under which scope, and the version `check --against` names. */
+/** The package whose Baseline is read: its name, the declared Snapshot it publishes, and the version `check --against` names. */
 export type BaselineQuery = {
+  readonly packageName: string;
   readonly declared: Declared;
-  readonly scope: string;
   readonly against: string | undefined;
 };
 
-const unnamable = failed(
-  'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
-);
+const unnamable = failed('cannot name the package to read: a package name must be a text');
 
 /** A package and the versions it lists. */
 type Published = { readonly packageName: string; readonly listed: Versions };
 
 /**
  * Reads, through the organization's own npm, the Baseline of the package a declared Snapshot
- * publishes as under `scope`: the highest published version, a prerelease included, or the one
+ * publishes as: the highest published version, a prerelease included, or the one
  * `against` names, its metadata, and only its `snapshot.json`; anything that cannot be proven
  * fails closed.
  */
 export async function baselineOf(
   npm: NpmPlace,
-  { declared, scope, against }: BaselineQuery,
+  { packageName, declared, against }: BaselineQuery,
 ): Promise<ReadBaseline> {
-  const packageName = packageNameOf(scope, declared);
   if (typeof packageName !== 'string') {
-    return packageName;
+    return unnamable;
   }
   const listed = await versionsOf(npm, packageName);
   switch (listed.kind) {
@@ -78,29 +73,15 @@ export async function baselineOf(
       return listed;
     case 'not-found':
       return against === undefined
-        ? await baselineOfMissing(npm, packageName, scope)
+        ? await baselineOfMissing(npm, packageName)
         : unlistedAgainstOf(packageName, against);
     case 'versions':
       return await baselineAmong(npm, { packageName, listed }, { declared, against });
   }
 }
 
-/** The package's name, or why none can be named: a caller outside the types may pass anything. */
-function packageNameOf(scope: unknown, declared: unknown): string | Failed {
-  const name = ownOf(declared, 'name');
-  const kind = ownOf(declared, 'kind');
-  if (typeof scope !== 'string' || typeof name !== 'string' || typeof kind !== 'string') {
-    return unnamable;
-  }
-  return isRootKind(kind) ? publishedNameOf(scope, { kind, name }) : unnamable;
-}
-
-async function baselineOfMissing(
-  npm: NpmPlace,
-  packageName: string,
-  scope: string,
-): Promise<ReadBaseline> {
-  const unknown = await unknownPackageOf(npm, packageName, scope);
+async function baselineOfMissing(npm: NpmPlace, packageName: string): Promise<ReadBaseline> {
+  const unknown = await unknownPackageOf(npm, packageName);
   return unknown.kind === 'failed' ? unknown : { kind: 'no-baseline', packageName, why: unknown };
 }
 

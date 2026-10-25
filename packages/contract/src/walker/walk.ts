@@ -13,7 +13,7 @@ import {
 } from './walked.ts';
 import { type Def, walkDefinition, withOwnChecks } from './zod-types.ts';
 
-/** Where a schema came from, as the caller knows it from the Definitions Packages it lists. */
+/** Where a schema came from, as the caller knows it from the Definitions Packages installed. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
 
 /** One schema walked where it sits: its node, or every construct in it that is not allowed. */
@@ -28,6 +28,9 @@ export type WalkedSchemas = {
   readonly defs: Defs;
 };
 
+/** Every schema of a Snapshot walked, and every schema the walk met, at the first place it met it. */
+export type MeetingWalk = WalkedSchemas & { readonly met: ReadonlyMap<core.$ZodType, Path> };
+
 /** The schemas written once under a Snapshot's `defs`, by the id that names each cycle. */
 export type Defs = Readonly<Record<string, SchemaNode>>;
 
@@ -36,6 +39,7 @@ type WalkState = {
   readonly walker: Walker;
   readonly recursion: Recursion;
   readonly originOf: OriginOf;
+  readonly met: Map<core.$ZodType, Path>;
 };
 
 /**
@@ -44,17 +48,26 @@ type WalkState = {
  * failure comes back as the same failure wherever the cycle is met.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
+  const { located: walkedLocations, defs } = walkMeetingSchemas(located, originOf);
+  return { located: walkedLocations, defs };
+}
+
+/** Walks as `walkSchemas` does, and says where it first met each schema, so a rule can judge where a schema came from. */
+export function walkMeetingSchemas(
+  located: readonly LocatedSchema[],
+  originOf: OriginOf,
+): MeetingWalk {
   const recursion = startRecursion();
   const walker: Walker = {
     schema: (schema, at) => walkSchema(schema, at, state),
     field: (schema, at) => walkField(schema, at, state),
   };
-  const state: WalkState = { walker, recursion, originOf };
+  const state: WalkState = { walker, recursion, originOf, met: new Map() };
   const walkedLocations = located.map(({ at, schema }) => ({
     at,
     walked: distinct(walker.schema(schema, at)),
   }));
-  return { located: walkedLocations, defs: recursion.defs() };
+  return { located: walkedLocations, defs: recursion.defs(), met: state.met };
 }
 
 /** A schema's failures each once, without the node the walk was building. */
@@ -66,6 +79,9 @@ function distinct(walked: Walked): Walked {
 }
 
 function walkSchema(schema: core.$ZodType, at: Path, state: WalkState): Walked {
+  if (!state.met.has(schema)) {
+    state.met.set(schema, at);
+  }
   const metadata = ownMetadata(schema, at, state.originOf);
   const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
   return state.recursion.within({ schema, at, id }, () =>

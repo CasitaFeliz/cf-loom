@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { byCodePoint } from '@cf-loom/contract/internal';
+import { byCodePoint, exportNamesOf } from '@cf-loom/contract/internal';
 import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
 
@@ -27,11 +27,11 @@ export function insideContractOf(directory: string): (realFolder: string) => boo
 
 /**
  * Where a declaration is exported, under the name it is exported as: a file by its path relative
- * to the project, or a package by its name.
+ * to the project, or a package by the specifier the project imports it by.
  */
 export type ExportedAt =
   | { readonly kind: 'file'; readonly path: string; readonly name: string }
-  | { readonly kind: 'package'; readonly packageName: string; readonly name: string };
+  | { readonly kind: 'package'; readonly specifier: string; readonly name: string };
 
 /** A file of the Contract exporting a declaration. */
 export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
@@ -90,16 +90,6 @@ function exportsOfIn(modules: readonly Module[], declaration: unknown): readonly
   return modules.flatMap(({ path, exports }) =>
     exportNamesOf(exports, declaration).map((name): FileExport => ({ kind: 'file', path, name })),
   );
-}
-
-/**
- * The names a module exports `value` under, by identity, `default` included, in code point order.
- */
-export function exportNamesOf(
-  moduleExports: Readonly<Record<string, unknown>>,
-  value: unknown,
-): readonly string[] {
-  return namesOf(moduleExports).filter((name) => moduleExports[name] === value);
 }
 
 function isContractSource(file: string): boolean {

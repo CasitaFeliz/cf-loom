@@ -1,3 +1,4 @@
+import { packageNamePartsOf } from '@cf-loom/contract/internal';
 import { type Failed, failed, lineOf } from '../child-process/index.ts';
 import { jsonFromNpm, type NpmPlace, textFromNpm } from './npm.ts';
 
@@ -5,7 +6,7 @@ const registrySetting = 'npm_config_registry';
 const credentialsInUrl =
   'npm will not print a registry URL that holds credentials: put them in a //host/:_authToken or //host/:_auth line instead of in the registry URL';
 
-/** A package the registry npm reads for its scope does not know, found with the user npm logs in as there. */
+/** A package the registry npm reads it from does not know, found with the user npm logs in as there. */
 export type UnknownPackage = {
   readonly kind: 'unknown-package';
   readonly registry: string;
@@ -16,21 +17,22 @@ type Registry = { readonly kind: 'registry'; readonly registry: string };
 
 type Unset = { readonly kind: 'unset' };
 
+const unset: Unset = { kind: 'unset' };
+
 type Login =
   | { readonly kind: 'user'; readonly username: string }
   | { readonly kind: 'refused'; readonly why: string };
 
 /**
  * Settles what npm's 404 for a package means: a package never published only when npm has a login
- * on the registry that serves the scope; without one, a package the login cannot read looks the
+ * on the registry that serves the package; without one, a package the login cannot read looks the
  * same, so the read fails.
  */
 export async function unknownPackageOf(
   npm: NpmPlace,
   packageName: string,
-  scope: string,
 ): Promise<UnknownPackage | Failed> {
-  const served = await registryOf(npm, scope);
+  const served = await registryOf(npm, packageName);
   if (served.kind === 'failed') {
     return served;
   }
@@ -44,15 +46,19 @@ export async function unknownPackageOf(
   return { kind: 'unknown-package', registry, username: login.username };
 }
 
-/** The scope's own registry, or else the default one; each asked alone, since npm refuses one that holds credentials. */
-async function registryOf(npm: NpmPlace, scope: string): Promise<Registry | Failed> {
-  const scoped = await registryAt(npm, `${scope}:registry`);
+/**
+ * The package's scope's own registry, or else the default one; each asked alone, since npm
+ * refuses one that holds credentials.
+ */
+async function registryOf(npm: NpmPlace, packageName: string): Promise<Registry | Failed> {
+  const { scope } = packageNamePartsOf(packageName);
+  const scoped = scope === undefined ? unset : await registryAt(npm, `${scope}:registry`);
   if (scoped.kind !== 'unset') {
     return scoped;
   }
   const standard = await registryAt(npm, 'registry');
   return standard.kind === 'unset'
-    ? failed(`npm did not say which registry serves ${scope}`)
+    ? failed(`npm did not say which registry serves ${packageName}`)
     : standard;
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -7,7 +8,13 @@ import {
   defineGroup,
   defineGuard,
 } from '../index.ts';
-import { codeNameOf, type Failure, kebabCaseOf, validateContract } from '../internal/index.ts';
+import {
+  codeNameOf,
+  type Failure,
+  kebabCaseOf,
+  type RootPackage,
+  validateContract,
+} from '../internal/index.ts';
 
 const alphabet = ['a', 'b', 'A', 'B', '1'];
 
@@ -41,24 +48,29 @@ function isNameGrammar(broken: Failure): boolean {
 }
 
 /** The names whose `name-grammar` failure sits at `nameAt` of the location, a Message Version's `@1` cut. */
-function failingNames(root: unknown, packageName: string, nameAt: number): ReadonlySet<string> {
-  const validated = validateContract(root, {
-    packageName,
-    originOf: () => undefined,
-    exportsOf: () => [],
-  });
+function failingNames(
+  root: unknown,
+  given: Partial<RootPackage>,
+  nameAt: number,
+): ReadonlySet<string> {
+  const validated = validateContract(root, aRootPackage(root, given));
   const failures = validated.kind === 'invalid' ? validated.failures : [];
   const grammar = failures.filter((broken) => isNameGrammar(broken));
   return new Set(grammar.map(({ at }) => String(at[nameAt]).replace(/@1$/, '')));
 }
 
 /** The Guard names, out of the candidates, that the name grammar refuses. */
+const guardsPackage = defineDefinitions({});
 const refusedElementNames = failingNames(
-  defineDefinitions({
-    name: 'definitions',
-    guards: candidates.map((name) => defineGuard({ name, description: 'A guard' })),
-  }),
-  'definitions',
+  guardsPackage,
+  {
+    rootExports: Object.fromEntries(
+      candidates.map((name, index) => [
+        `guard${index}`,
+        defineGuard({ name, description: 'A guard' }),
+      ]),
+    ),
+  },
   1,
 );
 
@@ -82,7 +94,7 @@ const refusedMessageNames = failingNames(
       } as unknown as Parameters<typeof defineGroup>[0]),
     ],
   }),
-  'orders-service',
+  { packageName: 'orders-service' },
   3,
 );
 
