@@ -791,7 +791,7 @@ describe('compatibilityReportOf, the report', () => {
   test('an Application’s Dependencies give no Element Change, only a changed hash', () => {
     const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
     const proposed = anApplication({
-      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder], events: [] } },
+      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder] } },
     });
 
     const report = compatibilityReportOf(baseline, proposed);
@@ -810,10 +810,10 @@ describe('compatibilityReportOf, the report', () => {
 
   test('a Dependency declared against a newer version changes the hash', () => {
     const baseline = aBaseline({
-      dependencies: { 'payments-service': { against: '5.1.0', endpoints: [], events: [] } },
+      dependencies: { 'payments-service': { against: '5.1.0', endpoints: [] } },
     });
     const proposed = aProposed({
-      dependencies: { 'payments-service': { against: '5.2.0', endpoints: [], events: [] } },
+      dependencies: { 'payments-service': { against: '5.2.0', endpoints: [] } },
     });
 
     const report = compatibilityReportOf(baseline, proposed);

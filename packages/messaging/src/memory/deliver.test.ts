@@ -2,7 +2,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -83,7 +83,7 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
 const notifyOnCreated = defineSubscription({
   name: 'notifyOnCreated',
@@ -114,7 +114,7 @@ const contract = defineContract({
       subscriptions: [notifyOnCreated, auditCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });

@@ -2,14 +2,14 @@
 
 `client` and its types (see [Types](#types)). How an Outcome travels, how the client decodes it and which Fault it infers when there is none are in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md; how the package is built is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
-The example leaves out the import of `paymentsDeps`, a Dependency declared as in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#dependencies) in the contract README.
+The example leaves out the import of `paymentsDependency`, a Dependency declared as in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#dependencies) in the contract README.
 
 ## Consuming a Contract
 
 ```ts
 import { client } from '@cf-loom/client';
 
-const payments = client(paymentsDeps, {
+const payments = client(paymentsDependency, {
   baseUrl,
   headers: { 'x-api-key': settings.paymentsKey },   // a string
 });
@@ -76,7 +76,7 @@ A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [L
 ## Types
 
 - `ClientOptions<D, Configured>`, `{ baseUrl, headers?, fetch?, inferFault?, onDeprecation? }`, what `client(deps, options)` takes; `Fetch` and `OnDeprecation`, the types of its `fetch` and `onDeprecation`.
-- `Client<D, Configured>`, what `client()` returns: one method per listed Endpoint, `(input, { signal }?) => Promise<ReceivedOutcome<D, Name>>`. Code that calls another Service can depend on `Client<typeof paymentsDeps, 'x-api-key'>` rather than on `client()` itself; its second parameter names the headers given to `client()`, which its methods no longer require.
+- `Client<D, Configured>`, what `client()` returns: one method per listed Endpoint, `(input, { signal }?) => Promise<ReceivedOutcome<D, Name>>`. Code that calls another Service can depend on `Client<typeof paymentsDependency, 'x-api-key'>` rather than on `client()` itself; its second parameter names the headers given to `client()`, which its methods no longer require.
 - `CallInput<E, Configured>`, the Input a method takes, and `CallOptions`, `{ signal? }`.
 - `ReceivedOutcome<D, Name>`, what the method `Name` of a client of the Dependency `D` returns: one of `ReceivedSuccess<E>`, `ReceivedRejection<E, Standards>` and `ReceivedFault`, where `E` is its Endpoint and `Standards` the Provider's Standard codes, `D['standardRejections']`.
 - `Happened`, `InferredFault` and `InferFault`, what `inferFault` receives and returns; `DeprecationNotice`, what `onDeprecation` receives.

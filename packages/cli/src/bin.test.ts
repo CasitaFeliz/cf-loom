@@ -1986,7 +1986,6 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       'orders-service': {
         against: '1.0.0',
         endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-        events: [],
       },
     };
     const published = publishedAs(project, '1.0.0', { dependencies: dependency });

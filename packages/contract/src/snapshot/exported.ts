@@ -1,14 +1,11 @@
-import type { Endpoint } from '../declarations/index.ts';
+import type { ContractPackage, Endpoint } from '../declarations/index.ts';
 import { problemLineOf, type TextPartNodes } from '../validation/index.ts';
 import { identityOf } from '../written/index.ts';
 import { snapshotFormatOf } from './format.ts';
-import type { EndpointSnapshot, ExportedSnapshot } from './types.ts';
+import type { EndpointSnapshot } from './types.ts';
 
-/** A Provider as a Dependency carries it: its name and the Snapshot its Contract Package exports. */
-export type Providing = {
-  readonly provider: string;
-  readonly exportedSnapshot: ExportedSnapshot;
-};
+/** A Provider's Contract Package, as far as its exported Snapshot is read: its name and that Snapshot. */
+export type Providing = Pick<ContractPackage, 'name' | 'exportedSnapshot'>;
 
 /**
  * Refuses a Provider's exported Snapshot in a format this cf-loom does not read, before any of its
@@ -16,7 +13,7 @@ export type Providing = {
  */
 export function checkExportedFormat(providing: Providing): void {
   const named = snapshotFormatOf(providing.exportedSnapshot);
-  const exported = `${providing.provider}'s exported Snapshot`;
+  const exported = `${providing.name}'s exported Snapshot`;
   switch (named.kind) {
     case 'known':
       return;
@@ -37,7 +34,7 @@ export function exportedEntryOf(providing: Providing, endpoint: Endpoint): Endpo
   const identity = identityOf(endpoint.method, endpoint.path);
   const entry = providing.exportedSnapshot.endpoints[identity];
   if (entry === undefined) {
-    throw new Error(`The exported Snapshot of ${providing.provider} has no ${identity}`);
+    throw new Error(`The exported Snapshot of ${providing.name} has no ${identity}`);
   }
   return entry;
 }

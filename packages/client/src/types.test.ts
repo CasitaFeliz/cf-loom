@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineRejection,
@@ -95,13 +95,13 @@ const standards = {
 
 const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [getOrder, listOrders] });
+const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder, listOrders] });
 
 const baseUrl = 'http://orders.test';
 
 describe('the client’s types', () => {
   test('has a method only for each Endpoint the Dependency lists', () => {
-    const orders = client(ordersDeps, { baseUrl });
+    const orders = client(ordersDependency, { baseUrl });
 
     expectTypeOf(orders).toHaveProperty('getOrder');
     expectTypeOf(orders).not.toHaveProperty('ping');
@@ -109,7 +109,7 @@ describe('the client’s types', () => {
   });
 
   test('a required header not given to client() stays required on each call', () => {
-    const orders = client(ordersDeps, { baseUrl, headers: { 'x-api-key': 'k' } });
+    const orders = client(ordersDependency, { baseUrl, headers: { 'x-api-key': 'k' } });
     type Input = Parameters<typeof orders.getOrder>[0];
 
     expectTypeOf<{
@@ -121,11 +121,11 @@ describe('the client’s types', () => {
   });
 
   test('the first argument may be left out when no part of the Input is required', () => {
-    const configured = client(ordersDeps, {
+    const configured = client(ordersDependency, {
       baseUrl,
       headers: { 'x-api-key': 'k', 'x-region': 'eu' },
     });
-    const bare = client(ordersDeps, { baseUrl });
+    const bare = client(ordersDependency, { baseUrl });
 
     const leftOut = () => configured.listOrders();
     // @ts-expect-error: without the headers given, they are required, so the Input is too
@@ -137,7 +137,7 @@ describe('the client’s types', () => {
   });
 
   test('a header given to client() takes the Input’s type, across every Endpoint declaring it', () => {
-    type Options = Parameters<typeof client<typeof ordersDeps, 'x-region'>>[1];
+    type Options = Parameters<typeof client<typeof ordersDependency, 'x-region'>>[1];
     type Region = NonNullable<Options['headers']>['x-region'];
 
     expectTypeOf<'eu'>().toExtend<Region>();
@@ -147,17 +147,17 @@ describe('the client’s types', () => {
   });
 
   test('Client<typeof deps, names> is what client() returns with those headers given', () => {
-    const configured: Client<typeof ordersDeps, 'x-api-key'> = client(ordersDeps, {
+    const configured: Client<typeof ordersDependency, 'x-api-key'> = client(ordersDependency, {
       baseUrl,
       headers: { 'x-api-key': 'k' },
     });
 
-    expectTypeOf(configured).toEqualTypeOf<Client<typeof ordersDeps, 'x-api-key'>>();
+    expectTypeOf(configured).toEqualTypeOf<Client<typeof ordersDependency, 'x-api-key'>>();
     expect(configured).toBeDefined();
   });
 
   test('checking known narrows a Rejection by code, the Provider’s Standard codes included', () => {
-    type Outcome = ReceivedOutcome<typeof ordersDeps, 'getOrder'>;
+    type Outcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
     type Known = Extract<Outcome, { readonly kind: 'rejection'; readonly known: true }>;
 
     expectTypeOf<Known['code']>().toEqualTypeOf<
@@ -171,11 +171,13 @@ describe('the client’s types', () => {
   });
 
   test('a method returns exactly ReceivedOutcome of its Dependency and Endpoint name', () => {
-    type Returned = Awaited<ReturnType<Client<typeof ordersDeps>['listOrders']>>;
+    type Returned = Awaited<ReturnType<Client<typeof ordersDependency>['listOrders']>>;
 
-    expectTypeOf<Returned>().toEqualTypeOf<ReceivedOutcome<typeof ordersDeps, 'listOrders'>>();
+    expectTypeOf<Returned>().toEqualTypeOf<
+      ReceivedOutcome<typeof ordersDependency, 'listOrders'>
+    >();
     // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
-    expectTypeOf<ReceivedOutcome<typeof ordersDeps, 'ping'>>().toBeObject();
-    expect(ordersDeps.endpoints.listOrders.name).toBe('listOrders');
+    expectTypeOf<ReceivedOutcome<typeof ordersDependency, 'ping'>>().toBeObject();
+    expect(ordersDependency.endpoints.listOrders.name).toBe('listOrders');
   });
 });

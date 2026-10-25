@@ -4,7 +4,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -297,7 +297,6 @@ describe('decodeSnapshot', () => {
           'payments-service': {
             against: '5.1.0',
             endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
-            events: ['PaymentSettled@1'],
           },
         },
       });
@@ -338,7 +337,6 @@ describe('decodeSnapshot', () => {
           'orders-service': {
             against: '3.4.0',
             endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-            events: ['OrderPlaced@1'],
           },
         },
       });
@@ -623,7 +621,7 @@ describe('decodeSnapshot', () => {
         where: 'an Application’s dependencies',
         snapshot: {
           ...anApplication(),
-          dependencies: protoKeyed({ against: '1.0.0', endpoints: [], events: [] }),
+          dependencies: protoKeyed({ against: '1.0.0', endpoints: [] }),
         },
         at: ['dependencies', '__proto__'],
       },
@@ -1038,26 +1036,27 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    test.each([
-      {
-        what: 'an Endpoint id',
-        endpoints: [{ id: 'FETCH /x', name: 'x' }],
-        events: [],
-        inside: ['endpoints', 0, 'id'],
-      },
-      { what: 'an Event', endpoints: [], events: ['PaymentSettled'], inside: ['events', 0] },
-    ])(
-      'a Dependency’s $what that is not an identity is malformed',
-      ({ endpoints, events, inside }) => {
-        const dependencies = { 'payments-service': { against: '5.1.0', endpoints, events } };
+    test('a Dependency’s Endpoint id that is not an identity is malformed', () => {
+      const endpoints = [{ id: 'FETCH /x', name: 'x' }];
+      const dependencies = { 'payments-service': { against: '5.1.0', endpoints } };
 
-        const service = serviceWith({ dependencies });
-        const application = decodedFrom({ ...anApplication(), dependencies });
+      const service = serviceWith({ dependencies });
+      const application = decodedFrom({ ...anApplication(), dependencies });
 
-        const at = ['dependencies', 'payments-service', ...inside];
-        expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
-      },
-    );
+      const at = ['dependencies', 'payments-service', 'endpoints', 0, 'id'];
+      expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
+    });
+
+    test('a Dependency holding events is malformed: a Service’s Subscriptions hold its Events', () => {
+      const dependency = { against: '5.1.0', endpoints: [], events: ['PaymentSettled@1'] };
+      const dependencies = { 'payments-service': dependency };
+
+      const service = serviceWith({ dependencies });
+      const application = decodedFrom({ ...anApplication(), dependencies });
+
+      const at = ['dependencies', 'payments-service', 'events'];
+      expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
+    });
 
     test('a ref to a def the Snapshot does not hold is malformed at the ref', () => {
       const defs = { tree: { type: 'array', items: aRef('missing') } };
@@ -1313,11 +1312,18 @@ function declaredSnapshot() {
     description: 'Charges the card',
     body: z.object({ amount: z.int() }),
   });
+  const paymentSettledV1 = defineEvent({
+    name: 'PaymentSettled',
+    version: 1,
+    visibility: 'internal',
+    description: 'A payment was settled',
+    body: z.object({ id: z.uuid() }),
+  });
   const payments = {
     name: 'payments-service',
     version: '5.1.0',
     endpoints: {},
-    events: {},
+    events: { paymentSettledV1 },
     standardRejections: {
       invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
       notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -1341,10 +1347,15 @@ function declaredSnapshot() {
             description: 'Receives it',
             event: orderPlaced,
           }),
+          defineSubscription({
+            name: 'notifyOnSettled',
+            description: 'Receives it',
+            event: payments.events.paymentSettledV1,
+          }),
         ],
       }),
     ],
-    dependencies: [defineDependencies(payments, { endpoints: [], events: [] })],
+    dependencies: [defineDependency({ provider: payments })],
   });
   const validated = validateContract(root, {
     packageName: 'orders-service',
@@ -1376,8 +1387,7 @@ const formatOneFixture = `{
   "dependencies": {
     "payments-service": {
       "against": "5.1.0",
-      "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }],
-      "events": ["PaymentSettled@1"]
+      "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }]
     }
   },
   "endpoints": {

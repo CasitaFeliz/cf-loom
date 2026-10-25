@@ -42,7 +42,6 @@ const dependencies = byKey(
   z.strictObject({
     against: text,
     endpoints: z.array(z.strictObject({ id: text, name: text })),
-    events: z.array(text),
   }),
 );
 

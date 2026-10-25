@@ -93,11 +93,10 @@ export type SubscriptionSnapshot = {
   readonly event: string;
 };
 
-/** What a Contract uses of one Provider: the version it relied on and the Elements it selects. */
+/** What a Contract uses of one Provider: the version it relied on and the Endpoints it selects. */
 export type DependencySnapshot = {
   readonly against: string;
   readonly endpoints: readonly { readonly id: string; readonly name: string }[];
-  readonly events: readonly string[];
 };
 
 /** What every Snapshot starts with; `version` is left to `publish`. */

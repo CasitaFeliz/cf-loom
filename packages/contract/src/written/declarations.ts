@@ -1,11 +1,12 @@
 import type { Definitions } from '../declarations/index.ts';
-import { isContract, isDefinitions, isDependencies } from '../declarations/index.ts';
+import { isContract, isDefinitions, isDependency } from '../declarations/index.ts';
+import type { Path } from '../walker/index.ts';
 import { groupedOf, groupsOf } from './grouped.ts';
 import type {
   LocatedCode,
   LocatedCommand,
   LocatedDefinitions,
-  LocatedDependencies,
+  LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
   LocatedGroup,
@@ -16,7 +17,7 @@ import type {
   Root,
 } from './located.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
-import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
+import { entriesOf, isPlainObject, listOf, partOf, textOf } from './written.ts';
 
 /**
  * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
@@ -36,7 +37,7 @@ export type Declarations = {
   /** Every code, each once, with every declaration of it. */
   readonly codes: readonly LocatedCode[];
   readonly standardRejections: readonly LocatedStandardRejection[];
-  readonly dependencies: readonly LocatedDependencies[];
+  readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
   readonly commands: readonly LocatedCommand[];
   readonly subscriptions: readonly LocatedSubscription[];
@@ -109,14 +110,27 @@ function definitionsOf(root: Root): readonly LocatedDefinitions[] {
   }));
 }
 
-function dependenciesOf(root: Root): readonly LocatedDependencies[] {
+function dependenciesOf(root: Root): readonly LocatedDependency[] {
   if (root.kind === 'definitions') {
     return [];
   }
-  return listOf(root.dependencies)
-    .filter(isDependencies)
-    .map((dependencies) => ({
-      at: ['dependencies', textOf(dependencies.provider)],
-      dependencies,
-    }));
+  const written = listOf(root.dependencies).map((dependency: unknown, index) => {
+    const at: Path = ['dependencies', providerNameOf(dependency) ?? index];
+    return { at, dependency };
+  });
+  return written.filter(isLocatedDependency);
+}
+
+/** What sits where a Dependency belongs and is none is the structure rule's. */
+function isLocatedDependency(written: {
+  readonly at: Path;
+  readonly dependency: unknown;
+}): written is LocatedDependency {
+  return isDependency(written.dependency);
+}
+
+/** The name of a Dependency's Provider, the Contract Package's own; none when it has no name to give. */
+export function providerNameOf(dependency: unknown): string | undefined {
+  const { name } = partOf<'name'>(partOf<'provider'>(dependency).provider);
+  return typeof name === 'string' ? name : undefined;
 }

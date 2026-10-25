@@ -3,7 +3,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -106,13 +106,14 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values(declared)), {
+const paymentsDependency = defineDependency({
+  provider: contractPackageOf(readers, Object.values(declared)),
   endpoints: [readers.getPayment, readers.tagPayment],
 });
 
 describe('fakeProvider: types', () => {
   test('on and calls take the names of listed Endpoints only', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     // @ts-expect-error listPayments is exported but not listed
     const unlisted = () => payments.on('listPayments');
@@ -126,7 +127,7 @@ describe('fakeProvider: types', () => {
   });
 
   test('reject takes the Endpoint’s codes, the Provider’s Standard ones included, each with its body', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments
       .on('getPayment')
@@ -144,7 +145,7 @@ describe('fakeProvider: types', () => {
   });
 
   test('success takes the Success as a Caller reads it: an Open Enum’s Unknown case, never a bare string', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments
       .on('getPayment')
@@ -161,7 +162,7 @@ describe('fakeProvider: types', () => {
   });
 
   test('a step receives the Endpoint’s Input as the Provider parses it, and returns a ScriptedAnswer', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments.on('getPayment').otherwise((builder, input) => {
       expectTypeOf(input).toEqualTypeOf<InputOf<typeof readers.getPayment>>();
@@ -174,13 +175,13 @@ describe('fakeProvider: types', () => {
   });
 
   test('client() with headers is a client with those headers configured', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     const configured = payments.client({ headers: { 'x-api-key': 'k' } });
     const bare = payments.client();
 
-    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDeps, 'x-api-key'>>();
-    expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDeps>>();
+    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDependency, 'x-api-key'>>();
+    expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDependency>>();
     expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment']);
   });
 });
@@ -226,13 +227,11 @@ const settledPackage = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const settledDeps = defineDependencies(settledPackage, { events: [paymentSettledV1] });
-
 const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
 
 describe('fakeEvent: types', () => {
   test('fakeEvent takes and returns the body a Subscription’s Handler reads, Unknown cases included', () => {
-    const settledEvent = settledDeps.events.paymentSettledV1;
+    const settledEvent = settledPackage.events.paymentSettledV1;
     const subscription = defineSubscription({
       name: 'notifyOnSettled',
       description: 'Notify on settled',
@@ -255,7 +254,7 @@ describe('fakeEvent: types', () => {
   });
 
   test('a body of the wrong shape is a type error', () => {
-    const settledEvent = settledDeps.events.paymentSettledV1;
+    const settledEvent = settledPackage.events.paymentSettledV1;
 
     // @ts-expect-error the body has a paymentId, not an id
     const misnamed = () => fakeEvent(settledEvent, { id: PAYMENT_ID, status: 'settled' });

@@ -5,7 +5,7 @@ import {
   eventServiceOf,
   type LocatedCommand,
   type LocatedDefinitions,
-  type LocatedDependencies,
+  type LocatedDependency,
   type LocatedEndpoint,
   type LocatedEvent,
   type LocatedGuard,
@@ -50,7 +50,7 @@ export type ValidatedDeclarations = {
   readonly guards: readonly ValidatedGuard[];
   readonly codes: readonly ValidatedCode[];
   readonly standardRejections: readonly ResolvedStandard[];
-  readonly dependencies: readonly LocatedDependencies[];
+  readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
   readonly commands: readonly LocatedCommand[];
   readonly subscriptions: readonly ValidatedSubscription[];

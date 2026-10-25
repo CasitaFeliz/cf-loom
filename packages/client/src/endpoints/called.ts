@@ -1,4 +1,4 @@
-import type { Dependencies, Endpoint, StandardRejections } from '@cf-loom/contract';
+import type { ContractPackage, Dependency, Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -7,17 +7,10 @@ import {
 } from '@cf-loom/contract/internal';
 
 /** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
-export type AnyDependencies = Dependencies<
-  Readonly<Record<string, Endpoint>>,
-  unknown,
-  StandardRejections
->;
+export type AnyDependency = Dependency<ContractPackage, Readonly<Record<string, Endpoint>>>;
 
-/** What an Endpoint is called through of its Dependency: its Provider, Standard codes and nodes. */
-export type Providing = Pick<
-  AnyDependencies,
-  'provider' | 'standardRejections' | 'exportedSnapshot'
->;
+/** What an Endpoint is called through of its Provider's Contract Package: its name, Standard codes and nodes. */
+export type Providing = Pick<ContractPackage, 'name' | 'standardRejections' | 'exportedSnapshot'>;
 
 /**
  * One listed Endpoint as the client calls it and reads its answers, prepared once: the header
@@ -38,7 +31,7 @@ export function calledEndpointOf(endpoint: Endpoint, providing: Providing): Call
   const entry = exportedEntryOf(providing, endpoint);
   const standards = providing.standardRejections;
   return {
-    provider: providing.provider,
+    provider: providing.name,
     name: endpoint.name,
     endpoint,
     inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),

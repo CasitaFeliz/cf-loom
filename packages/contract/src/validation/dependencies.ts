@@ -1,11 +1,15 @@
-import { isEndpoint, isEvent, reaches, type Visibility } from '../declarations/index.ts';
+import {
+  type ContractPackage,
+  isEndpoint,
+  reaches,
+  type Visibility,
+} from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
   entriesOf,
   isPlainObject,
-  type LocatedDependencies,
-  partOf,
+  type LocatedDependency,
   type Root,
   textOf,
 } from '../written/index.ts';
@@ -13,72 +17,68 @@ import { type DeclarationFailure, failure } from './failures.ts';
 
 const selection = 'A Dependency selects Elements its Provider exports';
 
-/** An Element a Dependency selected, by its name in code, and where it sits. */
+/** An Endpoint a Dependency selected, by its name in code, and where it sits. */
 type Selected = { readonly at: Path; readonly name: string; readonly element: unknown };
 
 /**
- * A Service reaches the Elements its Provider exports, and never a Private one; an Application,
- * outside the network, Public Endpoints only. A Dependency lists only Events a Subscription uses.
+ * A Dependency holds a Contract Package and is used: it selects Endpoints, or a Subscription
+ * receives an Event its Provider exports. A Service reaches the Endpoints its Provider exports,
+ * and never a Private one; an Application, outside the network, Public Endpoints only.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, dependencies, subscriptions } = declarations;
-  const subscribed = new Set(subscriptions.map(({ subscription }) => subscription.event));
-  return dependencies.flatMap((located) => {
-    const exported = exportedOf(located);
+  return declarations.dependencies.flatMap((located) => {
+    const { provider } = located.dependency;
+    if (!isContractPackage(provider)) {
+      const message = `A Dependency's provider is the contract a Contract Package exports`;
+      return [failure(located.at, 'dependency-provider', message)];
+    }
     return [
-      ...selectedOf(located, 'endpoints').flatMap((selected) =>
-        selectedEndpointFailures(selected, exported, root.kind),
-      ),
-      ...selectedOf(located, 'events').flatMap((selected) =>
-        eventFailures(selected, { exported, rootKind: root.kind, subscribed }),
-      ),
+      ...endpointFailures(located, provider, declarations.root.kind),
+      ...unusedFailures(located, provider, declarations),
     ];
   });
 }
 
-function selectedOf(
-  { at, dependencies }: LocatedDependencies,
-  part: 'endpoints' | 'events',
-): readonly Selected[] {
-  return entriesOf(dependencies[part]).map(([name, element]) => ({
-    at: [...at, part, name],
-    name,
-    element,
-  }));
+/** What a Contract Package's `contract` holds, as far as a Dependency reads it. */
+function isContractPackage(provider: unknown): provider is ContractPackage {
+  if (!isPlainObject(provider)) {
+    return false;
+  }
+  const { name, version, endpoints, events, standardRejections, exportedSnapshot } = provider;
+  const maps = [endpoints, events, standardRejections, exportedSnapshot];
+  return typeof name === 'string' && typeof version === 'string' && maps.every(isPlainObject);
 }
 
-/**
- * The Elements a Dependency's Provider exports, read once per Dependency; a map that is no object
- * is the field rules' finding, and nothing is judged against it.
- */
-type Exported = {
-  readonly endpoints: ReadonlySet<unknown> | undefined;
-  readonly events: ReadonlySet<unknown> | undefined;
-};
-
-function exportedOf({ dependencies }: LocatedDependencies): Exported {
-  const exported: Partial<Record<'endpoints' | 'events', unknown>> = partOf(dependencies.exported);
-  return {
-    endpoints: isPlainObject(exported.endpoints)
-      ? new Set(Object.values(exported.endpoints))
-      : undefined,
-    events: isPlainObject(exported.events) ? new Set(Object.values(exported.events)) : undefined,
-  };
+/** A selection that is no list stays as written; each item of one is judged on its own. */
+function endpointFailures(
+  { at, dependency }: LocatedDependency,
+  provider: ContractPackage,
+  rootKind: Root['kind'],
+): readonly DeclarationFailure[] {
+  const endpointsAt = [...at, 'endpoints'];
+  if (!isPlainObject(dependency.endpoints)) {
+    return [failure(endpointsAt, 'not-a-list', 'endpoints is a list')];
+  }
+  const exported = new Set<unknown>(Object.values(provider.endpoints));
+  return entriesOf(dependency.endpoints).flatMap(([name, element]) =>
+    selectedFailures({ at: [...endpointsAt, name], name, element }, exported, rootKind),
+  );
 }
 
-function selectedEndpointFailures(
+function selectedFailures(
   { at, name, element }: Selected,
-  exported: Exported,
+  exported: ReadonlySet<unknown>,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
   if (!isEndpoint(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Endpoint`)];
+    const message = `${selection}: endpoints.${name} is not an Endpoint`;
+    return [failure(at, 'dependency-selection', message)];
   }
   const packageKind = rootKind === 'application' ? 'application' : 'service';
   if (!reaches(packageKind, element.visibility)) {
     return [unreachableEndpointFailure({ at, name }, element.visibility)];
   }
-  if (exported.endpoints !== undefined && !exported.endpoints.has(element)) {
+  if (!exported.has(element)) {
     return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
   }
   return [];
@@ -96,52 +96,24 @@ function unreachableEndpointFailure(
   return failure(at, 'application-dependency', message);
 }
 
-/** What a Dependency's selected Event is judged against: its Provider's exports, its root and the Events subscribed to. */
-type EventContext = {
-  readonly exported: Exported;
-  readonly rootKind: Root['kind'];
-  readonly subscribed: ReadonlySet<unknown>;
-};
-
-/** An Event that fails selection is not also reported as unused: one cause, once. */
-function eventFailures(selected: Selected, context: EventContext): readonly DeclarationFailure[] {
-  const failures = selectedEventFailures(selected, context.exported, context.rootKind);
-  if (failures.length > 0) {
-    return failures;
-  }
-  return unusedEventFailures(selected, context.subscribed);
-}
-
-function selectedEventFailures(
-  { at, name, element }: Selected,
-  exported: Exported,
-  rootKind: Root['kind'],
+/**
+ * A Dependency that selects no Endpoint is used only when a Subscription receives its Provider's
+ * Event; a selection that is no list is reported as such, and not also as unused.
+ */
+function unusedFailures(
+  { at, dependency }: LocatedDependency,
+  provider: ContractPackage,
+  { subscriptions }: Declarations,
 ): readonly DeclarationFailure[] {
-  if (rootKind === 'application') {
-    return [
-      failure(at, 'application-dependency', `An Application subscribes to no Event: ${name}`),
-    ];
-  }
-  if (!isEvent(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
-  }
-  if (!reaches('service', element.visibility)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
-  }
-  if (exported.events !== undefined && !exported.events.has(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
-  }
-  return [];
-}
-
-/** A Dependency lists an Event only for a Subscription, since a Dependency names only what its owner uses. */
-function unusedEventFailures(
-  { at, name, element }: Selected,
-  subscribed: ReadonlySet<unknown>,
-): readonly DeclarationFailure[] {
-  if (subscribed.has(element)) {
+  const exportedEvents = new Set<unknown>(Object.values(provider.events));
+  const selectsEndpoints =
+    !isPlainObject(dependency.endpoints) || entriesOf(dependency.endpoints).length > 0;
+  const receivesEvents = subscriptions.some(({ subscription }) =>
+    exportedEvents.has(subscription.event),
+  );
+  if (selectsEndpoints || receivesEvents) {
     return [];
   }
-  const message = `A Dependency lists only Events a Subscription uses: ${name}`;
-  return [failure(at, 'unused-dependency-event', message)];
+  const message = `A Dependency is used: ${provider.name} gives no Endpoint and no Subscription's Event`;
+  return [failure(at, 'unused-dependency', message)];
 }

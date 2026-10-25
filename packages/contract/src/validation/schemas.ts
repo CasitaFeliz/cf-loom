@@ -179,7 +179,7 @@ function sharedSlots({ root }: Declarations): readonly Slot[] {
   }));
 }
 
-/** A Message Version owns its body; a Dependency's Events are the Provider's, recorded by identity only. */
+/** A Message Version owns its body; a Provider's Event is its Contract Package's, recorded by identity only. */
 function messageSlots({ events, commands }: Declarations): readonly Slot[] {
   return [
     ...events.map(({ at, event }) => slot({ at, owner: event }, 'body', event.body)),

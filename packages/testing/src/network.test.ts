@@ -2,7 +2,7 @@ import { client } from '@cf-loom/client';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   type Endpoint,
@@ -53,7 +53,8 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment }), {
+const paymentsDependency = defineDependency({
+  provider: contractPackageOf({ getPayment }),
   endpoints: [getPayment],
 });
 
@@ -61,7 +62,7 @@ const params = { paymentId: 'pay-1' };
 
 describe('fakeProvider: what the client infers its Fault from', () => {
   test('noConnection is a refused connection: committed no, retryable', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.noConnection());
 
     const outcome = await payments.client().getPayment({ params });
@@ -76,7 +77,7 @@ describe('fakeProvider: what the client infers its Fault from', () => {
   });
 
   test('reset is a connection reset after sending: committed unknown, retryable', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.reset());
 
     const outcome = await payments.client().getPayment({ params });
@@ -95,7 +96,7 @@ describe('fakeProvider: what the client infers its Fault from', () => {
     [503, { 'retry-after': '30' }, { committed: 'unknown', retryable: true, retryAfter: '30' }],
     [429, {}, { committed: 'no', retryable: true }],
   ] as const)('status(%i) is inferred from the status alone', async (status, headers, fault) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.status(status, headers));
 
     const outcome = await payments.client().getPayment({ params });
@@ -108,9 +109,9 @@ describe('fakeProvider: what the client infers its Fault from', () => {
   });
 
   test('a client the code builds itself over payments.fetch reaches the fake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r, input) => r.success({ id: input.params.paymentId }));
-    const own = client(paymentsDeps, {
+    const own = client(paymentsDependency, {
       baseUrl: 'https://payments.internal.example',
       fetch: payments.fetch,
     });

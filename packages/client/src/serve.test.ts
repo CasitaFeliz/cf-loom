@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -159,7 +159,8 @@ const orders = contractPackageOf(exported, defaultStandards, [
   refundOrder,
 ]);
 
-const ordersDeps = defineDependencies(orders, {
+const ordersDependency = defineDependency({
+  provider: orders,
   endpoints: [getOrderReader, createOrder, cancelOrder, archiveOrder, refundOrder],
 });
 
@@ -216,7 +217,7 @@ afterAll(() => {
 });
 
 function ordersClient() {
-  return client(ordersDeps, {
+  return client(ordersDependency, {
     baseUrl,
     headers: { 'x-api-key': async () => 'caller-7' },
     onDeprecation: (notice) => notices.push(notice),
@@ -273,7 +274,7 @@ describe('end to end against serve through node:http and the global fetch', () =
       await orders.archiveOrder({ params: { orderId: 'o-1' } }),
       await orders.refundOrder({ params: { orderId: 'o-1' } }),
       await orders.getOrder({ params: { orderId: 'broken' } }),
-      await client(ordersDeps, {
+      await client(ordersDependency, {
         baseUrl,
         fetch: (url, init) => fetch(url, { ...init, body: JSON.stringify(large) }),
       }).createOrder({ body: large }),

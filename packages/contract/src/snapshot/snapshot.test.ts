@@ -6,7 +6,7 @@ import {
   defineCommand,
   defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -167,9 +167,9 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, {
+const paymentsDependency = defineDependency({
+  provider: payments,
   endpoints: [payments.endpoints.getPayment, payments.endpoints.listPayments],
-  events: [payments.events.paymentSettledV1, payments.events.paymentFailedV1],
 });
 
 const orgPackage: ResolvedDefinitions = {
@@ -181,12 +181,12 @@ const orgPackage: ResolvedDefinitions = {
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: paymentsDeps.events.paymentSettledV1,
+  event: payments.events.paymentSettledV1,
 });
 const notifyOnFailed = defineSubscription({
   name: 'notifyOnFailed',
   description: 'Notifies the customer of each payment failed',
-  event: paymentsDeps.events.paymentFailedV1,
+  event: payments.events.paymentFailedV1,
 });
 
 const contract = defineContract({
@@ -200,7 +200,7 @@ const contract = defineContract({
       subscriptions: [notifyOnSettled, notifyOnFailed],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 const stampedAt = '2026-10-17T09:30:00Z';
@@ -652,7 +652,7 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('Dependencies are written by Provider with against, Endpoints by id and Events by identity, sorted', () => {
+  test('Dependencies are written by Provider with against and Endpoints by id, sorted, and no Events', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.dependencies).toEqual({
@@ -662,8 +662,11 @@ describe('snapshotOf: a Service', () => {
           { id: 'GET /payments', name: 'listPayments' },
           { id: 'GET /payments/{}', name: 'getPayment' },
         ],
-        events: ['PaymentFailed@1', 'PaymentSettled@1'],
       },
+    });
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnFailed: { event: 'payments-service:PaymentFailed@1' },
+      notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
     });
   });
 
@@ -747,7 +750,7 @@ function messagingSnapshot(declared: {
         subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
       }),
     ],
-    dependencies: [paymentsDeps],
+    dependencies: [paymentsDependency],
   });
   return serviceSnapshot(root, aContext({ packages: [] }));
 }
@@ -965,8 +968,11 @@ describe('snapshotOf: deprecatedAt', () => {
 
 describe('snapshotOf: an Application', () => {
   test('an Application’s Snapshot holds only its Dependencies', () => {
-    const adminDeps = defineDependencies(payments, { endpoints: [payments.endpoints.getPayment] });
-    const application = defineApplication({ name: 'web-admin', dependencies: [adminDeps] });
+    const adminDependency = defineDependency({
+      provider: payments,
+      endpoints: [payments.endpoints.getPayment],
+    });
+    const application = defineApplication({ name: 'web-admin', dependencies: [adminDependency] });
 
     const snapshot = snapshotFor(application, aContext({ packages: [] }));
 
@@ -979,7 +985,6 @@ describe('snapshotOf: an Application', () => {
         'payments-service': {
           against: '5.1.0',
           endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
-          events: [],
         },
       },
     });
@@ -1058,9 +1063,9 @@ describe('canonicalTextOf', () => {
         }),
       ],
       dependencies: [
-        defineDependencies(payments, {
+        defineDependency({
+          provider: payments,
           endpoints: [payments.endpoints.listPayments, payments.endpoints.getPayment],
-          events: [payments.events.paymentFailedV1, payments.events.paymentSettledV1],
         }),
       ],
     });

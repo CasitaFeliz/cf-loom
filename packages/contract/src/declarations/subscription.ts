@@ -14,7 +14,7 @@ type SubscriptionDeclaration = {
 export type Subscription<Declaration extends SubscriptionDeclaration = SubscriptionDeclaration> =
   Readonly<Declaration> & { readonly kind: 'subscription' };
 
-/** Declares that a Service receives an Event, its own or one listed in a Dependency. */
+/** Declares that a Service receives an Event, its own or one a listed Dependency's Provider exports. */
 export function defineSubscription<const Declaration extends SubscriptionDeclaration>(
   declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, SubscriptionDeclaration>>,
 ): Subscription<Declaration> {

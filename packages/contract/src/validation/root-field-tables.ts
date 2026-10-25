@@ -3,9 +3,8 @@ import type {
   Command,
   Contract,
   Definitions,
-  Dependencies,
+  Dependency,
   Event,
-  ExportedElements,
   Group,
   Subscription,
 } from '../declarations/index.ts';
@@ -109,45 +108,23 @@ export const groupFields = {
   objects: {},
 } satisfies Fields<Group>;
 
-/** The fields of a Dependency, as `defineDependencies` builds it. */
-export const dependenciesFields = {
-  declared: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  required: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  strings: { kind: true, provider: true, against: true },
-  objects: {
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-} satisfies Fields<Dependencies>;
+/**
+ * A Dependency's fields as the field rules judge them: its provider and its Endpoints are the
+ * Dependency rule's, which reports them in its own terms.
+ */
+type DependencyFields = {
+  readonly kind: Dependency['kind'];
+  readonly provider?: unknown;
+  readonly endpoints?: unknown;
+};
 
-/** The Elements a Dependency keeps as its Provider exported them. */
-export const exportedFields = {
-  declared: { endpoints: true, events: true },
-  required: { endpoints: true, events: true },
-  strings: {},
-  objects: { endpoints: true, events: true },
-} satisfies Fields<ExportedElements>;
+/** The fields of a Dependency, as `defineDependency` builds it. */
+export const dependencyFields = {
+  declared: { kind: true, provider: true, endpoints: true },
+  required: { kind: true },
+  strings: { kind: true },
+  objects: {},
+} satisfies Fields<DependencyFields>;
 
 /** The fields of each kind of root. */
 export const rootFields: Readonly<Record<Declarations['root']['kind'], KnownFields>> = {

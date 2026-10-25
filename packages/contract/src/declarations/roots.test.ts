@@ -6,7 +6,7 @@ import {
   defineCommand,
   defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -75,18 +75,18 @@ describe('defineContract', () => {
       description: 'Payments',
       endpoints: [getPayment],
     });
-    const paymentsDeps = defineDependencies(payments, { endpoints: [refundPayment] });
+    const paymentsDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
 
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions],
       groups: [paymentsGroup],
-      dependencies: [paymentsDeps],
+      dependencies: [paymentsDependency],
     });
 
     expect(contract.groups[0]).toBe(paymentsGroup);
     expect(contract.definitions[0]).toBe(definitions);
-    expect(contract.dependencies[0]).toBe(paymentsDeps);
+    expect(contract.dependencies[0]).toBe(paymentsDependency);
     expect(contract.kind).toBe('contract');
   });
 
@@ -109,27 +109,19 @@ describe('defineContract', () => {
 
 describe('defineApplication', () => {
   test('an Application may depend on Public Endpoints', () => {
-    const publicDeps = defineDependencies(payments, { endpoints: [getPayment] });
+    const publicDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
 
-    const application = defineApplication({ name: 'web-admin', dependencies: [publicDeps] });
+    const application = defineApplication({ name: 'web-admin', dependencies: [publicDependency] });
 
-    expect(application.dependencies[0]).toBe(publicDeps);
+    expect(application.dependencies[0]).toBe(publicDependency);
   });
 
   test('an Application depending on an Internal Endpoint is a type error', () => {
-    const internalDeps = defineDependencies(payments, { endpoints: [refundPayment] });
+    const internalDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
 
-    // @ts-expect-error an Application runs outside the internal network
-    const declare = () => defineApplication({ name: 'web-admin', dependencies: [internalDeps] });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('an Application depending on an Event is a type error', () => {
-    const eventDeps = defineDependencies(payments, { events: [paymentSettledV1] });
-
-    // @ts-expect-error an Application subscribes to no Event
-    const declare = () => defineApplication({ name: 'web-admin', dependencies: [eventDeps] });
+    const declare = () =>
+      // @ts-expect-error an Application runs outside the internal network
+      defineApplication({ name: 'web-admin', dependencies: [internalDependency] });
 
     expect(declare).not.toThrow();
   });

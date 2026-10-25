@@ -6,7 +6,7 @@ export {
   resolutionOf,
 } from './answerable.ts';
 export type { Declarations } from './declarations.ts';
-export { declarationsOf, listedDefinitionsOf } from './declarations.ts';
+export { declarationsOf, listedDefinitionsOf, providerNameOf } from './declarations.ts';
 export type { Listed } from './grouped.ts';
 export {
   commandsOf,
@@ -37,7 +37,7 @@ export type {
   LocatedCode,
   LocatedCommand,
   LocatedDefinitions,
-  LocatedDependencies,
+  LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
   LocatedGroup,

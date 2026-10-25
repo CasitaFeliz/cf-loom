@@ -3,7 +3,7 @@ import type {
   Command,
   Contract,
   Definitions,
-  Dependencies,
+  Dependency,
   Endpoint,
   Event,
   Group,
@@ -56,8 +56,11 @@ export type LocatedCode = {
 /** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
 export type LocatedDefinitions = { readonly at: Path; readonly definitions: Definitions };
 
-/** A Dependency and where it sits in its root, by Provider. */
-export type LocatedDependencies = { readonly at: Path; readonly dependencies: Dependencies };
+/**
+ * A Dependency and where it sits in its root, by its Provider's name, or by its position when its
+ * provider has none: `['dependencies', 'orders-service']`.
+ */
+export type LocatedDependency = { readonly at: Path; readonly dependency: Dependency };
 
 /** A Standard Rejection as a Definitions Package declares it, by name, where it sits and the package. */
 export type LocatedStandardRejection = {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -49,7 +49,7 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
 /** A Subscription the types refuse, as a cast lets an author write it. */
 function aSubscription(name: string, event: unknown): Subscription {
@@ -70,7 +70,7 @@ function validateSubscriptions(
   const contract = defineContract({
     name: 'orders-service',
     groups: [ordersGroup],
-    dependencies: [paymentsDeps],
+    dependencies: [paymentsDependency],
   });
   return validateContract(contract, {
     originOf: () => undefined,
@@ -82,7 +82,7 @@ function validateSubscriptions(
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Receives it',
-  event: paymentSettledV1,
+  event: payments.events.paymentSettledV1,
 });
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -102,8 +102,14 @@ describe('validateContract: Subscriptions', () => {
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event listed in a Dependency validates', () => {
-    const result = validateSubscriptions([notifyOnSettled]);
+  test('a Subscription to an Event a listed Dependency’s Provider exports validates', () => {
+    const onFailed = defineSubscription({
+      name: 'onFailed',
+      description: 'Receives it',
+      event: payments.events.paymentFailedV1,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onFailed]);
 
     expect(result.kind).toBe('valid');
   });
@@ -121,16 +127,48 @@ describe('validateContract: Subscriptions', () => {
       failed(
         ['groups', 'orders', 'subscriptions', 'auditOrders', 'event'],
         'subscription-event',
-        "A Subscription's Event is the Service's own or one listed in a Dependency: OrderCreated@1",
+        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: OrderCreated@1",
       ),
     );
   });
 
-  test('a Subscription to a Provider’s Event its Dependency does not list fails', () => {
+  test('a Subscription to an Event of a Provider no Dependency lists fails', () => {
+    const shippedV1 = defineEvent({
+      name: 'Shipped',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was shipped',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const onShipped = defineSubscription({
+      name: 'onShipped',
+      description: 'Receives it',
+      event: shippedV1,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onShipped]);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onShipped', 'event'],
+        'subscription-event',
+        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Shipped@1",
+      ),
+    );
+  });
+
+  test('an Event declared apart with a Provider’s name and version is not the one it exports', () => {
+    const lookalike = defineEvent({
+      name: 'PaymentFailed',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment failed',
+      body: z.object({ paymentId: z.uuid() }),
+    });
     const onFailed = defineSubscription({
       name: 'onFailed',
       description: 'Receives it',
-      event: paymentFailedV1,
+      event: lookalike,
     });
 
     const result = validateSubscriptions([notifyOnSettled, onFailed]);
@@ -139,7 +177,7 @@ describe('validateContract: Subscriptions', () => {
       failed(
         ['groups', 'orders', 'subscriptions', 'onFailed', 'event'],
         'subscription-event',
-        "A Subscription's Event is the Service's own or one listed in a Dependency: PaymentFailed@1",
+        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: PaymentFailed@1",
       ),
     );
   });

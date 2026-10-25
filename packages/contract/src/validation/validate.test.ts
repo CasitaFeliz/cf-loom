@@ -7,7 +7,7 @@ import {
   defineApplication,
   defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
@@ -259,8 +259,11 @@ describe('validateContract', () => {
   });
 
   test('a valid Application returns no schemas and no Elements', () => {
-    const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
-    const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
+    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [paymentsDependency],
+    });
 
     const validated = validateInPackage(application, noOrigin);
 
@@ -686,16 +689,22 @@ describe('validateContract: the README’s examples', () => {
     description: 'Order lifecycle',
     endpoints: [readmeGetOrder, createOrder, updateOrder],
   });
-  const paymentsDeps = defineDependencies(payments, { endpoints: [payments.endpoints.getPayment] });
+  const paymentsDependency = defineDependency({
+    provider: payments,
+    endpoints: [payments.endpoints.getPayment],
+  });
   const contract = defineContract({
     name: 'orders-service',
     definitions: [definitions],
     groups: [readmeOrders],
-    dependencies: [paymentsDeps],
+    dependencies: [paymentsDependency],
   });
 
   test('the Service, its Definitions Package and an Application validate', () => {
-    const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [paymentsDependency],
+    });
 
     const validated = [contract, definitions, application].map(
       (root) => validateInPackage(root, noOrigin).kind,

@@ -1,6 +1,6 @@
 import {
   isDefinitions,
-  isDependencies,
+  isDependency,
   isGroup,
   isGuard,
   isRejection,
@@ -103,7 +103,7 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           at: ['dependencies'],
           list: root.dependencies,
           noun: 'a Dependency',
-          fits: isDependencies,
+          fits: isDependency,
         },
       ];
     case 'application':
@@ -112,7 +112,7 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           at: ['dependencies'],
           list: root.dependencies,
           noun: 'a Dependency',
-          fits: isDependencies,
+          fits: isDependency,
           required: true,
         },
       ];

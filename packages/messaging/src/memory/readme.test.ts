@@ -2,7 +2,7 @@ import {
   type ContractPackage,
   defineCommand,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -64,7 +64,7 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
 const chargeOnCreated = defineSubscription({
   name: 'chargeOnCreated',
@@ -89,7 +89,7 @@ const contract = defineContract({
       subscriptions: [chargeOnCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 type Resources = {
@@ -153,7 +153,7 @@ describe('the In memory section of the messaging README', () => {
     await broker.settled();
     const messages = broker.messages.map(({ subject }) => subject);
     const settlement = await broker.deliver(
-      paymentsDeps.events.paymentSettledV1,
+      payments.events.paymentSettledV1,
       { paymentId: PAYMENT_ID },
       { factId: 'pay-1' },
     );

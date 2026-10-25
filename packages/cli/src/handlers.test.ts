@@ -434,7 +434,7 @@ function aMessagingRoot({
       lines([
         'import {',
         '  defineContract,',
-        '  defineDependencies,',
+        '  defineDependency,',
         '  defineGroup,',
         '  defineSubscription,',
         "} from '@cf-loom/contract';",
@@ -453,7 +453,7 @@ function aMessagingRoot({
     .replace(
       "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
       lines([
-        'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
+        'const paymentsDependency = defineDependency({ provider: payments });',
         '',
         'const paymentsGroup = defineGroup({',
         "  name: 'payments',",
@@ -465,7 +465,7 @@ function aMessagingRoot({
         'export const contract = defineContract({',
         "  name: 'orders-service',",
         '  groups: [orders, paymentsGroup],',
-        '  dependencies: [paymentsDeps],',
+        '  dependencies: [paymentsDependency],',
         '});',
       ]).trimEnd(),
     )

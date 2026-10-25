@@ -1,5 +1,5 @@
 import { checkExportedFormat } from '@cf-loom/contract/internal';
-import { type AnyDependencies, calledEndpointOf } from '../endpoints/index.ts';
+import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
 import type { Client, ClientOptions, ConfiguredName, Fetch } from './client-types.ts';
@@ -10,7 +10,7 @@ import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
  * Outcome and never throws for a Rejection or a Fault.
  */
 export function client<
-  const Deps extends AnyDependencies,
+  const Deps extends AnyDependency,
   Configured extends ConfiguredName<Deps> = never,
 >(deps: Deps, options: ClientOptions<Deps, Configured>): Client<Deps, Configured> {
   const calling: Calling = {
@@ -19,10 +19,10 @@ export function client<
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
-  checkExportedFormat(deps);
+  checkExportedFormat(deps.provider);
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
   const methods = Object.entries(deps.endpoints).map(([name, endpoint]) => {
-    const called = calledEndpointOf(endpoint, deps);
+    const called = calledEndpointOf(endpoint, deps.provider);
     return [name, methodOf(called, calling, deprecationWatchOf(called, onDeprecation))] as const;
   });
   return Object.freeze(Object.fromEntries(methods)) as Client<Deps, Configured>;

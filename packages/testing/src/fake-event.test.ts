@@ -1,7 +1,7 @@
 import {
   type ContractPackage,
   defineContract,
-  defineDependencies,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineSubscription,
@@ -42,9 +42,9 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const paymentsDependency = defineDependency({ provider: payments });
 
-const settledEvent = paymentsDeps.events.paymentSettledV1;
+const settledEvent = payments.events.paymentSettledV1;
 
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
@@ -61,7 +61,7 @@ const contract = defineContract({
       subscriptions: [notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDeps],
+  dependencies: [paymentsDependency],
 });
 
 const readers = readersOf({

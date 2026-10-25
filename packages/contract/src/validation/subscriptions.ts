@@ -11,7 +11,7 @@ import {
 import { type DeclarationFailure, failure } from './failures.ts';
 import { repeated } from './names.ts';
 
-/** Each Subscription receives an Event that still works, the Service's own or a Dependency's, under a name of its own. */
+/** Each Subscription receives an Event that still works, the Service's own or one a listed Dependency's Provider exports, under a name of its own. */
 export function subscriptionFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, subscriptions } = declarations;
   return [
@@ -35,7 +35,7 @@ function eventFailures(
   }
   const identity = messageIdentityOf(event.name, event.version);
   if (eventServiceOf(root, event) === undefined) {
-    const message = `A Subscription's Event is the Service's own or one listed in a Dependency: ${identity}`;
+    const message = `A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: ${identity}`;
     return [failure(eventAt, 'subscription-event', message)];
   }
   if (!isLive(event)) {
