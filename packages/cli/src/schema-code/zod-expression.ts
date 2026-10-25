@@ -91,24 +91,32 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
   return `${min}${max}`;
 }
 
-/**
- * An enum; one value, or values that are not all strings, are literals, and a discriminator must
- * be one. An Open Enum's reader reads a declared value as itself and any other string as its
- * Unknown case, `{ unknown: 'refunded' }`, so TypeScript tells them apart, and writes that case
- * back as its string.
- */
 function enumOf(node: EnumNode, writing: Writing): string {
+  return node.open ? openEnumOf(node, writing) : closedEnumOf(node);
+}
+
+/**
+ * A closed enum of one value, or of values that are not all strings, is a literal, as a
+ * discriminator must be.
+ */
+function closedEnumOf(node: EnumNode): string {
   const values = node.values.map(literalOf).join(', ');
   const allStrings = node.values.every((value) => typeof value === 'string');
-  if (!node.open && node.values.length === 1) {
+  if (node.values.length === 1) {
     return `z.literal(${values})`;
   }
-  if (!node.open) {
-    return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
-  }
+  return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
+}
+
+/**
+ * An Open Enum's reader reads a declared value as itself and any other string as its Unknown case,
+ * `{ unknown: 'refunded' }`, so TypeScript tells them apart, and writes that case back as its
+ * string.
+ */
+function openEnumOf(node: EnumNode, writing: Writing): string {
   writing.needs.modules.add('loom');
   const call = writing.mode === 'reader' ? 'openEnumReader' : 'openEnum';
-  return `loom.${call}([${values}])`;
+  return `loom.${call}([${node.values.map(literalOf).join(', ')}])`;
 }
 
 function objectOf(node: ObjectNode, writing: Writing): string {

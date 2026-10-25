@@ -115,7 +115,7 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
  * declared order, since zod's union returns the first option that parses.
  */
 function choiceOf(options: readonly SchemaNode[]): SchemaNode {
-  const literals = options.filter(isLiterals);
+  const literals = options.filter(isClosedEnum);
   if (literals.length !== options.length) {
     return { type: 'union', options: [...options] };
   }
@@ -125,7 +125,7 @@ function choiceOf(options: readonly SchemaNode[]): SchemaNode {
     : values;
 }
 
-/** An enum of several literal values, each once, in canonical order. */
+/** A closed enum of literal values, each once, in canonical order. */
 export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
   const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
   const distinct = [...valueByJson.values()];
@@ -133,7 +133,7 @@ export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
 }
 
 /** A closed enum, which is how a literal walks. */
-function isLiterals(node: SchemaNode): node is EnumNode {
+function isClosedEnum(node: SchemaNode): node is EnumNode {
   return node.type === 'enum' && !node.open;
 }
 

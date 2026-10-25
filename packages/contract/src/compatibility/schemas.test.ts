@@ -145,7 +145,7 @@ function aBaselineDefinitions(
   return { ...aDefinitions(), version: '4.2.0', ...fields };
 }
 
-const aString: SchemaNode = { type: 'string' };
+const aString: StringNode = { type: 'string' };
 const aNumber: SchemaNode = { type: 'number' };
 const aBoolean: SchemaNode = { type: 'boolean' };
 
@@ -1112,7 +1112,7 @@ function anArray(items: SchemaNode, counts: Counts = {}): SchemaNode {
   return { type: 'array', items, ...counts };
 }
 
-function aRecord(key: SchemaNode, value: SchemaNode): SchemaNode {
+function aRecord(key: StringNode, value: SchemaNode): SchemaNode {
   return { type: 'record', key, value };
 }
 

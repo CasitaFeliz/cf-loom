@@ -66,7 +66,7 @@ export type ObjectNode = Annotations & {
 /** An object whose keys are dynamic strings, all with one value schema. */
 export type RecordNode = Annotations & {
   readonly type: 'record';
-  readonly key: SchemaNode;
+  readonly key: StringNode;
   readonly value: SchemaNode;
 };
 

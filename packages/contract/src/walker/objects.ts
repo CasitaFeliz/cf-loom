@@ -1,13 +1,13 @@
 import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
-import type { Field, ObjectNode, Path, SchemaNode } from './nodes.ts';
+import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
 import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
 /** The key zod drops when it parses, since assigning it sets the prototype instead. */
 const protoKey = '__proto__';
 
-/** An object, always `open`: a Contract declares no strictness, and a catchall is refused. */
+/** An object: a Contract declares no strict object, and a catchall is refused. */
 export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
@@ -33,14 +33,17 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   }
   const key = walker.schema(def.keyType, [...at, 'key']);
   const value = walker.schema(def.valueType, [...at, 'value']);
-  const refusal = key.kind === 'walked' ? keyRefusalOf(key.value) : undefined;
-  if (refusal !== undefined) {
-    return failed(failuresOf([notAllowed(at, refusal), value]));
-  }
-  if (key.kind === 'not-allowed' || value.kind === 'not-allowed') {
+  if (key.kind === 'not-allowed') {
     return failed(failuresOf([key, value]));
   }
-  return walked({ type: 'record', key: key.value, value: value.value });
+  const recordKey = recordKeyOf(key.value);
+  if (recordKey.kind === 'refused') {
+    return failed(failuresOf([notAllowed(at, recordKey.refusal), value]));
+  }
+  if (value.kind === 'not-allowed') {
+    return value;
+  }
+  return walked({ type: 'record', key: recordKey.node, value: value.value });
 }
 
 /**
@@ -77,18 +80,22 @@ function catchallRefusalOf(def: core.$ZodObjectDef): Refused | undefined {
   }
 }
 
-/** Why a walked key cannot key a `record`: it is nullable, open or not a string, or an enum or literal. */
-function keyRefusalOf(key: SchemaNode): Refused | undefined {
+/** A walked key that can key a `record`, or why it cannot: only a string, not nullable, can. */
+type RecordKey =
+  | { readonly kind: 'string'; readonly node: StringNode }
+  | { readonly kind: 'refused'; readonly refusal: Refused };
+
+function recordKeyOf(key: SchemaNode): RecordKey {
   if (key.nullable === true) {
-    return refused.nullableRecordKey;
+    return { kind: 'refused', refusal: refused.nullableRecordKey };
   }
   if (key.type === 'string') {
-    return undefined;
+    return { kind: 'string', node: key };
   }
   if (key.type !== 'enum') {
-    return refused.recordKey;
+    return { kind: 'refused', refusal: refused.recordKey };
   }
-  return key.open ? refused.openRecordKey : refused.keyedRecord;
+  return { kind: 'refused', refusal: key.open ? refused.openRecordKey : refused.keyedRecord };
 }
 
 function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]> {

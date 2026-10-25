@@ -342,7 +342,7 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.params).toEqual(['orderId', 'lineId']);
   });
 
-  test('params hold exactly the path’s params, like any object with no mode', () => {
+  test('params hold exactly the path’s params', () => {
     const snapshot = serviceSnapshot();
 
     const params = snapshot.endpoints['PATCH /orders/{}/lines/{}']?.input.params;
