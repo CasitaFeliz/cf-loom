@@ -11,30 +11,24 @@ import {
   type MessageHandled,
 } from './handled.ts';
 
-/** The Handler file of a declared Element, and whether the Handler map imports it. */
+/** The Handler file of an Element the Handler map holds a Handler for. */
 export type HandlerPath = {
   readonly handled: Handled;
   readonly path: string;
-  readonly isMapped: boolean;
 };
 
 /**
- * Where every declared Element's Handler lives, or the line saying why one cannot be placed: its
+ * Where every Handler lives, or the line saying why one cannot be placed: its
  * path lies under `src/contract/`, or two share a path.
  */
 export type HandlerPaths =
   | { readonly kind: 'placed'; readonly paths: readonly HandlerPath[] }
   | { readonly kind: 'unplaced'; readonly line: string };
 
-/**
- * The Handler path of every Element a Service declares one for, a Retired Endpoint's, the Guards
- * only it attaches and a Retired Command's Message Version's included, so any other Handler file
- * is an orphan.
- */
+/** The Handler path of every Element the Handler map holds, so two never share one. */
 export function handlerPathsOf(snapshot: ServiceSnapshot, layout: ServiceLayout): HandlerPaths {
-  const paths = declaredHandledOf(snapshot).map(({ handled, isMapped }) => ({
+  const paths = declaredHandledOf(snapshot).map((handled) => ({
     handled,
-    isMapped,
     path: pathOf(handled, layout),
   }));
   const line = contractLineOf(paths) ?? collidingLineOf(paths);

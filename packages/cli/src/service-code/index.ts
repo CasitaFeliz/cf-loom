@@ -1,7 +1,7 @@
 export { handlerLocalOf, pairingNameOf } from './code-names.ts';
 export { isWrittenByGenerate } from './generated-header.ts';
 export type { DeclarationHandled, DeprecationStamp, Handled, MessageHandled } from './handled.ts';
-export { deprecationStampsOf } from './handled.ts';
+export { deprecationStampsOf, retiredHandledOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';
 export { elementLabelOf, handlerPathsOf, recordedLabelOf } from './handler-paths.ts';
 export type { MessageExports } from './readers.ts';

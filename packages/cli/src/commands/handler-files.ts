@@ -17,19 +17,12 @@ export function placedOf(service: BuiltService): PlacedService | Tooling {
   }
 }
 
-/** The Handler paths the Handler map imports. */
-export function mappedPathsOf({
-  handlerPaths,
-}: Pick<PlacedService, 'handlerPaths'>): readonly HandlerPath[] {
-  return handlerPaths.filter(({ isMapped }) => isMapped);
-}
-
 /** The Handlers the Handler map imports whose paths hold nothing, not even a link. */
 export function missingHandlersOf(
   service: Pick<PlacedService, 'project' | 'handlerPaths'>,
 ): readonly HandlerPath[] {
   const { directory } = service.project;
-  return mappedPathsOf(service).filter(({ path }) => isNothingAt(join(directory, path)));
+  return service.handlerPaths.filter(({ path }) => isNothingAt(join(directory, path)));
 }
 
 /** A line for every Handler path that something other than a file holds. */
@@ -37,7 +30,7 @@ export function noFileLinesOf(
   service: Pick<PlacedService, 'project' | 'handlerPaths'>,
 ): readonly string[] {
   const { directory } = service.project;
-  const paths = mappedPathsOf(service).map(({ path }) => path);
+  const paths = service.handlerPaths.map(({ path }) => path);
   const blocked = paths.filter((path) => isNoFile(join(directory, path)));
   return blocked.map((path) => `${path} is no file: a Handler is a file`);
 }

@@ -13,7 +13,7 @@ import {
 } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
 import { locatedUnderOf } from './exported-declarations.ts';
-import { isNothingAt, mappedPathsOf, type PlacedService } from './handler-files.ts';
+import { isNothingAt, type PlacedService } from './handler-files.ts';
 
 /**
  * The stubs `generate` writes, and a line for every Endpoint and Guard a stub could not import as
@@ -35,7 +35,7 @@ type LocatedHandler = StubLocated & { readonly path: string };
 /** The stub of every Handler that does not exist yet, importing its Element as it is named. */
 export function stubsOf(service: PlacedService, exportsOf: ExportsOf): Stubs {
   const { directory } = service.project;
-  const located = mappedPathsOf(service).map((placed) =>
+  const located = service.handlerPaths.map((placed) =>
     locatedHandlerOf(service, placed, exportsOf),
   );
   const missing = located

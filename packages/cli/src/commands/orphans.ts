@@ -5,12 +5,14 @@ import { generatedEnding, layoutFolder } from '../config/index.ts';
 import { filesUnder, insideContractOf, oneLineOf } from '../loading/index.ts';
 import {
   elementLabelOf,
+  type Handled,
   type HandlerPath,
   handlerLocalOf,
   isWrittenByGenerate,
   type RecordedHandler,
   recordedHandlersOf,
   recordedLabelOf,
+  retiredHandledOf,
 } from '../service-code/index.ts';
 import { isNothingAt, missingHandlersOf, type PlacedService } from './handler-files.ts';
 
@@ -82,10 +84,18 @@ function generatedOrphansOf(
     .map(({ path }) => ({ path, line: `${path} ${rule}: delete it` }));
 }
 
+/** What the recorded Handlers are read against: where each Element's Handler is now, and which are Retired. */
+type Placement = {
+  readonly directory: string;
+  readonly declared: ReadonlyMap<string, HandlerPath>;
+  readonly retired: ReadonlyMap<string, Handled>;
+  readonly lacking: readonly HandlerPath[];
+};
+
 /**
  * The Handlers the Handler maps among some files import whose file still sits at the path they
- * were imported from, though the layout now places the Element elsewhere or it is gone. A
- * Retired Endpoint or Command's Message Version still declared keeps its Handler where it is.
+ * were imported from, though the layout now places the Element elsewhere or it is Retired or
+ * gone: the map would stop importing a file that is still there.
  */
 function handlerOrphansOf(
   service: PlacedService,
@@ -95,24 +105,40 @@ function handlerOrphansOf(
   const recorded = files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
   const standing = recorded.filter(({ path }) => !isNothingAt(join(directory, path)));
   const held = new Set(standing.map(({ local }) => local));
-  const lacking = missingHandlersOf(service).filter(
-    ({ handled }) => !held.has(handlerLocalOf(handled)),
-  );
-  const declared = new Map(
-    service.handlerPaths.map((placed) => [handlerLocalOf(placed.handled), placed]),
-  );
+  const placement: Placement = {
+    directory,
+    declared: new Map(
+      service.handlerPaths.map((placed) => [handlerLocalOf(placed.handled), placed]),
+    ),
+    retired: new Map(
+      retiredHandledOf(service.snapshot).map((handled) => [handlerLocalOf(handled), handled]),
+    ),
+    lacking: missingHandlersOf(service).filter(({ handled }) => !held.has(handlerLocalOf(handled))),
+  };
   const orphans: Orphan[] = [];
   for (const handler of standing) {
-    const placed = declared.get(handler.local);
-    if (placed?.path !== handler.path) {
-      const line =
-        placed === undefined
-          ? goneLineOf(handler, lacking)
-          : movedLineOf(directory, handler, placed);
+    const line = lineOf(handler, placement);
+    if (line !== undefined) {
       orphans.push({ path: handler.path, line });
     }
   }
   return orphans;
+}
+
+/** The line for a recorded Handler whose file is still there, or none while the map keeps importing it from there. */
+function lineOf(handler: RecordedHandler, placement: Placement): string | undefined {
+  const placed = placement.declared.get(handler.local);
+  if (placed?.path === handler.path) {
+    return undefined;
+  }
+  if (placed !== undefined) {
+    return movedLineOf(placement.directory, handler, placed);
+  }
+  const retired = placement.retired.get(handler.local);
+  if (retired !== undefined) {
+    return `${handler.path} is the Handler of ${elementLabelOf(retired)}, which is Retired: delete it`;
+  }
+  return goneLineOf(handler, placement.lacking);
 }
 
 /** The line for a Handler whose Element the layout now places at another path. */

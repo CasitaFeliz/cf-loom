@@ -21,56 +21,61 @@ export type PlacedMessage = MessageHandled & { readonly group: string };
  */
 export type Handled = DeclarationHandled | PlacedMessage;
 
-/** A declared Element with a Handler, and whether the Handler map holds its Handler. */
-export type DeclaredHandled = { readonly handled: Handled; readonly isMapped: boolean };
+/** Whether an Element is wanted by its lifecycle: `isLive` for one with a Handler, its opposite for one without. */
+type Wanted = (element: { readonly lifecycle?: string | undefined }) => boolean;
 
-/** Every Element a Service declares a Handler for, kind by kind, each kind in its map's order. */
-export function declaredHandledOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+/**
+ * Every Element the Handler map holds a Handler for, kind by kind, each kind in its map's order:
+ * the Endpoints and Commands' Message Versions that are not Retired, every Guard and every
+ * Subscription.
+ */
+export function declaredHandledOf(snapshot: ServiceSnapshot): readonly Handled[] {
   return [
-    ...declaredEndpointsOf(snapshot),
-    ...declaredGuardsOf(snapshot),
-    ...declaredCommandsOf(snapshot),
-    ...declaredSubscriptionsOf(snapshot),
+    ...endpointsOf(snapshot, isLive),
+    ...guardsOf(snapshot),
+    ...commandsOf(snapshot, isLive),
+    ...subscriptionsOf(snapshot),
   ];
 }
 
-/** Each Endpoint, by name, mapped unless Retired. */
-function declaredEndpointsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+/** The Endpoints and Commands' Message Versions still declared that are Retired, which have no Handler. */
+export function retiredHandledOf(snapshot: ServiceSnapshot): readonly Handled[] {
+  return [...endpointsOf(snapshot, isRetired), ...commandsOf(snapshot, isRetired)];
+}
+
+function isRetired(element: { readonly lifecycle?: string | undefined }): boolean {
+  return !isLive(element);
+}
+
+/** The Endpoints the lifecycle wants, by name. */
+function endpointsOf(snapshot: ServiceSnapshot, wanted: Wanted): readonly Handled[] {
   return Object.values(snapshot.endpoints)
-    .map(
-      (endpoint): DeclaredHandled => ({
-        handled: { kind: 'endpoint', name: endpoint.name, group: endpoint.group },
-        isMapped: isLive(endpoint),
-      }),
-    )
-    .sort((left, right) => byCodePoint(left.handled.name, right.handled.name));
+    .filter(wanted)
+    .map((endpoint): Handled => ({ kind: 'endpoint', name: endpoint.name, group: endpoint.group }))
+    .sort((left, right) => byCodePoint(left.name, right.name));
 }
 
-/** Each Guard, in the canonical Snapshot's order, mapped when a mapped Endpoint attaches it. */
-function declaredGuardsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
-  const live = Object.values(snapshot.endpoints).filter(isLive);
-  const attached = new Set(live.flatMap(({ guards }) => guards.map(({ guard }) => guard)));
-  return Object.keys(snapshot.guards).map(
-    (name): DeclaredHandled => ({ handled: { kind: 'guard', name }, isMapped: attached.has(name) }),
-  );
+/** Each Guard, in the canonical Snapshot's order: it has no lifecycle, so no state without a Handler. */
+function guardsOf(snapshot: ServiceSnapshot): readonly Handled[] {
+  return Object.keys(snapshot.guards).map((name): Handled => ({ kind: 'guard', name }));
 }
 
-/** Each Command's Message Version, by name in code, mapped unless Retired. */
-function declaredCommandsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
-  const commands = Object.entries(snapshot.commands).map(([identity, command]) => ({
-    handled: { kind: 'command' as const, ...nameAndVersionOf(identity), group: command.group },
-    isMapped: isLive(command),
-  }));
-  return commands.sort((left, right) => byCommandName(left.handled, right.handled));
+/** The Commands' Message Versions the lifecycle wants, by name in code. */
+function commandsOf(snapshot: ServiceSnapshot, wanted: Wanted): readonly Handled[] {
+  return Object.entries(snapshot.commands)
+    .filter(([, command]) => wanted(command))
+    .map(([identity, command]) => ({
+      kind: 'command' as const,
+      ...nameAndVersionOf(identity),
+      group: command.group,
+    }))
+    .sort(byCommandName);
 }
 
-/** Each Subscription, in the canonical Snapshot's order, always mapped: it has no lifecycle. */
-function declaredSubscriptionsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
+/** Each Subscription, in the canonical Snapshot's order: it has no lifecycle, so it always has a Handler. */
+function subscriptionsOf(snapshot: ServiceSnapshot): readonly Handled[] {
   return Object.entries(snapshot.subscriptions).map(
-    ([name, { group }]): DeclaredHandled => ({
-      handled: { kind: 'subscription', name, group },
-      isMapped: true,
-    }),
+    ([name, { group }]): Handled => ({ kind: 'subscription', name, group }),
   );
 }
 

@@ -170,6 +170,23 @@ function getOrderRenamed(service = aService()): Readonly<Record<string, string>>
   };
 }
 
+/** The file of `aService()` changed so its Endpoint `createOrder` is Retired. */
+function retiredCreateOrder(): Readonly<Record<string, string>> {
+  return {
+    'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
+      name: 'createOrder',
+      method: 'POST',
+      path: '/orders',
+      visibility: 'private',
+      lifecycle: 'retired',
+    }),
+  };
+}
+
+/** The line for the Handler of `createOrder` once the Endpoint is Retired. */
+const retiredCreateOrderLine =
+  'src/endpoints/orders/create-order.handler.ts is the Handler of endpoints.createOrder, which is Retired: delete it';
+
 /** The line for the Handler `getOrder` left behind when it is renamed `fetchOrder`. */
 const renamedGetOrderLine =
   'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/endpoints/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it';
@@ -552,7 +569,7 @@ function probeImportOf(local: string, path: string): string {
 }
 
 describe('cf-loom generate: the Handler map', () => {
-  test('handlers.generated.ts maps every Endpoint and attached Guard that is not Retired, by name', () => {
+  test('handlers.generated.ts maps every Endpoint that is not Retired and every Guard, by name', () => {
     const project = aProject(aService());
 
     const ran = cfLoom(project, 'generate');
@@ -564,6 +581,7 @@ describe('cf-loom generate: the Handler map', () => {
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
+        importOf('legacyKeyGuardHandler', './guards/legacy-key.handler.ts'),
         importOf('{ readers }', './readers.generated.ts'),
         '',
         'export default {',
@@ -573,6 +591,7 @@ describe('cf-loom generate: the Handler map', () => {
         '  },',
         '  guards: {',
         '    apiKey: apiKeyGuardHandler,',
+        '    legacyKey: legacyKeyGuardHandler,',
         '  },',
         '  commands: {},',
         '  subscriptions: {},',
@@ -626,6 +645,7 @@ describe('cf-loom generate: the Handler map', () => {
         'Wrote src/endpoints/orders/create-order.handler.ts',
         'Wrote src/endpoints/orders/get-order.handler.ts',
         'Wrote src/guards/api-key.handler.ts',
+        'Wrote src/guards/legacy-key.handler.ts',
       ]),
     );
   });
@@ -642,6 +662,7 @@ describe('cf-loom generate: the Handler map', () => {
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
+        importOf('legacyKeyGuardHandler', './guards/legacy-key.handler.ts'),
         importOf('{ readers }', './readers.generated.ts'),
         importOf(
           'auditCreatedSubscriptionHandler',
@@ -659,6 +680,7 @@ describe('cf-loom generate: the Handler map', () => {
         '  },',
         '  guards: {',
         '    apiKey: apiKeyGuardHandler,',
+        '    legacyKey: legacyKeyGuardHandler,',
         '  },',
         '  commands: {',
         '    chargeCardV1: chargeCardV1CommandHandler,',
@@ -690,6 +712,7 @@ describe('cf-loom generate: the Handler map', () => {
         'Wrote src/endpoints/orders/create-order.handler.ts',
         'Wrote src/endpoints/orders/get-order.handler.ts',
         'Wrote src/guards/api-key.handler.ts',
+        'Wrote src/guards/legacy-key.handler.ts',
         'Wrote src/subscriptions/payments/audit-created.handler.ts',
         'Wrote src/subscriptions/payments/notify-on-settled.handler.ts',
       ]),
@@ -991,6 +1014,7 @@ describe('cf-loom generate: stubs', () => {
       'endpoints/orders/create-order.handler.ts',
       'endpoints/orders/get-order.handler.ts',
       'guards/api-key.handler.ts',
+      'guards/legacy-key.handler.ts',
     ]);
     expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(
       lines([
@@ -1067,7 +1091,7 @@ describe('cf-loom generate: stubs', () => {
     expect(read(project, 'src/guards/api-key.handler.ts')).toBe(written);
     expect(read(project, 'src/handlers.generated.ts')).toBe(map);
     expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(stub);
-    expect(handlerFiles(project)).toHaveLength(3);
+    expect(handlerFiles(project)).toHaveLength(4);
   });
   test('a Command’s Message Version’s stub sits at src/commands/<group>/<name>.v<n>.handler.ts and imports its pairing from readers.generated.ts', () => {
     const project = aProject(aMessagingService());
@@ -1239,6 +1263,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
       lines([
         header,
         importOf('apiKeyGuardHandler', '../guards/api-key.handler.ts'),
+        importOf('legacyKeyGuardHandler', '../guards/legacy-key.handler.ts'),
         importOf('createOrderEndpointHandler', '../http/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', '../http/orders/get-order.handler.ts'),
         importOf('{ readers }', '../readers.generated.ts'),
@@ -1250,6 +1275,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         '  },',
         '  guards: {',
         '    apiKey: apiKeyGuardHandler,',
+        '    legacyKey: legacyKeyGuardHandler,',
         '  },',
         '  commands: {},',
         '  subscriptions: {},',
@@ -1285,6 +1311,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         'Wrote src/http/orders/create-order.handler.ts',
         'Wrote src/http/orders/get-order.handler.ts',
         'Wrote src/security/api-key.handler.ts',
+        'Wrote src/security/legacy-key.handler.ts',
       ]),
     );
   });
@@ -1351,7 +1378,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
-  test('a Retired Command’s Message Version still declared collides with a live one at its path', () => {
+  test('a Retired Command’s Message Version still declared shares no Handler path with a live one', () => {
     const service = aMessagingService();
     const project = aProject(
       withLayout(
@@ -1364,6 +1391,17 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         },
         "{ command: 'src/commands/{name}.handler.ts' }",
       ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(handlerFiles(project)).toContain('commands/charge-card.handler.ts');
+  });
+
+  test('two live Message Versions of one Command at one Handler path exit 3 naming both', () => {
+    const project = aProject(
+      withLayout(aMessagingService(), "{ command: 'src/commands/{name}.handler.ts' }"),
     );
 
     const ran = cfLoom(project, 'generate');
@@ -1461,6 +1499,11 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         'src/guards/api-key.handler.ts',
         'guards.apiKey',
         'src/security/api-key.handler.ts',
+      ),
+      movedLine(
+        'src/guards/legacy-key.handler.ts',
+        'guards.legacyKey',
+        'src/security/legacy-key.handler.ts',
       ),
       'src/handlers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
       'src/readers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
@@ -1946,23 +1989,154 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('the Handler of an Endpoint retired after the map imported it is no orphan', () => {
+  test('retiring an Endpoint whose Handler the map imported names the Handler to delete, and writes nothing', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const mapBefore = read(project, 'src/handlers.generated.ts');
+    write(project, retiredCreateOrder());
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${retiredCreateOrderLine}\n` });
+    expect(read(project, 'src/handlers.generated.ts')).toBe(mapBefore);
+  });
+
+  test('verify names the Handler of an Endpoint retired since generate', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, retiredCreateOrder());
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(`${retiredCreateOrderLine}\n`);
+    expect(ran.stderr).toContain(
+      'src/handlers.generated.ts was edited or is out of date: run cf-loom generate\n',
+    );
+  });
+
+  test('the Handler map drops a retired Endpoint once its Handler is deleted, and deleting its declaration then names nothing', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, retiredCreateOrder());
+    rmSync(join(project, 'src/endpoints/orders/create-order.handler.ts'));
+
+    const retired = cfLoom(project, 'generate');
+    rmSync(join(project, 'src/contract/endpoints/orders/create-order.endpoint.ts'));
+    write(project, {
+      'src/contract/index.ts': aRoot({
+        getOrder: './endpoints/orders/get-order.endpoint.ts',
+        listOrders: './endpoints/orders/list-orders.endpoint.ts',
+      }),
+    });
+    const deleted = cfLoom(project, 'generate');
+
+    expect(retired).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/handlers.generated.ts')).not.toContain('createOrder');
+    expect(deleted).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('the Handler of a Command’s Message Version retired since generate is named to delete', () => {
+    const service = aMessagingService();
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    write(project, {
+      'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '').replace(
+        "  description: 'Charge a card',\n  lifecycle: 'deprecated',",
+        "  description: 'Charge a card',\n  lifecycle: 'retired',",
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/commands/payments/charge-card.v1.handler.ts is the Handler of commands.ChargeCard@1, which is Retired: delete it\n',
+    });
+  });
+
+  test('after an Endpoint is retired and the layout changes, its Handler is named to delete, not to move', () => {
+    const service = aService();
+    const listOrders = 'src/contract/endpoints/orders/list-orders.endpoint.ts';
+    const project = aProject({
+      ...service,
+      [listOrders]: (service[listOrders] ?? '').replace(
+        "lifecycle: 'retired'",
+        "lifecycle: 'deprecated'",
+      ),
+    });
+    cfLoom(project, 'generate');
+    write(project, {
+      [listOrders]: service[listOrders] ?? '',
+      ...withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        movedLine(
+          'src/endpoints/orders/get-order.handler.ts',
+          'endpoints.getOrder',
+          'src/http/orders/get-order.handler.ts',
+        ),
+        'src/endpoints/orders/list-orders.handler.ts is the Handler of endpoints.listOrders, which is Retired: delete it',
+      ]),
+    });
+  });
+
+  test('a Guard stays in the Handler map after the only Endpoint that attached it is retired', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, {
-      'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
-        name: 'createOrder',
-        method: 'POST',
-        path: '/orders',
-        visibility: 'private',
+      'src/contract/endpoints/orders/get-order.endpoint.ts': (
+        aService()['src/contract/endpoints/orders/get-order.endpoint.ts'] ?? ''
+      ).replace("  lifecycle: 'active',", "  lifecycle: 'retired',"),
+    });
+    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/handlers.generated.ts')).toContain('apiKey: apiKeyGuardHandler,');
+  });
+
+  test('a live Endpoint reusing the name of a Retired one, at another path, gets its own Handler', () => {
+    const service = aService();
+    const retiredFile = 'src/contract/endpoints/orders/get-order-v1.endpoint.ts';
+    const project = aProject({
+      ...service,
+      [retiredFile]: anEndpoint({
+        name: 'getOrder',
+        path: '/orders-old',
         lifecycle: 'retired',
       }),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace(
+          importOf('{ getOrder }', './endpoints/orders/get-order.endpoint.ts'),
+          lines([
+            importOf('{ getOrder }', './endpoints/orders/get-order.endpoint.ts'),
+            importOf('{ getOrder as getOrderV1 }', './endpoints/orders/get-order-v1.endpoint.ts'),
+          ]).trimEnd(),
+        )
+        .replace('endpoints: [getOrder,', 'endpoints: [getOrder, getOrderV1,'),
     });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toMatchObject({ status: 0, stderr: '' });
-    expect(read(project, 'src/handlers.generated.ts')).not.toContain('createOrder');
+    expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toContain(
+      "from '../../contract/endpoints/orders/get-order.endpoint.ts'",
+    );
   });
 
   test('a Handler of a Guard renamed is named with the Guard that may replace it', () => {
@@ -2037,7 +2211,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('the Handler of a Retired Endpoint that is still declared is no orphan', () => {
+  test('a Handler file of a Retired Endpoint that the map never imported is the Service’s', () => {
     const project = aProject({
       ...aService(),
       'src/endpoints/orders/list-orders.handler.ts': "export default 'retired';\n",
@@ -2048,8 +2222,11 @@ describe('cf-loom generate: what it refuses', () => {
 
     expect(ran.status).toBe(0);
     expect(read(project, 'src/handlers.generated.ts')).not.toContain('listOrders');
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      'legacyKey: legacyKeyGuardHandler,',
+    );
   });
-  test('the Handler of a Retired Command’s Message Version that is still declared is no orphan', () => {
+  test('a Handler file of a Retired Command’s Message Version that the map never imported is the Service’s', () => {
     const project = aProject({
       ...aMessagingService(),
       'src/commands/payments/refund-card.v1.handler.ts': "export default 'retired';\n",
@@ -3037,7 +3214,10 @@ describe('cf-loom generate and verify: what the file system holds', () => {
     );
     expect(verified.status).toBe(1);
     expect(verified.stderr).toBe(
-      'src/guards/api-key.handler.ts is missing: run cf-loom generate\n',
+      lines([
+        'src/guards/api-key.handler.ts is missing: run cf-loom generate',
+        'src/guards/legacy-key.handler.ts is missing: run cf-loom generate',
+      ]),
     );
   });
 
