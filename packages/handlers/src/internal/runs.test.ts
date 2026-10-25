@@ -450,9 +450,9 @@ describe('mappedHandlerOf, by its key', () => {
     ];
 
     expect(lookups.map(errorMessageOf)).toEqual([
-      'commands.chargeCardV1 has no Handler in the Handler map',
-      'commands.chargeCardV1 has no Handler in the Handler map',
-      'commands.chargeCardV1 holds no Handler handle() returned for it: run cf-loom generate',
+      'commands.chargeCardV1 has no Handler in the Handler map: run cf-loom generate',
+      'commands.chargeCardV1 has no Handler in the Handler map: run cf-loom generate',
+      'commands.chargeCardV1 holds the Handler written for notifyOnPaid',
     ]);
   });
 

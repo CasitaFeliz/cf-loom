@@ -16,13 +16,14 @@ type TakenKeyOf<Resources> = Exclude<keyof Resources, typeof unannotated>;
 
 /**
  * The Resources a Handler returned by `handle()` takes: none when its implementation's last
- * parameter is not annotated, so a direct call or a map may still hand it any.
+ * parameter is not annotated, so a direct call or a map may still hand it any; `any` stays `any`,
+ * for `ResourcesOf` to refuse.
  */
-export type HandledResourcesOf<Resources extends object> = [ResourcesNotAnnotated] extends [
-  Resources,
-]
-  ? NoResources
-  : Resources;
+export type HandledResourcesOf<Resources extends object> = 0 extends 1 & Resources
+  ? Resources
+  : [ResourcesNotAnnotated] extends [Resources]
+    ? NoResources
+    : Resources;
 
 /** What a Handler takes beside what it is given: the Service's Resources, which `serve` and `consume` hand it unread. */
 export type WithResources<Resources extends object> = { readonly resources: Resources };
@@ -48,14 +49,24 @@ type CallOf<Handler> = Handler extends (first: never, second: never, ...call: in
   ? Call[0]
   : never;
 
+/** What a map's Resources hold when a Handler types its own as `any`, which would erase every other: the cause, by name. */
+type AnyResourcesRefusal = {
+  readonly 'A Handler types its Resources as any: type them, as Needs<…> does': never;
+};
+
 /** The Resources one Handler takes, none for a Handler that takes none; distributes, so a Handler that takes none never narrows the others. */
 type ResourcesOfHandler<Handler> = Handler extends unknown
   ? NonNullable<CallOf<Handler>> extends { readonly resources?: infer Resources }
-    ? TakenKeyOf<NonNullable<Resources>> extends never
-      ? never
-      : NonNullable<Resources>
+    ? TakenResourcesOf<NonNullable<Resources>>
     : never
   : never;
+
+/** The Resources a Handler's last argument holds, none when it takes none, the refusal when `any`. */
+type TakenResourcesOf<Resources> = 0 extends 1 & Resources
+  ? AnyResourcesRefusal
+  : TakenKeyOf<Resources> extends never
+    ? never
+    : Resources;
 
 type HandlersIn<Handlers> = {
   [Map in keyof Handlers]: Handlers[Map][keyof Handlers[Map]];

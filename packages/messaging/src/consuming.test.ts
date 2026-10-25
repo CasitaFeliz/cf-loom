@@ -359,10 +359,11 @@ describe('consume', () => {
     };
     const { consume } = await messaging(contract, aBroker().broker);
 
+    // @ts-expect-error notifyOnSettled holds the Handler of notifyOnCreated
     const swapping = consume({ ...handlers, subscriptions: swapped });
 
     await expect(swapping).rejects.toThrow(
-      'subscriptions.notifyOnSettled holds no Handler handle() returned for it: run cf-loom generate',
+      'subscriptions.notifyOnSettled holds the Handler written for notifyOnCreated',
     );
   });
 

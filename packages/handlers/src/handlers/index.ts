@@ -6,8 +6,10 @@ export type {
   GuardCall,
   GuardHandler,
   GuardImplementation,
+  HandledBy,
   HandlerMap,
 } from './handler.ts';
+export type { HandlerMapOf } from './handler-map.ts';
 export { mappedHandlerOf, mappedMessageHandlerOf } from './mapped.ts';
 export type {
   CommandHandler,

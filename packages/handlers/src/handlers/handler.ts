@@ -20,6 +20,11 @@ import type {
   ResourcesNotAnnotated,
 } from './resources.ts';
 
+declare const handled: unique symbol;
+
+/** What only a Handler `handle()` returned for one Element carries: its Element, and a brand no hand-made value has. */
+export type HandledBy<Element> = { readonly element: Element; readonly [handled]: Element };
+
 /** What an EndpointHandler is given beside its Input: the Context its Guards provided, and the request. */
 export type EndpointCall<Target extends Endpoint> = {
   readonly context: ContextOf<Target>;
@@ -69,14 +74,12 @@ export type GuardImplementation<
 ) => Admission<Target> | Promise<Admission<Target>>;
 
 /** The Handler of one Endpoint: calling it runs the Contract's checks and answers what `serve` would. */
-export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = {
-  (
-    input: InputOf<Target>,
-    call: ContextField<ContextOf<Target>> & DirectRequestField,
-    ...last: CallArgument<ResourcesField<Resources>>
-  ): Promise<CheckedOutcome<Target>>;
-  readonly element: Target;
-};
+export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = ((
+  input: InputOf<Target>,
+  call: ContextField<ContextOf<Target>> & DirectRequestField,
+  ...last: CallArgument<ResourcesField<Resources>>
+) => Promise<CheckedOutcome<Target>>) &
+  HandledBy<Target>;
 
 /**
  * The shape every Handler map has, which `serve` and `consume` accept: each Handler by its name,
@@ -95,11 +98,9 @@ export type HandlerMap = {
 };
 
 /** The Handler of one Guard: calling it validates what it is given and answers what `serve` would. */
-export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = {
-  (
-    demands: DemandsOf<Target>,
-    call: ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField,
-    ...last: CallArgument<ResourcesField<Resources>>
-  ): Promise<CheckedAdmission<Target>>;
-  readonly element: Target;
-};
+export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = ((
+  demands: DemandsOf<Target>,
+  call: ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField,
+  ...last: CallArgument<ResourcesField<Resources>>
+) => Promise<CheckedAdmission<Target>>) &
+  HandledBy<Target>;

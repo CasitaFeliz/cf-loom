@@ -612,6 +612,13 @@ function probe(project: string, script: string): unknown {
 }
 
 /** The probe's import of a module of the project, by its path from the project's folder. */
+/** The Handler map's import of its root, by type, for `satisfies HandlerMapOf<typeof contract>`. */
+function contractImport(specifier: string): string {
+  return `import type { contract } from '${specifier}';`;
+}
+
+const handlerMapOfImport = "import type { HandlerMapOf } from '@cf-loom/handlers';";
+
 function probeImportOf(local: string, path: string): string {
   return `const ${local} = await import(${JSON.stringify(`./${path}`)});`;
 }
@@ -626,11 +633,13 @@ describe('cf-loom generate: the Handler map', () => {
     expect(read(project, 'src/handlers.generated.ts')).toBe(
       lines([
         header,
+        contractImport('./contract/index.ts'),
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
         importOf('legacyKeyGuardHandler', './guards/legacy-key.handler.ts'),
         importOf('{ readers }', './readers.generated.ts'),
+        handlerMapOfImport,
         '',
         'export default {',
         '  endpoints: {',
@@ -645,7 +654,7 @@ describe('cf-loom generate: the Handler map', () => {
         '  subscriptions: {},',
         '  readers,',
         '  deprecatedAt: {},',
-        '};',
+        '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
   });
@@ -658,7 +667,12 @@ describe('cf-loom generate: the Handler map', () => {
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     const stamp: string = snapshot.endpoints['POST /orders'].deprecatedAt;
     expect(read(project, 'src/handlers.generated.ts')).toContain(
-      lines(['  deprecatedAt: {', `    createOrder: '${stamp}',`, '  },', '};']),
+      lines([
+        '  deprecatedAt: {',
+        `    createOrder: '${stamp}',`,
+        '  },',
+        '} satisfies HandlerMapOf<typeof contract>;',
+      ]),
     );
   });
 
@@ -707,6 +721,7 @@ describe('cf-loom generate: the Handler map', () => {
         header,
         importOf('chargeCardV1CommandHandler', './commands/payments/charge-card.v1.handler.ts'),
         importOf('chargeCardV2CommandHandler', './commands/payments/charge-card.v2.handler.ts'),
+        contractImport('./contract/index.ts'),
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
@@ -720,6 +735,7 @@ describe('cf-loom generate: the Handler map', () => {
           'notifyOnSettledSubscriptionHandler',
           './subscriptions/payments/notify-on-settled.handler.ts',
         ),
+        handlerMapOfImport,
         '',
         'export default {',
         '  endpoints: {',
@@ -740,7 +756,7 @@ describe('cf-loom generate: the Handler map', () => {
         '  },',
         '  readers,',
         '  deprecatedAt: {},',
-        '};',
+        '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
   });
@@ -1312,11 +1328,13 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(read(project, 'src/generated/handlers.generated.ts')).toBe(
       lines([
         header,
+        contractImport('../contract/index.ts'),
         importOf('apiKeyGuardHandler', '../guards/api-key.handler.ts'),
         importOf('legacyKeyGuardHandler', '../guards/legacy-key.handler.ts'),
         importOf('createOrderEndpointHandler', '../http/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', '../http/orders/get-order.handler.ts'),
         importOf('{ readers }', '../readers.generated.ts'),
+        handlerMapOfImport,
         '',
         'export default {',
         '  endpoints: {',
@@ -1331,7 +1349,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         '  subscriptions: {},',
         '  readers,',
         '  deprecatedAt: {},',
-        '};',
+        '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
   });

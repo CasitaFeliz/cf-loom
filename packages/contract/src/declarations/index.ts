@@ -32,7 +32,7 @@ export {
 } from './grammars.ts';
 export type { Group } from './group.ts';
 export { defineGroup } from './group.ts';
-export type { GroupedField, GroupedOf } from './grouped.ts';
+export type { AttachedGuardsOf, GroupedField, GroupedOf, LiveOf } from './grouped.ts';
 export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
@@ -53,6 +53,7 @@ export type {
   RequiredContextOf,
   SuccessOf,
 } from './inference.ts';
+export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
   isApplication,

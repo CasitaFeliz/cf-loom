@@ -5,7 +5,7 @@ import {
   defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
-import { type HandlerMap, handle, readersOf, type WithResources } from '@cf-loom/handlers';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -156,9 +156,24 @@ const contract = defineContract({
 });
 
 const readers = readersOf({
-  commands: {},
+  commands: {
+    chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body },
+    chargeCardV2: { element: chargeCardV2, reader: chargeCardV2.body },
+    refundV1: { element: refundV1, reader: refundV1.body },
+    shipV1: { element: shipV1, reader: shipV1.body },
+    shipV2: { element: shipV2, reader: shipV2.body },
+  },
   subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV3.body } },
 });
+
+/** A stub for every Command's Message Version the Contract declares, none Retired. */
+const commands = {
+  chargeCardV1: handle.stub(readers.commands.chargeCardV1),
+  chargeCardV2: handle.stub(readers.commands.chargeCardV2),
+  refundV1: handle.stub(readers.commands.refundV1),
+  shipV1: handle.stub(readers.commands.shipV1),
+  shipV2: handle.stub(readers.commands.shipV2),
+};
 
 const broker: Broker = {
   connect: async () => ({
@@ -292,11 +307,8 @@ describe('publish and send types', () => {
   test('consume takes the Handler map; onServiceFault receives a ConsumedFault', () => {
     const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
     const consuming = () =>
-      consume({ commands: {}, subscriptions: { notifyOnCreated: notifying }, readers });
+      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers });
 
-    expectTypeOf(consume)
-      .parameter(0)
-      .toEqualTypeOf<Pick<HandlerMap, 'commands' | 'subscriptions' | 'readers'>>();
     expectTypeOf<
       Parameters<NonNullable<MessagingOptions['onServiceFault']>>[0]
     >().toEqualTypeOf<ConsumedFault>();
@@ -328,6 +340,21 @@ describe('publish and send types', () => {
     expectTypeOf<CloseOptions>().toEqualTypeOf<{ readonly signal?: AbortSignal | undefined }>();
   });
 
+  test('consume refuses a map that lacks a Command’s Message Version or a Subscription', () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
+    const { shipV2: _shipV2, ...withoutShipV2 } = commands;
+
+    const consuming = () => [
+      // @ts-expect-error shipV2 has no Handler
+      consume({ commands: withoutShipV2, subscriptions: { notifyOnCreated: notifying }, readers }),
+      // @ts-expect-error notifyOnCreated has no Handler
+      consume({ commands, subscriptions: {}, readers }),
+      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers }),
+    ];
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
   test('consume without the Resources its Message Handlers take is a type error', () => {
     type Notifications = { readonly notifications: { readonly send: () => void } };
     const notifying = handle(
@@ -336,7 +363,7 @@ describe('publish and send types', () => {
         resources.notifications.send();
       },
     );
-    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying }, readers };
+    const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
     const resources: Notifications = { notifications: { send: () => undefined } };
 
     const consuming = () => [
@@ -353,11 +380,11 @@ describe('publish and send types', () => {
   test('consume takes no options when no Message Handler takes Resources', () => {
     const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
     const stubbed = handle.stub(readers.subscriptions.notifyOnCreated);
-    const handlers = { commands: {}, subscriptions: { notifyOnCreated: notifying }, readers };
+    const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
 
     const consuming = () => [
       consume(handlers),
-      consume({ commands: {}, subscriptions: { notifyOnCreated: stubbed }, readers }),
+      consume({ commands, subscriptions: { notifyOnCreated: stubbed }, readers }),
     ];
 
     expect(consuming).toBeTypeOf('function');

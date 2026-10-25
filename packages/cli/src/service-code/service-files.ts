@@ -9,20 +9,32 @@ import {
   namedImportOf,
   relativeSpecifierOf,
   stringLiteralOf,
+  typeImportOf,
 } from '../source-text/index.ts';
 import { handlerLocalOf, nameInCodeOf } from './code-names.ts';
 import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
 import { readersTable } from './readers.ts';
 
+/** The package the Handler map imports `HandlerMapOf` from. */
+const handlersPackage = '@cf-loom/handlers';
+
+/** Where the Handler map is written, and the files it imports beside its Handlers. */
+type HandlerMapPlace = {
+  readonly file: string;
+  readonly readersFile: string;
+  readonly rootFile: string;
+};
+
 /**
  * The Handler map written at `file`: plain data importing each Handler and the `readers` of the
- * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is.
+ * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is; it
+ * `satisfies HandlerMapOf<typeof contract>`, so a missing or misplaced Handler is a type error.
  */
 export function handlerMapTextOf(
   mapped: readonly HandlerPath[],
   stamps: readonly DeprecationStamp[],
-  { file, readersFile }: { readonly file: string; readonly readersFile: string },
+  { file, readersFile, rootFile }: HandlerMapPlace,
 ): string {
   const handlerImports = mapped.map(({ handled, path }) => {
     const specifier = relativeSpecifierOf(file, path);
@@ -33,7 +45,12 @@ export function handlerMapTextOf(
     specifier: readersSpecifier,
     line: namedImportOf([readersTable], readersSpecifier),
   };
-  const imports = [...handlerImports, readersImport]
+  const rootSpecifier = relativeSpecifierOf(file, rootFile);
+  const typeImports = [
+    { specifier: rootSpecifier, line: typeImportOf(['contract'], rootSpecifier) },
+    { specifier: handlersPackage, line: typeImportOf(['HandlerMapOf'], handlersPackage) },
+  ];
+  const imports = [...handlerImports, readersImport, ...typeImports]
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ line }) => line);
   const handled = mapped.map(({ handled }) => handled);
@@ -49,7 +66,7 @@ export function handlerMapTextOf(
     ...mapLinesOf('subscriptions', subscriptions),
     `  ${readersTable},`,
     ...stampLinesOf(stamps),
-    '};',
+    '} satisfies HandlerMapOf<typeof contract>;',
   ];
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
 }

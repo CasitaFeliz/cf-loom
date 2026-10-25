@@ -1,5 +1,5 @@
 import type { Contract, Http } from '@cf-loom/contract';
-import type { ResourcesOf } from '@cf-loom/handlers';
+import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
@@ -42,8 +42,11 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
  * Answers a Contract's Endpoints with their Handlers over web-standard HTTP, handing each the
  * Service's Resources, after checking the Service is assembled as the Contract says.
  */
-export function serve<Handlers extends ServedHandlers>(
-  contract: Contract,
+export function serve<
+  const C extends Contract,
+  const Handlers extends Pick<HandlerMapOf<C>, 'endpoints' | 'guards' | 'deprecatedAt'>,
+>(
+  contract: C,
   handlers: Handlers,
   ...options: CallArgument<ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>>
 ): Http;

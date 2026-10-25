@@ -538,6 +538,16 @@ describe('ResourcesOf', () => {
     expect(handlers.endpoints.getOrder.element).toBe(getOrder);
   });
 
+  test('a Handler whose Resources are any makes ResourcesOf name the cause', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
+    const loose: EndpointHandler<typeof getOrder, any> = handle(getOrder, () => reject(notFound));
+    const handlers = { endpoints: { getOrder: loose } };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(
+      'A Handler types its Resources as any: type them, as Needs<…> does',
+    );
+  });
+
   test('a Handler map none of whose Handlers takes Resources holds none', () => {
     const handlers = {
       endpoints: { getOrder: handle(getOrder, () => reject(notFound)) },

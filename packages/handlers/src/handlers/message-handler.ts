@@ -2,6 +2,7 @@ import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
 import type { MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
+import type { HandledBy } from './handler.ts';
 import type {
   CallArgument,
   NoResources,
@@ -49,24 +50,20 @@ export type EventImplementation<
 export type CommandHandler<
   Target extends Pairing<Command>,
   Resources extends object = NoResources,
-> = {
-  (
-    body: ReadBodyOf<Target>,
-    meta: DirectMeta,
-    ...last: CallArgument<ResourcesField<Resources>>
-  ): Promise<Fault | undefined>;
-  readonly element: Target['element'];
-};
+> = ((
+  body: ReadBodyOf<Target>,
+  meta: DirectMeta,
+  ...last: CallArgument<ResourcesField<Resources>>
+) => Promise<Fault | undefined>) &
+  HandledBy<Target['element']>;
 
 /** The Handler of a Subscription: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type EventHandler<
   Target extends Pairing<Subscription>,
   Resources extends object = NoResources,
-> = {
-  (
-    body: ReadBodyOf<Target>,
-    meta: DirectMeta,
-    ...last: CallArgument<ResourcesField<Resources>>
-  ): Promise<Fault | undefined>;
-  readonly element: Target['element'];
-};
+> = ((
+  body: ReadBodyOf<Target>,
+  meta: DirectMeta,
+  ...last: CallArgument<ResourcesField<Resources>>
+) => Promise<Fault | undefined>) &
+  HandledBy<Target['element']>;

@@ -27,9 +27,12 @@ export {
   versionBumpOf,
 } from '../compatibility/index.ts';
 export type {
+  AttachedGuardsOf,
+  CodeNameOf,
   GroupedField,
   GroupedOf,
   IsOneLiteral,
+  LiveOf,
   ProvidedEvent,
   Refusal,
 } from '../declarations/index.ts';

@@ -19,4 +19,5 @@ export {
   namespaceImportOf,
   pathOfSpecifier,
   relativeSpecifierOf,
+  typeImportOf,
 } from './modules.ts';
