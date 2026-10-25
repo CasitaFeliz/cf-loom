@@ -22,7 +22,6 @@ import {
 import { guardModuleOf } from './guard-code.ts';
 import { type ContractSnapshot, manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts';
-import { collidingCodesOf } from './names.ts';
 import { packagePaths } from './paths.ts';
 import { rejectionModuleOf } from './rejection-code.ts';
 
@@ -79,7 +78,7 @@ function serviceSourcesOf(
     exported.defs,
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
-  const unnamed = unnamedLineOf(Object.keys(exported.codes), defUses);
+  const unnamed = defNamesLineOf(defUses);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
@@ -109,15 +108,6 @@ function schemaFilesOf(
       rejectionModuleOf({ kind: 'rejection', code }, declared),
     ),
   ];
-}
-
-/** The codes or recursion ids the package writes that cannot be names of their own, in one line. */
-function unnamedLineOf(codes: readonly string[], defUses: readonly DefUse[]): string | undefined {
-  const colliding = collidingCodesOf(codes);
-  if (colliding !== undefined) {
-    return `The codes ${colliding[0]} and ${colliding[1]} are one name in code: rename one of them`;
-  }
-  return defNamesLineOf(defUses);
 }
 
 function defsFilesOf(

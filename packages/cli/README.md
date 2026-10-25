@@ -241,7 +241,6 @@ Exit 3, a tooling error:
 | `package.json names <name>, but a Definitions Package of scope <scope> publishes as <scope>/<name>` | `publish` |
 | `package.json lists <name> in <field> as <range>, which npm cannot install from the registry`, for a `workspace:`, `catalog:`, `file:` or `link:` range in a Definitions Package's `dependencies` or `optionalDependencies`, `<field>` being the one that lists it | `publish` |
 | `npm pack --dry-run listed no files` | `publish` |
-| `The codes <code> and <code> are one name in code: rename one of them` | `package`, `publish` |
 | `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `<element> is <path>, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts`, for the first Handler path in the Handler map's order that lies there once filled, where `<element>` is as in the next row | `generate`, `verify` |

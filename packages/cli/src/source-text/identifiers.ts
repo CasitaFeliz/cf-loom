@@ -6,6 +6,16 @@ export function kebabCaseOfCode(code: string): string {
 }
 
 /**
+ * The camelCase of an UPPER_SNAKE_CASE Rejection code, which never loses information: `ORDER_LOCKED`
+ * is `orderLocked`, and a word that starts with a digit keeps its underscore, so `ORDER_V_2` is
+ * `orderV_2` and `ORDER_V2` is `orderV2`.
+ */
+export function camelCaseOfCode(code: string): string {
+  const [first = '', ...rest] = code.toLowerCase().split('_');
+  return [first, ...rest.map(afterUnderscore)].join('');
+}
+
+/**
  * The camelCase of a name's alphanumeric words, as code names it: `order-locked` is
  * `orderLocked`, and `Tree Node` is `treeNode`.
  */
@@ -31,6 +41,10 @@ export function messageVersionStemOf(message: {
 /** The PascalCase of a camelCase name, as a type names it. */
 export function pascalCaseOf(name: string): string {
   return upperFirst(name);
+}
+
+function afterUnderscore(word: string): string {
+  return /^[0-9]/.test(word) ? `_${word}` : upperFirst(word);
 }
 
 function lowerFirst(word: string): string {

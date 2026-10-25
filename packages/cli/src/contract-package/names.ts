@@ -1,5 +1,10 @@
-import { byCodePoint, kebabCaseOf } from '@cf-loom/contract/internal';
-import { camelCaseOf, kebabCaseOfCode, messageVersionStemOf } from '../source-text/index.ts';
+import { kebabCaseOf } from '@cf-loom/contract/internal';
+import {
+  camelCaseOf,
+  camelCaseOfCode,
+  kebabCaseOfCode,
+  messageVersionStemOf,
+} from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFiles } from './paths.ts';
 
@@ -38,7 +43,7 @@ export function bindingOf(declared: PackagedDeclaration): string {
     case 'guard':
       return `${declared.name}Guard`;
     case 'rejection':
-      return `${camelCaseOf(kebabCaseOfCode(declared.code))}Rejection`;
+      return `${camelCaseOfCode(declared.code)}Rejection`;
     case 'event':
       return `${camelCaseOf(declared.name)}EventV${declared.version}`;
   }
@@ -47,18 +52,4 @@ export function bindingOf(declared: PackagedDeclaration): string {
 /** A declaration as another file of the package imports it. */
 export function siblingOf(declared: PackagedDeclaration): Sibling {
   return { name: bindingOf(declared), path: fileOf(declared), kind: 'value' };
-}
-
-/** The first two codes, in code point order, whose names in the package are one. */
-export function collidingCodesOf(codes: readonly string[]): readonly [string, string] | undefined {
-  const codeByBinding = new Map<string, string>();
-  for (const code of [...codes].sort(byCodePoint)) {
-    const binding = bindingOf({ kind: 'rejection', code });
-    const earlier = codeByBinding.get(binding);
-    if (earlier !== undefined) {
-      return [earlier, code];
-    }
-    codeByBinding.set(binding, code);
-  }
-  return undefined;
 }
