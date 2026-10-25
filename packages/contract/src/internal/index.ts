@@ -118,6 +118,7 @@ export type {
 export {
   failureLineOf,
   locationOf,
+  oneOf,
   problemLineOf,
   problemOf,
   validateContract,

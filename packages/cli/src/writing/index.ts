@@ -1,3 +1,7 @@
+export type { Deleted } from './deleting.ts';
+export { deleteFiles } from './deleting.ts';
+export type { FileMove, Moved } from './moving.ts';
+export { moveFiles } from './moving.ts';
 export type { PackageWrite } from './package-target.ts';
 export { writeContractPackageTo } from './package-target.ts';
 export type { CopiedFile, Staged } from './staging.ts';

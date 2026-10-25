@@ -7,15 +7,12 @@ import {
   type Run,
   snapshotFile,
 } from '../project/index.ts';
+import type { HandlerPath } from '../service-code/index.ts';
 import { comparedOf } from '../writing/index.ts';
 import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
-import {
-  missingHandlerPathsOf,
-  noFileLinesOf,
-  type PlacedService,
-  placedOf,
-} from './handler-files.ts';
-import { orphanLinesOf } from './orphans.ts';
+import { noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts';
+import { pendingLineOf } from './placement.ts';
+import { type RecordRead, recordOf } from './record.ts';
 import { serviceFilesOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
 import { unreachedLinesOf } from './unreached.ts';
@@ -60,9 +57,9 @@ async function verifyService(
   if (unreadable?.kind === 'failed') {
     return toolingError(unreadable.message);
   }
-  const orphans = orphanLinesOf(service);
-  if (orphans.kind === 'tooling') {
-    return toolingError(orphans.message);
+  const record = recordOf(service);
+  if (record.kind === 'tooling') {
+    return toolingError(record.message);
   }
   const outdated = compared.filter(({ compared: { kind } }) => kind === 'different');
   const failures = [
@@ -70,13 +67,25 @@ async function verifyService(
     ...outdated.map(
       ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
     ),
-    ...stubsOf(service, exports.exportsOf).failureLines,
+    ...stubsOf(service, exports.exportsOf, record.lacking).failureLines,
     ...regenerated.failureLines,
     ...unreachedLinesOf(service, exports.exports),
-    ...serviceFailuresOf(service),
-    ...orphans.lines,
+    ...serviceFailuresOf(service, record.lacking),
+    ...recordFailuresOf(record),
   ];
   return verifiedExit(failures, [snapshotFile, ...regenerated.files.map(({ path }) => path)]);
+}
+
+/** What the record leaves for `generate` to do or for the author to settle, as `verify` says it. */
+function recordFailuresOf(
+  record: Extract<RecordRead, { readonly kind: 'read' }>,
+): readonly string[] {
+  const rule = 'is a file cf-loom generate wrote, at no path the layout names';
+  return [
+    ...record.lines,
+    ...record.moves.map(pendingLineOf),
+    ...record.stale.map((path) => `${path} ${rule}: run cf-loom generate`),
+  ];
 }
 
 /** Every failure found, or each file compared up to date. */
@@ -88,9 +97,12 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
 }
 
 /** What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them. */
-function serviceFailuresOf(service: PlacedService): readonly string[] {
+function serviceFailuresOf(
+  service: PlacedService,
+  lacking: readonly HandlerPath[],
+): readonly string[] {
   return [
-    ...missingHandlerPathsOf(service).map((path) => `${path} is missing: run cf-loom generate`),
+    ...lacking.map(({ path }) => `${path} is missing: run cf-loom generate`),
     ...noFileLinesOf(service),
   ];
 }

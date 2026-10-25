@@ -1862,8 +1862,16 @@ async function aChangedProjectListing(
     ...versions.map((version) => publishedAs(project, version)),
   );
   write(project, after);
+  withoutRetiredHandlers(project);
   await generateIn(lab, project);
   return { project, served };
+}
+
+/** Deletes the Endpoint and Command Handlers `generate` wrote, as a developer deletes those of the Elements a change retires. */
+function withoutRetiredHandlers(project: string): void {
+  for (const folder of ['endpoints', 'commands']) {
+    rmSync(join(project, 'src', folder), { recursive: true, force: true });
+  }
 }
 
 /** A project whose root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */

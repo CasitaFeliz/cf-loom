@@ -8,7 +8,11 @@ export type PlacedService = BuiltService & { readonly handlerPaths: readonly Han
 
 /** The Service with its Handler paths, or the line saying why one cannot be placed. */
 export function placedOf(service: BuiltService): PlacedService | Tooling {
-  const placed = handlerPathsOf(service.snapshot, service.project.layout);
+  const placed = handlerPathsOf(
+    service.snapshot,
+    service.project.layout,
+    service.project.directory,
+  );
   switch (placed.kind) {
     case 'placed':
       return { ...service, handlerPaths: placed.paths };
@@ -17,28 +21,12 @@ export function placedOf(service: BuiltService): PlacedService | Tooling {
   }
 }
 
-/** The Handler paths the Handler map imports. */
-export function mappedPathsOf({
-  handlerPaths,
-}: Pick<PlacedService, 'handlerPaths'>): readonly HandlerPath[] {
-  return handlerPaths.filter(({ isMapped }) => isMapped);
-}
-
-/** The Handler paths the Handler map imports where nothing is, not even a link. */
-export function missingHandlerPathsOf(
-  service: Pick<PlacedService, 'project' | 'handlerPaths'>,
-): readonly string[] {
-  const { directory } = service.project;
-  const paths = mappedPathsOf(service).map(({ path }) => path);
-  return paths.filter((path) => isNothingAt(join(directory, path)));
-}
-
 /** A line for every Handler path that something other than a file holds. */
 export function noFileLinesOf(
   service: Pick<PlacedService, 'project' | 'handlerPaths'>,
 ): readonly string[] {
   const { directory } = service.project;
-  const paths = mappedPathsOf(service).map(({ path }) => path);
+  const paths = service.handlerPaths.map(({ path }) => path);
   const blocked = paths.filter((path) => isNoFile(join(directory, path)));
   return blocked.map((path) => `${path} is no file: a Handler is a file`);
 }

@@ -2,7 +2,7 @@ import type { ExportsOf } from '../loading/index.ts';
 import { type BuiltProject, snapshotFile } from '../project/index.ts';
 import { deprecationStampsOf, handlerMapTextOf, readersTextOf } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
-import { mappedPathsOf, type PlacedService } from './handler-files.ts';
+import type { PlacedService } from './handler-files.ts';
 import { messageExportsOf } from './message-exports.ts';
 
 /** `contract.snapshot.json`, which every root regenerates. */
@@ -44,6 +44,6 @@ function handlerMapFileOf(service: PlacedService): GeneratedFile {
   const { handlerMap, readers } = service.project.layout;
   const stamps = deprecationStampsOf(service.snapshot);
   const where = { file: handlerMap, readersFile: readers };
-  const text = handlerMapTextOf(mappedPathsOf(service), stamps, where);
+  const text = handlerMapTextOf(service.handlerPaths, stamps, where);
   return { path: handlerMap, text, written: 'always' };
 }
