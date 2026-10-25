@@ -9,7 +9,12 @@
     }
   },
   "files": {
-    "includes": ["**", "!examples/*/contract.snapshot.json", "!examples/*/src/**/*.generated.ts"]
+    "includes": [
+      "**",
+      "!examples/*/contract.snapshot.json",
+      "!examples/*/src/**/*.generated.ts",
+      "!.claude/workflows"
+    ]
   },
   "formatter": {
     "indentStyle": "space",
