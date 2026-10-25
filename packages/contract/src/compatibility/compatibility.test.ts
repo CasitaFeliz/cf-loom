@@ -15,6 +15,7 @@ import {
   type PublishedSnapshot,
   type ServiceSnapshot,
   type Snapshot,
+  type Verdict,
 } from '../internal/index.ts';
 
 type Lifecycle = EndpointSnapshot['lifecycle'];
@@ -158,7 +159,7 @@ function identityOf(site: ChangeSite): string {
 type Element = {
   readonly name: string;
   readonly site: ChangeSite;
-  readonly retiring: 'needed' | 'not-needed';
+  readonly retiring: Verdict;
   readonly proposed: (lifecycle: Lifecycle) => Partial<ServiceSnapshot>;
   readonly live: (lifecycle: 'active' | 'deprecated') => Partial<PublishedServiceSnapshot>;
   readonly retired: () => Partial<PublishedServiceSnapshot>;
@@ -167,8 +168,8 @@ type Element = {
 
 const endpoint: Element = {
   name: 'Endpoint',
-  site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
-  retiring: 'needed',
+  site: { kind: 'endpoint', identity: 'GET /orders/{}', name: 'getOrder', visibility: 'public' },
+  retiring: 'approval-needed',
   proposed: (lifecycle) => ({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } }),
   live: (lifecycle) => ({ endpoints: { 'GET /orders/{}': aLive(anEndpoint(), lifecycle) } }),
   retired: () => ({ endpoints: { 'GET /orders/{}': aRetired(anEndpoint()) } }),
@@ -179,7 +180,7 @@ const endpoint: Element = {
 const event: Element = {
   name: 'Event',
   site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
-  retiring: 'needed',
+  retiring: 'approval-needed',
   proposed: (lifecycle) => ({ events: { 'OrderPlaced@1': anEvent({ lifecycle }) } }),
   live: (lifecycle) => ({ events: { 'OrderPlaced@1': aLive(anEvent(), lifecycle) } }),
   retired: () => ({ events: { 'OrderPlaced@1': aRetired(anEvent()) } }),
@@ -187,8 +188,8 @@ const event: Element = {
 };
 const command: Element = {
   name: 'Command',
-  site: { kind: 'command', identity: 'ChargeCard@1' },
-  retiring: 'not-needed',
+  site: { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' },
+  retiring: 'allowed',
   proposed: (lifecycle) => ({ commands: { 'ChargeCard@1': aCommand({ lifecycle }) } }),
   live: (lifecycle) => ({ commands: { 'ChargeCard@1': aLive(aCommand(), lifecycle) } }),
   retired: () => ({ commands: { 'ChargeCard@1': aRetired(aCommand()) } }),
@@ -260,7 +261,9 @@ describe('compatibilityReportOf, presence', () => {
   test.each(elements)('adding a $name is Additive', ({ site, proposed }) => {
     const changes = changesOf(aBaseline(), aProposed(proposed('active')));
 
-    expect(changes).toEqual([{ site, difference: { kind: 'added' }, class: 'additive' }]);
+    expect(changes).toEqual([
+      { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' },
+    ]);
   });
 
   test.each(elements)(
@@ -268,7 +271,9 @@ describe('compatibilityReportOf, presence', () => {
     ({ site, retired }) => {
       const changes = changesOf(aBaseline(retired()), aProposed());
 
-      expect(changes).toEqual([{ site, difference: { kind: 'tombstoned' }, class: 'neutral' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'tombstoned' }, class: 'neutral', verdict: 'allowed' },
+      ]);
     },
   );
 
@@ -277,9 +282,23 @@ describe('compatibilityReportOf, presence', () => {
     ({ site, live, lifecycle }) => {
       const changes = changesOf(aBaseline(live(lifecycle)), aProposed());
 
-      expect(changes).toEqual([{ site, difference: { kind: 'deleted' }, class: 'not-allowed' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' },
+      ]);
     },
   );
+
+  test('a Change on an Endpoint dropped from the proposed Snapshot names it as the Baseline did', () => {
+    const baseline = aBaseline({
+      endpoints: { 'GET /orders/{}': aLive(anEndpoint({ name: 'fetchOrder' })) },
+    });
+
+    const changes = changesOf(baseline, aProposed());
+
+    expect(changes.map(({ site }) => site)).toEqual([
+      { kind: 'endpoint', identity: 'GET /orders/{}', name: 'fetchOrder', visibility: 'public' },
+    ]);
+  });
 
   test.each(elements)(
     'a $name tombstone the proposed Snapshot no longer declares is no Change',
@@ -296,7 +315,7 @@ describe('compatibilityReportOf, presence', () => {
       const changes = changesOf(aBaseline(tombstone()), aProposed(proposed('active')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'identity-reused' }, class: 'not-allowed' },
+        { site, difference: { kind: 'identity-reused' }, class: 'breaking', verdict: 'refused' },
       ]);
     },
   );
@@ -312,6 +331,7 @@ describe('compatibilityReportOf, presence', () => {
         site: { kind: 'event', identity: 'OrderPlaced@2', visibility: 'internal' },
         difference: { kind: 'added' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
@@ -325,11 +345,22 @@ describe('compatibilityReportOf, presence', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      { site: endpoint.site, difference: { kind: 'deleted' }, class: 'not-allowed' },
       {
-        site: { kind: 'endpoint', identity: 'GET /purchases/{}', visibility: 'public' },
+        site: endpoint.site,
+        difference: { kind: 'deleted' },
+        class: 'breaking',
+        verdict: 'refused',
+      },
+      {
+        site: {
+          kind: 'endpoint',
+          identity: 'GET /purchases/{}',
+          name: 'getOrder',
+          visibility: 'public',
+        },
         difference: { kind: 'added' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
@@ -362,7 +393,9 @@ describe('compatibilityReportOf, lifecycle', () => {
   test.each(elements)('marking a $name Deprecated is Additive', ({ site, live, proposed }) => {
     const changes = changesOf(aBaseline(live('active')), aProposed(proposed('deprecated')));
 
-    expect(changes).toEqual([{ site, difference: { kind: 'deprecated' }, class: 'additive' }]);
+    expect(changes).toEqual([
+      { site, difference: { kind: 'deprecated' }, class: 'additive', verdict: 'allowed' },
+    ]);
   });
 
   test.each(elements)(
@@ -370,7 +403,9 @@ describe('compatibilityReportOf, lifecycle', () => {
     ({ site, live, proposed }) => {
       const changes = changesOf(aBaseline(live('deprecated')), aProposed(proposed('active')));
 
-      expect(changes).toEqual([{ site, difference: { kind: 'reactivated' }, class: 'neutral' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'reactivated' }, class: 'neutral', verdict: 'allowed' },
+      ]);
     },
   );
 
@@ -380,7 +415,7 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(live('deprecated')), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired' }, class: 'breaking', approval: retiring },
+        { site, difference: { kind: 'retired' }, class: 'breaking', verdict: retiring },
       ]);
     },
   );
@@ -400,7 +435,7 @@ describe('compatibilityReportOf, lifecycle', () => {
         site: { kind: 'event', identity: 'OrderAudited@1', visibility: 'private' },
         difference: { kind: 'retired' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
     ]);
   });
@@ -411,7 +446,12 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(live('active')), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired-before-deprecated' }, class: 'not-allowed' },
+        {
+          site,
+          difference: { kind: 'retired-before-deprecated' },
+          class: 'breaking',
+          verdict: 'refused',
+        },
       ]);
     },
   );
@@ -422,8 +462,13 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'added' }, class: 'additive' },
-        { site, difference: { kind: 'retired-before-deprecated' }, class: 'not-allowed' },
+        { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' },
+        {
+          site,
+          difference: { kind: 'retired-before-deprecated' },
+          class: 'breaking',
+          verdict: 'refused',
+        },
       ]);
     },
   );
@@ -434,7 +479,12 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(retired()), aProposed(proposed(lifecycle)));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired-brought-back', lifecycle }, class: 'not-allowed' },
+        {
+          site,
+          difference: { kind: 'retired-brought-back', lifecycle },
+          class: 'additive',
+          verdict: 'refused',
+        },
       ]);
     },
   );
@@ -547,9 +597,10 @@ describe('compatibilityReportOf, Visibility', () => {
 
     expect(changes).toEqual([
       {
-        site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
+        site: { ...endpoint.site, visibility: 'public' },
         difference: { kind: 'visibility-widened', from: 'private', to: 'public' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
@@ -565,10 +616,10 @@ describe('compatibilityReportOf, Visibility', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: from },
+          site: { ...endpoint.site, visibility: from },
           difference: { kind: 'visibility-narrowed', from, to },
           class: 'breaking',
-          approval: 'needed',
+          verdict: 'approval-needed',
         },
       ]);
     },
@@ -587,7 +638,7 @@ describe('compatibilityReportOf, Visibility', () => {
         site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
         difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
     ]);
   });
@@ -615,11 +666,8 @@ describe('compatibilityReportOf, Visibility', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes.map(({ site, difference }) => [site, difference.kind])).toEqual([
-      [{ kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' }, 'deprecated'],
-      [
-        { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
-        'visibility-narrowed',
-      ],
+      [{ ...endpoint.site, visibility: 'public' }, 'deprecated'],
+      [{ ...endpoint.site, visibility: 'public' }, 'visibility-narrowed'],
     ]);
   });
 
@@ -662,10 +710,15 @@ describe('compatibilityReportOf, renames', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility },
-          difference: { kind: 'renamed', from: 'getOrder', to: 'fetchOrder', visibility },
+          site: { ...endpoint.site, name: 'fetchOrder', visibility },
+          difference: {
+            kind: 'renamed',
+            from: 'getOrder',
+            to: 'fetchOrder',
+            baselineVisibility: visibility,
+          },
           class: 'breaking',
-          approval: 'needed',
+          verdict: 'approval-needed',
         },
       ]);
     },

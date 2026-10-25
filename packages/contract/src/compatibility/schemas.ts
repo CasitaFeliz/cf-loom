@@ -1,4 +1,4 @@
-import type { Path, SchemaNode } from '../walker/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
 import { enumFindingsOf, isEnumLike } from './enums.ts';
@@ -12,17 +12,18 @@ import {
   typeChanged,
 } from './findings.ts';
 import { type EnteredKey, followedOf } from './refs.ts';
-import type { Difference, EndpointPosition, PositionOrEvery } from './report.ts';
+import type { Difference, EndpointPosition, Position } from './report.ts';
+import type { Step } from './steps.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
-/** Where a schema sits: the Position it is read in, and its path from the site. */
-export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
+/** Where a schema sits: the Position it is read in, and its steps from the site. */
+export type SchemaPlace = { readonly position: Position; readonly at: readonly Step[] };
 
 /**
  * Where a schema read as Input or Success sits: an Endpoint's part, a Guard's demand or a
  * Rejection's body; never a Message's or a shared schema's.
  */
-export type EndpointPlace = { readonly position: EndpointPosition; readonly at: Path };
+export type EndpointPlace = { readonly position: EndpointPosition; readonly at: readonly Step[] };
 
 /**
  * A place with the keys of the pairs already entered within its root schema, one list shared by

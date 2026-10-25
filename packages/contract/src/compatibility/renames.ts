@@ -11,6 +11,6 @@ export function renameDifferenceOf(pair: Pair<EndpointSnapshot>): Difference | u
     kind: 'renamed',
     from: pair.baseline.name,
     to: pair.proposed.name,
-    visibility: pair.baseline.visibility,
+    baselineVisibility: pair.baseline.visibility,
   };
 }

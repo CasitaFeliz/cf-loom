@@ -1,10 +1,11 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
-import type { Field, ObjectNode, Path } from '../walker/index.ts';
+import type { Field, ObjectNode } from '../walker/index.ts';
 import { counterpartsOf } from './counterparts.ts';
 import { unconstrainedTypeOf } from './enums.ts';
 import type { BothDefs } from './findings.ts';
 import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
+import { fieldStep, partsOf, type Step } from './steps.ts';
 
 /** A query or headers object of the Baseline and the proposed one, `null` where none is declared. */
 export type TextParts = {
@@ -50,7 +51,7 @@ function paramSchemaDifferencesOf(
   defs: BothDefs,
   name: string,
 ): readonly Difference[] {
-  const at = ['input', 'params', 'fields', name];
+  const at = [...partsOf('input', 'params'), fieldStep(name)];
   if (params.baseline === undefined || params.proposed === undefined) {
     const shape = { kind: 'unproven', node: 'param' } as const;
     return [{ kind: 'schema', position: 'input', at, shape }];
@@ -81,21 +82,30 @@ export function textPartDifferencesOf(
 
 /**
  * Input headers as Input, then each optional one added whose schema refuses some text: a header
- * name is shared with proxies, gateways and browsers, which may already send it.
+ * name is shared with proxies, gateways and browsers, which may already send it. Such a header is
+ * left out of the proposed object, so it is `header-refuses-text` alone and no field added.
  */
 export function inputHeaderDifferencesOf(
   parts: TextParts,
   defs: BothDefs,
-  at: Path,
+  at: readonly Step[],
 ): readonly Difference[] {
   const { baseline, proposed } = objectsOf(parts);
-  const refusing: Difference[] = [];
-  for (const header of counterpartsOf(baseline.fields, proposed.fields)) {
-    if (header.kind === 'added' && refusesSomeText(header.proposed)) {
-      refusing.push({ kind: 'header-refuses-text', at: [...at, 'fields', header.key] });
-    }
-  }
-  return [...textPartDifferencesOf(parts, defs, { position: 'input', at }), ...refusing];
+  const refusing = counterpartsOf(baseline.fields, proposed.fields)
+    .filter((header) => header.kind === 'added' && refusesSomeText(header.proposed))
+    .map((header) => header.key);
+  const accepted = { baseline, proposed: withoutFields(proposed, refusing) };
+  const refusals = refusing.map((name) => refusalOf([...at, fieldStep(name)]));
+  return [...textPartDifferencesOf(accepted, defs, { position: 'input', at }), ...refusals];
+}
+
+function refusalOf(at: readonly Step[]): Difference {
+  return { kind: 'header-refuses-text', at };
+}
+
+function withoutFields(object: ObjectNode, names: readonly string[]): ObjectNode {
+  const kept = Object.entries(object.fields).filter(([name]) => !names.includes(name));
+  return { ...object, fields: Object.fromEntries(kept) };
 }
 
 /** Whether an optional header accepts less than every text, which a Caller may already send. */

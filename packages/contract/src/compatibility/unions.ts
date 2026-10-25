@@ -10,6 +10,7 @@ import {
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
 import type { ShapeDifference } from './report.ts';
+import { variantStep } from './steps.ts';
 
 /**
  * How two discriminated unions differ. Variants are matched by discriminator value alone, so a
@@ -21,11 +22,15 @@ export function taggedFindingsOf({ baseline, proposed }: NodePairOf<'tagged'>): 
     const change = { from: baseline.discriminator, to: proposed.discriminator };
     return [found({ kind: 'discriminator-changed', ...change })];
   }
-  return counterpartsOf(baseline.variants, proposed.variants).map(variantFindingOf);
+  const variants = counterpartsOf(baseline.variants, proposed.variants);
+  return variants.map((variant) => variantFindingOf(variant, baseline.discriminator));
 }
 
-function variantFindingOf(variant: Counterpart<ObjectNode | RefNode>): Finding {
-  const steps = ['variants', variant.key];
+function variantFindingOf(
+  variant: Counterpart<ObjectNode | RefNode>,
+  discriminator: string,
+): Finding {
+  const steps = [variantStep(discriminator, variant.key)];
   switch (variant.kind) {
     case 'added':
       return found({ kind: 'variant-added' }, steps);

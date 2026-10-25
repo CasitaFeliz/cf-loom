@@ -7,6 +7,7 @@ import { answeredDifferencesOf } from './codes.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import type { Difference, SiteDifferences } from './report.ts';
+import { partsOf } from './steps.ts';
 import { inputHeaderDifferencesOf, textPartDifferencesOf } from './text-parts.ts';
 
 /**
@@ -20,7 +21,7 @@ export function guardDifferencesOf(
   const defs = bothDefsOf(baseline, proposed);
   return counterpartsOf(baseline.guards, proposed.guards).map(
     (guard): SiteDifferences => ({
-      site: { kind: 'guard', name: guard.key },
+      site: { kind: 'guard', name: guard.key, visibility: 'public' },
       differences: differencesOf(guard, defs),
     }),
   );
@@ -46,8 +47,8 @@ function keptDifferencesOf(
   const query = { baseline: baseline.demands.query, proposed: proposed.demands.query };
   const headers = { baseline: baseline.demands.headers, proposed: proposed.demands.headers };
   return [
-    ...textPartDifferencesOf(query, defs, { position: 'input', at: ['demands', 'query'] }),
-    ...inputHeaderDifferencesOf(headers, defs, ['demands', 'headers']),
+    ...textPartDifferencesOf(query, defs, { position: 'input', at: partsOf('demands', 'query') }),
+    ...inputHeaderDifferencesOf(headers, defs, partsOf('demands', 'headers')),
     ...answeredDifferencesOf(baseline.rejections, proposed.rejections),
   ];
 }

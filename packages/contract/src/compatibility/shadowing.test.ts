@@ -124,18 +124,19 @@ function shadowedOf(
 
 function shadowing(identity: string, by: string, visibility: Visibility = 'public'): Change {
   return {
-    site: { kind: 'endpoint', identity, visibility },
+    site: { kind: 'endpoint', identity, name: identity, visibility },
     difference: { kind: 'shadowed', by },
     class: 'breaking',
-    approval: 'needed',
+    verdict: 'approval-needed',
   };
 }
 
 function added(identity: string): Change {
   return {
-    site: { kind: 'endpoint', identity, visibility: 'public' },
+    site: { kind: 'endpoint', identity, name: identity, visibility: 'public' },
     difference: { kind: 'added' },
     class: 'additive',
+    verdict: 'allowed',
   };
 }
 
@@ -336,9 +337,10 @@ describe('compatibilityReportOf, shadowing, Retired Endpoints', () => {
 
     expect(report.changes).toEqual([
       {
-        site: { kind: 'endpoint', identity: latestOrder, visibility: 'public' },
+        site: { kind: 'endpoint', identity: latestOrder, name: latestOrder, visibility: 'public' },
         difference: { kind: 'tombstoned' },
         class: 'neutral',
+        verdict: 'allowed',
       },
     ]);
   });

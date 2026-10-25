@@ -1,21 +1,22 @@
 import type { TupleNode } from '../walker/index.ts';
 import { boundFindingsOf } from './constraints.ts';
 import { type BothDefs, type Finding, found, inside, type NodePairOf } from './findings.ts';
+import { itemsStep, keyStep, restStep, valueStep } from './steps.ts';
 import { plainUnionFindingsOf } from './unions.ts';
 
 /** An array's item counts under the constraint rules, then its items under the field rules. */
 export function arrayFindingsOf({ baseline, proposed }: NodePairOf<'array'>): readonly Finding[] {
   return [
     ...boundFindingsOf(baseline, proposed),
-    inside(baseline.items, proposed.items, ['items']),
+    inside(baseline.items, proposed.items, [itemsStep]),
   ];
 }
 
 /** A record's key under the constraint rules and its value under the field rules. */
 export function recordFindingsOf({ baseline, proposed }: NodePairOf<'record'>): readonly Finding[] {
   return [
-    inside(baseline.key, proposed.key, ['key']),
-    inside(baseline.value, proposed.value, ['value']),
+    inside(baseline.key, proposed.key, [keyStep]),
+    inside(baseline.value, proposed.value, [valueStep]),
   ];
 }
 
@@ -39,7 +40,7 @@ function withoutRest(tuple: TupleNode): TupleNode {
 }
 
 function restFindingsOf({ baseline, proposed }: NodePairOf<'tuple'>): readonly Finding[] {
-  const steps = ['rest'];
+  const steps = [restStep];
   if (baseline.rest === undefined) {
     return proposed.rest === undefined ? [] : [found({ kind: 'rest-added' }, steps)];
   }

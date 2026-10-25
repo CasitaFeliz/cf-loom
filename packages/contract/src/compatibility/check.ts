@@ -12,7 +12,7 @@ import {
 import { messageBodyDifferencesOf } from './bodies.ts';
 import { classificationOf } from './classes.ts';
 import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.ts';
-import { endpointDifferencesOf } from './endpoints.ts';
+import { endpointDifferencesOf, endpointSiteOf } from './endpoints.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import { guardDifferencesOf } from './guards.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
@@ -98,9 +98,7 @@ function endpointPairChangesOf(
   defs: BothDefs,
   paths: EndpointPaths,
 ): readonly Change[] {
-  const visibility = siteVisibilityOf(pair);
-  const site: ChangeSite = { kind: 'endpoint', identity: pair.identity, visibility };
-  return changesAt(site, [
+  return changesAt(endpointSiteOf(pair), [
     presenceDifferenceOf(pair),
     lifecycleDifferenceOf(pair),
     visibilityDifferenceOf(pair),
@@ -144,7 +142,7 @@ function commandChangesOf(
   const defs = bothDefsOf(baseline, proposed);
   const history = messageHistoryOf(baseline, proposed, 'command');
   return pairsOf(baseline.commands, proposed.commands).flatMap((pair) =>
-    changesAt({ kind: 'command', identity: pair.identity }, [
+    changesAt({ kind: 'command', identity: pair.identity, visibility: 'private' }, [
       presenceDifferenceOf(pair),
       ...historyDifferencesOf(pair, history),
       lifecycleDifferenceOf(pair),

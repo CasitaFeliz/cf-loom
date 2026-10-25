@@ -1,5 +1,6 @@
-import { canonicalJson, type Defs, type Path, type SchemaNode, shapeOf } from '../walker/index.ts';
+import { canonicalJson, type Defs, type SchemaNode, shapeOf } from '../walker/index.ts';
 import type { ShapeDifference } from './report.ts';
+import type { Step } from './steps.ts';
 
 /** A schema of the Baseline and the proposed one at the same place. */
 export type NodePair = { readonly baseline: SchemaNode; readonly proposed: SchemaNode };
@@ -26,16 +27,20 @@ export function bothDefsOf(
  * inside them still to compare.
  */
 export type Finding =
-  | { readonly kind: 'found'; readonly steps: Path; readonly shape: ShapeDifference }
-  | { readonly kind: 'inside'; readonly steps: Path; readonly pair: NodePair };
+  | { readonly kind: 'found'; readonly steps: readonly Step[]; readonly shape: ShapeDifference }
+  | { readonly kind: 'inside'; readonly steps: readonly Step[]; readonly pair: NodePair };
 
 /** A difference in the node itself, or at the steps that lead to it from there. */
-export function found(shape: ShapeDifference, steps: Path = []): Finding {
+export function found(shape: ShapeDifference, steps: readonly Step[] = []): Finding {
   return { kind: 'found', steps, shape };
 }
 
 /** Two nodes inside the ones compared, at the steps that lead to them. */
-export function inside(baseline: SchemaNode, proposed: SchemaNode, steps: Path): Finding {
+export function inside(
+  baseline: SchemaNode,
+  proposed: SchemaNode,
+  steps: readonly Step[],
+): Finding {
   return { kind: 'inside', steps, pair: { baseline, proposed } };
 }
 

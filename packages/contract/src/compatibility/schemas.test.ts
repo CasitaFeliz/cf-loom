@@ -23,6 +23,7 @@ import {
   type ShapeDifference,
   type Snapshot,
   type StringNode,
+  snapshotPathOf,
   type TaggedNode,
   walkSchemas,
 } from '../internal/index.ts';
@@ -185,14 +186,15 @@ function aRef(name: string): SchemaNode {
   return { type: 'ref', name };
 }
 
-/** What a Breaking difference in a place is classed: an Approval, or not allowed for a Message Version. */
-type Breaking =
-  | { readonly class: 'breaking'; readonly approval: 'needed' }
-  | { readonly class: 'not-allowed' };
+/** What a Breaking difference in a place is judged: an Approval, or refused for a Message Version. */
+type Breaking = {
+  readonly class: 'breaking';
+  readonly verdict: 'approval-needed' | 'refused';
+};
 
 type Place = {
   readonly name: string;
-  readonly position: Position | 'every';
+  readonly position: Position;
   readonly site: ChangeSite;
   readonly root: Path;
   readonly breaking: Breaking;
@@ -204,9 +206,14 @@ type Place = {
 const input: Place = {
   name: 'Input',
   position: 'input',
-  site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
+  site: {
+    kind: 'endpoint',
+    identity: 'POST /orders',
+    name: 'createOrder',
+    visibility: 'public',
+  },
   root: ['input', 'body'],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 0,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(node, null)) } }),
@@ -216,9 +223,14 @@ const input: Place = {
 const success: Place = {
   name: 'Success',
   position: 'success',
-  site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
+  site: {
+    kind: 'endpoint',
+    identity: 'POST /orders',
+    name: 'createOrder',
+    visibility: 'public',
+  },
   root: ['success', 'body'],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 1,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(null, node)) } }),
@@ -230,17 +242,17 @@ const message: Place = {
   position: 'message',
   site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
   root: ['body'],
-  breaking: { class: 'not-allowed' },
+  breaking: { class: 'breaking', verdict: 'refused' },
   column: 2,
   baseline: (node, defs) => aBaseline({ defs, events: { 'OrderPlaced@1': aLive(anEvent(node)) } }),
   proposed: (node, defs) => aProposed({ defs, events: { 'OrderPlaced@1': anEvent(node) } }),
 };
 const shared: Place = {
   name: 'a shared schema',
-  position: 'every',
-  site: { kind: 'shared-schema', name: 'money' },
+  position: 'message',
+  site: { kind: 'shared-schema', name: 'money', visibility: 'public' },
   root: [],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 3,
   baseline: (node, defs) => aBaselineDefinitions({ defs, schemas: { money: node } }),
   proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
@@ -274,7 +286,20 @@ type Row = {
   readonly places?: readonly Place[];
 };
 
-function changeAt(place: Place, difference: Found): Change {
+/** A Change with the Snapshot's own path in place of its steps, as the rows below spell their paths. */
+type PathChange = Omit<Change, 'difference'> & { readonly difference: unknown };
+
+function snapshotPathsOf(changes: readonly Change[]): readonly PathChange[] {
+  return changes.map((change) => {
+    const { difference } = change;
+    if (!('at' in difference)) {
+      return change;
+    }
+    return { ...change, difference: { ...difference, at: snapshotPathOf(difference.at) } };
+  });
+}
+
+function changeAt(place: Place, difference: Found): PathChange {
   const shapeChange = {
     kind: 'schema',
     position: place.position,
@@ -284,7 +309,7 @@ function changeAt(place: Place, difference: Found): Change {
   const changeClass = difference.classes[place.column];
   return changeClass === 'breaking'
     ? { site: place.site, difference: shapeChange, ...place.breaking }
-    : { site: place.site, difference: shapeChange, class: changeClass };
+    : { site: place.site, difference: shapeChange, class: changeClass, verdict: 'allowed' };
 }
 
 function comparedOf(baseline: PublishedSnapshot, proposed: Snapshot): ComparedReport {
@@ -303,8 +328,8 @@ function reportOf(place: Place, row: Pick<Row, 'from' | 'to' | 'fromDefs' | 'toD
 
 function outcomeOf(place: Place, difference: Found): string {
   const changeClass = difference.classes[place.column];
-  return changeClass === 'breaking' && place.breaking.class === 'not-allowed'
-    ? 'not allowed'
+  return changeClass === 'breaking' && place.breaking.verdict === 'refused'
+    ? 'refused'
     : changeClass;
 }
 
@@ -323,7 +348,9 @@ function casesOf(rows: readonly Row[]) {
 function expectRow({ row, where }: ReturnType<typeof casesOf>[number]): void {
   const report = reportOf(where, row);
 
-  expect(report.changes).toEqual(row.found.map((difference) => changeAt(where, difference)));
+  expect(snapshotPathsOf(report.changes)).toEqual(
+    row.found.map((difference) => changeAt(where, difference)),
+  );
 }
 
 const noteField = ['fields', 'note'];
@@ -1059,7 +1086,7 @@ describe('compatibilityReportOf, constraints', () => {
 
       const report = reportOf(place, { from, to });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found(tightened('lower-bound'), acceptsLess, ['fields', 'name'])),
       ]);
     },
@@ -1477,7 +1504,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { tree: treeWithName },
       });
 
-      expect(report.changes).toEqual([changeAt(place, treeNameAdded)]);
+      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, treeNameAdded)]);
     },
   );
 
@@ -1505,7 +1532,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { sprawl: anObject({ ...sprawl.fields, name: required(aString) }) },
     });
 
-    expect(report.changes).toEqual([changeAt(input, treeNameAdded)]);
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(input, treeNameAdded)]);
   });
 
   test('a dense set of mutually recursive defs, unchanged, is compared fast', () => {
@@ -1530,7 +1557,9 @@ describe('compatibilityReportOf, refs', () => {
     });
 
     const path = ['fields', 'def1', 'fields', 'def10', 'fields', 'def11', 'fields', 'name'];
-    expect(report.changes).toEqual([changeAt(input, found(nameAdded, acceptsLess, path))]);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(nameAdded, acceptsLess, path)),
+    ]);
   });
 
   test.each(places)(
@@ -1611,7 +1640,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { person: leaf },
       });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found({ kind: 'union-changed' }, breaksEverywhere)),
       ]);
     },
@@ -1631,7 +1660,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { card: anObject({ ...card.fields, last4: required(aString) }) },
       });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])),
       ]);
     },
@@ -1719,11 +1748,28 @@ describe('compatibilityReportOf, refs', () => {
   );
 });
 
-function schemaChange(position: Position | 'every', at: Path, shape: ShapeDifference) {
+function schemaChange(position: Position, at: Path, shape: ShapeDifference) {
   return { kind: 'schema', position, at, shape } as const;
 }
 
 describe('compatibilityReportOf, Elements’ bodies', () => {
+  test('a difference inside a variant is at a step that names the discriminator and the variant', () => {
+    const from = aTagged('kind', { card: { last4: required(aString) } });
+    const to = aTagged('kind', { card: {} });
+
+    const report = reportOf(input, { from, to });
+
+    const [change] = report.changes;
+    expect(change?.difference).toMatchObject({
+      at: [
+        { kind: 'part', name: 'input' },
+        { kind: 'part', name: 'body' },
+        { kind: 'variant', discriminator: 'kind', value: '"card"' },
+        { kind: 'field', name: 'last4' },
+      ],
+    });
+  });
+
   test('a Command’s body is read as Message', () => {
     const baseline = aBaseline({ commands: { 'ChargeCard@1': aLive(aCommand(anObject())) } });
     const proposed = aProposed({
@@ -1732,21 +1778,19 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
 
     const report = comparedOf(baseline, proposed);
 
-    const site: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
-    expect(report).toEqual({
-      kind: 'compared',
-      hashChanged: true,
-      changes: [
-        {
-          site,
-          difference: schemaChange('message', ['body', 'fields', 'amount'], {
-            kind: 'field-added',
-            required: true,
-          }),
-          class: 'not-allowed',
-        },
-      ],
-    });
+    const site: ChangeSite = { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' };
+    expect(report.hashChanged).toBe(true);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      {
+        site,
+        difference: schemaChange('message', ['body', 'fields', 'amount'], {
+          kind: 'field-added',
+          required: true,
+        }),
+        class: 'breaking',
+        verdict: 'refused',
+      },
+    ]);
   });
 
   test('a Breaking Change to an Endpoint’s body needs an Approval', () => {
@@ -1755,8 +1799,8 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
       to: anObject({ amount: required(aNumber) }),
     }).changes;
 
-    expect(changes.map((change) => change.class === 'breaking' && change.approval)).toEqual([
-      'needed',
+    expect(changes.map(({ class: changeClass, verdict }) => [changeClass, verdict])).toEqual([
+      ['breaking', 'approval-needed'],
     ]);
   });
 
@@ -1814,31 +1858,43 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
 });
 
 type SharedClass =
-  | { readonly class: 'additive' }
-  | { readonly class: 'breaking'; readonly approval: 'needed' };
+  | { readonly class: 'additive'; verdict: 'allowed' }
+  | { readonly class: 'breaking'; readonly verdict: 'approval-needed' };
 
-function sharedChange(name: string, difference: Change['difference'], rest: SharedClass): Change {
-  return { site: { kind: 'shared-schema', name }, difference, ...rest };
+function sharedChange(name: string, difference: unknown, rest: SharedClass): PathChange {
+  return { site: { kind: 'shared-schema', name, visibility: 'public' }, difference, ...rest };
 }
 
 describe('compatibilityReportOf, shared schemas', () => {
+  test('a shared schema is judged as a Message: a value added to its closed enum is Breaking', () => {
+    const baseline = aBaselineDefinitions({ schemas: { currency: aClosedEnum('CLP') } });
+    const proposed = aDefinitions({ schemas: { currency: aClosedEnum('CLP', 'USD') } });
+
+    const report = comparedOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      sharedChange(
+        'currency',
+        schemaChange('message', [], { kind: 'value-added', value: 'USD', enum: 'closed' }),
+        { class: 'breaking', verdict: 'approval-needed' },
+      ),
+    ]);
+  });
+
   test('a Breaking Change to a shared schema needs an Approval', () => {
     const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
     const proposed = aDefinitions({ schemas: { money: anObject({ cents: required(aNumber) }) } });
 
     const report = comparedOf(baseline, proposed);
 
-    expect(report).toEqual({
-      kind: 'compared',
-      hashChanged: true,
-      changes: [
-        sharedChange(
-          'money',
-          schemaChange('every', ['fields', 'cents'], { kind: 'field-added', required: true }),
-          { class: 'breaking', approval: 'needed' },
-        ),
-      ],
-    });
+    expect(report.hashChanged).toBe(true);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      sharedChange(
+        'money',
+        schemaChange('message', ['fields', 'cents'], { kind: 'field-added', required: true }),
+        { class: 'breaking', verdict: 'approval-needed' },
+      ),
+    ]);
   });
 
   test('adding a shared schema is Additive', () => {
@@ -1848,7 +1904,7 @@ describe('compatibilityReportOf, shared schemas', () => {
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('page', { kind: 'added' }, { class: 'additive' }),
+      sharedChange('page', { kind: 'added' }, { class: 'additive', verdict: 'allowed' }),
     ]);
   });
 
@@ -1859,7 +1915,7 @@ describe('compatibilityReportOf, shared schemas', () => {
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('page', { kind: 'removed' }, { class: 'breaking', approval: 'needed' }),
+      sharedChange('page', { kind: 'removed' }, { class: 'breaking', verdict: 'approval-needed' }),
     ]);
   });
 
@@ -1870,8 +1926,8 @@ describe('compatibilityReportOf, shared schemas', () => {
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('amount', { kind: 'added' }, { class: 'additive' }),
-      sharedChange('money', { kind: 'removed' }, { class: 'breaking', approval: 'needed' }),
+      sharedChange('amount', { kind: 'added' }, { class: 'additive', verdict: 'allowed' }),
+      sharedChange('money', { kind: 'removed' }, { class: 'breaking', verdict: 'approval-needed' }),
     ]);
   });
 

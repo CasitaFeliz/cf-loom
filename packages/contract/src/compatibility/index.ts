@@ -10,5 +10,8 @@ export type {
   Difference,
   Position,
   ShapeDifference,
+  Verdict,
 } from './report.ts';
+export type { Step } from './steps.ts';
+export { snapshotPathOf } from './steps.ts';
 export { versionBumpOf } from './versioning.ts';

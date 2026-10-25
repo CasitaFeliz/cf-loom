@@ -1636,7 +1636,10 @@ const checkedAgainstOrders = `Checked against ${ordersPackage}@1.0.0`;
 const staleSnapshot = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
 const approvalNeededLine =
   '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it';
-const notAllowedLine = 'The check failed: 1 Change(s) not allowed';
+const refusedLine = 'The check failed: 1 Change(s) refused';
+const openEnumHint = 'declare it with openEnum, so readers take values added later';
+const deletedHint =
+  'retire it instead, deprecating it first if it is not, and delete it once the Baseline has it Retired';
 
 type MessagingOptions = {
   readonly body?: string;
@@ -2035,14 +2038,14 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const { ran } = await checkedAgainst(lab, changed);
 
     const approval = 'Breaking, needs a Breaking Change Approval';
-    const schema = 'endpoints.GET /ping schema';
+    const schema = 'endpoints.GET /ping (ping) schema';
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
-      `endpoints.GET /ping status-changed from=200 to=201: ${approval}`,
-      `${schema} value-added at success.body.fields.code (success) value="1" enum=closed: ${approval}`,
-      `${schema} value-removed at success.body.fields.code (success) value=1: Additive`,
-      `${schema} value-added at success.body.fields.kind (success) value="c" enum=closed: ${approval}`,
-      `${schema} field-removed at success.body.fields.total (success): ${approval}`,
+      `endpoints.GET /ping (ping) status-changed from=200 to=201: ${approval}`,
+      `${schema} value-added at success.body.code value="1" enum=closed: ${approval}; ${openEnumHint}`,
+      `${schema} value-removed at success.body.code value=1: Additive`,
+      `${schema} value-added at success.body.kind value="c" enum=closed: ${approval}; ${openEnumHint}`,
+      `${schema} field-removed at success.body.total: ${approval}`,
       'events.OrderCreated@2 added: Additive',
       'commands.ChargeCard@1 retired: Breaking, needs no Approval',
       '',
@@ -2062,7 +2065,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const approval = 'Breaking, needs a Breaking Change Approval';
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
-      `endpoints.GET /ping schema field-removed at success.body.fields."odd\\nkey" (success): ${approval}`,
+      `endpoints.GET /ping (ping) schema field-removed at success.body."odd\\nkey": ${approval}`,
       '',
     ]);
   });
@@ -2085,10 +2088,10 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const { ran } = await checkedAgainst(lab, changed);
 
     const approval = 'Breaking, needs a Breaking Change Approval';
-    const change = 'endpoints.GET /ping schema discriminator-changed at success.body.fields.shape';
+    const change = 'endpoints.GET /ping (ping) schema discriminator-changed at success.body.shape';
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
-      `${change} (success) from="odd\\nkind" to=kind: ${approval}`,
+      `${change} from="odd\\nkind" to=kind: ${approval}`,
       '',
     ]);
   });
@@ -2111,7 +2114,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       const key = `"odd${sequence}key"`;
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
-        `endpoints.GET /ping schema field-removed at success.body.fields.${key} (success): ${approval}`,
+        `endpoints.GET /ping (ping) schema field-removed at success.body.${key}: ${approval}`,
         '',
       ]);
     },
@@ -2133,10 +2136,10 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       const { ran } = await checkedAgainst(lab, changed);
 
       const approval = 'Breaking, needs a Breaking Change Approval';
-      const change = 'endpoints.GET /ping schema value-added at success.body.fields.kind (success)';
+      const change = 'endpoints.GET /ping (ping) schema value-added at success.body.kind';
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
-        `${change} value="b${sequence}c" enum=closed: ${approval}`,
+        `${change} value="b${sequence}c" enum=closed: ${approval}; ${openEnumHint}`,
         '',
       ]);
     },
@@ -2165,7 +2168,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
   test.for([
     ['events', 'Order\nX@1', 'events.Order\\nX@1'],
     ['commands', 'Cmd\rX@1', 'commands.Cmd\\rX@1'],
-    ['endpoints', 'GET /a\u0085b', 'endpoints.GET /a\\u0085b'],
+    ['endpoints', 'GET /a\u0085b', 'endpoints.GET /a\\u0085b (ping)'],
   ] as const)(
     'a Baseline whose %s hold an identity with a line break is printed escaped, so the Change stays on one line',
     async ([section, key, site], { lab }) => {
@@ -2175,10 +2178,10 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
-        `${site} deleted: Not allowed`,
+        `${site} deleted: Breaking, refused; ${deletedHint}`,
         '',
       ]);
-      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+      expect(ran.stderr).toBe(`${refusedLine}\n`);
       expect(ran.status).toBe(1);
     },
   );
@@ -2196,11 +2199,13 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
       const [document, ...rest] = ran.stdout.split('\n');
       expect(rest).toEqual(['']);
-      expect(document).toContain(`"site":"events.Order${visible}X@1"`);
+      expect(document).toContain(`"identity":"Order${visible}X@1"`);
       expect(JSON.parse(document ?? '').changes).toEqual([
-        expect.objectContaining({ site: `events.Order${character}X@1` }),
+        expect.objectContaining({
+          site: expect.objectContaining({ identity: `Order${character}X@1` }),
+        }),
       ]);
-      expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+      expect(ran.stderr).toBe(`${refusedLine}\n`);
     },
   );
 
@@ -2215,7 +2220,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 2,
       stdout: [
         checkedAgainstOrders,
-        'endpoints.GET /ping schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval',
+        'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
         '',
       ].join('\n'),
       stderr: `${approvalNeededLine}\n`,
@@ -2239,7 +2244,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     });
   });
 
-  test('a Not allowed Change exits 1 and says the check failed', async ({ lab }) => {
+  test('a refused Change exits 1 and says the check failed', async ({ lab }) => {
     const changed = await aChangedProject(lab, removedEventField);
 
     const { ran } = await checkedAgainst(lab, changed);
@@ -2248,30 +2253,28 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 1,
       stdout: [
         checkedAgainstOrders,
-        'events.OrderCreated@1 schema field-removed at body.fields.placedAt (message): Not allowed',
+        'events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused; make the change in a new Message Version',
         '',
       ].join('\n'),
-      stderr: `${notAllowedLine}\n`,
+      stderr: `${refusedLine}\n`,
     });
   });
 
-  test('a Not allowed Change exits 1 even when another Change needs an Approval', async ({
-    lab,
-  }) => {
+  test('a refused Change exits 1 even when another Change needs an Approval', async ({ lab }) => {
     const changed = await aChangedProject(lab, removedFieldOfEach);
 
     const { ran } = await checkedAgainst(lab, changed);
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toBe(`${notAllowedLine}\n`);
+    expect(ran.stderr).toBe(`${refusedLine}\n`);
     expect(ran.stdout).toContain(
-      'endpoints.GET /ping schema field-removed at success.body.fields.total (success)',
+      'endpoints.GET /ping (ping) schema field-removed at success.body.total',
     );
   });
 
   test.for([
     ['retiring a Command', retiredCommand, 0, ''],
-    ['removing an Event field', removedEventField, 1, `${notAllowedLine}\n`],
+    ['removing an Event field', removedEventField, 1, `${refusedLine}\n`],
     ['removing a Success field', removedSuccessField, 2, `${approvalNeededLine}\n`],
   ] as const)(
     '--json writes exactly one line to stdout, the document, when %s',
@@ -2300,38 +2303,42 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const { ran } = await checkedAgainst(lab, changed, '--json');
 
     expect(JSON.parse(ran.stdout)).toEqual({
+      format: 1,
       status: 2,
       package: ordersPackage,
       baseline: '1.0.0',
       reason: null,
       changes: [
         {
-          site: 'endpoints.GET /ping',
-          difference: 'schema',
-          shape: 'field-removed',
-          at: 'success.body.fields.total',
-          position: 'success',
+          site: { kind: 'endpoint', identity: 'GET /ping', name: 'ping', visibility: 'public' },
+          difference: {
+            kind: 'schema',
+            position: 'success',
+            at: ['success', 'body', 'fields', 'total'],
+            shape: { kind: 'field-removed' },
+          },
+          path: 'success.body.total',
           class: 'breaking',
-          approval: 'needed',
+          verdict: 'approval-needed',
+          hint: null,
         },
       ],
     });
   });
 
-  test('--json writes a Change with no shape, path or Position as null', async ({ lab }) => {
+  test('--json writes a Change with no path or hint as null', async ({ lab }) => {
     const changed = await aChangedProject(lab, retiredCommand);
 
     const { ran } = await checkedAgainst(lab, changed, '--json');
 
     expect(JSON.parse(ran.stdout).changes).toEqual([
       {
-        site: 'commands.ChargeCard@1',
-        difference: 'retired',
-        shape: null,
-        at: null,
-        position: null,
+        site: { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' },
+        difference: { kind: 'retired' },
+        path: null,
         class: 'breaking',
-        approval: 'not-needed',
+        verdict: 'allowed',
+        hint: null,
       },
     ]);
   });
@@ -2344,6 +2351,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const reason = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
     expect(ran.status).toBe(0);
     expect(JSON.parse(ran.stdout)).toEqual({
+      format: 1,
       status: 0,
       package: ordersPackage,
       baseline: null,
@@ -2373,10 +2381,371 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       const lines = ran.stderr.trimEnd().split('\n');
       expect(ran.status).toBe(status);
       expect(ran.stdout.split('\n')).toHaveLength(2);
-      expect(JSON.parse(ran.stdout)).toEqual({ status, errors: lines });
+      expect(JSON.parse(ran.stdout)).toEqual({ format: 1, status, errors: lines });
       expect(lines.every((line) => line !== '')).toBe(true);
     },
   );
+});
+
+/** `aRoot` as a POST that reads `input`, for a Change an Input part makes. */
+function aRootReading(input: string): Files {
+  const root = aRoot();
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '')
+    .replace("method: 'GET'", "method: 'POST'")
+    .replace('  success:', `  input: ${input},\n  success:`);
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
+}
+
+/** `aRoot` whose Endpoint answers the Rejections of the codes given. */
+function aRootAnswering(codes: readonly string[]): Files {
+  const root = aRoot();
+  const message = (code: string) => `{ code: '${code}', status: 409, message: '${code}' }`;
+  const declared = codes.map((code) => `const reject${code} = defineRejection(${message(code)});`);
+  const listed = codes.map((code) => `reject${code}`).join(', ');
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '')
+    .replace('import { defineEndpoint }', 'import { defineEndpoint, defineRejection }')
+    .replace('export const ping', `${declared.join('\n')}\nexport const ping`)
+    .replace('  success:', `  rejections: [${listed}],\n  success:`);
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
+}
+
+/** `aRoot` with the Endpoint's declaration edited, as a Visibility change is. */
+function aRootEdited(from: string, to: string): Files {
+  const root = aRoot();
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '').replace(from, to);
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
+}
+
+/** `aRoot` with the Endpoint named and exported as `pong`. */
+function aRootRenamed(): Files {
+  const root = aRoot();
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '')
+    .replace("name: 'ping'", "name: 'pong'")
+    .replace('export const ping', 'export const pong');
+  const index = (root['src/contract/index.ts'] ?? '')
+    .replace('{ ping }', '{ pong }')
+    .replace('[ping]', '[pong]');
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint, 'src/contract/index.ts': index };
+}
+
+/** A project whose Private Endpoint `ping` was published, then became the Public Endpoint `pong`. */
+async function aRenamedAndWidenedProject(lab: Lab): Promise<Checkable> {
+  const before = aRootEdited("visibility: 'public'", "visibility: 'private'");
+  const project = await aGeneratedProject(lab, before);
+  const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+  rmSync(join(project, 'src/endpoints/health/ping.handler.ts'));
+  write(project, aRootRenamed());
+  await generateIn(lab, project);
+  return { project, served };
+}
+
+const nestedVariants = (variants: string) =>
+  [
+    'z.object({ orders: z.array(z.object({ lines: z.array(z.object({',
+    `kind: z.discriminatedUnion('type', [${variants}]) })) })) })`,
+  ].join(' ');
+
+const needsApproval = 'Breaking, needs a Breaking Change Approval';
+
+/** A Change as `check --json` prints it, as far as the lines are compared with it. */
+type JsonChange = {
+  readonly difference: { readonly shape?: Record<string, unknown> } & Record<string, unknown>;
+  readonly path: string | null;
+};
+
+/** The fields a Change line prints as `name=value`, before its class; a `value` stays the JSON it is printed as. */
+function printedFieldsOf(line: string): readonly (readonly [string, string])[] {
+  const described = line.slice(0, line.lastIndexOf(': '));
+  const printed = described.matchAll(/ ([A-Za-z]+)=("(?:[^"\\]|\\.)*"|[^\s:]+)/g);
+  return [...printed].map(([, name = '', text = '']) => {
+    const isQuoted = text.startsWith('"') && name !== 'value';
+    return [name, isQuoted ? JSON.parse(text) : text];
+  });
+}
+
+/** The same fields as the JSON of a Change holds them. */
+function jsonFieldsOf({ difference }: JsonChange): readonly (readonly [string, string])[] {
+  const { shape, ...own } = difference;
+  const named = [...Object.entries(own), ...Object.entries(shape ?? {})];
+  const unworded = named.filter(([name]) => !['kind', 'at', 'position'].includes(name));
+  return unworded.map(([name, value]) => [
+    name,
+    name === 'value' ? JSON.stringify(value) : String(value),
+  ]);
+}
+
+/** The path a Change line prints after `at`, or null when it prints none. */
+function printedPathOf(line: string): string | null {
+  return / at (\S+?)(?::| |$)/.exec(line)?.[1] ?? null;
+}
+
+describe.concurrent('cf-loom check, a Change in the author’s terms', {
+  timeout: checkTimeout,
+}, () => {
+  test('a difference in a variant inside nested arrays is at a path in the author’s terms', async ({
+    lab,
+  }) => {
+    const variants = (fields: string) =>
+      `z.object({ type: z.literal('a')${fields} }), z.object({ type: z.literal('b') })`;
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: nestedVariants(variants(', x: z.number()')) }),
+      after: aRoot({ body: nestedVariants(variants('')) }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `endpoints.GET /ping (ping) schema field-removed at success.body.orders[].lines[].kind<type="a">.x: ${needsApproval}`,
+      '',
+    ]);
+  });
+
+  test.for([
+    [
+      'a record’s value',
+      'z.object({ prices: z.record(z.string(), z.object({ amount: z.number(), note: z.string() })) })',
+      'z.object({ prices: z.record(z.string(), z.object({ amount: z.number() })) })',
+      'schema field-removed at success.body.prices{}.note',
+    ],
+    [
+      'a record’s key',
+      'z.object({ prices: z.record(z.string().min(1), z.number()) })',
+      'z.object({ prices: z.record(z.string(), z.number()) })',
+      'schema constraint-relaxed at success.body.prices{key} constraint=lower-bound',
+    ],
+    [
+      'a tuple’s rest',
+      'z.object({ pair: z.tuple([z.string()]) })',
+      'z.object({ pair: z.tuple([z.string()]).rest(z.number()) })',
+      'schema rest-added at success.body.pair[...]',
+    ],
+  ] as const)(
+    '%s is written in the notation of a record and a tuple',
+    async ([, before, after, change], { lab }) => {
+      const changed = await aChangedProject(lab, {
+        before: aRoot({ body: before }),
+        after: aRoot({ body: after }),
+      });
+
+      const { ran } = await checkedAgainst(lab, changed);
+
+      expect(ran.stdout.split('\n')).toEqual([
+        checkedAgainstOrders,
+        `endpoints.GET /ping (ping) ${change}: ${needsApproval}`,
+        '',
+      ]);
+    },
+  );
+
+  test('a Guard’s demand is written with the Position it is read in', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    const token = {
+      type: 'object',
+      mode: 'open',
+      fields: { token: { required: true, schema: { type: 'string' } } },
+    };
+    const guards = {
+      apiKey: { ...snapshot.guards.apiKey, demands: { headers: null, query: token } },
+    };
+    const served = servedAs('@org/definitions', publishedAs(project, '1.0.0', { guards }));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran.stdout.split('\n')).toEqual([
+      'Checked against @org/definitions@1.0.0',
+      'guards.apiKey schema field-removed at demands.query.token (input): Additive',
+      'No Change needs a Breaking Change Approval',
+      '',
+    ]);
+  });
+
+  test('a shared schema’s root difference has no path, and says it is judged as a Message', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+    const served = servedAs(
+      '@org/definitions',
+      publishedAs(project, '1.0.0', { schemas: { money: { type: 'string' } } }),
+    );
+    const changed = { project, served };
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    expect(lines.ran.stdout.split('\n')[1]).toBe(
+      `schemas.money schema type-changed (message) from=string to=object: ${needsApproval}`,
+    );
+    expect(JSON.parse(json.ran.stdout).changes[0].path).toBeNull();
+  });
+
+  test('two Rejections removed from an Endpoint are two Changes, each naming its code', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRootAnswering(['A', 'D']),
+      after: aRootAnswering([]),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    const differences = JSON.parse(ran.stdout).changes.map(
+      (change: { difference: unknown }) => change.difference,
+    );
+    expect(differences).toEqual([
+      { kind: 'rejection-removed', code: 'A' },
+      { kind: 'rejection-removed', code: 'D' },
+    ]);
+  });
+
+  test('--json writes a changed status with its from and to', async ({ lab }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot({ status: 201 }) });
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    const [change] = JSON.parse(ran.stdout).changes;
+    expect(change.difference).toEqual({ kind: 'status-changed', from: 200, to: 201 });
+  });
+
+  test('renaming an Endpoint while widening its Visibility is a Neutral rename of the Baseline’s Visibility', async ({
+    lab,
+  }) => {
+    const changed = await aRenamedAndWidenedProject(lab);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      'endpoints.GET /ping (pong) visibility-widened from=private to=public: Additive',
+      'endpoints.GET /ping (pong) renamed from=ping to=pong baselineVisibility=private: Neutral',
+      'No Change needs a Breaking Change Approval',
+      '',
+    ]);
+  });
+
+  test('a Message Version added past a gap is Additive and refused, so check exits 1', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aMessagingRoot({ eventVersions: [1] }),
+      after: aMessagingRoot({ eventVersions: [1, 3] }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: [
+        checkedAgainstOrders,
+        'events.OrderCreated@3 added: Additive',
+        'events.OrderCreated@3 version-gap missing=OrderCreated@2: Additive, refused',
+        '',
+      ].join('\n'),
+      stderr: 'The check failed: 1 Change(s) refused\n',
+    });
+  });
+
+  const hintRows = [
+    [
+      'deleting an Event, which also fits a new Message Version',
+      (lab: Lab) => aBaselineWithExtraKey(lab, 'events', 'OrderPlaced@1'),
+      'events.OrderPlaced@1 deleted: Breaking, refused',
+      'retire it instead, deprecating it first if it is not, and delete it once the Baseline has it Retired',
+    ],
+    [
+      'retiring an Endpoint that is not Deprecated',
+      (lab: Lab) =>
+        aChangedProject(lab, { before: aRoot(), after: aRoot({ lifecycle: 'retired' }) }),
+      'endpoints.GET /ping (ping) retired-before-deprecated: Breaking, refused',
+      'deprecate it in one publish and retire it in a later one',
+    ],
+    [
+      'adding an optional header that refuses some text',
+      (lab: Lab) =>
+        aChangedProject(lab, {
+          before: aRootReading('{ headers: z.object({}) }'),
+          after: aRootReading('{ headers: z.object({ "x-trace": z.string().min(3).optional() }) }'),
+        }),
+      `endpoints.POST /ping (ping) header-refuses-text at input.headers.x-trace: ${needsApproval}`,
+      'accept any text, or make the header required',
+    ],
+    [
+      'adding a value to a closed enum',
+      (lab: Lab) =>
+        aChangedProject(lab, {
+          before: aRoot({ body: "z.object({ kind: z.enum(['a']) })" }),
+          after: aRoot({ body: "z.object({ kind: z.enum(['a', 'b']) })" }),
+        }),
+      `endpoints.GET /ping (ping) schema value-added at success.body.kind value="b" enum=closed: ${needsApproval}`,
+      openEnumHint,
+    ],
+    [
+      'adding a required field to an Input body',
+      (lab: Lab) =>
+        aChangedProject(lab, {
+          before: aRootReading('{ body: z.object({ a: z.string() }) }'),
+          after: aRootReading('{ body: z.object({ a: z.string(), b: z.string() }) }'),
+        }),
+      `endpoints.POST /ping (ping) schema field-added at input.body.b required=true: ${needsApproval}`,
+      'make it optional',
+    ],
+    [
+      'removing a field from an Event’s body',
+      (lab: Lab) => aChangedProject(lab, removedEventField),
+      'events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused',
+      'make the change in a new Message Version',
+    ],
+  ] as const;
+
+  test.for(hintRows)(
+    '%s ends the line with its hint, and the JSON carries it',
+    async ([, setup, line, hint], { lab }) => {
+      const changed = await setup(lab);
+
+      const lines = await checkedAgainst(lab, changed);
+      const json = await checkedAgainst(lab, changed, '--json');
+
+      expect(lines.ran.stdout.split('\n')).toContain(`${line}; ${hint}`);
+      expect(
+        JSON.parse(json.ran.stdout).changes.map((change: { hint: string }) => change.hint),
+      ).toContain(hint);
+    },
+  );
+
+  const drifting = [
+    ['a Service changed in every way', (lab: Lab) => aChangedProject(lab, changedInEveryWay)],
+    ['an Endpoint renamed while it is widened', aRenamedAndWidenedProject],
+    ...hintRows.map(([name, setup]) => [name, setup] as const),
+  ] as const;
+
+  test.for(drifting)(
+    'every name=value a Change line prints is in its JSON, and so is its path: %s',
+    async ([, setup], { lab }) => {
+      const changed = await setup(lab);
+
+      const lines = await checkedAgainst(lab, changed);
+      const json = await checkedAgainst(lab, changed, '--json');
+
+      const printed = lines.ran.stdout.split('\n').filter((line) => line.includes(': '));
+      const changes: JsonChange[] = JSON.parse(json.ran.stdout).changes;
+      expect(printed.map(printedPathOf)).toEqual(changes.map((change) => change.path));
+      expect(printed.map(printedFieldsOf)).toEqual(changes.map(jsonFieldsOf));
+    },
+  );
+
+  test.for([
+    ['a document with a Baseline', true],
+    ['a document without one', false],
+  ] as const)('--json writes %s with its format', async ([, hasBaseline], { lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const published = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+    const served = hasBaseline ? published : {};
+
+    const { ran } = await checkedAgainst(lab, { project, served }, '--json');
+
+    expect(JSON.parse(ran.stdout).format).toBe(1);
+  });
 });
 
 const publishTimeout = 120_000;
@@ -2601,7 +2970,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 0,
       stdout: [
         checkedAgainstOrders,
-        'endpoints.GET /ping schema field-added at success.body.fields.total (success) required=true: Additive',
+        'endpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive',
         `Published ${ordersPackage}@1.1.0`,
         '',
       ].join('\n'),
@@ -2622,7 +2991,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 0,
       stdout: [
         checkedAgainstOrders,
-        'endpoints.GET /ping schema field-removed at success.body.fields.total (success): Breaking, needs a Breaking Change Approval',
+        'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
         `Published ${ordersPackage}@2.0.0`,
         '',
       ].join('\n'),
@@ -2720,9 +3089,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.1', distTags }]);
   });
 
-  test('a Not allowed Change exits 1 with every Change line, and nothing is put', async ({
-    lab,
-  }) => {
+  test('a refused Change exits 1 with every Change line, and nothing is put', async ({ lab }) => {
     const changed = await aChangedProject(lab, removedEventField);
 
     const { ran, registry } = await publishedAgainst(lab, changed);
@@ -2731,10 +3098,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 1,
       stdout: [
         checkedAgainstOrders,
-        'events.OrderCreated@1 schema field-removed at body.fields.placedAt (message): Not allowed',
+        'events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused; make the change in a new Message Version',
         '',
       ].join('\n'),
-      stderr: `${notAllowedLine}\n`,
+      stderr: `${refusedLine}\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
   });
@@ -3248,6 +3615,6 @@ describe('cf-loom', () => {
     expect(ran.status).toBe(3);
     expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: \S+:\d+: ENOENT/)]);
     expect(ran.stdout.split('\n')).toHaveLength(2);
-    expect(JSON.parse(ran.stdout)).toEqual({ status: 3, errors });
+    expect(JSON.parse(ran.stdout)).toEqual({ format: 1, status: 3, errors });
   });
 });
