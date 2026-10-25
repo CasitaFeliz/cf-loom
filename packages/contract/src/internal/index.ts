@@ -154,7 +154,6 @@ export type {
   InvalidInputBody,
   Matchable,
   ReceivedHeaders,
-  ReceivedInvalidInputBody,
   RejectionEnvelope,
   SentRejection,
   SentSuccess,

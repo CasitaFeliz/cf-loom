@@ -122,7 +122,7 @@ function presenceDifferencesOf(
 }
 
 function standardCodesOf(baseline: PublishedDefinitionsSnapshot): ReadonlySet<string> {
-  return new Set(Object.values(baseline.standardRejections).map(({ code }) => code));
+  return new Set(Object.values(baseline.standardRejections));
 }
 
 /**

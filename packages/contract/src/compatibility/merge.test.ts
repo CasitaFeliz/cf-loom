@@ -20,9 +20,9 @@ import {
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 type Lifecycle = EndpointSnapshot['lifecycle'];
 
@@ -98,6 +98,12 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     ...fields,
   };
 }
+
+const standardCodes = {
+  [standardRejections.invalidInput]: aCode({ origin: 'standard', status: 400, message: 'Invalid' }),
+  [standardRejections.notFound]: aCode({ origin: 'standard', status: 404, message: 'Not found' }),
+  [standardRejections.notImplemented]: aCode({ origin: 'standard', status: 501, message: 'No' }),
+};
 
 const heading = {
   format: 1,
@@ -452,12 +458,13 @@ describe('publishedSnapshotOf', () => {
         'DELETE /orders/{}': { lifecycle: 'retired', retiredIn: '2.0.0', name: 'cancelOrder' },
       },
       events: { 'OrderPlaced@1': aRetired(anEvent(), '3.1.0') },
-      codes: { [orderLocked]: aCode() },
+      codes: { ...standardCodes, [orderLocked]: aCode() },
       subscriptions: { legacySync: aSubscription('orders-service:OrderPlaced@1') },
     });
     const proposed = aProposed({
       endpoints: { 'POST /orders': anEndpoint({ name: 'createOrder' }) },
       commands: { 'ChargeCard@1': aCommand({ lifecycle: 'retired' }) },
+      codes: { ...standardCodes, [orderLocked]: aCode() },
     });
 
     const published = publishedSnapshotOf(baseline, proposed, '3.5.0');

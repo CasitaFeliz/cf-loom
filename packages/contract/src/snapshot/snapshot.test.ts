@@ -160,7 +160,12 @@ const payments = {
   endpoints: { getPayment, listPayments },
   events: { paymentSettledV1, paymentFailedV1 },
   standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+    invalidInput: {
+      code: 'INVALID_INPUT',
+      status: 400,
+      message: 'Invalid input',
+      body: z.object({ issues: z.array(z.unknown()) }),
+    },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
@@ -544,24 +549,23 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.codes['UNAUTHENTICATED']?.message).toBe('Unauthenticated');
   });
 
-  test('Standard Rejections are resolved with their origin: the Definitions Package’s, else cf-loom’s', () => {
+  test('standardRejections maps each Standard Rejection to the code it resolved to', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.standardRejections).toEqual({
-      invalidInput: {
-        origin: '@org/definitions@4.2.0',
-        code: 'BAD_REQUEST',
-        status: 400,
-        message: 'The request is invalid',
-        body: expect.objectContaining({ type: 'object' }),
-      },
-      notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: {
-        origin: 'standard',
-        code: 'NOT_IMPLEMENTED',
-        status: 501,
-        message: 'Not implemented',
-      },
+      invalidInput: 'BAD_REQUEST',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
+    });
+  });
+
+  test('each Standard Rejection’s status, message and origin are its code’s, under codes', () => {
+    const snapshot = serviceSnapshot();
+
+    expect(snapshot.codes['BAD_REQUEST']).toMatchObject({
+      origin: '@org/definitions@4.2.0',
+      status: 400,
+      message: 'The request is invalid',
     });
     expect(snapshot.codes['NOT_FOUND']).toEqual({
       origin: 'standard',
@@ -570,16 +574,21 @@ describe('snapshotOf: a Service', () => {
       body: null,
       removed: false,
     });
+    expect(snapshot.codes['NOT_IMPLEMENTED']).toMatchObject({
+      origin: 'standard',
+      status: 501,
+      message: 'Not implemented',
+    });
   });
 
-  test('the invalid-input Rejection carries cf-loom’s body, its issues', () => {
+  test('the invalid-input Rejection carries cf-loom’s body, its issues, with in and code as Open Enums', () => {
     const snapshot = serviceSnapshot();
     const issue = {
       type: 'object',
       fields: {
         in: {
           required: true,
-          schema: { type: 'enum', values: ['body', 'headers', 'params', 'query'], open: false },
+          schema: { type: 'enum', values: ['body', 'headers', 'params', 'query'], open: true },
         },
         path: {
           required: true,
@@ -603,20 +612,17 @@ describe('snapshotOf: a Service', () => {
               'too_small',
               'unrecognized_key',
             ],
-            open: false,
+            open: true,
           },
         },
         message: { required: true, schema: { type: 'string' } },
       },
     };
 
-    expect(snapshot.standardRejections.invalidInput.body).toEqual({
+    expect(snapshot.codes['BAD_REQUEST']?.body).toEqual({
       type: 'object',
       fields: { issues: { required: true, schema: { type: 'array', items: issue } } },
     });
-    expect(snapshot.codes['BAD_REQUEST']?.body).toEqual(
-      snapshot.standardRejections.invalidInput.body,
-    );
   });
 
   test('a shared schema from a Definitions Package carries its origin with its name', () => {
@@ -991,11 +997,19 @@ describe('snapshotOf: a Definitions Package', () => {
       'userToken',
     ]);
     expect(snapshot.kind === 'definitions' && snapshot.codes['UNUSED']?.origin).toBe('local');
-    expect(snapshot.kind === 'definitions' && snapshot.standardRejections.invalidInput.origin).toBe(
-      'local',
-    );
+    expect(snapshot.kind === 'definitions' && snapshot.codes['BAD_REQUEST']?.origin).toBe('local');
     expect(snapshot).not.toHaveProperty('endpoints');
     expect(snapshot).not.toHaveProperty('definitions');
+  });
+
+  test('a Definitions Package’s standardRejections maps each Standard Rejection to its code', () => {
+    const snapshot = snapshotFor(orgDefinitions, aContext({ packages: [] }));
+
+    expect(snapshot.kind === 'definitions' && snapshot.standardRejections).toEqual({
+      invalidInput: 'BAD_REQUEST',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
+    });
   });
 });
 

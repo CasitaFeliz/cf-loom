@@ -31,17 +31,39 @@ import {
   validateContract,
 } from '../internal/index.ts';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
 const standardRejections: PublishedServiceSnapshot['standardRejections'] = {
-  invalidInput: {
+  invalidInput: invalidInputCode,
+  notFound: notFoundCode,
+  notImplemented: notImplementedCode,
+};
+
+const standardCodes = {
+  [invalidInputCode]: {
     origin: 'standard',
-    code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
     body: { type: 'object', fields: {} },
+    removed: false,
   },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
-};
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    body: null,
+    removed: false,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    body: null,
+    removed: false,
+  },
+} as const satisfies PublishedServiceSnapshot['codes'];
 
 function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
   return {
@@ -57,7 +79,7 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     events: {},
     commands: {},
     guards: {},
-    codes: {},
+    codes: standardCodes,
     subscriptions: {},
     dependencies: {},
     ...fields,
@@ -91,7 +113,7 @@ function aDefinitions(
     defs: {},
     schemas: {},
     guards: {},
-    codes: {},
+    codes: standardCodes,
     ...fields,
   };
 }
@@ -284,7 +306,7 @@ describe('decodeSnapshot', () => {
         events: { 'OrderPlaced@1': anEvent },
         commands: { 'ChargeCard@1': aCommand },
         guards: { apiKey: aGuard },
-        codes: { [orderLocked]: aCode },
+        codes: { ...standardCodes, [orderLocked]: aCode },
         subscriptions: {
           notifyOnPlaced: {
             group: 'orders',
@@ -350,6 +372,7 @@ describe('decodeSnapshot', () => {
         schemas: { money: { type: 'object', fields: {} } },
         guards: { apiKey: { ...aGuard, rejections: ['UNAUTHENTICATED'] } },
         codes: {
+          ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
           [gone]: { ...aCode, status: 410, removed: true },
         },
@@ -406,7 +429,7 @@ describe('decodeSnapshot', () => {
     test('a removed code decodes with removed true and the status and body it last had', () => {
       const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { [gone]: { ...aCode, status: 410, body, removed: true } },
+        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removed: true } },
       });
 
       const result = roundTrip(published);
@@ -849,19 +872,6 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
-      { name: 'notFound', rejection: standardRejections.notFound },
-      { name: 'notImplemented', rejection: standardRejections.notImplemented },
-    ])('a body on the $name Standard Rejection is malformed at the body', ({ name, rejection }) => {
-      const withBody = { ...rejection, body: { type: 'string' } };
-
-      const result = serviceWith({
-        standardRejections: { ...standardRejections, [name]: withBody },
-      });
-
-      expect(result).toEqual(malformedAt(['standardRejections', name, 'body']));
-    });
-
-    test.each([
       [
         'a Dependency’s Endpoint with a key of its own',
         {
@@ -1158,16 +1168,6 @@ describe('decodeSnapshot', () => {
         ['endpoints', 'GET /orders/{}', 'success', 'headers', 'fields', 'name'],
       ],
       [
-        'a Standard Rejection’s body',
-        aService({
-          standardRejections: {
-            ...standardRejections,
-            invalidInput: { ...standardRejections.invalidInput, body: aRef('missing') },
-          },
-        }),
-        ['standardRejections', 'invalidInput', 'body'],
-      ],
-      [
         'a Command’s body',
         aService({ commands: { 'ChargeCard@1': { ...aCommand, body: aRef('missing') } } }),
         ['commands', 'ChargeCard@1', 'body'],
@@ -1216,6 +1216,22 @@ describe('decodeSnapshot', () => {
       expect(serviceGuard).toEqual(malformedAt(['guards', 'apiKey', 'rejections', 0]));
       expect(definitionsGuard).toEqual(malformedAt(['guards', 'apiKey', 'rejections', 0]));
     });
+
+    test.each(['invalidInput', 'notFound', 'notImplemented'])(
+      'a Standard Rejection naming a code the Snapshot does not hold is malformed at its name: %s',
+      (name) => {
+        const named = { ...standardRejections, [name]: 'NOPE' };
+
+        const service = serviceWith({ standardRejections: named });
+        const definitions = decodedFrom({ ...aDefinitions(), standardRejections: named });
+
+        const malformed = malformedAt(
+          ['standardRejections', name],
+          'names a code the Snapshot does not hold: NOPE',
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
 
     test('a Guard an Endpoint attaches, or a Guard lists, that guards does not hold is malformed', () => {
       const attaching = { ...anEndpoint, guards: [{ guard: 'apiKey', qualifier: null }] };
@@ -1354,7 +1370,12 @@ function declaredSnapshot() {
     endpoints: {},
     events: { paymentSettledV1 },
     standardRejections: {
-      invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+      invalidInput: {
+        code: 'INVALID_INPUT',
+        status: 400,
+        message: 'Invalid input',
+        body: z.object({ issues: z.array(z.unknown()) }),
+      },
       notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
       notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
     },
@@ -1465,15 +1486,9 @@ const formatOneFixture = `{
   "kind": "service",
   "name": "orders-service",
   "standardRejections": {
-    "invalidInput": {
-      "body": { "fields": {}, "type": "object" },
-      "code": "INVALID_INPUT",
-      "message": "Invalid",
-      "origin": "standard",
-      "status": 400
-    },
-    "notFound": { "code": "NOT_FOUND", "message": "Not found", "origin": "standard", "status": 404 },
-    "notImplemented": { "code": "NOT_IMPLEMENTED", "message": "No", "origin": "standard", "status": 501 }
+    "invalidInput": "INVALID_INPUT",
+    "notFound": "NOT_FOUND",
+    "notImplemented": "NOT_IMPLEMENTED"
   },
   "subscriptions": {
     "legacySync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },

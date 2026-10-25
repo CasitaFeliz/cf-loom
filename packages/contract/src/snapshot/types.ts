@@ -60,19 +60,8 @@ export type CodeSnapshot = {
   readonly removed: boolean;
 };
 
-/** A Standard Rejection as the root resolves it; only the invalid-input one has a body. */
-export type StandardRejectionSnapshot = {
-  readonly origin: Origin;
-  readonly code: string;
-  readonly status: number;
-  readonly message: string;
-  readonly body?: SchemaNode;
-};
-
-/** The three Standard Rejections, resolved, so a change of their source shows in the check. */
-export type StandardRejectionsSnapshot = Readonly<
-  Record<StandardRejectionName, StandardRejectionSnapshot>
->;
+/** The code each Standard Rejection resolved to; its status, message, origin and body are that code's, under `codes`. */
+export type StandardRejectionsSnapshot = Readonly<Record<StandardRejectionName, string>>;
 
 /** A Message Version by its identity, with the Group that lists it. */
 export type EventSnapshot = {

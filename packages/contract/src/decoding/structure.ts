@@ -31,8 +31,6 @@ const code = z.strictObject({
   removed: z.boolean(),
 });
 
-const standardRejection = { origin: text, code: text, status: z.number(), message: text };
-
 const subscription = z.union([
   z.strictObject({ group: text, description: text, event: text }),
   z.strictObject({ event: text, removedIn: semanticVersionText }),
@@ -46,9 +44,9 @@ const dependencies = byKey(
 );
 
 const standardRejections = z.strictObject({
-  invalidInput: z.strictObject({ ...standardRejection, body: schemaNode.exactOptional() }),
-  notFound: z.strictObject(standardRejection),
-  notImplemented: z.strictObject(standardRejection),
+  invalidInput: text,
+  notFound: text,
+  notImplemented: text,
 });
 
 const service = z.strictObject({

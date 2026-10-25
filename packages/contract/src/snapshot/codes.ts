@@ -8,11 +8,7 @@ import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 import type { ResolvedDefinitions, SnapshotSources } from './context.ts';
 import { listedOriginOf, standardOriginOf } from './origins.ts';
-import type {
-  CodeSnapshot,
-  StandardRejectionSnapshot,
-  StandardRejectionsSnapshot,
-} from './types.ts';
+import type { CodeSnapshot, StandardRejectionsSnapshot } from './types.ts';
 
 /** Codes once each, by code point, as the Snapshot lists an Endpoint's or a Guard's codes. */
 export function sortedCodes(codes: readonly string[]): readonly string[] {
@@ -27,13 +23,12 @@ export function codeOfStandard(
   return standardNamed(standards, name).code;
 }
 
-/** Each Standard Rejection resolved with its origin; only the invalid-input one has a body. */
+/** The code each Standard Rejection resolves to in this root. */
 export function standardRejectionsOf({
   standards,
-  packages,
-}: SnapshotSources): StandardRejectionsSnapshot {
+}: Pick<SnapshotSources, 'standards'>): StandardRejectionsSnapshot {
   const entries = standardRejectionNames.map(
-    (name) => [name, standardRejectionOf(standardNamed(standards, name), packages)] as const,
+    (name) => [name, codeOfStandard(standards, name)] as const,
   );
   return Object.fromEntries(entries) as StandardRejectionsSnapshot;
 }
@@ -44,14 +39,10 @@ export function standardRejectionsOf({
  */
 export function codeSnapshotsOf(
   codes: readonly ValidatedCode[],
-  standardRejections: StandardRejectionsSnapshot,
   sources: SnapshotSources,
 ): Readonly<Record<string, CodeSnapshot>> {
   const declared = codes.filter(({ reached }) => reached).map((code) => codeOf(code, sources));
-  const standard = Object.values(standardRejections).map(
-    ({ code, origin, status, message, body }) =>
-      [code, { origin, status, message, body: body ?? null, removed: false }] as const,
-  );
+  const standard = sources.standards.map((resolved) => standardCodeOf(resolved, sources.packages));
   return Object.fromEntries([...declared, ...standard]);
 }
 
@@ -76,20 +67,18 @@ function codeOf(
   return [code, { origin, status, message, body, removed: false }];
 }
 
-function standardRejectionOf(
+function standardCodeOf(
   standard: ResolvedStandard,
   packages: readonly ResolvedDefinitions[],
-): StandardRejectionSnapshot {
+): readonly [string, CodeSnapshot] {
   const { name, code, status, message } = standard;
   const origin = standardOriginOf(standard, packages);
-  if (name !== 'invalidInput') {
-    return { origin, code, status, message };
-  }
-  return { origin, code, status, message, body: invalidInputNode() };
+  const body = name === 'invalidInput' ? invalidInputNode(code) : null;
+  return [code, { origin, status, message, body, removed: false }];
 }
 
-function invalidInputNode(): SchemaNode {
-  const at = ['standardRejections', 'invalidInput', 'body'];
+function invalidInputNode(code: string): SchemaNode {
+  const at = ['codes', code, 'body'];
   const [located] = walkSchemas([{ at, schema: invalidInputBody }], () => undefined).located;
   if (located?.walked.kind !== 'walked') {
     throw new Error('cf-loom’s invalid-input body walks to a node: a bug.');
