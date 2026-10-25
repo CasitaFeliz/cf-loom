@@ -1529,6 +1529,28 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
+  test('an Endpoint exported only as default exits 1 naming it', () => {
+    const service = aService();
+    const project = aProject({
+      ...service,
+      'src/contract/endpoints/orders/create-order.endpoint.ts': (
+        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+      ).replace('export const createOrder =', 'export default'),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        'import { createOrder }',
+        'import createOrder',
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'endpoints.createOrder is not exported as createOrder\n',
+    });
+  });
+
   test('a local Guard exported by no file exits 1 naming it', () => {
     const service = aService();
     const project = aProject({
@@ -3201,7 +3223,26 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
 
   test('a Group the root does not list is reported once, and what it lists is not', () => {
     const project = aProject({
-      ...aMessagingService(),
+      ...withRoot(aMessagingService(), (root) =>
+        root
+          .replace(/const paymentsGroup = defineGroup\(\{[\s\S]*?\}\);\n\n/, '')
+          .replace(
+            importOf('{ auditCreated, notifyOnSettled }', './subscriptions.ts'),
+            importOf('{ paymentsGroup }', './groups/payments.group.ts'),
+          ),
+      ),
+      'src/contract/groups/payments.group.ts': lines([
+        "import { defineGroup } from '@cf-loom/contract';",
+        importOf('{ chargeCardV1, chargeCardV2, refundCardV1 }', '../messages.ts'),
+        importOf('{ auditCreated, notifyOnSettled }', '../subscriptions.ts'),
+        '',
+        'export const paymentsGroup = defineGroup({',
+        "  name: 'payments',",
+        "  description: 'Payments',",
+        '  commands: [chargeCardV1, chargeCardV2, refundCardV1],',
+        '  subscriptions: [notifyOnSettled, auditCreated],',
+        '});',
+      ]),
       'src/contract/archive.ts': archiveFile,
       'src/contract/groups/archive.group.ts': lines([
         "import { defineGroup } from '@cf-loom/contract';",

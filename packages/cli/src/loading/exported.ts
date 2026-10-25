@@ -39,7 +39,7 @@ export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
 /** A file of the Contract exporting a value under a name. */
 export type ExportedValue = FileExport & { readonly value: unknown };
 
-/** The files of the Contract that export a declaration under a name in code, by identity, in code point order of file and name. */
+/** The files of the Contract that export a declaration, by identity, in code point order of file and name. */
 export type ExportsOf = (declaration: unknown) => readonly FileExport[];
 
 /**
@@ -77,8 +77,7 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
   return {
     kind: 'exported',
     exports,
-    exportsOf: (declaration) =>
-      exports.filter(({ name, value }) => name !== 'default' && value === declaration),
+    exportsOf: (declaration) => exports.filter(({ value }) => value === declaration),
   };
 }
 

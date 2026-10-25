@@ -1,3 +1,4 @@
+import type { Group } from '@cf-loom/contract';
 import {
   declarationsListedBy,
   isGroup,
@@ -18,32 +19,37 @@ export function unreachedLinesOf(
   { validated }: BuiltService,
   exports: readonly ExportedValue[],
 ): readonly string[] {
-  const unlistedGroups = unlistedGroupsOf(validated.declarations, exports);
-  const reached = reachedOf(validated.declarations, unlistedGroups);
-  const groups = firstExportsOf(exports, (value) => unlistedGroups.includes(value));
+  const rootGroups = validated.declarations.groups.map(({ group }) => group);
+  const unlistedGroups = unlistedGroupsOf(rootGroups, exports);
+  const reached = reachedOf(validated.declarations.dependencies, [
+    ...rootGroups,
+    ...unlistedGroups,
+  ]);
+  const groups = firstExportsOf(exports, (value) =>
+    unlistedGroups.some((group) => group === value),
+  );
   const declarations = firstExportsOf(exports, (value) => isListable(value) && !reached.has(value));
   return [...groups.map(unlistedGroupLineOf), ...declarations.map(unlistedDeclarationLineOf)];
 }
 
 /** The Groups that a file exports and the root does not list. */
 function unlistedGroupsOf(
-  { groups }: ValidatedDeclarations,
+  rootGroups: readonly Group[],
   exports: readonly ExportedValue[],
-): readonly unknown[] {
-  const listed: readonly unknown[] = groups.map(({ group }) => group);
+): readonly Group[] {
   return exports
     .map(({ value }) => value)
-    .filter((value) => isGroup(value) && !listed.includes(value));
+    .filter(isGroup)
+    .filter((group) => !rootGroups.includes(group));
 }
 
 /** What needs no line: whatever a Group lists, the root's or an unlisted one, and what a Provider exports. */
 function reachedOf(
-  { groups, dependencies }: ValidatedDeclarations,
-  unlistedGroups: readonly unknown[],
+  dependencies: ValidatedDeclarations['dependencies'],
+  groups: readonly Group[],
 ): ReadonlySet<unknown> {
-  const allGroups = [...groups.map(({ group }) => group), ...unlistedGroups.filter(isGroup)];
   return new Set<unknown>([
-    ...allGroups.flatMap(declarationsListedBy),
+    ...groups.flatMap(declarationsListedBy),
     ...dependencies.flatMap(({ dependency }) =>
       Object.values(providerExportsOf(dependency)).flat(),
     ),
