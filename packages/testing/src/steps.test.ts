@@ -282,27 +282,92 @@ describe('fakeProvider: steps', () => {
     });
   });
 
-  test('reject({ unknown }) answers 422, its message the code unless given, and the client receives an unknown-rejection', async () => {
+  test('unknownRejection(code) answers 422 with the code as its message and no body, and the client receives an unknown code', async () => {
     const payments = fakeProvider(paymentsDependency);
-    payments
-      .on('getPayment')
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { expiredAt: '2026-01' }))
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED', message: 'The card expired' }, null));
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED'));
 
     const response = await payments.fetch(new Request(at));
     const outcome = await payments.client().getPayment({ params });
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
-      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: { expiredAt: '2026-01' } },
+      rejection: { code: 'CARD_EXPIRED', message: 'CARD_EXPIRED' },
     });
-    expect(outcome).toEqual({
+    expect(outcome).toStrictEqual({
       kind: 'unknown-rejection',
       source: 'provider',
       code: 'CARD_EXPIRED',
       status: 422,
-      message: 'The card expired',
-      body: null,
+      message: 'CARD_EXPIRED',
+    });
+  });
+
+  test('unknownRejection(code, { message, body }) carries both', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { message: 'The card expired', body: { expiredAt: '2026-01' } };
+    payments.on('getPayment').otherwise((r) => r.unknownRejection('CARD_EXPIRED', scripted));
+
+    const response = await payments.fetch(new Request(at));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ rejection: { code: 'CARD_EXPIRED', ...scripted } });
+  });
+
+  test('unknownRejection of a code another Endpoint declares answers its declared status, message and body, as a later Provider adding it would', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: { unknown: 'chargeback' } };
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body }));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      rejection: {
+        code: 'PAYMENT_LOCKED',
+        message: 'The payment is locked',
+        body: { lockedAt: '2026-10-19T10:00:00Z', reason: 'chargeback' },
+      },
+    });
+  });
+
+  test('unknownRejection of a code another Endpoint declares takes the message given', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const body = { lockedAt: '2026-10-19T10:00:00Z', reason: 'fraud' };
+    const message = 'Locked for review';
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { message, body }));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(await response.json()).toMatchObject({ rejection: { code: 'PAYMENT_LOCKED', message } });
+  });
+
+  test('unknownRejection of a code another Endpoint declares, with a body that breaks its reader, is a mistake listing the Issues', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body: { lockedAt: 'now' } }));
+
+    const calling = capture(payments, '{"amount":1}');
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: capturePayment: the scripted PAYMENT_LOCKED body breaks its reader',
+        'payments-service: capturePayment: body.lockedAt invalid_format: ',
+      ].join('\n'),
+    );
+  });
+
+  test('unknownRejection of the Provider’s not-found code, on an Endpoint that does not list it, answers 404 with its message and no body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('capturePayment').otherwise((r) => r.unknownRejection('NO_PAYMENT'));
+
+    const response = await capture(payments, '{"amount":1}');
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NO_PAYMENT', message: 'No such payment' },
     });
   });
 

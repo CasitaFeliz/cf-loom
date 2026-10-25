@@ -1,5 +1,10 @@
 import type { AnyDependency } from '@cf-loom/client/internal';
-import type { ContractPackage, Endpoint, ProvidedStandardRejections } from '@cf-loom/contract';
+import {
+  type ContractPackage,
+  type Endpoint,
+  notFound,
+  type ProvidedStandardRejections,
+} from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -21,6 +26,8 @@ export type ListedEndpoint = {
   readonly nodes: TextPartNodes;
   readonly deprecatedAt: string | undefined;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
+  /** Every code the Provider's Contract Package declares, by its resolved code, the Endpoint's own among them. */
+  readonly declaredByCode: ReadonlyMap<string, AnswerableRejection>;
   readonly standards: ProvidedStandardRejections;
 };
 
@@ -44,11 +51,13 @@ export type Provided = {
 export function providedOf(dependency: AnyDependency, base: URL): Provided {
   const { provider } = dependency;
   checkExportedFormat(provider);
+  const declaredByCode = declaredByCodeOf(provider);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
   for (const endpoint of dependency.endpoints ?? []) {
     const { name } = endpoint;
     const entry = exportedEntryOf(provider, endpoint);
-    listedByEntry.set(entry, listedEndpointOf(provider, { name, endpoint, entry }));
+    const listing = { name, endpoint, entry };
+    listedByEntry.set(entry, listedEndpointOf(provider, listing, declaredByCode));
   }
   const entries = Object.entries(provider.exportedSnapshot.endpoints);
   const exported = entries.map(([identity, entry]) => {
@@ -66,9 +75,23 @@ type Listing = {
   readonly entry: EndpointSnapshot;
 };
 
+/**
+ * Every code the Provider's Contract Package declares, by the code it resolves to: what each
+ * exported Endpoint answers, its Guards' included, and the Provider's not-found code.
+ */
+function declaredByCodeOf(provider: ContractPackage): ReadonlyMap<string, AnswerableRejection> {
+  const standards = provider.standardRejections;
+  const declared: [string, AnswerableRejection][] = [[standards.notFound.code, notFound]];
+  for (const endpoint of Object.values(provider.endpoints)) {
+    declared.push(...answerableByCodeOf(endpoint, standards));
+  }
+  return new Map(declared);
+}
+
 function listedEndpointOf(
   provider: ContractPackage,
   { name, endpoint, entry }: Listing,
+  declaredByCode: ReadonlyMap<string, AnswerableRejection>,
 ): ListedEndpoint {
   const standards = provider.standardRejections;
   return {
@@ -78,6 +101,7 @@ function listedEndpointOf(
     nodes: textPartNodesOf(entry),
     deprecatedAt: entry.deprecatedAt,
     rejectionsByCode: answerableByCodeOf(endpoint, standards),
+    declaredByCode,
     standards,
   };
 }

@@ -181,6 +181,22 @@ const capture = (body: string, contentType = 'application/json'): RequestInit =>
 });
 
 describe('fakeProvider and serve answer alike', () => {
+  test('a code another Endpoint declares, sent by r.unknownRejection, is answered with the bytes serve sends for it', async () => {
+    const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body: locked }));
+
+    const fromServe = await served(new Request('http://payments.test/payments/locked'));
+    const fromFake = await payments.fetch(
+      new Request('http://payments.test/payments/pay-1/capture', capture('{"amount":1}')),
+    );
+
+    expect(fromFake.status).toBe(fromServe.status);
+    expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+    expect(await fromFake.text()).toBe(await fromServe.text());
+  });
+
   test.each([
     ['a Success with its headers', '/payments/pay-1', {}],
     ['a Standard Rejection', '/payments/missing', {}],

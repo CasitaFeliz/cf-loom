@@ -154,9 +154,8 @@ describe('fakeProvider: requests', () => {
       },
     });
     expect(taken.getPayment).toBe(0);
-    expect(fake.calls('getPayment')).toEqual([
+    expect(fake.invalidCalls('getPayment')).toEqual([
       {
-        kind: 'invalid',
         issues: [
           { in: 'params', path: ['paymentId'], code: 'too_small', message: expect.any(String) },
         ],
@@ -205,7 +204,7 @@ describe('fakeProvider: requests', () => {
     );
 
     expect(inputs).toEqual([{ params: { paymentId: 'pay-1' }, body: { amount: 5 } }]);
-    expect(fake.calls('capturePayment')).toEqual([{ kind: 'valid', input: inputs[0] }]);
+    expect(fake.calls('capturePayment')).toEqual([inputs[0]]);
   });
 
   test('text parts are converted by their nodes, a repeated query key as a list', async () => {
@@ -218,13 +217,44 @@ describe('fakeProvider: requests', () => {
 
     expect(fake.calls('getPayment')).toEqual([
       {
-        kind: 'valid',
-        input: {
-          params: { paymentId: 'pay-1' },
-          query: { expand: ['a', 'b'] },
-          headers: { 'x-api-key': 'k' },
-        },
+        params: { paymentId: 'pay-1' },
+        query: { expand: ['a', 'b'] },
+        headers: { 'x-api-key': 'k' },
       },
+    ]);
+  });
+
+  test('calls lists only the requests read as valid, each its parsed Input, in arrival order', async () => {
+    const { fake } = countingFake();
+    const headers = { 'x-api-key': 'k' };
+
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-2`, { headers }));
+
+    expect(fake.calls('getPayment')).toEqual([
+      { params: { paymentId: 'pay-1' }, query: {}, headers },
+      { params: { paymentId: 'pay-2' }, query: {}, headers },
+    ]);
+  });
+
+  test('invalidCalls lists the Issues of each request answered with invalid input, in arrival order', async () => {
+    const { fake } = countingFake();
+    const headers = { 'x-api-key': 'k' };
+
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-2`));
+
+    const issueOf = (where: string, path: string, code: string) => ({
+      in: where,
+      path: [path],
+      code,
+      message: expect.any(String),
+    });
+    expect(fake.invalidCalls('getPayment')).toEqual([
+      { issues: [issueOf('params', 'paymentId', 'too_small')] },
+      { issues: [issueOf('headers', 'x-api-key', 'required')] },
     ]);
   });
 
@@ -368,14 +398,18 @@ describe('fakeProvider: requests', () => {
     expect(taken.getPayment).toBe(0);
   });
 
-  test('calls are a frozen copy', async () => {
+  test('calls and invalidCalls are frozen copies', async () => {
     const { fake } = countingFake();
     await fake.fetch(new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }));
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }));
 
     const calls = fake.calls('getPayment');
+    const invalidCalls = fake.invalidCalls('getPayment');
 
     expect(Object.isFrozen(calls)).toBe(true);
+    expect(Object.isFrozen(invalidCalls)).toBe(true);
     expect(fake.calls('getPayment')).not.toBe(calls);
+    expect(fake.invalidCalls('getPayment')).not.toBe(invalidCalls);
   });
 
   test('a path no exported Endpoint matches is a mistake naming the path and the base URL', async () => {

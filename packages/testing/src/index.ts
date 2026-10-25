@@ -1,8 +1,8 @@
 export type {
-  FakeCall,
   FakeClientOptions,
   FakeProvider,
   FakeProviderOptions,
+  InvalidCall,
 } from './faking/index.ts';
 export { fakeProvider } from './faking/index.ts';
 export { FakeProviderError } from './mistakes/index.ts';

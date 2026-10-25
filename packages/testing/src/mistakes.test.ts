@@ -92,10 +92,7 @@ function firstLineOf(error: unknown): string | undefined {
   return error instanceof Error ? error.message.split('\n')[0] : undefined;
 }
 
-type Builder = StepBuilder<
-  typeof readers.getPayment,
-  (typeof paymentsDependency)['provider']['standardRejections']
->;
+type Builder = StepBuilder<typeof paymentsDependency, 'getPayment'>;
 
 function circular(): unknown {
   const value: Record<string, unknown> = {};
@@ -180,7 +177,12 @@ describe('fakeProvider: a test’s mistakes', () => {
     [
       'a code the Endpoint answers',
       'NOT_FOUND',
-      'NOT_FOUND is a code the Endpoint answers, not one the Provider does not declare',
+      "NOT_FOUND is a code the Endpoint answers: r.reject('NOT_FOUND') answers it",
+    ],
+    [
+      'the Standard invalid-input code, which every Endpoint answers',
+      'INVALID_INPUT',
+      "INVALID_INPUT is a code the Endpoint answers: r.reject('INVALID_INPUT') answers it",
     ],
     ['a reserved code', 'RETIRED', 'RETIRED is a reserved code, which r.fault({ code }) answers'],
     [
@@ -188,9 +190,9 @@ describe('fakeProvider: a test’s mistakes', () => {
       'card-expired',
       'card-expired is no UPPER_SNAKE_CASE, so no Contract can declare it',
     ],
-  ])('r.reject({ unknown }) with %s is a mistake', async (_name, code, message) => {
+  ])('r.unknownRejection with %s is a mistake', async (_name, code, message) => {
     const payments = fakeProvider(paymentsDependency);
-    payments.on('getPayment').otherwise((r) => r.reject({ unknown: code }, {}));
+    payments.on('getPayment').otherwise((r) => r.unknownRejection(code));
 
     const error = await payments
       .client()
@@ -214,7 +216,9 @@ describe('fakeProvider: a test’s mistakes', () => {
     'a body that is no JSON, %s, for a code the Provider does not declare is a mistake',
     async (_name, value) => {
       const payments = fakeProvider(paymentsDependency);
-      payments.on('getPayment').otherwise((r) => r.reject({ unknown: 'CARD_EXPIRED' }, value));
+      payments
+        .on('getPayment')
+        .otherwise((r) => r.unknownRejection('CARD_EXPIRED', { body: value }));
 
       const calling = payments.client().getPayment({ params });
 
@@ -282,14 +286,19 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toThrow(FakeProviderError);
   });
 
-  test('a code the Endpoint does not answer, given as declared, is a mistake', async () => {
+  test('a code the Endpoint does not answer, given to r.reject, is a mistake naming r.unknownRejection', async () => {
     const payments = fakeProvider(paymentsDependency);
     // @ts-expect-error getPayment answers no PAYMENT_LOST
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOST'));
 
-    const calling = payments.client().getPayment({ params });
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
 
-    await expect(calling).rejects.toThrow('the Endpoint answers no code PAYMENT_LOST');
+    expect(firstLineOf(error)).toBe(
+      "payments-service: getPayment: the Endpoint answers no code PAYMENT_LOST; r.unknownRejection sends a code the Provider's Contract does not declare",
+    );
   });
 
   test.each([200, 199, 600, 502.5])(
@@ -319,10 +328,7 @@ describe('fakeProvider: a test’s mistakes', () => {
 
   test.each([
     ['r.status given a symbol', (r: Builder) => r.status(Symbol('s') as never)],
-    [
-      'r.reject({ unknown }) given a symbol',
-      (r: Builder) => r.reject({ unknown: Symbol('s') as never }, null),
-    ],
+    ['r.unknownRejection given a symbol', (r: Builder) => r.unknownRejection(Symbol('s') as never)],
   ])('%s is a mistake, never a TypeError the client takes for a Fault', async (_name, step) => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);

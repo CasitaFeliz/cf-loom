@@ -13,9 +13,13 @@ import {
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import { type ListedEndpoint, type Matched, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
-import { knownRejectionResponseOf, scriptedSuccessResponseOf } from './outcomes.ts';
+import {
+  declaredRejectionResponseOf,
+  knownRejectionResponseOf,
+  scriptedSuccessResponseOf,
+} from './outcomes.ts';
 
-/** The status a scripted code the Provider does not declare travels with. */
+/** The status a scripted code the Provider's Contract does not declare travels with. */
 const unknownRejectionStatus = 422;
 
 /** What a mistake says when a scripted answer throws while it is read. */
@@ -56,28 +60,38 @@ function reservedAnswerOf(code: ReservedCode, otherMethods: readonly string[]): 
 type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;
 
 /**
- * A code the Provider does not declare, as a later Provider might send it: never one the Endpoint
- * answers, a reserved one or one no Contract could declare, and with a JSON body.
+ * A code the Endpoint does not answer, as a later Provider might send it: one the Provider's
+ * Contract declares elsewhere as it declares it, any other with 422; never a reserved code or one
+ * no Contract could declare.
  */
 function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
   const refused = refusedUnknownCodeOf(answer.code, listed);
   if (refused !== undefined) {
     throw mistakeOf({ ...whoOf(listed), what: refused });
   }
-  const { code, message, body } = answer;
+  const rejection = listed.declaredByCode.get(answer.code);
+  if (rejection !== undefined) {
+    return declaredRejectionResponseOf({ ...answer, rejection }, listed);
+  }
+  return undeclaredRejectionResponseOf(answer, listed);
+}
+
+/** A code the Provider's Contract does not declare: 422, its message the code unless given, and a JSON body only when given. */
+function undeclaredRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
+  const { code, message = code, body } = answer;
   const what = `the scripted ${code} body is no JSON`;
   return builtOf(listed, what, () => {
-    if (!isJsonValue(body)) {
+    if (body !== undefined && !isJsonValue(body)) {
       throw mistakeOf({ ...whoOf(listed), what });
     }
     return rejectionResponseOf({ code, status: unknownRejectionStatus, message, body });
   });
 }
 
-/** Why a code cannot stand for one the Provider does not declare, if it cannot. */
+/** Why a code cannot stand for one the Endpoint does not answer, if it cannot. */
 function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | undefined {
   if (listed.rejectionsByCode.has(code)) {
-    return `${code} is a code the Endpoint answers, not one the Provider does not declare`;
+    return `${code} is a code the Endpoint answers: r.reject('${code}') answers it`;
   }
   if (isReservedCode(code)) {
     return `${code} is a reserved code, which r.fault({ code }) answers`;

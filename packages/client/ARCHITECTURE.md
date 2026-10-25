@@ -6,7 +6,7 @@ The package builds with `lib: ["ES2024", "DOM"]` and `types: []`, so nothing in 
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@cf-loom/testing` builds its fake and its client with: the types `AnyDependency`, from `endpoints/`, `ConfiguredName`, from `calling/`, and `EndpointSuccess` and `EndpointRejection`, the Success and the Rejections of one Endpoint, from `decoding/`, `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`, and `networkFailureOf`, what `fetch` throws for a refused or a lost connection, from `inference/`.
+The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `inference/`, and `src/internal/index.ts` (`./internal`) what `@cf-loom/testing` builds its fake and its client with: the types `AnyDependency`, from `endpoints/`, and `ConfiguredName`, from `calling/`; `baseUrlOf` and `basePathOf`, the base URL checked once and the path every Endpoint is called under, from `request/`, and `networkFailureOf`, what `fetch` throws for a refused or a lost connection, from `inference/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |

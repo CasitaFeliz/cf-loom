@@ -98,7 +98,7 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   payments
     .on('getPayment')
     .once((r) => r.reject('NOT_FOUND'))
-    .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, {}))
+    .once((r) => r.unknownRejection('CARD_EXPIRED'))
     .once((r) => r.fault({ committed: 'no', retryable: true }))
     .once((r) => r.noConnection())
     .once((r) => r.reset())
@@ -117,7 +117,6 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
       code: 'CARD_EXPIRED',
       status: 422,
       message: 'CARD_EXPIRED',
-      body: {},
     },
     {
       kind: 'fault',
@@ -152,7 +151,7 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
     { kind: 'success', status: 200, body: { id: PAYMENT_ID, amount } },
   ]);
   const input = { params: { paymentId: PAYMENT_ID }, headers: { 'x-api-key': 'k' } };
-  expect(calls).toEqual(Array.from({ length: 7 }, () => ({ kind: 'valid', input })));
+  expect(calls).toEqual(Array.from({ length: 7 }, () => input));
 });
 
 test('the entry exports fakeProvider and FakeProviderError alone, as the README lists them', async () => {

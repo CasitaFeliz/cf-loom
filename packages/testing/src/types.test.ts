@@ -18,7 +18,14 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { type FakeCall, fakeProvider, type ScriptedAnswer } from './index.ts';
+import {
+  fakeProvider,
+  type InvalidCall,
+  type Script,
+  type ScriptedAnswer,
+  type Step,
+  type StepBuilder,
+} from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -113,8 +120,48 @@ describe('fakeProvider: types', () => {
 
     expect([unlisted, unknown]).toHaveLength(2);
     expectTypeOf(payments.calls('getPayment')).toEqualTypeOf<
-      readonly FakeCall<typeof readers.getPayment>[]
+      readonly InputOf<typeof readers.getPayment>[]
     >();
+    expectTypeOf(payments.invalidCalls('getPayment')).toEqualTypeOf<readonly InvalidCall[]>();
+  });
+
+  test('a call is the parsed Input itself, read with no narrowing', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const paymentId = payments.calls('getPayment')[0]?.params.paymentId;
+
+    expectTypeOf(paymentId).toEqualTypeOf<string | undefined>();
+    expect(paymentId).toBeUndefined();
+  });
+
+  test('an invalid call holds the Issues of the invalid-input Rejection', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const issues = payments.invalidCalls('getPayment')[0]?.issues;
+
+    expectTypeOf(issues).toEqualTypeOf<InvalidCall['issues'] | undefined>();
+    expect(issues).toBeUndefined();
+  });
+
+  test('on(name) is the Script of that name, whose once takes a Step keyed by the Dependency and the name', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const step: Step<typeof paymentsDependency, 'getPayment'> = (r) => r.reject('NO_PAYMENT');
+
+    const script = payments.on('getPayment').once(step);
+
+    expectTypeOf(script).toEqualTypeOf<Script<typeof paymentsDependency, 'getPayment'>>();
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('Script, Step and StepBuilder refuse a name the Dependency does not list', () => {
+    // @ts-expect-error listPayments is exported but not listed
+    type UnlistedScript = Script<typeof paymentsDependency, 'listPayments'>;
+    // @ts-expect-error listPayments is exported but not listed
+    type UnlistedStep = Step<typeof paymentsDependency, 'listPayments'>;
+    // @ts-expect-error no Endpoint has this name
+    type UnlistedBuilder = StepBuilder<typeof paymentsDependency, 'getPayments'>;
+
+    expectTypeOf<[UnlistedScript, UnlistedStep, UnlistedBuilder]>().not.toBeNever();
   });
 
   test('a Dependency written without a list gives on and calls no name', () => {
@@ -133,7 +180,7 @@ describe('fakeProvider: types', () => {
       .on('getPayment')
       .once((r) => r.reject('NO_PAYMENT'))
       .once((r) => r.reject('PAYMENT_LOCKED', { lockedAt: '2026-10-19T10:00:00Z' }))
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { any: 'thing' }))
+      .once((r) => r.unknownRejection('CARD_EXPIRED', { body: { any: 'thing' } }))
       // @ts-expect-error a declared body is required
       .once((r) => r.reject('PAYMENT_LOCKED'))
       // @ts-expect-error the Provider resolved notFound to NO_PAYMENT

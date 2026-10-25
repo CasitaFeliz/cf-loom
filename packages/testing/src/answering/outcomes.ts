@@ -1,5 +1,6 @@
 import type { Issue } from '@cf-loom/contract';
 import {
+  type AnswerableRejection,
   encodedValueOf,
   headerTextsOf,
   type IssuePart,
@@ -36,21 +37,42 @@ export function scriptedSuccessResponseOf(scripted: unknown, listed: ListedEndpo
 
 type KnownRejection = Extract<Answer, { readonly kind: 'rejection' }>;
 
-/** A Rejection by a code the Endpoint answers, its body written as its readers read it. */
+/** A Rejection by a code the Endpoint answers, as `serve` sends it. */
 export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedEndpoint): Response {
   const rejection = listed.rejectionsByCode.get(answer.code);
   if (rejection === undefined) {
-    const what = `the Endpoint answers no code ${answer.code}; r.reject({ unknown }) sends one`;
+    const sends = "r.unknownRejection sends a code the Provider's Contract does not declare";
+    const what = `the Endpoint answers no code ${answer.code}; ${sends}`;
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  const reader = rejectionBodyReaderOf(rejection, listed.standards);
-  const body = writtenOf('body', reader, answer.body);
+  return declaredRejectionResponseOf({ ...answer, rejection }, listed);
+}
+
+/** A Rejection the Provider declares, as scripted: its message, when one replaces the declared one, and its body. */
+export type DeclaredAnswer = {
+  readonly code: string;
+  readonly rejection: AnswerableRejection;
+  readonly message?: string;
+  readonly body?: unknown;
+};
+
+/**
+ * A Rejection the Provider declares, as `serve` sends it: its resolved code and status, its
+ * message unless one is given, and its body written as its reader reads it.
+ */
+export function declaredRejectionResponseOf(
+  declared: DeclaredAnswer,
+  listed: ListedEndpoint,
+): Response {
+  const reader = rejectionBodyReaderOf(declared.rejection, listed.standards);
+  const body = writtenOf('body', reader, declared.body);
   if (body.issues.length > 0) {
-    const what = `the scripted ${answer.code} body breaks its reader`;
+    const what = `the scripted ${declared.code} body breaks its reader`;
     throw mistakeOf({ ...whoOf(listed), what, issues: body.issues });
   }
-  const resolved = resolutionOf(rejection, listed.standards);
-  return rejectionResponseOf({ ...resolved, body: body.value });
+  const resolved = resolutionOf(declared.rejection, listed.standards);
+  const message = declared.message ?? resolved.message;
+  return rejectionResponseOf({ ...resolved, message, body: body.value });
 }
 
 /** A part as written for its reader, or every Issue at that part; nothing where none is declared. */

@@ -16,7 +16,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`, connecting a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError`, `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter: `jetstream`, whose `apply` applies a broker plan; the `JetStreamBrokerOptions`, `JetStreamBroker`, `BrokerPlan`, `BrokerPlanStream`, `BrokerPlanConsumer`, `BrokerLimits`, `StreamLimits`, `DurableConsumerLimits` and `Duration` types; `@nats-io/jetstream` and `@nats-io/nats-core` are optional peer dependencies |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter: `memory`; the `MemoryBroker`, `RecordedMessage`, `DeliveryMeta` and `PendingMessage` types |
-| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types |
+| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `InvalidCall` types |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig` |
 
 How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
