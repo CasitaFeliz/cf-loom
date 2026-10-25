@@ -8,7 +8,11 @@ export type PlacedService = BuiltService & { readonly handlerPaths: readonly Han
 
 /** The Service with its Handler paths, or the line saying why one cannot be placed. */
 export function placedOf(service: BuiltService): PlacedService | Tooling {
-  const placed = handlerPathsOf(service.snapshot, service.project.layout);
+  const placed = handlerPathsOf(
+    service.snapshot,
+    service.project.layout,
+    service.project.directory,
+  );
   switch (placed.kind) {
     case 'placed':
       return { ...service, handlerPaths: placed.paths };

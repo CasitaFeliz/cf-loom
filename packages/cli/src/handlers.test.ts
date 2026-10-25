@@ -1611,6 +1611,59 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(read(project, 'src/security/api-key.handler.ts')).toBe(guard);
   });
 
+  test('a Handler that moves onto the old path of another reached through a link takes it in the same run', () => {
+    const project = aProject(anEndpointWithItsGuard());
+    cfLoom(project, 'generate');
+    const endpoint = implement(project, 'src/endpoints/orders/a.handler.ts', 'endpoint a');
+    const guard = implement(project, 'src/guards/a.handler.ts', 'guard a');
+    symlinkSync(join(project, 'src/endpoints'), join(project, 'src/http'), 'dir');
+    const layout =
+      "{ endpoint: 'src/x/{name}.handler.ts', guard: 'src/http/orders/{name}.handler.ts' }";
+    write(project, withLayout({}, layout));
+
+    const ran = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(0);
+    expect(read(project, 'src/x/a.handler.ts')).toBe(endpoint);
+    expect(read(project, 'src/http/orders/a.handler.ts')).toBe(guard);
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('two Elements whose Handler paths are one file through a link fail the collision check', () => {
+    const project = aProject(anEndpointWithItsGuard());
+    cfLoom(project, 'generate');
+    implement(project, 'src/endpoints/orders/a.handler.ts', 'endpoint a');
+    const guard = implement(project, 'src/guards/a.handler.ts', 'guard a');
+    symlinkSync(join(project, 'src/guards'), join(project, 'src/http'), 'dir');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{name}.handler.ts' }"));
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line =
+      'endpoints.a and guards.a are both the same file, src/http/a.handler.ts and src/guards/a.handler.ts: give each its own path in the layout of cf-loom.config.ts\n';
+    expect(generated).toEqual({ status: 3, stdout: '', stderr: line });
+    expect(verified).toEqual({ status: 3, stdout: '', stderr: line });
+    expect(read(project, 'src/guards/a.handler.ts')).toBe(guard);
+  });
+
+  test('a Handler path that reaches src/contract/ through a link fails like one that names it', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    symlinkSync(join(project, 'src/contract/endpoints'), join(project, 'src/shared'), 'dir');
+    write(project, withLayout({}, "{ endpoint: 'src/shared/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'endpoints.createOrder is src/shared/orders/create-order.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
   test('two Handlers that swap paths keep their implementations', () => {
     const before = "{ endpoint: 'src/a/{name}.handler.ts', guard: 'src/b/{name}.handler.ts' }";
     const swapped = "{ endpoint: 'src/b/{name}.handler.ts', guard: 'src/a/{name}.handler.ts' }";
@@ -4393,3 +4446,19 @@ describe('cf-loom generate: the Handlers it moves, whatever happens to the Eleme
     },
   );
 });
+
+/** A Service with an Endpoint `a` that attaches the Guard `a`. */
+function anEndpointWithItsGuard(): Readonly<Record<string, string>> {
+  return {
+    'package.json': manifest,
+    'cf-loom.config.ts': config,
+    'src/contract/guards/a.guard.ts': aGuardNamed('a'),
+    'src/contract/endpoints/orders/a.endpoint.ts': anEndpoint({
+      name: 'a',
+      path: '/a',
+      guards: '[guardA]',
+      imports: [importOf('{ a as guardA }', '../../guards/a.guard.ts')],
+    }),
+    'src/contract/index.ts': aRoot({ a: './endpoints/orders/a.endpoint.ts' }),
+  };
+}

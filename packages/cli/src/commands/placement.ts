@@ -50,52 +50,75 @@ export function placementOf(
   recorded: readonly RecordedHandler[],
 ): Placement {
   const { directory } = service.project;
+  const identityOf = (path: string) => realPathOf(directory, path);
   const declared = new Map(
     service.handlerPaths.map((placed) => [handlerLocalOf(placed.handled), placed]),
   );
   const standing = recorded.filter(({ path }) => !isNothingAt(join(directory, path)));
-  const leaving = standing.filter((handler) => !isPlacedAt(directory, handler, declared));
+  const leaving = standing.filter((handler) => !isPlacedAt(handler, declared, identityOf));
   const moving = movingOf(leaving, declared);
-  const keeping = keepingOf(service, new Set(leaving.map(({ path }) => path)));
-  const arriving = new Set(moving.map(({ placed }) => placed.path));
-  const lacking = service.handlerPaths.filter(
-    ({ path }) => !keeping.has(path) && !arriving.has(path),
-  );
-  const retired = new Map(
-    retiredHandledOf(service.snapshot).map((handled) => [handlerLocalOf(handled), handled]),
-  );
+  const { keeping, lacking } = pictureOf(service, { leaving, moving }, identityOf);
+  const isKept = ({ placed }: Moving) => keeping.has(identityOf(placed.path));
   const undecided = leaving.filter(({ local }) => !declared.has(local));
   return {
     moves: moving
-      .filter(({ placed }) => !keeping.has(placed.path))
+      .filter((move) => !isKept(move))
       .map(moveOf)
       .sort(byFrom),
     lines: [
-      ...moving.filter(({ placed }) => keeping.has(placed.path)).map(conflictLineOf),
-      ...undecided.map((handler) => undecidedLineOf(handler, retired, lacking)),
+      ...moving.filter(isKept).map(conflictLineOf),
+      ...undecided.map((handler) => undecidedLineOf(service, handler, lacking)),
     ],
     lacking,
   };
 }
 
-/** Whether the layout places a recorded Handler's Element at the path it was imported from, or at a path that is the same file. */
-function isPlacedAt(
-  directory: string,
-  handler: RecordedHandler,
-  declared: ReadonlyMap<string, HandlerPath>,
-): boolean {
-  const placed = declared.get(handler.local);
-  return (
-    placed !== undefined &&
-    realPathOf(directory, placed.path) === realPathOf(directory, handler.path)
+/**
+ * The files that keep a Handler once every move is made, and the Handlers that lack one: an
+ * Element lacks a Handler when its file neither keeps one nor receives one.
+ */
+function pictureOf(
+  service: PlacedService,
+  {
+    leaving,
+    moving,
+  }: { readonly leaving: readonly RecordedHandler[]; readonly moving: readonly Moving[] },
+  identityOf: Identity,
+): { readonly keeping: ReadonlySet<string>; readonly lacking: readonly HandlerPath[] } {
+  const keeping = keepingOf(
+    service,
+    new Set(leaving.map(({ path }) => identityOf(path))),
+    identityOf,
   );
+  const arriving = new Set(moving.map(({ placed }) => identityOf(placed.path)));
+  const lacking = service.handlerPaths.filter(
+    ({ path }) => !keeping.has(identityOf(path)) && !arriving.has(identityOf(path)),
+  );
+  return { keeping, lacking };
 }
 
-/** The Handler paths with a file that no Handler leaves behind. */
-function keepingOf(service: PlacedService, leavingPaths: ReadonlySet<string>): ReadonlySet<string> {
+/** A path as the file it is, so two spellings of one file are one. */
+type Identity = (path: string) => string;
+
+/** Whether the layout places a recorded Handler's Element at the file it was imported from. */
+function isPlacedAt(
+  handler: RecordedHandler,
+  declared: ReadonlyMap<string, HandlerPath>,
+  identityOf: Identity,
+): boolean {
+  const placed = declared.get(handler.local);
+  return placed !== undefined && identityOf(placed.path) === identityOf(handler.path);
+}
+
+/** The files of the Handler paths that have a file no Handler leaves behind, by identity. */
+function keepingOf(
+  service: PlacedService,
+  leaving: ReadonlySet<string>,
+  identityOf: Identity,
+): ReadonlySet<string> {
   const { directory } = service.project;
   const there = service.handlerPaths.filter(({ path }) => !isNothingAt(join(directory, path)));
-  return new Set(there.map(({ path }) => path).filter((path) => !leavingPaths.has(path)));
+  return new Set(there.map(({ path }) => identityOf(path)).filter((file) => !leaving.has(file)));
 }
 
 function movingOf(
@@ -129,13 +152,15 @@ function conflictLineOf({ handler, placed }: Moving): PathLine {
 
 /** The line for a Handler whose Element is Retired or no longer declared, which only the author can settle. */
 function undecidedLineOf(
+  service: PlacedService,
   handler: RecordedHandler,
-  retired: ReadonlyMap<string, Handled>,
   lacking: readonly HandlerPath[],
 ): PathLine {
-  const element = retired.get(handler.local);
+  const retired = retiredHandledOf(service.snapshot).find(
+    (handled) => handlerLocalOf(handled) === handler.local,
+  );
   const line =
-    element === undefined ? goneLineOf(handler, lacking) : retiredLineOf(handler, element);
+    retired === undefined ? goneLineOf(handler, lacking) : retiredLineOf(handler, retired);
   return { path: handler.path, line };
 }
 

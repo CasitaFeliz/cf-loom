@@ -55,7 +55,9 @@ export function recordOf(service: PlacedService): RecordRead {
   }
   const read = written.files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
   const recorded = [
-    ...new Map(read.map((handler) => [`${handler.local} ${handler.path}`, handler])).values(),
+    ...new Map(
+      read.map((handler) => [`${handler.local} ${realPathOf(directory, handler.path)}`, handler]),
+    ).values(),
   ];
   const { moves, lines, lacking } = placementOf(service, recorded);
   const sorted = [...lines].sort((left, right) => byCodePoint(left.path, right.path));
