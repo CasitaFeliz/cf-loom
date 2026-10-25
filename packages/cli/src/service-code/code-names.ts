@@ -59,7 +59,6 @@ export function collidingSubscriptionLineOf(
     if (earlier !== undefined) {
       return `subscriptions.${name} is ${code} in code, as ${earlier} is: rename the Subscription`;
     }
-    namesByCode.set(code, `subscriptions.${name}`);
   }
   return undefined;
 }

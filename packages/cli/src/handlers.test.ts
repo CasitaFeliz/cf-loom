@@ -1731,7 +1731,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     write(project, {
       'src/check.ts': aCheck([
         'export const charge: CommandHandler<typeof chargeCardV2> = handlers.commands.chargeCardV2;',
-        "export const audit: EventHandler<typeof auditCreated> = handlers.subscriptions['auditCreated'];",
+        'export const audit: EventHandler<typeof auditCreated> = handlers.subscriptions.auditCreated;',
         'export const old: CommandHandler<typeof chargeCardV1> = handlers.commands.chargeCardV1;',
       ]),
     });
@@ -1775,7 +1775,7 @@ describe('cf-loom generate: the Service type-checks', () => {
         "const meta = { messageId: 'm-1', factId: 'f-1', deliveryCount: 1 };",
         "const items = { label: 'root', children: [] };",
         "const orderId = '0b8f5f8e-8a5e-4c1e-9d0c-2f3b8c1d2e3f';",
-        "const audit = handlers.subscriptions['auditCreated'];",
+        'const audit = handlers.subscriptions.auditCreated;',
         "export const unknown = audit({ orderId, status: { unknown: 'refunded' }, items }, meta);",
         '// @ts-expect-error an undeclared value is read as its Unknown case, never bare',
         "export const bare = audit({ orderId, status: 'refunded', items }, meta);",

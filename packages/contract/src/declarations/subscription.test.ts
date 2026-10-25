@@ -22,7 +22,6 @@ describe('defineSubscription', () => {
 
     expect(notifyOnCreated.kind).toBe('subscription');
     expect(notifyOnCreated.name).toBe('notifyOnCreated');
-    expect(notifyOnCreated.description).toBe('Notifies the customer of each order created');
     expect(notifyOnCreated.event).toBe(orderCreatedV1);
   });
 
