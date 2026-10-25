@@ -38,12 +38,12 @@ type ObjectPart = { readonly at: Path; readonly value: unknown; readonly require
 /** Every list is a list, every object part an object, and every item the declaration that belongs there. */
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
-    ...listingsOf(declarations).flatMap(listingFailures),
+    ...listsOf(declarations).flatMap(listingFailures),
     ...readableOf(declarations).flatMap(objectPartsOf).flatMap(objectPartFailures),
   ];
 }
 
-function listingsOf(declarations: Declarations): readonly Listing[] {
+function listsOf(declarations: Declarations): readonly Listing[] {
   const { root, groups, endpoints, guards, allPackages } = declarations;
   return [
     ...rootListings(root),

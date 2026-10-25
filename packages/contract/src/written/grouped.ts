@@ -45,9 +45,6 @@ export type FieldListing<Field extends GroupedField> = {
   readonly keyOf: (declaration: GroupedDeclarations[Field]) => string;
 };
 
-/** The fields a Group lists declarations in, in the order the rules read them. */
-export const groupedFields = ['endpoints', 'events', 'commands', 'subscriptions'] as const;
-
 /** Each field of a Group: the one place that says what it holds and how each item is located. */
 export const fieldListings: { readonly [Field in GroupedField]: FieldListing<Field> } = {
   endpoints: {
@@ -71,6 +68,9 @@ export const fieldListings: { readonly [Field in GroupedField]: FieldListing<Fie
     keyOf: (subscription) => textOf(subscription.name),
   },
 };
+
+/** The fields a Group lists declarations in, in the order the rules read them. */
+export const groupedFields = Object.keys(fieldListings) as readonly GroupedField[];
 
 /** What a root's Groups list, each declaration once, where first met, located under its Group. */
 export type Grouped = {
