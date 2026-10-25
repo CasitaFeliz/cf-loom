@@ -146,7 +146,8 @@ const theEvents = [
 
 /**
  * A Service named `orders-service` with an Event of each Visibility and Lifecycle in the Groups
- * `trees`, `orders` and `notes`, and a Command and a Subscription.
+ * `trees`, `orders` and `notes`, its one Retired Event alone in `purges`, and a Command and a
+ * Subscription.
  */
 const theService = aContractProject([
   ...theEvents,
@@ -158,8 +159,9 @@ const theService = aContractProject([
   '  commands: [chargeCardV1],',
   '  subscriptions: [auditCreated],',
   '});',
-  "const notes = defineGroup({ name: 'notes', description: 'Notes', events: [orderNotedV1, orderPurgedV1] });",
-  "export const contract = defineContract({ name: 'orders-service', groups: [trees, orders, notes] });",
+  "const notes = defineGroup({ name: 'notes', description: 'Notes', events: [orderNotedV1] });",
+  "const purges = defineGroup({ name: 'purges', description: 'Purges', events: [orderPurgedV1] });",
+  "export const contract = defineContract({ name: 'orders-service', groups: [trees, orders, notes, purges] });",
 ]);
 
 /** A Service named `orders-service` that declares no Event. */

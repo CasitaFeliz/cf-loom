@@ -105,6 +105,14 @@ describe('validateContract: what a Group lists', () => {
     );
   });
 
+  test('a Group whose only field is no list fails as not-a-list alone', () => {
+    const result = validateGroups([aGroup('orders', { events: {} })]);
+
+    expect(result).toEqual(
+      failed(['groups', 'orders', 'events'], 'not-a-list', 'events is a list'),
+    );
+  });
+
   test('an empty list beside a list that holds something validates', () => {
     const result = validateGroups([aGroup('orders', { endpoints: [listOrders], events: [] })]);
 

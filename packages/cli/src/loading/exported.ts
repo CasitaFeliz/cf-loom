@@ -7,6 +7,11 @@ import { importedModuleOf } from './imported.ts';
 /** Where the Contract's own files sit in a project. */
 export const contractFolder = 'src/contract';
 
+/** Whether a path the layout gives, from the project's directory, lies under the Contract's folder. */
+export function isUnderContract(path: string): boolean {
+  return path.startsWith(`${contractFolder}/`);
+}
+
 /**
  * Whether a folder, by its real path, is the project's Contract folder or inside it, whichever
  * link led to it, so a search of `src/` never reads what a link into the Contract reaches.

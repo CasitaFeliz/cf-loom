@@ -1,9 +1,14 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
-import { contractFolder } from '../loading/index.ts';
+import { contractFolder, isUnderContract } from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
-import { declaredHandledOf, type Handled, type MessageHandled } from './handled.ts';
+import {
+  type DeclarationHandled,
+  declaredHandledOf,
+  type Handled,
+  type MessageHandled,
+} from './handled.ts';
 
 /** The Handler file of a declared Element, and whether the Handler map imports it. */
 export type HandlerPath = {
@@ -61,7 +66,7 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
 
 /** The line naming the first Element, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
 function contractLineOf(paths: readonly HandlerPath[]): string | undefined {
-  const placed = paths.find(({ path }) => path.startsWith(`${contractFolder}/`));
+  const placed = paths.find(({ path }) => isUnderContract(path));
   if (placed === undefined) {
     return undefined;
   }
@@ -84,7 +89,7 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
 }
 
 /** An Element as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
-export function elementLabelOf(handled: Handled | MessageHandled): string {
+export function elementLabelOf(handled: DeclarationHandled | MessageHandled): string {
   switch (handled.kind) {
     case 'endpoint':
       return `endpoints.${handled.name}`;

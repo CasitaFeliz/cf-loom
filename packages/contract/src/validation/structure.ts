@@ -1,18 +1,16 @@
 import {
-  isCommand,
   isDefinitions,
   isDependencies,
-  isEndpoint,
-  isEvent,
   isGroup,
   isGuard,
   isRejection,
   isStandardRejection,
-  isSubscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
+  fieldListings,
+  groupedFields,
   isPlainObject,
   type LocatedGroup,
   listOf,
@@ -80,19 +78,14 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
   ];
 }
 
-/** A Group's four lists, none required, since a list left out is empty. */
+/** A Group's lists, none required, since a list left out is empty. */
 function groupListings({ at, group }: LocatedGroup): readonly Listing[] {
-  return [
-    { at: [...at, 'endpoints'], list: group.endpoints, noun: 'an Endpoint', fits: isEndpoint },
-    { at: [...at, 'events'], list: group.events, noun: 'an Event', fits: isEvent },
-    { at: [...at, 'commands'], list: group.commands, noun: 'a Command', fits: isCommand },
-    {
-      at: [...at, 'subscriptions'],
-      list: group.subscriptions,
-      noun: 'a Subscription',
-      fits: isSubscription,
-    },
-  ];
+  return groupedFields.map((field) => ({
+    at: [...at, field],
+    list: group[field],
+    noun: fieldListings[field].noun,
+    fits: fieldListings[field].fits,
+  }));
 }
 
 function rootListings(root: Declarations['root']): readonly Listing[] {

@@ -38,20 +38,38 @@ export type Listed<Field extends GroupedField> = {
   readonly group: Group;
 };
 
-/** What belongs in a field of a Group, and the key that locates it there. */
-type Listing<Field extends GroupedField> = {
+/** What belongs in a field of a Group, as the structure rule names it, and the key that locates it there. */
+export type FieldListing<Field extends GroupedField> = {
+  readonly noun: string;
   readonly fits: (item: unknown) => item is GroupedDeclarations[Field];
   readonly keyOf: (declaration: GroupedDeclarations[Field]) => string;
 };
 
-const listings: { readonly [Field in GroupedField]: Listing<Field> } = {
-  endpoints: { fits: isEndpoint, keyOf: (endpoint) => identityOf(endpoint.method, endpoint.path) },
-  events: { fits: isEvent, keyOf: (event) => messageIdentityOf(event.name, event.version) },
+/** The fields a Group lists declarations in, in the order the rules read them. */
+export const groupedFields = ['endpoints', 'events', 'commands', 'subscriptions'] as const;
+
+/** Each field of a Group: the one place that says what it holds and how each item is located. */
+export const fieldListings: { readonly [Field in GroupedField]: FieldListing<Field> } = {
+  endpoints: {
+    noun: 'an Endpoint',
+    fits: isEndpoint,
+    keyOf: (endpoint) => identityOf(endpoint.method, endpoint.path),
+  },
+  events: {
+    noun: 'an Event',
+    fits: isEvent,
+    keyOf: (event) => messageIdentityOf(event.name, event.version),
+  },
   commands: {
+    noun: 'a Command',
     fits: isCommand,
     keyOf: (command) => messageIdentityOf(command.name, command.version),
   },
-  subscriptions: { fits: isSubscription, keyOf: (subscription) => textOf(subscription.name) },
+  subscriptions: {
+    noun: 'a Subscription',
+    fits: isSubscription,
+    keyOf: (subscription) => textOf(subscription.name),
+  },
 };
 
 /** What a root's Groups list, each declaration once, where first met, located under its Group. */
@@ -99,11 +117,11 @@ export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
 }
 
 /** Every declaration a Group lists in one field, in its order, repeats included. */
-export function listedIn<Field extends GroupedField>(
+export function listingsOf<Field extends GroupedField>(
   { at, group }: LocatedGroup,
   field: Field,
 ): readonly Listed<Field>[] {
-  const { fits, keyOf } = listings[field];
+  const { fits, keyOf } = fieldListings[field];
   return listOf(group[field])
     .filter(fits)
     .map((declaration) => ({ at: [...at, field, keyOf(declaration)], declaration, group }));
@@ -143,7 +161,7 @@ function distinctListed<Field extends GroupedField>(
 ): readonly Listed<Field>[] {
   const seen = new Set<unknown>();
   const distinct: Listed<Field>[] = [];
-  for (const listed of groups.flatMap((group) => listedIn(group, field))) {
+  for (const listed of groups.flatMap((group) => listingsOf(group, field))) {
     if (!seen.has(listed.declaration)) {
       seen.add(listed.declaration);
       distinct.push(listed);

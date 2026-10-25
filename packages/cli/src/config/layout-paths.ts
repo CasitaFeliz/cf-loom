@@ -1,4 +1,4 @@
-import { contractFolder } from '../loading/index.ts';
+import { contractFolder, isUnderContract } from '../loading/index.ts';
 import type { Layout } from './config.ts';
 
 /** A field of the layout: a kind of Handler path, or a generated file's. */
@@ -113,7 +113,7 @@ export function pathRefusalOf(field: LayoutField, path: string): string | undefi
 }
 
 function locationRefusalOf(field: LayoutField, path: string): string | undefined {
-  if (path.startsWith(`${layoutFolder}/`) && !path.startsWith(`${contractFolder}/`)) {
+  if (path.startsWith(`${layoutFolder}/`) && !isUnderContract(path)) {
     return undefined;
   }
   return `layout.${field} must be under ${layoutFolder}/ and outside ${contractFolder}/: ${path}`;

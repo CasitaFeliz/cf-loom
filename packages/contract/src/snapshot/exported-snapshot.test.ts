@@ -567,8 +567,8 @@ function eventsSnapshot(): ServiceSnapshot {
       description: 'Stock was reserved',
       body: z.object({ sku: z.string() }),
     }),
-  ];
-  const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', events } as never);
+  ] as const;
+  const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', events });
   const root = defineContract({ name: 'orders-service', groups: [ordersGroup] });
   return serviceSnapshotOf(root);
 }
