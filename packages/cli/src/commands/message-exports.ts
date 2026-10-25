@@ -3,19 +3,11 @@ import type { ExportsOf, FileExport } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
 import {
   elementLabelOf,
-  type MessageAt,
+  type MessageExports,
   type MessageHandled,
   pairingNameOf,
 } from '../service-code/index.ts';
 import { type Located, locatedUnderOf } from './exported-declarations.ts';
-
-/**
- * Where each Command's Message Version and Subscription of a Service is exported under its name
- * in code, or a line for every one that is not.
- */
-export type MessageExports =
-  | { readonly kind: 'located'; readonly atOf: MessageAt }
-  | { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 /** A Command's Message Version or a Subscription, and where it is exported. */
 type LocatedMessage = Located<FileExport> & { readonly handled: MessageHandled };

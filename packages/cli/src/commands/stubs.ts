@@ -25,12 +25,12 @@ export type Stubs = {
 };
 
 /** What a Handler's stub passes to `handle.stub`, or why it cannot be written. */
-type Located =
+type StubLocated =
   | { readonly kind: 'exported'; readonly target: StubTarget }
   | { readonly kind: 'refused'; readonly line: string };
 
 /** A handled Element located, with the path its Handler is written at. */
-type LocatedHandler = Located & { readonly path: string };
+type LocatedHandler = StubLocated & { readonly path: string };
 
 /** The stub of every Handler that does not exist yet, importing its Element as it is named. */
 export function stubsOf(service: PlacedService, exportsOf: ExportsOf): Stubs {
@@ -59,7 +59,7 @@ function locatedHandlerOf(
  * Where a stub imports what its Handler is written for: an Endpoint or Guard where it is exported,
  * a Command's Message Version or Subscription from the readers, which pair it with its Reader.
  */
-function locatedOf(service: PlacedService, handled: Handled, exportsOf: ExportsOf): Located {
+function locatedOf(service: PlacedService, handled: Handled, exportsOf: ExportsOf): StubLocated {
   switch (handled.kind) {
     case 'endpoint':
     case 'guard':
@@ -76,7 +76,7 @@ function declarationLocatedOf(
   service: PlacedService,
   handled: DeclarationHandled,
   exportsOf: ExportsOf,
-): Located {
+): StubLocated {
   const packaged = packageOf(service, handled);
   if (packaged !== undefined) {
     return packageExportOf(handled, packaged);
@@ -93,7 +93,7 @@ function declarationLocatedOf(
 function packageExportOf(
   handled: DeclarationHandled,
   { packageName, exports, guard }: PackagedGuard,
-): Located {
+): StubLocated {
   if (exports[handled.name] === guard) {
     const imported = { kind: 'package', packageName, name: handled.name } as const;
     return { kind: 'exported', target: exportedTargetOf(imported) };

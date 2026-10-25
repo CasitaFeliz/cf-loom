@@ -21,12 +21,24 @@ import { type Readable, readerSchemasOf } from './reader-schemas.ts';
 import type { StubTarget } from './service-files.ts';
 
 /** Where a Command's Message Version or a Subscription is exported under its name in code. */
-export type MessageAt = (message: MessageHandled) => FileExport;
+type MessageAt = (message: MessageHandled) => FileExport;
 
-/** The text of the readers file, or the line saying which name cannot be written as code. */
+/**
+ * Where each Command's Message Version and Subscription of a Service is exported under its name
+ * in code, or a line for every one that is not.
+ */
+export type MessageExports =
+  | { readonly kind: 'located'; readonly atOf: MessageAt }
+  | { readonly kind: 'refused'; readonly lines: readonly string[] };
+
+/**
+ * The text of the readers file; the line saying which name cannot be written as code, which comes
+ * before the lines saying which Message is exported under no name in code.
+ */
 export type ReadersText =
   | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'unnamed'; readonly line: string };
+  | { readonly kind: 'unnamed'; readonly line: string }
+  | { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 /** A Command's Message Version or a Subscription, imported under a local name, with its Reader. */
 type Pairing = {
@@ -42,11 +54,26 @@ const withReaderImport = { name: 'withReader', specifier: '@cf-loom/handlers' } 
 /** The name the readers file exports its table of pairings under. */
 const readersTable = 'readers';
 
+/** The tables of the `readers` object, in the order they are written. */
+const tableKeys = ['commands', 'subscriptions'] as const;
+
+type TableKey = (typeof tableKeys)[number];
+
+/** The table a pairing sits in and the name it has there, which the table lists and a stub passes. */
+function tableMemberOf(handled: MessageHandled): { readonly key: TableKey; readonly name: string } {
+  switch (handled.kind) {
+    case 'command':
+      return { key: 'commands', name: pairingNameOf(handled) };
+    case 'subscription':
+      return { key: 'subscriptions', name: pairingNameOf(handled) };
+  }
+}
+
 /** Where a Message Handler's stub gets its pairing: the readers file's table, by kind and name. */
 export function pairingTargetOf(handled: MessageHandled, readersFile: string): StubTarget {
   const imported = { kind: 'file', path: readersFile, name: readersTable } as const;
-  const kind = handled.kind === 'command' ? 'commands' : 'subscriptions';
-  return { imported, expression: `${readersTable}.${kind}.${pairingNameOf(handled)}` };
+  const { key, name } = tableMemberOf(handled);
+  return { imported, expression: `${readersTable}.${key}.${name}` };
 }
 
 /**
@@ -57,23 +84,26 @@ export function pairingTargetOf(handled: MessageHandled, readersFile: string): S
 export function readersTextOf(
   snapshot: ServiceSnapshot,
   readersFile: string,
-  atOf: MessageAt,
+  messages: MessageExports,
 ): ReadersText {
   const schemas = readerSchemasOf(snapshot);
   const unnamed = defNamesLineOf(schemas.defUses);
   if (unnamed !== undefined) {
     return { kind: 'unnamed', line: unnamed };
   }
+  if (messages.kind === 'refused') {
+    return messages;
+  }
   const commands = schemas.readables
     .filter(isCommandReadable)
     .sort((left, right) => byCommandName(left.message, right.message))
-    .map((readable) => commandPairingOf(readable, atOf));
+    .map((readable) => commandPairingOf(readable, messages.atOf));
   const subscriptions = Object.entries(snapshot.subscriptions).map(([name, { event }]) =>
-    subscriptionPairingOf(snapshot.name, { name, event }, atOf),
+    subscriptionPairingOf(snapshot.name, { name, event }, messages.atOf),
   );
   const pairings = [...commands, ...subscriptions];
   const imports = importsOf(schemas.needs, pairings, readersFile);
-  const body = bodyOf([schemas.defs, schemas.readers, tableLinesOf(commands, subscriptions)]);
+  const body = bodyOf([schemas.defs, schemas.readers, tableLinesOf(pairings)]);
   return { kind: 'text', text: moduleTextOf({ first: [headerOf('generate')], imports, body }) };
 }
 
@@ -109,29 +139,27 @@ function subscriptionPairingOf(
   return { handled, at: atOf(handled), local, reader };
 }
 
-/** The table of pairings, `commands` then `subscriptions`; none while there is no pairing. */
-function tableLinesOf(
-  commands: readonly Pairing[],
-  subscriptions: readonly Pairing[],
-): readonly string[] {
-  if (commands.length + subscriptions.length === 0) {
+/** The table of pairings, one member per table key; none while there is no pairing. */
+function tableLinesOf(pairings: readonly Pairing[]): readonly string[] {
+  if (pairings.length === 0) {
     return [];
   }
-  return [
-    `export const ${readersTable} = {`,
-    ...memberLinesOf('commands', commands),
-    ...memberLinesOf('subscriptions', subscriptions),
-    '};',
-  ];
+  const members = tableKeys.map((key) =>
+    memberLinesOf(
+      key,
+      pairings.filter(({ handled }) => tableMemberOf(handled).key === key),
+    ),
+  );
+  return [`export const ${readersTable} = {`, ...members.flat(), '};'];
 }
 
-function memberLinesOf(key: string, pairings: readonly Pairing[]): readonly string[] {
+function memberLinesOf(key: TableKey, pairings: readonly Pairing[]): readonly string[] {
   if (pairings.length === 0) {
     return [`  ${key}: {},`];
   }
   const entries = pairings.map(({ handled, local, reader }) => {
     const pairing = `${withReaderImport.name}(${local}, ${reader})`;
-    return `    ${keyOf(pairingNameOf(handled))}: ${pairing},`;
+    return `    ${keyOf(tableMemberOf(handled).name)}: ${pairing},`;
   });
   return [`  ${key}: {`, ...entries, '  },'];
 }

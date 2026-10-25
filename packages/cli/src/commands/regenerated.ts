@@ -11,9 +11,9 @@ export function snapshotFileOf(built: BuiltProject): GeneratedFile {
 }
 
 /**
- * The files a Service regenerates beside its Snapshot, and a line for every Message the readers
- * could not import as it is named, which leave the readers file out; or the line saying which name
- * cannot be written as code.
+ * The files a Service regenerates beside its Snapshot, and a line for every Command's Message
+ * Version or Subscription the readers could not import as it is named, which leaves the readers
+ * file out; or the line saying which name cannot be written as code.
  */
 export type ServiceFiles =
   | {
@@ -25,26 +25,29 @@ export type ServiceFiles =
 
 /** The files a Service regenerates beside its Snapshot: its Handler map and its readers. */
 export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): ServiceFiles {
-  const { handlerMap, readers: readersFile } = service.project.layout;
-  const mapped = mappedPathsOf(service);
-  const stamps = deprecationStampsOf(service.snapshot);
-  const mapFile: GeneratedFile = {
-    path: handlerMap,
-    text: handlerMapTextOf(mapped, stamps, handlerMap),
-    written: 'always',
-  };
+  const mapFile = handlerMapFileOf(service);
+  const { readers: readersFile } = service.project.layout;
   const messages = messageExportsOf(service, exportsOf);
-  if (messages.kind === 'refused') {
-    return { kind: 'files', files: [mapFile], failureLines: messages.lines };
+  const readers = readersTextOf(service.snapshot, readersFile, messages);
+  switch (readers.kind) {
+    case 'unnamed':
+      return readers;
+    case 'refused':
+      return { kind: 'files', files: [mapFile], failureLines: readers.lines };
+    case 'text': {
+      const readersFileText: GeneratedFile = {
+        path: readersFile,
+        text: readers.text,
+        written: 'always',
+      };
+      return { kind: 'files', files: [mapFile, readersFileText], failureLines: [] };
+    }
   }
-  const readers = readersTextOf(service.snapshot, readersFile, messages.atOf);
-  if (readers.kind === 'unnamed') {
-    return readers;
-  }
-  const readersFileText: GeneratedFile = {
-    path: readersFile,
-    text: readers.text,
-    written: 'always',
-  };
-  return { kind: 'files', files: [mapFile, readersFileText], failureLines: [] };
+}
+
+function handlerMapFileOf(service: PlacedService): GeneratedFile {
+  const { handlerMap } = service.project.layout;
+  const stamps = deprecationStampsOf(service.snapshot);
+  const text = handlerMapTextOf(mappedPathsOf(service), stamps, handlerMap);
+  return { path: handlerMap, text, written: 'always' };
 }

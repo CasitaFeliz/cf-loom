@@ -4,7 +4,7 @@ export type { DeclarationHandled, DeprecationStamp, Handled, MessageHandled } fr
 export { deprecationStampsOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';
 export { elementLabelOf, handlerPathsOf } from './handler-paths.ts';
-export type { MessageAt } from './readers.ts';
+export type { MessageExports } from './readers.ts';
 export { pairingTargetOf, readersTextOf } from './readers.ts';
 export type { StubTarget } from './service-files.ts';
 export { exportedTargetOf, handlerMapTextOf, stubTextOf } from './service-files.ts';

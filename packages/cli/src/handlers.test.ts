@@ -1653,6 +1653,7 @@ describe('cf-loom generate: what it refuses', () => {
       stdout: '',
       stderr: 'commands.ChargeCard@2 is exported by no file under src/contract/\n',
     });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
   });
 
@@ -1710,30 +1711,35 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('every Command and Subscription that is not exported under its name is named, after the Endpoints and Guards', () => {
+  test('every Endpoint, Command and Subscription not exported under its name is named, the Endpoints first', () => {
     const service = aMessagingService({
       subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
     });
     const project = aProject({
       ...service,
+      'src/contract/endpoints/orders/create-order.endpoint.ts': (
+        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+      ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
       'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '').replace(
         'export const refundCardV1 =',
         'export const refundCard =',
       ),
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
-        '  refundCardV1,\n',
-        '  refundCard as refundCardV1,\n',
-      ),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }')
+        .replace('  refundCardV1,\n', '  refundCard as refundCardV1,\n'),
     });
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.stderr).toBe(
-      lines([
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        'endpoints.createOrder is not exported as createOrder',
         'commands.RefundCard@1 is not exported as refundCardV1',
         'subscriptions.auditOrders is exported by no file under src/contract/',
       ]),
-    );
+    });
   });
 
   test('a recursion id an own Message reaches that is no name in code exits 3 in one line', () => {
@@ -1750,6 +1756,28 @@ describe('cf-loom generate: what it refuses', () => {
       stderr: 'The recursion id 2-tree is no name in code: rename it\n',
     });
   });
+
+  test.each(['generate', 'verify'])(
+    'a recursion id that is no name in code exits 3 of %s before a Subscription exported by no file exits 1',
+    (command) => {
+      const project = aProject(
+        aMessagingService({
+          subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
+        }),
+      );
+      edit(project, 'src/contract/messages.ts', (text) =>
+        text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
+      );
+
+      const ran = cfLoom(project, command);
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: 'The recursion id 2-tree is no name in code: rename it\n',
+      });
+    },
+  );
 });
 
 describe('cf-loom generate: roots that offer no Elements', () => {
@@ -1940,19 +1968,26 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
-  test('a Subscription named like a Command’s Message Version generates a Service that passes tsc', () => {
+  test.each([
+    'chargeCardV1',
+    'withReader',
+    'z',
+    'readers',
+    'orderCreatedV2Reader',
+    'treeReaderDef',
+  ])('a Subscription named %s generates a Service that passes tsc', (name) => {
     const service = aMessagingService({
-      subscriptions: ['notifyOnSettled', 'auditCreated', 'chargeCardV1Subscription'],
+      subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
     });
     const project = aProject({
       ...service,
-      'src/contract/subscriptions.ts': `${subscriptions}\nexport const chargeCardV1 = defineSubscription({ name: 'chargeCardV1', description: 'Charge card v1', event: orderCreatedV2 });\n`,
+      'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
         "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
         lines([
           'import {',
           '  auditCreated,',
-          '  chargeCardV1 as chargeCardV1Subscription,',
+          `  ${name} as ${name}Subscription,`,
           '  notifyOnSettled,',
           "} from './subscriptions.ts';",
         ]).trimEnd(),
