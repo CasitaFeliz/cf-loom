@@ -4,7 +4,7 @@ export type { FileMove, Moved } from './moving.ts';
 export { moveFiles } from './moving.ts';
 export type { PackageWrite } from './package-target.ts';
 export { writeContractPackageTo } from './package-target.ts';
-export type { CopiedFile, Staged } from './staging.ts';
+export type { CopiedFile, Staged, StagedContent } from './staging.ts';
 export { removeStaged, stagedIn } from './staging.ts';
 export type { Compared, GeneratedFile, Written } from './writing.ts';
 export { comparedOf, writeFiles } from './writing.ts';

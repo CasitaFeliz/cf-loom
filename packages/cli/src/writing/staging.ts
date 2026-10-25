@@ -10,43 +10,51 @@ const stagingParent = 'node_modules/.cache/cf-loom';
 /** A file of the project to publish as it is, by its path in the project and in the package. */
 export type CopiedFile = { readonly from: string; readonly path: string };
 
-/** The folder a package was staged in, or why it could not be and the lines naming a folder it could not remove. */
+/** What a package is staged from: the files written, and the files of the project copied as they are. */
+export type StagedContent = {
+  readonly files: readonly PackageFile[];
+  readonly copied: readonly CopiedFile[];
+};
+
+/**
+ * Where a package was staged, or why it could not be and the lines naming a folder it could not
+ * remove. `folder` is the package, which `npm publish` and `tsc` get; it sits under `staging` in
+ * a `node_modules`, so Node finds it as it finds an installed package.
+ */
 export type Staged =
-  | { readonly kind: 'staged'; readonly folder: string }
+  | { readonly kind: 'staged'; readonly staging: string; readonly folder: string }
   | { readonly kind: 'failed'; readonly message: string; readonly left: readonly string[] };
 
 /**
- * Stages a package in a new folder of the project's staging place: the files copied, then the
- * files given over them. The folder is removed with `removeStaged`, and by this function when
- * it fails, which names it if it stays.
+ * Stages a package in `node_modules/<its name>` of a new folder of the project's staging place:
+ * the files copied, then the files given over them. The folder is removed with `removeStaged`,
+ * and by this function when it fails, which names it if it stays.
  */
-export function stagedIn(
-  directory: string,
-  files: readonly PackageFile[],
-  copied: readonly CopiedFile[],
-): Staged {
+export function stagedIn(directory: string, packageName: string, content: StagedContent): Staged {
   const parent = join(directory, stagingParent);
-  let folder: string | undefined;
+  let staging: string | undefined;
   try {
     mkdirSync(parent, { recursive: true });
-    folder = mkdtempSync(join(parent, 'publish-'));
-    copyAll(folder, copied);
-    writeAll(folder, files);
-    return { kind: 'staged', folder };
+    staging = mkdtempSync(join(parent, 'publish-'));
+    const folder = join(staging, 'node_modules', packageName);
+    mkdirSync(folder, { recursive: true });
+    copyAll(folder, content.copied);
+    writeAll(folder, content.files);
+    return { kind: 'staged', staging, folder };
   } catch (e) {
     const message = `${stagingParent} cannot be written: ${oneLineOf(e, directory)}`;
-    const left = folder === undefined ? [] : removeStaged(folder, directory);
+    const left = staging === undefined ? [] : removeStaged(staging, directory);
     return { kind: 'failed', message, left };
   }
 }
 
-/** Removes a folder `stagedIn` made, and what was built in it; a folder that stays is named in a line, never thrown. */
-export function removeStaged(folder: string, directory: string): readonly string[] {
+/** Removes a staging folder `stagedIn` made, and what was built in it; a folder that stays is named in a line, never thrown. */
+export function removeStaged(staging: string, directory: string): readonly string[] {
   try {
-    rmSync(folder, { recursive: true, force: true });
+    rmSync(staging, { recursive: true, force: true });
     return [];
   } catch (e) {
-    const left = `${stagingParent}/${basename(folder)} was left behind: ${oneLineOf(e, directory)}`;
+    const left = `${stagingParent}/${basename(staging)} was left behind: ${oneLineOf(e, directory)}`;
     return [`${left}: delete it`];
   }
 }

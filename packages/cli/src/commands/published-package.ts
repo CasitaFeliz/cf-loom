@@ -10,7 +10,7 @@ import {
   packagePaths,
 } from '../contract-package/index.ts';
 import { publishedNameOf } from '../loading/index.ts';
-import type { Project, Run } from '../project/index.ts';
+import type { BuiltProject, Project, Run } from '../project/index.ts';
 import {
   type FirstListing,
   type NpmPlace,
@@ -21,13 +21,16 @@ import {
 } from '../registry/index.ts';
 import type { DistTag } from '../versioning/index.ts';
 import { type CopiedFile, removeStaged, stagedIn } from '../writing/index.ts';
+import { checkedEntryOf, type EntryToCheck } from './built-entry.ts';
 
 /**
- * What a publish puts out: the package's Snapshot as published with its text, the peers it is
- * built with, its dist-tag, and the highest version the package listed when the Baseline was read.
+ * What a publish puts out: the package's Snapshot as published with its text, the declared
+ * Snapshot it was published from, the peers it is built with, its dist-tag, and the highest
+ * version the package listed when the Baseline was read.
  */
 export type ToPublish = {
   readonly project: Project;
+  readonly declared: Pick<BuiltProject, 'text' | 'context'>;
   readonly published: PublishedSnapshot;
   readonly text: string;
   readonly peers: Peers;
@@ -41,7 +44,7 @@ export type PublishedPackage = {
   readonly left: readonly string[];
 };
 
-/** Who builds a staged package: cf-loom, with the project's `tsc`, or its author before `publish`. */
+/** Who builds a staged package: cf-loom, with the project's `tsc`, or its author before `publish`, which checks it. */
 type Build = 'with-tsc' | 'by-author';
 
 /** The files a package is staged from: those written, and those of the project copied as they are. */
@@ -59,9 +62,10 @@ type DefinitionsToStage = {
   readonly peers: Peers;
 };
 
-/** A staged folder, as it is built, as it is published, and as the package was listed before the Check. */
+/** A staged folder, as it is built or checked, as it is published, and as the package was listed before the Check. */
 type StagedPackage = {
   readonly building: Building;
+  readonly entry: EntryToCheck;
   readonly publishing: Publishing;
   readonly listing: FirstListing;
 };
@@ -81,37 +85,46 @@ export async function publishedPackageOf(
   if (files.kind === 'failed') {
     return { put: files, left: [] };
   }
-  const staged = stagedIn(project.directory, files.files, files.copied);
+  const name = publishedNameOf(project.packageName, toPublish.published.kind);
+  const staged = stagedIn(project.directory, name, files);
   if (staged.kind === 'failed') {
     return { put: staged, left: staged.left };
   }
   let put: PublishedPackage['put'];
   let left: readonly string[];
   try {
-    put = await builtAndPublished(npm, files.build, stagedPackageOf(staged.folder, toPublish));
+    put = await builtAndPublished(npm, files.build, stagedPackageOf(staged, toPublish));
   } finally {
-    left = removeStaged(staged.folder, project.directory);
+    left = removeStaged(staged.staging, project.directory);
   }
   return { put, left };
 }
 
-function stagedPackageOf(folder: string, toPublish: ToPublish): StagedPackage {
-  const { project, published, tag, highest } = toPublish;
+function stagedPackageOf(
+  { staging, folder }: { readonly staging: string; readonly folder: string },
+  toPublish: ToPublish,
+): StagedPackage {
+  const { project, declared, published, tag, highest } = toPublish;
   const { directory, rootFile } = project;
   const { version } = published;
   const packageName = publishedNameOf(project.packageName, published.kind);
   const rootPath = join(directory, rootFile);
   const building = { folder, rootPath, spec: `${packageName}@${version}` };
   const publishing = { folder, packageName, version, tag };
-  return { building, publishing, listing: { packageName, highest } };
+  return {
+    building,
+    entry: { project, staging, declared },
+    publishing,
+    listing: { packageName, highest },
+  };
 }
 
 async function builtAndPublished(
   npm: NpmPlace,
   build: Build,
-  { building, publishing, listing }: StagedPackage,
+  { building, entry, publishing, listing }: StagedPackage,
 ): Promise<PublishedPackage['put']> {
-  const built = await builtAs(build, building);
+  const built = await builtAs(build, { building, entry });
   if (built.kind === 'failed') {
     return built;
   }
@@ -119,12 +132,15 @@ async function builtAndPublished(
   return unchanged.kind === 'failed' ? unchanged : await publishFolder(npm, publishing);
 }
 
-async function builtAs(build: Build, building: Building): Promise<Built> {
+async function builtAs(
+  build: Build,
+  { building, entry }: Pick<StagedPackage, 'building' | 'entry'>,
+): Promise<Built> {
   switch (build) {
     case 'with-tsc':
       return await builtWithTsc(building);
     case 'by-author':
-      return { kind: 'built' };
+      return await checkedEntryOf(entry);
   }
 }
 

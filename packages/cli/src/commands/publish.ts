@@ -105,5 +105,6 @@ function toPublishOf({ comparison, peers }: Prepared, { version, tag }: DerivedV
   const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
   const published = publishedSnapshotOf(baseline, snapshot, version);
   const highest = baseline?.version;
-  return { project, published, text: canonicalTextOf(published), peers, tag, highest };
+  const text = canonicalTextOf(published);
+  return { project, declared: comparison.built, published, text, peers, tag, highest };
 }

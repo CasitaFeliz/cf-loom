@@ -4029,8 +4029,26 @@ const aRootWithoutEndpoints: Files = {
   ].join('\n'),
 };
 
-/** The Definitions Package `@org/definitions` as its author left it once built. */
-function aBuiltDefinitions(manifest: Readonly<Record<string, unknown>> = {}): Files {
+/** The root file of a Definitions Package, which exports what is given besides `definitions`. */
+function aDefinitionsModule(exported: readonly string[] = []): string {
+  const imports = "import { defineDefinitions, defineGuard } from '@cf-loom/contract';";
+  return [imports, ...exported, 'export const definitions = defineDefinitions({});', ''].join('\n');
+}
+
+const aMoney = [
+  "import { z } from 'zod';",
+  'export const money = z.object({ amount: z.number() });',
+].join('\n');
+const anApiKey = "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });";
+
+/**
+ * The Definitions Package `@org/definitions` as its author left it once built: its `dist` is the
+ * JavaScript of `source` unless `built` says it was built from other source.
+ */
+function aBuiltDefinitions(
+  manifest: Readonly<Record<string, unknown>> = {},
+  { source = aDefinitionsModule(), built = source }: { source?: string; built?: string } = {},
+): Files {
   return {
     ...aDefinitionsRoot,
     'package.json': JSON.stringify({
@@ -4041,8 +4059,9 @@ function aBuiltDefinitions(manifest: Readonly<Record<string, unknown>> = {}): Fi
       files: ['dist'],
       ...manifest,
     }),
-    'dist/index.js': 'export const money = 1;\n',
-    'dist/index.d.ts': 'export declare const money: number;\n',
+    'src/definitions/index.ts': source,
+    'dist/index.js': built,
+    'dist/index.d.ts': 'export {};\n',
   };
 }
 
@@ -4099,12 +4118,14 @@ function withTsc(project: string, script: string): void {
 function aTscThatLocksItsStaging(ending: string): string {
   return [
     "const { chmodSync, mkdirSync, writeFileSync } = require('node:fs');",
-    "const { dirname, join } = require('node:path');",
+    "const { basename, dirname, join } = require('node:path');",
     'const folder = process.argv[3];',
     "mkdirSync(join(folder, 'dist'), { recursive: true });",
     "writeFileSync(join(folder, 'dist/index.js'), 'export {};\\n');",
     "writeFileSync(join(folder, 'dist/index.d.ts'), 'export {};\\n');",
-    'chmodSync(dirname(folder), 0o555);',
+    'let place = folder;',
+    "while (basename(place) !== 'cf-loom') place = dirname(place);",
+    'chmodSync(place, 0o555);',
     ending,
   ].join('\n');
 }
@@ -4752,7 +4773,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       'package.json',
       'snapshot.json',
     ]);
-    expect(files['dist/index.js']).toBe('export const money = 1;\n');
+    expect(files['dist/index.js']).toBe(aDefinitionsModule());
     expect(JSON.parse(files['snapshot.json']!)).toMatchObject({
       kind: 'definitions',
       version: '1.0.0',
@@ -4774,6 +4795,76 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     });
     expect(leftBehindIn(project)).toEqual([]);
   });
+
+  test('a Definitions Package built from its source publishes, and one that imports another Definitions Package too', async ({
+    lab,
+  }) => {
+    const source = aDefinitionsModule([anApiKey, "export { gone } from '@org/definitions';"]);
+    const files = {
+      ...installedDefinitions('node_modules'),
+      ...aBuiltDefinitions({ name: '@other/definitions' }, { source }),
+    };
+    const project = await aGeneratedProject(lab, files);
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test.for([
+    [
+      'still exports a schema removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([aMoney]) },
+    ],
+    [
+      'lacks a Guard added to src',
+      { source: aDefinitionsModule([anApiKey]), built: aDefinitionsModule() },
+    ],
+  ] as const)(
+    'a Definitions Package whose dist %s is refused, and nothing is put or left behind',
+    async ([, sources], { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions({}, sources));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      const refused = `@org/definitions's built files are not what contract.snapshot.json describes: build, then publish`;
+      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    ['has no dist', {}, 'Cannot find module'],
+    [
+      'exports its TypeScript source',
+      { exports: './src/definitions/index.ts', files: ['src'] },
+      'files under node_modules',
+    ],
+  ] as const)(
+    'a Definitions Package that %s cannot be imported as installed, and nothing is put or left behind',
+    async ([, manifest, reason], { lab }) => {
+      const built = aBuiltDefinitions(manifest);
+      const { 'dist/index.js': _js, 'dist/index.d.ts': _declarations, ...files } = built;
+      const project = await aGeneratedProject(lab, 'files' in manifest ? built : files);
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout).toBe('');
+      expect(ran.stderr).toMatch(
+        /^@org\/definitions cannot be imported as installed: [^\n]+: build, then publish\n$/,
+      );
+      expect(ran.stderr).toContain(reason);
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
 
   test('a Definitions Package’s publishConfig.tag is left out of what is published, and the rest of publishConfig is kept', async ({
     lab,

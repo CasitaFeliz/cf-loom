@@ -71,6 +71,18 @@ export { userToken, permission, money, pagination, unauthenticated, forbidden };
 
 Services import its Guards, Rejections and schemas by name; a Service names its `definitions` as `standardRejections` to take its Standard Rejections (see [The root](#the-root)). Its root file exports `definitions` and exactly what it shares: each Guard, Rejection and zod schema, under the name Services import it by; those exports are what its Snapshot describes. Any other export fails `generate`, and so does a Guard or Rejection an exported Guard reaches without being exported, since Services import it to attach it or reject with it. Only the root file's exports count: a declaration exported only from another entry of the package is none of its members. It is published built, as JavaScript with its `.d.ts`, from erasable TypeScript source, since Node strips no types under `node_modules`. It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
 
+Its package.json names the built root file as the package's entry, and `publish` imports that entry as a Service that installed the package would, refusing to publish unless it has the committed Snapshot:
+
+```json
+{
+  "name": "@org/definitions",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/definitions/index.d.ts", "default": "./dist/definitions/index.js" } },
+  "files": ["dist"],
+  "peerDependencies": { "@cf-loom/contract": "…", "zod": "…" }
+}
+```
+
 ## Groups
 
 Every Endpoint, Event's or Command's Message Version, and Subscription belongs to exactly one Group; two Message Versions of one Event or Command may sit in different Groups. Guards belong to none.

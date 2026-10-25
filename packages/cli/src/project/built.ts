@@ -28,7 +28,8 @@ export type Generator = 'running' | 'committed';
 
 /**
  * What every command builds before it writes: the project, its valid root, the declared Snapshot
- * in canonical order with its text and bytes, and the committed file; or why it could not be built.
+ * in canonical order with its text and bytes, the committed file and the context the Snapshot was
+ * declared in; or why it could not be built.
  */
 export type Built =
   | {
@@ -39,6 +40,7 @@ export type Built =
       readonly text: string;
       readonly bytes: Buffer;
       readonly committed: Committed;
+      readonly context: SnapshotContext;
     }
   | ProjectFailure;
 
@@ -60,8 +62,7 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator;
- * a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
+ * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
  */
 export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
@@ -79,7 +80,37 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
     committed: parsed,
     now: run.now,
   };
-  const validated = validatedOf(project);
+  const declared = declaredOf(project, context);
+  if (declared.kind !== 'declared') {
+    return declared;
+  }
+  const { validated, snapshot, text, bytes } = declared;
+  return { kind: 'built', project, validated, snapshot, text, bytes, committed, context };
+}
+
+/** The root a Snapshot is declared from: what a project's root file exports, and the packages its import reached. */
+export type DeclaredRoot = Pick<
+  Project,
+  'directory' | 'packageName' | 'root' | 'rootExports' | 'rootFile' | 'packages'
+>;
+
+/** A root's declared Snapshot in canonical order with its text and bytes, or why the root declares none. */
+export type Declared =
+  | {
+      readonly kind: 'declared';
+      readonly validated: ValidContract;
+      readonly snapshot: Snapshot;
+      readonly text: string;
+      readonly bytes: Buffer;
+    }
+  | ProjectFailure;
+
+/**
+ * Validates a root and declares its Snapshot in canonical order, the one way every Snapshot is
+ * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
+ */
+export function declaredOf(declaring: DeclaredRoot, context: SnapshotContext): Declared {
+  const validated = validatedOf(declaring);
   switch (validated.kind) {
     case 'tooling':
     case 'invalid':
@@ -91,8 +122,7 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
         return tooDeep;
       }
       const text = canonicalTextOf(snapshot);
-      const bytes = Buffer.from(text, 'utf8');
-      return { kind: 'built', project, validated, snapshot, text, bytes, committed };
+      return { kind: 'declared', validated, snapshot, text, bytes: Buffer.from(text, 'utf8') };
     }
   }
 }
@@ -104,8 +134,8 @@ function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
 }
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
-function validatedOf(project: Project): ValidatedContract | Tooling {
-  const { directory, packageName, root, rootExports, rootFile, packages } = project;
+function validatedOf(declaring: DeclaredRoot): ValidatedContract | Tooling {
+  const { directory, packageName, root, rootExports, rootFile, packages } = declaring;
   const rootPackage: RootPackage = {
     packageName: packageJsonNameOf(packageName),
     packages,
