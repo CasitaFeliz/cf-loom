@@ -265,8 +265,11 @@ describe('fakeProvider: a test’s mistakes', () => {
       .catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(FakeProviderError);
-    expect(firstLineOf(error)).toBe(
-      'payments-service: getPayment: the scripted NOT_FOUND declares no body',
+    expect((error as Error).message).toBe(
+      [
+        'payments-service: getPayment: the scripted NOT_FOUND body breaks its reader',
+        'payments-service: getPayment: body invalid_type: Expected no value',
+      ].join('\n'),
     );
   });
 

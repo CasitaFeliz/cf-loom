@@ -1,43 +1,11 @@
 import type { Issue } from '@cf-loom/contract';
-import type { IssuePart, Part, SchemaIssue } from '@cf-loom/contract/internal';
-import { parseValue } from '@cf-loom/contract/internal';
-import type * as core from 'zod/v4/core';
-
-/** Where in a value an Issue sits, inside its part. */
-type Path = readonly (string | number)[];
+import type { Checked } from '@cf-loom/contract/internal';
 
 /** One way a value broke its part of the Contract, as contract defines it for every package. */
 export type { Issue } from '@cf-loom/contract';
 
-/** A value checked against the Contract: parsed, or every Issue it broke. */
-export type Checked<Value> =
-  | { readonly kind: 'value'; readonly value: Value }
-  | { readonly kind: 'issues'; readonly issues: readonly Issue[] };
-
-/**
- * A value checked against the schema its part declares, its Issues at `at` inside the part; where
- * the part declares no schema, the value must be missing.
- */
-export function checkedPart<Schema extends core.$ZodType>(
-  part: Exclude<Part, 'schema'>,
-  schema: Schema | undefined,
-  given: { readonly value: unknown; readonly at?: Path },
-): Checked<core.output<Schema> | undefined> {
-  const at = given.at ?? [];
-  if (schema === undefined) {
-    return given.value === undefined
-      ? { kind: 'value', value: undefined }
-      : {
-          kind: 'issues',
-          issues: [{ part, path: at, code: 'invalid_type', message: 'Expected no value' }],
-        };
-  }
-  const parsed = parseValue(schema, given.value);
-  if (parsed.kind === 'value') {
-    return parsed;
-  }
-  return { kind: 'issues', issues: parsed.issues.map((issue) => issueAt(part, at, issue)) };
-}
+/** A value checked against the Contract, part by part: parsed, or every Issue it broke; the contract's. */
+export type { Checked } from '@cf-loom/contract/internal';
 
 /** Several checks as one: every value by its name, or the Issues of all of them. */
 export function checkedAll<Values extends Readonly<Record<string, unknown>>>(
@@ -88,9 +56,4 @@ function isIssues(check: Checked<unknown>): check is Extract<Checked<unknown>, {
 
 function checkedValueOf(check: Checked<unknown>): unknown {
   return check.kind === 'value' ? check.value : undefined;
-}
-
-/** A schema's Issue placed at `at` inside its part. */
-export function issueAt(part: IssuePart, at: Path, issue: SchemaIssue): Issue {
-  return { part, ...issue, path: [...at, ...issue.path] };
 }

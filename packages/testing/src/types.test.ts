@@ -191,15 +191,21 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
-  test('reject given a code that may be one requiring a body requires the body', () => {
+  test('reject takes one code with its own body, never a code not narrowed to one', () => {
     const payments = fakeProvider(paymentsDependency);
     const code = Math.random() > 0.5 ? ('NO_PAYMENT' as const) : ('PAYMENT_LOCKED' as const);
 
     payments
       .on('getPayment')
-      // @ts-expect-error PAYMENT_LOCKED declares a body, so a code that may be it takes one
+      // @ts-expect-error a code that may be either is paired with neither body
       .once((r) => r.reject(code))
-      .otherwise((r) => r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' }));
+      // @ts-expect-error NO_PAYMENT declares no body, so the body fits only one of the two
+      .once((r) => r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' }))
+      .otherwise((r) =>
+        code === 'PAYMENT_LOCKED'
+          ? r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' })
+          : r.reject(code),
+      );
 
     expect(payments.calls('getPayment')).toEqual([]);
   });
@@ -223,9 +229,12 @@ describe('fakeProvider: types', () => {
       .once((r) => r.success({ id: 'pay-1', stage: { unknown: 'refunded' } }))
       // @ts-expect-error a value the Open Enum does not declare is its Unknown case
       .otherwise((r) => r.success({ id: 'pay-1', stage: 'refunded' }));
+    const withBody = { headers: { 'x-tag': 'settled' as const }, body: { x: 1 } };
     payments
       .on('tagPayment')
       .once((r) => r.success({ headers: { 'x-tag': 'settled' } }))
+      // @ts-expect-error a headers-only Success takes no body, in a literal or not
+      .once((r) => r.success(withBody))
       // @ts-expect-error declared headers are passed with the Success
       .otherwise((r) => r.success());
 

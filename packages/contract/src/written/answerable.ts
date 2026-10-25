@@ -21,7 +21,7 @@ export type AnswerableRejection = Rejection | StandardRejection;
 
 const addedByName = { invalidInput, notImplemented };
 
-const standardByName = { invalidInput, notFound, notImplemented };
+const standardByName = { ...addedByName, notFound };
 
 /** Every Rejection an Endpoint or a Guard may answer, each once (see `RejectionsOf`). */
 export function answerableRejectionsOf(element: Endpoint | Guard): readonly AnswerableRejection[] {

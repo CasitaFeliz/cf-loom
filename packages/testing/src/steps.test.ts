@@ -388,7 +388,40 @@ describe('fakeProvider: steps', () => {
     const calling = capture(payments, '{"amount":1}');
 
     await expect(calling).rejects.toThrow(
-      'payments-service: capturePayment: the scripted NO_PAYMENT declares no body',
+      [
+        'payments-service: capturePayment: the scripted NO_PAYMENT body breaks its reader',
+        'payments-service: capturePayment: body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('a body scripted for a Success that declares none is a mistake at success.body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    // @ts-expect-error cancelPayment's Success declares no body
+    payments.on('cancelPayment').otherwise((r) => r.success({ x: 1 }));
+
+    const calling = payments.fetch(new Request(at, { method: 'DELETE' }));
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: cancelPayment: the scripted Success breaks its readers',
+        'payments-service: cancelPayment: success.body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('a body scripted beside the headers of a headers-only Success is a mistake at success.body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { headers: { 'x-count': 1 }, body: { x: 1 } };
+    payments.on('checkPayment').otherwise((r) => r.success(scripted as never));
+
+    const calling = payments.fetch(new Request(`${at}/check`));
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: checkPayment: the scripted Success breaks its readers',
+        'payments-service: checkPayment: success.body invalid_type: Expected no value',
+      ].join('\n'),
     );
   });
 

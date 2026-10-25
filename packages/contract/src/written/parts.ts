@@ -145,3 +145,17 @@ export function schemaOf(
 export function isSchema(value: unknown): value is $ZodType {
   return value instanceof $ZodType;
 }
+
+/**
+ * What a Success is built from, by field: the body alone where the Endpoint declares no headers,
+ * else its `headers` and `body`; the one place that reads what `success()` is given.
+ */
+export function successFieldsOf(
+  endpoint: Endpoint,
+  given: unknown,
+): Readonly<Record<string, unknown>> {
+  if (schemaOf(endpoint, 'success.headers') === undefined) {
+    return { body: given };
+  }
+  return typeof given === 'object' && given !== null ? { ...given } : {};
+}

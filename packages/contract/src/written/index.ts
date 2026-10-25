@@ -75,6 +75,7 @@ export {
   partFieldOf,
   schemaOf,
   slotAt,
+  successFieldsOf,
   successParts,
   writtenAt,
 } from './parts.ts';
