@@ -165,6 +165,22 @@ describe('jetstream()', () => {
     );
   });
 
+  test('messaging() refusing a stream that does not exist rejects with that refusal and closes the connection, though its drain is not answered', async () => {
+    const prefix = aPrefix();
+    const opened: NatsConnection[] = [];
+    const connectUndrainable = async (): Promise<NatsConnection> => {
+      const connection = await connect({ servers: server.url });
+      onTestFinished(() => connection.close());
+      opened.push(connection);
+      return withMethods(connection, { drain: () => Promise.reject(new Error('no answer')) });
+    };
+
+    const opening = messaging(contract, jetstream({ connect: connectUndrainable, prefix }));
+
+    await expect(opening).rejects.toThrow(absent(`${prefix}_orders-service`));
+    expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
   test('messaging() rejects naming its own stream as absent when another stream holds its subjects', async () => {
     const prefix = aPrefix();
     const subjects = [`${prefix}.orders-service.>`];

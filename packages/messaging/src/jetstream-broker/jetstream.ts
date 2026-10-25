@@ -3,7 +3,7 @@ import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
 import { type Applier, applyPlan } from './applying.ts';
-import { drainOnce, jetStreamConnectionOf } from './connection.ts';
+import { drainOrCloseAfterFailure, jetStreamConnectionOf } from './connection.ts';
 import type { BrokerLimits } from './limits.ts';
 import {
   checkedStreamOf,
@@ -64,7 +64,7 @@ async function checkStreamOrDrain(
       throw new Error(refusal);
     }
   } catch (error) {
-    await drainOnce(natsConnection);
+    await drainOrCloseAfterFailure(natsConnection);
     throw error;
   }
 }

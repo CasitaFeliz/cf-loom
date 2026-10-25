@@ -2,7 +2,7 @@ import { decodeBrokerPlan } from '@cf-loom/contract/internal';
 import type { JetStreamManager, JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Applied } from './applied.ts';
-import { drainOnce } from './connection.ts';
+import { drainOrClose, drainOrCloseAfterFailure } from './connection.ts';
 import { applyDurable } from './durable-applying.ts';
 import { type ResolvedPlan, settingsOf } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
@@ -52,12 +52,20 @@ function checkedOf(prefix: string | null, plan: unknown, limits: unknown): Check
 
 async function appliedOn(applier: Applier, settings: ResolvedPlan): Promise<Applied> {
   const natsConnection = await applier.connect();
+  let applied: Applied;
   try {
     const manager = await managerOf(natsConnection, applier.jetstream);
-    return await applyAll(manager, settings);
-  } finally {
-    await drainOnce(natsConnection);
+    applied = await applyAll(manager, settings);
+  } catch (error) {
+    await drainOrCloseAfterFailure(natsConnection);
+    throw error;
   }
+  if (applied.kind === 'refused') {
+    await drainOrCloseAfterFailure(natsConnection);
+  } else {
+    await drainOrClose(natsConnection);
+  }
+  return applied;
 }
 
 async function applyAll(manager: JetStreamManager, settings: ResolvedPlan): Promise<Applied> {

@@ -33,23 +33,33 @@ export function jetStreamConnectionOf(
         void pullFrom(durable, natsConnection, { stopping, troubled });
       }
     },
-    close: () => drainOnce(natsConnection),
+    close: () => drainOrClose(natsConnection),
   };
 }
 
 /**
- * Drains the connection the Service opened, unless it is closed already, or draining because the
- * Service started that, and then waits for it; so no drain replaces the error that led to it.
+ * Ends a connection the Service opened, which cf-loom drains, or waits for the Service's drain of, and resolves
+ * once it is closed, whoever closed it. When NATS does not answer, it closes the connection without the drain and
+ * rejects with an error saying so, NATS's error as `cause`.
  */
-export async function drainOnce(natsConnection: NatsConnection): Promise<void> {
+export async function drainOrClose(natsConnection: NatsConnection): Promise<void> {
   if (natsConnection.isClosed()) {
     return;
   }
-  if (natsConnection.isDraining()) {
-    await natsConnection.closed();
-    return;
+  const answered = natsConnection.isDraining() ? natsConnection.flush() : natsConnection.drain();
+  try {
+    await Promise.race([natsConnection.closed(), answered.then(() => natsConnection.closed())]);
+  } catch (cause) {
+    await natsConnection.close();
+    throw new Error('NATS did not answer the drain, so the connection was closed without it', {
+      cause,
+    });
   }
-  await natsConnection.drain();
+}
+
+/** Ends a connection after a failure of the caller's own, whose error is the one to reach it, so the drain's is dropped. */
+export async function drainOrCloseAfterFailure(natsConnection: NatsConnection): Promise<void> {
+  await drainOrClose(natsConnection).catch(() => undefined);
 }
 
 /** A signal that aborts when the connection closes, so a pause or a pull ends with it. */
