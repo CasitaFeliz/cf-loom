@@ -2,8 +2,10 @@ import type { Issue } from '@cf-loom/contract';
 import {
   discardBodyOf,
   headerValuesOf,
+  isPlainObject,
   parseValue,
   receivedBodyOf,
+  schemaOf,
 } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type Answered, answeredFaultOf, type Inferring } from '../inference/index.ts';
@@ -60,28 +62,28 @@ function declaredSuccessOf(
   status: number,
   read: { readonly headers: SuccessHeaders; readonly body: { readonly value: unknown } },
 ): DecodedSuccess {
-  const { headers, body } = called.endpoint.success;
+  const { endpoint } = called;
   return {
     kind: 'success',
     status,
-    ...(headers === undefined ? {} : { headers: read.headers.value }),
-    ...(body === undefined ? {} : { body: read.body.value }),
+    ...(schemaOf(endpoint, 'success.headers') === undefined ? {} : { headers: read.headers.value }),
+    ...(schemaOf(endpoint, 'success.body') === undefined ? {} : { body: read.body.value }),
   };
 }
 
 /** The declared Success headers, each text converted by its node, then read with its schema. */
 function successHeadersOf(received: Headers, called: CalledEndpoint): SuccessHeaders {
-  const schema = called.endpoint.success.headers;
+  const schema = schemaOf(called.endpoint, 'success.headers');
   if (schema === undefined || called.successHeaders === undefined) {
     return { value: {}, issues: [] };
   }
   const parsed = parseValue(schema, headerValuesOf(called.successHeaders, received));
-  const value: Readonly<Record<string, unknown>> = parsed.kind === 'value' ? parsed.value : {};
+  const value = parsed.kind === 'value' && isPlainObject(parsed.value) ? parsed.value : {};
   return { value, issues: issuesAt('success.headers', parsed) };
 }
 
 async function successBodyOf(response: Response, called: CalledEndpoint): Promise<SuccessBody> {
-  const schema = called.endpoint.success.body;
+  const schema = schemaOf(called.endpoint, 'success.body');
   if (schema === undefined) {
     await discardBodyOf(response);
     return { kind: 'value', value: undefined, issues: [] };

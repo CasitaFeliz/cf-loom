@@ -6,6 +6,7 @@ import {
   isSegmentText,
   isTextValue,
   notJsonContentType,
+  ownOf,
   readingOf,
   textOfValue,
 } from '@cf-loom/contract/internal';
@@ -30,10 +31,9 @@ export type ReadyInput =
  */
 export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise<ReadyInput> {
   const sent = sentInputOf(passed);
+  const sentBody = ownOf(sent, 'body');
   const body =
-    sent['body'] === undefined
-      ? notJsonContentType
-      : { kind: 'value' as const, value: sent['body'] };
+    sentBody === undefined ? notJsonContentType : { kind: 'value' as const, value: sentBody };
   const demanded: Readonly<Record<string, unknown>>[] = [];
   const reading = await readingOf(endpoint, {
     textOf: () => sent,
@@ -59,11 +59,11 @@ export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise
  */
 function sentInputOf(passed: unknown): Readonly<Record<string, unknown>> {
   const fields = fieldsIn(passed);
-  const query = fields['query'] ?? {};
+  const query = ownOf(fields, 'query') ?? {};
   return {
     ...fields,
-    params: fields['params'] ?? {},
-    headers: fields['headers'] ?? {},
+    params: ownOf(fields, 'params') ?? {},
+    headers: ownOf(fields, 'headers') ?? {},
     query: isFields(query) ? withoutEmptyListsOf(query) : query,
   };
 }
@@ -78,7 +78,7 @@ function travelingInputOf(
   parsed: Readonly<Record<string, unknown>>,
   demands: readonly Readonly<Record<string, unknown>>[],
 ): ReadyInput {
-  const params = fieldsIn(parsed['params']);
+  const params = fieldsIn(ownOf(parsed, 'params'));
   const query = definedFieldsOf(sentFieldsOf('query', parsed, demands));
   const headers = headerTextsOf('input.headers', sentFieldsOf('headers', parsed, demands));
   const textIssues = [...paramIssuesOf(params), ...queryIssuesOf(query)];
@@ -92,7 +92,7 @@ function travelingInputOf(
       const ready = { params, query, headers: headers.texts };
       return {
         kind: 'ready',
-        input: 'body' in parsed ? { ...ready, body: parsed['body'] } : ready,
+        input: Object.hasOwn(parsed, 'body') ? { ...ready, body: ownOf(parsed, 'body') } : ready,
       };
     }
   }
@@ -107,7 +107,7 @@ function sentFieldsOf(
   parsed: Readonly<Record<string, unknown>>,
   demands: readonly Readonly<Record<string, unknown>>[],
 ): Readonly<Record<string, unknown>> {
-  const parts = [...demands, parsed].map((source) => fieldsIn(source[field]));
+  const parts = [...demands, parsed].map((source) => fieldsIn(ownOf(source, field)));
   return Object.assign({}, ...parts);
 }
 

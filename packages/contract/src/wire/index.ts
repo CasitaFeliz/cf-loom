@@ -40,6 +40,7 @@ export {
   committedValues,
   envelopeOf,
   internalError,
+  isRejectionEnvelope,
   receivedEnvelopeOf,
   reservedFaults,
 } from './envelopes.ts';

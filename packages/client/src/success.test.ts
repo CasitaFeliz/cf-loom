@@ -191,6 +191,36 @@ describe('a Success that breaks its Reader schemas', () => {
   });
 });
 
+/** Runs a call while Object.prototype holds names every plain object then inherits, then restores them. */
+async function withInherited<Result>(
+  names: readonly string[],
+  value: unknown,
+  run: () => Promise<Result>,
+): Promise<Result> {
+  for (const name of names) {
+    Object.defineProperty(Object.prototype, name, { value, writable: true, configurable: true });
+  }
+  try {
+    return await run();
+  } finally {
+    for (const name of names) {
+      Reflect.deleteProperty(Object.prototype, name);
+    }
+  }
+}
+
+describe('a Success that declares neither headers nor a body, though Object.prototype holds both', () => {
+  test('has neither key', async () => {
+    const orders = ordersAnswering(() => new Response(null, { status: 204 }));
+
+    const outcome = await withInherited(['headers', 'body'], { 'x-total': 3 }, () =>
+      orders.cancelOrder(params),
+    );
+
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
+  });
+});
+
 describe('a Success body nested past the stack', () => {
   const tree: z.ZodType = z
     .object({

@@ -35,11 +35,12 @@ export function successResponseOf(success: SentSuccess): Response {
   for (const [name, text] of sentHeaderTextsOf(success)) {
     headers.set(name, text);
   }
-  if (success.body === undefined) {
+  const body = Object.hasOwn(success, 'body') ? success.body : undefined;
+  if (body === undefined) {
     return new Response(null, { status: success.status, headers });
   }
   headers.set('content-type', jsonContentType);
-  return new Response(JSON.stringify(success.body), { status: success.status, headers });
+  return new Response(JSON.stringify(body), { status: success.status, headers });
 }
 
 /** The response of a Rejection: its status and its Envelope. */
@@ -87,7 +88,8 @@ export function methodNotAllowedResponseOf(allowed: readonly string[]): Response
 }
 
 function sentHeaderTextsOf(success: SentSuccess): readonly (readonly [string, string])[] {
-  const headers = headerTextsOf('success.headers', success.headers);
+  const given = Object.hasOwn(success, 'headers') ? success.headers : undefined;
+  const headers = headerTextsOf('success.headers', given);
   if (headers.kind === 'issues') {
     const names = headers.issues.map(({ path }) => path.join('.')).join(', ');
     throw new Error(

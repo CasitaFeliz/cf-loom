@@ -211,6 +211,7 @@ export {
   isPrefixedName,
   isPrefixedSubject,
   isQueryText,
+  isRejectionEnvelope,
   isSegmentText,
   isTextValue,
   jsonBytesOf,

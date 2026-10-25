@@ -107,6 +107,20 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
 
 const getRequest = new Request('http://test/orders/o-1');
 
+/** Runs a call while Object.prototype holds a name every plain object then inherits, then restores it. */
+async function withInherited<Result>(
+  name: string,
+  value: unknown,
+  run: () => Promise<Result>,
+): Promise<Result> {
+  Object.defineProperty(Object.prototype, name, { value, writable: true, configurable: true });
+  try {
+    return await run();
+  } finally {
+    Reflect.deleteProperty(Object.prototype, name);
+  }
+}
+
 describe('serve: a Success', () => {
   test('sends its declared headers as text with the parsed body', async () => {
     const { http } = serveWith(() =>
@@ -195,6 +209,20 @@ describe('serve: a Success', () => {
     expect(response.headers.get('content-type')).toBeNull();
     expect(await response.text()).toBe('');
   });
+
+  test.each(['body', 'headers'])(
+    'a 204 sends no %s, though Object.prototype holds one',
+    async (name) => {
+      const { http } = serveWith(() => reject(notFound));
+      const request = new Request('http://test/orders/o-1', { method: 'PUT' });
+
+      const response = await withInherited(name, { 'x-inherited': '1' }, () => http(request));
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get('x-inherited')).toBeNull();
+      expect(response.headers.get('content-type')).toBeNull();
+    },
+  );
 
   test('a headers-only Success sends its status and headers only', async () => {
     const { http } = serveWith(() => reject(notFound));
@@ -314,6 +342,17 @@ describe('serve: a Rejection', () => {
     const response = await http(getRequest.clone());
 
     expect(response.status).toBe(404);
+    expect(await response.json()).toStrictEqual({
+      rejection: { code: 'MISSING', message: 'Nothing here' },
+    });
+  });
+
+  test('a Rejection without a body sends none, though Object.prototype holds one', async () => {
+    const { http } = serveWith(() => reject(notFound));
+    const request = getRequest.clone();
+
+    const response = await withInherited('body', { inherited: true }, () => http(request));
+
     expect(await response.json()).toStrictEqual({
       rejection: { code: 'MISSING', message: 'Nothing here' },
     });

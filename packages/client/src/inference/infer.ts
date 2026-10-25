@@ -1,3 +1,4 @@
+import { ownOf } from '@cf-loom/contract/internal';
 import {
   type Answered,
   type Happened,
@@ -56,9 +57,8 @@ function faultWith(happened: Happened, inference: Inference): ReceivedFault {
     ...inference,
     ...detailsOf(happened),
   };
-  return 'headers' in happened && happened.headers !== undefined
-    ? withRetryAfter(fault, happened.headers)
-    : fault;
+  const headers = ownOf(happened, 'headers');
+  return headers instanceof Headers ? withRetryAfter(fault, headers) : fault;
 }
 
 /** What a Fault carries of what happened: the status when a response arrived, the error as `cause`. */

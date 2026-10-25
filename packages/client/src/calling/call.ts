@@ -1,5 +1,5 @@
 import type { Http } from '@cf-loom/contract';
-import { type InputIssue, invalidInputBodyOf } from '@cf-loom/contract/internal';
+import { type InputIssue, invalidInputBodyOf, ownOf } from '@cf-loom/contract/internal';
 import { type DecodedOutcome, outcomeOf, rejectionOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
@@ -34,7 +34,7 @@ export function methodOf(
       return notSentFaultOf(signal);
     }
     const passed = fieldsOf(input);
-    const headers = await withConfiguredHeaders(called, calling.headers, passed['headers']);
+    const headers = await withConfiguredHeaders(called, calling.headers, ownOf(passed, 'headers'));
     const ready = await readyInputOf(called.endpoint, { ...passed, headers });
     if (ready.kind === 'invalid') {
       return invalidInputOf(called, ready.issues);

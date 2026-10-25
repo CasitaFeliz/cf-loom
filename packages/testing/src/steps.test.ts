@@ -124,6 +124,20 @@ const success = {
   body: { id: 'pay-1', amount: 5, stage: 'pending' },
 } as const;
 
+/** Runs a call while Object.prototype holds a name every plain object then inherits, then restores it. */
+async function withInherited<Result>(
+  name: string,
+  value: unknown,
+  run: () => Promise<Result>,
+): Promise<Result> {
+  Object.defineProperty(Object.prototype, name, { value, writable: true, configurable: true });
+  try {
+    return await run();
+  } finally {
+    Reflect.deleteProperty(Object.prototype, name);
+  }
+}
+
 describe('fakeProvider: steps', () => {
   test('once steps answer in order, then the last otherwise answers every other request', async () => {
     const payments = fakeProvider(paymentsDependency);
@@ -149,6 +163,18 @@ describe('fakeProvider: steps', () => {
       'success',
     ]);
     expect(outcomes[3]).toMatchObject({ body: { amount: 9 } });
+  });
+
+  test('a Success scripted for an Endpoint without headers is not read from headers Object.prototype holds', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('cancelPayment').otherwise((builder) => builder.success());
+    const request = new Request(at, { method: 'DELETE' });
+
+    const response = await withInherited('headers', { 'x-inherited': '1' }, () =>
+      payments.fetch(request),
+    );
+
+    expect(response.status).toBe(204);
   });
 
   test('a step may be async', async () => {

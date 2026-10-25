@@ -87,6 +87,13 @@ export function faultEnvelopeOf(fault: TravelingFault): FaultEnvelope {
   };
 }
 
+/** Whether an Envelope is a Rejection's, told by the field it holds itself, never one it inherits. */
+export function isRejectionEnvelope(
+  envelope: RejectionEnvelope | FaultEnvelope,
+): envelope is RejectionEnvelope {
+  return Object.hasOwn(envelope, 'rejection');
+}
+
 /**
  * The Envelope a received body is, read by its fields alone, extra keys ignored; a Fault's code
  * that is not reserved is dropped, since a new one only comes with a cf-loom major. None otherwise.
