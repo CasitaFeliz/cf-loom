@@ -13,6 +13,7 @@ import {
 const optionTypes = {
   out: { type: 'string' },
   prefix: { type: 'string' },
+  against: { type: 'string' },
   json: { type: 'boolean' },
   force: { type: 'boolean' },
   prerelease: { type: 'boolean' },
@@ -27,7 +28,7 @@ type Parsed =
   | { readonly kind: 'called'; readonly called: Called }
   | { readonly kind: 'usage'; readonly exit: Exit };
 
-/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--json`, `--force` and `--prerelease` are the options, any other a usage error. */
+/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--against <version|dist-tag>`, `--json`, `--force` and `--prerelease` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const { positionals, tokens, values } = parseArgs({
     args: [...args],
@@ -42,9 +43,12 @@ function calledOf(args: readonly string[]): Parsed {
   if (unknown !== undefined && unknown.kind === 'option') {
     return { kind: 'usage', exit: usageError(`Unknown option: ${unknown.rawName}`) };
   }
-  const { out, prefix, json, force, prerelease } = values;
+  const { out, prefix, against, json, force, prerelease } = values;
   if (out !== undefined && (typeof out !== 'string' || out === '')) {
     return { kind: 'usage', exit: usageError('--out takes a folder') };
+  }
+  if (against !== undefined && (typeof against !== 'string' || against === '')) {
+    return { kind: 'usage', exit: usageError('--against takes a version or a dist-tag') };
   }
   type Token = (typeof tokens)[number];
   const isValuedFlag = (token: Token): token is Extract<Token, { kind: 'option' }> =>
@@ -59,6 +63,7 @@ function calledOf(args: readonly string[]): Parsed {
     ...options,
     ...(out === undefined ? {} : { out }),
     ...(prefix === undefined ? {} : { prefix: typeof prefix === 'string' ? prefix : '' }),
+    ...(against === undefined ? {} : { against }),
   };
   return { kind: 'called', called };
 }

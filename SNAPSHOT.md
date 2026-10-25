@@ -159,13 +159,13 @@ Every code that ever existed in the Contract stays here, with the status and bod
 }
 ```
 
-- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)).
+- A removed Subscription stays as a tombstone that keeps its Event and drops its description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
 - A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name.
 
 ## Lifecycle and tombstones
 
 - `lifecycle` is `active`, `deprecated` or `retired`.
-- A Retired Element that is still declared keeps everything it records; in the published Snapshot it also carries `retiredIn`, the version that first published it Retired.
+- A Retired Element that is still declared keeps everything it records; in the published Snapshot it also carries `retiredIn`, the version that first published it Retired, a prerelease included: a version promoted from that prerelease keeps its `retiredIn`.
 - Once its declaration is deleted, `publish` carries it forward from the Baseline as a tombstone: `{ "lifecycle": "retired", "retiredIn": "3.0.0" }`, its `retiredIn` the Baseline's, plus `name` for an Endpoint. Its identity is never reused.
 
 ## Schemas

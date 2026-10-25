@@ -18,13 +18,14 @@ import { verify } from './verify.ts';
 const packageRoot = join(import.meta.dirname, '..', '..');
 
 const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] | broker-plan [--prefix <p>] [--json] | openapi | asyncapi [--prefix <p>] | publish [--force] [--prerelease]';
+  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] [--against <version|dist-tag>] | broker-plan [--prefix <p>] [--json] | openapi | asyncapi [--prefix <p>] | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
   readonly positionals: readonly string[];
   readonly out?: string;
   readonly prefix?: string;
+  readonly against?: string;
   readonly output: Output;
   readonly force: boolean;
   readonly prerelease: boolean;
@@ -48,7 +49,7 @@ export function crashedExitOf(thrown: unknown, output: Output): Exit {
 
 /** Runs the command the arguments name where and when the CLI runs. */
 export async function runCommand(called: Called, run: Run): Promise<Exit> {
-  const { positionals, out, output, force, prerelease } = called;
+  const { positionals, out, force, prerelease } = called;
   const [command, ...rest] = positionals;
   const misplaced = misplacedOptionIn(called, command);
   if (misplaced !== undefined) {
@@ -66,7 +67,7 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
         ? usageError('package takes no argument')
         : await packageCommand(run, out ?? defaultPackageFolder);
     case 'check':
-      return rest.length > 0 ? usageError('check takes no argument') : await check(run, output);
+      return await checkExitOf(rest, called, run);
     case 'broker-plan':
       return await brokerPlanExitOf(rest, called, run);
     case 'openapi':
@@ -84,11 +85,14 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
 
 /** The usage error of an option given to a command that does not take it. */
 function misplacedOptionIn(
-  { out, prefix, output, force, prerelease }: Called,
+  { out, prefix, against, output, force, prerelease }: Called,
   command: string | undefined,
 ): Exit | undefined {
   if (out !== undefined && command !== 'package') {
     return usageError('Only package takes --out');
+  }
+  if (against !== undefined && command !== 'check') {
+    return usageError('Only check takes --against');
   }
   if (prefix !== undefined && command !== 'broker-plan' && command !== 'asyncapi') {
     return usageError('Only broker-plan and asyncapi take --prefix');
@@ -103,6 +107,16 @@ function misplacedOptionIn(
     return usageError('Only publish takes --prerelease');
   }
   return undefined;
+}
+
+async function checkExitOf(
+  rest: readonly string[],
+  { output, against }: Called,
+  run: Run,
+): Promise<Exit> {
+  return rest.length > 0
+    ? usageError('check takes no argument')
+    : await check(run, { output, against });
 }
 
 async function brokerPlanExitOf(

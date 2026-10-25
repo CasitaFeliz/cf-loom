@@ -8,12 +8,15 @@ import type { Exit, Stopped } from './exit.ts';
 /** How a command prints: its lines, or, for `check` and `broker-plan`, one JSON document. */
 export type Output = 'lines' | 'json';
 
+/** How `check` was asked to run: how it prints, and the version or dist-tag to compare with instead of the highest version. */
+export type CheckOptions = { readonly output: Output; readonly against: string | undefined };
+
 /**
  * Runs the Compatibility Check of the committed Snapshot against its Baseline and prints every
  * Change with its class; it only reports, and the organization enforces any Approval.
  */
-export async function check(run: Run, output: Output): Promise<Exit> {
-  const checked = await checkedOf(run);
+export async function check(run: Run, { output, against }: CheckOptions): Promise<Exit> {
+  const checked = await checkedOf(run, against);
   switch (output) {
     case 'lines':
       return linesExitOf(checked);
@@ -38,11 +41,11 @@ function jsonExitOf(checked: Checked | Stopped): Exit {
   return { status, stdout: [checkedJsonOf(checked, status)], stderr };
 }
 
-async function checkedOf(run: Run): Promise<Checked | Stopped> {
+async function checkedOf(run: Run, against: string | undefined): Promise<Checked | Stopped> {
   const built = await committedBuiltOf(run);
   if (built.kind === 'stopped') {
     return built;
   }
-  const comparison = await comparisonOf(built, run);
+  const comparison = await comparisonOf(built, run, against);
   return comparison.kind === 'stopped' ? comparison : checkedFrom(comparison);
 }

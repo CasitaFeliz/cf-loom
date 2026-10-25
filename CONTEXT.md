@@ -195,7 +195,7 @@ A language-neutral description of a Contract or a Definitions Package, frozen wh
 _Avoid_: schema dump, manifest
 
 **Baseline**:
-The Snapshot of the highest published version of a Contract Package or Definitions Package, against which every proposed change is judged.
+The Snapshot of the highest published version of a Contract Package or Definitions Package, a prerelease included, against which every proposed change is judged.
 _Avoid_: previous snapshot, reference
 
 **Reader schema**:

@@ -88,7 +88,7 @@ const splitPaxPath = paxRecordOfBytes('path', Buffer.from(`package/${'a'.repeat(
 async function readOrders(lab: Lab, served: RegistryOptions) {
   const registry = await lab.aRegistry(served);
   const npm = lab.aPlace({ userConfig: loginTo(registry) });
-  const read = await baselineOf(npm, orders, '@org');
+  const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
   return { read, registry };
 }
 
@@ -188,17 +188,67 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(baselineIn(read).snapshot.version).toBe('1.10.0');
   });
 
-  test('a prerelease never counts as the highest version', async ({ lab }) => {
+  test('prereleases order as semver.org orders them, and below the version that is not one', async ({
+    lab,
+  }) => {
+    const ascending = [
+      '1.0.0-alpha',
+      '1.0.0-alpha.1',
+      '1.0.0-alpha.beta',
+      '1.0.0-beta',
+      '1.0.0-beta.2',
+      '1.0.0-beta.11',
+      '1.0.0-rc.1',
+      '1.0.0',
+    ];
+    const served = ordersWith(...[...ascending].reverse().map((version) => aVersion(version)));
+
+    const { read } = await readOrders(lab, served);
+
+    expect(baselineIn(read).versions).toEqual(ascending);
+  });
+
+  test.for([
+    ['1.0.0-123', '1.0.0-1a'],
+    ['1.0.0-111', '1.0.0-a1'],
+  ] as const)(
+    'a numeric prerelease identifier comes before one with a letter in it: %s before %s',
+    async ([lower, higher], { lab }) => {
+      const served = ordersWith(aVersion(higher), aVersion(lower));
+
+      const { read } = await readOrders(lab, served);
+
+      expect(baselineIn(read).versions).toEqual([lower, higher]);
+    },
+  );
+
+  test('a prerelease above the highest stable version is the Baseline', async ({ lab }) => {
     const served = ordersWith(aVersion('1.0.0'), aVersion('2.0.0-rc.1'));
+
+    const { read } = await readOrders(lab, served);
+
+    expect(baselineIn(read).snapshot.version).toBe('2.0.0-rc.1');
+  });
+
+  test('a prerelease below the highest stable version is not the Baseline', async ({ lab }) => {
+    const served = ordersWith(aVersion('1.0.0'), aVersion('1.0.0-rc.1'));
 
     const { read } = await readOrders(lab, served);
 
     expect(baselineIn(read).snapshot.version).toBe('1.0.0');
   });
 
+  test('the Baseline names the highest stable version beside it', async ({ lab }) => {
+    const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0'), aVersion('2.0.0-rc.1'));
+
+    const { read } = await readOrders(lab, served);
+
+    expect(baselineIn(read)).toMatchObject({ stable: '1.1.0', chosen: 'highest' });
+  });
+
   test.for([
     ['a lower version', '1.0.0'],
-    ['a prerelease', '2.0.0-rc.1'],
+    ['the highest stable version', '1.1.0'],
   ] as const)(
     'the latest dist-tag is never read, even when it points at %s',
     async ([, tagged], { lab }) => {
@@ -207,7 +257,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
 
       const { read } = await readOrders(lab, served);
 
-      expect(baselineIn(read).snapshot.version).toBe('1.1.0');
+      expect(baselineIn(read).snapshot.version).toBe('2.0.0-rc.1');
     },
   );
 
@@ -219,19 +269,16 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     expect(baselineIn(read).snapshot.version).toBe('1.1.0');
   });
 
-  test('a package with only prereleases has no Baseline and lists its versions', async ({
+  test('a package with only prereleases has the highest one as its Baseline, and no stable version', async ({
     lab,
   }) => {
     const served = ordersWith(aVersion('1.0.0-rc.2'), aVersion('1.0.0-rc.1'));
 
     const { read, registry } = await readOrders(lab, served);
 
-    expect(read).toEqual({
-      kind: 'no-baseline',
-      packageName: ordersPackage,
-      why: { kind: 'only-prereleases', versions: ['1.0.0-rc.1', '1.0.0-rc.2'] },
-    });
-    expect(tarballsRequested(registry)).toEqual([]);
+    expect(baselineIn(read)).toMatchObject({ stable: undefined });
+    expect(baselineIn(read).snapshot.version).toBe('1.0.0-rc.2');
+    expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, '1.0.0-rc.2')]);
   });
 
   test('the Baseline lists every published version, prereleases included, lowest first', async ({
@@ -280,7 +327,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const elsewhere = await lab.aRegistry();
     const npm = lab.aPlace({ userConfig: loginTo(elsewhere), projectConfig: loginTo(serving) });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(baselineIn(read).snapshot.version).toBe('1.0.0');
     expect(elsewhere.requests).toEqual([]);
@@ -291,8 +338,12 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const recording = aRecordingNpm(lab);
     const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
 
-    await baselineOf(npm, orders, '@org');
-    await baselineOf(npm, { kind: 'service', name: 'unknown-service' }, '@org');
+    await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
+    await baselineOf(npm, {
+      declared: { kind: 'service', name: 'unknown-service' },
+      scope: '@org',
+      against: undefined,
+    });
 
     const calls = recording.calls();
     const secrets = [token, registry.host, '--registry'];
@@ -306,7 +357,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const registry = await lab.aRegistry();
     const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(read).toEqual({
       kind: 'no-baseline',
@@ -325,7 +376,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const defaults = `registry=${standard.url}/\n//${standard.host}/:_authToken=${token}\n`;
     const npm = lab.aPlace({ userConfig: loginTo(scoped) + defaults });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(read.kind).toBe('no-baseline');
     expect(scoped.requests.map((request) => request.path)).toContain('/-/whoami');
@@ -337,7 +388,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const userConfig = `registry=${registry.url}/\n//${registry.host}/:_authToken=${token}\n`;
     const npm = lab.aPlace({ userConfig });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
   });
@@ -350,7 +401,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       userConfig: `${loginTo(registry)}registry=https://bob:pw@elsewhere.invalid/\n`,
     });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
   });
@@ -362,7 +413,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const authority = `bob:pw@${registry.host}`;
     const npm = lab.aPlace({ userConfig: `registry=http://${authority}/\n` });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toBe(`npm config get registry failed: ${credentialsInUrl}`);
   });
@@ -377,7 +428,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       const userConfig = `${key}=http://alice:pw@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`;
       const npm = lab.aPlace({ userConfig });
 
-      const read = await baselineOf(npm, orders, '@org');
+      const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
       expect(failureIn(read)).toBe(`npm config get ${key} failed: ${credentialsInUrl}`);
     },
@@ -389,7 +440,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       userConfig: `@org:registry=http://alice@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`,
     });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
   });
@@ -400,7 +451,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       userConfig: `@org:registry=http://alice@${registry.host}/\n//${registry.host}/:_authToken=${token}\n`,
     });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toContain(
       `${ordersPackage} is not in ${registry.url}/, and npm has no login`,
@@ -417,7 +468,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       const registry = await lab.aRegistry({ whoami });
       const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-      const read = await baselineOf(npm, orders, '@org');
+      const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
       expect(failureIn(read)).toContain(`${ordersPackage} is not in ${registry.url}/`);
       expect(failureIn(read)).toContain('a package your login cannot read looks unpublished');
@@ -438,7 +489,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       });
       const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-      const read = await baselineOf(npm, declared, '@org');
+      const read = await baselineOf(npm, { declared: declared, scope: '@org', against: undefined });
 
       expect(baselineIn(read)).toMatchObject({ packageName, snapshot: { kind, name } });
     },
@@ -508,7 +559,11 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
       const registry = await lab.aRegistry();
       const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-      const read = await baselineOf(npm, declared as never, scope as never);
+      const read = await baselineOf(npm, {
+        declared: declared as never,
+        scope: scope as never,
+        against: undefined,
+      });
 
       expect(failureIn(read)).toBe(
         'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
@@ -571,7 +626,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const registry = await lab.aDeadAddress();
     const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toMatch(
       /^npm view @org\/contract-orders-service failed \(ECONNREFUSED: /,
@@ -583,7 +638,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const registry = await lab.aRegistry({ answers: { [packument]: 'hang' } });
     const npm = lab.aPlace({ userConfig: loginTo(registry), fetchTimeout: 300 });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toMatch(/^npm view @org\/contract-orders-service failed \(/);
   });
@@ -591,7 +646,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
   test('npm missing from PATH fails rather than throws', async ({ lab }) => {
     const npm = lab.aPlace({ path: lab.aFolder() });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toBe(
       'npm cannot be run: spawn npm ENOENT: cf-loom reads the registry through npm, which must be on PATH',
@@ -754,7 +809,7 @@ describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
     const stub = aStubNpm(lab, 'echo "npm is not itself today"\necho "second line"');
     const npm = lab.aPlace({ userConfig: loginTo(registry), path: stub });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toBe(
       `npm view ${ordersPackage} printed no JSON: npm is not itself today`,
@@ -1471,9 +1526,11 @@ describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
       const { TMPDIR: before } = process.env;
       setEnvironment('TMPDIR', tmp);
 
-      const read = await baselineOf(npm, orders, '@org').finally(() =>
-        setEnvironment('TMPDIR', before),
-      );
+      const read = await baselineOf(npm, {
+        declared: orders,
+        scope: '@org',
+        against: undefined,
+      }).finally(() => setEnvironment('TMPDIR', before));
 
       const destination = packDestinationIn(recording.calls());
       expect(read.kind).toBe(kind);
@@ -1489,7 +1546,11 @@ describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
     const { TMPDIR: before } = process.env;
     setEnvironment('TMPDIR', tmp);
 
-    const read = await baselineOf(npm, orders, '@org').finally(() => {
+    const read = await baselineOf(npm, {
+      declared: orders,
+      scope: '@org',
+      against: undefined,
+    }).finally(() => {
       setEnvironment('TMPDIR', before);
       chmodSync(tmp, 0o755);
     });
@@ -1503,9 +1564,11 @@ describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
     const { TMPDIR: before } = process.env;
     setEnvironment('TMPDIR', join(lab.aFolder(), 'nowhere'));
 
-    const read = await baselineOf(npm, orders, '@org').finally(() =>
-      setEnvironment('TMPDIR', before),
-    );
+    const read = await baselineOf(npm, {
+      declared: orders,
+      scope: '@org',
+      against: undefined,
+    }).finally(() => setEnvironment('TMPDIR', before));
 
     expect(failureIn(read)).toMatch(
       /^@org\/contract-orders-service@1.0.0's tarball cannot be read: /,
@@ -1517,7 +1580,7 @@ describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
     const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${metadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '[{"filename":"missing.tgz"}]';;\nesac`;
     const npm = lab.aPlace({ path: aStubNpm(lab, body) });
 
-    const read = await baselineOf(npm, orders, '@org');
+    const read = await baselineOf(npm, { declared: orders, scope: '@org', against: undefined });
 
     expect(failureIn(read)).toMatch(
       /^@org\/contract-orders-service@1.0.0's tarball cannot be read: /,

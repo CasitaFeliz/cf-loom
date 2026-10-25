@@ -1,10 +1,15 @@
 import { type Change, type ChangeSite, locationOf, type Path } from '@cf-loom/contract/internal';
-import type { NoBaseline } from '../registry/index.ts';
+import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import type { ExitStatus } from './exit.ts';
 
-/** What `check` compared a Snapshot with: its Baseline's version, or the reason it has none. */
+/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
 type Against =
-  | { readonly kind: 'baseline'; readonly version: string }
+  | {
+      readonly kind: 'baseline';
+      readonly version: string;
+      readonly stable: string | undefined;
+      readonly chosen: ChosenVersion['chosen'];
+    }
   | { readonly kind: 'none'; readonly why: NoBaseline };
 
 /** What `check` found, ready to print: the package, what it was compared with and every Change. */
@@ -74,8 +79,6 @@ export function reasonOf(why: NoBaseline): string {
   switch (why.kind) {
     case 'unknown-package':
       return `it is not in ${why.registry} for the npm user ${why.username}: never published, or that login cannot read it`;
-    case 'only-prereleases':
-      return `it has only prereleases, the highest ${why.versions.at(-1)}`;
   }
 }
 
