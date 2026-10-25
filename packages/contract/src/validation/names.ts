@@ -1,4 +1,4 @@
-import { isLive } from '../declarations/index.ts';
+import { type Definitions, isLive } from '../declarations/index.ts';
 import {
   type Declarations,
   identityOf,
@@ -10,46 +10,61 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { isCanonicalPath } from './paths.ts';
+import type { ResolvedDefinitions } from './validate.ts';
 
 /**
- * A root is named as its package.json without the scope, so its Contract Package's name follows
- * from it; a name that is no string is another rule's.
+ * A Service or an Application is named as its package.json without the scope, so its Contract
+ * Package's name follows from it; a Definitions Package has no name but its package.json's, and a
+ * name that is no string is another rule's.
  */
 export function packageNameFailures(
   root: Root,
   packageName: string,
 ): readonly DeclarationFailure[] {
-  if (typeof root.name !== 'string' || root.name === packageName) {
+  const unscoped = packageName.split('/').at(-1);
+  if (root.kind === 'definitions' || typeof root.name !== 'string' || root.name === unscoped) {
     return [];
   }
-  const message = `A root is named as its package.json, without the scope: ${packageName}`;
+  const message = `A root is named as its package.json, without the scope: ${unscoped}`;
   return [failure(['name'], 'package-name', message)];
 }
 
-/** Definitions Package and Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
+/** A Contract lists each Definitions Package once, named by the package that exports it. */
+export function listedOnceFailures(
+  { listedDefinitions }: Declarations,
+  packages: readonly ResolvedDefinitions[],
+): readonly DeclarationFailure[] {
+  const seen = new Set<Definitions>();
+  const failures: DeclarationFailure[] = [];
+  for (const { at, definitions } of listedDefinitions) {
+    if (seen.has(definitions)) {
+      const packageName = listedPackageNameOf(packages, definitions);
+      const named = packageName === undefined ? '' : `: ${packageName}`;
+      const message = `A Contract lists each Definitions Package once${named}`;
+      failures.push(failure(at, 'duplicate-definitions', message));
+    }
+    seen.add(definitions);
+  }
+  return failures;
+}
+
+/** The package.json name of the installed package a listed Definitions object comes from. */
+export function listedPackageNameOf(
+  packages: readonly ResolvedDefinitions[],
+  definitions: Definitions,
+): string | undefined {
+  return packages.find((resolved) => resolved.definitions === definitions)?.packageName;
+}
+
+/** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
 export function uniquenessFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
-    ...uniqueDefinitionsNames(declarations),
     ...uniqueGroupNames(declarations),
     ...uniqueEndpointNames(declarations),
     ...uniqueEndpointIdentities(declarations),
     ...uniqueGuardNames(declarations),
     ...uniqueProviders(declarations),
   ];
-}
-
-function uniqueDefinitionsNames({
-  listedDefinitions,
-}: Declarations): readonly DeclarationFailure[] {
-  const nameOf = (located: Declarations['listedDefinitions'][number]) =>
-    textOf(located.definitions.name);
-  return repeated(listedDefinitions, nameOf).map(({ at, definitions }) =>
-    failure(
-      [...at, 'name'],
-      'duplicate-definitions-name',
-      `A Contract lists each Definitions Package once, under a name of its own: ${textOf(definitions.name)}`,
-    ),
-  );
 }
 
 function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure[] {

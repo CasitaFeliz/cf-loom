@@ -86,14 +86,13 @@ export const subscriptionFields = {
 export const definitionsFields = {
   declared: {
     kind: true,
-    name: true,
     guards: true,
     schemas: true,
     rejections: true,
     standardRejections: true,
   },
-  required: { kind: true, name: true },
-  strings: { kind: true, name: true },
+  required: { kind: true },
+  strings: { kind: true },
   nonBlank: {},
   objects: { schemas: true, standardRejections: true },
 } satisfies Fields<Definitions>;

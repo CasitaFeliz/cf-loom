@@ -1,6 +1,6 @@
+import type { ResolvedDefinitions } from '../validation/index.ts';
 import type { Origin, OriginOf } from '../walker/index.ts';
 import type { LocatedDefinitions, ResolvedStandard } from '../written/index.ts';
-import type { ResolvedDefinitions } from './context.ts';
 
 /**
  * Where each shared schema of the listed Definitions Packages came from, as the walk writes it on

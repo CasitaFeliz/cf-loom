@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Contract,
   type Definitions,
@@ -18,9 +19,7 @@ import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -179,7 +178,6 @@ describe('validateContract: lists and their items', () => {
 
   test('a null Standard Rejection entry fails', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: anything<Record<string, never>>({ notFound: null }),
     });
 
@@ -238,7 +236,6 @@ describe('validateContract: lists and their items', () => {
 
   test('a Definitions Package’s schemas that is null fails', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       schemas: anything<Record<string, never>>(null),
     });
 
@@ -249,7 +246,6 @@ describe('validateContract: lists and their items', () => {
 
   test('a standardRejections that is a string fails once', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: anything<Record<string, never>>('abc'),
     });
 
@@ -260,7 +256,6 @@ describe('validateContract: lists and their items', () => {
 
   test('a standardRejections that is a list fails once', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: anything<Record<string, never>>([
         { code: 'X', status: 400, message: 'x' },
       ]),

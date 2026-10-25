@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Attachment,
   defineApplication,
@@ -18,9 +19,7 @@ import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -107,13 +106,13 @@ describe('validateContract: undeclared fields', () => {
   });
 
   test('an undeclared field on a Definitions Package fails', () => {
-    const definitions = defineDefinitions(withField({ name: 'definitions' }, 'endpoints'));
+    const definitions = defineDefinitions(withField({}, 'endpoints'));
 
     expect(validateInPackage(definitions, noOrigin)).toEqual(undeclared(['endpoints']));
   });
 
   test('an undeclared field on a listed Definitions Package fails where it is listed', () => {
-    const definitions = defineDefinitions(withField({ name: 'definitions' }, 'endpoints'));
+    const definitions = defineDefinitions(withField({}, 'endpoints'));
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
 
     expect(validateInPackage(contract, noOrigin)).toEqual(
@@ -197,7 +196,7 @@ describe('validateContract: undeclared fields', () => {
     const standardRejections = {
       notFund: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     } as unknown as { notFound: { code: 'NOT_FOUND'; status: 404; message: 'Not found' } };
-    const definitions = defineDefinitions({ name: 'definitions', standardRejections });
+    const definitions = defineDefinitions({ standardRejections });
 
     expect(validateInPackage(definitions, noOrigin)).toEqual(
       undeclared(['standardRejections', 'notFund']),
@@ -212,7 +211,6 @@ describe('validateContract: undeclared fields', () => {
       body: z.object({ resource: z.string() }),
     } as unknown as { code: 'NOT_FOUND'; status: 404; message: 'Not found' };
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound },
     });
 
@@ -294,7 +292,6 @@ describe('validateContract: required fields', () => {
       message: 'Not found';
     };
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound },
     });
 
@@ -439,7 +436,6 @@ describe('validateContract: required fields', () => {
       message: 'Not found';
     };
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound },
     });
 
@@ -532,7 +528,6 @@ describe('validateContract: a description or a message is never blank', () => {
 
   test.each(blankTexts)('a Standard Rejection whose message is %j fails', (message) => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'NOT_FOUND', status: 404, message } },
     });
 

@@ -12,7 +12,7 @@ export type Rule =
   | 'blank-text'
   | 'name-grammar'
   | 'duplicate-group-name'
-  | 'duplicate-definitions-name'
+  | 'duplicate-definitions'
   | 'duplicate-endpoint-name'
   | 'duplicate-endpoint-identity'
   | 'duplicate-guard-name'

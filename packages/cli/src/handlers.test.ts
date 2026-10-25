@@ -374,7 +374,7 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
     'node_modules/@org/definitions/index.js': lines([
       "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
       "export const userToken = defineGuard({ name: 'userToken', description: 'A user' });",
-      "export const definitions = defineDefinitions({ name: 'definitions', guards: [userToken] });",
+      'export const definitions = defineDefinitions({ guards: [userToken] });',
     ]),
     'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
       name: 'createOrder',
@@ -2819,7 +2819,7 @@ describe('cf-loom generate: roots that offer no Elements', () => {
       {
         'src/definitions/index.ts': lines([
           "import { defineDefinitions } from '@cf-loom/contract';",
-          "export const definitions = defineDefinitions({ name: 'orders-service' });",
+          'export const definitions = defineDefinitions({});',
         ]),
       },
     ],

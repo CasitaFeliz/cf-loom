@@ -5,6 +5,11 @@ import { oneLineOf } from './imported.ts';
 /** A project's package as its package.json names it: the scope, when it has one, and the name. */
 export type PackageName = { readonly scope: string | undefined; readonly name: string };
 
+/** A package's name as its package.json writes it, scope included. */
+export function packageJsonNameOf({ scope, name }: PackageName): string {
+  return scope === undefined ? name : `${scope}/${name}`;
+}
+
 /** The project's package with its package.json as read, or why its package.json cannot be used. */
 export type ProjectPackage =
   | {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -578,11 +579,10 @@ function serviceSnapshotOf(
   root: ReturnType<typeof defineContract>,
   packages: readonly ResolvedDefinitions[] = [],
 ): ServiceSnapshot {
-  const rootPackage = {
+  const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
     originOf: schemaOriginsOf(packages),
-    exportsOf: () => [],
-  };
+  });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
@@ -612,7 +612,6 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
   });
   const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
   const definitions = defineDefinitions({
-    name: 'definitions',
     guards: [userToken, permission, unusedGuard],
   });
   const getOrder = defineEndpoint({
@@ -631,7 +630,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     groups: [group],
   });
   const packages: readonly ResolvedDefinitions[] = [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    { definitions, packageName: '@org/definitions', version: '1.0.0', exports: {} },
   ];
   return serviceSnapshotOf(root, packages);
 }
@@ -648,7 +647,7 @@ function codeReachSnapshot(): ServiceSnapshot {
   const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
   const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
   const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
-  const definitions = defineDefinitions({ name: 'definitions', rejections: [unused] });
+  const definitions = defineDefinitions({ rejections: [unused] });
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -679,6 +678,6 @@ function codeReachSnapshot(): ServiceSnapshot {
     groups: [group],
   });
   return serviceSnapshotOf(root, [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    { definitions, packageName: '@org/definitions', version: '1.0.0', exports: {} },
   ]);
 }

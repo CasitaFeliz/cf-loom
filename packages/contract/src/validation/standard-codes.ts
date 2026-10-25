@@ -15,6 +15,8 @@ import {
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
+import { listedPackageNameOf } from './names.ts';
+import type { ResolvedDefinitions } from './validate.ts';
 
 const redefinedStandard =
   'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
@@ -108,8 +110,14 @@ export function redefinitionFailures(
     );
 }
 
-/** At most one listed Definitions Package declares Standard Rejections; one listed twice is one. */
-export function onceFailures({ listedDefinitions }: Declarations): readonly DeclarationFailure[] {
+/**
+ * At most one listed Definitions Package declares Standard Rejections; one listed twice is one,
+ * named by the package that exports it.
+ */
+export function onceFailures(
+  { listedDefinitions }: Declarations,
+  packages: readonly ResolvedDefinitions[],
+): readonly DeclarationFailure[] {
   const once = [
     ...new Map(listedDefinitions.map((located) => [located.definitions, located])).values(),
   ];
@@ -120,11 +128,12 @@ export function onceFailures({ listedDefinitions }: Declarations): readonly Decl
   if (first === undefined) {
     return [];
   }
+  const declarer = listedPackageNameOf(packages, first.definitions) ?? 'another package';
   return others.map(({ at }) =>
     failure(
       [...at, 'standardRejections'],
       'standard-rejections-once',
-      `At most one listed Definitions Package declares Standard Rejections: ${textOf(first.definitions.name)} already does`,
+      `At most one listed Definitions Package declares Standard Rejections: ${declarer} already does`,
     ),
   );
 }

@@ -59,7 +59,6 @@ A Definitions Package is a package of its own, which may be a repository of its 
 ```ts
 // definitions/src/definitions/index.ts, published as @org/definitions
 export const definitions = defineDefinitions({
-  name: 'definitions',
   guards: [userToken, permission],
   schemas: { money, pagination },
   rejections: [unauthenticated, forbidden],

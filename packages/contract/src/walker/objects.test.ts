@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
   defineContract,
@@ -355,11 +356,7 @@ function aCommand(body: core.$ZodType) {
 
 function failuresIn(root: unknown) {
   const name = Reflect.get(root as object, 'name');
-  const validated = validateContract(root, {
-    originOf: () => undefined,
-    packageName: String(name),
-    exportsOf: () => [],
-  });
+  const validated = validateContract(root, aRootPackage(root, { packageName: String(name) }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -414,7 +411,7 @@ describe('validateContract: a strict object fails wherever it sits', () => {
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ name: 'definitions', schemas: { scope: strictObject() } }),
+      () => defineDefinitions({ schemas: { scope: strictObject() } }),
       ['schemas', 'scope'],
     ],
   ])('a strict object %s fails with one line naming z.object()', (_position, rootOf, at) => {
@@ -495,7 +492,7 @@ describe('validateContract: a record keyed by an enum or literal fails wherever 
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ name: 'definitions', schemas: { totals: keyed() } }),
+      () => defineDefinitions({ schemas: { totals: keyed() } }),
       ['schemas', 'totals'],
     ],
   ])(

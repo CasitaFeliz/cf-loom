@@ -72,7 +72,7 @@ function definitionsSnapshotOf(
   return {
     format: 1,
     kind: 'definitions',
-    name: root.name,
+    name: declarations.packageName,
     generator: context.generator,
     standardRejections,
     defs: schemas.defs,

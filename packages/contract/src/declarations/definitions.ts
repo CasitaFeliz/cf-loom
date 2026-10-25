@@ -8,9 +8,11 @@ import type {
   StandardRejectionDeclarations,
 } from './standard-rejections.ts';
 
-/** What an author writes to declare a Definitions Package; an absent list is empty. */
+/**
+ * What an author writes to declare a Definitions Package, which the package.json it is published
+ * from names; an absent list is empty.
+ */
 type DefinitionsDeclaration = {
-  readonly name: string;
   readonly guards?: readonly Guard[];
   readonly schemas?: Readonly<Record<string, core.$ZodType>>;
   readonly rejections?: readonly Rejection[];

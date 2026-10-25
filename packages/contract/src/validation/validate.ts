@@ -1,4 +1,9 @@
-import { isApplication, isContract, isDefinitions } from '../declarations/index.ts';
+import {
+  type Definitions,
+  isApplication,
+  isContract,
+  isDefinitions,
+} from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import { type OriginOf, openCompositionsOf, walkSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
@@ -11,7 +16,7 @@ import { groupFailures } from './groups.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
 import { messageBodyFailures, messageFailures } from './messages.ts';
 import { nameFailures } from './name-grammars.ts';
-import { packageNameFailures, uniquenessFailures } from './names.ts';
+import { listedOnceFailures, packageNameFailures, uniquenessFailures } from './names.ts';
 import { paramsFailures, pathFailures } from './paths.ts';
 import { rejectionBodyFailures, rejectionFailures } from './rejections.ts';
 import {
@@ -23,6 +28,7 @@ import {
   nodesOf,
   schemaSlotsOf,
 } from './schemas.ts';
+import { onceFailures } from './standard-codes.ts';
 import { structureFailures } from './structure.ts';
 import { subscriptionFailures } from './subscriptions.ts';
 import { conflictFailures, textPartFailures } from './text-only.ts';
@@ -38,12 +44,25 @@ export type ValidatedSchemas = {
 };
 
 /**
- * The package a root sits in: the unscoped name of its package.json, which the root is named as,
- * and what the Definitions Packages installed beside it tell: where each schema came from and
- * what each package's module exports.
+ * A Definitions Package installed where the root is validated: its Definitions object, the
+ * package.json name and exact version, which the Snapshot records, and what its module exports,
+ * by name.
+ */
+export type ResolvedDefinitions = {
+  readonly definitions: Definitions;
+  readonly packageName: string;
+  readonly version: string;
+  readonly exports: Readonly<Record<string, unknown>>;
+};
+
+/**
+ * The package a root sits in: its package.json name, scope included, which a Service's or
+ * Application's root is named as without the scope; every Definitions Package its files import,
+ * as Node resolved them; where each shared schema came from; and what each package's module exports.
  */
 export type RootPackage = {
   readonly packageName: string;
+  readonly packages: readonly ResolvedDefinitions[];
   readonly originOf: OriginOf;
   readonly exportsOf: ExportsOf;
 };
@@ -80,6 +99,8 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
+    ...listedOnceFailures(declarations, rootPackage.packages),
+    ...onceFailures(declarations, rootPackage.packages),
     ...unlistedFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
@@ -96,7 +117,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
       nodeOf: nodeLookupOf(nodes),
       defs: nodes.defs,
     },
-    declarations: validatedDeclarationsOf(declarations),
+    declarations: validatedDeclarationsOf(declarations, rootPackage.packageName),
   };
 }
 

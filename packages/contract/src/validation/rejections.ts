@@ -24,7 +24,6 @@ import {
   distinctCodeFailures,
   guardStandardFailures,
   listedStandardFailures,
-  onceFailures,
   redefinitionFailures,
   standardStatusFailures,
 } from './standard-codes.ts';
@@ -46,7 +45,6 @@ export function rejectionFailures(declarations: Declarations): readonly Declarat
     ...guards.flatMap(({ at, guard }) => listedOnceFailures(at, guard.rejections)),
     ...distinctCodeFailures(resolved),
     ...redefinitionFailures(rejections, resolved),
-    ...onceFailures(declarations),
     ...statusConflictFailures(codes, resolved),
   ];
 }

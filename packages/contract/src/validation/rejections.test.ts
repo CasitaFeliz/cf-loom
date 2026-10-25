@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -18,9 +19,7 @@ import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -84,7 +83,6 @@ describe('validateContract: Rejection statuses', () => {
   test('a Standard Rejection a Definitions Package declares with a status outside 4xx fails', () => {
     const status = 200 as RejectionStatus;
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'NOT_FOUND', status, message: 'Not found' } },
     });
 
@@ -100,7 +98,6 @@ describe('validateContract: Rejection statuses', () => {
   test('the not-implemented Rejection with a status other than 501 fails', () => {
     const status = 500 as 501;
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notImplemented: { code: 'NOT_IMPLEMENTED', status, message: 'Later' } },
     });
 
@@ -241,7 +238,6 @@ describe('validateContract: one status and one body per code', () => {
 
   test('a Standard Rejection’s resolved code joins the one-status rule', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' } },
     });
     const missing = defineRejection({ code: 'NOT_FOUND', status: 410, message: 'Gone' });
@@ -414,7 +410,6 @@ describe('validateContract: reserved codes', () => {
 
   test('a Standard Rejection declared with a reserved code fails', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         notFound: { code: 'NO_SUCH_ENDPOINT', status: 404, message: 'Not found' },
       },
@@ -490,7 +485,6 @@ describe('validateContract: Standard Rejections', () => {
 
   test('the Standard codes are the ones the listed Definitions Package resolves', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
       },
@@ -531,7 +525,6 @@ describe('validateContract: Standard Rejections', () => {
 
   test('two Standard Rejections resolving to one code fail in a Definitions Package', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         invalidInput: { code: 'NOT_FOUND', status: 400, message: 'Bad' },
         notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -549,7 +542,6 @@ describe('validateContract: Standard Rejections', () => {
 
   test('two Standard Rejections resolving to one code fail in a Contract', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         notFound: { code: 'GONE', status: 404, message: 'Gone' },
         notImplemented: { code: 'GONE', status: 501, message: 'Later' },
@@ -568,7 +560,6 @@ describe('validateContract: Standard Rejections', () => {
 
   test('a Standard Rejection declared with the default code of another fails', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { invalidInput: { code: 'NOT_FOUND', status: 404, message: 'Missing' } },
     });
 
@@ -595,7 +586,6 @@ describe('validateContract: Standard Rejections', () => {
 
   test('one listed Definitions Package may declare Standard Rejections', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
     });
     const contract = defineContract({ name: 'orders-service', definitions: [definitions] });
@@ -605,20 +595,24 @@ describe('validateContract: Standard Rejections', () => {
 
   test('two listed Definitions Packages declaring Standard Rejections fail', () => {
     const first = defineDefinitions({
-      name: 'first',
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
     });
     const second = defineDefinitions({
-      name: 'second',
       standardRejections: { notImplemented: { code: 'LATER', status: 501, message: 'Later' } },
     });
     const contract = defineContract({ name: 'orders-service', definitions: [first, second] });
+    const packages = [
+      { definitions: first, packageName: '@org/first', version: '1.0.0', exports: {} },
+      { definitions: second, packageName: '@org/second', version: '1.0.0', exports: {} },
+    ];
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    const validated = validateContract(contract, aRootPackage(contract, { packages }));
+
+    expect(validated).toEqual(
       failed(
         ['definitions', 1, 'standardRejections'],
         'standard-rejections-once',
-        'At most one listed Definitions Package declares Standard Rejections: first already does',
+        'At most one listed Definitions Package declares Standard Rejections: @org/first already does',
       ),
     );
   });

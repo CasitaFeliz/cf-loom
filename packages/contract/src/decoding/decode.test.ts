@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -1451,11 +1452,10 @@ function declaredSnapshot() {
     ],
     dependencies: [defineDependency({ provider: payments })],
   });
-  const validated = validateContract(root, {
-    packageName: 'orders-service',
-    originOf: schemaOriginsOf([]),
-    exportsOf: () => [],
-  });
+  const validated = validateContract(
+    root,
+    aRootPackage(root, { packageName: 'orders-service', originOf: schemaOriginsOf([]) }),
+  );
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

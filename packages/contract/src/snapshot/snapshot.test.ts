@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -52,7 +53,6 @@ const permission = defineGuard({
 const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
 
 const orgDefinitions = defineDefinitions({
-  name: 'definitions',
   guards: [userToken, permission, unusedGuard],
   schemas: { money },
   rejections: [unauthenticated, forbidden, unusedRejection],
@@ -181,6 +181,7 @@ const orgPackage: ResolvedDefinitions = {
   definitions: orgDefinitions,
   packageName: '@org/definitions',
   version: '4.2.0',
+  exports: {},
 };
 
 const notifyOnSettled = defineSubscription({
@@ -221,10 +222,8 @@ function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
 }
 
 function snapshotFor(root: unknown, context: SnapshotContext = aContext()): Snapshot {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
   const originOf = schemaOriginsOf(context.packages);
-  const packageName = String(name);
-  const validated = validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  const validated = validateContract(root, aRootPackage(root, { originOf }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -978,7 +977,7 @@ describe('snapshotOf: a Definitions Package', () => {
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'definitions',
-      name: 'definitions',
+      name: '@org/definitions',
       generator: '@cf-loom/cli@2.1.0',
       defs: {},
       schemas: {

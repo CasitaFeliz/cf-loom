@@ -47,6 +47,8 @@ export type ValidatedSubscription = LocatedSubscription & { readonly service: st
  */
 export type ValidatedDeclarations = {
   readonly root: Root;
+  /** The package.json name of the package the root sits in, scope included. */
+  readonly packageName: string;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
@@ -59,9 +61,13 @@ export type ValidatedDeclarations = {
 };
 
 /** What a valid root declares, so the Snapshot's writer never gathers it again. */
-export function validatedDeclarationsOf(declarations: Declarations): ValidatedDeclarations {
+export function validatedDeclarationsOf(
+  declarations: Declarations,
+  packageName: string,
+): ValidatedDeclarations {
   return {
     root: declarations.root,
+    packageName,
     groups: declarations.groups,
     endpoints: declarations.endpoints,
     guards: declarations.guards.map((located) => ({

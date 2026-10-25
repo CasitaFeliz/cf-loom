@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import { defineCommand, defineContract, defineEvent, defineGroup } from '../index.ts';
 import {
   type BrokerPlan,
@@ -37,11 +38,10 @@ function aServicePlan(prefix: string | null): BrokerPlan {
       }),
     ],
   });
-  const validated = validateContract(root, {
-    originOf: schemaOriginsOf([]),
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  const validated = validateContract(
+    root,
+    aRootPackage(root, { originOf: schemaOriginsOf([]), packageName: 'orders-service' }),
+  );
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

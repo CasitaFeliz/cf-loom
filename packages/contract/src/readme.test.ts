@@ -44,7 +44,6 @@ const permission = defineGuard({
 });
 
 const definitions = defineDefinitions({
-  name: 'definitions',
   guards: [userToken, permission],
   schemas: { money, pagination },
   rejections: [unauthenticated, forbidden],

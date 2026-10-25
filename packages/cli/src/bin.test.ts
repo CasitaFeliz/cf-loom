@@ -168,7 +168,6 @@ function installedDefinitions(
       "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
       "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
       'export const definitions = defineDefinitions({',
-      "  name: 'definitions',",
       '  rejections: [gone],',
       "  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },",
       '});',
@@ -283,9 +282,7 @@ describe('cf-loom init', () => {
       [
         "import { defineDefinitions } from '@cf-loom/contract';",
         '',
-        'export const definitions = defineDefinitions({',
-        "  name: 'orders-service',",
-        '});',
+        'export const definitions = defineDefinitions({});',
         '',
       ].join('\n'),
     );
@@ -372,19 +369,20 @@ describe('cf-loom init', () => {
     expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
   });
 
-  test.each(['service', 'application', 'definitions'])(
-    'the %s root init writes generates its Snapshot',
-    (kind) => {
-      const project = aProject();
-      cfLoom(project, 'init', kind);
+  test.each([
+    ['service', 'orders-service'],
+    ['application', 'orders-service'],
+    ['definitions', '@org/orders-service'],
+  ])('the %s root init writes generates its Snapshot, named %s', (kind, name) => {
+    const project = aProject();
+    cfLoom(project, 'init', kind);
 
-      const ran = cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-      expect(ran).toMatchObject({ status: 0, stderr: '' });
-      const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-      expect(snapshot).toMatchObject({ kind, name: 'orders-service' });
-    },
-  );
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot).toMatchObject({ kind, name });
+  });
 });
 
 describe('cf-loom generate', () => {
@@ -953,7 +951,7 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
       {
         'src/definitions/index.ts': [
           "import { defineDefinitions } from '@cf-loom/contract';",
-          "export const definitions = defineDefinitions({ name: 'orders-service' });",
+          'export const definitions = defineDefinitions({});',
           '',
         ].join('\n'),
       },
@@ -1310,7 +1308,6 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         'export const money = z.object({ amount: z.int() });',
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
         'export const definitions = defineDefinitions({',
-        "  name: 'definitions',",
         '  guards: [apiKey],',
         '  schemas: { money },',
         '});',
@@ -1361,7 +1358,6 @@ describe('cf-loom generate: a Definitions Package root', () => {
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
         "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
         'export const definitions = defineDefinitions({',
-        "  name: 'definitions',",
         '  guards: [],',
         '  rejections: [gone],',
         '});',
@@ -1388,7 +1384,7 @@ describe('cf-loom generate: a Definitions Package root', () => {
         "import { z } from 'zod';",
         '',
         "export const money = z.object({ amount: z.int() }).meta({ id: 'money' });",
-        "export const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });",
+        'export const definitions = defineDefinitions({ schemas: { money } });',
         '',
       ].join('\n'),
     });
@@ -1418,7 +1414,7 @@ describe('cf-loom generate: what a listed Definitions Package lists', () => {
       'node_modules/@org/definitions/index.js': [
         "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
         "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
-        "export const definitions = defineDefinitions({ name: 'definitions' });",
+        'export const definitions = defineDefinitions({});',
         '',
       ].join('\n'),
     });
@@ -1432,30 +1428,6 @@ describe('cf-loom generate: what a listed Definitions Package lists', () => {
       stderr:
         'definitions.0.rejections definitions-unlisted: A Definitions Package lists every Rejection it exports or its Guards reach: GONE\n',
     });
-  });
-
-  test('a listed Definitions Package whose name breaks the grammar is reported by the grammar', () => {
-    const project = aProject({
-      'cf-loom.config.ts': config,
-      ...aRoot(),
-      ...anInstalledPackage(
-        '@org/definitions',
-        { exports: './index.js' },
-        {
-          'index.js': [
-            "import { defineDefinitions } from '@cf-loom/contract';",
-            "export const definitions = defineDefinitions({ name: 'Org Definitions' });",
-            '',
-          ].join('\n'),
-        },
-      ),
-    });
-    listDefinitions(project);
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^definitions\.0\.name name-grammar: [^\n]+\n$/);
   });
 });
 
@@ -1477,7 +1449,6 @@ function definitionsModuleOf(code: string): string {
     "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
     "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
     'export const definitions = defineDefinitions({',
-    "  name: 'definitions',",
     '  guards: [apiKey],',
     `  standardRejections: { notFound: { code: '${code}', status: 404, message: 'Missing' } },`,
     '});',
@@ -1544,7 +1515,7 @@ const guardsModules: Readonly<Record<string, string>> = {
   'index.js': [
     "import { defineDefinitions } from '@cf-loom/contract';",
     "import { apiKey } from './guards.js';",
-    "export const definitions = defineDefinitions({ name: 'definitions', guards: [apiKey] });",
+    'export const definitions = defineDefinitions({ guards: [apiKey] });',
     '',
   ].join('\n'),
 };
@@ -1771,6 +1742,31 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
+  test('one Definitions Package listed twice exits 1, named by its package', () => {
+    const project = aProject({
+      ...aServiceListing(
+        ["import { definitions } from '@org/definitions';"],
+        'definitions, definitions',
+      ),
+      ...anInstalledPackage(
+        '@org/definitions',
+        { exports: './index.js' },
+        {
+          'index.js': definitionsModuleOf('MISSING'),
+        },
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'definitions.1 duplicate-definitions: A Contract lists each Definitions Package once: @org/definitions\n',
+    });
+  });
+
   test('two Definitions Packages of two scopes, both listed, pass generate', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
@@ -1794,7 +1790,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         {
           'index.js': [
             "import { defineDefinitions } from '@cf-loom/contract';",
-            "export const definitions = defineDefinitions({ name: 'platform' });",
+            'export const definitions = defineDefinitions({});',
             '',
           ].join('\n'),
         },
@@ -2052,7 +2048,7 @@ const aDefinitionsRoot: Files = {
   'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
   'src/definitions/index.ts': [
     "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'definitions' });",
+    'export const definitions = defineDefinitions({});',
     '',
   ].join('\n'),
 };
@@ -2067,7 +2063,7 @@ const aDefinitionsRootOfEverySite: Files = {
     "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
     'export const money = z.object({ amount: z.number() });',
     'export const definitions = defineDefinitions({',
-    "  name: 'definitions', guards: [apiKey], schemas: { money }, rejections: [gone],",
+    '  guards: [apiKey], schemas: { money }, rejections: [gone],',
     '});',
     '',
   ].join('\n'),

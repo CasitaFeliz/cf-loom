@@ -157,6 +157,6 @@ export const aDefinitionsPackage: Readonly<Record<string, string>> = {
   'cf-loom.config.ts': config,
   'src/definitions/index.ts': lines([
     "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'orders-service' });",
+    'export const definitions = defineDefinitions({});',
   ]),
 };

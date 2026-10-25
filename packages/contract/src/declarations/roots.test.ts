@@ -74,7 +74,7 @@ const payments = {
 
 describe('defineContract', () => {
   test('a Contract keeps what its root lists by identity', () => {
-    const definitions = defineDefinitions({ name: 'definitions' });
+    const definitions = defineDefinitions({});
     const paymentsGroup = defineGroup({
       name: 'payments',
       description: 'Payments',

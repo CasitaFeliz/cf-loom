@@ -4,7 +4,6 @@ import { unauthenticated } from './rejections/unauthenticated.rejection.ts';
 import { money } from './schemas/money.schema.ts';
 
 export const definitions = defineDefinitions({
-  name: 'definitions',
   guards: [apiKey],
   schemas: { money },
   rejections: [unauthenticated],

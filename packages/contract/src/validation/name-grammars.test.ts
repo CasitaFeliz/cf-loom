@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -42,11 +43,7 @@ function isNameGrammar(broken: Failure): boolean {
 
 /** The names whose `name-grammar` failure sits at `nameAt` of the location, a Message Version's `@1` cut. */
 function failingNames(root: unknown, packageName: string, nameAt: number): ReadonlySet<string> {
-  const validated = validateContract(root, {
-    packageName,
-    originOf: () => undefined,
-    exportsOf: () => [],
-  });
+  const validated = validateContract(root, aRootPackage(root, { packageName }));
   const failures = validated.kind === 'invalid' ? validated.failures : [];
   const grammar = failures.filter((broken) => isNameGrammar(broken));
   return new Set(grammar.map(({ at }) => String(at[nameAt]).replace(/@1$/, '')));
@@ -55,7 +52,6 @@ function failingNames(root: unknown, packageName: string, nameAt: number): Reado
 /** The Guard names, out of the candidates, that the name grammar refuses. */
 const refusedElementNames = failingNames(
   defineDefinitions({
-    name: 'definitions',
     guards: candidates.map((name) => defineGuard({ name, description: 'A guard' })),
   }),
   'definitions',

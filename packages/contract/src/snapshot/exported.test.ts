@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import { defineContract, defineEndpoint, defineGroup, defineGuard } from '../index.ts';
 import {
   checkExportedFormat,
@@ -44,11 +45,7 @@ const listOrders = defineEndpoint({
 function declaredSnapshotOf() {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
   const validated = validateContract(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error('The fixture is invalid');

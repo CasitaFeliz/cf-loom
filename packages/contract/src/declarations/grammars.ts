@@ -10,7 +10,7 @@ export type Grammar = {
   readonly reserved?: ReadonlySet<string>;
 };
 
-/** The grammar of a Service, Application, Definitions Package or Group name. */
+/** The grammar of a Service, Application or Group name. */
 export const kebabCase: Grammar = { name: 'kebab-case', pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/ };
 
 /** The grammar of a path param's name and a recursion id. */

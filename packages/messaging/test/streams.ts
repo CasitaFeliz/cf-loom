@@ -77,6 +77,7 @@ function serviceSnapshotOf(contract: Contract) {
   const validated = validateContract(contract, {
     originOf,
     packageName: contract.name,
+    packages: [],
     exportsOf: () => [],
   });
   if (validated.kind !== 'valid') {

@@ -13,7 +13,7 @@ import {
   type ValidContract,
   validateContract,
 } from '@cf-loom/contract/internal';
-import { oneLineOf } from '../loading/index.ts';
+import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type Project, projectOf } from './project.ts';
@@ -101,7 +101,8 @@ function validatedOf(project: Project): ValidatedContract | Tooling {
   );
   const rootPackage: RootPackage = {
     originOf: schemaOriginsOf(packages),
-    packageName: packageName.name,
+    packageName: packageJsonNameOf(packageName),
+    packages: project.definitionsPackages,
     exportsOf: (definitions) =>
       definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? []),
   };

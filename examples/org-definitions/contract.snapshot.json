@@ -138,7 +138,7 @@
     }
   },
   "kind": "definitions",
-  "name": "definitions",
+  "name": "@org/definitions",
   "schemas": {
     "money": {
       "fields": {

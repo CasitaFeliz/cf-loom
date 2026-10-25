@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
   defineContract,
@@ -56,11 +57,7 @@ function aGroup(name: string, lists: Readonly<Record<string, unknown>>): Group {
 }
 
 function validateRoot(root: unknown) {
-  return validateContract(root, {
-    originOf: () => undefined,
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  return validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
 }
 
 function validateGroups(groups: readonly Group[]) {

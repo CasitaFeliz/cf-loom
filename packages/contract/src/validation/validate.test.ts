@@ -2,6 +2,7 @@ import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -20,9 +21,7 @@ import { type RootPackage, validateContract, walkSchemas } from '../internal/ind
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -136,7 +135,6 @@ describe('validateContract', () => {
     const shared = defineGuard({ name: 'shared', description: 'Listed, attached by no Endpoint' });
     const unused = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [shared],
       rejections: [unused],
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
@@ -152,6 +150,7 @@ describe('validateContract', () => {
     const listedIn = { at: ['definitions', 0], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
+      packageName: 'orders-service',
       groups: [{ at: ['groups', 'orders'], group: ordersGroup }],
       endpoints: [
         {
@@ -233,7 +232,6 @@ describe('validateContract', () => {
       guards: [userToken],
     });
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [permission, userToken],
     });
 
@@ -247,7 +245,6 @@ describe('validateContract', () => {
 
   test('a valid Definitions Package reaches every Guard and code it declares', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [apiKey],
       rejections: [orderLocked, unauthenticated],
     });
@@ -472,7 +469,6 @@ describe('validateContract', () => {
   test('a valid Definitions Package finds the nodes of its Guards, Rejections and shared schemas', () => {
     const money = z.object({ amount: z.int(), currency: z.string() });
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [apiKey],
       schemas: { money },
       rejections: [unauthenticated, orderLocked],
@@ -641,7 +637,6 @@ describe('validateContract: the README’s examples', () => {
     rejections: [forbidden],
   });
   const definitions = defineDefinitions({
-    name: 'definitions',
     guards: [userToken, permission],
     schemas: { money, pagination },
     rejections: [unauthenticated, forbidden],

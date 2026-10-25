@@ -1,5 +1,5 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
-export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
+export type { SnapshotContext } from './context.ts';
 export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';

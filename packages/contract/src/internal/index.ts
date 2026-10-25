@@ -83,7 +83,6 @@ export type {
   PublishedEvent,
   PublishedServiceSnapshot,
   PublishedSnapshot,
-  ResolvedDefinitions,
   SemanticVersionParts,
   ServiceSnapshot,
   Snapshot,
@@ -112,6 +111,7 @@ export {
 export type {
   Failure,
   Problem,
+  ResolvedDefinitions,
   RootPackage,
   TextPartNodes,
   ValidatedContract,

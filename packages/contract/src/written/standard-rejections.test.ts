@@ -5,7 +5,6 @@ import { standardRejectionsOf } from '../internal/index.ts';
 describe('standardRejectionsOf', () => {
   test('a listed Definitions Package’s declarations take the place of cf-loom’s defaults', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
       },

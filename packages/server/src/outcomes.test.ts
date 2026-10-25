@@ -62,7 +62,6 @@ const orderTotal = defineEndpoint({
 });
 
 const definitions = defineDefinitions({
-  name: 'definitions',
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
     notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },

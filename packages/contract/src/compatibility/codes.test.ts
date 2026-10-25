@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import { defineContract, defineEndpoint, defineGroup } from '../index.ts';
 import {
   type Change,
@@ -619,11 +620,10 @@ function generatedCodeOf(code: string): CodeSnapshot {
   });
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
   const root = defineContract({ name: 'ping-service', groups: [group] });
-  const validated = validateContract(root, {
-    originOf: schemaOriginsOf([]),
-    packageName: 'ping-service',
-    exportsOf: () => [],
-  });
+  const validated = validateContract(
+    root,
+    aRootPackage(root, { originOf: schemaOriginsOf([]), packageName: 'ping-service' }),
+  );
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -12,9 +13,7 @@ import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -53,7 +52,6 @@ function failuresOf(root: unknown) {
 describe('validateContract: a Definitions Package lists what its Guards reach', () => {
   test('a Definitions Package that lists every Guard and Rejection its Guards reach is valid', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [userToken, permission],
       rejections: [unauthenticated, forbidden],
     });
@@ -71,7 +69,6 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
     'a Guard a listed Guard reaches at depth $depth, left out of the list, fails naming it',
     ({ listed, unlisted }) => {
       const definitions = defineDefinitions({
-        name: 'definitions',
         guards: listed,
         rejections: [unauthenticated, forbidden],
       });
@@ -91,7 +88,6 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
 
   test('a Rejection a listed Guard answers, left out of the list, fails', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       guards: [userToken, permission],
       rejections: [forbidden],
     });
@@ -110,7 +106,7 @@ describe('validateContract: a Definitions Package lists what its Guards reach', 
   });
 
   test('a Definitions Package a Contract lists is held to the same rule, where it is listed', () => {
-    const definitions = defineDefinitions({ name: 'definitions', guards: [permission] });
+    const definitions = defineDefinitions({ guards: [permission] });
     const ping = defineEndpoint({
       name: 'ping',
       method: 'GET',
@@ -147,7 +143,6 @@ describe('validateContract: a listed Definitions Package lists what it exports',
   });
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
   const definitions = defineDefinitions({
-    name: 'definitions',
     guards: [userToken],
     rejections: [unauthenticated],
   });
@@ -158,11 +153,14 @@ describe('validateContract: a listed Definitions Package lists what it exports',
   });
 
   function exportingFailures(exported: readonly unknown[]) {
-    const validated = validateContract(contract, {
-      originOf: noOrigin,
-      packageName: 'ping-service',
-      exportsOf: (listed) => (listed === definitions ? exported : []),
-    });
+    const validated = validateContract(
+      contract,
+      aRootPackage(contract, {
+        originOf: noOrigin,
+        packageName: 'ping-service',
+        exportsOf: (listed) => (listed === definitions ? exported : []),
+      }),
+    );
     return validated.kind === 'invalid' ? validated.failures : [];
   }
 

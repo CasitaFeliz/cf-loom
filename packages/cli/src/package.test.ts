@@ -150,7 +150,6 @@ const definitions: Readonly<Record<string, string>> = {
     '  rejections: [forbidden],',
     '});',
     'export const definitions = defineDefinitions({',
-    "  name: 'definitions',",
     '  guards: [userToken, permission],',
     '  schemas: { money },',
     '  rejections: [forbidden],',
@@ -1890,7 +1889,7 @@ describe('cf-loom package: what it refuses', () => {
       'cf-loom.config.ts': config,
       'src/definitions/index.ts': lines([
         "import { defineDefinitions } from '@cf-loom/contract';",
-        "export const definitions = defineDefinitions({ name: 'definitions' });",
+        'export const definitions = defineDefinitions({});',
       ]),
     });
 
@@ -1910,7 +1909,7 @@ describe('cf-loom package: what it refuses', () => {
       'cf-loom.config.ts': config,
       'src/definitions/index.ts': lines([
         "import { defineDefinitions } from '@cf-loom/contract';",
-        "export const definitions = defineDefinitions({ name: 'definitions' });",
+        'export const definitions = defineDefinitions({});',
       ]),
     });
 

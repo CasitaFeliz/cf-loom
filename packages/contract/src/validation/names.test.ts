@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
+  type Definitions,
   defineApplication,
   defineContract,
   defineDefinitions,
@@ -15,9 +17,7 @@ import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+  return validateContract(root, aRootPackage(root, { originOf }));
 }
 
 function noOrigin() {
@@ -252,7 +252,7 @@ describe('validateContract: name grammars', () => {
     'a Guard named %s, in a Definitions Package too, fails',
     (name) => {
       const guard = defineGuard({ name, description: 'A guard' });
-      const definitions = defineDefinitions({ name: 'definitions', guards: [guard] });
+      const definitions = defineDefinitions({ guards: [guard] });
 
       expect(validateInPackage(definitions, noOrigin)).toEqual(
         failed(
@@ -287,17 +287,8 @@ describe('validateContract: name grammars', () => {
     );
   });
 
-  test('a Definitions Package name that is not kebab-case fails', () => {
-    const definitions = defineDefinitions({ name: 'Definitions' });
-
-    expect(validateInPackage(definitions, noOrigin)).toEqual(
-      failed(['name'], 'name-grammar', 'A Definitions Package name is kebab-case: Definitions'),
-    );
-  });
-
   test('a Standard Rejection code a Definitions Package declares follows the code grammar', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'not-found', status: 404, message: 'Not found' } },
     });
 
@@ -375,7 +366,7 @@ describe('validateContract: unique names and identities', () => {
   test('a Guard named like one in a listed Definitions Package fails', () => {
     const shared = defineGuard({ name: 'apiKey', description: 'A key' });
     const local = defineGuard({ name: 'apiKey', description: 'A local key' });
-    const definitions = defineDefinitions({ name: 'definitions', guards: [shared] });
+    const definitions = defineDefinitions({ guards: [shared] });
     const endpoint = defineEndpoint({ ...listing, guards: [local] });
     const contract = defineContract({
       name: 'orders-service',
@@ -423,25 +414,36 @@ describe('validateContract: unique names and identities', () => {
 });
 
 describe('validateContract: listed Definitions Packages', () => {
-  test('a Definitions Package listed twice fails', () => {
-    const definitions = defineDefinitions({ name: 'definitions' });
+  const installed = (definitions: Definitions) => ({
+    definitions,
+    packageName: '@org/definitions',
+    version: '4.2.0',
+    exports: {},
+  });
+
+  test('a Definitions Package listed twice fails, named by its package', () => {
+    const definitions = defineDefinitions({});
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions, definitions],
     });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    const validated = validateContract(
+      contract,
+      aRootPackage(contract, { packages: [installed(definitions)] }),
+    );
+
+    expect(validated).toEqual(
       failed(
-        ['definitions', 1, 'name'],
-        'duplicate-definitions-name',
-        'A Contract lists each Definitions Package once, under a name of its own: definitions',
+        ['definitions', 1],
+        'duplicate-definitions',
+        'A Contract lists each Definitions Package once: @org/definitions',
       ),
     );
   });
 
   test('a Definitions Package with Standard Rejections listed twice fails only as a duplicate', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
     });
     const contract = defineContract({
@@ -449,27 +451,26 @@ describe('validateContract: listed Definitions Packages', () => {
       definitions: [definitions, definitions],
     });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    const validated = validateContract(
+      contract,
+      aRootPackage(contract, { packages: [installed(definitions)] }),
+    );
+
+    expect(validated).toEqual(
       failed(
-        ['definitions', 1, 'name'],
-        'duplicate-definitions-name',
-        'A Contract lists each Definitions Package once, under a name of its own: definitions',
+        ['definitions', 1],
+        'duplicate-definitions',
+        'A Contract lists each Definitions Package once: @org/definitions',
       ),
     );
   });
 
-  test('two listed Definitions Packages with one name fail', () => {
-    const first = defineDefinitions({ name: 'definitions' });
-    const second = defineDefinitions({ name: 'definitions' });
+  test('two Definitions objects that declare the same are two packages', () => {
+    const first = defineDefinitions({});
+    const second = defineDefinitions({});
     const contract = defineContract({ name: 'orders-service', definitions: [first, second] });
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
-      failed(
-        ['definitions', 1, 'name'],
-        'duplicate-definitions-name',
-        'A Contract lists each Definitions Package once, under a name of its own: definitions',
-      ),
-    );
+    expect(validateInPackage(contract, noOrigin).kind).toBe('valid');
   });
 });
 
@@ -491,25 +492,22 @@ describe('validateContract: the root is named as its package', () => {
   const roots = [
     ['a Contract', defineContract({ name: 'orders-service', groups: [] })],
     ['an Application', defineApplication({ name: 'orders-service', dependencies: [] })],
-    ['a Definitions Package', defineDefinitions({ name: 'orders-service' })],
   ] as const;
 
   test.each(roots)('%s named as its package.json without the scope is valid', (_, root) => {
-    const validated = validateContract(root, {
-      originOf: noOrigin,
-      packageName: 'orders-service',
-      exportsOf: () => [],
-    });
+    const validated = validateContract(
+      root,
+      aRootPackage(root, { originOf: noOrigin, packageName: 'orders-service' }),
+    );
 
     expect(validated.kind).toBe('valid');
   });
 
   test.each(roots)('%s named otherwise fails package-name', (_, root) => {
-    const validated = validateContract(root, {
-      originOf: noOrigin,
-      packageName: 'billing-service',
-      exportsOf: () => [],
-    });
+    const validated = validateContract(
+      root,
+      aRootPackage(root, { originOf: noOrigin, packageName: 'billing-service' }),
+    );
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -527,14 +525,32 @@ describe('validateContract: the root is named as its package', () => {
   test('a wrong package name is reported with every other failure at once', () => {
     const root = defineContract({ name: 'Orders', groups: [] });
 
-    const validated = validateContract(root, {
-      originOf: noOrigin,
-      packageName: 'orders',
-      exportsOf: () => [],
-    });
+    const validated = validateContract(
+      root,
+      aRootPackage(root, { originOf: noOrigin, packageName: 'orders' }),
+    );
 
     const rules = validated.kind === 'invalid' ? validated.failures.map(ruleOf) : [];
     expect(rules).toEqual(['name-grammar', 'package-name']);
+  });
+
+  test('a Service is named as its package.json without the scope', () => {
+    const root = defineContract({ name: 'orders-service', groups: [] });
+
+    const validated = validateContract(
+      root,
+      aRootPackage(root, { packageName: '@payments/orders-service' }),
+    );
+
+    expect(validated.kind).toBe('valid');
+  });
+
+  test('a Definitions Package takes the name of its package.json, whatever it is', () => {
+    const root = defineDefinitions({});
+
+    const validated = validateContract(root, aRootPackage(root, { packageName: 'shared' }));
+
+    expect(validated.kind).toBe('valid');
   });
 });
 
