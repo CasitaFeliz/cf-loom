@@ -29,7 +29,6 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'json':
     case 'ref':

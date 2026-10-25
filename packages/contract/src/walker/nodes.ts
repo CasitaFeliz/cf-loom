@@ -20,7 +20,7 @@ export type Annotations = {
 /** A regex as `RegExp.prototype.source` and `flags` give it, so two compare equal only if identical. */
 export type Regex = { readonly source: string; readonly flags: string };
 
-/** A value a literal or an enum can hold, kept with its JSON type: `true` is not `"true"`. */
+/** A value an enum can hold, kept with its JSON type: `true` is not `"true"`. */
 export type JsonPrimitive = string | number | boolean;
 
 /** A string, with a known format, a regex and length bounds when declared. */
@@ -46,9 +46,6 @@ export type NumberNode = Annotations & {
 
 /** A boolean. */
 export type BooleanNode = Annotations & { readonly type: 'boolean' };
-
-/** One value. */
-export type LiteralNode = Annotations & { readonly type: 'literal'; readonly value: JsonPrimitive };
 
 /** One of several values; an open one's readers handle values they do not know. */
 export type EnumNode = Annotations & {
@@ -122,7 +119,6 @@ export type SchemaNode =
   | StringNode
   | NumberNode
   | BooleanNode
-  | LiteralNode
   | EnumNode
   | ObjectNode
   | RecordNode

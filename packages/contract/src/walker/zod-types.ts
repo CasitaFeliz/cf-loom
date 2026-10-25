@@ -36,7 +36,6 @@ export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], 
     case 'array':
       return constrainArray(node, checks, at);
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'object':
     case 'record':

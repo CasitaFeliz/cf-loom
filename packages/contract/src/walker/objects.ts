@@ -105,9 +105,6 @@ function keysOf(key: SchemaNode): readonly string[] | undefined {
 }
 
 function keyValuesOf(key: SchemaNode): readonly JsonPrimitive[] {
-  if (key.type === 'literal') {
-    return [key.value];
-  }
   if (key.type === 'enum') {
     return key.values;
   }

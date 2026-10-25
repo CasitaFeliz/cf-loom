@@ -484,7 +484,7 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     expect(echoed('flag')).toEqual({ type: 'boolean' });
   });
 
-  test('a literal is a const of the type of its value', () => {
+  test('a one-value closed enum is a const of the type of its value', () => {
     expect([echoed('kind'), extra('meaning')]).toEqual([
       { type: 'string', const: 'order' },
       { type: 'number', const: 42 },

@@ -905,7 +905,7 @@ describe('walkSchemas: recursion', () => {
       type: 'object',
       mode: 'open',
       fields: {
-        type: { required: true, schema: { type: 'literal', value: 'leaf' } },
+        type: { required: true, schema: { type: 'enum', values: ['leaf'], open: false } },
         value: { required: true, schema: { type: 'number' } },
       },
     } as const;
@@ -918,7 +918,7 @@ describe('walkSchemas: recursion', () => {
       type: 'object',
       mode: 'open',
       fields: {
-        type: { required: true, schema: { type: 'literal', value: 'branch' } },
+        type: { required: true, schema: { type: 'enum', values: ['branch'], open: false } },
         children: { required: true, schema: { type: 'array', items: treeNode } },
       },
     } as const;

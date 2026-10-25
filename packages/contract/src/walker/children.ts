@@ -98,7 +98,6 @@ function nodelessStepsFrom(
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'object':
     case 'record':
@@ -115,7 +114,6 @@ function isRef(node: SchemaNode): node is RefNode {
 }
 
 /** The nodes directly inside a node, each with the steps the walker's paths take to it. */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the children of each node type
 export function childrenOf(node: SchemaNode): readonly Child[] {
   switch (node.type) {
     case 'object':
@@ -147,7 +145,6 @@ export function childrenOf(node: SchemaNode): readonly Child[] {
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'json':
     case 'ref':

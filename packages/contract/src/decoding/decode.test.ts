@@ -225,7 +225,7 @@ const everyNode: SchemaNode = {
       },
     },
     flag: { required: true, schema: { type: 'boolean' } },
-    one: { required: true, schema: { type: 'literal', value: 'a' } },
+    one: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
     color: { required: true, schema: { type: 'enum', values: ['red', 2, true], open: true } },
     lookup: {
       required: true,
@@ -249,7 +249,9 @@ const everyNode: SchemaNode = {
           '"a"': {
             type: 'object',
             mode: 'strict',
-            fields: { kind: { required: true, schema: { type: 'literal', value: 'a' } } },
+            fields: {
+              kind: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
+            },
           },
           '"b"': aRef('tree'),
         },
@@ -740,6 +742,11 @@ describe('decodeSnapshot', () => {
         'a string format',
         { defs: { tree: { type: 'string', format: 'phone' } } },
         ['defs', 'tree', 'format'],
+      ],
+      [
+        'a literal node',
+        { defs: { tree: { type: 'literal', value: 'a' } } },
+        ['defs', 'tree', 'type'],
       ],
       [
         'an object mode',

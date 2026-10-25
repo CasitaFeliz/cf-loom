@@ -450,7 +450,6 @@ describe('compatibilityReportOf, Input headers', () => {
     ['a min length', { type: 'string', min: 1 }],
     ['a max length', { type: 'string', max: 64 }],
     ['an enum', { type: 'enum', values: ['a', 'b'], open: false }],
-    ['a literal', { type: 'literal', value: 'a' }],
     ['a number', aNumber],
     ['a boolean', { type: 'boolean' }],
   ];

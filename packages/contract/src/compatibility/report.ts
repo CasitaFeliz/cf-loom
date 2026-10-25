@@ -65,7 +65,7 @@ export type ShapeDifference =
   | { readonly kind: 'field-made-optional' }
   | { readonly kind: 'nullability-added' }
   | { readonly kind: 'nullability-removed' }
-  /** A value added to an enum or literal, with the Baseline's openness, which its deployed readers hold. */
+  /** A value added to an enum, with the Baseline's openness, which its deployed readers hold. */
   | {
       readonly kind: 'value-added';
       readonly value: JsonPrimitive;
@@ -74,9 +74,9 @@ export type ShapeDifference =
   | { readonly kind: 'value-removed'; readonly value: JsonPrimitive }
   | { readonly kind: 'enum-opened' }
   | { readonly kind: 'enum-closed' }
-  /** An enum or literal widened to the base type every value shares, with no constraint. */
+  /** An enum widened to the base type every value shares, with no constraint. */
   | { readonly kind: 'enum-widened'; readonly to: BaseType }
-  /** An unconstrained base type narrowed to an enum or literal of its values. */
+  /** An unconstrained base type narrowed to an enum of its values. */
   | { readonly kind: 'enum-narrowed'; readonly from: BaseType }
   | { readonly kind: 'variant-added' }
   | { readonly kind: 'variant-removed' }

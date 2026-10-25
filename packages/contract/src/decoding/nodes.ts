@@ -58,7 +58,6 @@ const nodes = [
     multipleOf: bound,
   }),
   node('boolean', {}),
-  node('literal', { value: primitive }),
   node('enum', { values: z.array(primitive), open: z.boolean() }),
   objectNode,
   node('record', { key: child, value: child }),

@@ -1124,7 +1124,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     linkPeers(out);
     expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
     const written = read(out, 'src/defs.ts');
-    const wrong = written.replaceAll("{ kind: 'stem' }", "{ kind: 'stem'; extra: number }");
+    const wrong = written.replaceAll("{ kind: ('stem') }", "{ kind: ('stem'); extra: number }");
     expect(wrong).not.toBe(written);
     write(out, { 'src/defs.ts': wrong });
 

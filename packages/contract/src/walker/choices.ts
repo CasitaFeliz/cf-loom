@@ -5,7 +5,6 @@ import { innerOfLazy } from './lazy.ts';
 import type {
   EnumNode,
   JsonPrimitive,
-  LiteralNode,
   ObjectNode,
   Path,
   RefNode,
@@ -120,14 +119,10 @@ function choiceOf(options: readonly SchemaNode[]): SchemaNode {
   if (literals.length !== options.length) {
     return { type: 'union', options: [...options] };
   }
-  const values = enumOf(literals.flatMap(valuesOf));
+  const values = enumOf(literals.flatMap((literal) => literal.values));
   return literals.some((literal) => literal.nullable === true)
     ? { ...values, nullable: true }
     : values;
-}
-
-function valuesOf(literals: LiteralNode | EnumNode): readonly JsonPrimitive[] {
-  return literals.type === 'literal' ? [literals.value] : literals.values;
 }
 
 /** An enum of several literal values, each once, in canonical order. */
@@ -137,9 +132,9 @@ export function enumOf(values: readonly JsonPrimitive[]): EnumNode {
   return { type: 'enum', values: distinct.sort(byCanonicalJson), open: false };
 }
 
-/** A literal of one value, or a closed enum, which is how a literal of several values walks. */
-function isLiterals(node: SchemaNode): node is LiteralNode | EnumNode {
-  return node.type === 'literal' || (node.type === 'enum' && !node.open);
+/** A closed enum, which is how a literal walks. */
+function isLiterals(node: SchemaNode): node is EnumNode {
+  return node.type === 'enum' && !node.open;
 }
 
 function isString(value: unknown): value is string {

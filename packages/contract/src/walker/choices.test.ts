@@ -28,7 +28,7 @@ const cardNode = {
   type: 'object',
   mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'card' } },
+    type: { required: true, schema: { type: 'enum', values: ['card'], open: false } },
     last4: { required: true, schema: { type: 'string' } },
   },
 } as const;
@@ -37,7 +37,7 @@ const transferNode = {
   type: 'object',
   mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'transfer' } },
+    type: { required: true, schema: { type: 'enum', values: ['transfer'], open: false } },
     iban: { required: true, schema: { type: 'string' } },
   },
 } as const;

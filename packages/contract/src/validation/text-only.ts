@@ -29,7 +29,7 @@ function textPartOf(part: Part): TextIn | undefined {
   return isObjectPart(part) ? partFieldOf(part) : undefined;
 }
 
-const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
+const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
 
 const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',

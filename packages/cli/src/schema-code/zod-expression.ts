@@ -44,8 +44,6 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
       return numberOf(node);
     case 'boolean':
       return 'z.boolean()';
-    case 'literal':
-      return `z.literal(${literalOf(node.value)})`;
     case 'enum':
       return enumOf(node, writing);
     case 'object':
@@ -95,13 +93,17 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
 }
 
 /**
- * An enum; values that are not all strings are literals. An Open Enum's reader reads a declared
- * value as itself and any other string as its Unknown case, `{ unknown: 'refunded' }`, so
- * TypeScript tells them apart, and writes that case back as its string.
+ * An enum; one value, or values that are not all strings, are literals, and a discriminator must
+ * be one. An Open Enum's reader reads a declared value as itself and any other string as its
+ * Unknown case, `{ unknown: 'refunded' }`, so TypeScript tells them apart, and writes that case
+ * back as its string.
  */
 function enumOf(node: EnumNode, writing: Writing): string {
   const values = node.values.map(literalOf).join(', ');
   const allStrings = node.values.every((value) => typeof value === 'string');
+  if (!node.open && node.values.length === 1) {
+    return `z.literal(${values})`;
+  }
   if (!node.open) {
     return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
   }

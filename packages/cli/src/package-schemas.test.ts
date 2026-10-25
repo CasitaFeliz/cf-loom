@@ -357,6 +357,13 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(written.filter((text) => text.includes('loom.openEnumReader(['))).not.toEqual([]);
   });
 
+  test('a one-value Open Enum is written as an Open Enum reader, not as a literal', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src')).join('\n');
+
+    expect(written).toContain("loom.openEnumReader(['ok'])");
+    expect(written).not.toContain("z.literal('ok')");
+  });
+
   test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {
     const parsed = read({ ...sample, payment: { type: 'crypto', coin: 'btc' } });
 
