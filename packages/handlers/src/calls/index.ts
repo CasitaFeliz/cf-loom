@@ -1,3 +1,5 @@
+export type { DirectMeta } from './direct-meta.ts';
+export { defaultedMetaOf } from './direct-meta.ts';
 export type { HandledElement, MessageElement } from './elements.ts';
 export { isMessageElement } from './elements.ts';
 export {
@@ -7,7 +9,6 @@ export {
   faultLogOf,
   InvalidInputError,
   InvalidOutcomeError,
-  issueLineOf,
   logOf,
   messageAnswerOf,
 } from './errors.ts';

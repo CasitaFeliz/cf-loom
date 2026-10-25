@@ -8,18 +8,18 @@ export type {
   MessageRun,
 } from '../calls/index.ts';
 export {
+  defaultedMetaOf,
   elementNameOf,
   failureCauseOf,
   failureLineOf,
   faultLineOf,
   faultLogOf,
   hookFailureOf,
-  issueLineOf,
   logOf,
   notRunFaultOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
-export { checkedBody, checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
+export { checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
 export type { CallArgument, NoResources, ResourcesField } from '../handlers/index.ts';
 export {
   isStub,

@@ -209,7 +209,7 @@ describe('fakeProvider and serve answer alike', () => {
     const fromServe = await served(new Request(url));
     const fromFake = payments.fetch(new Request(url));
 
-    await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    await expect(fromFake).rejects.toThrow(/success\.headers\.x-note invalid_format/);
     expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
     expect(serviceFaults).toEqual([
       {

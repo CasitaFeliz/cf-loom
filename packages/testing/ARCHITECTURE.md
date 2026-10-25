@@ -1,23 +1,22 @@
 # Internals of @cf-loom/testing
 
-How a fake (see [README.md](README.md)) answers a request, how `fakeEvent` reads a body, and how the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires. How an Outcome travels over HTTP and which Fault the client infers when there is none are in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md.
+How a fake (see [README.md](README.md)) answers a request, and how the package's `src/` is split into modules, as [Package layout](../../ARCHITECTURE.md#package-layout) in the root ARCHITECTURE.md requires. How an Outcome travels over HTTP and which Fault the client infers when there is none are in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md.
 
-`@cf-loom/handlers` is a peer, whose `./internal` reads a faked Event's body; `@cf-loom/server` is a devDependency, so the tests compare a fake's responses with `serve`'s; `tsconfig.test.json` alone references the server.
+Its peers are `@cf-loom/contract`, `@cf-loom/client` and `zod`. `@cf-loom/handlers` and `@cf-loom/server` are devDependencies, so the tests build Handlers and compare a fake's responses with `serve`'s; `tsconfig.test.json` alone references them.
 
 ## Modules
 
-The entry `src/index.ts` (`.`) re-exports from `events/`, `faking/`, `mistakes/` and `scripting/`.
+The entry `src/index.ts` (`.`) re-exports from `faking/`, `mistakes/` and `scripting/`.
 
 | Module | Holds | Depends on |
 | --- | --- | --- |
-| `mistakes/` | `FakeProviderError`, and a mistake's message: it names the Provider and the Endpoint when the request reached one, or, from `fakeEvent`, the Message Version, and what went wrong, then each Issue on its own line | none |
+| `mistakes/` | `FakeProviderError`, and a mistake's message: it names the Provider and the Endpoint when the request reached one, and what went wrong, then each Issue on its own line | none |
 | `provided/` | the Contract Package's exported Snapshot, refused first in a format cf-loom does not read; each Endpoint it exports, matched as `serve` matches it, and each listed one prepared once: its packaged declaration, the nodes its text parts are read by, its `deprecatedAt` and its Rejections by code; a request's path under the base URL's, matched to a listed Endpoint, with the other methods its path takes, or the test's mistake; who a mistake with a listed Endpoint names | `mistakes` |
 | `scripting/` | `Script`, `Step`, `StepBuilder` and the one builder every step receives; the closed union of what a step scripts, held in a `ScriptedAnswer` no test can build; each Endpoint's steps and the turns its requests take them in | none |
 | `answering/` | a scripted answer as the Provider sends it: a Success or a Rejection body written back through its readers, a Fault, a reserved code, `METHOD_NOT_ALLOWED` with `Allow`, or a bare status as a `Response`, a network failure thrown as `fetch` throws it | `provided`, `scripting`, `mistakes` |
 | `faking/` | `fakeProvider` and its types; one request top to bottom, read by the contract's reading, its `Deprecation` added once to whatever it answers; the calls each Endpoint received; an abort | all of the above |
-| `events/` | `fakeEvent`: an Event body written back through its Reader and read again by `@cf-loom/handlers`' `checkedBody`, the direct call's own check; what breaks it or throws is the test's mistake | `mistakes` |
 
-The rules a fake shares with `serve` and the client live in `@cf-loom/contract`'s `./internal`: matching a request and reading its text parts and body, a request as its Provider reads it, writing a value back through a Reader schema, the invalid-input Rejection's response, the `Response` of each Outcome, the schema a Rejection's body is read with and the `Deprecation` header. The client is the real one, and `AnyDependency`, `ConfiguredName`, the base URL checked once and the path it prefixes come from its `./internal`; the grammar of a Rejection code and the reserved codes, which a code the Provider does not declare cannot be, come from the contract's. Writing a Message body back through its Reader and reading it again comes from `@cf-loom/handlers`' `./internal`.
+The rules a fake shares with `serve` and the client live in `@cf-loom/contract`'s `./internal`: matching a request and reading its text parts and body, a request as its Provider reads it, writing a value back through a Reader schema, the invalid-input Rejection's response, the `Response` of each Outcome, the schema a Rejection's body is read with and the `Deprecation` header. The client is the real one, and `AnyDependency`, `ConfiguredName`, the base URL checked once and the path it prefixes come from its `./internal`; the grammar of a Rejection code and the reserved codes, which a code the Provider does not declare cannot be, come from the contract's. An Issue's line comes from the contract's `./internal`, and a network failure as `fetch` throws it from the client's.
 
 ## A request
 

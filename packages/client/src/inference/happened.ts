@@ -1,10 +1,16 @@
 import type { Answered, Happened } from './faults.ts';
 
+/** The system error code Node gives for a connection the Provider refused. */
+const refusedCode = 'ECONNREFUSED';
+
+/** The system error code Node gives for a connection the Provider reset. */
+const resetCode = 'ECONNRESET';
+
 /** The system error codes Node and undici give for a request that never reached the Provider. */
 const noConnectionCodes: ReadonlySet<unknown> = new Set([
   'ENOTFOUND',
   'EAI_AGAIN',
-  'ECONNREFUSED',
+  refusedCode,
   'UND_ERR_CONNECT_TIMEOUT',
 ]);
 
@@ -16,12 +22,18 @@ const timeoutCodes: ReadonlySet<unknown> = new Set([
 
 /** The system error codes Node and undici give for a connection lost after the request may have gone out. */
 const lostCodes: ReadonlySet<unknown> = new Set([
-  'ECONNRESET',
+  resetCode,
   'UND_ERR_SOCKET',
   'ETIMEDOUT',
   'ENETUNREACH',
   'EHOSTUNREACH',
 ]);
+
+/** What `fetch` throws for a refused connection (`ECONNREFUSED`) or one lost after sending (`ECONNRESET`), by a code the client infers that Fault from. */
+export function networkFailureOf(kind: 'no-connection' | 'connection-lost'): TypeError {
+  const code = kind === 'no-connection' ? refusedCode : resetCode;
+  return new TypeError('fetch failed', { cause: { code } });
+}
 
 /** What `fetch` threw, told by the call's signal first, then by the error; none for something to rethrow. */
 export function thrownHappenedOf(

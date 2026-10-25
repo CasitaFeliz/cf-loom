@@ -1,3 +1,4 @@
+import { networkFailureOf } from '@cf-loom/client/internal';
 import type { ReservedCode } from '@cf-loom/contract';
 import {
   faultResponseOf,
@@ -37,9 +38,9 @@ export function responseOf(answer: Answer, { listed, otherMethods }: Matched): R
     case 'reserved':
       return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, otherMethods));
     case 'no-connection':
-      throw networkFailureOf('ECONNREFUSED');
+      throw networkFailureOf('no-connection');
     case 'reset':
-      throw networkFailureOf('ECONNRESET');
+      throw networkFailureOf('connection-lost');
     case 'status':
       return builtOf(listed, unsendable, () => bareStatusResponseOf(answer, listed));
   }
@@ -50,11 +51,6 @@ function reservedAnswerOf(code: ReservedCode, otherMethods: readonly string[]): 
   return code === 'METHOD_NOT_ALLOWED'
     ? methodNotAllowedResponseOf(otherMethods)
     : reservedResponseOf(code);
-}
-
-/** What `fetch` throws when the connection is refused or reset, as Node's reports it. */
-function networkFailureOf(code: 'ECONNREFUSED' | 'ECONNRESET'): TypeError {
-  return new TypeError('fetch failed', { cause: { code } });
 }
 
 type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;

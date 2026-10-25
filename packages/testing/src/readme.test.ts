@@ -4,20 +4,17 @@ import {
   defineContract,
   defineDependency,
   defineEndpoint,
-  defineEvent,
   defineGroup,
   defineGuard,
-  defineSubscription,
   type Endpoint,
   notFound,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { fakeEvent, fakeProvider } from './index.ts';
+import { fakeProvider } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -40,14 +37,6 @@ const getPayment = defineEndpoint({
   rejections: [notFound],
 });
 
-const paymentSettledV1 = defineEvent({
-  name: 'PaymentSettled',
-  version: 1,
-  visibility: 'internal',
-  description: 'A payment was settled',
-  body: z.object({ paymentId: z.string() }),
-});
-
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
 function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
   endpoints: Endpoints,
@@ -68,8 +57,7 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const events = { paymentSettledV1 };
-  return { name, version: '1.0.0', endpoints, events, standardRejections, exportedSnapshot };
+  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
 /** The Provider's Contract Package, as a Consumer imports it. */
@@ -167,43 +155,10 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   expect(calls).toEqual(Array.from({ length: 7 }, () => ({ kind: 'valid', input })));
 });
 
-test('the README’s fakeEvent example runs: a faked PaymentSettled reaches notifyOnSettledHandler', async () => {
-  const notifyOnSettled = defineSubscription({
-    name: 'notifyOnSettled',
-    description: 'Notify on settled',
-    event: payments.events.paymentSettledV1,
-  });
-  const readers = readersOf({
-    commands: {},
-    subscriptions: {
-      notifyOnSettled: {
-        element: notifyOnSettled,
-        reader: payments.events.paymentSettledV1.body,
-      },
-    },
-  });
-  const received: unknown[] = [];
-  const notifications = { send: async (paymentId: string) => void received.push({ paymentId }) };
-  const notifyOnSettledHandler = handle(
-    readers.subscriptions.notifyOnSettled,
-    async (
-      body,
-      _meta,
-      { resources }: WithResources<{ readonly notifications: typeof notifications }>,
-    ) => {
-      await resources.notifications.send(body.paymentId);
-    },
-  );
+test('the entry exports fakeProvider and FakeProviderError alone, as the README lists them', async () => {
+  const entry = await import('./index.ts');
 
-  const settled = fakeEvent(payments.events.paymentSettledV1, {
-    paymentId: PAYMENT_ID,
-  });
-  const answer = await notifyOnSettledHandler(
-    settled,
-    { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
-    { resources: { notifications } },
-  );
+  const exported = Object.keys(entry).sort();
 
-  expect(answer).toBeUndefined();
-  expect(received).toEqual([{ paymentId: PAYMENT_ID }]);
+  expect(exported).toEqual(['FakeProviderError', 'fakeProvider']);
 });

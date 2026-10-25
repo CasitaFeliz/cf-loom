@@ -254,6 +254,7 @@ export {
   isPlainObject,
   isSameRejection,
   isSchema,
+  issueLineOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,

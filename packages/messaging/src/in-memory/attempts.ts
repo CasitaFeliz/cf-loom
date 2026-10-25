@@ -1,13 +1,12 @@
 import type { Command, Event } from '@cf-loom/contract';
 import {
-  brokerMessageIdOf,
   isCommand,
   isSubscription,
   jsonBytesOf,
   messageIdentityOf,
 } from '@cf-loom/contract/internal';
 import { InvalidInputError } from '@cf-loom/handlers';
-import { writtenMessageBody } from '@cf-loom/handlers/internal';
+import { defaultedMetaOf, writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
 import { consumerDetailsOf } from '../consuming/index.ts';
 import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
@@ -63,10 +62,10 @@ function attemptsOf(
   reached: readonly BrokerConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
-  const factId = meta.factId ?? globalThis.crypto.randomUUID();
-  const messageId = meta.messageId ?? brokerMessageIdOf(message, factId);
+  const { headers: given = {}, ...ids } = meta;
+  const { factId, messageId } = defaultedMetaOf(message, ids);
   const measured = [{ version: message, messageId, factId }];
-  const { headers, invalid } = checkedHeadersOf(meta, meta.headers ?? {}, measured);
+  const { headers, invalid } = checkedHeadersOf(ids, given, measured);
   if (invalid.length > 0) {
     throw new InvalidMessageError(invalid);
   }

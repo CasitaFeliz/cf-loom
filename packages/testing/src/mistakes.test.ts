@@ -131,7 +131,7 @@ describe('fakeProvider: a test’s mistakes', () => {
     );
   });
 
-  test('a Success that breaks its readers lists each Issue on its own line, never the value', async () => {
+  test('a Success that breaks its readers lists each Issue on its own line as handlers writes it, never the value', async () => {
     const payments = fakeProvider(paymentsDependency);
     const secret = 'secret-id-12345';
     payments
@@ -149,8 +149,8 @@ describe('fakeProvider: a test’s mistakes', () => {
     const lines = String((error as Error).message).split('\n');
     expect(lines).toEqual([
       'payments-service: getPayment: the scripted Success breaks its readers',
-      expect.stringMatching(/^ {2}success\.body at amount: too_small: /),
-      '  success.body at stage: invalid_value: A declared value, not an Unknown case',
+      expect.stringMatching(/^payments-service: getPayment: success\.body\.amount too_small: /),
+      'payments-service: getPayment: success.body.stage invalid_value: A declared value, not an Unknown case',
     ]);
     expect((error as Error).message).not.toContain(secret);
   });
@@ -164,7 +164,7 @@ describe('fakeProvider: a test’s mistakes', () => {
 
     const calling = payments.client().getPayment({ params });
 
-    await expect(calling).rejects.toThrow(/success\.body at stage: invalid_value/);
+    await expect(calling).rejects.toThrow(/success\.body\.stage invalid_value/);
   });
 
   test('a header that cannot travel as text is a mistake', async () => {
@@ -173,7 +173,7 @@ describe('fakeProvider: a test’s mistakes', () => {
 
     const calling = payments.client().getPayment({ params });
 
-    await expect(calling).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    await expect(calling).rejects.toThrow(/success\.headers\.x-note invalid_format/);
   });
 
   test.each([

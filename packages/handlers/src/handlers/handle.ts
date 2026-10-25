@@ -1,8 +1,10 @@
 import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
 import { notImplemented } from '@cf-loom/contract';
-import { isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
+import { isCommand, isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
 import {
   answerOf,
+  type DirectMeta,
+  defaultedMetaOf,
   elementNameOf,
   endpointRunOf,
   guardRunOf,
@@ -26,7 +28,6 @@ import type {
 import type {
   CommandHandler,
   CommandImplementation,
-  DirectMeta,
   EventHandler,
   EventImplementation,
 } from './message-handler.ts';
@@ -189,10 +190,10 @@ function requestOf({ request }: DirectCallGiven): HandledRequest {
 }
 
 function messageCallOf(written: MessageWritten) {
-  return async (body: unknown, given: DirectMeta, last?: DirectLastGiven) => {
-    const { messageId, factId, deliveryCount, lastAttempt = false, headers = {} } = given;
-    const signal = given.signal ?? new AbortController().signal;
-    const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
+  const { element } = written;
+  const message = isCommand(element) ? element : element.event;
+  return async (body: unknown, given: DirectMeta = {}, last?: DirectLastGiven) => {
+    const meta = defaultedMetaOf(message, given);
     const run = await messageRunOf(
       written,
       { body, meta, resources: last?.resources },

@@ -185,27 +185,20 @@ const notifyOnSettledHandler = handle(
 );
 
 describe('the handlers README', () => {
-  test('the direct call of an EventHandler receives its body and meta, headers defaulting to {}', async () => {
+  test('the direct call of an EventHandler receives its body and its meta defaulted', async () => {
     const settled = { paymentId: 'pay-1', method: { unknown: 'wallet' } };
 
-    const answer = await notifyOnSettledHandler(
-      settled,
-      { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
-      { resources },
-    );
+    const answer = await notifyOnSettledHandler(settled, {}, { resources });
 
     expect(answer).toBeUndefined();
-    expect(sent).toEqual([
-      [
-        'pay-1',
-        {
-          messageId: 'event.PaymentSettled.v1:pay-1',
-          factId: 'pay-1',
-          deliveryCount: 1,
-          headers: {},
-        },
-      ],
-    ]);
+    const [[paymentId, meta]] = sent as [[string, { factId: string }]];
+    expect(paymentId).toBe('pay-1');
+    expect(meta).toEqual({
+      messageId: `event.PaymentSettled.v1:${meta.factId}`,
+      factId: expect.any(String),
+      deliveryCount: 1,
+      headers: {},
+    });
   });
 
   test('the EndpointHandler example answers its Success', async () => {

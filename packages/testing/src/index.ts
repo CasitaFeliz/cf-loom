@@ -1,4 +1,3 @@
-export { fakeEvent } from './events/index.ts';
 export type {
   FakeCall,
   FakeClientOptions,
