@@ -121,12 +121,6 @@ function titled<Item extends { readonly name: string }>(order: readonly Item[]) 
 }
 
 describe('walkSchemas: unions', () => {
-  test('a union holds its options in declared order', () => {
-    expect(walkBody(z.union([z.string(), z.number()]))).toEqual(
-      walkedTo({ type: 'union', options: [{ type: 'string' }, { type: 'number' }] }),
-    );
-  });
-
   test.each(ordersOf(declaredOptions).map(titled))(
     'a union of %s keeps that order',
     (_names, options) => {
