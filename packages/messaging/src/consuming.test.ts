@@ -736,6 +736,71 @@ describe('a Message delivered', () => {
   });
 });
 
+describe('a Message whose body is nested past the stack', () => {
+  const tree: z.ZodType = z.object({
+    get next() {
+      return tree.optional();
+    },
+  });
+  const nestV1 = defineCommand({
+    name: 'Nest',
+    version: 1,
+    description: 'A deep body',
+    body: tree,
+  });
+  const nesting = defineContract({
+    name: 'nesting-service',
+    groups: [defineGroup({ name: 'nesting', description: 'Nesting', commands: [nestV1] })],
+  });
+  const nestReaders = readersOf({
+    commands: { nestV1: { element: nestV1, reader: tree } },
+    subscriptions: {},
+  });
+
+  test('is ended as an invalid body with one malformed Issue, and its Handler never runs', async () => {
+    const received: unknown[] = [];
+    const faults: ConsumedFault[] = [];
+    const { broker, deliver } = aBroker();
+    const { consume } = await messaging(nesting, broker, {
+      onServiceFault: (consumedFault) => {
+        faults.push(consumedFault);
+      },
+    });
+    await consume({
+      commands: {
+        nestV1: handle(nestReaders.commands.nestV1, (given) => {
+          received.push(given);
+        }),
+      },
+      subscriptions: {},
+      readers: nestReaders,
+    });
+    const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
+
+    const settlement = await deliver(
+      'nesting-service.command.Nest.v1',
+      new TextEncoder().encode(deep),
+    );
+
+    expect(settlement).toBe('ended');
+    expect(received).toEqual([]);
+    expect(faults).toMatchObject([
+      {
+        kind: 'invalid-body',
+        identity: 'Nest@1',
+        issues: [
+          {
+            part: 'body',
+            path: [],
+            code: 'malformed',
+            message: 'The value is nested too deeply to read',
+          },
+        ],
+      },
+    ]);
+  });
+});
+
 describe('a Handler’s signal and its delivery’s wait', () => {
   test('the Handler’s signal aborts when close starts, its reason a MessagingClosedError', async () => {
     const stopped = Promise.withResolvers<void>();

@@ -191,6 +191,54 @@ describe('a Success that breaks its Reader schemas', () => {
   });
 });
 
+describe('a Success body nested past the stack', () => {
+  const tree: z.ZodType = z
+    .object({
+      get next() {
+        return tree.optional();
+      },
+    })
+    .meta({ id: 'tree' });
+  const nest = defineEndpoint({
+    name: 'nest',
+    method: 'GET',
+    path: '/nest',
+    visibility: 'public',
+    description: 'A deep body',
+    success: { status: 200, body: tree },
+  });
+  const nesting = defineDependency({
+    provider: contractPackageOf({ nest }, defaultStandards),
+    endpoints: [nest],
+  });
+
+  test('is INVALID_OUTCOME with one malformed Issue at success.body, never a rejected call', async () => {
+    const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
+    const nests = client(nesting, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        new Response(deep, { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const outcome = await nests.nest();
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'invalid-outcome',
+      code: 'INVALID_OUTCOME',
+      committed: 'yes',
+      issues: [
+        {
+          part: 'success.body',
+          path: [],
+          code: 'malformed',
+          message: 'The value is nested too deeply to read',
+        },
+      ],
+    });
+  });
+});
+
 describe('a Success status that carries no JSON', () => {
   const statusFault = {
     kind: 'fault',

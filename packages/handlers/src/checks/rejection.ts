@@ -5,11 +5,12 @@ import {
   isRejection,
   isSameRejection,
   isStandardRejection,
+  ownOf,
   parsedPartOf,
   schemaOf,
 } from '@cf-loom/contract/internal';
 import type { AnyRejection, BuiltRejection } from '../outcomes/index.ts';
-import { type Checked, fieldOf, mapValue } from './checked.ts';
+import { type Checked, mapValue } from './checked.ts';
 
 /** A Rejection an EndpointHandler may build: any its Endpoint answers but invalid input, the runtime's. */
 type EndpointRejection = Exclude<AnswerableRejection, StandardRejection<'invalidInput'>>;
@@ -71,7 +72,7 @@ function checkedBuilt<Answered extends EndpointRejection>(
   built: AnyRejection,
 ): Checked<BuiltRejection<Answered>> {
   const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
-  const body = parsedPartOf('body', schema, { value: fieldOf(built, 'body') });
+  const body = parsedPartOf('body', schema, { value: ownOf(built, 'body') });
   return mapValue(body, (parsed) => {
     const checked =
       parsed === undefined
@@ -93,5 +94,5 @@ function codeOf(rejection: unknown): string {
   if (isStandardRejection(rejection)) {
     return rejection.name;
   }
-  return String(fieldOf(rejection, 'code') ?? 'A value that is no Rejection');
+  return String(ownOf(rejection, 'code') ?? 'A value that is no Rejection');
 }

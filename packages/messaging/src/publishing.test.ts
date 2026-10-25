@@ -733,3 +733,51 @@ describe('messaging() over memory(): publish and send', () => {
     ]);
   });
 });
+
+describe('publisher.publish, given a body nested past the stack', () => {
+  test('rejects with InvalidMessageError at the body, one malformed Issue, and nothing is sent', async () => {
+    const tree: z.ZodType = z.object({
+      get next() {
+        return tree.optional();
+      },
+    });
+    const nestedV1 = defineEvent({
+      name: 'Nested',
+      version: 1,
+      visibility: 'internal',
+      description: 'A deep body',
+      body: tree,
+    });
+    const nesting = defineContract({
+      name: 'nesting-service',
+      groups: [defineGroup({ name: 'nesting', description: 'Nesting', events: [nestedV1] })],
+    });
+    const { broker, published } = aBroker();
+    const { publisher } = await messaging(nesting, broker);
+    let v1: object = {};
+    for (let depth = 0; depth < 5000; depth += 1) {
+      v1 = { next: v1 };
+    }
+
+    const error = await rejectionOf(publisher.publish('Nested', { v1 }, fact));
+
+    expect(error).toBeInstanceOf(InvalidMessageError);
+    expect(error).toMatchObject({
+      invalid: [
+        {
+          kind: 'body',
+          identity: 'Nested@1',
+          issues: [
+            {
+              part: 'body',
+              path: [],
+              code: 'malformed',
+              message: 'The value is nested too deeply to read',
+            },
+          ],
+        },
+      ],
+    });
+    expect(published).toEqual([]);
+  });
+});

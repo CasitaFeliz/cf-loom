@@ -1,3 +1,4 @@
+import { ownOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 
 /** The headers given to `client()`, each a value or a function called per request. */
@@ -13,7 +14,7 @@ export async function withConfiguredHeaders(
   passed: unknown,
 ): Promise<unknown> {
   const missing = Object.entries(configured).filter(
-    ([name]) => called.inputHeaderNames.has(name) && fieldOf(passed, name) === undefined,
+    ([name]) => called.inputHeaderNames.has(name) && ownOf(passed, name) === undefined,
   );
   if (missing.length === 0) {
     return passed;
@@ -27,8 +28,4 @@ export async function withConfiguredHeaders(
 
 function isFields(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fieldOf(value: unknown, field: string): unknown {
-  return isFields(value) ? value[field] : undefined;
 }

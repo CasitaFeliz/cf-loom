@@ -509,6 +509,63 @@ describe('Input that cannot be sent', () => {
   });
 });
 
+describe('Input nested past the stack', () => {
+  const tree: z.ZodType = z
+    .object({
+      get next() {
+        return tree.optional();
+      },
+    })
+    .meta({ id: 'tree' });
+  const nest = defineEndpoint({
+    name: 'nest',
+    method: 'POST',
+    path: '/nest',
+    visibility: 'public',
+    description: 'A deep body',
+    input: { body: tree },
+    success: { status: 204 },
+  });
+  const nesting = defineDependency({
+    provider: contractPackageOf({ nest }, defaultStandards),
+    endpoints: [nest],
+  });
+
+  test('is the Provider’s invalid-input Rejection, malformed at the body, and nothing is sent', async () => {
+    const sent: Request[] = [];
+    const nests = client(nesting, {
+      baseUrl: 'http://orders.test',
+      fetch: async (request) => {
+        sent.push(request);
+        return new Response(null, { status: 204 });
+      },
+    });
+    let body: object = {};
+    for (let depth = 0; depth < 5000; depth += 1) {
+      body = { next: body };
+    }
+
+    const outcome = await nests.nest({ body });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      source: 'client',
+      code: 'INVALID_INPUT',
+      body: {
+        issues: [
+          {
+            in: 'body',
+            path: [],
+            code: 'malformed',
+            message: 'The value is nested too deeply to read',
+          },
+        ],
+      },
+    });
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('a Guard’s demands, checked before the Input, as serve checks them', () => {
   const apiKey = defineGuard({
     name: 'apiKey',

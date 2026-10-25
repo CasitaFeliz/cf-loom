@@ -42,14 +42,6 @@ export function mapValue<Value, Mapped>(
   return checked.kind === 'issues' ? checked : { kind: 'value', value: map(checked.value) };
 }
 
-/** A field of what a call was given, whatever it was given. */
-export function fieldOf(given: unknown, key: string): unknown {
-  if (typeof given !== 'object' || given === null) {
-    return undefined;
-  }
-  return Reflect.get(given, key);
-}
-
 function isIssues(check: Checked<unknown>): check is Extract<Checked<unknown>, { kind: 'issues' }> {
   return check.kind === 'issues';
 }

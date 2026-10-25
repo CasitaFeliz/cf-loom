@@ -182,6 +182,28 @@ describe('headers given to client()', () => {
     expect(sent[0]?.headers.get('authorization')).toBe('Bearer configured');
   });
 
+  test('a header given to client() is sent whatever Object.prototype holds under its name', async () => {
+    const { sent, fetch } = recorded();
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: { authorization: 'Bearer configured' },
+    });
+    Object.defineProperty(Object.prototype, 'authorization', {
+      value: 'Bearer inherited',
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      await orders.getOrder({ ...params, headers: { 'x-api-key': 'key-2' } });
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'authorization');
+    }
+
+    expect(sent[0]?.headers.get('authorization')).toBe('Bearer configured');
+  });
+
   test('an aborted signal sends nothing and calls no header function', async () => {
     let called = 0;
     const orders = client(ordersDependency, {

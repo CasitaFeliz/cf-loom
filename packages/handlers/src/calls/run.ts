@@ -118,8 +118,8 @@ async function guardCallOf(
 }
 
 /**
- * What a call is given, checked; a throw while checking, such as a stack overflow on deep input, is
- * the Fault not committed, since the implementation never ran.
+ * What a call is given, checked; a throw while checking, such as a getter in the Input that throws,
+ * is the Fault not committed, since the implementation never ran.
  */
 function checkedGiven<Value>(
   check: () => Checked<Value>,
@@ -136,11 +136,10 @@ function checkedGiven<Value>(
 }
 
 /**
- * The Fault of a throw before an implementation ran, such as a stack overflow while its input is
- * parsed: not committed, since nothing was done, and not retryable, since the same request throws
- * again.
+ * The Fault of a throw before an implementation ran, such as a getter in its Input that throws: not
+ * committed, since nothing was done, and not retryable, since the same request throws again.
  */
-export function notRunFaultOf(cause: unknown): Fault {
+function notRunFaultOf(cause: unknown): Fault {
   return fault({ committed: 'no', retryable: false, cause });
 }
 
