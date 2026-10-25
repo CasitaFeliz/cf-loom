@@ -2,7 +2,7 @@ import type { Checked, Ending } from './checked.ts';
 import { reasonOf } from './checked.ts';
 import type { Exit } from './exit.ts';
 
-/** The format of the documents `--json` prints. */
+/** The format of the document of `check --json` and of every `--json` errors document. */
 const jsonFormat = 1;
 
 /** The document `check --json` prints when it compared or found no Baseline, on one line. */

@@ -520,6 +520,19 @@ describe('versionBumpOf', () => {
     expect(bump).toBe('unchanged');
   });
 
+  test('a refused Additive Change on a Public Endpoint bumps patch, not minor', () => {
+    const broughtBack: Change = {
+      site: publicEndpoint,
+      difference: { kind: 'retired-brought-back', lifecycle: 'active' },
+      class: 'additive',
+      verdict: 'refused',
+    };
+
+    const bump = versionBumpOf(aReport([broughtBack]), unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
   test('a refused Change on a Public Endpoint does not bump past patch', () => {
     const report = aReport([aRefusedChange(publicEndpoint)]);
 

@@ -278,7 +278,7 @@ describe('compatibilityReportOf, presence', () => {
   );
 
   test.each(eachLive)(
-    'deleting a $name that is $lifecycle in the Baseline is not allowed',
+    'deleting a $name that is $lifecycle in the Baseline is refused',
     ({ site, live, lifecycle }) => {
       const changes = changesOf(aBaseline(live(lifecycle)), aProposed());
 
@@ -310,7 +310,7 @@ describe('compatibilityReportOf, presence', () => {
   );
 
   test.each(elements)(
-    'declaring a $name at a tombstone’s identity is not allowed: a Retired identity is never reused',
+    'declaring a $name at a tombstone’s identity is refused: a Retired identity is never reused',
     ({ site, tombstone, proposed }) => {
       const changes = changesOf(aBaseline(tombstone()), aProposed(proposed('active')));
 
@@ -336,7 +336,7 @@ describe('compatibilityReportOf, presence', () => {
     ]);
   });
 
-  test('moving an Endpoint’s path without retiring the old one is an added Endpoint and a deletion that is not allowed', () => {
+  test('moving an Endpoint’s path without retiring the old one is an added Endpoint and a deletion that is refused', () => {
     const baseline = aBaseline(endpoint.live('active'));
     const proposed = aProposed({
       endpoints: { 'GET /purchases/{}': anEndpoint({ params: ['purchaseId'] }) },
@@ -441,7 +441,7 @@ describe('compatibilityReportOf, lifecycle', () => {
   });
 
   test.each(elements)(
-    'retiring a $name Active in the Baseline is not allowed: it must be Deprecated first',
+    'retiring a $name Active in the Baseline is refused: it must be Deprecated first',
     ({ site, live, proposed }) => {
       const changes = changesOf(aBaseline(live('active')), aProposed(proposed('retired')));
 
@@ -474,7 +474,7 @@ describe('compatibilityReportOf, lifecycle', () => {
   );
 
   test.each(eachLive)(
-    'bringing a Retired $name back to $lifecycle is not allowed',
+    'bringing a Retired $name back to $lifecycle is refused',
     ({ site, retired, proposed, lifecycle }) => {
       const changes = changesOf(aBaseline(retired()), aProposed(proposed(lifecycle)));
 

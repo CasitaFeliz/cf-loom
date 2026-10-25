@@ -38,8 +38,8 @@ export function endingOf(changes: readonly CheckedChange[]): Ending {
 }
 
 /**
- * Where a Change is, as a Snapshot keys it: `endpoints.GET /orders/{} (getOrder)`,
- * `events.OrderCreated@2`.
+ * Where a Change is: its Snapshot key, with an Endpoint's name, `endpoints.GET /orders/{} (getOrder)`
+ * or `events.OrderCreated@2`.
  */
 export function siteOf(site: ChangeSite): string {
   switch (site.kind) {

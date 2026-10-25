@@ -5,8 +5,8 @@ import type { Change, ComparedReport } from './report.ts';
 const bumpsInOrder = ['unchanged', 'patch', 'minor', 'major'] as const;
 
 /**
- * The bump a publish takes: the highest of its Changes' classes, Private ones capped at patch, and
- * of the peer rule; `unchanged` when neither the hash nor a peer range moved.
+ * The bump a publish takes: the highest of its Changes' classes, Private and refused ones capped at
+ * patch, and of the peer rule; `unchanged` when neither the hash nor a peer range moved.
  */
 export function versionBumpOf(report: ComparedReport, peers: PeerMove): VersionBump | 'unchanged' {
   const snapshotBump = report.hashChanged ? snapshotBumpOf(report.changes) : 'unchanged';

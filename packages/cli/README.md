@@ -108,10 +108,11 @@ The hint says how to avoid a Change, from a closed table; the first row that fit
 | --- | --- |
 | `deleted` | `retire it instead, deprecating it first if it is not, and delete it once the Baseline has it Retired` |
 | `retired-before-deprecated` | `deprecate it in one publish and retire it in a later one` |
-| `header-refuses-text` | `accept any text, or make the header required` |
-| a Breaking `value-added` to a closed enum | `declare it with openEnum, so readers take values added later` |
+| `header-refuses-text` | `accept any text` |
+| `name-kind-changed` | `declare it under a new name` |
 | a Breaking `field-added` that is required | `make it optional` |
-| a refused Breaking Change to an Event or a Command | `make the change in a new Message Version` |
+| a Breaking `value-added` to a closed enum, when the Verdict needs an Approval | `declare it with openEnum, so readers take values added later` |
+| a Breaking change to an Event's or a Command's body, or `identity-reused` on one | `make the change in a new Message Version` |
 
 The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success` or `message` (a shared schema is judged as a Message), and the kind of its shape; a `body-added` or `body-removed` carries `at` and a `position` of `input` or `success`; a `header-refuses-text` carries `at`:
 

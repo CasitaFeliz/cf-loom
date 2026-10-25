@@ -2387,6 +2387,22 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
   );
 });
 
+/** The sections of a Snapshot, as `publishedAs` takes them. */
+type Sections = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+
+/** A project of `aMessagingRoot` whose Baseline holds the sections `more` makes of its Snapshot's. */
+async function aMessagingProjectBaselinedAs(
+  lab: Lab,
+  more: (sections: Sections) => Sections,
+): Promise<Checkable> {
+  const project = await aGeneratedProject(lab, aMessagingRoot());
+  const sections: Sections = JSON.parse(read(project, 'contract.snapshot.json'));
+  return {
+    project,
+    served: servedAs(ordersPackage, publishedAs(project, '1.0.0', more(sections))),
+  };
+}
+
 /** `aRoot` as a POST that reads `input`, for a Change an Input part makes. */
 function aRootReading(input: string): Files {
   const root = aRoot();
@@ -2668,7 +2684,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
           after: aRootReading('{ headers: z.object({ "x-trace": z.string().min(3).optional() }) }'),
         }),
       `endpoints.POST /ping (ping) header-refuses-text at input.headers.x-trace: ${needsApproval}`,
-      'accept any text, or make the header required',
+      'accept any text',
     ],
     [
       'adding a value to a closed enum',
@@ -2695,6 +2711,35 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
       (lab: Lab) => aChangedProject(lab, removedEventField),
       'events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused',
       'make the change in a new Message Version',
+    ],
+    [
+      'adding a value to a closed enum of an Event’s body, which openEnum would not allow either',
+      (lab: Lab) =>
+        aChangedProject(lab, {
+          before: aMessagingRoot({ eventBody: "z.object({ kind: z.enum(['a']) })" }),
+          after: aMessagingRoot({ eventBody: "z.object({ kind: z.enum(['a', 'b']) })" }),
+        }),
+      'events.OrderCreated@1 schema value-added at body.kind (message) value="b" enum=closed: Breaking, refused',
+      'make the change in a new Message Version',
+    ],
+    [
+      'declaring a Retired Message Version again',
+      (lab: Lab) =>
+        aMessagingProjectBaselinedAs(lab, ({ events = {} }) => ({
+          events: { ...events, 'OrderCreated@1': { lifecycle: 'retired', retiredIn: '0.9.0' } },
+        })),
+      'events.OrderCreated@1 identity-reused: Breaking, refused',
+      'make the change in a new Message Version',
+    ],
+    [
+      'declaring a Command under the name of an Event',
+      (lab: Lab) =>
+        aMessagingProjectBaselinedAs(lab, ({ events = {} }) => ({
+          events: { ...events, 'ChargeCard@1': Object.values(events)[0] ?? {} },
+          commands: {},
+        })),
+      'commands.ChargeCard@1 name-kind-changed from=event: Breaking, refused',
+      'declare it under a new name',
     ],
   ] as const;
 
