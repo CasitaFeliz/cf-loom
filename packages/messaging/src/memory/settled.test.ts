@@ -270,7 +270,7 @@ describe('settled()', () => {
     expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
   });
 
-  test('an onServiceFault that throws leaves the Message pending and makes settled() reject', async () => {
+  test('settled() rejects with the Fault’s line and the onServiceFault threw line when onServiceFault throws', async () => {
     const hook = new Error('the hook broke');
     const { broker, publisher } = await running(
       () => ({
@@ -289,15 +289,20 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.message).toBe(
-      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: the Handler threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      ].join('\n'),
     );
-    expect(rejection?.cause).toBe(hook);
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
   });
 
   test('an onServiceFault that rejects leaves pending a Message it would have ended, and makes settled() reject', async () => {
     const { broker, publisher } = await running(
-      () => ({ notify: () => fault({ committed: 'no', retryable: false }) }),
+      () => ({
+        notify: () => fault({ committed: 'no', retryable: false, message: 'Not notified' }),
+      }),
       { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
     );
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
@@ -305,9 +310,38 @@ describe('settled()', () => {
     const rejection = await rejectionOf(broker.settled());
 
     expect(rejection?.message).toBe(
-      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: Not notified',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      ].join('\n'),
     );
     expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+  });
+
+  test('a Message a Handler publishes while messaging is closing is left pending, its Handler never run, and settled() resolves', async () => {
+    const gate = aGate();
+    const charged: string[] = [];
+    const { broker, publisher, sender, close } = await running(() => ({
+      notify: async () => {
+        await gate.opened;
+        await sender.send('ChargeCard', created, { factId: 'o-1:charge' });
+        return undefined;
+      },
+      charge: ({ orderId }) => {
+        charged.push(orderId);
+        return undefined;
+      },
+    }));
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+
+    const closing = close();
+    gate.open();
+    await closing;
+    const settling = broker.settled();
+
+    await expect(settling).resolves.toBeUndefined();
+    expect(charged).toEqual([]);
+    expect(broker.pending).toMatchObject([{ identity: 'ChargeCard@1', deliveryCount: 1 }]);
   });
 
   test('an onServiceFault that rejects causes no unhandled rejection', async () => {

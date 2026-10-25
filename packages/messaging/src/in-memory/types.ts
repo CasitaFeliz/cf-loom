@@ -22,7 +22,7 @@ export type MemoryBroker = Broker & {
     message: Event | Command,
     body: unknown,
     meta?: DeliveryMeta,
-  ) => Promise<Settlement['kind']>;
+  ) => Promise<Settlement>;
   /**
    * Delivers every pending Message again, each to the consumer it is pending for alone, as attempt
    * `deliveryCount + 1`.
@@ -51,6 +51,8 @@ export type DeliveryMeta = {
 /** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */
 export type PendingMessage = {
   readonly element: Subscription | Command;
+  /** `notifyOnSettled` for a Subscription, `ChargeCard@1` for a Command's Message Version. */
+  readonly identity: string;
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;

@@ -1,4 +1,5 @@
 import type { BrokerConsumer } from '../broker/index.ts';
+import { consumerDetailsOf } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { jsonBodyOf } from './bodies.ts';
 import type { PendingMessage } from './types.ts';
@@ -35,6 +36,8 @@ function keyOf(consumer: BrokerConsumer, messageId: string): string {
 
 function pendingMessageOf({ consumer, delivery }: Attempt): PendingMessage {
   const { messageId, factId, deliveryCount, headers, body } = delivery;
-  const { element, subject } = consumer;
-  return { element, subject, messageId, factId, deliveryCount, headers, body: jsonBodyOf(body) };
+  const { element, identity } = consumerDetailsOf(consumer);
+  const { subject } = consumer;
+  const wire = jsonBodyOf(body);
+  return { element, identity, subject, messageId, factId, deliveryCount, headers, body: wire };
 }

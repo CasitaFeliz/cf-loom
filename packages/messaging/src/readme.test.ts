@@ -143,7 +143,9 @@ describe('the messaging README', () => {
       headers: { traceparent: '00-abc-def-01' },
     };
     const body = { orderId: 'o-1', total: { amount: 12, currency: 'EUR' } };
-    const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
+    const consumer = consumers.find(
+      (candidate) => candidate.durable === 'orders-service_notify-on-created',
+    );
 
     const settlement = await consumer?.receive({
       ...meta,
@@ -151,7 +153,7 @@ describe('the messaging README', () => {
     });
     await running.close();
 
-    expect(settlement).toEqual({ kind: 'acked' });
+    expect(settlement).toBe('acked');
     expect(received).toEqual(['o-1', meta]);
   });
 });

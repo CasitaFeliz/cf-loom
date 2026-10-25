@@ -1,19 +1,56 @@
+import type { Command, Subscription } from '@cf-loom/contract';
+import type { Issue } from '@cf-loom/handlers';
 import {
   elementNameOf,
   failureCauseOf,
   failureLineOf,
+  type HandlerFailure,
+  type HandlerFaultBase,
+  hookFailureOf,
   hookThrewLineOf,
   issueLineOf,
   logOf,
 } from '@cf-loom/handlers/internal';
-import type { BrokerConsumer, ConsumedFault, Delivery } from '../broker/index.ts';
+import type { Delivery } from '../broker/index.ts';
+import type { Consumed } from '../subjects/index.ts';
 
-/** What hears of a `ConsumedFault`, and is awaited: the Service's `onServiceFault`, or the console without one. */
-export type Report = (fault: ConsumedFault) => void | Promise<void>;
+/**
+ * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
+ * the Command's Message Version it handles as `element`, with its name or identity as `identity`,
+ * the Message, then why.
+ */
+export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
+  readonly subject: string;
+  readonly messageId: string;
+  readonly factId: string;
+} & ({ readonly kind: 'invalid-body'; readonly issues: readonly Issue[] } | HandlerFailure);
 
-/** The Service's hook, or the console line of every fault. */
-export function reportOf(onServiceFault: Report | undefined): Report {
-  return onServiceFault ?? logConsumedFault;
+/** The Service's `onServiceFault`, which may be async and is awaited. */
+export type ServiceFaultHook = (fault: ConsumedFault) => void | Promise<void>;
+
+/** An `onServiceFault` that threw or rejected: its `onServiceFault threw` line, already on the console, and what it threw. */
+export type HookFailure = { readonly line: string; readonly cause: unknown };
+
+/** Tells of a fault and never rejects: it answers how the hook failed, if it did. */
+export type Report = (fault: ConsumedFault) => Promise<HookFailure | undefined>;
+
+/** The Service's hook, contained so that its failure is logged and answered, or the console line of every fault. */
+export function reportOf(onServiceFault: ServiceFaultHook | undefined): Report {
+  if (onServiceFault === undefined) {
+    return async (fault) => {
+      logConsumedFault(fault);
+      return undefined;
+    };
+  }
+  return async (fault) => {
+    const source = sourceOf(fault);
+    const called = { source, hook: 'onServiceFault' } as const;
+    const failure = await hookFailureOf(onServiceFault, fault, called);
+    if (failure === undefined) {
+      return undefined;
+    }
+    return { line: hookThrewLineOf(source, 'onServiceFault'), cause: failure.cause };
+  };
 }
 
 /** The lines a fault is told in, wherever it is told: one per Issue, or one for a Fault or a throw. */
@@ -36,18 +73,18 @@ export type About = Pick<
 
 /** Where a delivery went: the Element its consumer handles, its subject and the Message's ids. */
 export function aboutOf(
-  { element, subject }: Pick<BrokerConsumer, 'element' | 'subject'>,
+  { element, subject }: Pick<Consumed, 'element' | 'subject'>,
   { messageId, factId }: Pick<Delivery, 'messageId' | 'factId'>,
 ): About {
   return { element, identity: elementNameOf(element), subject, messageId, factId };
 }
 
-/** The line for a delivery whose `receive` rejected, which only an `onServiceFault` that throws or rejects causes. */
+/** The `onServiceFault threw` line of a delivery, which `settled()` also reports for a `receive` that rejected, through a bug. */
 export function receiveFailureLineOf(
-  consumer: Pick<BrokerConsumer, 'element' | 'subject'>,
+  consumed: Pick<Consumed, 'element' | 'subject'>,
   delivery: Pick<Delivery, 'messageId' | 'factId'>,
 ): string {
-  const source = sourceOf(aboutOf(consumer, delivery));
+  const source = sourceOf(aboutOf(consumed, delivery));
   return hookThrewLineOf(source, 'onServiceFault');
 }
 

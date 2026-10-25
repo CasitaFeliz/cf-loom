@@ -6,7 +6,8 @@ import type { PulledMessage } from './pulled-message.ts';
 
 /**
  * Hands one Message to its Handler and applies the Settlement it comes back with; one whose
- * `receive` rejects is left to NATS, and one without cf-loom's ids is ended, since cf-loom never published it.
+ * `receive` rejects, through a bug, is left to NATS, and one without cf-loom's ids is ended, since
+ * cf-loom never published it.
  */
 export async function deliver(message: PulledMessage, durable: FoundDurable): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
@@ -37,7 +38,7 @@ function headerEntriesOf(message: PulledMessage): readonly (readonly [string, st
 }
 
 function applySettlement(message: PulledMessage, settlement: Settlement): void {
-  switch (settlement.kind) {
+  switch (settlement) {
     case 'acked':
       message.ack();
       return;

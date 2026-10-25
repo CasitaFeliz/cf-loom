@@ -9,6 +9,7 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, Delivery } from '../broker/index.ts';
+import { consumerDetailsOf } from '../consuming/index.ts';
 import {
   checkedHeaderPartsOf,
   checkedIdOf,
@@ -85,17 +86,19 @@ function messageIdOf(message: Event | Command, factId: string, given: string | u
 }
 
 function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {
+  const { element } = consumerDetailsOf(consumer);
   if (isCommand(message)) {
-    return consumer.element === message;
+    return element === message;
   }
-  return isSubscription(consumer.element) && consumer.element.event === message;
+  return isSubscription(element) && element.event === message;
 }
 
 /** The body as it travels to a consumer, written back through its Reader; one that breaks it throws as a direct call does. */
 function writtenBodyOf(consumer: BrokerConsumer, body: unknown): unknown {
-  const written = writtenMessageBody(consumer.reader, body);
+  const { element, reader } = consumerDetailsOf(consumer);
+  const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
-    throw new InvalidInputError(consumer.element, written.issues);
+    throw new InvalidInputError(element, written.issues);
   }
   return written.value;
 }

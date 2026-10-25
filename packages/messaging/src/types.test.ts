@@ -10,10 +10,13 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
+  type BrokerConsumer,
+  type BrokerService,
   type ConsumedFault,
   type Messaging,
   type MessagingOptions,
   messaging,
+  type Settlement,
 } from './index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -274,5 +277,21 @@ describe('publish and send types', () => {
     ];
 
     expect(consuming).toBeTypeOf('function');
+  });
+});
+
+describe('the Broker seam', () => {
+  test('a Broker adapter implements connect with only the stream and subjects', () => {
+    expectTypeOf<keyof BrokerService>().toEqualTypeOf<'stream' | 'subjects'>();
+  });
+
+  test('a BrokerConsumer offers an adapter only its durable consumer, stream, subject and receive', () => {
+    expectTypeOf<keyof BrokerConsumer>().toEqualTypeOf<
+      'durable' | 'stream' | 'subject' | 'receive'
+    >();
+  });
+
+  test('a Settlement is acked, pending or ended', () => {
+    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended'>();
   });
 });

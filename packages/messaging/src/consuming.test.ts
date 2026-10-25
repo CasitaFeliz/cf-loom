@@ -269,23 +269,12 @@ describe('consume', () => {
     ]);
   });
 
-  test('each consumer carries the Command or Subscription it consumes and the Reader the Handler map pairs with it', async () => {
-    const { consumers } = await consuming();
-
-    const carried = consumers.map(({ element, reader }) => ({ element, reader }));
-
-    expect(carried).toEqual([
-      readers.commands.chargeCardV1,
-      readers.commands.chargeCardV2,
-      readers.subscriptions.notifyOnCreated,
-      readers.subscriptions.notifyOnSettled,
-    ]);
-  });
-
   test('a Subscription to a Provider’s Event reads the Provider’s stream and subject', async () => {
     const { consumers } = await consuming();
 
-    const settled = consumers.find((consumer) => consumer.element === notifyOnSettled);
+    const settled = consumers.find(
+      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    );
 
     expect(settled).toMatchObject({
       stream: 'payments-service',
@@ -296,10 +285,10 @@ describe('consume', () => {
   test('a Deprecated Command’s Version is consumed; a Retired one needs no Handler and is not', async () => {
     const { consumers } = await consuming();
 
-    const elements = consumers.map((consumer) => consumer.element);
+    const durables = consumers.map((consumer) => consumer.durable);
 
-    expect(elements).toContain(chargeCardV1);
-    expect(elements).not.toContain(refundV1);
+    expect(durables).toContain('orders-service_command_ChargeCard_v1');
+    expect(durables).not.toContain('orders-service_command_Refund_v1');
   });
 
   test('a stub is not given to the broker, and consume warns naming it', async () => {
@@ -310,7 +299,10 @@ describe('consume', () => {
       subscriptions: { notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated) },
     });
 
-    expect(consumers.map((consumer) => consumer.element)).toEqual([chargeCardV2, notifyOnSettled]);
+    expect(consumers.map((consumer) => consumer.durable)).toEqual([
+      'orders-service_command_ChargeCard_v2',
+      'orders-service_notify-on-settled',
+    ]);
     expect(warned.mock.calls).toEqual([
       ["ChargeCard@1's Handler is a stub: consume does not pull its Messages"],
       ["notifyOnCreated's Handler is a stub: consume does not pull its Messages"],
@@ -438,7 +430,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, body);
 
-    expect(settlement).toEqual({ kind: 'acked' });
+    expect(settlement).toBe('acked');
     expect(faults).toEqual([]);
   });
 
@@ -448,7 +440,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, body);
 
-    expect(settlement).toEqual({ kind: 'pending', fault: undefined });
+    expect(settlement).toBe('pending');
     expect(faults).toEqual([]);
   });
 
@@ -459,7 +451,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, body);
 
-    expect(settlement.kind).toBe('ended');
+    expect(settlement).toBe('ended');
     expect(faults).toEqual([
       {
         element: notifyOnCreated,
@@ -483,7 +475,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, body);
 
-    expect(settlement.kind).toBe('pending');
+    expect(settlement).toBe('pending');
     expect(faults).toEqual([
       {
         element: notifyOnCreated,
@@ -503,7 +495,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, body);
 
-    expect(settlement.kind).toBe('pending');
+    expect(settlement).toBe('pending');
     expect(faults).toMatchObject([{ kind: 'thrown', cause: expect.any(TypeError) }]);
   });
 
@@ -513,7 +505,7 @@ describe('a Message delivered', () => {
 
     const settlement = await deliver(created, { orderId: 'nope', status: 'paid' });
 
-    expect(settlement.kind).toBe('ended');
+    expect(settlement).toBe('ended');
     expect(received).toEqual([]);
     expect(faults).toEqual([
       {
@@ -538,7 +530,7 @@ describe('a Message delivered', () => {
       await deliver(created, new Uint8Array([0xff, 0xfe])),
     ];
 
-    expect(settlements.map((settlement) => settlement.kind)).toEqual(['ended', 'ended']);
+    expect(settlements).toEqual(['ended', 'ended']);
     expect(
       faults.map((consumedFault) => consumedFault.kind === 'invalid-body' && consumedFault.issues),
     ).toEqual([
@@ -557,18 +549,6 @@ describe('a Message delivered', () => {
       [notifyOnCreated, 'notifyOnCreated'],
       [chargeCardV2, 'ChargeCard@2'],
     ]);
-  });
-
-  test('the settlement carries what onServiceFault received', async () => {
-    const error = new Error('gateway down');
-    const { subscriptions } = receiving(() => {
-      throw error;
-    });
-    const { deliver, faults } = await consuming({ subscriptions });
-
-    const settlement = await deliver(created, body);
-
-    expect(settlement).toEqual({ kind: 'pending', fault: faults[0] });
   });
 
   test('without onServiceFault, an ended Message is logged one line per Issue with its subject, broker message id and Fact id, never the value', async () => {
@@ -628,18 +608,22 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('what onServiceFault throws rejects the delivery', async () => {
+  test('an onServiceFault that rejects leaves the delivery pending, receive resolves, and the console gets the onServiceFault threw line with the rejection as cause', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const error = new Error('the hook broke');
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker, {
-      onServiceFault: () => {
+      onServiceFault: async () => {
         throw error;
       },
     });
     await consume(handlers);
 
-    const delivering = deliver(created, {});
+    const settlement = await deliver(created, {});
 
-    await expect(delivering).rejects.toBe(error);
+    expect(settlement).toBe('pending');
+    expect(logged.mock.calls).toEqual([
+      ['notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1: onServiceFault threw', error],
+    ]);
   });
 });

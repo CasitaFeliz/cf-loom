@@ -173,14 +173,13 @@ async function consumingWith(notifying: (typeof handlers.subscriptions)['notifyO
 }
 
 describe('messaging() and close', () => {
-  test('messaging() connects through the broker, telling it the Service’s name, its stream and the subjects it publishes and sends', async () => {
+  test('connect receives the Service’s stream and subjects, unprefixed', async () => {
     const { broker, recorded } = aBroker();
 
     await messaging(contract, broker);
 
     expect(recorded.connectedWith).toEqual([
       {
-        name: 'orders-service',
         stream: 'orders-service',
         subjects: ['orders-service.event.OrderCreated.v1', 'orders-service.command.ChargeCard.v1'],
       },
@@ -291,7 +290,7 @@ describe('messaging() and close', () => {
 
     expect(closesWhileRunning).toBe(0);
     expect(recorded.closes).toBe(1);
-    await expect(delivered).resolves.toEqual({ kind: 'acked' });
+    await expect(delivered).resolves.toBe('acked');
   });
 
   test('a Handler running during close can still publish', async () => {
@@ -309,7 +308,7 @@ describe('messaging() and close', () => {
     gate.open();
     await closing;
 
-    await expect(delivered).resolves.toEqual({ kind: 'acked' });
+    await expect(delivered).resolves.toBe('acked');
     expect(recorded.published).toHaveLength(1);
   });
 
@@ -328,7 +327,7 @@ describe('messaging() and close', () => {
     gate.open();
     await Promise.all([first, closing]);
 
-    expect(second).toEqual({ kind: 'pending', fault: undefined });
+    expect(second).toBe('pending');
     expect(runs).toHaveLength(1);
   });
 
@@ -389,14 +388,16 @@ describe('messaging() and close', () => {
     const { publisher, consume, close } = await messaging(contract, broker);
     publish = () => publisher.publish('OrderCreated', { v1: body });
     await consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
-    const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
+    const consumer = consumers.find(
+      (candidate) => candidate.subject === 'orders-service.event.OrderCreated.v1',
+    );
     const delivered = consumer?.receive(aDelivery(body));
 
     const closing = close();
     gate.open();
     await closing;
 
-    await expect(delivered).resolves.toEqual({ kind: 'acked' });
+    await expect(delivered).resolves.toBe('acked');
     expect(log).toEqual([
       'consume',
       'consumed',

@@ -3,7 +3,6 @@ export type {
   BrokerConnection,
   BrokerConsumer,
   BrokerService,
-  ConsumedFault,
   Delivery,
   OutgoingMessage,
   Settlement,

@@ -1,16 +1,21 @@
-import type { BrokerConsumer, ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
-import { consumedFaultLinesOf, receiveFailureLineOf } from '../consuming/index.ts';
+import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
+import {
+  consumedFaultLinesOf,
+  consumerDetailsOf,
+  receiveFailureLineOf,
+  type Settled,
+} from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
 import { DeliveryLine } from './line.ts';
 import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
 
-/** A delivery whose `receive` rejected is left for redelivery, as the Broker's `receive` says. */
-const leftPending: Settlement = { kind: 'pending', fault: undefined };
+/** A delivery whose `settle` rejected, through a bug of the core, is left for redelivery. */
+const leftPending: Settled = { settlement: 'pending', fault: undefined, hookFailure: undefined };
 
 /** How severe a settlement is, the most severe first. */
-const bySeverity: readonly Settlement['kind'][] = ['ended', 'pending', 'acked'];
+const bySeverity: readonly Settlement[] = ['ended', 'pending', 'acked'];
 
 /** What a `memory()` does with its consumers: delivers to them one at a time, and keeps what became of each delivery. */
 export class Deliveries {
@@ -32,12 +37,12 @@ export class Deliveries {
   }
 
   /** Lines deliveries up and waits for them: the most severe settlement, or the cut that dropped one. */
-  async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement['kind']> {
+  async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement> {
     const lined = attempts.map(({ consumer, delivery }) =>
       this.#line.add(() => this.#attempt(consumer, delivery)),
     );
-    const kinds = await Promise.all(lined);
-    return bySeverity.find((kind) => kinds.includes(kind)) ?? 'acked';
+    const settlements = await Promise.all(lined);
+    return bySeverity.find((settlement) => settlements.includes(settlement)) ?? 'acked';
   }
 
   /** Lines every Message pending now up again, each for the consumer it is pending for, and waits for them. */
@@ -66,42 +71,46 @@ export class Deliveries {
     await this.#attempt(consumer, next);
   }
 
-  async #attempt(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement['kind']> {
-    const settlement = await this.#received(consumer, delivery);
-    this.#apply(consumer, delivery, settlement);
-    return settlement.kind;
+  async #attempt(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
+    const settled = await this.#received(consumer, delivery);
+    this.#apply(consumer, delivery, settled);
+    return settled.settlement;
   }
 
-  async #received(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
+  async #received(consumer: BrokerConsumer, delivery: Delivery): Promise<Settled> {
+    const { element, settle } = consumerDetailsOf(consumer);
     try {
-      return await consumer.receive(delivery);
+      return await settle(delivery);
     } catch (cause) {
-      const lines = [receiveFailureLineOf(consumer, delivery)];
+      const lines = [receiveFailureLineOf({ element, subject: consumer.subject }, delivery)];
       this.#failures.record({ lines, cause });
       return leftPending;
     }
   }
 
   /** What became of a delivery, kept in the list of pending Messages and the failures. */
-  #apply(consumer: BrokerConsumer, delivery: Delivery, settlement: Settlement): void {
-    switch (settlement.kind) {
+  #apply(consumer: BrokerConsumer, delivery: Delivery, settled: Settled): void {
+    switch (settled.settlement) {
       case 'acked':
         this.#pending.leave(consumer, delivery.messageId);
-        return;
+        break;
       case 'pending':
         this.#pending.put({ consumer, delivery });
-        this.#failed(settlement.fault);
-        return;
+        break;
       case 'ended':
         this.#pending.leave(consumer, delivery.messageId);
-        this.#failed(settlement.fault);
-        return;
+        break;
     }
+    this.#failed(settled);
   }
 
-  #failed(fault: ConsumedFault | undefined): void {
+  /** The Fault a delivery reported, then the hook's failure, each for `settled()` to report. */
+  #failed({ fault, hookFailure }: Settled): void {
     if (fault !== undefined) {
       this.#failures.record({ lines: consumedFaultLinesOf(fault), cause: fault });
+    }
+    if (hookFailure !== undefined) {
+      this.#failures.record({ lines: [hookFailure.line], cause: hookFailure.cause });
     }
   }
 }

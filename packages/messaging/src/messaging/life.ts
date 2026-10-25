@@ -1,4 +1,5 @@
-import type { BrokerConnection, BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
+import type { BrokerConnection, BrokerConsumer, Delivery } from '../broker/index.ts';
+import type { Settle, Settled } from '../consuming/index.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
@@ -9,7 +10,7 @@ type State =
   | { readonly kind: 'closing'; readonly closed: Promise<void>; readonly idle: () => void }
   | { readonly kind: 'closed'; readonly closed: Promise<void> };
 
-const leftPending: Settlement = { kind: 'pending', fault: undefined };
+const leftPending: Settled = { settlement: 'pending', fault: undefined, hookFailure: undefined };
 
 /**
  * The life of one messaging over its broker connection: publishing while open or closing, since a
@@ -46,8 +47,13 @@ export class MessagingLife {
     return call;
   }
 
-  /** Hands the broker its consumers, once; a broker that rejects them leaves `consume` to retry. */
-  async consume(consumersOf: () => readonly BrokerConsumer[]): Promise<void> {
+  /**
+   * Hands the broker its consumers, once, built with `received`, which runs a delivery only while
+   * open; a broker that rejects them leaves `consume` to retry.
+   */
+  async consume(
+    consumersOf: (received: (settle: Settle) => Settle) => readonly BrokerConsumer[],
+  ): Promise<void> {
     const state = this.#state;
     switch (state.kind) {
       case 'closing':
@@ -58,7 +64,7 @@ export class MessagingLife {
           throw new Error('consume() was already called on this messaging');
         }
     }
-    const consumers = consumersOf().map((consumer) => this.#trackedConsumer(consumer));
+    const consumers = consumersOf((settle) => (delivery) => this.#received(settle, delivery));
     this.#consumption('taken');
     try {
       await this.tracked(this.#connection.consume(consumers, this.#closing.signal));
@@ -98,18 +104,14 @@ export class MessagingLife {
     }
   }
 
-  #trackedConsumer(consumer: BrokerConsumer): BrokerConsumer {
-    return { ...consumer, receive: (delivery) => this.#received(consumer, delivery) };
-  }
-
   /** A delivery while open runs its Handler; one while closing or closed is left pending, its Handler never run. */
-  #received(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
+  #received(settle: Settle, delivery: Delivery): Promise<Settled> {
     switch (this.#state.kind) {
       case 'closing':
       case 'closed':
         return Promise.resolve(leftPending);
       case 'open':
-        return this.tracked(consumer.receive(delivery));
+        return this.tracked(settle(delivery));
     }
   }
 

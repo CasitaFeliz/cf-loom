@@ -569,7 +569,7 @@ describe('pending and redeliver()', () => {
     ['threw', throwing],
     ['returned a retryable Fault', () => fault({ committed: 'no', retryable: true })],
   ])(
-    'a Message whose Handler %s is listed with its Subscription, its ids, its attempt and its headers',
+    'a Message whose Handler %s is listed with its declaration, its identity, its ids, its attempt and its headers',
     async (_how, answer) => {
       const headers = { traceparent: '00-abc-def-01' };
       const { broker } = await running(() => ({ notify: answer }));
@@ -579,6 +579,7 @@ describe('pending and redeliver()', () => {
       expect(broker.pending).toEqual([
         {
           element: notifyOnCreated,
+          identity: 'notifyOnCreated',
           subject: 'orders-service.event.OrderCreated.v2',
           messageId: 'event.OrderCreated.v2:o-1',
           factId: 'o-1',
@@ -589,6 +590,28 @@ describe('pending and redeliver()', () => {
       ]);
     },
   );
+
+  test('a pending Message’s element is the same declaration its fault names', async () => {
+    const { broker, faults } = await running(() => ({ notify: throwing }));
+
+    await broker.deliver(orderCreatedV2, created, { factId: 'o-1' });
+
+    expect(broker.pending[0]?.element).toBe(faults[0]?.element);
+    expect(broker.pending[0]?.identity).toBe(faults[0]?.identity);
+  });
+
+  test('an Event two Subscriptions take, one ending it and one acknowledging, makes settled() reject with the one Fault’s line', async () => {
+    const ending = () => fault({ committed: 'no', retryable: false, message: 'Not notified' });
+    const { broker, publisher } = await running(() => ({ notify: ending }));
+    await publisher.publish('OrderCreated', { v1: charge, v2: created }, { factId: 'o-1' });
+
+    const rejection = await rejectionOf(broker.settled());
+
+    expect(rejection).toBeInstanceOf(Error);
+    expect((rejection as Error).message).toBe(
+      'notifyOnCreated orders-service.event.OrderCreated.v2 event.OrderCreated.v2:o-1 o-1: Not notified',
+    );
+  });
 
   test('pending lists the wire body, not the form the Handler read', async () => {
     const { broker, received } = await running(() => ({ notify: throwing }));
@@ -608,7 +631,12 @@ describe('pending and redeliver()', () => {
     await broker.deliver(chargeCardV1, charge, { factId: 'f-1' });
 
     expect(broker.pending).toMatchObject([
-      { element: chargeCardV1, subject: 'orders-service.command.ChargeCard.v1', body: charge },
+      {
+        element: chargeCardV1,
+        identity: 'ChargeCard@1',
+        subject: 'orders-service.command.ChargeCard.v1',
+        body: charge,
+      },
     ]);
   });
 
