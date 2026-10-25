@@ -36,7 +36,7 @@ export type ReadBaseline =
       readonly versions: readonly string[];
       /** The highest published version that is not a prerelease, which a prerelease Baseline's version derives from. */
       readonly stable: string | undefined;
-      /** Whether the Baseline is the highest version or the one `--against` named. */
+      /** How the version compared with was chosen: the Baseline, or the one `--against` named. */
       readonly chosen: ChosenVersion['chosen'];
     }
   | { readonly kind: 'no-baseline'; readonly packageName: string; readonly why: NoBaseline }

@@ -2,7 +2,7 @@ import { type Change, type ChangeSite, locationOf, type Path } from '@cf-loom/co
 import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import type { ExitStatus } from './exit.ts';
 
-/** What `check` compared a Snapshot with: its Baseline's version, how it was chosen and the highest stable version, or the reason it has none. */
+/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
 type Against =
   | {
       readonly kind: 'baseline';
