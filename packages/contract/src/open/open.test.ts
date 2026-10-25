@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import type { OpenEnum } from '../index.ts';
 import * as contract from '../index.ts';
 import { encodedValueOf, walkSchemas } from '../internal/index.ts';
 
@@ -39,6 +40,52 @@ describe('openEnum', () => {
 
   test('a described z.enum() stays closed', () => {
     expect(openOf(z.enum(['pending', 'paid']).describe('The order status'))).toBe(false);
+  });
+
+  test('an openEnum with values excluded stays open', () => {
+    const status = contract.openEnum(['pending', 'paid', 'refunded']);
+
+    const withoutRefunded = status.exclude(['refunded']);
+
+    expect(openOf(withoutRefunded)).toBe(true);
+    expect(withoutRefunded.options).toEqual(['pending', 'paid']);
+  });
+
+  test('an openEnum with values extracted stays open', () => {
+    const status = contract.openEnum(['pending', 'paid', 'refunded']);
+
+    const settled = status.extract(['paid', 'refunded']);
+
+    expect(openOf(settled)).toBe(true);
+    expect(settled.options).toEqual(['paid', 'refunded']);
+  });
+
+  test('a described openEnum with values excluded stays open', () => {
+    const status = contract.openEnum(['pending', 'paid', 'refunded']);
+
+    const withoutRefunded = status.describe('The order status').exclude(['refunded']);
+
+    expect(openOf(withoutRefunded)).toBe(true);
+  });
+
+  test('a z.enum() with values excluded stays closed', () => {
+    const status = z.enum(['pending', 'paid', 'refunded']);
+
+    expect(openOf(status.exclude(['refunded']))).toBe(false);
+    expect(openOf(status.extract(['paid']))).toBe(false);
+  });
+
+  test('what an openEnum derives is typed as an Open Enum of the remaining values', () => {
+    const status = contract.openEnum(['pending', 'paid']);
+
+    expectTypeOf(status.exclude(['paid'])).toEqualTypeOf<OpenEnum<{ pending: 'pending' }>>();
+    expectTypeOf(status.extract(['pending'])).toEqualTypeOf<OpenEnum<{ pending: 'pending' }>>();
+    expectTypeOf(status.describe('The order status')).toEqualTypeOf(status);
+  });
+
+  test('a z.enum() is not typed as an Open Enum', () => {
+    expectTypeOf(contract.openEnum(['pending'])).toExtend<OpenEnum<{ pending: 'pending' }>>();
+    expectTypeOf(z.enum(['pending'])).not.toExtend<OpenEnum<{ pending: 'pending' }>>();
   });
 
   test('openEnum takes string values only', () => {

@@ -3,25 +3,41 @@ import type * as core from 'zod/v4/core';
 
 const openKey = Symbol.for('@cf-loom/contract.open');
 
-/** Kept on `globalThis`, so a schema made open by one copy of this package is open to every copy. */
-const openHolder = globalThis as typeof globalThis & { [openKey]?: WeakSet<core.$ZodType> };
-openHolder[openKey] ??= new WeakSet<core.$ZodType>();
-const openSchemas = openHolder[openKey];
+type OpenMarked = { [openKey]?: true };
+
+declare const openEnumBrand: unique symbol;
+
+/**
+ * An enum whose readers handle values they do not know; what it derives with `exclude` or
+ * `extract` stays open. A `z.enum()` is not one.
+ */
+export interface OpenEnum<T extends core.util.EnumLike = core.util.EnumLike> extends z.ZodEnum<T> {
+  readonly [openEnumBrand]: true;
+  extract<const Keys extends readonly (keyof T)[]>(
+    values: Keys,
+    params?: string | core.$ZodEnumParams,
+  ): OpenEnum<core.util.Flatten<Pick<T, Keys[number]>>>;
+  exclude<const Keys extends readonly (keyof T)[]>(
+    values: Keys,
+    params?: string | core.$ZodEnumParams,
+  ): OpenEnum<core.util.Flatten<Omit<T, Keys[number]>>>;
+}
 
 /** Declares an enum whose readers handle values they do not know, so values can be added later. */
-export function openEnum<const Values extends readonly [string, ...string[]]>(values: Values) {
+export function openEnum<const Values extends readonly [string, ...string[]]>(
+  values: Values,
+): OpenEnum<core.util.ToEnum<Values[number]>> {
   const schema = z.enum(values);
-  openSchemas.add(schema);
-  return schema;
+  (schema._zod.def as OpenMarked)[openKey] = true;
+  return schema as unknown as OpenEnum<core.util.ToEnum<Values[number]>>;
 }
 
 /**
- * Whether a schema was declared open: by `openEnum()` itself, or cloned from one by zod's own
- * `.describe()`, `.meta()` or `.check()`, which keep the shape.
+ * Whether a schema was declared open: `openEnum()` marks its definition, which zod copies into
+ * every schema it derives.
  */
 export function isOpen(schema: core.$ZodType): boolean {
-  const parent = schema._zod.parent;
-  return openSchemas.has(schema) || (parent !== undefined && isOpen(parent));
+  return (schema._zod.def as OpenMarked)[openKey] === true;
 }
 
 /** What an Unknown case may never hold: a value its Open Enum declares, which reads as itself. */
