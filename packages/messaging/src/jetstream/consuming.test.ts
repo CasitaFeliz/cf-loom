@@ -497,7 +497,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
 
     await orders.consume(handlersOf(received));
-    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
     await vi.waitFor(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
   });
