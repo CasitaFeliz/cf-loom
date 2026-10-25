@@ -33,6 +33,12 @@ export const reservedFaults = {
     message: 'No Endpoint has this method and path',
   },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  METHOD_NOT_ALLOWED: {
+    status: 405,
+    committed: 'no',
+    message: 'No Endpoint has this method on this path',
+  },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   BODY_TOO_LARGE: { status: 413, committed: 'no', message: 'The body is too large' },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   INVALID_OUTCOME: {

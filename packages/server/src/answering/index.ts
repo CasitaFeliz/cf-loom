@@ -1,3 +1,4 @@
+export type { Http } from './fallback.ts';
 export type { AnsweredRequest, ServedFault } from './hooks.ts';
-export type { Http, ServeOptions } from './serve.ts';
+export type { ServeOptions } from './serve.ts';
 export { serve } from './serve.ts';

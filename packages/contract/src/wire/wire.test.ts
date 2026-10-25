@@ -327,6 +327,10 @@ describe('the reserved codes and statuses', () => {
         'NO_SUCH_ENDPOINT',
         { status: 404, committed: 'no', message: 'No Endpoint has this method and path' },
       ],
+      [
+        'METHOD_NOT_ALLOWED',
+        { status: 405, committed: 'no', message: 'No Endpoint has this method on this path' },
+      ],
       ['BODY_TOO_LARGE', { status: 413, committed: 'no', message: 'The body is too large' }],
       [
         'INVALID_OUTCOME',
@@ -335,7 +339,7 @@ describe('the reserved codes and statuses', () => {
     ]);
   });
 
-  test('a reserved code is one of the four, any other value is none', () => {
+  test('a reserved code is one of the five, any other value is none', () => {
     const values = ['RETIRED', 'INVALID_OUTCOME', 'NOT_FOUND', 'retired', 1, undefined];
 
     expect(values.map(isReservedCode)).toEqual([true, true, false, false, false, false]);

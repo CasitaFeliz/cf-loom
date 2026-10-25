@@ -197,6 +197,7 @@ export {
   malformedBodyIssueOf,
   matchOf,
   maxBrokerHeaderBytes,
+  methodNotAllowedResponseOf,
   notJsonContentType,
   prefixedNameOf,
   prefixedSubjectOf,

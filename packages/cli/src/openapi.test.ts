@@ -1034,7 +1034,15 @@ describe('cf-loom openapi: the components', () => {
           type: 'object',
           required: ['committed', 'retryable', 'message'],
           properties: {
-            code: { enum: ['BODY_TOO_LARGE', 'INVALID_OUTCOME', 'NO_SUCH_ENDPOINT', 'RETIRED'] },
+            code: {
+              enum: [
+                'BODY_TOO_LARGE',
+                'INVALID_OUTCOME',
+                'METHOD_NOT_ALLOWED',
+                'NO_SUCH_ENDPOINT',
+                'RETIRED',
+              ],
+            },
             committed: { enum: ['no', 'yes', 'unknown'] },
             retryable: { type: 'boolean' },
             message: { type: 'string' },

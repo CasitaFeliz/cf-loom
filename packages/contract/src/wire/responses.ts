@@ -67,6 +67,13 @@ export function reservedResponseOf(code: ReservedCode): Response {
   return jsonResponseOf(status, faultEnvelopeOf({ code, committed, retryable: false, message }));
 }
 
+/** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes. */
+export function methodNotAllowedResponseOf(allowed: readonly string[]): Response {
+  const response = reservedResponseOf('METHOD_NOT_ALLOWED');
+  response.headers.set('allow', allowed.join(', '));
+  return response;
+}
+
 function sentHeaderTextsOf(success: SentSuccess): readonly (readonly [string, string])[] {
   const headers = headerTextsOf('success.headers', success.headers);
   if (headers.kind === 'issues') {

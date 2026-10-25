@@ -360,8 +360,8 @@ describe('serve: onOutcome', () => {
       },
     });
 
-    await http(new Request('http://test/orders', { method: 'propfind' }));
-    await http(new Request('http://test/orders', { method: 'HEAD' }));
+    await http(new Request('http://test/customers', { method: 'propfind' }));
+    await http(new Request('http://test/customers', { method: 'HEAD' }));
 
     expect(answered).toStrictEqual([
       { method: 'propfind', status: 404, kind: 'fault', durationMs: expect.any(Number) },
@@ -416,6 +416,36 @@ describe('serve: onOutcome', () => {
 });
 
 describe('serve: onOutcome for the Caller’s Faults', () => {
+  test('METHOD_NOT_ALLOWED is recorded with its method, as a fault with status 405', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, {
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
+
+    await http(new Request('http://test/orders', { method: 'DELETE' }));
+
+    expect(answered).toStrictEqual([
+      { method: 'DELETE', status: 405, kind: 'fault', durationMs: expect.any(Number) },
+    ]);
+  });
+
+  test('a request the fallback answered is not recorded', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, {
+      fallback: async () => new Response('ok'),
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
+
+    await http(get('/healthz'));
+    await http(new Request('http://test/orders', { method: 'OPTIONS' }));
+
+    expect(answered).toEqual([]);
+  });
+
   test('RETIRED and BODY_TOO_LARGE are recorded with their method, Endpoint and path', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {

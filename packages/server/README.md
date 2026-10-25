@@ -33,6 +33,13 @@ process.on('SIGTERM', () => {
 await running.consume(handlers, { resources });
 ```
 
+A Service without messaging leaves out `messaging` and `consume`, and its `main.ts` serves HTTP alone:
+
+```ts
+const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });
+nodeHttp(http).listen(3000);
+```
+
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). `serve(contract, handlers, { resources })` hands the Service's Resources to every EndpointHandler and GuardHandler it runs (see [Resources](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#resources) in the handlers README). `serve(contract, handlers, { maxBodyBytes })` refuses a larger body with `BODY_TOO_LARGE` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), and counts the bytes read, not `Content-Length`; without it cf-loom sets no limit, leaving it to the host or the organization's gateway. The limit is operational, not part of the Contract.
 
 `serve()` checks the Service before the first request, so a Service assembled otherwise than its Contract says fails at startup, not inside a request. It throws, naming what it found, on a root that is no Contract; on an Endpoint that is not Retired whose Handler the map lacks, or holds a value `handle()` did not return for that very Endpoint; on a Guard such an Endpoint attaches without such a Handler; on a part that travels as text, an Endpoint's path params, query, headers or Success headers or a Guard's demands, that any of `generate`'s text-part rules refuses: what it holds, its header names, params that are exactly the path's names, and one shape per header or query name; and on a Deprecated Endpoint whose `deprecatedAt` the map lacks or holds otherwise than `generate` writes it, an ISO 8601 UTC instant to the second, since the map is then stale. A Retired Endpoint needs no Handler, keys the Contract does not name are ignored, so a test can spread the map, and a `deprecatedAt` for an Endpoint that is not Deprecated, or that the Contract does not name, is ignored (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README). Every response of a Deprecated Endpoint carries the `Deprecation` header, from the `deprecatedAt` the Handler map carries (see [Stubs and the Handler map](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#stubs-and-the-handler-map) in the handlers README).
@@ -44,7 +51,22 @@ How `serve` validates every Outcome before sending it is in [Validation](https:/
 - `invalid-outcome`, an Outcome that broke a constraint, or a Success header whose value cannot travel as HTTP field text, answered `INVALID_OUTCOME`, with the issues;
 - `runtime-bug`, a Context or Qualifier `serve` built that breaks the Contract, answered as a Fault with `committed: 'no'`, with the issues.
 
-The Caller's Faults, `RETIRED`, `NO_SUCH_ENDPOINT` and `BODY_TOO_LARGE`, never reach it; `onOutcome` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue, `<identity>[ <guard>]: <part>.<path> <code>: <message>`, or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.
+The Caller's Faults, `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED` and `BODY_TOO_LARGE`, never reach it; `onOutcome` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue, `<identity>[ <guard>]: <part>.<path> <code>: <message>`, or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.
+
+`serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onOutcome` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, which the Service adds by wrapping the handler `serve` returns.
+
+```ts
+const notOurs = new Response(null, { status: 404 });
+const http = serve(contract, handlers, {
+  resources,
+  maxBodyBytes: 1_048_576,
+  fallback: async (request) => {
+    if (new URL(request.url).pathname === '/healthz') return new Response('ok');
+    if (request.method === 'OPTIONS') return preflight(request); // the Service's CORS policy
+    return notOurs;
+  },
+});
+```
 
 `serve(contract, handlers, { onOutcome })` receives an `AnsweredRequest` for every request it answers: `method`, the request's method as the web-standard `Request` holds it; `endpoint` and `path`, the matched Endpoint's name and its path as declared (`/orders/:orderId`), both present exactly when an Endpoint matched; `status`, the HTTP status; `kind`, `'success'`, `'rejection'` or `'fault'`; and `durationMs`, the time taken. It is the hook for metrics and tracing: `method` and `path` fill OpenTelemetry's `http.request.method` and `http.route`, and a method no Endpoint declares arrives as received, so bounding its cardinality is the organization's; cf-loom ships no exporter: the backend is the organization's. On the Caller's side the `fetch` option of the client does the same (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README).
 
@@ -57,6 +79,6 @@ Both hooks may be async and are awaited before the response is returned; what on
 ## Types
 
 - `Http`, `(request: Request) => Promise<Response>`: the fetch-style handler `serve` returns.
-- `ServeOptions<Resources>`, `{ resources, maxBodyBytes?, onServiceFault?, onOutcome? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take and what is operational about serving; none of it is part of the Contract.
+- `ServeOptions<Resources>`, `{ resources, maxBodyBytes?, fallback?, onServiceFault?, onOutcome? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take and what is operational about serving; none of it is part of the Contract.
 - `ServedFault`: what `onServiceFault` receives, `{ element, identity, guard? }` and `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
 - `AnsweredRequest`, `{ method, endpoint?, path?, status, kind, durationMs }`: what `onOutcome` receives.

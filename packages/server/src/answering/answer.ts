@@ -1,16 +1,19 @@
 import type { Endpoint, StandardRejections } from '@cf-loom/contract';
 import {
   matchOf,
+  methodNotAllowedResponseOf,
   type Reading,
   type ReadingSource,
   readingOf,
   reservedResponseOf,
+  type TextSource,
   withDeprecation,
 } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { type EndpointRun, notRunFaultOf, runEndpoint } from '@cf-loom/handlers/internal';
 import type { ServedContract, ServedEndpoint } from '../served/index.ts';
 import { type Call, partsOf } from './call.ts';
+import { fallbackAnswerOf, type Http } from './fallback.ts';
 import { guardRunsOf } from './guards.ts';
 import type { FaultedBy } from './hooks.ts';
 import {
@@ -21,23 +24,56 @@ import {
   answeredOfSuccess,
 } from './runs.ts';
 
-/** How a request was answered, and the declared Endpoint it matched, if any. */
-export type AnsweredFor = { readonly endpoint?: ServedEndpoint; readonly answered: Answered };
+/**
+ * How a request was answered, and the declared Endpoint it matched, if any; or the fallback's
+ * Response, which is not `serve`'s answer.
+ */
+export type AnsweredFor =
+  | { readonly kind: 'served'; readonly endpoint?: ServedEndpoint; readonly answered: Answered }
+  | { readonly kind: 'fallback'; readonly response: Response };
 
-/** One request answered: matched to its Endpoint, read with its Guards' runs, then its Handler. */
-export async function answerOf(served: ServedContract, request: Request): Promise<AnsweredFor> {
+/**
+ * One request answered: matched to its Endpoint, read with its Guards' runs, then its Handler;
+ * one no declared Endpoint matches goes to the fallback when there is one.
+ */
+export async function answerOf(
+  served: ServedContract,
+  request: Request,
+  fallback: Http | undefined,
+): Promise<AnsweredFor> {
   const match = matchOf(served.endpoints, request);
-  if (match.kind === 'none') {
-    return { answered: { kind: 'fault', response: reservedResponseOf('NO_SUCH_ENDPOINT') } };
+  if (match.kind !== 'matched' && fallback !== undefined) {
+    return { kind: 'fallback', response: await fallbackAnswerOf(fallback, request) };
   }
-  const endpoint = match.matched;
+  switch (match.kind) {
+    case 'none':
+      return reservedAnswerOf(reservedResponseOf('NO_SUCH_ENDPOINT'));
+    case 'other-method':
+      return reservedAnswerOf(methodNotAllowedResponseOf(match.allowed));
+    case 'matched':
+      return await matchedAnswerOf(served, match, request);
+  }
+}
+
+function reservedAnswerOf(response: Response): AnsweredFor {
+  return { kind: 'served', answered: { kind: 'fault', response } };
+}
+
+/** A request a declared Endpoint matched: `RETIRED`, or its call answered. */
+async function matchedAnswerOf(
+  served: ServedContract,
+  { matched: endpoint, source }: { readonly matched: ServedEndpoint; readonly source: TextSource },
+  request: Request,
+): Promise<AnsweredFor> {
   switch (endpoint.kind) {
-    case 'retired':
-      return { endpoint, answered: { kind: 'fault', response: reservedResponseOf('RETIRED') } };
+    case 'retired': {
+      const answered = { kind: 'fault' as const, response: reservedResponseOf('RETIRED') };
+      return { kind: 'served', endpoint, answered };
+    }
     case 'live': {
-      const answered = await answeredCallOf({ endpoint, request, source: match.source }, served);
+      const answered = await answeredCallOf({ endpoint, request, source }, served);
       withDeprecation(answered.response, endpoint.deprecatedAt);
-      return { endpoint, answered };
+      return { kind: 'served', endpoint, answered };
     }
   }
 }

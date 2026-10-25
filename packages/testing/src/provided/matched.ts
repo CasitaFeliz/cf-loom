@@ -9,7 +9,8 @@ export type Matched = { readonly listed: ListedEndpoint; readonly source: TextSo
 /**
  * The listed Endpoint a request reaches: its path, under the base URL's path, matched against
  * every Endpoint the Provider exports; any other origin is the fake's too. A path outside the base
- * URL, or one no exported Endpoint matches, or one an unlisted Endpoint takes, is the test's mistake.
+ * URL, one no exported Endpoint matches, its method included, or one an unlisted Endpoint takes, is
+ * the test's mistake.
  */
 export function matchedOf(provided: Provided, request: Request): Matched {
   const url = new URL(request.url);
@@ -18,13 +19,28 @@ export function matchedOf(provided: Provided, request: Request): Matched {
   routedUrl.pathname = path;
   const routed = new Request(routedUrl, { method: request.method, headers: request.headers });
   const match = matchOf(provided.exported, routed);
-  if (match.kind === 'none') {
-    const what = `no Endpoint it exports is ${request.method} ${path} under ${basePathOf(provided.base)}/`;
-    throw mistakeOf({ provider: provided.provider, what });
+  const unmatched = `no Endpoint it exports is ${request.method} ${path} under ${basePathOf(provided.base)}/`;
+  switch (match.kind) {
+    case 'none':
+      throw mistakeOf({ provider: provided.provider, what: unmatched });
+    case 'other-method': {
+      const what = `${unmatched}; that path takes ${match.allowed.join(', ')}`;
+      throw mistakeOf({ provider: provided.provider, what });
+    }
+    case 'matched':
+      return listedMatchOf(provided, match, `${request.method} ${path}`);
   }
+}
+
+/** A matched exported Endpoint, or the test's mistake when the Dependency does not list it. */
+function listedMatchOf(
+  provided: Provided,
+  match: { readonly matched: Provided['exported'][number]; readonly source: TextSource },
+  reached: string,
+): Matched {
   const { listed, identity } = match.matched;
   if (listed === undefined) {
-    const what = `the Dependency does not list ${identity}, which ${request.method} ${path} reaches`;
+    const what = `the Dependency does not list ${identity}, which ${reached} reaches`;
     throw mistakeOf({ provider: provided.provider, what });
   }
   return { listed, source: match.source };

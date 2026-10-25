@@ -52,6 +52,7 @@ export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,
   faultStatusOf,
+  methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
   successResponseOf,

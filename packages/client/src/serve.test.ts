@@ -358,6 +358,23 @@ describe('end to end against serve through node:http and the global fetch', () =
     ]);
   });
 
+  test('a declared path asked with another method arrives as METHOD_NOT_ALLOWED', async () => {
+    const putting = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': async () => 'caller-7' },
+      fetch: (url, init) => fetch(url, { ...init, method: 'PUT' }),
+    });
+
+    const outcome = await putting.cancelOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      code: 'METHOD_NOT_ALLOWED',
+      committed: 'no',
+      retryable: false,
+    });
+  });
+
   test('a Deprecated Endpoint works, and its Deprecation is told once', async () => {
     const orders = ordersClient();
 

@@ -5,9 +5,13 @@ import { isSegmentText, segmentTextOf } from './url-text.ts';
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
 
-/** The declared Endpoint a request matched, with where its text comes from, or none. */
+/**
+ * The declared Endpoint a request matched, with where its text comes from; the methods its path
+ * takes when declared Endpoints have the path but none the method; or none.
+ */
 export type Match<Matched extends Matchable> =
   | { readonly kind: 'none' }
+  | { readonly kind: 'other-method'; readonly allowed: readonly string[] }
   | { readonly kind: 'matched'; readonly matched: Matched; readonly source: TextSource };
 
 /**
@@ -26,7 +30,7 @@ export function matchOf<Matched extends Matchable>(
   }
   const best = matchedOf(declared, request.method, texts);
   if (best === undefined) {
-    return { kind: 'none' };
+    return unmatchedOf(declared, texts);
   }
   const params = paramsOf(best.segments, texts);
   const source = { params, query: url.searchParams, headers: request.headers };
@@ -49,6 +53,19 @@ export function matchedOf<Matched extends Matchable>(
     }
   }
   return best;
+}
+
+/** No Endpoint with this method: the methods of those that have the path, once each in code point order, or none. */
+function unmatchedOf<Matched extends Matchable>(
+  declared: readonly Matched[],
+  texts: readonly string[],
+): Match<Matched> {
+  const onPath = declared.filter((candidate) => isMatchedBy(candidate.segments, texts));
+  if (onPath.length === 0) {
+    return { kind: 'none' };
+  }
+  const allowed = [...new Set(onPath.map(({ method }) => method))].sort();
+  return { kind: 'other-method', allowed };
 }
 
 /** The decoded segments of a request path; the root has none. */

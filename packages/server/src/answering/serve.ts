@@ -3,6 +3,7 @@ import type { ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
+import type { Http } from './fallback.ts';
 import {
   type AnsweredRequest,
   answeredRequestOf,
@@ -10,9 +11,6 @@ import {
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
-
-/** The fetch-style handler `serve` returns: what an adapter connects to its host. */
-export type Http = (request: Request) => Promise<Response>;
 
 /** What `serve` takes besides the Contract and the Handler map: the Resources its Handlers take, and what is operational about serving; none of it is part of the Contract. */
 export type ServeOptions<Resources extends object = NoResources> = ResourcesField<Resources> & {
@@ -23,7 +21,13 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
    * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.
    */
   readonly onServiceFault?: (fault: ServedFault) => void | Promise<void>;
-  /** Receives one record per request answered, for metrics and tracing. */
+  /**
+   * Answers every request no declared Endpoint matches, such as a health check or CORS preflight,
+   * its Response returned as is, and the internal Fault if it rejects; without it,
+   * `NO_SUCH_ENDPOINT`, or `METHOD_NOT_ALLOWED` on a declared path.
+   */
+  readonly fallback?: Http;
+  /** Receives one record per request answered, for metrics and tracing; never one the fallback answered. */
   readonly onOutcome?: (request: AnsweredRequest) => void | Promise<void>;
 };
 
@@ -44,7 +48,11 @@ export function serve(
   const served = servedContractOf(contract, handlers, options);
   return async (request) => {
     const started = performance.now();
-    const { endpoint, answered } = await answerOf(served, request);
+    const answer = await answerOf(served, request, options.fallback);
+    if (answer.kind === 'fallback') {
+      return answer.response;
+    }
+    const { endpoint, answered } = answer;
     if (answered.kind === 'fault' && answered.servedFault !== undefined) {
       await reportServedFault(answered.servedFault, options.onServiceFault);
     }
