@@ -611,19 +611,46 @@ describe('fault() retryAfter', () => {
 
     expectTypeOf(later.retryAfter).toEqualTypeOf<number>();
     // @ts-expect-error a Fault not worth retrying says no time to retry
-    expect(() => fault({ committed: 'no', retryable: false, retryAfter: 5 })).not.toThrow();
+    expect(() => fault({ committed: 'no', retryable: false, retryAfter: 5 })).toThrow(
+      'fault(): retryAfter is given only to a retryable Fault',
+    );
   });
 
-  test.each([1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-    'fault() refuses a retryAfter of %s, naming it',
-    (retryAfter) => {
-      const building = () => fault({ committed: 'no', retryable: true, retryAfter });
+  test.each([
+    [1.5, '1.5'],
+    [-1, '-1'],
+    [Number.NaN, 'NaN'],
+    [Number.POSITIVE_INFINITY, 'Infinity'],
+    ['5', '"5"'],
+  ])('fault() refuses a retryAfter of %s, naming it', (retryAfter, named) => {
+    const building = () =>
+      fault({ committed: 'no', retryable: true, retryAfter: retryAfter as number });
 
-      expect(building).toThrow(
-        `fault() takes retryAfter as a whole number of seconds from 0: got ${retryAfter}`,
-      );
-    },
-  );
+    expect(building).toThrow(
+      `fault(): retryAfter is no whole number of seconds from 0: got ${named}`,
+    );
+  });
+
+  test('a Fault built by hand whose retryAfter cannot be sent is an invalid Outcome', async () => {
+    const getOrderHandler = handle(getOrder, () => ({
+      kind: 'fault' as const,
+      committed: 'no' as const,
+      retryable: false,
+      message: 'Down',
+      retryAfter: 5,
+    }));
+
+    const issues = await issuesOf(() => getOrderHandler(getInput, getContext));
+
+    expect(issues).toEqual([
+      {
+        part: 'fault',
+        path: ['retryAfter'],
+        code: 'invalid_value',
+        message: 'retryAfter is given only to a retryable Fault',
+      },
+    ]);
+  });
 });
 
 describe('what an EndpointHandler returns', () => {

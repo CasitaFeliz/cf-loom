@@ -37,21 +37,34 @@ export function fault({
   cause,
   retryAfter,
 }: FaultGiven & { readonly retryAfter?: number }): Fault {
+  const problem = retryAfterProblemOf({ retryable, retryAfter });
+  if (problem !== undefined) {
+    throw new Error(`fault(): ${problem}`);
+  }
   const built: Fault = { kind: 'fault', committed, retryable, message: message ?? internalError };
   const caused = cause === undefined ? built : { ...built, cause };
-  return retryAfter === undefined
-    ? caused
-    : { ...caused, retryAfter: checkedRetryAfter(retryAfter) };
+  return retryAfter === undefined ? caused : { ...caused, retryAfter };
 }
 
-/** A `retryAfter` that is a whole number of seconds from 0; any other is the Handler's bug. */
-function checkedRetryAfter(retryAfter: number): number {
-  if (Number.isSafeInteger(retryAfter) && retryAfter >= 0) {
-    return retryAfter;
+/**
+ * Why a Fault's `retryAfter` cannot be sent as `Retry-After`, or none: it is a whole number of
+ * seconds from 0, on a retryable Fault only.
+ */
+export function retryAfterProblemOf({
+  retryable,
+  retryAfter,
+}: {
+  readonly retryable: boolean;
+  readonly retryAfter?: unknown;
+}): string | undefined {
+  if (retryAfter === undefined) {
+    return undefined;
   }
-  throw new Error(
-    `fault() takes retryAfter as a whole number of seconds from 0: got ${retryAfter}`,
-  );
+  if (typeof retryAfter !== 'number' || !Number.isSafeInteger(retryAfter) || retryAfter < 0) {
+    const named = typeof retryAfter === 'string' ? JSON.stringify(retryAfter) : String(retryAfter);
+    return `retryAfter is no whole number of seconds from 0: got ${named}`;
+  }
+  return retryable ? undefined : 'retryAfter is given only to a retryable Fault';
 }
 
 /** What anything a Handler throws becomes: nothing says the same request could succeed later. */

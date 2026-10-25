@@ -353,6 +353,31 @@ describe('serve: a Fault', () => {
     expect(responses.map(({ headers }) => headers.get('retry-after'))).toEqual(['5', null]);
   });
 
+  test.each([
+    ['a negative one', { retryable: true, retryAfter: -1 }],
+    ['one that is no number', { retryable: true, retryAfter: 'a\nb' as never }],
+    ['one on a Fault that is not retryable', { retryable: false, retryAfter: 5 }],
+  ])(
+    'a Fault built by hand with %s as retryAfter is INVALID_OUTCOME, with no retry-after',
+    async (_, built) => {
+      const { http, faults } = serveWith(() => ({
+        kind: 'fault',
+        committed: 'no',
+        message: 'Down',
+        ...built,
+      }));
+
+      const response = await http(getRequest.clone());
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('retry-after')).toBeNull();
+      expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+      expect(faults).toMatchObject([
+        { kind: 'invalid-outcome', issues: [{ part: 'fault', path: ['retryAfter'] }] },
+      ]);
+    },
+  );
+
   test('a Fault the Handler returns travels with 503 when retryable, its cause kept from the Caller', async () => {
     const cause = new Error('the database is down');
     const { http, faults } = serveWith(() =>
