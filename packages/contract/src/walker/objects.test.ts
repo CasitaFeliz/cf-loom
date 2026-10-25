@@ -247,20 +247,16 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
+  const named = z.object({ name: z.string() });
+  const hasToString = z.object({ toString: z.string() });
   test.each([
-    ['first', z.object({ toString: z.string() }), z.object({ name: z.string() })],
-    ['second', z.object({ name: z.string() }), z.object({ toString: z.string() })],
+    ['first', z.intersection(hasToString, named), 0],
+    ['second', z.intersection(named, hasToString), 1],
   ])(
-    'a key named like an Object method, in the %s object, merges like any key',
-    (_order, left, right) => {
-      expect(walkBody(z.intersection(left, right))).toEqual(
-        walkedTo({
-          type: 'object',
-          fields: {
-            name: { required: true, schema: text },
-            toString: { required: true, schema: text },
-          },
-        }),
+    'a key named like an Object method, in the %s object, fails like in any object',
+    (_order, intersection, item) => {
+      expect(walkBody(intersection)).toEqual(
+        refusedAt(['body', 'items', item, 'fields', 'toString'], everyObjectHas('toString')),
       );
     },
   );
@@ -303,6 +299,138 @@ describe('walkSchemas: a field named __proto__', () => {
     expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
   });
 });
+
+/** The names every plain object has, read from the platform the tests run on. */
+const inheritedNames = Object.getOwnPropertyNames(Object.prototype);
+
+function everyObjectHas(name: string) {
+  return `a field named ${name}, which every object already has (zod reads it from Object.prototype when it is absent)`;
+}
+
+describe('walkSchemas: a field named what every object already has', () => {
+  test('an object field named constructor is not allowed', () => {
+    const schema = z.object({ constructor: z.string().optional(), b: z.string() });
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(['body', 'fields', 'constructor'], everyObjectHas('constructor')),
+    );
+  });
+
+  test('an object field named toString is not allowed two objects deep', () => {
+    const schema = z.object({ a: z.object({ b: z.object({ toString: z.number().optional() }) }) });
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(
+        ['body', 'fields', 'a', 'fields', 'b', 'fields', 'toString'],
+        everyObjectHas('toString'),
+      ),
+    );
+  });
+
+  test('an object field named valueOf is not allowed inside the value of a record', () => {
+    const schema = z.record(z.string(), z.object({ valueOf: z.number().optional() }));
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(['body', 'value', 'fields', 'valueOf'], everyObjectHas('valueOf')),
+    );
+  });
+
+  test('a variant of a discriminated union with a field named hasOwnProperty is not allowed', () => {
+    const schema = z.discriminatedUnion('kind', [
+      z.object({ kind: z.literal('a'), hasOwnProperty: z.string().optional() }),
+    ]);
+
+    expect(walkBody(schema)).toEqual(
+      refusedAt(
+        ['body', 'variants', 0, 'fields', 'hasOwnProperty'],
+        everyObjectHas('hasOwnProperty'),
+      ),
+    );
+  });
+
+  test('a refused field is reported beside the failures of its own schema', () => {
+    const schema = z.object({ constructor: z.date() });
+
+    expect(walkBody(schema)).toEqual({
+      located: [
+        {
+          at: ['body'],
+          walked: {
+            kind: 'not-allowed',
+            failures: [
+              {
+                kind: 'not-allowed',
+                at: ['body', 'fields', 'constructor'],
+                construct: everyObjectHas('constructor'),
+              },
+              {
+                kind: 'not-allowed',
+                at: ['body', 'fields', 'constructor'],
+                construct: 'z.date()',
+                instead: 'z.iso.datetime()',
+              },
+            ],
+          },
+        },
+      ],
+      defs: {},
+    });
+  });
+
+  test.each(['then', 'toJSON', '__proto', 'Constructor', 'tostring'])(
+    'an object field named %s is allowed, since no object has it',
+    (name) => {
+      const schema = z.object({ [name]: z.string().optional() });
+
+      expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
+    },
+  );
+
+  test('a field is refused exactly when every object has its name', () => {
+    const next = seededNext(273);
+    const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$-. ';
+    let refusals = 0;
+    for (let draw = 0; draw < 300; draw += 1) {
+      const name = aFieldName(next, alphabet);
+      const schema = z.object({ [name]: z.string().optional() });
+
+      const kind = walkBody(schema).located[0]?.walked.kind;
+
+      const refusedName = inheritedNames.includes(name);
+      refusals += refusedName ? 1 : 0;
+      expect(kind, `draw ${draw}: ${JSON.stringify(name)}`).toBe(
+        refusedName ? 'not-allowed' : 'walked',
+      );
+    }
+    expect(refusals).toBeGreaterThan(30);
+  });
+});
+
+/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** A name every object has, one that differs from it by a letter's case or an extra character, or a random string. */
+function aFieldName(next: () => number, alphabet: string): string {
+  const inherited = inheritedNames[Math.floor(next() * inheritedNames.length)] ?? 'constructor';
+  const draw = next();
+  if (draw < 0.3) {
+    return inherited;
+  }
+  if (draw < 0.4) {
+    return `${inherited.slice(0, 1).toUpperCase()}${inherited.slice(1)}`;
+  }
+  if (draw < 0.5) {
+    return `${inherited}${alphabet[Math.floor(next() * alphabet.length)]}`;
+  }
+  const length = 1 + Math.floor(next() * 12);
+  return Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
+}
 
 /** A Contract whose one Endpoint attaches one Guard and answers one Rejection, and whose Group lists a body each. */
 function contractWith(parts: {
@@ -561,5 +689,95 @@ describe('validateContract: a record keyed by an enum or literal fails wherever 
     const failures = failuresIn(contractWith(parts));
 
     expect(failures).toEqual([]);
+  });
+});
+
+const optionalField = (name: string) => z.object({ [name]: z.string().optional() });
+
+const protoConstruct = 'a field named __proto__ (zod drops it when parsing)';
+
+/** Where an object sits in a Contract: a Contract with a field of a name there, and where that field is reported. */
+const fieldPlaces = [
+  {
+    place: 'a query param',
+    appliesTo: () => true,
+    contractOf: (name: string) => contractWith({ input: { query: optionalField(name) } as never }),
+    at: (name: string) => [...endpointAt, 'input', 'query', 'fields', name],
+  },
+  {
+    place: 'a header, whose name is lower-case',
+    appliesTo: (name: string) => name === name.toLowerCase(),
+    contractOf: (name: string) =>
+      contractWith({ input: { headers: optionalField(name) } as never }),
+    at: (name: string) => [...endpointAt, 'input', 'headers', 'fields', name],
+  },
+  {
+    place: 'a path param, whose name is camelCase',
+    appliesTo: (name: string) => /^[a-z][a-zA-Z0-9]*$/.test(name),
+    contractOf: (name: string) =>
+      contractWith({
+        path: `/echo/:${name}`,
+        input: { params: z.object({ [name]: z.string() }) } as never,
+      }),
+    at: (name: string) => [...echoAt, 'input', 'params', 'fields', name],
+  },
+  {
+    place: 'a field of a body',
+    appliesTo: () => true,
+    contractOf: (name: string) => contractWith({ input: { body: optionalField(name) } }),
+    at: (name: string) => [...endpointAt, 'input', 'body', 'fields', name],
+  },
+  {
+    place: 'a field of an object nested in a body',
+    appliesTo: () => true,
+    contractOf: (name: string) =>
+      contractWith({
+        input: { body: z.object({ outer: z.object({ inner: optionalField(name) }) }) },
+      }),
+    at: (name: string) => [
+      ...endpointAt,
+      'input',
+      'body',
+      'fields',
+      'outer',
+      'fields',
+      'inner',
+      'fields',
+      name,
+    ],
+  },
+  {
+    place: 'a field of an object in the value of a record',
+    appliesTo: () => true,
+    contractOf: (name: string) =>
+      contractWith({ input: { body: z.record(z.string(), optionalField(name)) } }),
+    at: (name: string) => [...endpointAt, 'input', 'body', 'value', 'fields', name],
+  },
+  {
+    place: 'a field of a Success body',
+    appliesTo: () => true,
+    contractOf: (name: string) =>
+      contractWith({ success: { status: 200, body: optionalField(name) } }),
+    at: (name: string) => [...endpointAt, 'success', 'body', 'fields', name],
+  },
+  {
+    place: 'a field of an Event body',
+    appliesTo: () => true,
+    contractOf: (name: string) => contractWith({ eventBody: optionalField(name) }),
+    at: (name: string) => ['groups', 'shapes', 'events', 'OrderCreated@1', 'body', 'fields', name],
+  },
+] as const;
+
+/** Every place of the list with every name that can sit there. */
+const namedFieldPlaces = fieldPlaces.flatMap((place) =>
+  inheritedNames.filter(place.appliesTo).map((name) => ({ ...place, name })),
+);
+
+describe('validateContract: a field named what every object already has fails wherever it sits', () => {
+  test.each(namedFieldPlaces)('$place named $name fails generate', ({ contractOf, at, name }) => {
+    const failures = failuresIn(contractOf(name));
+
+    const construct = name === '__proto__' ? protoConstruct : everyObjectHas(name);
+    expect(failures).toEqual([{ kind: 'not-allowed', at: at(name), construct }]);
   });
 });

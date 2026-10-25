@@ -112,6 +112,13 @@ export function refusedMetaKey(key: string): Refused {
 /** Examples that are not a list, which no JSON Schema reader could take. */
 export const refusedExamples: Refused = { construct: '.meta({ examples }) that is not a list' };
 
+/** A field named what every object already has, which zod reads from the prototype when it is absent. */
+export function refusedObjectNameField(name: string): Refused {
+  return {
+    construct: `a field named ${name}, which every object already has (zod reads it from Object.prototype when it is absent)`,
+  };
+}
+
 /** A recursion id that is no camelCase name, so code could not name its def. */
 export function refusedNonCamelCaseId(id: string): Refused {
   return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
