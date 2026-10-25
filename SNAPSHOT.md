@@ -26,7 +26,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
   "version": "3.4.0",
   "generator": "@cf-loom/cli@2.1.0",
   "definitions": { "@org/definitions": "4.2.0" },
-  "standardRejections": { "invalidInput": {}, "notFound": {}, "notImplemented": {} },
+  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" },
   "defs": {},
   "endpoints": {},
   "events": {},
@@ -39,7 +39,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ```
 
 - `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file. From the first released format on, anything this specification adds or changes is a new format.
-- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large or nested too deeply to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, or a Guard an Endpoint attaches or a Guard lists; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It does not judge again the rules `generate` enforced when the file was written.
+- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large or nested too deeply to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists or a Standard Rejection names, or a Guard an Endpoint attaches or a Guard lists; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It does not judge again the rules `generate` enforced when the file was written.
 - `kind` is `service`, `application` or `definitions`. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `guards`, `schemas` (its shared schemas by name), `codes`, `standardRejections` and `defs`.
 - `definitions` lists every Definitions Package the Contract uses, at the exact version resolved.
 
@@ -52,7 +52,7 @@ A Definitions Package's Snapshot:
   "name": "definitions",
   "version": "4.2.0",
   "generator": "@cf-loom/cli@2.1.0",
-  "standardRejections": { "invalidInput": {}, "notFound": {}, "notImplemented": {} },
+  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" },
   "defs": {},
   "schemas": { "money": {}, "pagination": {} },
   "guards": {},
@@ -140,7 +140,7 @@ Subjects, stream names and durable consumer names are derived from these identit
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. A code declared more than once has one body shape (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md); the `message`, `description`, `examples` and `origin` written are the first declaration's, in the root's order: a listed Definitions Package's, then the Guards', then the Endpoints'. A Service's Snapshot writes the codes its Endpoints answer, themselves or through the Guards they reach, and every code a Standard Rejection has had; a listed Definitions Package's other codes stay out; a Definitions Package's own Snapshot writes every code it declares. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more, or, in a Definitions Package, one it no longer declares. `standardRejections` holds the resolved code, status, message and `origin` of each Standard Rejection, and the body of the invalid-input Rejection (see [Rejections](packages/contract/README.md#rejections) in the contract README).
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. A code declared more than once has one body shape (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md); the `message` and `origin` written are the first declaration's, in the root's order: a listed Definitions Package's, then the Guards', then the Endpoints'. A Service's Snapshot writes the codes its Endpoints answer, themselves or through the Guards they reach, and every code a Standard Rejection has had; a listed Definitions Package's other codes stay out; a Definitions Package's own Snapshot writes every code it declares. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more, or, in a Definitions Package, one it no longer declares. `standardRejections` names the code each Standard Rejection resolved to; its status, message, `origin` and body are that code's, under `codes`, and only the invalid-input Rejection has a body (see [Rejections](packages/contract/README.md#rejections) in the contract README).
 
 ## Subscriptions and Dependencies
 

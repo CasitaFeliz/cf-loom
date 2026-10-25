@@ -1,4 +1,9 @@
-import type { ContractPackage, Dependency, Endpoint, StandardRejections } from '@cf-loom/contract';
+import type {
+  ContractPackage,
+  Dependency,
+  Endpoint,
+  ProvidedStandardRejections,
+} from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
@@ -36,7 +41,7 @@ export type CalledEndpoint = {
   readonly inputHeaderNames: ReadonlySet<string>;
   readonly successHeaders: ObjectNode | undefined;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
-  readonly standards: StandardRejections;
+  readonly standards: ProvidedStandardRejections;
 };
 
 /** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */

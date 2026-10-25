@@ -43,7 +43,8 @@ export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedE
     const what = `the Endpoint answers no code ${answer.code}; r.reject({ unknown }) sends one`;
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  const body = writtenOf('body', rejectionBodyReaderOf(rejection), answer.body);
+  const reader = rejectionBodyReaderOf(rejection, listed.standards);
+  const body = writtenOf('body', reader, answer.body);
   if (body.issues.length > 0) {
     const what = `the scripted ${answer.code} body breaks its reader`;
     throw mistakeOf({ ...whoOf(listed), what, issues: body.issues });

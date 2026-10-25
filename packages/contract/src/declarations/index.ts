@@ -73,6 +73,7 @@ export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,
+  ProvidedStandardRejections,
   StandardRejection,
   StandardRejectionDeclaration,
   StandardRejectionDeclarations,

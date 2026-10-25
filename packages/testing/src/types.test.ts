@@ -21,6 +21,7 @@ import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contr
 import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { type FakeCall, fakeEvent, fakeProvider, type ScriptedAnswer } from './index.ts';
 
 const apiKey = defineGuard({
@@ -97,11 +98,9 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     throw new Error('The fixture is no Service');
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  const standardRejections = providedStandardRejections({
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  });
   const name = 'payments-service';
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
@@ -228,11 +227,7 @@ const settledPackage = {
   version: '5.1.0',
   endpoints: {},
   events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
+  standardRejections: providedStandardRejections(),
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 

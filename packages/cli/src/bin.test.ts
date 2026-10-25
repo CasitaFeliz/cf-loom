@@ -588,11 +588,13 @@ describe('cf-loom generate', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     expect(snapshot.definitions).toEqual({ '@org/definitions': '4.2.0' });
-    expect(snapshot.standardRejections.notFound).toEqual({
+    expect(snapshot.standardRejections.notFound).toBe('MISSING');
+    expect(snapshot.codes.MISSING).toEqual({
       origin: '@org/definitions@4.2.0',
-      code: 'MISSING',
       status: 404,
       message: 'Missing',
+      body: null,
+      removed: false,
     });
   });
 

@@ -19,7 +19,7 @@ export function rejectionOf(
   if (rejection === undefined) {
     return { kind: 'rejection', known: false, code, message, body };
   }
-  const schema = rejectionBodyReaderOf(rejection);
+  const schema = rejectionBodyReaderOf(rejection, called.standards);
   if (schema === undefined) {
     return { kind: 'rejection', known: true, code, message, body: undefined };
   }

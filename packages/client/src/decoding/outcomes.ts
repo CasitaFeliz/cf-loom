@@ -1,10 +1,5 @@
-import type { Endpoint, RejectionsOf, StandardRejections } from '@cf-loom/contract';
-import {
-  type Issue,
-  type Parsed,
-  type ReceivedInvalidInputBody,
-  reservedFaults,
-} from '@cf-loom/contract/internal';
+import type { Endpoint, ProvidedStandardRejections, RejectionsOf } from '@cf-loom/contract';
+import { type Issue, type Parsed, reservedFaults } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';
@@ -51,13 +46,16 @@ type KnownRejection<Code, Body> = DecodedRejection & {
 type UnknownRejection = DecodedRejection & { readonly known: false };
 
 /** A Rejection an Endpoint answers, as received: a Standard one by its Provider's code. */
-type KnownRejectionOf<Answerable, Standards extends StandardRejections> = Answerable extends {
+type KnownRejectionOf<
+  Answerable,
+  Standards extends ProvidedStandardRejections,
+> = Answerable extends {
   readonly kind: 'standard-rejection';
-  readonly name: infer Name extends keyof StandardRejections;
+  readonly name: infer Name extends keyof ProvidedStandardRejections;
 }
   ? KnownRejection<
       Standards[Name]['code'],
-      Name extends 'invalidInput' ? ReceivedInvalidInputBody : undefined
+      Name extends 'invalidInput' ? core.output<Standards['invalidInput']['body']> : undefined
     >
   : Answerable extends { readonly kind: 'rejection'; readonly code: infer Code }
     ? KnownRejection<
@@ -67,9 +65,10 @@ type KnownRejectionOf<Answerable, Standards extends StandardRejections> = Answer
     : never;
 
 /** A Rejection as a Caller receives it: one its Endpoint answers, or one with an unknown code. */
-export type ReceivedRejection<Target extends Endpoint, Standards extends StandardRejections> =
-  | KnownRejectionOf<RejectionsOf<Target>, Standards>
-  | UnknownRejection;
+export type ReceivedRejection<
+  Target extends Endpoint,
+  Standards extends ProvidedStandardRejections,
+> = KnownRejectionOf<RejectionsOf<Target>, Standards> | UnknownRejection;
 
 /** The Outcome a Caller receives from one Endpoint of a Dependency: a Success, a Rejection or a Fault. */
 export type ReceivedOutcome<D extends AnyDependency, Name extends ListedName<D>> =

@@ -7,11 +7,12 @@ import {
   defineRejection,
   type Endpoint,
   notFound,
-  type StandardRejections,
+  type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { type Client, client, type ReceivedOutcome } from './index.ts';
 
 const orderLocked = defineRejection({
@@ -63,7 +64,7 @@ const ping = defineEndpoint({
  */
 function contractPackageOf<
   const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
@@ -87,11 +88,11 @@ function contractPackageOf<
   return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
 }
 
-const standards = {
+const standards = providedStandardRejections({
   invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'Invalid' },
   notFound: { code: 'MISSING', status: 404, message: 'Missing' },
   notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
-} as const;
+});
 
 const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
 
@@ -195,6 +196,18 @@ describe('the client’s types', () => {
     }>();
     expectTypeOf<Extract<Known, { readonly code: 'MISSING' }>['body']>().toEqualTypeOf<undefined>();
     expect(standards.notFound.code).toBe('MISSING');
+  });
+
+  test('the invalid-input body’s in and code admit a value a later cf-loom adds, as { unknown }', () => {
+    type Outcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
+    type Known = Extract<Outcome, { readonly kind: 'rejection'; readonly known: true }>;
+    type Body = Extract<Known, { readonly code: 'BAD_REQUEST' }>['body'];
+    type Issue = Body['issues'][number];
+
+    expectTypeOf<{ unknown: string }>().toExtend<Issue['code']>();
+    expectTypeOf<{ unknown: string }>().toExtend<Issue['in']>();
+    expectTypeOf<'required'>().toExtend<Issue['code']>();
+    expect(standards.invalidInput.code).toBe('BAD_REQUEST');
   });
 
   test('a method returns exactly ReceivedOutcome of its Dependency and Endpoint name', () => {

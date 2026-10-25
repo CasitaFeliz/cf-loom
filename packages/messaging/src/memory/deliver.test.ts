@@ -19,6 +19,7 @@ import {
 } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { type ConsumedFault, type Messaging, messaging } from '../index.ts';
 import { type MemoryBroker, memory } from './index.ts';
 
@@ -75,11 +76,7 @@ const payments = {
   version: '5.1.0',
   endpoints: {},
   events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
+  standardRejections: providedStandardRejections(),
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
