@@ -6,6 +6,7 @@ import { noFileLinesOf, placedOf } from './handler-files.ts';
 import { orphanLinesOf } from './orphans.ts';
 import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
 import { stubsOf } from './stubs.ts';
+import { unreachedLinesOf } from './unreached.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
@@ -52,6 +53,7 @@ async function generateService(run: Run, built: BuiltService): Promise<Exit> {
   const failures = [
     ...stubs.failureLines,
     ...regenerated.failureLines,
+    ...unreachedLinesOf(service, exports.exports),
     ...noFileLinesOf(service),
     ...orphans.lines,
   ];

@@ -6,14 +6,21 @@ export {
   resolutionOf,
 } from './answerable.ts';
 export type { Declarations } from './declarations.ts';
-export { declarationsOf, listedDefinitionsOf, providerNameOf } from './declarations.ts';
+export {
+  declarationsOf,
+  listedDefinitionsOf,
+  providerExportsOf,
+  providerNameOf,
+} from './declarations.ts';
 export type { Listed } from './grouped.ts';
 export {
   commandsOf,
+  declarationsListedBy,
   endpointsOf,
   eventsOf,
   fieldListings,
   groupedFields,
+  isListable,
   listingsOf,
   subscriptionsOf,
 } from './grouped.ts';

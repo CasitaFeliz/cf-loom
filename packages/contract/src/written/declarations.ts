@@ -1,4 +1,4 @@
-import type { Definitions } from '../declarations/index.ts';
+import type { Definitions, Dependency } from '../declarations/index.ts';
 import { isContract, isDefinitions, isDependency } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { groupedOf, groupsOf } from './grouped.ts';
@@ -133,4 +133,16 @@ function isLocatedDependency(written: {
 export function providerNameOf(dependency: unknown): string | undefined {
   const { name } = partOf<'name'>(partOf<'provider'>(dependency).provider);
   return typeof name === 'string' ? name : undefined;
+}
+
+/** The Endpoints and Events a Dependency's Provider exports; none of a kind when a cast left it out of the Contract Package. */
+export function providerExportsOf(dependency: Dependency): {
+  readonly endpoints: readonly unknown[];
+  readonly events: readonly unknown[];
+} {
+  const provider = partOf<'endpoints' | 'events'>(dependency.provider);
+  return {
+    endpoints: Object.values(partOf(provider.endpoints)),
+    events: Object.values(partOf(provider.events)),
+  };
 }

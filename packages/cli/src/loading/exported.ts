@@ -36,12 +36,22 @@ export type ExportedAt =
 /** A file of the Contract exporting a declaration. */
 export type FileExport = Extract<ExportedAt, { readonly kind: 'file' }>;
 
+/** A file of the Contract exporting a value under a name. */
+export type ExportedValue = FileExport & { readonly value: unknown };
+
 /** The files of the Contract that export a declaration, by identity, in code point order of file and name. */
 export type ExportsOf = (declaration: unknown) => readonly FileExport[];
 
-/** What `src/contract/` exports, or the file that could not be imported. */
+/**
+ * What `src/contract/` exports: every export, a default one included, in code point order of file
+ * and name, and where a declaration is exported under a name; or the file that could not be imported.
+ */
 export type ContractExports =
-  | { readonly kind: 'exported'; readonly exportsOf: ExportsOf }
+  | {
+      readonly kind: 'exported';
+      readonly exports: readonly ExportedValue[];
+      readonly exportsOf: ExportsOf;
+    }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
@@ -54,22 +64,20 @@ export async function contractExportsOf(directory: string): Promise<ContractExpo
   if (files.kind === 'failed') {
     return files;
   }
-  const exportsByDeclaration = new Map<unknown, FileExport[]>();
+  const exports: ExportedValue[] = [];
   for (const path of [...files.files].sort(byCodePoint)) {
     const imported = await importedModuleOf(join(directory, path), directory);
     if (imported.kind === 'failed') {
       return { kind: 'failed', message: `${path} cannot be loaded: ${imported.message}` };
     }
     for (const name of namesOf(imported.exports)) {
-      const declaration = imported.exports[name];
-      const found = exportsByDeclaration.get(declaration) ?? [];
-      found.push({ kind: 'file', path, name });
-      exportsByDeclaration.set(declaration, found);
+      exports.push({ kind: 'file', path, name, value: imported.exports[name] });
     }
   }
   return {
     kind: 'exported',
-    exportsOf: (declaration) => exportsByDeclaration.get(declaration) ?? [],
+    exports,
+    exportsOf: (declaration) => exports.filter(({ value }) => value === declaration),
   };
 }
 
@@ -77,9 +85,7 @@ function isContractSource(file: string): boolean {
   return file.endsWith('.ts') && !file.endsWith('.test.ts') && !file.endsWith('.d.ts');
 }
 
-/** A module's named exports, in code point order. */
+/** A module's exports, `default` included, in code point order of their names. */
 function namesOf(exports: Readonly<Record<string, unknown>>): readonly string[] {
-  return Object.keys(exports)
-    .filter((name) => name !== 'default')
-    .sort(byCodePoint);
+  return Object.keys(exports).sort(byCodePoint);
 }
