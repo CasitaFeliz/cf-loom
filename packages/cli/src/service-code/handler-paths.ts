@@ -3,6 +3,7 @@ import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
 import { contractFolder, isUnderContract } from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
+import type { HandlerLocal } from './code-names.ts';
 import {
   type DeclarationHandled,
   declaredHandledOf,
@@ -92,12 +93,28 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
 export function elementLabelOf(handled: DeclarationHandled | MessageHandled): string {
   switch (handled.kind) {
     case 'endpoint':
-      return `endpoints.${handled.name}`;
     case 'guard':
-      return `guards.${handled.name}`;
-    case 'command':
-      return `commands.${messageIdentityOf(handled.name, handled.version)}`;
     case 'subscription':
-      return `subscriptions.${handled.name}`;
+      return labelOf(handled.kind, handled.name);
+    case 'command':
+      return labelOf(handled.kind, messageIdentityOf(handled.name, handled.version));
+  }
+}
+
+/** An Element no longer declared, by its name in code: `endpoints.getOrder`, `commands.chargeCardV1`. */
+export function recordedLabelOf({ kind, name }: HandlerLocal): string {
+  return labelOf(kind, name);
+}
+
+function labelOf(kind: Handled['kind'], name: string): string {
+  switch (kind) {
+    case 'endpoint':
+      return `endpoints.${name}`;
+    case 'guard':
+      return `guards.${name}`;
+    case 'command':
+      return `commands.${name}`;
+    case 'subscription':
+      return `subscriptions.${name}`;
   }
 }

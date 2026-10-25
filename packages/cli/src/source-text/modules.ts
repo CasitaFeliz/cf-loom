@@ -24,6 +24,15 @@ export function defaultImportOf(local: string, specifier: string): string {
   return `import ${local} from ${stringLiteralOf(specifier)};`;
 }
 
+/** A default import of a module as `defaultImportOf` spells it: the local name and the specifier. */
+export type DefaultImport = { readonly local: string; readonly specifier: string };
+
+/** The default imports a generated module's text holds, which `defaultImportOf` spelled. */
+export function defaultImportsOf(text: string): readonly DefaultImport[] {
+  const lines = text.matchAll(/^import ([A-Za-z_$][A-Za-z0-9_$]*) from '([^'\\\r\n]*)';\r?$/gm);
+  return [...lines].map(([, local = '', specifier = '']) => ({ local, specifier }));
+}
+
 /**
  * The relative specifier from one file to another, both relative to the same folder, naming the
  * `.ts` file, as Node's type stripping and `tsc`'s rewriting require.
@@ -31,6 +40,11 @@ export function defaultImportOf(local: string, specifier: string): string {
 export function relativeSpecifierOf(from: string, to: string): string {
   const relative = posix.relative(posix.dirname(from), to);
   return relative.startsWith('.') ? relative : `./${relative}`;
+}
+
+/** The path a relative specifier names from a file, both relative to the same folder. */
+export function pathOfSpecifier(from: string, specifier: string): string {
+  return posix.normalize(posix.join(posix.dirname(from), specifier));
 }
 
 /** What a generated module holds: its first lines, its imports in order, then its body. */

@@ -1,10 +1,12 @@
-export { pairingNameOf } from './code-names.ts';
+export { handlerLocalOf, pairingNameOf } from './code-names.ts';
 export { isWrittenByGenerate } from './generated-header.ts';
 export type { DeclarationHandled, DeprecationStamp, Handled, MessageHandled } from './handled.ts';
 export { deprecationStampsOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';
-export { elementLabelOf, handlerPathsOf } from './handler-paths.ts';
+export { elementLabelOf, handlerPathsOf, recordedLabelOf } from './handler-paths.ts';
 export type { MessageExports } from './readers.ts';
 export { pairingTargetOf, readersTextOf } from './readers.ts';
+export type { RecordedHandler } from './recorded-handlers.ts';
+export { recordedHandlersOf } from './recorded-handlers.ts';
 export type { StubTarget } from './service-files.ts';
 export { exportedTargetOf, handlerMapTextOf, stubTextOf } from './service-files.ts';

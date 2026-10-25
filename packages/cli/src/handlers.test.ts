@@ -7,6 +7,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -149,9 +150,14 @@ function writtenBy(project: string): Readonly<Record<string, string>> {
   );
 }
 
-/** The line `generate` and `verify` print for a Handler file nothing declared names. */
-function orphanLine(path: string): string {
-  return `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it`;
+/** The line `generate` and `verify` print for a Handler left at a path its Element no longer has. */
+function movedLine(old: string, element: string, now: string): string {
+  return `${old} is the Handler of ${element}, which is now ${now}: move it`;
+}
+
+/** The same line when the Element's new path already holds a file. */
+function heldLine(old: string, element: string, now: string): string {
+  return movedLine(old, element, now).replace(/move it$/, 'delete it');
 }
 
 /** The files of `aService()` changed so its Endpoint `getOrder` is named `fetchOrder`. */
@@ -166,8 +172,8 @@ function getOrderRenamed(): Readonly<Record<string, string>> {
 }
 
 /** The line for the Handler `getOrder` left behind when it is renamed `fetchOrder`. */
-const movedGetOrderLine =
-  'src/endpoints/orders/get-order.handler.ts names no declared Endpoint: move it to src/endpoints/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else list its declaration in a Group or delete it';
+const renamedGetOrderLine =
+  'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/endpoints/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it';
 
 const apiKeyGuard = lines([
   "import { defineGuard } from '@cf-loom/contract';",
@@ -1371,7 +1377,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
-  test('after layout.endpoint changes, the Handlers left at the old paths are orphans', () => {
+  test('after layout.endpoint changes, the Handlers left at the old paths are named with where they go', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
@@ -1382,33 +1388,156 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
       status: 1,
       stdout: '',
       stderr: lines([
-        orphanLine('src/endpoints/orders/create-order.handler.ts'),
-        orphanLine('src/endpoints/orders/get-order.handler.ts'),
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        movedLine(
+          'src/endpoints/orders/get-order.handler.ts',
+          'endpoints.getOrder',
+          'src/http/orders/get-order.handler.ts',
+        ),
       ]),
     });
   });
 
-  test.each([
-    'src/endpoints/orders/GetOrder.handler.ts',
-    'src/endpoints/Orders/get-order.handler.ts',
-    'src/endpoints/orders/get_order.handler.ts',
-    'src/endpoints/orders/-get-order.handler.ts',
-    'src/commands/payments/charge-card.v0.handler.ts',
-    'src/commands/payments/charge-card.v01.handler.ts',
-    'src/commands/payments/charge-card.vx.handler.ts',
-  ])('a .handler.ts file %s, whose names break a variable’s grammar, is no Handler', (path) => {
+  test('after the layout moves from one custom path to another, the Handlers are named with where they go', () => {
+    const project = aProject(
+      withLayout(aService(), "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+    );
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ endpoint: 'src/api/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        movedLine(
+          'src/http/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/api/orders/create-order.handler.ts',
+        ),
+        movedLine(
+          'src/http/orders/get-order.handler.ts',
+          'endpoints.getOrder',
+          'src/api/orders/get-order.handler.ts',
+        ),
+      ]),
+    });
+  });
+
+  test('after every field of the layout moves, each Handler and each generated file left behind is named', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
-    write(project, { [path]: 'export const onEvent = () => {};\n' });
+    write(project, withLayout({}, movedLayout));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual([
+      movedLine(
+        'src/commands/payments/charge-card.v1.handler.ts',
+        'commands.ChargeCard@1',
+        'src/billing/charge-card.v1.handler.ts',
+      ),
+      movedLine(
+        'src/commands/payments/charge-card.v2.handler.ts',
+        'commands.ChargeCard@2',
+        'src/billing/charge-card.v2.handler.ts',
+      ),
+      movedLine(
+        'src/endpoints/orders/create-order.handler.ts',
+        'endpoints.createOrder',
+        'src/http/orders/create-order.handler.ts',
+      ),
+      movedLine(
+        'src/endpoints/orders/get-order.handler.ts',
+        'endpoints.getOrder',
+        'src/http/orders/get-order.handler.ts',
+      ),
+      movedLine(
+        'src/guards/api-key.handler.ts',
+        'guards.apiKey',
+        'src/security/api-key.handler.ts',
+      ),
+      'src/handlers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
+      'src/readers.generated.ts is a file cf-loom generate wrote, at no path the layout names: delete it',
+      movedLine(
+        'src/subscriptions/payments/audit-created.handler.ts',
+        'subscriptions.auditCreated',
+        'src/reactions/audit-created.handler.ts',
+      ),
+      movedLine(
+        'src/subscriptions/payments/notify-on-settled.handler.ts',
+        'subscriptions.notifyOnSettled',
+        'src/reactions/notify-on-settled.handler.ts',
+      ),
+    ]);
+  });
+
+  test('a Handler left at the old path and written at the new one is named to delete', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+    write(project, {
+      'src/http/orders/create-order.handler.ts': "export default 'new';\n",
+      'src/http/orders/get-order.handler.ts': "export default 'new';\n",
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        heldLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        heldLine(
+          'src/endpoints/orders/get-order.handler.ts',
+          'endpoints.getOrder',
+          'src/http/orders/get-order.handler.ts',
+        ),
+      ]),
+    });
+  });
+
+  test('a Handler the author deleted after the layout changed is named by no line', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
+    rmSync(join(project, 'src/endpoints/orders/create-order.handler.ts'));
+    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(handlerFiles(project)).toContain('http/orders/get-order.handler.ts');
   });
 
-  test('a .handler.ts file outside every Handler template of the layout is no Handler', () => {
+  test.each([
+    'src/lib/error.handler.ts',
+    'src/endpoints/lambda/error.handler.ts',
+    'src/endpoints/orders/GetOrder.handler.ts',
+  ])('a Handler file %s that the Handler map never imported is the Service’s', (path) => {
+    const project = aProject({ ...aService(), [path]: 'export const onError = () => {};\n' });
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+    expect(verified).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Handler file beside the Endpoints under a variable first folder is the Service’s', () => {
+    const layout = "{ endpoint: 'src/{group}/{name}.handler.ts' }";
     const project = aProject({
-      ...aService(),
+      ...withLayout(aService(), layout),
       'src/lib/error.handler.ts': 'export const onError = () => {};\n',
     });
 
@@ -1670,56 +1799,21 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Guard’s Handler that no Guard names ends its line with delete it', () => {
-    const project = aProject(aService());
-    cfLoom(project, 'generate');
-    write(project, { 'src/guards/old-key.handler.ts': "export default 'old';\n" });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'src/guards/old-key.handler.ts names no declared Guard: delete it\n',
-    });
-  });
-
-  test('a Guard’s Handler that no Guard names offers the Guard that lacks its Handler', () => {
-    const project = aProject({
-      ...aService(),
-      'src/guards/old-key.handler.ts': "export default 'old';\n",
-    });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'src/guards/old-key.handler.ts names no declared Guard: move it to src/guards/api-key.handler.ts if guards.apiKey replaces it, else delete it\n',
-    });
-  });
-
-  test('a Handler of an Endpoint renamed is an orphan that the line says to move', () => {
+  test('a Handler of an Endpoint renamed is named with the Endpoint that may replace it', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, getOrderRenamed());
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: `${movedGetOrderLine}\n`,
-    });
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${renamedGetOrderLine}\n` });
   });
 
-  test('a Handler file that two Endpoints lack theirs for lists both as where to move it', () => {
+  test('a Handler of an Endpoint no longer declared lists every Endpoint that lacks its Handler', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
+    write(project, getOrderRenamed());
     rmSync(join(project, 'src/endpoints/orders/create-order.handler.ts'));
-    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
-    write(project, { 'src/endpoints/orders/old-order.handler.ts': "export default 'old';\n" });
 
     const ran = cfLoom(project, 'generate');
 
@@ -1727,20 +1821,20 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'src/endpoints/orders/old-order.handler.ts names no declared Endpoint: move it to the Handler path of the Element that replaces it, endpoints.createOrder (src/endpoints/orders/create-order.handler.ts) or endpoints.getOrder (src/endpoints/orders/get-order.handler.ts), else list its declaration in a Group or delete it\n',
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to the Handler path of the Element that replaces it, endpoints.createOrder (src/endpoints/orders/create-order.handler.ts) or endpoints.fetchOrder (src/endpoints/orders/fetch-order.handler.ts), else delete it\n',
     });
   });
 
-  test('a Handler file that fits the templates of two kinds names both', () => {
-    const layout = lines([
-      '{',
-      "  endpoint: 'src/{group}/{name}.handler.ts',",
-      "  subscription: 'src/{group}/{name}.handler.ts',",
-      '}',
-    ]).trimEnd();
-    const project = aProject(withLayout(aMessagingService(), layout));
+  test('a Handler of an Endpoint deleted from the Contract is named to delete when no Endpoint lacks a Handler', () => {
+    const project = aProject(aService());
     cfLoom(project, 'generate');
-    write(project, { 'src/payments/old.handler.ts': "export default 'old';\n" });
+    rmSync(join(project, 'src/contract/endpoints/orders/create-order.endpoint.ts'));
+    write(project, {
+      'src/contract/index.ts': aRoot({
+        getOrder: './endpoints/orders/get-order.endpoint.ts',
+        listOrders: './endpoints/orders/list-orders.endpoint.ts',
+      }),
+    });
 
     const ran = cfLoom(project, 'generate');
 
@@ -1748,15 +1842,39 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'src/payments/old.handler.ts names no declared Endpoint or Subscription: list its declaration in a Group or delete it\n',
+        'src/endpoints/orders/create-order.handler.ts is the Handler of endpoints.createOrder, which is no longer declared: delete it\n',
     });
   });
 
-  test('a Handler file beside the Endpoints under a variable first folder is claimed', () => {
-    const layout = "{ endpoint: 'src/{group}/{name}.handler.ts' }";
-    const project = aProject(withLayout(aService(), layout));
+  test('the Handler of an Endpoint retired after the map imported it is no orphan', () => {
+    const project = aProject(aService());
     cfLoom(project, 'generate');
-    write(project, { 'src/lib/error.handler.ts': 'export const onError = () => {};\n' });
+    write(project, {
+      'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
+        name: 'createOrder',
+        method: 'POST',
+        path: '/orders',
+        visibility: 'private',
+        lifecycle: 'retired',
+      }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/handlers.generated.ts')).not.toContain('createOrder');
+  });
+
+  test('a Handler of a Guard renamed is named with the Guard that may replace it', () => {
+    const service = aService();
+    const guard = 'src/contract/guards/api-key.guard.ts';
+    const endpoint = 'src/contract/endpoints/orders/get-order.endpoint.ts';
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    write(project, {
+      [guard]: (service[guard] ?? '').replaceAll('apiKey', 'apiToken'),
+      [endpoint]: (service[endpoint] ?? '').replaceAll('apiKey', 'apiToken'),
+    });
 
     const ran = cfLoom(project, 'generate');
 
@@ -1764,7 +1882,58 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'src/lib/error.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
+        'src/guards/api-key.handler.ts is the Handler of guards.apiKey, which is no longer declared: move it to src/guards/api-token.handler.ts if guards.apiToken replaces it, else delete it\n',
+    });
+  });
+
+  test('a Handler of a Subscription renamed is named with the Subscription that may replace it', () => {
+    const service = aMessagingService();
+    const subscriptionsFile = 'src/contract/subscriptions.ts';
+    const root = 'src/contract/index.ts';
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    write(project, {
+      [subscriptionsFile]: (service[subscriptionsFile] ?? '').replaceAll(
+        'auditCreated',
+        'auditShipped',
+      ),
+      [root]: (service[root] ?? '').replaceAll('auditCreated', 'auditShipped'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        'src/subscriptions/payments/audit-created.handler.ts is the Handler of subscriptions.auditCreated, which is no longer declared: move it to src/subscriptions/payments/audit-shipped.handler.ts if subscriptions.auditShipped replaces it, else delete it\n',
+    });
+  });
+
+  test('the Handlers of a Command renamed are named by the code name of their Message Versions', () => {
+    const service = aMessagingService();
+    const messagesFile = 'src/contract/messages.ts';
+    const root = 'src/contract/index.ts';
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    write(project, {
+      [messagesFile]: (service[messagesFile] ?? '')
+        .replaceAll('chargeCardV', 'captureCardV')
+        .replaceAll("name: 'ChargeCard'", "name: 'CaptureCard'"),
+      [root]: (service[root] ?? '').replaceAll('chargeCardV', 'captureCardV'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const replacements =
+      'move it to the Handler path of the Element that replaces it, commands.CaptureCard@1 (src/commands/payments/capture-card.v1.handler.ts) or commands.CaptureCard@2 (src/commands/payments/capture-card.v2.handler.ts), else delete it';
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        `src/commands/payments/charge-card.v1.handler.ts is the Handler of commands.chargeCardV1, which is no longer declared: ${replacements}`,
+        `src/commands/payments/charge-card.v2.handler.ts is the Handler of commands.chargeCardV2, which is no longer declared: ${replacements}`,
+      ]),
     });
   });
 
@@ -1780,23 +1949,6 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran.status).toBe(0);
     expect(read(project, 'src/handlers.generated.ts')).not.toContain('listOrders');
   });
-  test.each([
-    ['src/commands/payments/capture-card.v1.handler.ts', "Command's Message Version"],
-    ['src/subscriptions/payments/old-audit.handler.ts', 'Subscription'],
-  ])('a Handler file %s that nothing declared names exits 1 naming it', (path, kind) => {
-    const project = aProject(aMessagingService());
-    cfLoom(project, 'generate');
-    write(project, { [path]: "export default 'old';\n" });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: `${path} names no declared ${kind}: list its declaration in a Group or delete it\n`,
-    });
-  });
-
   test('the Handler of a Retired Command’s Message Version that is still declared is no orphan', () => {
     const project = aProject({
       ...aMessagingService(),
@@ -2305,19 +2457,15 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     });
   });
 
-  test('verify exits 1 on a Handler file no declared Endpoint or Guard names', () => {
+  test('verify exits 1 on a Handler of an Endpoint no longer declared', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
-    write(project, { 'src/endpoints/orders/old-order.handler.ts': "export default 'old';\n" });
+    write(project, getOrderRenamed());
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'src/endpoints/orders/old-order.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
-    });
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(`${renamedGetOrderLine}\n`);
   });
 
   test('verify exits 1 when a Handler path is a folder', () => {
@@ -2503,21 +2651,26 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     });
   });
 
-  test('verify exits 1 on a Handler file under src/subscriptions no declared Subscription names', () => {
-    const project = aProject(aMessagingService());
+  test('verify exits 1 on a Handler of a Subscription no longer declared', () => {
+    const service = aMessagingService();
+    const subscriptionsFile = 'src/contract/subscriptions.ts';
+    const root = 'src/contract/index.ts';
+    const project = aProject(service);
     cfLoom(project, 'generate');
     write(project, {
-      'src/subscriptions/payments/old-audit.handler.ts': "export default 'old';\n",
+      [subscriptionsFile]: (service[subscriptionsFile] ?? '').replaceAll(
+        'auditCreated',
+        'auditShipped',
+      ),
+      [root]: (service[root] ?? '').replaceAll('auditCreated', 'auditShipped'),
     });
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'src/subscriptions/payments/old-audit.handler.ts names no declared Subscription: list its declaration in a Group or delete it\n',
-    });
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(
+      'src/subscriptions/payments/audit-created.handler.ts is the Handler of subscriptions.auditCreated, which is no longer declared: move it to src/subscriptions/payments/audit-shipped.handler.ts if subscriptions.auditShipped replaces it, else delete it\n',
+    );
   });
 });
 
@@ -2585,7 +2738,7 @@ describe('cf-loom verify: a configured layout', () => {
     });
   });
 
-  test('after layout.endpoint changes, verify exits 1 naming the Handlers left at the old paths', () => {
+  test('after layout.endpoint changes, verify exits 1 naming where the Handlers left at the old paths go', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
@@ -2593,8 +2746,21 @@ describe('cf-loom verify: a configured layout', () => {
     const ran = cfLoom(project, 'verify');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toContain(`${orphanLine('src/endpoints/orders/create-order.handler.ts')}\n`);
-    expect(ran.stderr).toContain(`${orphanLine('src/endpoints/orders/get-order.handler.ts')}\n`);
+    const createOrder = movedLine(
+      'src/endpoints/orders/create-order.handler.ts',
+      'endpoints.createOrder',
+      'src/http/orders/create-order.handler.ts',
+    );
+    const getOrder = movedLine(
+      'src/endpoints/orders/get-order.handler.ts',
+      'endpoints.getOrder',
+      'src/http/orders/get-order.handler.ts',
+    );
+    expect(ran.stderr).toContain(`${createOrder}\n`);
+    expect(ran.stderr).toContain(`${getOrder}\n`);
+    expect(ran.stderr).toContain(
+      'src/http/orders/get-order.handler.ts is missing: run cf-loom generate\n',
+    );
   });
 
   test.each([
@@ -2647,39 +2813,25 @@ describe('cf-loom generate: linked folders and other runs', () => {
     );
   });
 
-  test('an orphan Handler behind a linked folder exits 1 naming it', () => {
-    const project = aProject({
-      ...aService(),
-      'elsewhere/old.handler.ts': "export default 'old';\n",
-    });
+  test('a Handler behind a linked folder is named by the path the map imported it from', () => {
+    const project = aProject(aService());
     cfLoom(project, 'generate');
-    symlinkSync(join(project, 'elsewhere'), join(project, 'src/endpoints/other'), 'dir');
+    renameSync(join(project, 'src/endpoints/orders'), join(project, 'elsewhere-orders'));
+    symlinkSync(join(project, 'elsewhere-orders'), join(project, 'src/endpoints/orders'), 'dir');
+    write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'src/endpoints/other/old.handler.ts names no declared Endpoint: list its declaration in a Group or delete it\n',
-    });
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(
+      `${movedLine('src/endpoints/orders/get-order.handler.ts', 'endpoints.getOrder', 'src/http/orders/get-order.handler.ts')}\n`,
+    );
   });
 
   test.each(['aa', 'zz'])('a folder link src/%s to src/endpoints gives no orphan', (name) => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     symlinkSync(join(project, 'src/endpoints'), join(project, `src/${name}`), 'dir');
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran).toMatchObject({ status: 0, stderr: '' });
-  });
-
-  test('a Handler reached only through a folder link counts as named by its real path', () => {
-    const layout = "{ endpoint: 'src/{group}/{name}.handler.ts' }";
-    const project = aProject(withLayout(aService(), layout));
-    cfLoom(project, 'generate');
-    symlinkSync(join(project, 'src/orders'), join(project, 'src/zz'), 'dir');
 
     const ran = cfLoom(project, 'verify');
 
@@ -2999,7 +3151,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
     });
   });
 
-  test('after a Command’s Message Version moves to another Group, its Handler left in the old folder is an orphan', () => {
+  test('after a Command’s Message Version moves to another Group, its Handler left in the old folder is named with where it goes', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     const moved = withRoot(
@@ -3013,12 +3165,11 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr:
-        "src/commands/payments/charge-card.v2.handler.ts names no declared Command's Message Version: move it to src/commands/orders/charge-card.v2.handler.ts if commands.ChargeCard@2 replaces it, else list its declaration in a Group or delete it\n",
+      stderr: `${movedLine('src/commands/payments/charge-card.v2.handler.ts', 'commands.ChargeCard@2', 'src/commands/orders/charge-card.v2.handler.ts')}\n`,
     });
   });
 
-  test('after a Group is renamed, its Message Handlers left in the old folder are orphans', () => {
+  test('after a Group is renamed, its Message Handlers left in the old folder are named with where they go', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     const renamed = withRoot(aMessagingService(), paymentsNamed('billing'));
@@ -3026,16 +3177,28 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     const ran = cfLoom(project, 'generate');
 
-    const moveCommand =
-      'move it to the Handler path of the Element that replaces it, commands.ChargeCard@1 (src/commands/billing/charge-card.v1.handler.ts) or commands.ChargeCard@2 (src/commands/billing/charge-card.v2.handler.ts), else list its declaration in a Group or delete it';
-    const moveSubscription =
-      'move it to the Handler path of the Element that replaces it, subscriptions.auditCreated (src/subscriptions/billing/audit-created.handler.ts) or subscriptions.notifyOnSettled (src/subscriptions/billing/notify-on-settled.handler.ts), else list its declaration in a Group or delete it';
     expect(ran.status).toBe(1);
     expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual([
-      `src/commands/payments/charge-card.v1.handler.ts names no declared Command's Message Version: ${moveCommand}`,
-      `src/commands/payments/charge-card.v2.handler.ts names no declared Command's Message Version: ${moveCommand}`,
-      `src/subscriptions/payments/audit-created.handler.ts names no declared Subscription: ${moveSubscription}`,
-      `src/subscriptions/payments/notify-on-settled.handler.ts names no declared Subscription: ${moveSubscription}`,
+      movedLine(
+        'src/commands/payments/charge-card.v1.handler.ts',
+        'commands.ChargeCard@1',
+        'src/commands/billing/charge-card.v1.handler.ts',
+      ),
+      movedLine(
+        'src/commands/payments/charge-card.v2.handler.ts',
+        'commands.ChargeCard@2',
+        'src/commands/billing/charge-card.v2.handler.ts',
+      ),
+      movedLine(
+        'src/subscriptions/payments/audit-created.handler.ts',
+        'subscriptions.auditCreated',
+        'src/subscriptions/billing/audit-created.handler.ts',
+      ),
+      movedLine(
+        'src/subscriptions/payments/notify-on-settled.handler.ts',
+        'subscriptions.notifyOnSettled',
+        'src/subscriptions/billing/notify-on-settled.handler.ts',
+      ),
     ]);
   });
 
@@ -3077,7 +3240,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toContain(
-      'src/subscriptions/payments/audit-created.handler.ts names no declared Subscription: move it to src/subscriptions/orders/audit-created.handler.ts if subscriptions.auditCreated replaces it, else list its declaration in a Group or delete it\n',
+      `${movedLine('src/subscriptions/payments/audit-created.handler.ts', 'subscriptions.auditCreated', 'src/subscriptions/orders/audit-created.handler.ts')}\n`,
     );
   });
 });

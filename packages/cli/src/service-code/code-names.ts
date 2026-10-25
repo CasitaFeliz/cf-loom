@@ -27,17 +27,46 @@ export function readerNameOf(message: MessageVersion): string {
   return `${codeNameOf(message)}Reader`;
 }
 
-/** The Handler map's local name of a Handler, suffixed by its kind, so locals of two kinds never meet. */
+type HandlerKind = Handled['kind'];
+
+/** The kinds of Handler, in the order the Handler map lists them. */
+const handlerKinds: readonly HandlerKind[] = ['endpoint', 'guard', 'command', 'subscription'];
+
+/** What ends the Handler map's local name of a Handler, by kind, so locals of two kinds never meet. */
+const localSuffixes: Readonly<Record<HandlerKind, string>> = {
+  endpoint: 'EndpointHandler',
+  guard: 'GuardHandler',
+  command: 'CommandHandler',
+  subscription: 'SubscriptionHandler',
+};
+
+/** The Handler map's local name of a Handler: its name in code, suffixed by its kind. */
 export function handlerLocalOf(handled: Handled): string {
+  return `${nameInCodeOf(handled)}${localSuffixes[handled.kind]}`;
+}
+
+/** The kind and the name in code a Handler map's local name was made of. */
+export type HandlerLocal = { readonly kind: HandlerKind; readonly name: string };
+
+/** What a local name stands for, or nothing when it is no Handler's; the inverse of `handlerLocalOf`. */
+export function handlerOfLocal(local: string): HandlerLocal | undefined {
+  for (const kind of handlerKinds) {
+    const suffix = localSuffixes[kind];
+    if (local.endsWith(suffix) && local.length > suffix.length) {
+      return { kind, name: local.slice(0, -suffix.length) };
+    }
+  }
+  return undefined;
+}
+
+function nameInCodeOf(handled: Handled): string {
   switch (handled.kind) {
     case 'endpoint':
-      return `${handled.name}EndpointHandler`;
     case 'guard':
-      return `${handled.name}GuardHandler`;
+      return handled.name;
     case 'command':
-      return `${pairingNameOf(handled)}CommandHandler`;
     case 'subscription':
-      return `${pairingNameOf(handled)}SubscriptionHandler`;
+      return pairingNameOf(handled);
   }
 }
 
