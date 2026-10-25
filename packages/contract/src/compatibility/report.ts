@@ -205,7 +205,6 @@ export type Change = {
 
 /** A Compatibility Check that compared, with its Changes in order and whether the Snapshot's hash moved. */
 export type ComparedReport = {
-  readonly kind: 'compared';
   readonly changes: readonly Change[];
   readonly hashChanged: boolean;
 };

@@ -34,7 +34,6 @@ export function compatibilityReportOf(
 ): ComparedReport {
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
   return {
-    kind: 'compared',
     changes: changesOf(baseline, proposed),
     hashChanged: hashedTextOf(merged) !== hashedTextOf(baseline),
   };

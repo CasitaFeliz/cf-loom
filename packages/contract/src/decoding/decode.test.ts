@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { schemaExports } from '../../test/snapshots.ts';
 import {
@@ -1764,15 +1765,6 @@ describe('walkSchemas and decodeSnapshot agree on bounds', () => {
     }
   });
 
-  /** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
-  function seededNext(seed: number): () => number {
-    let state = seed;
-    return () => {
-      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-      return state / 2 ** 32;
-    };
-  }
-
   function pick<Value>(next: () => number, values: readonly Value[]): Value {
     return values[Math.floor(next() * values.length)] as Value;
   }
@@ -1943,6 +1935,47 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
 
     expect(node?.type).toBe('allOf');
     expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk. */
+  function publishedHolding(committed: ServiceSnapshot, schema: z.ZodType) {
+    const walk = walkSchemas([{ at: ['defs', 'probe'], schema }], () => undefined);
+    const [located] = walk.located;
+    if (located?.walked.kind !== 'walked') {
+      return undefined;
+    }
+    const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };
+    return publishedSnapshotOf(undefined, { ...committed, defs }, '1.0.0');
+  }
+
+  /** What the decoder makes of each order-free array of the probe def reversed or holding an item twice. */
+  function reorderedKindsOf(published: PublishedSnapshot): readonly string[] {
+    const arrays = orderFreeArraysOf(published).filter(
+      (at) => at[0] === 'defs' && at[1] === 'probe' && arrayAt(published, at).length > 0,
+    );
+    const twice = arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]]));
+    const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+    const reversed = reversible.map((at) => withArrayAt(published, at, (list) => list.reverse()));
+    return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+  }
+
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', () => {
+    const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
+    const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
+    const { schemaOf } = randomSchemas(seededNext(2231));
+    const drawn = Array.from({ length: 2000 }, () => publishedHolding(committed, schemaOf(3)));
+    const published = drawn.filter((snapshot) => snapshot !== undefined).slice(0, 200);
+
+    const readBack = published.map((snapshot) => {
+      const decoded = decodeSnapshot(canonicalTextOf(snapshot));
+      return decoded.kind === 'decoded' ? canonicalTextOf(decoded.snapshot) : decoded;
+    });
+    const reordered = published.flatMap(reorderedKindsOf);
+
+    expect(published).toHaveLength(200);
+    expect(readBack).toEqual(published.map(canonicalTextOf));
+    expect(reordered.length).toBeGreaterThan(50);
+    expect(new Set(reordered)).toEqual(new Set(['malformed']));
   });
 
   test.each(publishedSnapshots())('%s decodes as it was published', (_name, published) => {

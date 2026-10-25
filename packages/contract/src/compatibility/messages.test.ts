@@ -152,9 +152,6 @@ function changesOf(
   proposed: ServiceSnapshot,
 ): readonly Change[] {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report.changes;
 }
 
@@ -274,7 +271,7 @@ describe('compatibilityReportOf, a Message Version’s Group', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('moving a Command’s Message Version to another Group gives no Change, only a changed hash', () => {
@@ -284,7 +281,7 @@ describe('compatibilityReportOf, a Message Version’s Group', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 });
 

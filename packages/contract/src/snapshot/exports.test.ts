@@ -205,9 +205,6 @@ function changesOf(
 ) {
   const baseline = { ...definitionsSnapshotOf(before), version: '1.0.0' };
   const report = compatibilityReportOf(baseline, definitionsSnapshotOf(after));
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report.changes.filter(({ site }) => site.kind === 'export');
 }
 

@@ -123,9 +123,6 @@ function aProposed(
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -537,7 +534,7 @@ describe('compatibilityReportOf, Input headers', () => {
 
     const report = reportOf(aBaseline(own), aProposed(throughGuard));
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test('removing a header is Additive', () => {
@@ -763,7 +760,7 @@ describe('compatibilityReportOf, Neutral', () => {
   test.each(neutral)('%s gives no Change, only a changed hash', (_name, baseline, proposed) => {
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 });
 

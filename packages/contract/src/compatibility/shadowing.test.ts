@@ -105,9 +105,6 @@ function reportOf(
   tombstones: readonly string[] = [],
 ): ComparedReport {
   const report = compatibilityReportOf(aBaseline(baseline, tombstones), aProposed(proposed));
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
