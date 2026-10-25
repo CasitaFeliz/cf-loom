@@ -11,7 +11,7 @@ import {
   refusedMetaKey,
   refusedNonCamelCaseId,
 } from './not-allowed.ts';
-import { failed, failuresOf, type Walked, walked } from './walked.ts';
+import { failed, failuresOf, refusedBeside, type Walked, walked } from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };
@@ -55,7 +55,7 @@ export function annotated(result: Walked, annotations: Annotations): Walked {
 /** A node with what its schema's own metadata says, or the failures of either. */
 export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked {
   if (metadata.kind === 'not-allowed') {
-    return failed(failuresOf([metadata, result]));
+    return refusedBeside(metadata, result);
   }
   return annotated(result, metadata.value.annotations);
 }

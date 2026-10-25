@@ -12,18 +12,26 @@ import type {
   TaggedNode,
 } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
-import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
+import {
+  allWalked,
+  failed,
+  failuresOf,
+  type Outline,
+  type Walked,
+  type Walker,
+  walked,
+} from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` declared it or zod derived it from one. */
 export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   const values: readonly unknown[] = Object.values(schema._zod.def.entries);
   const strings = values.filter(isString);
   if (strings.length !== values.length) {
-    return notAllowed(at, refused.numericEnum);
+    return notAllowed(at, refused.numericEnum, { type: 'enum' });
   }
   const closed = enumOf(strings, at);
   if (closed.kind === 'not-allowed') {
-    return closed;
+    return failed(closed.failures, { type: 'enum' });
   }
   return walked({ ...closed.value, open: isOpen(schema) });
 }
@@ -35,10 +43,10 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
     def.options.map((option, index) => walker.schema(option, [...at, 'options', index])),
   );
   if (def.inclusive === false) {
-    return failed(failuresOf([notAllowed(at, refused.xor), options]));
+    return failed(failuresOf([notAllowed(at, refused.xor), options]), { type: 'union' });
   }
   if (options.kind === 'not-allowed') {
-    return options;
+    return failed(options.failures, { type: 'union' });
   }
   return choiceOf(options.value, at);
 }
@@ -58,12 +66,13 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
       return taggedVariant(variant, values, variantAt);
     }),
   );
+  const tagged: Outline = { type: 'tagged' };
   if (variants.kind === 'not-allowed') {
-    return variants;
+    return failed(variants.failures, tagged);
   }
   const keys = variants.value.map(([key]) => key);
   if (new Set(keys).size !== keys.length) {
-    return notAllowed(at, refused.duplicateDiscriminatorValue);
+    return notAllowed(at, refused.duplicateDiscriminatorValue, tagged);
   }
   return walked({
     type: 'tagged',
@@ -129,7 +138,7 @@ function choiceOf(options: readonly SchemaNode[], at: Path): Walked {
     at,
   );
   if (values.kind === 'not-allowed') {
-    return values;
+    return failed(values.failures, { type: 'enum' });
   }
   const nullable = literals.some((literal) => literal.nullable === true);
   return walked(nullable ? { ...values.value, nullable: true } : values.value);
@@ -138,7 +147,7 @@ function choiceOf(options: readonly SchemaNode[], at: Path): Walked {
 /** A closed enum of literal values, each once, in canonical order; one without values is refused. */
 export function enumOf(values: readonly JsonPrimitive[], at: Path): Walked<EnumNode> {
   if (values.length === 0) {
-    return notAllowed(at, refused.emptyEnum);
+    return notAllowed(at, refused.emptyEnum, { type: 'enum' });
   }
   const valueByJson = new Map(values.map((value) => [canonicalJson(value), value]));
   const distinct = [...valueByJson.values()];

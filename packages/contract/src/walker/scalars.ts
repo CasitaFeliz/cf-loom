@@ -4,7 +4,7 @@ import { enumOf } from './choices.ts';
 import { innerOfLazy } from './lazy.ts';
 import type { JsonPrimitive, Path } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
-import { allWalked, type Walked, walked } from './walked.ts';
+import { allWalked, failed, type Walked, walked } from './walked.ts';
 
 /**
  * A closed `enum` of the literal's JSON values; `null`, `undefined` and bigints have no JSON value
@@ -13,7 +13,7 @@ import { allWalked, type Walked, walked } from './walked.ts';
 export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Path): Walked {
   const values = allWalked(def.values.map((value) => jsonValueOf(value, at)));
   if (values.kind === 'not-allowed') {
-    return values;
+    return failed(values.failures, { type: 'enum' });
   }
   return enumOf(values.value, at);
 }

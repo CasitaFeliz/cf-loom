@@ -1,52 +1,45 @@
 import type * as core from 'zod/v4/core';
-import { checksOf, type DeclaredCheck, isConditional } from './check-defs.ts';
-import { constrainArray, constrainNumber, constrainString, unconstrained } from './checks.ts';
+import { checksOf, type DeclaredCheck } from './check-defs.ts';
+import { constrain } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import { innerOfOneLazy } from './lazy.ts';
 import { annotated } from './metadata.ts';
-import type { Path, SchemaNode } from './nodes.ts';
+import type { Path } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedName } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
-import { failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
+import { failed, failuresOf, refusedBeside, type Walked, type Walker, walked } from './walked.ts';
 
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
 export type Def = core.$ZodTypes['_zod']['def'];
 
-/** The node a schema's own def describes, with its own checks applied. */
+/** The node a schema's own def describes, with its own checks judged. */
 export function walkDefinition(schema: core.$ZodType, at: Path, walker: Walker): Walked {
-  const node = nodeOf(schema, at, walker);
-  if (node.kind === 'not-allowed') {
-    return node;
-  }
-  return constrained(node.value, checksOf(schema), at);
+  return withOwnChecks(schema, nodeOf(schema, at, walker), at);
 }
 
-/** A node with the constraint of each check, by what its type takes. */
-export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], at: Path): Walked {
-  if (checks.some(isConditional)) {
-    return notAllowed(at, refused.conditionalCheck);
+/**
+ * A schema's walk with its own checks judged, whether it built its node or failed. A format
+ * schema's own check is part of its type, so a refused type's is not refused again.
+ */
+export function withOwnChecks(schema: core.$ZodType, walkedSchema: Walked, at: Path): Walked {
+  const checks = walkedSchema.kind === 'walked' ? checksOf(schema) : checksBesideType(schema);
+  return constrain(walkedSchema, checks, at);
+}
+
+function checksBesideType(schema: core.$ZodType): readonly DeclaredCheck[] {
+  return checksOf(schema).filter((check) => check.def !== schema._zod.def);
+}
+
+/** The node of a schema's type; `z.coerce.*` is refused beside the node its type still builds. */
+function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
+  const node = nodeOfType(schema, at, walker);
+  const def = schema._zod.def as Def;
+  if ('coerce' in def && def.coerce === true) {
+    return refusedBeside(notAllowed(at, refused.coerce), node);
   }
-  switch (node.type) {
-    case 'string':
-      return constrainString(node, checks, at);
-    case 'number':
-      return constrainNumber(node, checks, at);
-    case 'array':
-      return constrainArray(node, checks, at);
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'tuple':
-    case 'union':
-    case 'tagged':
-    case 'allOf':
-    case 'json':
-    case 'ref':
-      return unconstrained(node, checks, at);
-  }
+  return node;
 }
 
 /**
@@ -54,12 +47,9 @@ export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], 
  * the end and is refused by its name, never walked as something it is not.
  */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the node or refusal of each zod type
-function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
+function nodeOfType(schema: core.$ZodType, at: Path, walker: Walker): Walked {
   const def = schema._zod.def as Def;
   const type: string = def.type;
-  if ('coerce' in def && def.coerce === true) {
-    return notAllowed(at, refused.coerce);
-  }
   switch (def.type) {
     case 'string':
       return walked({ type: 'string' });
@@ -97,7 +87,7 @@ function nodeOf(schema: core.$ZodType, at: Path, walker: Walker): Walked {
     case 'nonoptional':
     case 'promise':
     case 'success':
-      return refusedAround({ refusal: refused[def.type], inside: [def.innerType] }, at, walker);
+      return refusedWrapper(refused[def.type], at, walker.schema(def.innerType, at));
     case 'map':
       return refusedMap(def, at, walker);
     case 'set':
@@ -137,6 +127,14 @@ function unionNodeOf(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
     return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
   }
   return walkUnion(schema, at, walker);
+}
+
+/**
+ * A refused wrapper around one schema, which stands for that schema's node: removing the wrapper
+ * leaves its checks on the schema inside, so they are judged by it.
+ */
+function refusedWrapper(refusal: Refused, at: Path, inner: Walked): Walked {
+  return refusedBeside(notAllowed(at, refusal), inner);
 }
 
 /** A construct the walker refuses and the schemas it holds. */
