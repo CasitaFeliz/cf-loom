@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { byCodePoint, oneOf } from '@cf-loom/contract/internal';
+import { realPathOf } from '../loading/index.ts';
 import {
   elementLabelOf,
   type Handled,
@@ -19,7 +20,9 @@ export type Move = { readonly from: string; readonly to: string; readonly elemen
 
 /**
  * What the recorded Handlers come to once every move is made and every line followed: the moves,
- * the lines for what only the author can decide, and the Handlers that lack a file.
+ * the lines for what only the author can decide, and the Handlers that lack a file. Inside the
+ * layout only `generate` places a file, so what a line asks of the author is to delete a file or
+ * to move it off its path, never to put one at a path the layout names.
  */
 export type Placement = {
   readonly moves: readonly Move[];
@@ -51,7 +54,7 @@ export function placementOf(
     service.handlerPaths.map((placed) => [handlerLocalOf(placed.handled), placed]),
   );
   const standing = recorded.filter(({ path }) => !isNothingAt(join(directory, path)));
-  const leaving = standing.filter((handler) => declared.get(handler.local)?.path !== handler.path);
+  const leaving = standing.filter((handler) => !isPlacedAt(directory, handler, declared));
   const moving = movingOf(leaving, declared);
   const keeping = keepingOf(service, new Set(leaving.map(({ path }) => path)));
   const arriving = new Set(moving.map(({ placed }) => placed.path));
@@ -73,6 +76,19 @@ export function placementOf(
     ],
     lacking,
   };
+}
+
+/** Whether the layout places a recorded Handler's Element at the path it was imported from, or at a path that is the same file. */
+function isPlacedAt(
+  directory: string,
+  handler: RecordedHandler,
+  declared: ReadonlyMap<string, HandlerPath>,
+): boolean {
+  const placed = declared.get(handler.local);
+  return (
+    placed !== undefined &&
+    realPathOf(directory, placed.path) === realPathOf(directory, handler.path)
+  );
 }
 
 /** The Handler paths with a file that no Handler leaves behind. */
@@ -134,17 +150,16 @@ function goneLineOf(handler: RecordedHandler, lacking: readonly HandlerPath[]): 
   return `${handler.path} ${gone}: ${adviceOf(replacements)}`;
 }
 
-/** What to do with a Handler whose Element is gone: move it to the Handler path that lacks a file, else delete it. */
+/** What to do with a Handler whose Element is gone: delete it, or move it off its path to keep its code for the Element that replaces it. */
 function adviceOf(replacements: readonly HandlerPath[]): string {
+  const keep = 'delete it, or move it off its path to keep its code';
   const [only, ...others] = replacements;
   if (only === undefined) {
-    return 'delete it';
+    return keep;
   }
   if (others.length === 0) {
-    return `move it to ${only.path} if ${elementLabelOf(only.handled)} replaces it, else delete it`;
+    return `${keep} for ${elementLabelOf(only.handled)}`;
   }
-  const candidates = replacements.map(
-    ({ handled, path }) => `${elementLabelOf(handled)} (${path})`,
-  );
-  return `move it to the Handler path of the Element that replaces it, ${oneOf(candidates)}, else delete it`;
+  const candidates = replacements.map(({ handled }) => elementLabelOf(handled));
+  return `${keep} for the Element that replaces it, ${oneOf(candidates)}`;
 }

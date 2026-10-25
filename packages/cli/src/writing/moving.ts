@@ -67,16 +67,42 @@ function place(directory: string, file: SetAside): { readonly kind: 'placed' } |
 }
 
 function failureOf(directory: string, move: FileMove, thrown: unknown): StepFailed {
-  const reason = oneLineOf(thrown, directory);
-  return { kind: 'failed', message: `${move.from} cannot be moved to ${move.to}: ${reason}` };
+  return {
+    kind: 'failed',
+    message: `${move.from} cannot be moved to ${move.to}: ${reasonOf(directory, thrown)}`,
+  };
 }
 
-/** Puts each file back where it came from, wherever the move left it. */
+/** Why a step failed in one line, naming the paths of the move and never the name a file was set aside under. */
+function reasonOf(directory: string, thrown: unknown): string {
+  if (thrown instanceof Error && 'code' in thrown && thrown.code === 'EEXIST') {
+    return 'a file is already there';
+  }
+  return oneLineOf(thrown, directory).replace(/\.[0-9a-f-]{36}\.tmp/g, '');
+}
+
+/**
+ * Puts each file back where it came from, never over another: first every file that landed back
+ * to the name it was set aside under, then each set-aside file to its source, so a path one file
+ * left and another took is free again before its owner returns.
+ */
 function restore(directory: string, aside: readonly SetAside[]): void {
   for (const file of aside) {
-    const at = existsSync(join(directory, file.temporary)) ? file.temporary : file.to;
-    try {
-      renameSync(join(directory, at), join(directory, file.from));
-    } catch {}
+    if (existsSync(join(directory, file.to)) && !existsSync(join(directory, file.temporary))) {
+      relink(directory, file.to, file.temporary);
+    }
+  }
+  for (const file of aside) {
+    relink(directory, file.temporary, file.from);
+  }
+}
+
+/** Gives a file another name without overwriting, a file already there being left as it is. */
+function relink(directory: string, from: string, to: string): void {
+  try {
+    linkSync(join(directory, from), join(directory, to));
+    unlinkSync(join(directory, from));
+  } catch {
+    return;
   }
 }

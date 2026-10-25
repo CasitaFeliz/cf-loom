@@ -1,8 +1,8 @@
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
 import { generatedEnding, layoutFolder } from '../config/index.ts';
-import { filesUnder, insideContractOf, oneLineOf } from '../loading/index.ts';
+import { filesUnder, insideContractOf, oneLineOf, realPathOf } from '../loading/index.ts';
 import {
   type HandlerPath,
   isWrittenByGenerate,
@@ -53,7 +53,10 @@ export function recordOf(service: PlacedService): RecordRead {
   if (written.kind === 'failed') {
     return { kind: 'tooling', message: written.message };
   }
-  const recorded = written.files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
+  const read = written.files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
+  const recorded = [
+    ...new Map(read.map((handler) => [`${handler.local} ${handler.path}`, handler])).values(),
+  ];
   const { moves, lines, lacking } = placementOf(service, recorded);
   const sorted = [...lines].sort((left, right) => byCodePoint(left.path, right.path));
   return {
@@ -92,14 +95,4 @@ function staleOf(service: PlacedService, files: readonly WrittenFile[]): readonl
     .map(({ path }) => path)
     .filter((path) => !named.includes(realPathOf(directory, path)))
     .sort(byCodePoint);
-}
-
-/** A path's real path, links followed, or the path itself where nothing resolves. */
-function realPathOf(directory: string, path: string): string {
-  const absolute = join(directory, path);
-  try {
-    return realpathSync(absolute);
-  } catch {
-    return absolute;
-  }
 }

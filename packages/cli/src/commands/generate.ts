@@ -79,16 +79,17 @@ type Changes = { readonly moves: readonly FileMove[]; readonly stale: readonly s
 
 /** Writes the files, then deletes the stale ones, so no file is deleted before its replacement is written. */
 function writtenExit(run: Run, { moves, stale }: Changes, files: readonly GeneratedFile[]): Exit {
+  const movedLines = moves.map(({ from, to }) => `Moved ${from} to ${to}`);
   const written = writeFiles(run.cwd, files);
   if (written.kind === 'failed') {
-    return toolingError(written.message);
+    return { ...toolingError(written.message), stdout: movedLines };
   }
   const deleted = deleteFiles(run.cwd, stale);
   if (deleted.kind === 'failed') {
-    return toolingError(deleted.message);
+    return { ...toolingError(deleted.message), stdout: movedLines };
   }
   return done([
-    ...moves.map(({ from, to }) => `Moved ${from} to ${to}`),
+    ...movedLines,
     ...written.paths.map((path) => `Wrote ${path}`),
     ...deleted.paths.map((path) => `Deleted ${path}`),
   ]);
