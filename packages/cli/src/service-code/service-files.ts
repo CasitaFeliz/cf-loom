@@ -46,17 +46,28 @@ export function handlerMapTextOf(
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
 }
 
-/** The stub of the Handler at `path`, importing its Element from where it is exported. */
-export function stubTextOf(path: string, exported: ExportedAt): string {
-  const specifier = specifierOf(path, exported);
+/**
+ * What a stub hands to `handle.stub`, and the export it imports to write it: `getOrder`, or
+ * `readers` for `readers.commands.chargeCardV1`.
+ */
+export type StubTarget = { readonly imported: ExportedAt; readonly expression: string };
+
+/** The target that is the export itself, as an Endpoint or a Guard is imported. */
+export function exportedTargetOf(imported: ExportedAt): StubTarget {
+  return { imported, expression: imported.name };
+}
+
+/** The stub of the Handler at `path`, importing what it is written for from where it is exported. */
+export function stubTextOf(path: string, { imported, expression }: StubTarget): string {
+  const specifier = specifierOf(path, imported);
   const imports = [
     namedImportOf(['handle'], '@cf-loom/handlers'),
-    namedImportOf([exported.name], specifier),
+    namedImportOf([imported.name], specifier),
   ];
   return moduleTextOf({
     first: [],
     imports,
-    body: [`export default handle.stub(${exported.name});`],
+    body: [`export default handle.stub(${expression});`],
   });
 }
 

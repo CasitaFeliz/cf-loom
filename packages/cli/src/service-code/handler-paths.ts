@@ -66,7 +66,7 @@ function collidingLineOf(paths: readonly HandlerPath[]): string | undefined {
 }
 
 /** An Element as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
-function elementLabelOf(handled: Handled): string {
+export function elementLabelOf(handled: Handled): string {
   switch (handled.kind) {
     case 'endpoint':
       return `endpoints.${handled.name}`;

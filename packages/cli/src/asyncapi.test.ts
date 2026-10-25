@@ -141,7 +141,7 @@ const theEvents = [
   "  description: 'Charges a card',",
   '  body: z.object({ orderId: z.uuid() }),',
   '});',
-  "const auditCreated = defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 });",
+  "export const auditCreated = defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 });",
 ];
 
 /** A Service named `orders-service` with an Event of each Visibility and Lifecycle, a Command and a Subscription. */

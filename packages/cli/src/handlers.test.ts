@@ -388,9 +388,29 @@ const messages = lines([
   '});',
 ]);
 
-/** The Subscription to the Dependency's Event, which every messaging root declares. */
-const notifyOnSettled =
-  "defineSubscription({ name: 'notifyOnSettled', description: 'Notify on settled', event: paymentSettledV1 })";
+/** The Subscriptions every messaging root lists, each exported under its name in code. */
+const subscriptions = lines([
+  "import { defineSubscription } from '@cf-loom/contract';",
+  "import { orderCreatedV2 } from './messages.ts';",
+  "import { paymentSettledV1 } from './payments.ts';",
+  '',
+  'export const notifyOnSettled = defineSubscription({',
+  "  name: 'notifyOnSettled',",
+  "  description: 'Notify on settled',",
+  '  event: paymentSettledV1,',
+  '});',
+  '',
+  'export const auditCreated = defineSubscription({',
+  "  name: 'auditCreated',",
+  "  description: 'Audit created',",
+  '  event: orderCreatedV2,',
+  '});',
+]);
+
+/** A Subscription to `OrderCreated@2` written where the root lists it, so no file exports it. */
+function inlineSubscription(name: string): string {
+  return `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
+}
 
 /** What a messaging root lists beside its Group, each line one of `defineContract`'s fields. */
 type MessagingLists = {
@@ -399,15 +419,12 @@ type MessagingLists = {
 };
 
 /**
- * The root of `aService()`, also listing its Events and Commands, and declaring inline a
- * Subscription to a Dependency's Event, then one to its own `OrderCreated@2`.
+ * The root of `aService()`, also listing its Events and Commands, and the Subscriptions of
+ * `subscriptions.ts`: one to a Dependency's Event, then one to its own `OrderCreated@2`.
  */
 function aMessagingRoot({
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
-  subscriptions = [
-    notifyOnSettled,
-    "defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 })",
-  ],
+  subscriptions = ['notifyOnSettled', 'auditCreated'],
 }: MessagingLists = {}): string {
   const root = aService()['src/contract/index.ts'] ?? '';
   return root
@@ -429,6 +446,7 @@ function aMessagingRoot({
         '  refundCardV1,',
         "} from './messages.ts';",
         "import { paymentSettledV1, payments } from './payments.ts';",
+        "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
       ]).trimEnd(),
     )
     .replace(
@@ -451,13 +469,14 @@ function aMessagingRoot({
 /**
  * `aService()` with Messages: Events `OrderCreated@1` (Deprecated), `OrderCreated@2` (an Open Enum
  * and a recursive def) and `OrderPurged@1` (Retired); Commands `ChargeCard@1` (Deprecated),
- * `ChargeCard@2` and `RefundCard@1` (Retired); and two Subscriptions declared in the root.
+ * `ChargeCard@2` and `RefundCard@1` (Retired); and two Subscriptions, each in `subscriptions.ts`.
  */
 function aMessagingService(lists: MessagingLists = {}): Readonly<Record<string, string>> {
   return {
     ...aService(),
     'src/contract/messages.ts': messages,
     'src/contract/payments.ts': payments,
+    'src/contract/subscriptions.ts': subscriptions,
     'src/contract/index.ts': aMessagingRoot(lists),
   };
 }
@@ -617,7 +636,14 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(read(project, 'src/readers.generated.ts')).toBe(
       lines([
         header,
-        "import { contract } from './contract/index.ts';",
+        importOf(
+          '{ chargeCardV1 as chargeCardV1Command, chargeCardV2 as chargeCardV2Command, refundCardV1 as refundCardV1Command }',
+          './contract/messages.ts',
+        ),
+        importOf(
+          '{ auditCreated as auditCreatedSubscription, notifyOnSettled as notifyOnSettledSubscription }',
+          './contract/subscriptions.ts',
+        ),
         "import * as loom from '@cf-loom/contract';",
         "import { withReader } from '@cf-loom/handlers';",
         "import { z } from 'zod';",
@@ -631,11 +657,17 @@ describe('cf-loom generate: readers.generated.ts', () => {
         "export const orderCreatedV2Reader = z.object({ items: treeReaderDef, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
         'export const refundCardV1Reader = z.object({ orderId: z.uuid() });',
         '',
-        'export const chargeCardV1 = withReader(contract.commands[0], chargeCardV1Reader);',
-        'export const chargeCardV2 = withReader(contract.commands[1], chargeCardV2Reader);',
-        'export const refundCardV1 = withReader(contract.commands[2], refundCardV1Reader);',
-        'export const auditCreated = withReader(contract.subscriptions[1], orderCreatedV2Reader);',
-        'export const notifyOnSettled = withReader(contract.subscriptions[0], contract.subscriptions[0].event.body);',
+        'export const readers = {',
+        '  commands: {',
+        '    chargeCardV1: withReader(chargeCardV1Command, chargeCardV1Reader),',
+        '    chargeCardV2: withReader(chargeCardV2Command, chargeCardV2Reader),',
+        '    refundCardV1: withReader(refundCardV1Command, refundCardV1Reader),',
+        '  },',
+        '  subscriptions: {',
+        '    auditCreated: withReader(auditCreatedSubscription, orderCreatedV2Reader),',
+        '    notifyOnSettled: withReader(notifyOnSettledSubscription, notifyOnSettledSubscription.event.body),',
+        '  },',
+        '};',
       ]),
     );
   });
@@ -653,8 +685,8 @@ describe('cf-loom generate: readers.generated.ts', () => {
     const parsed = probe(
       project,
       lines([
-        probeImportOf('readers', 'src/readers.generated.ts'),
-        `const body = readers.orderCreatedV2Reader.parse(${JSON.stringify(body)});`,
+        probeImportOf('generated', 'src/readers.generated.ts'),
+        `const body = generated.orderCreatedV2Reader.parse(${JSON.stringify(body)});`,
         'console.log(JSON.stringify(body));',
       ]),
     );
@@ -666,19 +698,19 @@ describe('cf-loom generate: readers.generated.ts', () => {
     });
   });
 
-  test('each Command’s Message Version is paired with its Reader through the root’s own declaration', () => {
+  test('each Command’s Message Version is paired with its Reader through the file that exports it', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
 
     const paired = probe(
       project,
       lines([
-        probeImportOf('readers', 'src/readers.generated.ts'),
-        probeImportOf('root', 'src/contract/index.ts'),
-        'const { chargeCardV2, chargeCardV2Reader } = readers;',
+        probeImportOf('generated', 'src/readers.generated.ts'),
+        probeImportOf('messages', 'src/contract/messages.ts'),
+        'const { chargeCardV2 } = generated.readers.commands;',
         'console.log(JSON.stringify([',
-        '  chargeCardV2.element === root.contract.commands[1],',
-        '  chargeCardV2.reader === chargeCardV2Reader,',
+        '  chargeCardV2.element === messages.chargeCardV2,',
+        '  chargeCardV2.reader === generated.chargeCardV2Reader,',
         ']));',
       ]),
     );
@@ -686,19 +718,19 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(paired).toEqual([true, true]);
   });
 
-  test('a Subscription to the Service’s own Event is paired with that Event’s Reader', () => {
+  test('a Subscription to the Service’s own Event is paired with that Event’s Reader through the file that exports it', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
 
     const paired = probe(
       project,
       lines([
-        probeImportOf('readers', 'src/readers.generated.ts'),
-        probeImportOf('root', 'src/contract/index.ts'),
-        'const { auditCreated, orderCreatedV2Reader } = readers;',
+        probeImportOf('generated', 'src/readers.generated.ts'),
+        probeImportOf('subscriptions', 'src/contract/subscriptions.ts'),
+        'const { auditCreated } = generated.readers.subscriptions;',
         'console.log(JSON.stringify([',
-        '  auditCreated.element === root.contract.subscriptions[1],',
-        '  auditCreated.reader === orderCreatedV2Reader,',
+        '  auditCreated.element === subscriptions.auditCreated,',
+        '  auditCreated.reader === generated.orderCreatedV2Reader,',
         ']));',
       ]),
     );
@@ -713,9 +745,9 @@ describe('cf-loom generate: readers.generated.ts', () => {
     const paired = probe(
       project,
       lines([
-        probeImportOf('readers', 'src/readers.generated.ts'),
+        probeImportOf('generated', 'src/readers.generated.ts'),
         probeImportOf('payments', 'src/contract/payments.ts'),
-        'const { notifyOnSettled } = readers;',
+        'const { notifyOnSettled } = generated.readers.subscriptions;',
         'console.log(JSON.stringify([',
         "  notifyOnSettled.element.name === 'notifyOnSettled',",
         '  notifyOnSettled.reader === payments.paymentSettledV1.body,',
@@ -724,6 +756,71 @@ describe('cf-loom generate: readers.generated.ts', () => {
     );
 
     expect(paired).toEqual([true, true]);
+  });
+
+  test('a Command’s Message Version is imported from the file that exports it', () => {
+    const project = aProject(aMessagingService({ commands: '[chargeCardV1, shipOrderV1]' }));
+    write(project, {
+      'src/contract/commands/ship-order.v1.command.ts': lines([
+        "import { defineCommand } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        'export const shipOrderV1 = defineCommand({',
+        "  name: 'ShipOrder',",
+        '  version: 1,',
+        "  description: 'Ship an order',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]),
+    });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace(
+        'import { auditCreated,',
+        `${importOf('{ shipOrderV1 }', './commands/ship-order.v1.command.ts')}\nimport { auditCreated,`,
+      ),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/readers.generated.ts')).toContain(
+      importOf(
+        '{ shipOrderV1 as shipOrderV1Command }',
+        './contract/commands/ship-order.v1.command.ts',
+      ),
+    );
+  });
+
+  test('a Subscription is imported from the file that exports it', () => {
+    const project = aProject(
+      aMessagingService({ subscriptions: ['notifyOnSettled', 'auditOrders'] }),
+    );
+    write(project, {
+      'src/contract/subscriptions/audit-orders.subscription.ts': lines([
+        "import { defineSubscription } from '@cf-loom/contract';",
+        "import { orderCreatedV2 } from '../messages.ts';",
+        '',
+        'export const auditOrders = defineSubscription({',
+        "  name: 'auditOrders',",
+        "  description: 'Audit orders',",
+        '  event: orderCreatedV2,',
+        '});',
+      ]),
+    });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace(
+        'import { auditCreated,',
+        `${importOf('{ auditOrders }', './subscriptions/audit-orders.subscription.ts')}\nimport { auditCreated,`,
+      ),
+    );
+
+    cfLoom(project, 'generate');
+
+    expect(read(project, 'src/readers.generated.ts')).toContain(
+      importOf(
+        '{ auditOrders as auditOrdersSubscription }',
+        './contract/subscriptions/audit-orders.subscription.ts',
+      ),
+    );
   });
 
   test('a recursive def an own Message reaches is declared once in readers.generated.ts, as a reader, with its type', () => {
@@ -785,23 +882,24 @@ describe('cf-loom generate: readers.generated.ts', () => {
       '    shipOrderV10: shipOrderV10CommandHandler,',
       '    shipV1: shipV1CommandHandler,',
     ]);
-    expect(readers.match(/^export const \w+ = withReader\(contract\.commands\[\d\]/gm)).toEqual([
-      'export const shipOrderV1 = withReader(contract.commands[2]',
-      'export const shipOrderV10 = withReader(contract.commands[0]',
-      'export const shipV1 = withReader(contract.commands[1]',
+    expect(readers.match(/^ {4}ship\w+: withReader\(\w+Command,/gm)).toEqual([
+      '    shipOrderV1: withReader(shipOrderV1Command,',
+      '    shipOrderV10: withReader(shipOrderV10Command,',
+      '    shipV1: withReader(shipV1Command,',
     ]);
   });
 
-  test('a Retired Command’s Message Version is still paired, so its Handler keeps compiling', () => {
+  test('a Retired Command’s Message Version is still imported and paired, so its Handler keeps compiling', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
 
     const paired = probe(
       project,
       lines([
-        probeImportOf('readers', 'src/readers.generated.ts'),
-        probeImportOf('root', 'src/contract/index.ts'),
-        'console.log(JSON.stringify(readers.refundCardV1.element === root.contract.commands[2]));',
+        probeImportOf('generated', 'src/readers.generated.ts'),
+        probeImportOf('messages', 'src/contract/messages.ts'),
+        'const { refundCardV1 } = generated.readers.commands;',
+        'console.log(JSON.stringify(refundCardV1.element === messages.refundCardV1));',
       ]),
     );
 
@@ -905,9 +1003,9 @@ describe('cf-loom generate: stubs', () => {
     expect(read(project, 'src/commands/charge-card.v2.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { chargeCardV2 } from '../readers.generated.ts';",
+        "import { readers } from '../readers.generated.ts';",
         '',
-        'export default handle.stub(chargeCardV2);',
+        'export default handle.stub(readers.commands.chargeCardV2);',
       ]),
     );
   });
@@ -920,9 +1018,9 @@ describe('cf-loom generate: stubs', () => {
     expect(read(project, 'src/subscriptions/notify-on-settled.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { notifyOnSettled } from '../readers.generated.ts';",
+        "import { readers } from '../readers.generated.ts';",
         '',
-        'export default handle.stub(notifyOnSettled);',
+        'export default handle.stub(readers.subscriptions.notifyOnSettled);',
       ]),
     );
   });
@@ -933,31 +1031,6 @@ describe('cf-loom generate: stubs', () => {
     cfLoom(project, 'generate');
 
     expect(existsSync(join(project, 'src/commands/refund-card.v1.handler.ts'))).toBe(false);
-  });
-
-  test('a Command or Subscription exported by no file under its name still gets its stub', () => {
-    const project = aProject(aMessagingService());
-    edit(project, 'src/contract/messages.ts', (text) =>
-      text
-        .replace('export const chargeCardV2 =', 'const chargeCardV2 =')
-        .concat('export { chargeCardV2 as chargeCardNext };\n'),
-    );
-    edit(project, 'src/contract/index.ts', (text) =>
-      text.replace('  chargeCardV2,\n', '  chargeCardNext as chargeCardV2,\n'),
-    );
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toMatchObject({ status: 0, stderr: '' });
-    expect(handlerFiles(project)).toEqual([
-      'commands/charge-card.v1.handler.ts',
-      'commands/charge-card.v2.handler.ts',
-      'endpoints/orders/create-order.handler.ts',
-      'endpoints/orders/get-order.handler.ts',
-      'guards/api-key.handler.ts',
-      'subscriptions/audit-created.handler.ts',
-      'subscriptions/notify-on-settled.handler.ts',
-    ]);
   });
 
   test('a Command stub’s direct call reads its body with the generated Reader first, then throws, since consume never runs it', () => {
@@ -1049,9 +1122,9 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(read(project, 'src/billing/charge-card.v2.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { chargeCardV2 } from '../generated/readers.generated.ts';",
+        "import { readers } from '../generated/readers.generated.ts';",
         '',
-        'export default handle.stub(chargeCardV2);',
+        'export default handle.stub(readers.commands.chargeCardV2);',
       ]),
     );
   });
@@ -1066,9 +1139,9 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(read(project, 'src/reactions/notify-on-settled.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { notifyOnSettled } from '../readers.generated.ts';",
+        "import { readers } from '../readers.generated.ts';",
         '',
-        'export default handle.stub(notifyOnSettled);',
+        'export default handle.stub(readers.subscriptions.notifyOnSettled);',
       ]),
     );
   });
@@ -1109,7 +1182,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     );
   });
 
-  test('the readers at layout.readers import the root relative to themselves', () => {
+  test('the readers at layout.readers import the Contract relative to themselves', () => {
     const project = aProject(
       withLayout(aMessagingService(), "{ readers: 'src/generated/readers.generated.ts' }"),
     );
@@ -1117,7 +1190,7 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     cfLoom(project, 'generate');
 
     expect(read(project, 'src/generated/readers.generated.ts')).toContain(
-      "import { contract } from '../contract/index.ts';",
+      "from '../contract/messages.ts';",
     );
   });
 
@@ -1548,12 +1621,7 @@ describe('cf-loom generate: what it refuses', () => {
     ['handle', 'camelCase and no reserved word'],
   ])('a Subscription named %s, which is no name in code, fails the name grammar', (name, rule) => {
     const project = aProject(
-      aMessagingService({
-        subscriptions: [
-          notifyOnSettled,
-          `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`,
-        ],
-      }),
+      aMessagingService({ subscriptions: ['notifyOnSettled', inlineSubscription(name)] }),
     );
 
     const ran = cfLoom(project, 'generate');
@@ -1565,66 +1633,114 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Subscription whose name in code is a Command’s exits 3 naming both, and writes nothing', () => {
-    const project = aProject(
-      aMessagingService({
-        subscriptions: [
-          notifyOnSettled,
-          "defineSubscription({ name: 'chargeCardV1', description: 'Charge card v1', event: orderCreatedV2 })",
-        ],
-      }),
+  test('a Command’s Message Version exported by no file exits 1 naming it, and writes nothing', () => {
+    const project = aProject(aMessagingService());
+    edit(project, 'src/contract/messages.ts', (text) =>
+      text
+        .replace('export const chargeCardV2 =', 'const chargeCardV2 =')
+        .concat('export const commandList = [chargeCardV2];\n'),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text
+        .replace('  chargeCardV2,\n', '  commandList,\n')
+        .replace('[chargeCardV1, chargeCardV2,', '[chargeCardV1, commandList[0],'),
     );
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toEqual({
-      status: 3,
+      status: 1,
       stdout: '',
-      stderr:
-        'subscriptions.chargeCardV1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
+      stderr: 'commands.ChargeCard@2 is exported by no file under src/contract/\n',
     });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
   });
 
-  test.each([
-    [
-      'orderCreatedV2Reader',
-      'subscriptions.orderCreatedV2Reader is orderCreatedV2Reader in code, as the Reader of events.OrderCreated@2 is',
-    ],
-    [
-      'chargeCardV1Reader',
-      'subscriptions.chargeCardV1Reader is chargeCardV1Reader in code, as the Reader of commands.ChargeCard@1 is',
-    ],
-    ['treeReaderDef', 'subscriptions.treeReaderDef is treeReaderDef in code, as defs.tree is'],
-  ])(
-    'a Subscription named %s, paired under a name readers.generated.ts already takes, exits 3 naming both',
-    (name, line) => {
-      const declared = `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
-      const project = aProject(aMessagingService({ subscriptions: [notifyOnSettled, declared] }));
+  test('a Subscription exported by no file exits 1 naming it, and writes nothing', () => {
+    const project = aProject(
+      aMessagingService({ subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')] }),
+    );
 
-      const ran = cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}: rename the Subscription\n` });
-    },
-  );
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'subscriptions.auditOrders is exported by no file under src/contract/\n',
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+    expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
+  });
 
-  test.each(['contract', 'z', 'loom', 'withReader'])(
-    'a Subscription named %s, paired under a name readers.generated.ts imports, exits 3 naming both',
-    (name) => {
-      const subscription = `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
-      const project = aProject(
-        aMessagingService({ subscriptions: [notifyOnSettled, subscription] }),
-      );
+  test('a Command’s Message Version exported only under another name exits 1 naming it', () => {
+    const project = aProject(aMessagingService());
+    edit(project, 'src/contract/messages.ts', (text) =>
+      text
+        .replace('export const chargeCardV2 =', 'const chargeCardV2 =')
+        .concat('export { chargeCardV2 as chargeCardNext };\n'),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace('  chargeCardV2,\n', '  chargeCardNext as chargeCardV2,\n'),
+    );
 
-      const ran = cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-      expect(ran).toEqual({
-        status: 3,
-        stdout: '',
-        stderr: `subscriptions.${name} is ${name} in code, as the import ${name} is: rename the Subscription\n`,
-      });
-    },
-  );
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'commands.ChargeCard@2 is not exported as chargeCardV2\n',
+    });
+  });
+
+  test('a Subscription exported only under another name exits 1 naming it', () => {
+    const project = aProject(aMessagingService());
+    edit(project, 'src/contract/subscriptions.ts', (text) =>
+      text.replace('export const auditCreated =', 'export const auditCreatedNext ='),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace('import { auditCreated,', 'import { auditCreatedNext as auditCreated,'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'subscriptions.auditCreated is not exported as auditCreated\n',
+    });
+  });
+
+  test('every Endpoint, Command and Subscription not exported under its name is named, the Endpoints first', () => {
+    const service = aMessagingService({
+      subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
+    });
+    const project = aProject({
+      ...service,
+      'src/contract/endpoints/orders/create-order.endpoint.ts': (
+        service['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+      ).replace('export const createOrder =', 'export const createOrderEndpoint ='),
+      'src/contract/messages.ts': (service['src/contract/messages.ts'] ?? '').replace(
+        'export const refundCardV1 =',
+        'export const refundCard =',
+      ),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }')
+        .replace('  refundCardV1,\n', '  refundCard as refundCardV1,\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        'endpoints.createOrder is not exported as createOrder',
+        'commands.RefundCard@1 is not exported as refundCardV1',
+        'subscriptions.auditOrders is exported by no file under src/contract/',
+      ]),
+    });
+  });
 
   test('a recursion id an own Message reaches that is no name in code exits 3 in one line', () => {
     const project = aProject(aMessagingService());
@@ -1640,6 +1756,28 @@ describe('cf-loom generate: what it refuses', () => {
       stderr: 'The recursion id 2-tree is no name in code: rename it\n',
     });
   });
+
+  test.each(['generate', 'verify'])(
+    'a recursion id that is no name in code exits 3 of %s before a Subscription exported by no file exits 1',
+    (command) => {
+      const project = aProject(
+        aMessagingService({
+          subscriptions: ['notifyOnSettled', inlineSubscription('auditOrders')],
+        }),
+      );
+      edit(project, 'src/contract/messages.ts', (text) =>
+        text.replace(".meta({ id: 'tree' })", ".meta({ id: '2-tree' })"),
+      );
+
+      const ran = cfLoom(project, command);
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: 'The recursion id 2-tree is no name in code: rename it\n',
+      });
+    },
+  );
 });
 
 describe('cf-loom generate: roots that offer no Elements', () => {
@@ -1721,8 +1859,10 @@ describe('cf-loom generate: the Service type-checks', () => {
     return lines([
       "import type { CommandHandler, EventHandler, HandlerMap } from '@cf-loom/handlers';",
       importOf('handlers', './handlers.generated.ts'),
-      importOf('{ auditCreated, chargeCardV1, chargeCardV2 }', './readers.generated.ts'),
+      importOf('{ readers }', './readers.generated.ts'),
       '',
+      'const { auditCreated } = readers.subscriptions;',
+      'const { chargeCardV1, chargeCardV2 } = readers.commands;',
       'handlers satisfies HandlerMap;',
       ...after,
     ]);
@@ -1766,9 +1906,9 @@ describe('cf-loom generate: the Service type-checks', () => {
     write(project, {
       'src/subscriptions/audit-created.handler.ts': lines([
         "import { handle } from '@cf-loom/handlers';",
-        importOf('{ auditCreated }', '../readers.generated.ts'),
+        importOf('{ readers }', '../readers.generated.ts'),
         '',
-        'export default handle(auditCreated, async (body) => {',
+        'export default handle(readers.subscriptions.auditCreated, async (body) => {',
         "  const status: 'pending' | 'paid' | { unknown: string } = body.status;",
         '  console.log(status);',
         '  return undefined;',
@@ -1804,6 +1944,61 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked.status).not.toBe(0);
     expect(checked.stdout).toContain('error TS2307');
     expect(checked.stdout).toContain(path.replace('src/', './'));
+  });
+
+  test('a root whose subscriptions are held in a variable generates a Service that passes tsc with noUncheckedIndexedAccess', () => {
+    const service = aMessagingService();
+    const project = aProject({
+      ...service,
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace(
+          'export const contract',
+          'const listed = [notifyOnSettled, auditCreated];\n\nexport const contract',
+        )
+        .replace('subscriptions: [notifyOnSettled, auditCreated],', 'subscriptions: listed,'),
+      'tsconfig.json': tsconfig.replace(
+        '"strict":true',
+        '"strict":true,"noUncheckedIndexedAccess":true',
+      ),
+    });
+    expect(cfLoom(project, 'generate').status).toBe(0);
+
+    const checked = typeCheck(project);
+
+    expect(checked).toEqual({ status: 0, stdout: '' });
+  });
+
+  test.each([
+    'chargeCardV1',
+    'withReader',
+    'z',
+    'readers',
+    'orderCreatedV2Reader',
+    'treeReaderDef',
+  ])('a Subscription named %s generates a Service that passes tsc', (name) => {
+    const service = aMessagingService({
+      subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
+    });
+    const project = aProject({
+      ...service,
+      'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
+        lines([
+          'import {',
+          '  auditCreated,',
+          `  ${name} as ${name}Subscription,`,
+          '  notifyOnSettled,',
+          "} from './subscriptions.ts';",
+        ]).trimEnd(),
+      ),
+      'tsconfig.json': tsconfig,
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
   });
 });
 
@@ -1927,21 +2122,6 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     });
   });
 
-  test('verify compares files and loads no export, so a renamed export is not its to find', () => {
-    const project = aProject(aService());
-    cfLoom(project, 'generate');
-    edit(project, 'src/contract/endpoints/orders/create-order.endpoint.ts', (text) =>
-      text.replace('export const createOrder =', 'export const createOrderEndpoint ='),
-    );
-    edit(project, 'src/contract/index.ts', (text) =>
-      text.replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }'),
-    );
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran.status).toBe(0);
-  });
-
   test('verify writes nothing', () => {
     const project = aProject(aService());
 
@@ -1996,7 +2176,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     });
   });
 
-  test('verify exits 1 when the root’s commands are reordered, since readers.generated.ts reaches them by position', () => {
+  test('verify exits 0 when the root’s commands are reordered, since readers.generated.ts imports them by export', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     write(project, {
@@ -2007,32 +2187,80 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'src/readers.generated.ts was edited or is out of date: run cf-loom generate\n',
-    });
+    expect(ran.status).toBe(0);
   });
 
-  test('verify exits 3 when a Subscription is paired under a name readers.generated.ts already takes', () => {
+  test('verify exits 1 on a Subscription exported by no file', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     write(project, {
       'src/contract/index.ts': aMessagingRoot({
-        subscriptions: [
-          notifyOnSettled,
-          "defineSubscription({ name: 'chargeCardV1', description: 'Charge card v1', event: orderCreatedV2 })",
-        ],
+        subscriptions: ['notifyOnSettled', 'auditCreated', inlineSubscription('auditOrders')],
       }),
     });
 
     const ran = cfLoom(project, 'verify');
 
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(
+      'subscriptions.auditOrders is exported by no file under src/contract/\n',
+    );
+  });
+
+  test('verify exits 1 on an Endpoint exported only under another name, as generate does', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/endpoints/orders/create-order.endpoint.ts', (text) =>
+      text.replace('export const createOrder =', 'export const createOrderEndpoint ='),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace('import { createOrder }', 'import { createOrderEndpoint as createOrder }'),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
     expect(ran).toEqual({
-      status: 3,
+      status: 1,
       stdout: '',
-      stderr:
-        'subscriptions.chargeCardV1 is chargeCardV1 in code, as commands.ChargeCard@1 is: rename the Subscription\n',
+      stderr: 'endpoints.createOrder is not exported as createOrder\n',
+    });
+  });
+
+  test('verify exits 1 naming the readers file out of date after a Command’s Message Version is exported from another file', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/contract/messages.ts', (text) =>
+      text.slice(0, text.indexOf('export const refundCardV1 =')),
+    );
+    write(project, {
+      'src/contract/refunds.ts': lines([
+        "import { defineCommand } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        'export const refundCardV1 = defineCommand({',
+        "  name: 'RefundCard',",
+        '  version: 1,',
+        "  description: 'Refund a card',",
+        "  lifecycle: 'retired',",
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]),
+    });
+    edit(project, 'src/contract/index.ts', (text) =>
+      text
+        .replace('  refundCardV1,\n', '')
+        .replace(
+          'import { paymentSettledV1,',
+          "import { refundCardV1 } from './refunds.ts';\nimport { paymentSettledV1,",
+        ),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'src/readers.generated.ts was edited or is out of date: run cf-loom generate\n',
     });
   });
 
@@ -2162,21 +2390,6 @@ describe('cf-loom verify: a configured layout', () => {
       );
     },
   );
-
-  test.skipIf(isRoot)(
-    'verify does not read src/contract/, so a folder there it cannot read is not its to find (skipped as root)',
-    () => {
-      const project = aProject(aService());
-      cfLoom(project, 'generate');
-      write(project, { 'src/contract/locked/kept.txt': '' });
-      chmodSync(join(project, 'src/contract/locked'), 0o000);
-
-      const ran = cfLoom(project, 'verify');
-
-      chmodSync(join(project, 'src/contract/locked'), 0o755);
-      expect(ran.status).toBe(0);
-    },
-  );
 });
 
 describe('cf-loom: options', () => {
@@ -2239,22 +2452,6 @@ describe('cf-loom generate: linked folders and other runs', () => {
     expect(ran.status).toBe(0);
   });
 
-  test.skipIf(isRoot)(
-    'a link into src/contract/ does not lead verify into a folder there it cannot read (skipped as root)',
-    () => {
-      const project = aProject(aService());
-      cfLoom(project, 'generate');
-      write(project, { 'src/contract/locked/kept.txt': '' });
-      symlinkSync(join(project, 'src/contract'), join(project, 'src/link'), 'dir');
-      chmodSync(join(project, 'src/contract/locked'), 0o000);
-
-      const ran = cfLoom(project, 'verify');
-
-      chmodSync(join(project, 'src/contract/locked'), 0o755);
-      expect(ran.status).toBe(0);
-    },
-  );
-
   test('a link back up does not loop', () => {
     const project = aProject(aService());
     mkdirSync(join(project, 'src/endpoints'), { recursive: true });
@@ -2277,14 +2474,17 @@ describe('cf-loom generate: linked folders and other runs', () => {
     expect(cfLoom(project, 'verify').status).toBe(0);
   });
 
-  test('a file under src/contract the root does not import that cannot be loaded is a tooling error', () => {
-    const project = aProject({ ...aService(), 'src/contract/broken.ts': 'export const = ;\n' });
+  test.each(['generate', 'verify'])(
+    'a file under src/contract the root does not import that cannot be loaded is a tooling error of %s',
+    (command) => {
+      const project = aProject({ ...aService(), 'src/contract/broken.ts': 'export const = ;\n' });
 
-    const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, command);
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/^src\/contract\/broken\.ts cannot be loaded: [^\n]+\n$/);
-  });
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toMatch(/^src\/contract\/broken\.ts cannot be loaded: [^\n]+\n$/);
+    },
+  );
 
   test.each(['generate', 'verify'])('%s takes no argument', (command) => {
     const project = aProject(aService());
@@ -2399,13 +2599,13 @@ describe('cf-loom generate and verify: what the file system holds', () => {
     },
   );
 
-  test.skipIf(isRoot)(
-    'an unreadable folder under src/contract is a tooling error in one line (skipped as root)',
-    () => {
+  test.skipIf(isRoot).each(['generate', 'verify'])(
+    'an unreadable folder under src/contract is a tooling error of %s in one line (skipped as root)',
+    (command) => {
       const project = aProject({ ...aService(), 'src/contract/locked/kept.txt': '' });
       chmodSync(join(project, 'src/contract/locked'), 0o000);
 
-      const ran = cfLoom(project, 'generate');
+      const ran = cfLoom(project, command);
 
       chmodSync(join(project, 'src/contract/locked'), 0o755);
       expect(ran.status).toBe(3);
