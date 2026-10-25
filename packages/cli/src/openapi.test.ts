@@ -93,7 +93,7 @@ const installedDefinitions: Readonly<Record<string, string>> = {
     "import { defineDefinitions } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     'export const money = z.object({ amount: z.int(), currency: z.string() });',
-    'export const definitions = defineDefinitions({ schemas: { money } });',
+    'export const definitions = defineDefinitions({});',
   ]),
 };
 

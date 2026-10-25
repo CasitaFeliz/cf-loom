@@ -13,6 +13,7 @@ import type {
   Subscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
+import type { Members } from './members.ts';
 
 /** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
 export type Root = Contract | Application | Definitions;
@@ -54,7 +55,13 @@ export type LocatedCode = {
 };
 
 /** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
-export type LocatedDefinitions = { readonly at: Path; readonly definitions: Definitions };
+export type ListedDefinitions = { readonly at: Path; readonly definitions: Definitions };
+
+/** A Definitions Package where it sits, with what its root file exports that it shares. */
+export type LocatedDefinitions = ListedDefinitions & { readonly members: Members };
+
+/** What a Definitions Package's root file exports, by export name, as the tooling imported it: nothing when unknown. */
+export type ExportsOf = (definitions: Definitions) => Readonly<Record<string, unknown>>;
 
 /**
  * A Dependency and where it sits in its root, by its Provider's name, or by its position when its

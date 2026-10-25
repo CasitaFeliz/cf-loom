@@ -24,8 +24,8 @@ export type Project = {
    */
   readonly layout: ServiceLayout;
   readonly root: unknown;
-  /** Everything the root file exports, which a Definitions root lists. */
-  readonly rootExports: readonly unknown[];
+  /** Everything the root file exports, by name, which a Definitions root shares. */
+  readonly rootExports: Readonly<Record<string, unknown>>;
   /** Where the root file sits, relative to the project, as messages name it. */
   readonly rootFile: string;
   /** The Definitions Packages the root lists, each the one imported package that exports it. */

@@ -119,6 +119,35 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
     expect(published).toEqual(publishedExamples.map(({ packageName }) => `${packageName}@1.0.0`));
   });
 
+  test('renaming org-definitions’ money export to amount is Breaking, and check exits 2', async ({
+    examples,
+  }) => {
+    const { folder, env } = examples;
+    const definitions = aCopyOf('org-definitions', folder);
+    const index = join(definitions, 'src/definitions/index.ts');
+    replacedIn(
+      index,
+      'export { apiKey, money, unauthenticated };',
+      'export { apiKey, money as amount, unauthenticated };',
+    );
+    const generated = await cfLoomWith(definitions, env, 'generate');
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+
+    const checked = await cfLoomWith(definitions, env, 'check');
+
+    expect(checked).toEqual({
+      status: 2,
+      stdout: [
+        'Checked against @org/definitions@1.0.0',
+        'exports.amount added: Additive',
+        'exports.money removed: Breaking, needs a Breaking Change Approval',
+        '',
+      ].join('\n'),
+      stderr:
+        '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it\n',
+    });
+  });
+
   test('removing a Success field from GET /orders/:orderId needs a Breaking Change Approval, and check exits 2', async ({
     examples,
   }) => {

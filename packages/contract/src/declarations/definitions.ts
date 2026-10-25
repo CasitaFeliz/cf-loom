@@ -1,7 +1,4 @@
-import type * as core from 'zod/v4/core';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { Guard } from './guard.ts';
-import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 import type {
   StandardRejectionDeclaration,
@@ -10,16 +7,16 @@ import type {
 
 /**
  * What an author writes to declare a Definitions Package, which the package.json it is published
- * from names; an absent list is empty.
+ * from names: the Standard Rejections it declares, if any.
  */
 type DefinitionsDeclaration = {
-  readonly guards?: readonly Guard[];
-  readonly schemas?: Readonly<Record<string, core.$ZodType>>;
-  readonly rejections?: readonly Rejection[];
   readonly standardRejections?: StandardRejectionDeclarations;
 };
 
-/** A declared Definitions Package, listed on a root to resolve what the Contract imports. */
+/**
+ * A declared Definitions Package. What it holds is what its root file exports beside it: Guards,
+ * Rejections and zod schemas, each under the name Services import it by.
+ */
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
   Readonly<Declaration> & { readonly kind: 'definitions' };
 
@@ -39,7 +36,10 @@ type NestedFieldsRule<Declaration extends DefinitionsDeclaration> = {
   >;
 };
 
-/** Declares the Guards, schemas, Rejections and Standard Rejections several Contracts share. */
+/**
+ * Declares a Definitions Package; the Guards, Rejections and zod schemas its root file exports
+ * beside it are what it shares.
+ */
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(
   declaration: Declaration &
     NoInfer<

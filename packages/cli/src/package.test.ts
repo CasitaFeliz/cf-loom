@@ -149,11 +149,7 @@ const definitions: Readonly<Record<string, string>> = {
     "  qualifier: z.array(z.enum(['orders:read', 'orders:edit'])).min(1),",
     '  rejections: [forbidden],',
     '});',
-    'export const definitions = defineDefinitions({',
-    '  guards: [userToken, permission],',
-    '  schemas: { money },',
-    '  rejections: [forbidden],',
-    '});',
+    'export const definitions = defineDefinitions({});',
   ]),
 };
 
@@ -978,8 +974,8 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       'node_modules/@org/definitions/index.js': (
         service['node_modules/@org/definitions/index.js'] ?? ''
       ).replace(
-        '  schemas: { money },\n  rejections: [forbidden],\n});',
-        "  schemas: { money },\n  rejections: [forbidden],\n  standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Missing' } },\n});",
+        'defineDefinitions({});',
+        "defineDefinitions({ standardRejections: { notFound: { code: 'MISSING', status: 410, message: 'Missing' } } });",
       ),
     });
     const out = join(aFolder(), 'contract-orders-service');
@@ -1987,8 +1983,8 @@ describe('cf-loom package: what it refuses', () => {
       'node_modules/@org/definitions/index.js': (
         service['node_modules/@org/definitions/index.js'] ?? ''
       ).replace(
-        '  schemas: { money },\n  rejections: [forbidden],\n});',
-        "  schemas: { money },\n  rejections: [forbidden],\n  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },\n});",
+        'defineDefinitions({});',
+        "defineDefinitions({ standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } } });",
       ),
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
         .replace(

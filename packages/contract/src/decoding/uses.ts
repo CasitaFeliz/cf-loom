@@ -57,7 +57,34 @@ export function usesOf(snapshot: Used): readonly Use[] {
     ...guards.flatMap(([name, listed]) =>
       namesAt(['guards', name, 'guards'], listed.guards, 'guard'),
     ),
+    ...exportUsesOf(snapshot),
   ];
+}
+
+/** The Guard or code each export of a Definitions Package names, which its Snapshot must hold. */
+function exportUsesOf(snapshot: Used): readonly Use[] {
+  const exports = snapshot.kind === 'definitions' ? Object.entries(snapshot.exports) : [];
+  const uses: Use[] = [];
+  for (const [name, exported] of exports) {
+    if (exported.kind === 'guard') {
+      uses.push({ kind: 'guard', name: exported.guard, at: ['exports', name, 'guard'] });
+    }
+    if (exported.kind === 'rejection') {
+      uses.push({ kind: 'code', name: exported.code, at: ['exports', name, 'code'] });
+    }
+  }
+  return uses;
+}
+
+/** The node of each exported schema, at its export. */
+function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly LocatedNode[] {
+  const nodes: LocatedNode[] = [];
+  for (const [name, exported] of Object.entries(snapshot.exports)) {
+    if (exported.kind === 'schema') {
+      nodes.push(...partsAt(['exports', name], { schema: exported.schema }));
+    }
+  }
+  return nodes;
 }
 
 function namesAt(at: Path, names: readonly string[], kind: Use['kind']): readonly Use[] {
@@ -87,7 +114,7 @@ function isRefAt(located: LocatedNode): located is { at: Path; node: RefNode } {
 function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoint>[]) {
   return [
     ...partsAt(['defs'], snapshot.defs),
-    ...(snapshot.kind === 'definitions' ? partsAt(['schemas'], snapshot.schemas) : []),
+    ...(snapshot.kind === 'definitions' ? exportedSchemasOf(snapshot) : []),
     ...endpoints.flatMap(([identity, endpoint]) =>
       endpointNodesOf(['endpoints', identity], endpoint),
     ),

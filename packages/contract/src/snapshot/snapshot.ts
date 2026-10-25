@@ -1,12 +1,13 @@
-import type { Contract, Definitions } from '../declarations/index.ts';
+import { type Contract, type Definitions, isGuard, isRejection } from '../declarations/index.ts';
 import type { ValidContract } from '../validation/index.ts';
+import { isSchema } from '../written/index.ts';
 import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
 import type { SnapshotContext, SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
 import { guardSnapshotsOf } from './guards.ts';
 import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
-import type { DefinitionsSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
+import type { DefinitionsSnapshot, ExportSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
 
 /**
  * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
@@ -65,10 +66,8 @@ function definitionsSnapshotOf(
   const { schemas, declarations } = validated;
   const sources = sourcesOf(validated, context);
   const standardRejections = standardRejectionsOf(sources);
-  const shared = Object.entries(root.schemas ?? {}).map(([name, schema]) => [
-    name,
-    sources.nodeOf(schema, 'schema'),
-  ]);
+  const exported = Object.entries(declarations.exports).filter(([, value]) => value !== root);
+  const exports = exported.map(([name, value]) => [name, exportSnapshotOf(value, sources)]);
   return {
     format: 1,
     kind: 'definitions',
@@ -76,10 +75,25 @@ function definitionsSnapshotOf(
     generator: context.generator,
     standardRejections,
     defs: schemas.defs,
-    schemas: Object.fromEntries(shared),
+    exports: Object.fromEntries(exports),
     guards: guardSnapshotsOf(declarations.guards, sources),
     codes: codeSnapshotsOf(declarations.codes, sources),
   };
+}
+
+/** An export as its Snapshot records it; validation lets nothing else through. */
+function exportSnapshotOf(value: unknown, sources: SnapshotSources): ExportSnapshot {
+  if (isGuard(value)) {
+    return { kind: 'guard', guard: value.name };
+  }
+  if (isRejection(value)) {
+    return { kind: 'rejection', code: value.code };
+  }
+  const schema = isSchema(value) ? sources.nodeOf(value, 'schema') : undefined;
+  if (schema !== undefined) {
+    return { kind: 'schema', schema };
+  }
+  throw new Error('A valid Definitions root exported what it does not share: a bug.');
 }
 
 function sourcesOf(

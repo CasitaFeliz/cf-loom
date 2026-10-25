@@ -234,16 +234,6 @@ describe('validateContract: lists and their items', () => {
     );
   });
 
-  test('a Definitions Package’s schemas that is null fails', () => {
-    const definitions = defineDefinitions({
-      schemas: anything<Record<string, never>>(null),
-    });
-
-    expect(validateInPackage(definitions, noOrigin)).toEqual(
-      failed(['schemas'], 'not-an-object', 'schemas is an object'),
-    );
-  });
-
   test('a standardRejections that is a string fails once', () => {
     const definitions = defineDefinitions({
       standardRejections: anything<Record<string, never>>('abc'),

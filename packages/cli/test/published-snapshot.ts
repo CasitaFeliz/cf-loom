@@ -62,7 +62,7 @@ const definitionsBody = {
   kind: 'definitions',
   standardRejections,
   defs: {},
-  schemas: {},
+  exports: {},
   guards: {},
   codes: standardCodes,
 } as const;

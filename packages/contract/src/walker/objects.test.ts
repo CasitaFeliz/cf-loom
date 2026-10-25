@@ -354,9 +354,19 @@ function aCommand(body: core.$ZodType) {
   return defineCommand({ ...written, description: 'Charge' } as never);
 }
 
+/** What each Definitions root of a row exports beside it. */
+const exportedBy = new Map<unknown, Readonly<Record<string, unknown>>>();
+
+/** A Definitions root whose file exports the schemas given. */
+function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) {
+  const definitions = defineDefinitions({});
+  exportedBy.set(definitions, { definitions, ...schemas });
+  return definitions;
+}
+
 function failuresIn(root: unknown) {
-  const name = Reflect.get(root as object, 'name');
-  const validated = validateContract(root, aRootPackage(root, { packageName: String(name) }));
+  const exportsOf = (definitions: unknown) => exportedBy.get(definitions) ?? {};
+  const validated = validateContract(root, aRootPackage(root, { exportsOf }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -411,8 +421,8 @@ describe('validateContract: a strict object fails wherever it sits', () => {
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ schemas: { scope: strictObject() } }),
-      ['schemas', 'scope'],
+      () => definitionsExporting({ scope: strictObject() }),
+      ['exports', 'scope'],
     ],
   ])('a strict object %s fails with one line naming z.object()', (_position, rootOf, at) => {
     const failures = failuresIn(rootOf());
@@ -492,8 +502,8 @@ describe('validateContract: a record keyed by an enum or literal fails wherever 
     ],
     [
       'in a shared schema of a Definitions root',
-      () => defineDefinitions({ schemas: { totals: keyed() } }),
-      ['schemas', 'totals'],
+      () => definitionsExporting({ totals: keyed() }),
+      ['exports', 'totals'],
     ],
   ])(
     'a record keyed by an enum %s fails with one line naming z.object()',

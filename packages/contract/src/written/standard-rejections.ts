@@ -6,7 +6,7 @@ import {
   standardRejectionNames,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import { type Declarations, declarationsOf } from './declarations.ts';
+import { type Declarations, declarationsOf, noExports } from './declarations.ts';
 import type { LocatedStandardRejection } from './located.ts';
 import { textOf } from './written.ts';
 
@@ -55,7 +55,7 @@ export function resolvedStandards({
  * answers them; a valid root's statuses are the ones the type allows.
  */
 export function standardRejectionsOf(root: Contract): StandardRejections {
-  const resolved = resolvedStandards(declarationsOf(root));
+  const resolved = resolvedStandards(declarationsOf(root, noExports));
   const entries = resolved.map(({ name, code, status, message }) => [
     name,
     { code, status, message },

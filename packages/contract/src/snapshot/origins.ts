@@ -1,15 +1,19 @@
 import type { ResolvedDefinitions } from '../validation/index.ts';
-import type { Origin, OriginOf } from '../walker/index.ts';
-import type { LocatedDefinitions, ResolvedStandard } from '../written/index.ts';
+import { byCodePoint, type Origin, type OriginOf } from '../walker/index.ts';
+import { type LocatedDefinitions, membersOf, type ResolvedStandard } from '../written/index.ts';
 
 /**
  * Where each shared schema of the listed Definitions Packages came from, as the walk writes it on
- * the node; a clone of one is a new schema and has none.
+ * the node: the package and the first name, in code point order, it is exported under; a clone of
+ * one is a new schema and has none.
  */
 export function schemaOriginsOf(packages: readonly ResolvedDefinitions[]): OriginOf {
   const originBySchema = new Map<unknown, Origin>();
   for (const resolved of packages) {
-    for (const [name, schema] of Object.entries(resolved.definitions.schemas ?? {})) {
+    const schemas = membersOf(resolved.exports).schemas.toSorted(([left], [right]) =>
+      byCodePoint(left, right),
+    );
+    for (const [name, schema] of schemas) {
       if (!originBySchema.has(schema)) {
         originBySchema.set(schema, `${packageOriginOf(resolved)}#${name}`);
       }

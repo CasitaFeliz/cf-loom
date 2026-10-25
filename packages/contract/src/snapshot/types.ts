@@ -118,11 +118,17 @@ export type ApplicationSnapshot = Heading<'application'> & {
   readonly dependencies: ByKey<DependencySnapshot>;
 };
 
+/** One export of a Definitions Package: a Guard by name, a Rejection by code, or a shared schema's node. */
+export type ExportSnapshot =
+  | { readonly kind: 'guard'; readonly guard: string }
+  | { readonly kind: 'rejection'; readonly code: string }
+  | { readonly kind: 'schema'; readonly schema: SchemaNode };
+
 /** The declared Snapshot of a Definitions Package: everything it declares, reached or not. */
 export type DefinitionsSnapshot = Heading<'definitions'> & {
   readonly standardRejections: StandardRejectionsSnapshot;
   readonly defs: ByKey<SchemaNode>;
-  readonly schemas: ByKey<SchemaNode>;
+  readonly exports: ByKey<ExportSnapshot>;
   readonly guards: ByKey<GuardSnapshot>;
   readonly codes: ByKey<CodeSnapshot>;
 };

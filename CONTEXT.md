@@ -25,7 +25,7 @@ The published artifact that carries exactly one Contract: its Public and Interna
 _Avoid_: schemas package, public package (Visibility is not about the registry)
 
 **Definitions Package**:
-A versioned package of declarations that several Contracts import, such as Guards and common schemas. It owns no Elements and no Handlers.
+A versioned package of declarations that several Contracts import by name: the Guards, Rejections and shared schemas its root file exports. It owns no Elements and no Handlers.
 _Avoid_: shared kit, common contract, library
 
 **Service**:
@@ -215,7 +215,7 @@ The comparison of a Contract or a Definitions Package against its Baseline that 
 _Avoid_: diff, lint, compatibility review
 
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing a Definitions Package's shared schema, Guard or Rejection, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
+A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing or renaming an export of a Definitions Package, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:

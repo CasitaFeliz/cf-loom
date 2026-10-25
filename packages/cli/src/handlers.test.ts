@@ -374,7 +374,7 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
     'node_modules/@org/definitions/index.js': lines([
       "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
       "export const userToken = defineGuard({ name: 'userToken', description: 'A user' });",
-      'export const definitions = defineDefinitions({ guards: [userToken] });',
+      'export const definitions = defineDefinitions({});',
     ]),
     'src/contract/endpoints/orders/create-order.endpoint.ts': anEndpoint({
       name: 'createOrder',
@@ -2199,7 +2199,7 @@ describe('cf-loom generate: what it refuses', () => {
     });
   });
 
-  test('a Guard a listed Definitions Package reaches but its entry does not export exits 1 naming the package', () => {
+  test('a Guard a listed Definitions Package’s entry does not export is the Service’s own, and needs a file that exports it', () => {
     const definitions = withDefinitionsGuard();
     const project = aProject({
       ...definitions,
@@ -2220,7 +2220,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'guards.userToken is not exported by @org/definitions\n',
+      stderr: 'guards.userToken is exported by no file under src/contract/\n',
     });
   });
 

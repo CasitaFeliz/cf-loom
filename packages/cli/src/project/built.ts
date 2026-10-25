@@ -97,14 +97,14 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
 function validatedOf(project: Project): ValidatedContract | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = project;
   const exportsByDefinitions = new Map(
-    packages.map((resolved) => [resolved.definitions, Object.values(resolved.exports)]),
+    packages.map((resolved) => [resolved.definitions, resolved.exports]),
   );
   const rootPackage: RootPackage = {
     originOf: schemaOriginsOf(packages),
     packageName: packageJsonNameOf(packageName),
     packages: project.definitionsPackages,
     exportsOf: (definitions) =>
-      definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? []),
+      definitions === root ? rootExports : (exportsByDefinitions.get(definitions) ?? {}),
   };
   try {
     return validateContract(root, rootPackage);

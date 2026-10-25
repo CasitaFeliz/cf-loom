@@ -84,17 +84,11 @@ export const subscriptionFields = {
 
 /** The fields of a Definitions Package. */
 export const definitionsFields = {
-  declared: {
-    kind: true,
-    guards: true,
-    schemas: true,
-    rejections: true,
-    standardRejections: true,
-  },
+  declared: { kind: true, standardRejections: true },
   required: { kind: true },
   strings: { kind: true },
   nonBlank: {},
-  objects: { schemas: true, standardRejections: true },
+  objects: { standardRejections: true },
 } satisfies Fields<Definitions>;
 
 /** The fields of a Group. */

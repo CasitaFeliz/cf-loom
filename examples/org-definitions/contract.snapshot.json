@@ -99,6 +99,42 @@
     }
   },
   "defs": {},
+  "exports": {
+    "apiKey": {
+      "guard": "apiKey",
+      "kind": "guard"
+    },
+    "money": {
+      "kind": "schema",
+      "schema": {
+        "fields": {
+          "amount": {
+            "required": true,
+            "schema": {
+              "description": "In minor units, such as cents",
+              "int": true,
+              "min": 0,
+              "type": "number"
+            }
+          },
+          "currency": {
+            "required": true,
+            "schema": {
+              "description": "An ISO 4217 code",
+              "max": 3,
+              "min": 3,
+              "type": "string"
+            }
+          }
+        },
+        "type": "object"
+      }
+    },
+    "unauthenticated": {
+      "code": "UNAUTHENTICATED",
+      "kind": "rejection"
+    }
+  },
   "format": 1,
   "generator": "@cf-loom/cli@0.0.0",
   "guards": {
@@ -139,31 +175,6 @@
   },
   "kind": "definitions",
   "name": "@org/definitions",
-  "schemas": {
-    "money": {
-      "fields": {
-        "amount": {
-          "required": true,
-          "schema": {
-            "description": "In minor units, such as cents",
-            "int": true,
-            "min": 0,
-            "type": "number"
-          }
-        },
-        "currency": {
-          "required": true,
-          "schema": {
-            "description": "An ISO 4217 code",
-            "max": 3,
-            "min": 3,
-            "type": "string"
-          }
-        }
-      },
-      "type": "object"
-    }
-  },
   "standardRejections": {
     "invalidInput": "BAD_REQUEST",
     "notFound": "RESOURCE_NOT_FOUND",

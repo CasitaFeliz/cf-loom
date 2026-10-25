@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage } from '../../test/root-package.ts';
+import { aRootPackage, exporting } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -53,9 +53,6 @@ const permission = defineGuard({
 const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
 
 const orgDefinitions = defineDefinitions({
-  guards: [userToken, permission, unusedGuard],
-  schemas: { money },
-  rejections: [unauthenticated, forbidden, unusedRejection],
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
   },
@@ -181,7 +178,16 @@ const orgPackage: ResolvedDefinitions = {
   definitions: orgDefinitions,
   packageName: '@org/definitions',
   version: '4.2.0',
-  exports: {},
+  exports: {
+    definitions: orgDefinitions,
+    userToken,
+    permission,
+    unusedGuard,
+    money,
+    unauthenticated,
+    forbidden,
+    unusedRejection,
+  },
 };
 
 const notifyOnSettled = defineSubscription({
@@ -223,7 +229,8 @@ function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
 
 function snapshotFor(root: unknown, context: SnapshotContext = aContext()): Snapshot {
   const originOf = schemaOriginsOf(context.packages);
-  const validated = validateContract(root, aRootPackage(root, { originOf }));
+  const exportsOf = exporting([orgDefinitions, orgPackage.exports]);
+  const validated = validateContract(root, aRootPackage(root, { originOf, exportsOf }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -980,14 +987,23 @@ describe('snapshotOf: a Definitions Package', () => {
       name: '@org/definitions',
       generator: '@cf-loom/cli@2.1.0',
       defs: {},
-      schemas: {
+      exports: {
+        forbidden: { kind: 'rejection', code: 'FORBIDDEN' },
         money: {
-          type: 'object',
-          fields: {
-            amount: { required: true, schema: { type: 'number', int: true } },
-            currency: { required: true, schema: { type: 'string' } },
+          kind: 'schema',
+          schema: {
+            type: 'object',
+            fields: {
+              amount: { required: true, schema: { type: 'number', int: true } },
+              currency: { required: true, schema: { type: 'string' } },
+            },
           },
         },
+        permission: { kind: 'guard', guard: 'permission' },
+        unauthenticated: { kind: 'rejection', code: 'UNAUTHENTICATED' },
+        unusedGuard: { kind: 'guard', guard: 'unusedGuard' },
+        unusedRejection: { kind: 'rejection', code: 'UNUSED' },
+        userToken: { kind: 'guard', guard: 'userToken' },
       },
     });
     expect(snapshot.kind === 'definitions' && Object.keys(snapshot.guards).sort()).toEqual([

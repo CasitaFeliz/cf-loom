@@ -1,7 +1,7 @@
 import type { Contract, Endpoint, Guard } from '../declarations/index.ts';
 import { isEndpoint, isGuard } from '../declarations/index.ts';
 import { type ObjectNode, walkSchemas } from '../walker/index.ts';
-import { declarationsOf, type ObjectPart } from '../written/index.ts';
+import { declarationsOf, noExports, type ObjectPart } from '../written/index.ts';
 import type { Failure } from './failures.ts';
 import { paramsFailures } from './paths.ts';
 import {
@@ -31,7 +31,7 @@ export type WalkedTextParts =
  * shape per header or query name.
  */
 export function walkedTextPartsOf(contract: Contract): WalkedTextParts {
-  const declarations = declarationsOf(contract);
+  const declarations = declarationsOf(contract, noExports);
   const { slots, failures: notSchemas } = schemaSlotsAmong(textSlotsOf(declarations));
   const walked = walkSchemas(locatedSchemasOf(slots), () => undefined);
   const nodes = nodesOf(slots, walked);

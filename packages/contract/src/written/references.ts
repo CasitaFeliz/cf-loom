@@ -66,14 +66,12 @@ export function attachedGuardOf(attachment: Attachment): Guard | undefined {
 
 /**
  * Every Guard a root reaches by reference, each once, the Guards one lists before it: the
- * Endpoints' first, which the root reaches, then a listed Definitions Package's, reached only by a
- * Definitions root.
+ * Endpoints' first, which the root reaches, then those a Definitions Package exports, reached only
+ * by a Definitions root.
  */
 export function guardsOf({ root, allPackages, endpoints }: Sources): readonly LocatedGuard[] {
   const attached = reachedGuardsOf(endpoints.flatMap(({ endpoint }) => attachedGuardsOf(endpoint)));
-  const listed = reachedGuardsOf(
-    allPackages.flatMap(({ definitions }) => listOf(definitions.guards)),
-  );
+  const listed = reachedGuardsOf(allPackages.flatMap(({ members }) => members.guards));
   const listedOnly = listed.filter((guard) => !attached.includes(guard));
   return [
     ...attached.map((guard) => locatedGuardOf(guard, true)),
@@ -81,12 +79,12 @@ export function guardsOf({ root, allPackages, endpoints }: Sources): readonly Lo
   ];
 }
 
-/** Every Rejection a root reaches, each once: a Definitions Package's, a Guard's, an Endpoint's. */
+/** Every Rejection a root reaches, each once: a Definitions Package's exports, a Guard's, an Endpoint's. */
 export function rejectionsOf(
   { allPackages, endpoints }: Sources,
   guards: readonly LocatedGuard[],
 ): readonly LocatedRejection[] {
-  const listed = allPackages.flatMap((located) => listOf(located.definitions.rejections));
+  const listed = allPackages.flatMap(({ members }) => members.rejections);
   const ofGuards = guards.flatMap((located) => listOf(located.guard.rejections));
   const ofEndpoints = endpoints.flatMap((located) => listOf(located.endpoint.rejections));
   const rejections = [...listed, ...ofGuards, ...ofEndpoints].filter(isRejection);

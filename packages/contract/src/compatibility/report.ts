@@ -27,11 +27,11 @@ export type ChangeSite =
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
   /**
    * A Subscription by name, Private since no Consumer relies on what a Service itself consumes; or
-   * a Definitions Package's shared schema or Guard by name, Public since the Services that import
-   * it may use all of it.
+   * a Definitions Package's export or Guard by name, Public since the Services that import it may
+   * use all of it.
    */
   | {
-      readonly kind: 'subscription' | 'shared-schema' | 'guard';
+      readonly kind: 'subscription' | 'export' | 'guard';
       readonly name: string;
       readonly visibility: Visibility;
     };
@@ -124,6 +124,8 @@ export type Difference =
   | { readonly kind: 'name-kind-changed'; readonly from: 'event' | 'command' }
   /** A Subscription's Event changed, as the Snapshot spells it: the Releases side by side share its durable consumer. */
   | { readonly kind: 'event-changed'; readonly from: string; readonly to: string }
+  /** A Definitions Package's export now names another Guard or Rejection, or another kind: a Service importing it gets something else. */
+  | { readonly kind: 'export-changed'; readonly from: string; readonly to: string }
   /** An Endpoint renamed, with the Baseline's Visibility, since only its Callers knew the old name. */
   | {
       readonly kind: 'renamed';

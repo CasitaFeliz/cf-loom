@@ -9,6 +9,7 @@ export type { Declarations } from './declarations.ts';
 export {
   declarationsOf,
   listedDefinitionsOf,
+  noExports,
   providerExportsOf,
   providerNameOf,
 } from './declarations.ts';
@@ -41,6 +42,8 @@ export {
   subjectVersionOf,
 } from './identity.ts';
 export type {
+  ExportsOf,
+  ListedDefinitions,
   LocatedCode,
   LocatedCommand,
   LocatedDefinitions,
@@ -54,6 +57,8 @@ export type {
   LocatedSubscription,
   Root,
 } from './located.ts';
+export type { Members } from './members.ts';
+export { membersOf } from './members.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {

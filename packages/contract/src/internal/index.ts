@@ -72,6 +72,7 @@ export type {
   EndpointTombstone,
   EventSnapshot,
   ExportedSnapshot,
+  ExportSnapshot,
   GuardSnapshot,
   ListedRejection,
   MessageTombstone,
@@ -216,7 +217,14 @@ export {
   transportHeaderFitOf,
   withDeprecation,
 } from '../wire/index.ts';
-export type { AnswerableRejection, Issue, IssuePart, Part, PathSegment } from '../written/index.ts';
+export type {
+  AnswerableRejection,
+  ExportsOf,
+  Issue,
+  IssuePart,
+  Part,
+  PathSegment,
+} from '../written/index.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,

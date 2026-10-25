@@ -18,7 +18,6 @@ import {
 } from './index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
-const pagination = z.object({ page: z.int(), size: z.int() });
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
@@ -44,9 +43,6 @@ const permission = defineGuard({
 });
 
 const definitions = defineDefinitions({
-  guards: [userToken, permission],
-  schemas: { money, pagination },
-  rejections: [unauthenticated, forbidden],
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },

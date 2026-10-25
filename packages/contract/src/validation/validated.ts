@@ -1,4 +1,3 @@
-import type { Definitions } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
@@ -12,11 +11,12 @@ import {
   type LocatedGuard,
   type LocatedRejection,
   type LocatedSubscription,
-  listOf,
+  type Members,
   type ResolvedStandard,
   type Root,
   resolvedStandards,
 } from '../written/index.ts';
+import type { RootPackage } from './validate.ts';
 
 /**
  * A Guard of a valid root, whether the root reaches it, and the listed Definitions Package that
@@ -49,6 +49,8 @@ export type ValidatedDeclarations = {
   readonly root: Root;
   /** The package.json name of the package the root sits in, scope included. */
   readonly packageName: string;
+  /** What a Definitions root's file exports, by name: what it shares, beside the root; nothing for another root. */
+  readonly exports: Readonly<Record<string, unknown>>;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
@@ -63,23 +65,25 @@ export type ValidatedDeclarations = {
 /** What a valid root declares, so the Snapshot's writer never gathers it again. */
 export function validatedDeclarationsOf(
   declarations: Declarations,
-  packageName: string,
+  { packageName, exportsOf }: Pick<RootPackage, 'packageName' | 'exportsOf'>,
 ): ValidatedDeclarations {
+  const { root } = declarations;
   return {
-    root: declarations.root,
+    root,
     packageName,
+    exports: root.kind === 'definitions' ? exportsOf(root) : {},
     groups: declarations.groups,
     endpoints: declarations.endpoints,
     guards: declarations.guards.map((located) => ({
       ...located,
-      listedIn: listedInOf(declarations, located.guard, (definitions) => definitions.guards),
+      listedIn: listedInOf(declarations, located.guard, (members) => members.guards),
     })),
     codes: declarations.codes.map(({ code, at, rejections: [first], reached }) => ({
       code,
       at,
       rejection: first.rejection,
       reached,
-      listedIn: listedInOf(declarations, first.rejection, (definitions) => definitions.rejections),
+      listedIn: listedInOf(declarations, first.rejection, (members) => members.rejections),
     })),
     standardRejections: resolvedStandards(declarations),
     dependencies: declarations.dependencies,
@@ -103,13 +107,11 @@ function validatedSubscriptionsOf({
   });
 }
 
-/** The first listed Definitions Package whose list holds a declaration; none for the root's own. */
+/** The first listed Definitions Package whose members hold a declaration; none for the root's own. */
 function listedInOf(
   { listedDefinitions }: Declarations,
   declaration: unknown,
-  listed: (definitions: Definitions) => readonly unknown[] | undefined,
+  held: (members: Members) => readonly unknown[],
 ): LocatedDefinitions | undefined {
-  return listedDefinitions.find(({ definitions }) =>
-    listOf(listed(definitions)).includes(declaration),
-  );
+  return listedDefinitions.find(({ members }) => held(members).includes(declaration));
 }

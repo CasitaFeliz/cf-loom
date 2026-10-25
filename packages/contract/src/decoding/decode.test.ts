@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
+import { schemaExports } from '../../test/snapshots.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -112,7 +113,7 @@ function aDefinitions(
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: standardCodes,
     ...fields,
@@ -370,7 +371,7 @@ describe('decodeSnapshot', () => {
 
     test('a Definitions Package’s published Snapshot decodes, its shared schemas and removed codes included', () => {
       const published = aDefinitions({
-        schemas: { money: { type: 'object', fields: {} } },
+        exports: schemaExports({ money: { type: 'object', fields: {} } }),
         guards: { apiKey: { ...aGuard, rejections: ['UNAUTHENTICATED'] } },
         codes: {
           ...standardCodes,
@@ -649,9 +650,12 @@ describe('decodeSnapshot', () => {
         at: ['dependencies', '__proto__'],
       },
       {
-        where: 'a Definitions Package’s schemas',
-        snapshot: { ...aDefinitions(), schemas: protoKeyed({ type: 'string' }) },
-        at: ['schemas', '__proto__'],
+        where: 'a Definitions Package’s exports',
+        snapshot: {
+          ...aDefinitions(),
+          exports: protoKeyed({ kind: 'schema', schema: { type: 'string' } }),
+        },
+        at: ['exports', '__proto__'],
       },
       {
         where: 'an object node’s fields',
@@ -1170,8 +1174,8 @@ describe('decodeSnapshot', () => {
       ],
       [
         'a Definitions Package’s shared schema',
-        aDefinitions({ schemas: { money: aRef('missing') } }),
-        ['schemas', 'money'],
+        aDefinitions({ exports: schemaExports({ money: aRef('missing') }) }),
+        ['exports', 'money', 'schema'],
       ],
       [
         'a Guard’s qualifier',

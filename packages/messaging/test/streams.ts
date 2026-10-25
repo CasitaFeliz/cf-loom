@@ -78,7 +78,7 @@ function serviceSnapshotOf(contract: Contract) {
     originOf,
     packageName: contract.name,
     packages: [],
-    exportsOf: () => [],
+    exportsOf: () => ({}),
   });
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);

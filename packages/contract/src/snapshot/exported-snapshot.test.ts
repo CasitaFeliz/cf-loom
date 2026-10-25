@@ -581,6 +581,7 @@ function serviceSnapshotOf(
 ): ServiceSnapshot {
   const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
+    packages,
     originOf: schemaOriginsOf(packages),
   });
   const validated = validateContract(root, rootPackage);
@@ -611,9 +612,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     guards: [userToken],
   });
   const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
-  const definitions = defineDefinitions({
-    guards: [userToken, permission, unusedGuard],
-  });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -630,7 +629,12 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     groups: [group],
   });
   const packages: readonly ResolvedDefinitions[] = [
-    { definitions, packageName: '@org/definitions', version: '1.0.0', exports: {} },
+    {
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      exports: { definitions, userToken, permission, unusedGuard },
+    },
   ];
   return serviceSnapshotOf(root, packages);
 }
@@ -647,7 +651,7 @@ function codeReachSnapshot(): ServiceSnapshot {
   const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
   const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
   const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
-  const definitions = defineDefinitions({ rejections: [unused] });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -678,6 +682,11 @@ function codeReachSnapshot(): ServiceSnapshot {
     groups: [group],
   });
   return serviceSnapshotOf(root, [
-    { definitions, packageName: '@org/definitions', version: '1.0.0', exports: {} },
+    {
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      exports: { definitions, unused },
+    },
   ]);
 }

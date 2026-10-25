@@ -150,7 +150,7 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
-    case 'shared-schema':
+    case 'export':
     case 'subscription':
       return site.name;
     case 'endpoint':

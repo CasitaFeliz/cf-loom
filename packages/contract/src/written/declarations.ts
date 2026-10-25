@@ -3,6 +3,8 @@ import { isContract, isDefinitions, isDependency } from '../declarations/index.t
 import type { Path } from '../walker/index.ts';
 import { groupedOf, groupsOf } from './grouped.ts';
 import type {
+  ExportsOf,
+  ListedDefinitions,
   LocatedCode,
   LocatedCommand,
   LocatedDefinitions,
@@ -16,6 +18,7 @@ import type {
   LocatedSubscription,
   Root,
 } from './located.ts';
+import { membersOf } from './members.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
 
@@ -43,13 +46,20 @@ export type Declarations = {
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
-export function declarationsOf(root: Root): Declarations {
-  const listedDefinitions = listedDefinitionsOf(root);
+/**
+ * Gathers what a root declares, Guards and Rejections included, each where it was first met, with
+ * each Definitions Package's members read from what `exportsOf` says its root file exports.
+ */
+export function declarationsOf(root: Root, exportsOf: ExportsOf): Declarations {
+  const listedDefinitions = listedDefinitionsOf(root).map((listed) =>
+    withMembers(listed, exportsOf),
+  );
   const groups = groupsOf(root);
   const { endpoints, events, commands, subscriptions } = groupedOf(groups);
   const allPackages =
-    root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
+    root.kind === 'definitions'
+      ? [withMembers({ at: [], definitions: root }, exportsOf)]
+      : listedDefinitions;
   const sources = { root, allPackages, endpoints };
   const guards = guardsOf(sources);
   const rejections = rejectionsOf(sources, guards);
@@ -100,7 +110,7 @@ function isLocatedStandardRejection(
  * exported: the CLI resolves them before validating; what else sits there is the structure rules'
  * to report.
  */
-export function listedDefinitionsOf(root: unknown): readonly LocatedDefinitions[] {
+export function listedDefinitionsOf(root: unknown): readonly ListedDefinitions[] {
   if (!isContract(root)) {
     return [];
   }
@@ -114,9 +124,17 @@ export function listedDefinitionsOf(root: unknown): readonly LocatedDefinitions[
 function isLocatedDefinitions(located: {
   readonly at: Path;
   readonly definitions: unknown;
-}): located is LocatedDefinitions {
+}): located is ListedDefinitions {
   return isDefinitions(located.definitions);
 }
+
+/** A Definitions Package with the members its root file exports. */
+function withMembers(listed: ListedDefinitions, exportsOf: ExportsOf): LocatedDefinitions {
+  return { ...listed, members: membersOf(exportsOf(listed.definitions)) };
+}
+
+/** What a root file exports when nothing is known of it: the runtime reads no export. */
+export const noExports: ExportsOf = () => ({});
 
 function dependenciesOf(root: Root): readonly LocatedDependency[] {
   if (root.kind === 'definitions') {

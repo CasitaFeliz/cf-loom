@@ -11,7 +11,6 @@ import type {
 import {
   type Declarations,
   endpointParts,
-  entriesOf,
   guardParts,
   isObjectPart,
   isSchema,
@@ -165,13 +164,14 @@ function codeSlots({ rejections: [first, ...others] }: LocatedCode): readonly Sl
   ];
 }
 
-/** A shared schema sits under `schemas` by name and owns its slot, being no declaration's part. */
-function sharedSlots({ root }: Declarations): readonly Slot[] {
-  if (root.kind !== 'definitions') {
+/** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
+function sharedSlots({ root, allPackages }: Declarations): readonly Slot[] {
+  const [own] = allPackages;
+  if (root.kind !== 'definitions' || own === undefined) {
     return [];
   }
-  return entriesOf(root.schemas).map(([name, value]) => ({
-    at: ['schemas', name],
+  return own.members.schemas.map(([name, value]) => ({
+    at: ['exports', name],
     owner: value,
     part: 'schema' as const,
     value,

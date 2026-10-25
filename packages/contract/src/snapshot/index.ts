@@ -36,6 +36,7 @@ export type {
   EndpointSnapshot,
   EventSnapshot,
   ExportedSnapshot,
+  ExportSnapshot,
   GuardSnapshot,
   ServiceSnapshot,
   Snapshot,

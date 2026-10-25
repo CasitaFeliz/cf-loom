@@ -3,15 +3,17 @@ import type { RootPackage } from '@cf-loom/contract/internal';
 /**
  * The package a test's root sits in: named as the root is, or `@org/definitions` for a
  * Definitions Package, with no Definitions Package installed and no schema from one, unless the
- * test gives otherwise.
+ * test gives otherwise; each installed package's exports are what it exports.
  */
 export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): RootPackage {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const packages = given.packages ?? [];
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
-    packages: [],
+    packages,
     originOf: () => undefined,
-    exportsOf: () => [],
+    exportsOf: (definitions) =>
+      packages.find((resolved) => resolved.definitions === definitions)?.exports ?? {},
     ...given,
   };
 }

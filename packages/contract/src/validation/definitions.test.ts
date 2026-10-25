@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage } from '../../test/root-package.ts';
+import { aRootPackage, exporting } from '../../test/root-package.ts';
 import {
   defineContract,
   defineDefinitions,
@@ -9,16 +9,7 @@ import {
   defineGuard,
   defineRejection,
 } from '../index.ts';
-import { type RootPackage, validateContract } from '../internal/index.ts';
-
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  return validateContract(root, aRootPackage(root, { originOf }));
-}
-
-function noOrigin() {
-  return undefined;
-}
+import { validateContract } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -43,159 +34,162 @@ const admin = defineGuard({
   guards: [permission],
 });
 const owner = defineGuard({ name: 'owner', description: 'The user owns', guards: [admin] });
+const ping = defineEndpoint({
+  name: 'ping',
+  method: 'GET',
+  path: '/ping',
+  visibility: 'public',
+  description: 'Ping',
+  success: { status: 200, body: z.object({ ok: z.boolean() }) },
+});
 
-function failuresOf(root: unknown) {
-  const validated = validateInPackage(root, noOrigin);
+/** The failures of a Definitions root whose file exports what is given beside it. */
+function failuresOf(exported: Readonly<Record<string, unknown>>) {
+  const root = defineDefinitions({});
+  const validated = validateContract(
+    root,
+    aRootPackage(root, { exportsOf: exporting([root, exported]) }),
+  );
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
-describe('validateContract: a Definitions Package lists what its Guards reach', () => {
-  test('a Definitions Package that lists every Guard and Rejection its Guards reach is valid', () => {
-    const definitions = defineDefinitions({
-      guards: [userToken, permission],
-      rejections: [unauthenticated, forbidden],
-    });
+describe('validateContract: a Definitions Package exports what its Guards reach', () => {
+  test('a Definitions Package that exports every Guard and Rejection its Guards reach is valid', () => {
+    const failures = failuresOf({ userToken, permission, unauthenticated, forbidden });
 
-    const validated = validateInPackage(definitions, noOrigin);
-
-    expect(validated.kind).toBe('valid');
+    expect(failures).toEqual([]);
   });
 
   test.each([
-    { depth: 1, listed: [permission], unlisted: ['userToken'] },
-    { depth: 2, listed: [admin], unlisted: ['userToken', 'permission'] },
-    { depth: 3, listed: [owner], unlisted: ['userToken', 'permission', 'admin'] },
+    { depth: 1, exported: { permission }, unexported: ['userToken'] },
+    { depth: 2, exported: { admin }, unexported: ['userToken', 'permission'] },
+    { depth: 3, exported: { owner }, unexported: ['userToken', 'permission', 'admin'] },
   ])(
-    'a Guard a listed Guard reaches at depth $depth, left out of the list, fails naming it',
-    ({ listed, unlisted }) => {
-      const definitions = defineDefinitions({
-        guards: listed,
-        rejections: [unauthenticated, forbidden],
-      });
+    'a Guard an exported Guard reaches at depth $depth, left unexported, fails naming it',
+    ({ exported, unexported }) => {
+      const [name] = Object.keys(exported);
 
-      const failures = failuresOf(definitions);
+      const failures = failuresOf({ ...exported, unauthenticated, forbidden });
 
       expect(failures).toEqual(
-        unlisted.map((name) => ({
+        unexported.map((guard) => ({
           kind: 'declaration',
-          at: ['guards'],
-          rule: 'definitions-unlisted',
-          message: `A Definitions Package lists every Guard it exports or its Guards reach: ${name}`,
+          at: ['exports', name],
+          rule: 'definitions-unexported',
+          message: `${unexportedMessage}: ${guard}`,
         })),
       );
     },
   );
 
-  test('a Rejection a listed Guard answers, left out of the list, fails', () => {
-    const definitions = defineDefinitions({
-      guards: [userToken, permission],
-      rejections: [forbidden],
-    });
-
-    const failures = failuresOf(definitions);
+  test('a Rejection an exported Guard answers, left unexported, fails', () => {
+    const failures = failuresOf({ userToken, permission, forbidden });
 
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['rejections'],
-        rule: 'definitions-unlisted',
-        message:
-          'A Definitions Package lists every Rejection it exports or its Guards reach: UNAUTHENTICATED',
+        at: ['exports', 'permission'],
+        rule: 'definitions-unexported',
+        message: `${unexportedMessage}: UNAUTHENTICATED`,
       },
     ]);
   });
 
-  test('a Definitions Package a Contract lists is held to the same rule, where it is listed', () => {
-    const definitions = defineDefinitions({ guards: [permission] });
-    const ping = defineEndpoint({
-      name: 'ping',
-      method: 'GET',
-      path: '/ping',
-      visibility: 'public',
-      description: 'Ping',
-      success: { status: 200, body: z.object({ ok: z.boolean() }) },
+  test.each([
+    { depth: 1, links: 1 },
+    { depth: 2, links: 2 },
+    { depth: 3, links: 3 },
+  ])(
+    'every link of a chain of $depth Guards left unexported fails, and none exported does',
+    ({ links }) => {
+      const chain = [userToken, permission, admin, owner].slice(0, links + 1);
+      const top = chain.at(-1);
+      const rejections = { unauthenticated, forbidden };
+
+      for (let mask = 0; mask < 2 ** links; mask += 1) {
+        const kept = chain.slice(0, -1).filter((_, index) => (mask >> index) % 2 === 1);
+        const exported = Object.fromEntries([top, ...kept].map((guard) => [guard?.name, guard]));
+
+        const failures = failuresOf({ ...exported, ...rejections });
+
+        expect(failures).toHaveLength(links - kept.length);
+      }
+    },
+  );
+});
+
+describe('validateContract: a Definitions Package’s root file exports only what it shares', () => {
+  test.each([
+    ['a function', () => true],
+    ['a number', 100],
+    ['an Endpoint, which a Definitions Package never owns', ping],
+    ['a second Definitions Package', defineDefinitions({})],
+  ])('an export that is %s fails definitions-export', (_, value) => {
+    const failures = failuresOf({ other: value });
+
+    expect(failures).toEqual([
+      {
+        kind: 'declaration',
+        at: ['exports', 'other'],
+        rule: 'definitions-export',
+        message: `${exportsOnly}: other is none of them`,
+      },
+    ]);
+  });
+
+  test('the Definitions object exported under a second name fails definitions-export', () => {
+    const root = defineDefinitions({});
+    const exportsOf = exporting([root, { again: root }]);
+
+    const validated = validateContract(root, aRootPackage(root, { exportsOf }));
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          at: ['exports', 'again'],
+          rule: 'definitions-export',
+          message: `${exportsOnly}: its definitions once, as definitions, not as again`,
+        },
+      ],
     });
-    const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
+  });
+
+  test('a schema exported as __proto__ fails definitions-export', () => {
+    const exported = Object.defineProperty({}, '__proto__', {
+      value: z.object({ amount: z.int() }),
+      enumerable: true,
+    });
+
+    const failures = failuresOf(exported);
+
+    expect(failures).toEqual([
+      {
+        kind: 'declaration',
+        at: ['exports', '__proto__'],
+        rule: 'definitions-export',
+        message: `${exportsOnly}: nothing named __proto__, which no Snapshot can hold`,
+      },
+    ]);
+  });
+
+  test('a Contract’s listed Definitions Package is not judged by what it exports', () => {
+    const definitions = defineDefinitions({});
     const contract = defineContract({
       name: 'ping-service',
       definitions: [definitions],
-      groups: [group],
+      groups: [defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] })],
     });
+    const exportsOf = exporting([definitions, { permission, helper: () => true }]);
 
-    const failures = failuresOf(contract);
+    const validated = validateContract(contract, aRootPackage(contract, { exportsOf }));
 
-    expect(failures.map(({ at }) => at)).toEqual([
-      ['definitions', 0, 'guards'],
-      ['definitions', 0, 'rejections'],
-      ['definitions', 0, 'rejections'],
-    ]);
+    expect(validated.kind).toBe('valid');
   });
 });
 
-describe('validateContract: a listed Definitions Package lists what it exports', () => {
-  const ping = defineEndpoint({
-    name: 'ping',
-    method: 'GET',
-    path: '/ping',
-    visibility: 'public',
-    description: 'Ping',
-    success: { status: 200, body: z.object({ ok: z.boolean() }) },
-  });
-  const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
-  const definitions = defineDefinitions({
-    guards: [userToken],
-    rejections: [unauthenticated],
-  });
-  const contract = defineContract({
-    name: 'ping-service',
-    definitions: [definitions],
-    groups: [group],
-  });
-
-  function exportingFailures(exported: readonly unknown[]) {
-    const validated = validateContract(
-      contract,
-      aRootPackage(contract, {
-        originOf: noOrigin,
-        packageName: 'ping-service',
-        exportsOf: (listed) => (listed === definitions ? exported : []),
-      }),
-    );
-    return validated.kind === 'invalid' ? validated.failures : [];
-  }
-
-  test('a package that lists every Guard and Rejection it exports is valid', () => {
-    const failures = exportingFailures([definitions, userToken, unauthenticated, 'a constant']);
-
-    expect(failures).toEqual([]);
-  });
-
-  test('a Guard it exports and does not list fails where the package is listed', () => {
-    const failures = exportingFailures([definitions, userToken, permission]);
-
-    expect(failures).toEqual([
-      {
-        kind: 'declaration',
-        at: ['definitions', 0, 'guards'],
-        rule: 'definitions-unlisted',
-        message:
-          'A Definitions Package lists every Guard it exports or its Guards reach: permission',
-      },
-      {
-        kind: 'declaration',
-        at: ['definitions', 0, 'rejections'],
-        rule: 'definitions-unlisted',
-        message:
-          'A Definitions Package lists every Rejection it exports or its Guards reach: FORBIDDEN',
-      },
-    ]);
-  });
-
-  test('a Rejection it exports and does not list fails', () => {
-    const failures = exportingFailures([definitions, forbidden]);
-
-    expect(failures.map((failure) => failure.kind === 'declaration' && failure.message)).toEqual([
-      'A Definitions Package lists every Rejection it exports or its Guards reach: FORBIDDEN',
-    ]);
-  });
-});
+const unexportedMessage =
+  'A Definitions Package exports every Guard and Rejection its Guards reach, since Services import them to attach and to reject';
+const exportsOnly =
+  "A Definitions Package's root file exports only its definitions, Guards, Rejections and zod schemas";

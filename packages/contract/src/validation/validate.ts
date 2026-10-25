@@ -6,8 +6,8 @@ import {
 } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import { type OriginOf, openCompositionsOf, walkSchemas } from '../walker/index.ts';
-import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
-import { type ExportsOf, unlistedFailures } from './definitions.ts';
+import { type Declarations, declarationsOf, type ExportsOf, type Root } from '../written/index.ts';
+import { exportFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
@@ -92,7 +92,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     const message = 'A root is a Contract, an Application or a Definitions Package';
     return invalid([failure([], 'not-a-root', message)]);
   }
-  const declarations = declarationsOf(root);
+  const declarations = declarationsOf(root, rootPackage.exportsOf);
   const slots = schemaSlotsOf(declarations);
   const walked = walkSchemas(locatedSchemasOf(slots.slots), rootPackage.originOf);
   const nodes = nodesOf(slots.slots, walked);
@@ -101,7 +101,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
     ...packageNameFailures(root, rootPackage.packageName),
     ...listedOnceFailures(declarations, rootPackage.packages),
     ...onceFailures(declarations, rootPackage.packages),
-    ...unlistedFailures(declarations, rootPackage.exportsOf),
+    ...exportFailures(declarations, rootPackage.exportsOf),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
@@ -117,7 +117,7 @@ export function validateContract(root: unknown, rootPackage: RootPackage): Valid
       nodeOf: nodeLookupOf(nodes),
       defs: nodes.defs,
     },
-    declarations: validatedDeclarationsOf(declarations, rootPackage.packageName),
+    declarations: validatedDeclarationsOf(declarations, rootPackage),
   };
 }
 

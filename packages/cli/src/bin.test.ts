@@ -168,7 +168,6 @@ function installedDefinitions(
       "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
       "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
       'export const definitions = defineDefinitions({',
-      '  rejections: [gone],',
       "  standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },",
       '});',
       '',
@@ -1307,10 +1306,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         "import { z } from 'zod';",
         'export const money = z.object({ amount: z.int() });',
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
-        'export const definitions = defineDefinitions({',
-        '  guards: [apiKey],',
-        '  schemas: { money },',
-        '});',
+        'export const definitions = defineDefinitions({});',
         '',
       ].join('\n'),
       'src/contract/index.ts': [
@@ -1348,19 +1344,56 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
 });
 
 describe('cf-loom generate: a Definitions Package root', () => {
-  test('a Guard the root file exports and its root does not list fails definitions-unlisted', () => {
+  test('a Definitions Package writes every Guard, Rejection and schema its root file exports under exports', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
-      'cf-loom.config.ts': config,
       'src/definitions/index.ts': [
         "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
         '',
         "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
         "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
-        'export const definitions = defineDefinitions({',
-        '  guards: [],',
-        '  rejections: [gone],',
-        '});',
+        'export const money = z.object({ amount: z.int() });',
+        'export const definitions = defineDefinitions({});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(Object.keys(snapshot.exports)).toEqual(['apiKey', 'gone', 'money']);
+    expect(snapshot.exports.money.kind).toBe('schema');
+    expect(Object.keys(snapshot.guards)).toEqual(['apiKey']);
+    expect(snapshot).not.toHaveProperty('schemas');
+  });
+
+  test('a list on defineDefinitions fails generate with the field rule', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'src/definitions/index.ts': [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        'export const definitions = defineDefinitions({ guards: [] } as never);',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toMatch(/^guards undeclared-field: [^\n]+\n$/);
+  });
+
+  test('a helper the root file exports fails generate with one line, and nothing is written', () => {
+    const project = aProject({
+      'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+      'src/definitions/index.ts': [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        'export function isMoney(value: unknown): boolean {',
+        "  return typeof value === 'object';",
+        '}',
+        'export const definitions = defineDefinitions({});',
         '',
       ].join('\n'),
     });
@@ -1371,8 +1404,9 @@ describe('cf-loom generate: a Definitions Package root', () => {
       status: 1,
       stdout: '',
       stderr:
-        'guards definitions-unlisted: A Definitions Package lists every Guard it exports or its Guards reach: apiKey\n',
+        "exports.isMoney definitions-export: A Definitions Package's root file exports only its definitions, Guards, Rejections and zod schemas: isMoney is none of them\n",
     });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
   test('a shared schema with an id on no cycle fails generate', () => {
@@ -1384,41 +1418,10 @@ describe('cf-loom generate: a Definitions Package root', () => {
         "import { z } from 'zod';",
         '',
         "export const money = z.object({ amount: z.int() }).meta({ id: 'money' });",
-        'export const definitions = defineDefinitions({ schemas: { money } });',
-        '',
-      ].join('\n'),
-    });
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr:
-        'schemas.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
-    });
-  });
-});
-
-describe('cf-loom generate: what a listed Definitions Package lists', () => {
-  test('a Rejection the package exports and does not list fails with every other failure', () => {
-    const project = aProject({
-      'cf-loom.config.ts': config,
-      ...aRoot(),
-      'node_modules/@org/definitions/package.json': JSON.stringify({
-        name: '@org/definitions',
-        version: '4.2.0',
-        type: 'module',
-        exports: './index.js',
-      }),
-      'node_modules/@org/definitions/index.js': [
-        "import { defineDefinitions, defineRejection } from '@cf-loom/contract';",
-        "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
         'export const definitions = defineDefinitions({});',
         '',
       ].join('\n'),
     });
-    listDefinitions(project);
 
     const ran = cfLoom(project, 'generate');
 
@@ -1426,7 +1429,7 @@ describe('cf-loom generate: what a listed Definitions Package lists', () => {
       status: 1,
       stdout: '',
       stderr:
-        'definitions.0.rejections definitions-unlisted: A Definitions Package lists every Rejection it exports or its Guards reach: GONE\n',
+        'exports.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
     });
   });
 });
@@ -1449,7 +1452,6 @@ function definitionsModuleOf(code: string): string {
     "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
     "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
     'export const definitions = defineDefinitions({',
-    '  guards: [apiKey],',
     `  standardRejections: { notFound: { code: '${code}', status: 404, message: 'Missing' } },`,
     '});',
     '',
@@ -1505,7 +1507,7 @@ function aServiceGuardedFrom(
   };
 }
 
-/** The files of a Definitions Package whose Guard `apiKey` sits in `guards.js`, exported at `./guards` only. */
+/** The files of a Definitions Package whose Guard `apiKey` sits in `guards.js`, exported at `./guards` and by its root file. */
 const guardsModules: Readonly<Record<string, string>> = {
   'guards.js': [
     "import { defineGuard } from '@cf-loom/contract';",
@@ -1515,7 +1517,8 @@ const guardsModules: Readonly<Record<string, string>> = {
   'index.js': [
     "import { defineDefinitions } from '@cf-loom/contract';",
     "import { apiKey } from './guards.js';",
-    'export const definitions = defineDefinitions({ guards: [apiKey] });',
+    'export const definitions = defineDefinitions({});',
+    'export { apiKey };',
     '',
   ].join('\n'),
 };
@@ -1615,7 +1618,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     },
   );
 
-  test('a Definitions object and its Guard imported from two entries of one package are one package, and the stub imports the Guard from its entry', () => {
+  test('a Definitions object and its Guard imported from two entries of one package are one package, and the stub imports the Guard from the first entry exporting it', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aServiceGuardedFrom('@platform/definitions', '@platform/definitions/guards'),
@@ -1631,8 +1634,9 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     expect(snapshot.definitions).toEqual({ '@platform/definitions': '1.2.3' });
+    expect(snapshot.guards.apiKey.origin).toBe('@platform/definitions@1.2.3');
     expect(read(project, 'src/guards/api-key.handler.ts')).toContain(
-      "import { apiKey } from '@platform/definitions/guards';",
+      "import { apiKey } from '@platform/definitions';",
     );
   });
 
@@ -1647,7 +1651,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         exports: './index.js',
       }),
       'store/definitions/guards.js': guardsModules['guards.js'] ?? '',
-      'store/definitions/index.js': `${guardsModules['index.js'] ?? ''}export { apiKey };\n`,
+      'store/definitions/index.js': guardsModules['index.js'] ?? '',
     });
     link(join(project, 'store/definitions'), join(project, 'node_modules/@alias/definitions'));
 
@@ -2062,9 +2066,7 @@ const aDefinitionsRootOfEverySite: Files = {
     "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });",
     "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });",
     'export const money = z.object({ amount: z.number() });',
-    'export const definitions = defineDefinitions({',
-    '  guards: [apiKey], schemas: { money }, rejections: [gone],',
-    '});',
+    'export const definitions = defineDefinitions({});',
     '',
   ].join('\n'),
 };
@@ -2715,7 +2717,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     },
   );
 
-  test.for(['codes', 'guards', 'schemas'] as const)(
+  test.for(['codes', 'guards', 'exports'] as const)(
     'a Baseline whose %s hold a name with a line break is written as JSON, so the Change stays on one line',
     async (section, { lab }) => {
       const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
@@ -3148,13 +3150,15 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
     ]);
   });
 
-  test('a shared schema’s root difference has no path, and says it is judged as a Message', async ({
+  test('an exported schema’s root difference has no path, and says it is judged as a Message', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+    const { exports } = JSON.parse(read(project, 'contract.snapshot.json'));
+    const money = { kind: 'schema', schema: { type: 'string' } };
     const served = servedAs(
       '@org/definitions',
-      publishedAs(project, '1.0.0', { schemas: { money: { type: 'string' } } }),
+      publishedAs(project, '1.0.0', { exports: { ...exports, money } }),
     );
     const changed = { project, served };
 
@@ -3162,9 +3166,27 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
     const json = await checkedAgainst(lab, changed, '--json');
 
     expect(lines.ran.stdout.split('\n')[1]).toBe(
-      `schemas.money schema type-changed (message) from=string to=object: ${needsApproval}`,
+      `exports.money schema type-changed (message) from=string to=object: ${needsApproval}`,
     );
     expect(JSON.parse(json.ran.stdout).changes[0].path).toBeNull();
+  });
+
+  test('check --json gives a renamed export’s Changes sites of kind export', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
+    const { exports } = JSON.parse(read(project, 'contract.snapshot.json'));
+    const { money, ...others } = exports;
+    const served = servedAs(
+      '@org/definitions',
+      publishedAs(project, '1.0.0', { exports: { ...others, amount: money } }),
+    );
+
+    const { ran } = await checkedAgainst(lab, { project, served }, '--json');
+
+    const sites = JSON.parse(ran.stdout).changes.map(({ site }: { site: unknown }) => site);
+    expect(sites).toEqual([
+      { kind: 'export', name: 'amount', visibility: 'public' },
+      { kind: 'export', name: 'money', visibility: 'public' },
+    ]);
   });
 
   test('two Rejections removed from an Endpoint are two Changes, each naming its code', async ({

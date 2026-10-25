@@ -64,7 +64,8 @@ export type Rule =
   | 'subscription-event'
   | 'retired-event-subscribed'
   | 'duplicate-subscription-name'
-  | 'definitions-unlisted'
+  | 'definitions-export'
+  | 'definitions-unexported'
   | 'package-name';
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */

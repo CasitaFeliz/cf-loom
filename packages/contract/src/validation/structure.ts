@@ -43,7 +43,7 @@ export function structureFailures(declarations: Declarations): readonly Declarat
 }
 
 function listsOf(declarations: Declarations): readonly Listing[] {
-  const { root, groups, endpoints, guards, allPackages, dependencies } = declarations;
+  const { root, groups, endpoints, guards, dependencies } = declarations;
   return [
     ...rootListings(root),
     ...groups.flatMap(groupListings),
@@ -69,15 +69,6 @@ function listsOf(declarations: Declarations): readonly Listing[] {
         list: guard.rejections,
         noun: 'a Rejection',
         fits: isListedRejection,
-      },
-    ]),
-    ...allPackages.flatMap(({ at, definitions }) => [
-      { at: [...at, 'guards'], list: definitions.guards, noun: 'a Guard', fits: isGuard },
-      {
-        at: [...at, 'rejections'],
-        list: definitions.rejections,
-        noun: 'a Rejection',
-        fits: isRejection,
       },
     ]),
   ];

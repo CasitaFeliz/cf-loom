@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage } from '../../test/root-package.ts';
+import { aRootPackage, exporting } from '../../test/root-package.ts';
 import {
   type Definitions,
   defineApplication,
@@ -252,9 +252,10 @@ describe('validateContract: name grammars', () => {
     'a Guard named %s, in a Definitions Package too, fails',
     (name) => {
       const guard = defineGuard({ name, description: 'A guard' });
-      const definitions = defineDefinitions({ guards: [guard] });
+      const definitions = defineDefinitions({});
+      const exportsOf = exporting([definitions, { guard }]);
 
-      expect(validateInPackage(definitions, noOrigin)).toEqual(
+      expect(validateContract(definitions, aRootPackage(definitions, { exportsOf }))).toEqual(
         failed(
           ['guards', name, 'name'],
           'name-grammar',
@@ -366,15 +367,16 @@ describe('validateContract: unique names and identities', () => {
   test('a Guard named like one in a listed Definitions Package fails', () => {
     const shared = defineGuard({ name: 'apiKey', description: 'A key' });
     const local = defineGuard({ name: 'apiKey', description: 'A local key' });
-    const definitions = defineDefinitions({ guards: [shared] });
+    const definitions = defineDefinitions({});
     const endpoint = defineEndpoint({ ...listing, guards: [local] });
     const contract = defineContract({
       name: 'orders-service',
       definitions: [definitions],
       groups: [aGroup('orders', [endpoint])],
     });
+    const exportsOf = exporting([definitions, { shared }]);
 
-    expect(validateInPackage(contract, noOrigin)).toEqual(
+    expect(validateContract(contract, aRootPackage(contract, { exportsOf }))).toEqual(
       failed(
         ['guards', 'apiKey', 'name'],
         'duplicate-guard-name',

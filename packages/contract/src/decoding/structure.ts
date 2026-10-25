@@ -66,12 +66,18 @@ const service = z.strictObject({
 
 const application = z.strictObject({ ...heading, kind: z.literal('application'), dependencies });
 
+const exported = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('guard'), guard: text }),
+  z.strictObject({ kind: z.literal('rejection'), code: text }),
+  z.strictObject({ kind: z.literal('schema'), schema: schemaNode }),
+]);
+
 const definitions = z.strictObject({
   ...heading,
   kind: z.literal('definitions'),
   standardRejections,
   defs: byKey(schemaNode),
-  schemas: byKey(schemaNode),
+  exports: byKey(exported),
   guards: byKey(guard),
   codes: byKey(code),
 });
