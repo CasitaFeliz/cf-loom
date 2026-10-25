@@ -45,7 +45,11 @@ const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] }
 
 const settledEvent = paymentsDeps.events.paymentSettledV1;
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: settledEvent });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: settledEvent,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -214,7 +218,7 @@ describe('fakeEvent', () => {
     const { handler, received } = aNotifier();
     const broker = memory();
     const running = await messaging(contract, broker);
-    await running.consume({ commands: {}, subscriptions: { 'notify-on-settled': handler } });
+    await running.consume({ commands: {}, subscriptions: { notifyOnSettled: handler } });
     const faked = fakeEvent(settledEvent, {
       paymentId: PAYMENT_ID,
       amount: 1200,

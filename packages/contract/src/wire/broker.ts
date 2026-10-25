@@ -1,5 +1,6 @@
 import { follows, kebabCase } from '../validation/index.ts';
 import { subjectVersionOf } from '../written/index.ts';
+import { kebabCaseOf } from './identifiers.ts';
 
 /** The header the Fact id travels in, never parsed out of the broker message id. */
 export const factIdHeader = 'Cf-Loom-Fact-Id';
@@ -100,11 +101,11 @@ export type DurableConsumed =
   | { readonly kind: 'subscription'; readonly name: string }
   | { readonly kind: 'command'; readonly name: string; readonly version: number };
 
-/** The durable consumer of a Subscription, `<service>_<name>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
+/** The durable consumer of a Subscription, `<service>_<name in kebab-case>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
 export function durableNameOf(service: string, consumed: DurableConsumed): string {
   switch (consumed.kind) {
     case 'subscription':
-      return `${service}_${consumed.name}`;
+      return `${service}_${kebabCaseOf(consumed.name)}`;
     case 'command':
       return `${service}_command_${consumed.name}_v${consumed.version}`;
   }

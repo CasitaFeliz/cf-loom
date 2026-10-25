@@ -139,7 +139,8 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
 
 test('the README’s fakeEvent example runs: a faked PaymentSettled reaches notifyOnSettledHandler', async () => {
   const notifyOnSettled = defineSubscription({
-    name: 'notify-on-settled',
+    name: 'notifyOnSettled',
+    description: 'Notify on settled',
     event: paymentsDeps.events.paymentSettledV1,
   });
   const received: unknown[] = [];

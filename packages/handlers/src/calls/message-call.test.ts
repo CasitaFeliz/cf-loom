@@ -39,7 +39,11 @@ const orderPaidV1 = defineEvent({
   body: writtenBody,
 });
 
-const notifyOnPaid = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+const notifyOnPaid = defineSubscription({
+  name: 'notifyOnPaid',
+  description: 'Notify on paid',
+  event: orderPaidV1,
+});
 
 const paymentSettledV1 = defineEvent({
   name: 'PaymentSettled',
@@ -49,7 +53,11 @@ const paymentSettledV1 = defineEvent({
   body: readBody,
 });
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
 const chargeCard = withReader(chargeCardV1, readBody);
 const notifyOnPaidReader = withReader(notifyOnPaid, readBody);
@@ -171,7 +179,7 @@ describe("a Message Handler's body", () => {
 
     expect(messages).toEqual([
       expect.stringMatching(/^ChargeCard@1: body\.orderId invalid_format: /),
-      expect.stringMatching(/^notify-on-settled: body\.orderId invalid_format: /),
+      expect.stringMatching(/^notifyOnSettled: body\.orderId invalid_format: /),
     ]);
     expect(messages.join('\n')).not.toContain('secret-value');
   });
@@ -320,7 +328,7 @@ describe("what a Message Handler's direct call answers", () => {
     const call = notifyOnSettledHandler(body, meta);
 
     await expect(call).rejects.toEqual(
-      new TypeError("notify-on-settled's Handler returned no Fault but the kind success"),
+      new TypeError("notifyOnSettled's Handler returned no Fault but the kind success"),
     );
   });
 
@@ -342,7 +350,7 @@ describe('a Message Handler stub', () => {
     const call = stub(body, meta);
 
     await expect(call).rejects.toEqual(
-      new Error("notify-on-settled's Handler is a stub, which consume never runs"),
+      new Error("notifyOnSettled's Handler is a stub, which consume never runs"),
     );
   });
 

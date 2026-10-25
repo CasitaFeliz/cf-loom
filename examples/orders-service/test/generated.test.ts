@@ -103,7 +103,7 @@ describe('the Contract Package', () => {
     expect(manifest).not.toHaveProperty('dependencies');
   });
 
-  test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or charge-on-created', () => {
+  test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or chargeOnCreated', () => {
     const files = filesOf(outDir);
 
     const events = Object.keys(files).filter((path) => path.startsWith('src/events/'));
@@ -111,6 +111,6 @@ describe('the Contract Package', () => {
 
     expect(events).toEqual(['src/events/order-created.v1.ts']);
     expect(exported).toContain('OrderCreated@1');
-    expect(exported).not.toMatch(/ChargeCard|charge-on-created/i);
+    expect(exported).not.toMatch(/ChargeCard|chargeOnCreated/i);
   });
 });

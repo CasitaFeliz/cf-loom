@@ -33,10 +33,10 @@ const code = z.strictObject({
 
 const standardRejection = { origin: text, code: text, status: z.number(), message: text };
 
-const subscription = z.strictObject({
-  event: text,
-  removedIn: semanticVersionText.exactOptional(),
-});
+const subscription = z.union([
+  z.strictObject({ description: text, event: text }),
+  z.strictObject({ event: text, removedIn: semanticVersionText }),
+]);
 
 const dependencies = byKey(
   z.strictObject({

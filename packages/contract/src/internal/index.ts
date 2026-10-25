@@ -183,6 +183,7 @@ export {
   jsonContentType,
   jsonMediaType,
   jsonOfBytes,
+  kebabCaseOf,
   malformedBodyIssueOf,
   matchOf,
   maxBrokerHeaderBytes,

@@ -233,7 +233,11 @@ const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
 describe('fakeEvent: types', () => {
   test('fakeEvent takes and returns the body a Subscription’s Handler reads, Unknown cases included', () => {
     const settledEvent = settledDeps.events.paymentSettledV1;
-    const subscription = defineSubscription({ name: 'notify-on-settled', event: settledEvent });
+    const subscription = defineSubscription({
+      name: 'notifyOnSettled',
+      description: 'Notify on settled',
+      event: settledEvent,
+    });
     const handler = handle(withReader(subscription, settledEvent.body), () => undefined);
     type Read = Parameters<typeof handler>[0];
 

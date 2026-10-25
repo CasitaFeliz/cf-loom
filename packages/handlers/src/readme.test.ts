@@ -167,7 +167,11 @@ const paymentSettledV1 = defineEvent({
 });
 
 const notifyOnSettled = withReader(
-  defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 }),
+  defineSubscription({
+    name: 'notifyOnSettled',
+    description: 'Notify on settled',
+    event: paymentSettledV1,
+  }),
   paymentSettledV1.body,
 );
 
@@ -255,7 +259,7 @@ describe('the handlers README', () => {
       endpoints: { getOrder: getOrderHandler },
       guards: { apiKey: apiKeyHandler, permission: permissionHandler },
       commands: {},
-      subscriptions: { 'notify-on-settled': notifyOnSettledHandler },
+      subscriptions: { notifyOnSettled: notifyOnSettledHandler },
       deprecatedAt: {},
     };
 

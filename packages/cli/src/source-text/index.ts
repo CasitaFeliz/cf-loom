@@ -1,6 +1,5 @@
 export {
   camelCaseOf,
-  kebabCaseOf,
   kebabCaseOfCode,
   messageFileNameOf,
   messageVersionStemOf,

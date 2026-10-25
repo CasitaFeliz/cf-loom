@@ -336,7 +336,8 @@
     }
   },
   "subscriptions": {
-    "draft-invoice-on-created": {
+    "draftInvoiceOnCreated": {
+      "description": "Drafts an invoice for each order created",
       "event": "orders-service:OrderCreated@1"
     }
   }

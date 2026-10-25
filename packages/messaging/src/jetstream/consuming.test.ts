@@ -46,7 +46,11 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -127,9 +131,9 @@ function handlersOf(
       ),
     },
     subscriptions: {
-      'notify-on-created': handle(
+      notifyOnCreated: handle(
         withReader(notifyOnCreated, orderBody),
-        recording('notify-on-created', behaviors.notify),
+        recording('notifyOnCreated', behaviors.notify),
       ),
     },
   };
@@ -305,7 +309,7 @@ describe('consuming over jetstream()', () => {
     expect(received.map(({ handler, body }) => ({ handler, body }))).toEqual(
       expect.arrayContaining([
         { handler: 'ChargeCard@1', body: { orderId: 'o-1' } },
-        { handler: 'notify-on-created', body: { orderId: 'o-2' } },
+        { handler: 'notifyOnCreated', body: { orderId: 'o-2' } },
       ]),
     );
   });
@@ -365,7 +369,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ handler }) => handler).sort()).toEqual([
       'ChargeCard@1',
-      'notify-on-created',
+      'notifyOnCreated',
     ]);
   });
 
@@ -469,7 +473,7 @@ describe('consuming over jetstream()', () => {
     await messagingOfOrders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } });
 
     await vi.waitFor(() =>
-      expect(received.map(({ handler }) => handler)).toEqual(['notify-on-created']),
+      expect(received.map(({ handler }) => handler)).toEqual(['notifyOnCreated']),
     );
   });
 
@@ -518,7 +522,8 @@ describe('consuming over jetstream()', () => {
       exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
     } as const satisfies ContractPackage;
     const notifyOnSettled = defineSubscription({
-      name: 'notify-on-settled',
+      name: 'notifyOnSettled',
+      description: 'Notify on settled',
       event: paymentSettledV1,
     });
     const billing = defineContract({
@@ -536,7 +541,7 @@ describe('consuming over jetstream()', () => {
     const handlers = {
       commands: {},
       subscriptions: {
-        'notify-on-settled': handle(
+        notifyOnSettled: handle(
           withReader(notifyOnSettled, paymentSettledV1.body),
           () => undefined,
         ),

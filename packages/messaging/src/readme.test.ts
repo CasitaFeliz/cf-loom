@@ -30,7 +30,11 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV2 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV2,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -111,7 +115,7 @@ describe('the messaging README', () => {
     await running.consume(
       {
         commands: { chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), () => {}) },
-        subscriptions: { 'notify-on-created': notifyOnCreatedHandler },
+        subscriptions: { notifyOnCreated: notifyOnCreatedHandler },
       },
       { resources },
     );

@@ -1,5 +1,4 @@
 import { byCodePoint, codeNameOf } from '@cf-loom/contract/internal';
-import { camelCaseOf } from '../source-text/index.ts';
 import type { Handled, MessageHandled } from './handled.ts';
 
 /** A Message Version by its name and version. */
@@ -14,7 +13,7 @@ export function pairingNameOf(handled: MessageHandled): string {
     case 'command':
       return codeNameOf(handled);
     case 'subscription':
-      return camelCaseOf(handled.name);
+      return handled.name;
   }
 }
 

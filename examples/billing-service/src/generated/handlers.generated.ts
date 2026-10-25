@@ -9,7 +9,7 @@ export default {
   guards: {},
   commands: {},
   subscriptions: {
-    'draft-invoice-on-created': draftInvoiceOnCreatedSubscriptionHandler,
+    draftInvoiceOnCreated: draftInvoiceOnCreatedSubscriptionHandler,
   },
   deprecatedAt: {},
 };

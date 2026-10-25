@@ -21,7 +21,7 @@ export type EndpointTombstone = {
 export type MessageTombstone = { readonly lifecycle: 'retired'; readonly retiredIn: string };
 
 /** A removed Subscription, kept with its Event so its name is never reused. */
-export type SubscriptionTombstone = SubscriptionSnapshot & { readonly removedIn: string };
+export type SubscriptionTombstone = { readonly event: string; readonly removedIn: string };
 
 /** A still-declared Element as published: a Retired one also names the version that first published it Retired. */
 export type PublishedElement<Element extends { readonly lifecycle: Lifecycle }> =

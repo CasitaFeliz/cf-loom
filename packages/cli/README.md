@@ -38,7 +38,7 @@ A Service places its Handler files, and the two files `generate` regenerates, wi
 | `handlerMap` | the Handler map | none | `src/handlers.generated.ts` |
 | `readers` | the readers | none | `src/readers.generated.ts` |
 
-A path may hold the variables its field takes, each written in braces. `{group}` is the Endpoint's Group name; `{name}` is the Element's name in kebab-case, as files are named (`getOrder` is `get-order`, the Command `ChargeCard` is `charge-card`, and a Subscription's name stays as declared); `{version}` is the Message Version's number. With `endpoint: 'src/billing/{name}.handler.ts'`, the Endpoint `getOrder` has its Handler at `src/billing/get-order.handler.ts`.
+A path may hold the variables its field takes, each written in braces. `{group}` is the Endpoint's Group name; `{name}` is the Element's name in kebab-case, as files are named (`getOrder` is `get-order` and the Command `ChargeCard` is `charge-card`); `{version}` is the Message Version's number. With `endpoint: 'src/billing/{name}.handler.ts'`, the Endpoint `getOrder` has its Handler at `src/billing/get-order.handler.ts`.
 
 A path that breaks one of these rules stops every command that reads the config with exit 3:
 
@@ -228,7 +228,7 @@ Exit 3, a tooling error:
 | `The recursion id <id> is no name in code: rename it` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `The recursion ids <id> and <id> are one name in code: rename one of them` | `generate`, `verify`, `package`, `openapi`, `asyncapi`, `publish` |
 | `<element> and <element> are both <path>: give each its own path in the layout of cf-loom.config.ts`, where `<element>` is `endpoints.<name>`, `guards.<name>`, `commands.<Name>@<version>` or `subscriptions.<name>` | `generate`, `verify` |
-| `subscriptions.<name> is <name in code> in code, as <other> is: rename the Subscription`, where `<other>` is another Subscription, a Command's Message Version, an own Event's or Command's Reader, a def or an import of the readers file | `generate`, `verify` |
+| `subscriptions.<name> is <name in code> in code, as <other> is: rename the Subscription`, where `<other>` is a Command's Message Version, an own Event's or Command's Reader, a def or an import of the readers file | `generate`, `verify` |
 | `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"status":3,"errors":[…]}` | every command |
 
 Exit 3, a usage error, each followed on the same line by the usage:

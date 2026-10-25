@@ -286,7 +286,7 @@ const service: Readonly<Record<string, string>> = {
     "  description: 'Charge a card',",
     '  body: z.object({ cardToken: z.string() }),',
     '});',
-    "export const auditPlaced = defineSubscription({ name: 'audit-placed', event: orderPlacedV2 });",
+    "export const auditPlaced = defineSubscription({ name: 'auditPlaced', description: 'Audit placed', event: orderPlacedV2 });",
     'export const contract = defineContract({',
     "  name: 'orders-service',",
     '  definitions: [definitions],',
@@ -439,11 +439,13 @@ function aSubscriber(more: readonly string[]): string {
       '  events: [orders.events.orderPlacedV1, orders.events.orderPlacedV2],',
       '});',
       'const auditPlacedV1 = defineSubscription({',
-      "  name: 'audit-placed-v1',",
+      "  name: 'auditPlacedV1',",
+      "  description: 'Audit placed v1',",
       '  event: ordersDeps.events.orderPlacedV1,',
       '});',
       'const auditPlacedV2 = defineSubscription({',
-      "  name: 'audit-placed-v2',",
+      "  name: 'auditPlacedV2',",
+      "  description: 'Audit placed v2',",
       '  event: ordersDeps.events.orderPlacedV2,',
       '});',
       'export const contract = defineContract({',
@@ -562,7 +564,7 @@ describe('cf-loom package: the files', () => {
       .map((file) => read(out, file))
       .join('\n');
     const absents = ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category', 'StockReserved'];
-    for (const absent of [...absents, 'OrderPurged', 'ChargeCard', 'audit-placed']) {
+    for (const absent of [...absents, 'OrderPurged', 'ChargeCard', 'auditPlaced']) {
       expect(code).not.toContain(absent);
     }
     const imports = code.replace(read(out, 'src/exported-snapshot.ts'), '');
@@ -916,8 +918,8 @@ describe('cf-loom package: the built package', () => {
     expect(typeCheck(consumer)).toEqual({ status: 0, stdout: '' });
     const snapshot = JSON.parse(read(consumer, 'contract.snapshot.json'));
     expect(snapshot.subscriptions).toEqual({
-      'audit-placed-v1': { event: 'orders-service:OrderPlaced@1' },
-      'audit-placed-v2': { event: 'orders-service:OrderPlaced@2' },
+      auditPlacedV1: { description: 'Audit placed v1', event: 'orders-service:OrderPlaced@1' },
+      auditPlacedV2: { description: 'Audit placed v2', event: 'orders-service:OrderPlaced@2' },
     });
     expect(snapshot.dependencies['orders-service'].events).toEqual([
       'OrderPlaced@1',

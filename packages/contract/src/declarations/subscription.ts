@@ -3,9 +3,10 @@ import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
-/** What an author writes to declare a Subscription: the name of its durable consumer and an Event that still works. */
+/** What an author writes to declare a Subscription: its name, what it is for, and an Event that still works. */
 type SubscriptionDeclaration = {
   readonly name: string;
+  readonly description: string;
   readonly event: Event & { readonly lifecycle?: Exclude<Lifecycle, 'retired'> };
 };
 

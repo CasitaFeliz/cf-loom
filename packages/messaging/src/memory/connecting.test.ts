@@ -22,7 +22,11 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -51,7 +55,7 @@ async function running(chargeCard: (orderId: string, deliveryCount: number) => P
         await chargeCard(orderId, deliveryCount);
       }),
     },
-    subscriptions: { 'notify-on-created': handle(pairings.notifyOnCreated, () => undefined) },
+    subscriptions: { notifyOnCreated: handle(pairings.notifyOnCreated, () => undefined) },
   });
   return { broker, ...started };
 }

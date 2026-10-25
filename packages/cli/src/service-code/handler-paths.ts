@@ -1,7 +1,7 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
-import { messageIdentityOf } from '@cf-loom/contract/internal';
+import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
-import { kebabCaseOf, messageFileNameOf } from '../source-text/index.ts';
+import { messageFileNameOf } from '../source-text/index.ts';
 import { declaredHandledOf, type Handled } from './handled.ts';
 
 /** The Handler file of a declared Element, and whether the Handler map imports it. */
@@ -47,7 +47,7 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
         version: handled.version,
       });
     case 'subscription':
-      return filledPathOf(layout.subscription, { name: handled.name });
+      return filledPathOf(layout.subscription, { name: kebabCaseOf(handled.name) });
   }
 }
 

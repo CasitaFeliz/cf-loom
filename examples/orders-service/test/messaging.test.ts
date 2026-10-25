@@ -55,7 +55,7 @@ describe('orders-service over the memory adapter', () => {
     ]);
   });
 
-  test('OrderCreated reaches charge-on-created, which sends ChargeCard@1 under the Fact id <order id>:charge', async () => {
+  test('OrderCreated reaches chargeOnCreated, which sends ChargeCard@1 under the Fact id <order id>:charge', async () => {
     const orderId = await placeOrder();
 
     const sent = messagesOn('orders-service.command.ChargeCard.v1');

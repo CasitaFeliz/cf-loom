@@ -117,7 +117,7 @@ describe('the published Snapshot', () => {
       endpoints: { 'GET /orders/{}': retiredGetOrder, 'DELETE /orders/{}': endpointTombstone },
       events: { 'OrderPlaced@1': orderPlaced, 'OrderPurged@1': tombstone },
       subscriptions: {
-        'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
       },
     });
 
@@ -168,6 +168,7 @@ describe('the published Snapshot’s types', () => {
 
   test('a declared Subscription carries no removedIn', () => {
     const subscription: SubscriptionSnapshot = {
+      description: 'Receives it',
       event: 'orders-service:OrderPlaced@1',
       // @ts-expect-error removedIn belongs to the published Snapshot's tombstone
       removedIn: '3.2.0',

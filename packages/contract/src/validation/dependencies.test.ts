@@ -75,7 +75,11 @@ const payments = {
 /** A selection the types refuse, as a cast lets an author write it. */
 type AnySelection = { readonly endpoints?: readonly (typeof getPayment)[] };
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
+  event: paymentSettledV1,
+});
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };

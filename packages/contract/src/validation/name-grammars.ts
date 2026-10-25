@@ -8,7 +8,6 @@ import {
   isReserved,
   kebabCase,
   pascalCase,
-  subscriptionName,
   upperSnakeCase,
 } from './grammars.ts';
 
@@ -28,6 +27,7 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   const camel = [
     ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
     ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
+    ...named(subscriptions, (listed) => listed.subscription.name, 'A Subscription name'),
   ];
   const pascal = [
     ...named(events, (listed) => listed.event.name, 'A Message name'),
@@ -39,10 +39,6 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   ];
   return [
     ...grammarFailures(kebab, kebabCase),
-    ...grammarFailures(
-      named(subscriptions, (listed) => listed.subscription.name, 'A Subscription name'),
-      subscriptionName,
-    ),
     ...grammarFailures(camel, elementName),
     ...grammarFailures(pascal, pascalCase),
     ...grammarFailures(upperSnake, upperSnakeCase),

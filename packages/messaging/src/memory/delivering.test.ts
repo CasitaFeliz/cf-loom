@@ -56,13 +56,29 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnV1 = defineSubscription({ name: 'notify-on-v1', event: orderCreatedV1 });
+const notifyOnV1 = defineSubscription({
+  name: 'notifyOnV1',
+  description: 'Notify on v1',
+  event: orderCreatedV1,
+});
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV2 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV2,
+});
 
-const auditCreated = defineSubscription({ name: 'audit-created', event: orderCreatedV2 });
+const auditCreated = defineSubscription({
+  name: 'auditCreated',
+  description: 'Audit created',
+  event: orderCreatedV2,
+});
 
-const onAudited = defineSubscription({ name: 'on-audited', event: orderAuditedV1 });
+const onAudited = defineSubscription({
+  name: 'onAudited',
+  description: 'On audited',
+  event: orderAuditedV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -110,13 +126,10 @@ function handlersOf(received: Received[], replaced: Replaced = {}) {
       ...replaced.commands,
     },
     subscriptions: {
-      'notify-on-v1': handle(pairings.notifyOnV1, recorder(received, 'notify-on-v1')),
-      'notify-on-created': handle(
-        pairings.notifyOnCreated,
-        recorder(received, 'notify-on-created'),
-      ),
-      'audit-created': handle(pairings.auditCreated, recorder(received, 'audit-created')),
-      'on-audited': handle(pairings.onAudited, recorder(received, 'on-audited')),
+      notifyOnV1: handle(pairings.notifyOnV1, recorder(received, 'notifyOnV1')),
+      notifyOnCreated: handle(pairings.notifyOnCreated, recorder(received, 'notifyOnCreated')),
+      auditCreated: handle(pairings.auditCreated, recorder(received, 'auditCreated')),
+      onAudited: handle(pairings.onAudited, recorder(received, 'onAudited')),
       ...replaced.subscriptions,
     },
   };
@@ -161,7 +174,7 @@ describe('memory(): what the Service publishes and sends', () => {
     await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
     await broker.settled();
 
-    const notified = received.filter(({ handler }) => handler === 'notify-on-created');
+    const notified = received.filter(({ handler }) => handler === 'notifyOnCreated');
     expect(notified.map(({ body }) => body)).toEqual([{ orderId: 'o-1', status: 'paid' }]);
   });
 
@@ -172,9 +185,9 @@ describe('memory(): what the Service publishes and sends', () => {
     await broker.settled();
 
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
-      ['notify-on-v1', v1Body],
-      ['notify-on-created', v2Body],
-      ['audit-created', v2Body],
+      ['notifyOnV1', v1Body],
+      ['notifyOnCreated', v2Body],
+      ['auditCreated', v2Body],
     ]);
   });
 
@@ -183,12 +196,12 @@ describe('memory(): what the Service publishes and sends', () => {
     const log: string[] = [];
     const { publisher, broker } = await running(() => ({
       subscriptions: {
-        'notify-on-created': handle(pairings.notifyOnCreated, async () => {
+        notifyOnCreated: handle(pairings.notifyOnCreated, async () => {
           log.push('notify starts');
           await gate.opened;
           log.push('notify ends');
         }),
-        'audit-created': handle(pairings.auditCreated, () => {
+        auditCreated: handle(pairings.auditCreated, () => {
           log.push('audit');
         }),
       },
@@ -226,7 +239,7 @@ describe('memory(): what the Service publishes and sends', () => {
     );
     await broker.settled();
 
-    const notified = received.find(({ handler }) => handler === 'notify-on-created');
+    const notified = received.find(({ handler }) => handler === 'notifyOnCreated');
     expect(notified?.meta).toEqual({
       messageId: 'OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
@@ -265,7 +278,7 @@ describe('memory(): what the Service publishes and sends', () => {
     const handled: unknown[] = [];
     const { publisher, broker } = await running(() => ({
       subscriptions: {
-        'notify-on-created': handle(pairings.notifyOnCreated, async (body) => {
+        notifyOnCreated: handle(pairings.notifyOnCreated, async (body) => {
           await gate.opened;
           handled.push(body);
         }),
@@ -298,7 +311,7 @@ describe('memory(): what the Service publishes and sends', () => {
   test('an Event whose only Subscription is a stub is recorded and delivered nowhere', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { publisher, broker, received } = await running(() => ({
-      subscriptions: { 'notify-on-v1': handle.stub(pairings.notifyOnV1) },
+      subscriptions: { notifyOnV1: handle.stub(pairings.notifyOnV1) },
     }));
 
     await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body });
@@ -307,7 +320,7 @@ describe('memory(): what the Service publishes and sends', () => {
     expect(broker.messages.map(({ subject }) => subject)).toContain(
       'orders-service.event.OrderCreated.v1',
     );
-    expect(received.map(({ handler }) => handler)).toEqual(['notify-on-created', 'audit-created']);
+    expect(received.map(({ handler }) => handler)).toEqual(['notifyOnCreated', 'auditCreated']);
   });
 
   test('a Message published before consume is recorded and never delivered', async () => {
@@ -378,9 +391,9 @@ describe('memory(): what the Service publishes and sends', () => {
     await publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } });
     const settling = broker.settled();
 
-    await expect(settling).rejects.toThrow('on-audited');
+    await expect(settling).rejects.toThrow('onAudited');
     expect(received).toEqual([]);
-    expect(faults).toMatchObject([{ kind: 'invalid-body', element: 'on-audited' }]);
+    expect(faults).toMatchObject([{ kind: 'invalid-body', element: 'onAudited' }]);
     expect(broker.pending).toEqual([]);
   });
 });

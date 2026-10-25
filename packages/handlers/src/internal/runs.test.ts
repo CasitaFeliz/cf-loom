@@ -79,7 +79,11 @@ const orderPaidV1 = defineEvent({
   body: orderBody,
 });
 
-const notifyOnPaidV1 = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+const notifyOnPaidV1 = defineSubscription({
+  name: 'notifyOnPaid',
+  description: 'Notify on paid',
+  event: orderPaidV1,
+});
 
 const chargeCard = withReader(chargeCardV1, orderBody);
 const notifyOnPaid = withReader(notifyOnPaidV1, orderBody);

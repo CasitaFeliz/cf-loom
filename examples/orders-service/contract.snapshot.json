@@ -670,7 +670,8 @@
     }
   },
   "subscriptions": {
-    "charge-on-created": {
+    "chargeOnCreated": {
+      "description": "Charges the card for each order created",
       "event": "orders-service:OrderCreated@1"
     }
   }

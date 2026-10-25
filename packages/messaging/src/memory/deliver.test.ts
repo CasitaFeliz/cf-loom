@@ -84,11 +84,23 @@ const payments = {
 
 const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV2 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV2,
+});
 
-const auditCreated = defineSubscription({ name: 'audit-created', event: orderCreatedV2 });
+const auditCreated = defineSubscription({
+  name: 'auditCreated',
+  description: 'Audit created',
+  event: orderCreatedV2,
+});
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
 const contract = defineContract({
   name: 'orders-service',
@@ -163,17 +175,17 @@ async function running(
       ),
     },
     subscriptions: {
-      'notify-on-created': handle(
+      notifyOnCreated: handle(
         pairings.notifyOnCreated,
-        recording(received, 'notify-on-created', answers.notify),
+        recording(received, 'notifyOnCreated', answers.notify),
       ),
-      'audit-created': handle(
+      auditCreated: handle(
         pairings.auditCreated,
-        recording(received, 'audit-created', answers.audit),
+        recording(received, 'auditCreated', answers.audit),
       ),
-      'notify-on-settled': handle(
+      notifyOnSettled: handle(
         pairings.notifyOnSettled,
-        recording(received, 'notify-on-settled', answers.settled),
+        recording(received, 'notifyOnSettled', answers.settled),
       ),
     },
   });
@@ -224,7 +236,7 @@ describe('deliver()', () => {
 
     await broker.deliver(orderCreatedV2, { orderId: ORDER_ID, status: { unknown: 'refunded' } });
 
-    const notified = received.find(({ handler }) => handler === 'notify-on-created');
+    const notified = received.find(({ handler }) => handler === 'notifyOnCreated');
     expect(notified?.body).toEqual({ orderId: ORDER_ID, status: { unknown: 'refunded' } });
   });
 
@@ -251,7 +263,7 @@ describe('deliver()', () => {
 
     expect(settlement).toBe('acked');
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
-      ['notify-on-settled', { paymentId: PAYMENT_ID }],
+      ['notifyOnSettled', { paymentId: PAYMENT_ID }],
     ]);
   });
 
@@ -280,10 +292,7 @@ describe('deliver()', () => {
 
       const settlement = await broker.deliver(orderCreatedV2, created);
 
-      expect(received.map(({ handler }) => handler)).toEqual([
-        'notify-on-created',
-        'audit-created',
-      ]);
+      expect(received.map(({ handler }) => handler)).toEqual(['notifyOnCreated', 'auditCreated']);
       expect(settlement).toBe(expected);
     },
   );
@@ -467,7 +476,7 @@ describe('deliver()', () => {
 
     expect(rejection).toBeInstanceOf(InvalidInputError);
     expect(rejection).toMatchObject({
-      message: expect.stringContaining('audit-created'),
+      message: expect.stringContaining('auditCreated'),
       issues: [{ part: 'body', path: ['orderId'], code: 'invalid_format' }],
     });
     expect(received).toEqual([]);
@@ -500,9 +509,9 @@ describe('deliver()', () => {
       await consume({
         commands: { chargeCardV1: handle.stub(pairings.chargeCard) },
         subscriptions: {
-          'notify-on-created': handle.stub(pairings.notifyOnCreated),
-          'audit-created': handle.stub(pairings.auditCreated),
-          'notify-on-settled': handle.stub(pairings.notifyOnSettled),
+          notifyOnCreated: handle.stub(pairings.notifyOnCreated),
+          auditCreated: handle.stub(pairings.auditCreated),
+          notifyOnSettled: handle.stub(pairings.notifyOnSettled),
         },
       });
 
@@ -576,7 +585,7 @@ describe('pending and redeliver()', () => {
 
     await broker.deliver(orderCreatedV2, { orderId: ORDER_ID, status: { unknown: 'refunded' } });
 
-    const read = received.find(({ handler }) => handler === 'notify-on-created')?.body;
+    const read = received.find(({ handler }) => handler === 'notifyOnCreated')?.body;
     expect(read).toEqual({ orderId: ORDER_ID, status: { unknown: 'refunded' } });
     expect(broker.pending.map(({ body }) => body)).toEqual([
       { orderId: ORDER_ID, status: 'refunded' },
@@ -618,9 +627,9 @@ describe('pending and redeliver()', () => {
     await broker.redeliver();
 
     expect(received.map(({ handler, meta }) => [handler, meta.deliveryCount])).toEqual([
-      ['notify-on-created', 1],
-      ['audit-created', 1],
-      ['audit-created', 2],
+      ['notifyOnCreated', 1],
+      ['auditCreated', 1],
+      ['auditCreated', 2],
     ]);
     expect(broker.pending).toEqual([]);
   });
@@ -768,7 +777,7 @@ describe('pending and redeliver()', () => {
 
     await broker.redeliver();
 
-    const attempts = received.filter(({ handler }) => handler === 'notify-on-created');
+    const attempts = received.filter(({ handler }) => handler === 'notifyOnCreated');
     expect(attempts.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(broker.pending).toEqual([]);
   });

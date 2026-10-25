@@ -19,7 +19,7 @@ function anOrderCreated(orderId: string) {
   return fakeEvent(orderCreated, { orderId, customerId: CUSTOMER_ID, total });
 }
 
-describe('draft-invoice-on-created over the memory adapter', () => {
+describe('draftInvoiceOnCreated over the memory adapter', () => {
   let broker: MemoryBroker;
   let running: Messaging<typeof contract>;
 
@@ -53,7 +53,7 @@ describe('draft-invoice-on-created over the memory adapter', () => {
   });
 });
 
-describe('draft-invoice-on-created called directly', () => {
+describe('draftInvoiceOnCreated called directly', () => {
   test('with a faked OrderCreated, the Handler drafts the invoice', async () => {
     const body = anOrderCreated(CALLED_ORDER_ID);
     const factId = `${CALLED_ORDER_ID}:created`;

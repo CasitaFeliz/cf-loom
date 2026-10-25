@@ -16,6 +16,7 @@ import {
   publishedSnapshotOf,
   type ServiceSnapshot,
   type Snapshot,
+  type SubscriptionSnapshot,
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
@@ -74,6 +75,10 @@ function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
 
 function aCommand(fields: Partial<CommandSnapshot> = {}): CommandSnapshot {
   return { lifecycle: 'active', description: 'Charge a card', body: emptyObject, ...fields };
+}
+
+function aSubscription(event: string): SubscriptionSnapshot {
+  return { description: 'Receives it', event };
 }
 
 function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
@@ -373,32 +378,32 @@ describe('publishedSnapshotOf', () => {
     expect(published.codes).toEqual({ [orderLocked]: aCode({ status: 423 }) });
   });
 
-  test('a removed Subscription becomes a tombstone with its Event and removedIn the version', () => {
+  test('a removed Subscription becomes a tombstone with its Event and removedIn the version, and no description', () => {
     const baseline = aBaseline({
       subscriptions: {
-        'legacy-sync': { event: 'orders-service:OrderPlaced@1' },
-        'notify-on-settled': { event: 'payments-service:PaymentSettled@1' },
+        legacySync: aSubscription('orders-service:OrderPlaced@1'),
+        notifyOnSettled: aSubscription('payments-service:PaymentSettled@1'),
       },
     });
     const proposed = aProposed({
-      subscriptions: { 'notify-on-settled': { event: 'payments-service:PaymentSettled@1' } },
+      subscriptions: { notifyOnSettled: aSubscription('payments-service:PaymentSettled@1') },
     });
 
     const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
 
     expect(published.subscriptions).toEqual({
-      'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.5.0' },
-      'notify-on-settled': { event: 'payments-service:PaymentSettled@1' },
+      legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.5.0' },
+      notifyOnSettled: aSubscription('payments-service:PaymentSettled@1'),
     });
   });
 
   test('a Subscription tombstone of the Baseline is carried forward with its removedIn', () => {
     const tombstone = { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' };
-    const baseline = aBaseline({ subscriptions: { 'legacy-sync': tombstone } });
+    const baseline = aBaseline({ subscriptions: { legacySync: tombstone } });
 
     const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
 
-    expect(published.subscriptions).toEqual({ 'legacy-sync': tombstone });
+    expect(published.subscriptions).toEqual({ legacySync: tombstone });
   });
 
   test('a Definitions Package’s removed codes are carried forward', () => {
@@ -441,7 +446,7 @@ describe('publishedSnapshotOf', () => {
       },
       events: { 'OrderPlaced@1': aRetired(anEvent(), '3.1.0') },
       codes: { [orderLocked]: aCode() },
-      subscriptions: { 'legacy-sync': { event: 'orders-service:OrderPlaced@1' } },
+      subscriptions: { legacySync: aSubscription('orders-service:OrderPlaced@1') },
     });
     const proposed = aProposed({
       endpoints: { 'POST /orders': anEndpoint({ name: 'createOrder' }) },
@@ -465,9 +470,7 @@ describe('publishedSnapshotOf', () => {
         'DELETE /orders/{}': { lifecycle: 'retired', retiredIn: '2.0.0', name: 'cancelOrder' },
       },
       codes: { [orderLocked]: aCode({ removed: true }) },
-      subscriptions: {
-        'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
-      },
+      subscriptions: { legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' } },
     });
     const proposed = aProposed({
       endpoints: {

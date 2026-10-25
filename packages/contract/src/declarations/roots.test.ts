@@ -92,7 +92,8 @@ describe('defineContract', () => {
       body: z.object({ orderId: z.uuid() }),
     });
     const notifyOnCreated = defineSubscription({
-      name: 'notify-on-created',
+      name: 'notifyOnCreated',
+      description: 'Notifies the customer of each order created',
       event: orderCreatedV1,
     });
 
