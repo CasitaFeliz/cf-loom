@@ -7,11 +7,12 @@ import {
   defineGuard,
   type Endpoint,
   type ExportedSnapshot,
+  type Http,
   openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, success } from '@cf-loom/handlers';
+import { admit, handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -217,6 +218,59 @@ describe('what a call sends', () => {
     expect(emptyQuery).toThrow(/query or a fragment/);
     expect(emptyFragment).toThrow(/query or a fragment/);
   });
+
+  test.each([
+    ['http://orders.test', 'http://orders.test'],
+    ['HTTP://orders.test', 'http://orders.test'],
+    ['https://orders.test', 'https://orders.test'],
+    ['HTTPS://orders.test', 'https://orders.test'],
+    [new URL('HTTP://orders.test'), 'http://orders.test'],
+  ])(
+    'a baseUrl of %s is an http or https URL, whatever the case of its scheme',
+    async (baseUrl, origin) => {
+      const { orders, sent } = recording(counted, baseUrl);
+
+      await orders.searchOrders({ params: { shopId: 's' }, query: { ids: ['1'] } });
+
+      expect(sent[0]?.url).toBe(`${origin}/shops/s/orders?ids=1`);
+    },
+  );
+
+  test.each([
+    'ftp://orders.test/',
+    'file:///var/orders',
+    'ws://orders.test/',
+    'wss://orders.test/',
+    'data:text/plain,orders',
+    'blob:http://orders.test/id',
+    'unix:/var/run/orders.sock',
+    new URL('ftp://orders.test/'),
+  ])(
+    'a baseUrl of %s is no http or https URL, a bug thrown when the client is created',
+    (baseUrl) => {
+      const create = () => client(ordersDependency, { baseUrl });
+
+      expect(create).toThrow(/is no http or https URL/);
+    },
+  );
+
+  test('a baseUrl that is no http or https URL is thrown by its scheme, host and path', () => {
+    const create = () => client(ordersDependency, { baseUrl: 'ftp://orders.test/api' });
+
+    expect(create).toThrow(new Error('The baseUrl ftp://orders.test/api is no http or https URL'));
+  });
+
+  test.each([
+    ['ftp://ann:secret@orders.test/api?token=t0k#top', 'ftp://orders.test/api'],
+    ['blob:http://ann:secret@orders.test/id', 'blob:'],
+  ])(
+    'a baseUrl of %s that is no http or https URL is thrown without its credentials, query or fragment',
+    (baseUrl, shown) => {
+      const create = () => client(ordersDependency, { baseUrl });
+
+      expect(create).toThrow(new Error(`The baseUrl ${shown} is no http or https URL`));
+    },
+  );
 
   test('an optional query param passed as undefined sends no key', async () => {
     const { orders, sent } = recording(counted);
@@ -487,6 +541,159 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
     expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
       issues: { length: 1 },
     });
+  });
+});
+
+describe('every header and query param the Provider reads reaches the request, whichever declares it', () => {
+  const headerKey = z.object({ 'x-key': z.string() });
+  const queryKey = z.object({ key: z.string() });
+  const keyedByHeader = defineGuard({
+    name: 'keyed',
+    description: 'A key',
+    demands: { headers: headerKey },
+  });
+  const keyedByQuery = defineGuard({
+    name: 'keyed',
+    description: 'A key',
+    demands: { query: queryKey },
+  });
+  const readKeyed = {
+    name: 'readKeyed',
+    method: 'GET',
+    path: '/keyed',
+    visibility: 'public',
+    description: 'Reads with a key',
+    success: { status: 204 },
+  } as const;
+  const headerOnlyGuardDemands = defineEndpoint({ ...readKeyed, guards: [keyedByHeader] });
+
+  /** The Endpoints as a hand-built package lists them: a field in its own Input, its Guard's demands, or both. */
+  const cases: readonly {
+    readonly part: 'headers' | 'query';
+    readonly name: string;
+    readonly declaredBy: string;
+    readonly endpoint: ContractPackage['endpoints'][string];
+  }[] = [
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'the Endpoint only',
+      endpoint: defineEndpoint({ ...readKeyed, input: { headers: headerKey } }),
+    },
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'an attached Guard only',
+      endpoint: headerOnlyGuardDemands,
+    },
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'both',
+      endpoint: defineEndpoint({
+        ...readKeyed,
+        guards: [keyedByHeader],
+        input: { headers: headerKey },
+      }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'the Endpoint only',
+      endpoint: defineEndpoint({ ...readKeyed, input: { query: queryKey } }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'an attached Guard only',
+      endpoint: defineEndpoint({ ...readKeyed, guards: [keyedByQuery] }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'both',
+      endpoint: defineEndpoint({
+        ...readKeyed,
+        guards: [keyedByQuery],
+        input: { query: queryKey },
+      }),
+    },
+  ];
+
+  /** A client of the one Endpoint, called with an Input its types do not take. */
+  function keyedClient(endpoint: ContractPackage['endpoints'][string], fetch: Http) {
+    const provider = contractPackageOf({ readKeyed: endpoint }, defaultStandards);
+    const dependency = defineDependency({ provider, endpoints: [endpoint] });
+    return client(dependency, { baseUrl: 'http://orders.test', fetch }) as unknown as {
+      readonly readKeyed: (input: unknown) => Promise<unknown>;
+    };
+  }
+
+  /** What the Request carries under the name, as a list: its one value, or none. */
+  function carriedBy(request: Request | undefined, part: string, name: string) {
+    if (part === 'headers') {
+      return [request?.headers.get(name) ?? []].flat();
+    }
+    return new URL(request?.url ?? '').searchParams.getAll(name);
+  }
+
+  test.each(cases)(
+    'a $part field declared by $declaredBy is sent once, with its value',
+    async ({ part, name, endpoint }) => {
+      const sent: Request[] = [];
+      const keyed = keyedClient(endpoint, async (request) => {
+        sent.push(request);
+        return new Response(null, { status: 204 });
+      });
+
+      const outcome = await keyed.readKeyed({ [part]: { [name]: 'k' } });
+
+      expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
+      expect(carriedBy(sent[0], part, name)).toEqual(['k']);
+    },
+  );
+
+  test.each(cases.filter(({ declaredBy }) => declaredBy === 'an attached Guard only'))(
+    'a $part field only a Guard demands, left out, answers invalid input and sends nothing',
+    async ({ part, name, endpoint }) => {
+      let calls = 0;
+      const keyed = keyedClient(endpoint, async () => {
+        calls += 1;
+        return new Response(null, { status: 204 });
+      });
+
+      const outcome = await keyed.readKeyed({});
+
+      expect(outcome).toMatchObject({
+        kind: 'rejection',
+        code: 'INVALID_INPUT',
+        body: { issues: [{ in: part, path: [name], code: 'required' }] },
+      });
+      expect(calls).toBe(0);
+    },
+  );
+
+  test('a header only a Guard demands reaches the Provider that reads it', async () => {
+    const provider = defineContract({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'keyed',
+          description: 'Keyed',
+          endpoints: [headerOnlyGuardDemands],
+        }),
+      ],
+    });
+    const http = serve(provider, {
+      endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
+      guards: { keyed: handle(keyedByHeader, () => admit()) },
+      deprecatedAt: {},
+    });
+    const keyed = keyedClient(headerOnlyGuardDemands, http);
+
+    const outcome = await keyed.readKeyed({ headers: { 'x-key': 'k' } });
+
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 });
 

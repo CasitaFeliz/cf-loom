@@ -25,7 +25,8 @@ export type ReadyInput =
 
 /**
  * The Input a Caller passed, read as the Provider reads the request it would send, every Guard
- * admitting it and a body left out sent with no content type; then its text, that it can travel.
+ * admitting it and a body left out sent with no content type; then its text, that it can travel,
+ * the Guards' demands with the Input's.
  */
 export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise<ReadyInput> {
   const sent = sentInputOf(passed);
@@ -33,9 +34,14 @@ export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise
     sent['body'] === undefined
       ? notJsonContentType
       : { kind: 'value' as const, value: sent['body'] };
+  const demanded: Readonly<Record<string, unknown>>[] = [];
   const reading = await readingOf(endpoint, {
     textOf: () => sent,
     body: () => Promise.resolve(body),
+    admit: (_index, demands) => {
+      demanded.push(demands);
+      return Promise.resolve({ kind: 'admitted' });
+    },
   });
   switch (reading.kind) {
     case 'stopped':
@@ -43,7 +49,7 @@ export async function readyInputOf(endpoint: Endpoint, passed: unknown): Promise
     case 'invalid':
       return reading;
     case 'input':
-      return travelingInputOf(reading.input);
+      return travelingInputOf(reading.input, demanded);
   }
 }
 
@@ -68,10 +74,13 @@ function withoutEmptyListsOf(
   return Object.fromEntries(Object.entries(query).filter(([, item]) => !isEmptyList(item)));
 }
 
-function travelingInputOf(parsed: Readonly<Record<string, unknown>>): ReadyInput {
+function travelingInputOf(
+  parsed: Readonly<Record<string, unknown>>,
+  demands: readonly Readonly<Record<string, unknown>>[],
+): ReadyInput {
   const params = fieldsIn(parsed['params']);
-  const query = definedFieldsOf(fieldsIn(parsed['query']));
-  const headers = headerTextsOf('input.headers', fieldsIn(parsed['headers']));
+  const query = definedFieldsOf(sentFieldsOf('query', parsed, demands));
+  const headers = headerTextsOf('input.headers', sentFieldsOf('headers', parsed, demands));
   const textIssues = [...paramIssuesOf(params), ...queryIssuesOf(query)];
   switch (headers.kind) {
     case 'issues':
@@ -87,6 +96,19 @@ function travelingInputOf(parsed: Readonly<Record<string, unknown>>): ReadyInput
       };
     }
   }
+}
+
+/**
+ * The fields the Provider reads from a part: those its Guards demand and those the Input declares;
+ * a name both declare is parsed from the one value the Caller passed, so the Input's stands.
+ */
+function sentFieldsOf(
+  field: 'query' | 'headers',
+  parsed: Readonly<Record<string, unknown>>,
+  demands: readonly Readonly<Record<string, unknown>>[],
+): Readonly<Record<string, unknown>> {
+  const sources = [...demands, parsed];
+  return Object.fromEntries(sources.flatMap((source) => Object.entries(fieldsIn(source[field]))));
 }
 
 /** A path param whose text cannot arrive as its own segment. */

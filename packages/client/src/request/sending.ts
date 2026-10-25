@@ -8,20 +8,34 @@ import {
 import { type ParsedInput, textOf } from './input.ts';
 
 /**
- * The URL a Provider is reached at, checked once: its path is kept as a prefix, such as a
- * gateway's mount; a username or a password, which `fetch` refuses in a URL, or a query or
- * fragment, which no Endpoint's URL can carry, is a bug.
+ * The URL a Provider is reached at, checked once: an http or https URL, its path kept as a prefix,
+ * such as a gateway's mount; another scheme, a username or a password, which `fetch` refuses in a
+ * URL, or a query or fragment, which no Endpoint's URL can carry, is a bug.
  */
 export function baseUrlOf(baseUrl: string | URL): URL {
   const base = new URL(baseUrl);
+  if (base.protocol !== 'http:' && base.protocol !== 'https:') {
+    throw new Error(`The baseUrl ${shownOf(base)} is no http or https URL`);
+  }
   if (base.username !== '' || base.password !== '') {
-    const shown = `${base.protocol}//${base.host}${base.pathname}`;
-    throw new Error(`The baseUrl ${shown} has a username or a password, which fetch refuses`);
+    throw new Error(
+      `The baseUrl ${shownOf(base)} has a username or a password, which fetch refuses`,
+    );
   }
   if (base.search !== '' || base.hash !== '' || /[?#]$/.test(base.href)) {
     throw new Error(`The baseUrl ${base.href} has a query or a fragment, which no Endpoint takes`);
   }
   return base;
+}
+
+/**
+ * The URL as a message may show it, never a credential: its scheme, host and path, or only its
+ * scheme when it has no host to tell from its path.
+ */
+function shownOf(base: URL): string {
+  return base.pathname.startsWith('/')
+    ? `${base.protocol}//${base.host}${base.pathname}`
+    : base.protocol;
 }
 
 /** The base URL's path every Endpoint's path is called under, with one trailing slash removed. */
