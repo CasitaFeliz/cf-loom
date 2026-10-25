@@ -3,7 +3,7 @@ import type { ExportedAt } from '../loading/index.ts';
 import {
   defaultImportOf,
   headerOf,
-  importedNameOf,
+  importSpecifierOf,
   keyOf,
   moduleTextOf,
   namedImportOf,
@@ -55,31 +55,31 @@ export function handlerMapTextOf(
 }
 
 /**
- * What a stub hands to `handle.stub`, and the export it imports to write it, under the local name
- * the expression starts with: `getOrder`, or `readers` for `readers.commands.chargeCardV1`.
+ * What a stub hands to `handle.stub`: the export it imports under `local`, and the members read
+ * from it, none for `getOrder`, `commands` and `chargeCardV1` for `readers.commands.chargeCardV1`.
  */
 export type StubTarget = {
   readonly imported: ExportedAt;
   readonly local: string;
-  readonly expression: string;
+  readonly members: readonly string[];
 };
 
 /** The target that is the export itself, imported under the declaration's name in code. */
 export function exportedTargetOf(imported: ExportedAt, local: string): StubTarget {
-  return { imported, local, expression: local };
+  return { imported, local, members: [] };
 }
 
 /** The stub of the Handler at `path`, importing what it is written for from where it is exported. */
-export function stubTextOf(path: string, { imported, local, expression }: StubTarget): string {
+export function stubTextOf(path: string, { imported, local, members }: StubTarget): string {
   const specifier = specifierOf(path, imported);
   const imports = [
     namedImportOf(['handle'], '@cf-loom/handlers'),
-    namedImportOf([importedNameOf(imported.name, local)], specifier),
+    namedImportOf([importSpecifierOf(imported.name, local)], specifier),
   ];
   return moduleTextOf({
     first: [],
     imports,
-    body: [`export default handle.stub(${expression});`],
+    body: [`export default handle.stub(${[local, ...members].join('.')});`],
   });
 }
 

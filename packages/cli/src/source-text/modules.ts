@@ -23,7 +23,7 @@ export function namespaceImportOf(local: string, specifier: string): string {
  * An export as an import list names it under `local`: bare when it is called `local`, else
  * aliased, quoted when its name is no identifier.
  */
-export function importedNameOf(exported: string, local: string): string {
+export function importSpecifierOf(exported: string, local: string): string {
   return exported === local ? local : `${keyOf(exported)} as ${local}`;
 }
 

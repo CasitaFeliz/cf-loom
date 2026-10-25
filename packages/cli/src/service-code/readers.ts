@@ -9,7 +9,7 @@ import {
 } from '../schema-code/index.ts';
 import {
   headerOf,
-  importedNameOf,
+  importSpecifierOf,
   moduleTextOf,
   namedImportOf,
   relativeSpecifierOf,
@@ -71,7 +71,7 @@ function tableMemberOf(handled: MessageHandled): { readonly key: TableKey; reado
 export function pairingTargetOf(handled: MessageHandled, readersFile: string): StubTarget {
   const imported = { kind: 'file', path: readersFile, name: readersTable } as const;
   const { key, name } = tableMemberOf(handled);
-  return { imported, local: readersTable, expression: `${readersTable}.${key}.${name}` };
+  return { imported, local: readersTable, members: [key, name] };
 }
 
 /**
@@ -176,7 +176,7 @@ function pairedImportsOf(pairings: readonly Pairing[], readersFile: string): rea
   for (const { at, local } of pairings) {
     const specifier = relativeSpecifierOf(readersFile, at.path);
     const names = namesBySpecifier.get(specifier) ?? [];
-    names.push(importedNameOf(at.name, local));
+    names.push(importSpecifierOf(at.name, local));
     namesBySpecifier.set(specifier, names);
   }
   return [...namesBySpecifier].map(([specifier, names]) => ({

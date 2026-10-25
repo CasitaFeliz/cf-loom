@@ -1,5 +1,5 @@
 import { byCodePoint, isLive } from '@cf-loom/contract/internal';
-import type { ExportsOf } from '../loading/index.ts';
+import { type ExportsOf, exportNamesOf } from '../loading/index.ts';
 import {
   type DeclarationHandled,
   elementLabelOf,
@@ -98,9 +98,7 @@ function packageExportOf(
   handled: DeclarationHandled,
   { packageName, exports, guard }: PackagedGuard,
 ): StubLocated {
-  const exportName = Object.keys(exports)
-    .sort(byCodePoint)
-    .find((name) => exports[name] === guard);
+  const [exportName] = exportNamesOf(exports, guard);
   if (exportName === undefined) {
     return { kind: 'refused', line: `guards.${handled.name} is not exported by ${packageName}` };
   }

@@ -3159,6 +3159,45 @@ describe('cf-loom generate: the Service type-checks', () => {
       expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
     });
 
+    test('a Guard its Definitions Package exports under two names is imported under the first in code point order', () => {
+      const definitions = withDefinitionsGuard();
+      const project = aProject({
+        ...definitions,
+        'node_modules/@org/definitions/index.js': (
+          definitions['node_modules/@org/definitions/index.js'] ?? ''
+        ).concat('export { userToken as token };\n'),
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/guards/user-token.handler.ts')).toContain(
+        "import { token as userToken } from '@org/definitions';",
+      );
+    });
+
+    test('a Guard its Definitions Package exports under names whose code point and code unit orders differ is imported under the first by code point', () => {
+      const definitions = withDefinitionsGuard();
+      const project = aProject({
+        ...definitions,
+        'node_modules/@org/definitions/index.js': (
+          definitions['node_modules/@org/definitions/index.js'] ?? ''
+        )
+          .replace('export const userToken =', 'const userToken =')
+          .concat("export { userToken as '😀', userToken as Ａ };\n"),
+        'src/contract/endpoints/orders/create-order.endpoint.ts': (
+          definitions['src/contract/endpoints/orders/create-order.endpoint.ts'] ?? ''
+        ).replace('{ userToken }', '{ Ａ as userToken }'),
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toMatchObject({ status: 0, stderr: '' });
+      expect(read(project, 'src/guards/user-token.handler.ts')).toContain(
+        "import { 'Ａ' as userToken } from '@org/definitions';",
+      );
+    });
+
     test('renaming only the export of an Endpoint, its importers following, leaves every generated file as it was', () => {
       const service = aService();
       const project = aProject(service);
