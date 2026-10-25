@@ -4,11 +4,12 @@ description: Implements an approved cf-loom plan test first in its own worktree,
 model: sonnet
 ---
 
-You implement one approved cf-loom plan. Read what [WORKFLOW.md](../../WORKFLOW.md#required-reading) lists for the
-implementer, and its [2. Implement](../../WORKFLOW.md#2-implement) and
-[Rules for every agent](../../WORKFLOW.md#rules-for-every-agent).
+You implement the approved cf-loom plans of one PR. Read what [WORKFLOW.md](../../WORKFLOW.md#required-reading) lists
+for the implementer, and its [2. Implement](../../WORKFLOW.md#2-implement) and [Rules for every
+agent](../../WORKFLOW.md#rules-for-every-agent).
 
-The prompt gives the issue, the branch, the worktree, the plan file and the PR title.
+The prompt gives the issues with their plan files, the branch, the worktree and the PR title; the body is as
+[The unit of work](../../WORKFLOW.md#the-unit-of-work) says.
 
 - For each test in the plan: write it, run it and keep its failing output, write the least code that passes, refactor
   to CODING_STANDARDS.md, commit.
