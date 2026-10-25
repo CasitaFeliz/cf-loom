@@ -57,6 +57,8 @@ export const refused = {
   literalNull: { construct: 'z.literal(null)', instead: nullableInstead },
   literalUndefined: { construct: 'z.literal(undefined)', instead: nullableInstead },
   nonJsonExamples: { construct: 'examples that are not JSON values' },
+  nonStringId: { construct: '.meta({ id }) that is not a string' },
+  nonStringDescription: { construct: '.meta({ description }) that is not a string' },
   nonFinite: { construct: 'a number that is not finite (NaN or Infinity)' },
   literalBigint: { construct: 'a bigint z.literal()' },
   xor: { construct: 'z.xor()' },
@@ -108,6 +110,11 @@ export function refusedMetaKey(key: string): Refused {
 
 /** Examples that are not a list, which no JSON Schema reader could take. */
 export const refusedExamples: Refused = { construct: '.meta({ examples }) that is not a list' };
+
+/** A recursion id that is no camelCase name, so code could not name its def. */
+export function refusedId(id: string): Refused {
+  return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
+}
 
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {

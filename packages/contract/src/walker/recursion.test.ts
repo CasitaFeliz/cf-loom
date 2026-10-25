@@ -699,33 +699,55 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  test('an id named __proto__ is a def like any other', () => {
-    const node = z
-      .object({
-        get children() {
-          return z.array(node);
-        },
-      })
-      .meta({ id: '__proto__' });
-
-    expect(walkBody(node)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: '__proto__' })],
-      defs: {
-        ['__proto__']: {
-          type: 'object',
-          fields: {
-            children: {
-              required: true,
-              schema: { type: 'array', items: { type: 'ref', name: '__proto__' } },
-            },
+  describe('the grammar of an id', () => {
+    function recursiveWith(id: string): z.ZodType {
+      const node: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(node);
           },
-        },
+        })
+        .meta({ id });
+      return node;
+    }
+
+    test.each(['123', '__proto__', 'tree-node', 'ñandú', 'Tree', ''])(
+      'the id %j on a recursive schema fails, and no def is written',
+      (id) => {
+        const walked = walkBody(recursiveWith(id));
+
+        const [location] = walked.located;
+        expect(location?.walked).toMatchObject({
+          kind: 'not-allowed',
+          failures: expect.arrayContaining([
+            {
+              kind: 'not-allowed',
+              at: ['body'],
+              construct: `.meta({ id: ${JSON.stringify(id)} })`,
+              instead: 'a camelCase name',
+            },
+          ]),
+        });
+        expect(walked.defs).toEqual({});
       },
+    );
+
+    test('a recursive schema walks to a def exactly when its id is camelCase', () => {
+      const alphabet = ['a', 'Z', '1', '-', '_', 'ñ'];
+      const ones = alphabet;
+      const twos = ones.flatMap((first) => alphabet.map((last) => first + last));
+      const threes = twos.flatMap((first) => alphabet.map((last) => first + last));
+      const ids = [...ones, ...twos, ...threes];
+
+      const defined = ids.filter((id) => Object.hasOwn(walkBody(recursiveWith(id)).defs, id));
+
+      expect(ids).toHaveLength(258);
+      expect(defined).toEqual(ids.filter((id) => /^[a-z][a-zA-Z0-9]*$/.test(id)));
     });
   });
 
   test('an id on a schema that closes no cycle is ignored', () => {
-    const money = z.object({ amount: z.int() }).meta({ id: 'Money' });
+    const money = z.object({ amount: z.int() }).meta({ id: 'money' });
 
     expect(walkBody(money)).toEqual({
       located: [

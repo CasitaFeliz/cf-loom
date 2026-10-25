@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { globalRegistry } from 'zod/v4/core';
+import { camelCase, follows } from '../declarations/index.ts';
 import { isJsonValue } from './canonical-json.ts';
 import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
 import {
@@ -7,6 +8,7 @@ import {
   type Refused,
   refused,
   refusedExamples,
+  refusedId,
   refusedMetaKey,
 } from './not-allowed.ts';
 import { failed, failuresOf, type Walked, walked } from './walked.ts';
@@ -56,10 +58,34 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
 function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readonly NotAllowed[] {
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
-  const keyFailures = unknownKeys.map((key) => notAllowed(at, refusedMetaKey(key)));
-  const examplesRefusal = examplesRefusalOf(meta['examples']);
-  const examplesFailure = examplesRefusal === undefined ? [] : [notAllowed(at, examplesRefusal)];
-  return failuresOf([...keyFailures, ...examplesFailure]);
+  const keyRefusals = unknownKeys.map(refusedMetaKey);
+  const valueRefusals = [
+    examplesRefusalOf(meta['examples']),
+    idRefusalOf(meta['id']),
+    descriptionRefusalOf(meta['description']),
+  ].filter(isRefusal);
+  return failuresOf([...keyRefusals, ...valueRefusals].map((refusal) => notAllowed(at, refusal)));
+}
+
+function isRefusal(refusal: Refused | undefined): refusal is Refused {
+  return refusal !== undefined;
+}
+
+function idRefusalOf(id: unknown): Refused | undefined {
+  if (id === undefined) {
+    return undefined;
+  }
+  if (typeof id !== 'string') {
+    return refused.nonStringId;
+  }
+  return follows(camelCase, id) ? undefined : refusedId(id);
+}
+
+function descriptionRefusalOf(description: unknown): Refused | undefined {
+  if (description === undefined || typeof description === 'string') {
+    return undefined;
+  }
+  return refused.nonStringDescription;
 }
 
 function examplesRefusalOf(examples: unknown): Refused | undefined {
