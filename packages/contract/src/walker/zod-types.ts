@@ -1,11 +1,11 @@
 import type * as core from 'zod/v4/core';
-import { checksOf, type DeclaredCheck, isConditional } from './check-defs.ts';
-import { constrainArray, constrainNumber, constrainString, unconstrained } from './checks.ts';
+import { checksOf, type DeclaredCheck } from './check-defs.ts';
+import { type CheckedType, checkFailuresOf, constrain } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import { innerOfOneLazy } from './lazy.ts';
 import { annotated } from './metadata.ts';
-import type { Path, SchemaNode } from './nodes.ts';
+import type { Path } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedName } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
@@ -14,39 +14,61 @@ import { failed, failuresOf, type Walked, type Walker, walked } from './walked.t
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
 export type Def = core.$ZodTypes['_zod']['def'];
 
-/** The node a schema's own def describes, with its own checks applied. */
+/** The node a schema's own def describes, with its own checks judged. */
 export function walkDefinition(schema: core.$ZodType, at: Path, walker: Walker): Walked {
-  const node = nodeOf(schema, at, walker);
-  if (node.kind === 'not-allowed') {
-    return node;
-  }
-  return constrained(node.value, checksOf(schema), at);
+  return withOwnChecks(schema, nodeOf(schema, at, walker), at);
 }
 
-/** A node with the constraint of each check, by what its type takes. */
-export function constrained(node: SchemaNode, checks: readonly DeclaredCheck[], at: Path): Walked {
-  if (checks.some(isConditional)) {
-    return notAllowed(at, refused.conditionalCheck);
+/**
+ * A schema's walk with its own checks judged: applied to its node, or, when the walk failed and
+ * left no node, refused by the type its def fixes, beside what already failed.
+ */
+export function withOwnChecks(schema: core.$ZodType, walkedSchema: Walked, at: Path): Walked {
+  if (walkedSchema.kind === 'walked') {
+    return constrain(walkedSchema.value, checksOf(schema), at);
   }
-  switch (node.type) {
-    case 'string':
-      return constrainString(node, checks, at);
-    case 'number':
-      return constrainNumber(node, checks, at);
-    case 'array':
-      return constrainArray(node, checks, at);
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'tuple':
-    case 'union':
-    case 'tagged':
-    case 'allOf':
-    case 'json':
-    case 'ref':
-      return unconstrained(node, checks, at);
+  const refusals = checkFailuresOf(checkedTypeOf(schema), checksBesideType(schema), at);
+  return refusals.length === 0 ? walkedSchema : failed([...walkedSchema.failures, ...refusals]);
+}
+
+/** The checks a schema declares beside its type: a format schema's own check is part of its type. */
+function checksBesideType(schema: core.$ZodType): readonly DeclaredCheck[] {
+  return checksOf(schema).filter((check) => check.def !== schema._zod.def);
+}
+
+/**
+ * The type of node that judges the checks of a schema whose walk failed: the one its def fixes,
+ * read through what is left once a refused wrapper is removed. A schema already met is a cycle and
+ * has none.
+ */
+function checkedTypeOf(schema: core.$ZodType): CheckedType {
+  const met = new Set<core.$ZodType>();
+  let current = schema;
+  while (!met.has(current)) {
+    met.add(current);
+    const def = current._zod.def as Def;
+    switch (def.type) {
+      case 'string':
+      case 'number':
+      case 'array':
+        return def.type;
+      case 'lazy':
+        current = innerOfOneLazy(current as core.$ZodLazy);
+        break;
+      case 'nullable':
+      case 'optional':
+      case 'default':
+      case 'prefault':
+      case 'catch':
+      case 'readonly':
+      case 'nonoptional':
+        current = def.innerType;
+        break;
+      default:
+        return 'other';
+    }
   }
+  return 'other';
 }
 
 /**
