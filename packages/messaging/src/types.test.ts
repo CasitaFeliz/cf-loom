@@ -51,6 +51,16 @@ const orderArchivedV1 = defineEvent({
   body: z.object({ orderId: z.string() }),
 });
 
+const widenedVersion: number = 1;
+
+const barWithWidenedVersion = defineEvent({
+  name: 'Bar',
+  version: widenedVersion,
+  visibility: 'internal',
+  description: 'A Bar whose version is typed number',
+  body: z.object({ barId: z.string() }),
+});
+
 const chargeCardV1 = defineCommand({
   name: 'ChargeCard',
   version: 1,
@@ -92,7 +102,7 @@ const contract = defineContract({
     defineGroup({
       name: 'payments',
       description: 'Payments',
-      events: [orderCreatedV3, orderArchivedV1],
+      events: [orderCreatedV3, orderArchivedV1, barWithWidenedVersion],
       commands: [chargeCardV2, refundV1],
       subscriptions: [notifyOnCreated],
     }),
@@ -150,6 +160,15 @@ describe('publish and send types', () => {
     const retired = () => publisher.publish('OrderCreated', bodies);
 
     expect(retired).toBeTypeOf('function');
+  });
+
+  test('an Event whose version is typed number has no body key, so publishing it is a type error', () => {
+    // @ts-expect-error: a version typed number keys no body
+    const bare = () => publisher.publish('Bar', {});
+    // @ts-expect-error: a version typed number keys no body, whatever is given
+    const given = () => publisher.publish('Bar', { v1: { barId: 'b-1' } });
+
+    expect([bare, given]).toHaveLength(2);
   });
 
   test('a name the root does not list, or whose every version is Retired, is a type error', () => {

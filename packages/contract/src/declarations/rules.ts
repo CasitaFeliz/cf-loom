@@ -117,7 +117,11 @@ type IsNotWholeFromOne<Version extends number> = `${Version}` extends
   ? true
   : false;
 
-/** What every Message Version must also satisfy: a literal version is one whole number from 1 written without an exponent, never one of several. */
+/**
+ * What every Message Version must also satisfy: a literal version is one whole number from 1
+ * written without an exponent, never one of several. A version typed `number` says nothing about
+ * itself: `publish` refuses to key bodies by it.
+ */
 export type VersionRule<Declaration extends { readonly version: number }> =
   number extends Declaration['version']
     ? unknown

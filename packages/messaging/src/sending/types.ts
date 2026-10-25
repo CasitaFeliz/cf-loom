@@ -20,18 +20,30 @@ type LiveOf<M> = Exclude<M, { readonly lifecycle: 'retired' }>;
 /** The names of the Events a root publishes: those with a version not Retired. */
 type PublishedNameOf<C extends Contract> = LiveOf<OwnEventOf<C>>['name'];
 
-/** One body per live version of an Event, `v<n>`, required; a Retired version's key is `never`, so passing one is a type error even outside an object literal. */
-type PublishedBodiesOf<C extends Contract, Name> = {
-  readonly [E in Extract<
-    LiveOf<OwnEventOf<C>>,
-    { readonly name: Name }
-  > as `v${E['version']}`]: core.output<E['body']>;
-} & {
-  readonly [E in Extract<
-    OwnEventOf<C>,
-    { readonly name: Name; readonly lifecycle: 'retired' }
-  > as `v${E['version']}`]?: never;
-};
+/** A type no value has, whose only key is the sentence a type error reads. */
+type Refusal<Message extends string> = { readonly [Text in Message]: never };
+
+/** The live versions of the named Event. */
+type LiveNamedOf<C extends Contract, Name> = Extract<
+  LiveOf<OwnEventOf<C>>,
+  { readonly name: Name }
+>;
+
+/**
+ * One body per live version of an Event, `v<n>`, required; a Retired version's key is `never`, so
+ * passing one is a type error even outside an object literal. A version typed `number` keys no
+ * body, so none can be given: declare the version as one literal.
+ */
+type PublishedBodiesOf<C extends Contract, Name> = number extends LiveNamedOf<C, Name>['version']
+  ? Refusal<'An Event version typed number keys no body: declare the version as one literal'>
+  : {
+      readonly [E in LiveNamedOf<C, Name> as `v${E['version']}`]: core.output<E['body']>;
+    } & {
+      readonly [E in Extract<
+        OwnEventOf<C>,
+        { readonly name: Name; readonly lifecycle: 'retired' }
+      > as `v${E['version']}`]?: never;
+    };
 
 /** The Message Versions that are Active: neither Deprecated nor Retired. */
 type ActiveOf<M> = Exclude<M, { readonly lifecycle: 'deprecated' | 'retired' }>;
