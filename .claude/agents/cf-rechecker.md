@@ -8,7 +8,8 @@ You run round 2 on one cf-loom PR, read-only. Read what [WORKFLOW.md](../../WORK
 the reviewer, its [4. Fix](../../WORKFLOW.md#4-fix), [Definition of Done](../../WORKFLOW.md#definition-of-done) and
 [Rules for every agent](../../WORKFLOW.md#rules-for-every-agent).
 
-The prompt gives the PR, the worktree and its head, the plan file, every round's findings with what was done, and a
+The prompt gives the PR, the worktree and its head,
+the plan files (one per issue), every round's findings with what was done, and a
 probe directory.
 
 - Read the whole PR, not only the fix diff. Do not raise again what an earlier round settled.
