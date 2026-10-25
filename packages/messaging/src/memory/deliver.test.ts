@@ -10,10 +10,10 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import {
-  type Fault,
   fault,
   handle,
   InvalidInputError,
+  type MessageFault,
   type MessageMeta,
   readersOf,
 } from '@cf-loom/handlers';
@@ -133,7 +133,7 @@ type Received = { readonly handler: string; readonly body: unknown; readonly met
 type Implementation = (
   body: unknown,
   meta: MessageMeta,
-) => Fault | undefined | Promise<Fault | undefined>;
+) => MessageFault | undefined | Promise<MessageFault | undefined>;
 
 type Handlers = {
   readonly charge?: Implementation;
@@ -169,7 +169,9 @@ async function running(
   const broker = memory();
   const faults: ConsumedFault[] = [];
   const started = await messaging(contract, broker, {
-    onServiceFault: (consumedFault) => faults.push(consumedFault),
+    onServiceFault: (consumedFault) => {
+      faults.push(consumedFault);
+    },
   });
   const connection = { broker, received, faults, ...started };
   const answers = handlers(connection);

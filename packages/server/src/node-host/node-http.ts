@@ -8,13 +8,17 @@ import {
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { reservedResponseOf } from '@cf-loom/contract/internal';
-import type { Http } from '../answering/index.ts';
+import { faultLineOf } from '@cf-loom/handlers/internal';
+import { answeredOf, type Http } from '../answering/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
 const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
 
 /** The methods whose request never carries a body, which a web-standard `Request` refuses one for. */
 const bodiless: readonly string[] = ['GET', 'HEAD'];
+
+/** The line a handler that rejects is logged on. */
+const rejectedLine = faultLineOf('nodeListener', { message: 'the handler rejected' });
 
 /** How an incoming message reads as a web-standard request: a `Request`, or what answers it instead. */
 type Incoming =
@@ -23,8 +27,7 @@ type Incoming =
 
 /**
  * Connects the handler `serve` returns to `node:http` as a request listener, for a server the
- * Service creates itself; what `http` rejects with, a hook's throw, reaches the process, and
- * nothing else does.
+ * Service creates itself.
  */
 export function nodeListener(http: Http): RequestListener {
   return (incoming, outgoing) => {
@@ -37,9 +40,17 @@ export function nodeHttp(http: Http): Server {
   return createServer(nodeListener(http));
 }
 
+/**
+ * Answers an incoming message with what `http` returns; one answered before its body arrived whole
+ * closes the connection, so a body `serve` did not read never stalls the next request.
+ */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
   const read = incomingOf(incoming);
-  const response = read.kind === 'request' ? await http(read.request) : read.response;
+  const response =
+    read.kind === 'request' ? await answeredOf(http, read.request, rejectedLine) : read.response;
+  if (!incoming.complete) {
+    outgoing.setHeader('connection', 'close');
+  }
   try {
     await written(response, outgoing);
   } catch {

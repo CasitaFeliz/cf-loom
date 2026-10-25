@@ -62,6 +62,15 @@ function rejectionPartOf({ code, status, message }: ServedRejection): StatusPart
   return { status, description: `${code}: ${message}`, schema: componentRefOf(code) };
 }
 
+/** The `Retry-After` a retryable Fault may carry. */
+const retryAfterHeader = 'retry-after';
+
+const retryAfterObject: OpenApiObject = {
+  required: false,
+  description: 'When to retry, in whole seconds, if the Fault says',
+  schema: { type: 'integer', minimum: 0 },
+};
+
 /** The Faults `serve` may answer any Endpoint: 500 and 503, and 413 when a body is read. */
 function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
   const schema = componentRefOf(faultEnvelopeName);
@@ -72,10 +81,15 @@ function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
       description: 'A Fault that is not retryable, or INVALID_OUTCOME',
       schema,
     },
-    { status: faultStatusOf({ retryable: true }), description: 'A retryable Fault', schema },
+    {
+      status: faultStatusOf({ retryable: true }),
+      description: 'A retryable Fault',
+      headers: { [retryAfterHeader]: retryAfterObject },
+      schema,
+    },
   ];
   if (body !== null) {
-    const description = `BODY_TOO_LARGE: ${tooLarge.message}, when serve is given maxBodyBytes`;
+    const description = `BODY_TOO_LARGE: ${tooLarge.message}, when serve is given maxBodyBytes as a number`;
     parts.push({ status: tooLarge.status, description, schema });
   }
   return parts;

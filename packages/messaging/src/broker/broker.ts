@@ -1,5 +1,6 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import type { Fault, Issue } from '@cf-loom/handlers';
+import type { Issue } from '@cf-loom/handlers';
+import type { HandlerFailure, HandlerFaultBase } from '@cf-loom/handlers/internal';
 import type * as core from 'zod/v4/core';
 
 /** A broker as `connect` takes it: what an adapter returns, `jetstream()`, `memory()` or an organization's own. */
@@ -50,6 +51,11 @@ export type BrokerConsumer = {
   readonly subject: string;
   readonly element: Subscription | Command;
   readonly reader: core.$ZodType;
+  /**
+   * Runs the Handler and resolves with the Settlement to apply; it rejects only when
+   * `onServiceFault` throws or rejects, which the core logs, and the adapter then leaves the
+   * Message for redelivery.
+   */
   readonly receive: (delivery: Delivery) => Promise<Settlement>;
 };
 
@@ -70,15 +76,11 @@ export type Settlement =
 
 /**
  * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
- * the Command's Message Version it handles, by name or identity, the Message, then why.
+ * the Command's Message Version it handles as `element`, with its name or identity as `identity`,
+ * the Message, then why.
  */
-export type ConsumedFault = {
-  readonly element: string;
+export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;
-} & (
-  | { readonly kind: 'invalid-body'; readonly issues: readonly Issue[] }
-  | { readonly kind: 'returned'; readonly fault: Fault }
-  | { readonly kind: 'thrown'; readonly cause: unknown }
-);
+} & ({ readonly kind: 'invalid-body'; readonly issues: readonly Issue[] } | HandlerFailure);

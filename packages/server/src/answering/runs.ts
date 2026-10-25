@@ -38,7 +38,7 @@ export function answeredOfFailedRun(
     case 'invalid-outcome':
       return invalidOutcomeOf(run.issues, faultedBy);
     case 'thrown': {
-      const servedFault = { ...faultedBy, kind: 'thrown' as const, fault: run.fault };
+      const servedFault = { ...faultedBy, kind: 'thrown' as const, cause: run.fault.cause };
       return { kind: 'fault', response: faultResponseOf(run.fault), servedFault };
     }
   }

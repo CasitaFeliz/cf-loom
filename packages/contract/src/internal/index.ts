@@ -153,6 +153,7 @@ export type {
   DurableConsumed,
   InputIssue,
   InvalidInputBody,
+  Match,
   Matchable,
   ReceivedHeaders,
   RejectionEnvelope,
@@ -162,6 +163,7 @@ export type {
   TransportHeaderFit,
 } from '../wire/index.ts';
 export {
+  allowedMethodsOf,
   bodyOf,
   brokerHeaderBytesOf,
   brokerHeadersOf,
@@ -196,6 +198,7 @@ export {
   malformedBodyIssueOf,
   matchOf,
   maxBrokerHeaderBytes,
+  methodNotAllowedResponseOf,
   notJsonContentType,
   prefixedNameOf,
   prefixedSubjectOf,

@@ -973,13 +973,21 @@ describe('cf-loom openapi: the responses', () => {
     expect(valueAt(responseOf('/health', 'get', '503'), 'description')).toBe('A retryable Fault');
   });
 
+  test('the 503 response lists an optional retry-after header, whole seconds from 0', () => {
+    expect(valueAt(responseOf('/health', 'get', '503'), 'headers', 'retry-after')).toEqual({
+      required: false,
+      description: 'When to retry, in whole seconds, if the Fault says',
+      schema: { type: 'integer', minimum: 0 },
+    });
+  });
+
   test('an OpenAPI operation with an Input body answers the Fault Envelope under 413', () => {
     expect(responseBodyOf('/orders', 'post', '413')).toEqual(refTo('FaultEnvelope'));
   });
 
   test('the 413 response is described as BODY_TOO_LARGE', () => {
     expect(valueAt(responseOf('/orders', 'post', '413'), 'description')).toBe(
-      'BODY_TOO_LARGE: The body is too large, when serve is given maxBodyBytes',
+      'BODY_TOO_LARGE: The body is too large, when serve is given maxBodyBytes as a number',
     );
   });
 
@@ -1030,7 +1038,15 @@ describe('cf-loom openapi: the components', () => {
           type: 'object',
           required: ['committed', 'retryable', 'message'],
           properties: {
-            code: { enum: ['BODY_TOO_LARGE', 'INVALID_OUTCOME', 'NO_SUCH_ENDPOINT', 'RETIRED'] },
+            code: {
+              enum: [
+                'BODY_TOO_LARGE',
+                'INVALID_OUTCOME',
+                'METHOD_NOT_ALLOWED',
+                'NO_SUCH_ENDPOINT',
+                'RETIRED',
+              ],
+            },
             committed: { enum: ['no', 'yes', 'unknown'] },
             retryable: { type: 'boolean' },
             message: { type: 'string' },

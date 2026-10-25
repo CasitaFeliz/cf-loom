@@ -106,6 +106,8 @@ const handlers = {
   deprecatedAt,
 };
 
+const downFault = { committed: 'no', retryable: true } as const;
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -132,12 +134,12 @@ describe('serve: onServiceFault', () => {
     expect(line).not.toContain('short');
   });
 
-  test('without it, the console receives a thrown error with its message and cause', async () => {
+  test('without it, a throw is logged as the Handler threw, with its cause', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await serve(contract, handlers)(get('/orders/thrown'));
 
-    expect(logged).toHaveBeenCalledWith('getOrder: Internal error', new Error('a bug'));
+    expect(logged).toHaveBeenCalledWith('getOrder: the Handler threw', new Error('a bug'));
   });
 
   test('without it, the console names the Guard whose Handler failed', async () => {
@@ -163,9 +165,11 @@ describe('serve: onServiceFault', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const faults: ServedFault[] = [];
 
-    await serve(contract, handlers, { onServiceFault: (served) => faults.push(served) })(
-      get('/orders/thrown'),
-    );
+    await serve(contract, handlers, {
+      onServiceFault: (served) => {
+        faults.push(served);
+      },
+    })(get('/orders/thrown'));
 
     expect(faults).toHaveLength(1);
     expect(logged).not.toHaveBeenCalled();
@@ -175,7 +179,9 @@ describe('serve: onServiceFault', () => {
     const faults: ServedFault[] = [];
     const http = serve(contract, handlers, {
       maxBodyBytes: 8,
-      onServiceFault: (served) => faults.push(served),
+      onServiceFault: (served) => {
+        faults.push(served);
+      },
     });
 
     await http(get('/customers'));
@@ -185,17 +191,152 @@ describe('serve: onServiceFault', () => {
     expect(faults).toEqual([]);
   });
 
-  test('what it throws propagates, as the Service’s own bug', async () => {
-    const broken = new Error('the hook broke');
+  test('a Handler’s throw reaches it as thrown, with the Endpoint, its name and the error as cause', async () => {
+    const faults: ServedFault[] = [];
+
+    await serve(contract, handlers, {
+      onServiceFault: (served) => {
+        faults.push(served);
+      },
+    })(get('/orders/thrown'));
+
+    expect(faults).toStrictEqual([
+      { element: getOrder, identity: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
+    ]);
+  });
+
+  test('a Guard’s throw reaches it with the Endpoint, its name and the Guard', async () => {
+    const faults: ServedFault[] = [];
+    const throwing = handle(apiKey, () => {
+      throw new Error('the Guard broke');
+    });
+    const guarded = { ...handlers, guards: { apiKey: throwing } };
+
+    await serve(contract, guarded, {
+      onServiceFault: (served) => {
+        faults.push(served);
+      },
+    })(get('/orders/o-1'));
+
+    expect(faults).toStrictEqual([
+      {
+        element: getOrder,
+        identity: 'getOrder',
+        guard: apiKey,
+        kind: 'thrown',
+        cause: new Error('the Guard broke'),
+      },
+    ]);
+  });
+});
+
+describe('serve: a hook that fails', () => {
+  const broken = new Error('the hook broke');
+  const throwing = () => {
+    throw broken;
+  };
+  const rejecting = async () => {
+    throw broken;
+  };
+
+  test('an onServiceFault that throws leaves the answer as computed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await serve(contract, handlers, { onServiceFault: throwing })(
+      get('/orders/thrown'),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
+    });
+  });
+
+  test('an onServiceFault that throws is logged with what it threw as cause', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await serve(contract, handlers, { onServiceFault: throwing })(get('/orders/down'));
+
+    expect(logged).toHaveBeenCalledWith('getOrder: onServiceFault threw', broken);
+  });
+
+  test('an onServiceFault of a Guard’s Fault that throws is logged naming the Guard', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const guarded = { ...handlers, guards: { apiKey: handle(apiKey, () => fault(downFault)) } };
+
+    await serve(contract, guarded, { onServiceFault: throwing })(get('/orders/o-1'));
+
+    expect(logged).toHaveBeenCalledWith('getOrder apiKey: onServiceFault threw', broken);
+  });
+
+  test('an onServiceFault that rejects is awaited and logged, and the Http resolves', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await serve(contract, handlers, { onServiceFault: rejecting })(
+      get('/orders/down'),
+    );
+
+    expect(response.status).toBe(503);
+    expect(logged).toHaveBeenCalledWith('getOrder: onServiceFault threw', broken);
+  });
+
+  test('onOutcome still receives the record when onServiceFault throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
-      onServiceFault: () => {
-        throw broken;
+      onServiceFault: throwing,
+      onOutcome: (request) => {
+        answered.push(request);
       },
     });
 
-    const answered = http(get('/orders/down'));
+    await http(get('/orders/down'));
 
-    await expect(answered).rejects.toBe(broken);
+    expect(answered.map(({ status }) => status)).toEqual([503]);
+  });
+
+  test.each([
+    ['throws', throwing],
+    ['rejects', rejecting],
+  ])('an onOutcome that %s leaves the response returned, and is logged', async (_, onOutcome) => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await serve(contract, handlers, { onOutcome })(get('/orders/o-1'));
+
+    expect(response.status).toBe(200);
+    expect(logged).toHaveBeenCalledWith('getOrder: onOutcome threw', broken);
+  });
+
+  test('an onOutcome that throws for a request no Endpoint matched is logged as serve’s', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await serve(contract, handlers, { onOutcome: throwing })(get('/customers'));
+
+    expect(logged).toHaveBeenCalledWith('serve: onOutcome threw', broken);
+  });
+
+  test('serve waits for an async onOutcome before it resolves', async () => {
+    let recorded = false;
+    const onOutcome = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      recorded = true;
+    };
+
+    await serve(contract, handlers, { onOutcome })(get('/orders/o-1'));
+
+    expect(recorded).toBe(true);
+  });
+
+  test('serve waits for an async onServiceFault before it resolves', async () => {
+    let heard = false;
+    const onServiceFault = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      heard = true;
+    };
+
+    await serve(contract, handlers, { onServiceFault })(get('/orders/down'));
+
+    expect(heard).toBe(true);
   });
 });
 
@@ -204,7 +345,9 @@ describe('serve: onOutcome', () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       onServiceFault: () => undefined,
-      onOutcome: (request) => answered.push(request),
+      onOutcome: (request) => {
+        answered.push(request);
+      },
     });
 
     for (const path of ['/orders/o-1', '/orders/missing', '/orders/down', '/customers']) {
@@ -223,10 +366,14 @@ describe('serve: onOutcome', () => {
 
   test('a request no Endpoint matched carries its method as received, whatever it is', async () => {
     const answered: AnsweredRequest[] = [];
-    const http = serve(contract, handlers, { onOutcome: (request) => answered.push(request) });
+    const http = serve(contract, handlers, {
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
 
-    await http(new Request('http://test/orders', { method: 'propfind' }));
-    await http(new Request('http://test/orders', { method: 'HEAD' }));
+    await http(new Request('http://test/customers', { method: 'propfind' }));
+    await http(new Request('http://test/customers', { method: 'HEAD' }));
 
     expect(answered).toStrictEqual([
       { method: 'propfind', status: 404, kind: 'fault', durationMs: expect.any(Number) },
@@ -239,7 +386,11 @@ describe('serve: onOutcome', () => {
     const http = serve(
       contract,
       { ...handlers, guards: { apiKey: handle(apiKey, () => reject(unauthenticated)) } },
-      { onOutcome: (request) => answered.push(request) },
+      {
+        onOutcome: (request) => {
+          answered.push(request);
+        },
+      },
     );
     const json = { 'content-type': 'application/json' };
 
@@ -277,11 +428,43 @@ describe('serve: onOutcome', () => {
 });
 
 describe('serve: onOutcome for the Caller’s Faults', () => {
+  test('METHOD_NOT_ALLOWED is recorded with its method, as a fault with status 405', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, {
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
+
+    await http(new Request('http://test/orders', { method: 'DELETE' }));
+
+    expect(answered).toStrictEqual([
+      { method: 'DELETE', status: 405, kind: 'fault', durationMs: expect.any(Number) },
+    ]);
+  });
+
+  test('a request the fallback answered is not recorded', async () => {
+    const answered: AnsweredRequest[] = [];
+    const http = serve(contract, handlers, {
+      fallback: async () => new Response('ok'),
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
+
+    await http(get('/healthz'));
+    await http(new Request('http://test/orders', { method: 'OPTIONS' }));
+
+    expect(answered).toEqual([]);
+  });
+
   test('RETIRED and BODY_TOO_LARGE are recorded with their method, Endpoint and path', async () => {
     const answered: AnsweredRequest[] = [];
     const http = serve(contract, handlers, {
       maxBodyBytes: 8,
-      onOutcome: (request) => answered.push(request),
+      onOutcome: (request) => {
+        answered.push(request);
+      },
     });
 
     await http(new Request('http://test/archive', { method: 'POST' }));
@@ -309,24 +492,15 @@ describe('serve: onOutcome for the Caller’s Faults', () => {
 
   test('durationMs is the time the request took', async () => {
     const answered: AnsweredRequest[] = [];
-    const http = serve(contract, handlers, { onOutcome: (request) => answered.push(request) });
+    const http = serve(contract, handlers, {
+      onOutcome: (request) => {
+        answered.push(request);
+      },
+    });
 
     await http(get('/orders/slow'));
 
     expect(answered[0]?.durationMs).toBeGreaterThanOrEqual(35);
-  });
-
-  test('what it throws propagates, as the Service’s own bug', async () => {
-    const broken = new Error('the hook broke');
-    const http = serve(contract, handlers, {
-      onOutcome: () => {
-        throw broken;
-      },
-    });
-
-    const answered = http(get('/orders'));
-
-    await expect(answered).rejects.toBe(broken);
   });
 });
 

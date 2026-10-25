@@ -193,7 +193,9 @@ const handlers = {
       return success({ headers, body: { id: params.orderId, by: key.callerId } });
     }),
     createOrder: handle(createOrder, ({ body }) => success(body)),
-    cancelOrder: handle(cancelOrder, () => fault({ committed: 'no', retryable: true })),
+    cancelOrder: handle(cancelOrder, () =>
+      fault({ committed: 'no', retryable: true, retryAfter: 7 }),
+    ),
   },
   guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
   deprecatedAt: { createOrder: '2026-10-17T09:30:00Z' },
@@ -322,7 +324,7 @@ describe('end to end against serve through node:http and the global fetch', () =
     ]);
   });
 
-  test('a Fault the Handler returned arrives as sent', async () => {
+  test('a Fault the Handler returned arrives as sent, with the retryAfter serve sent', async () => {
     const outcome = await ordersClient().cancelOrder({ params: { orderId: 'o-1' } });
 
     expect(outcome).toEqual({
@@ -330,6 +332,7 @@ describe('end to end against serve through node:http and the global fetch', () =
       committed: 'no',
       retryable: true,
       message: 'Internal error',
+      retryAfter: '7',
     });
   });
 
@@ -353,6 +356,23 @@ describe('end to end against serve through node:http and the global fetch', () =
       { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown', retryable: false },
       { kind: 'fault', code: 'BODY_TOO_LARGE', committed: 'no', retryable: false },
     ]);
+  });
+
+  test('a declared path asked with another method arrives as METHOD_NOT_ALLOWED', async () => {
+    const putting = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': async () => 'caller-7' },
+      fetch: (url, init) => fetch(url, { ...init, method: 'PUT' }),
+    });
+
+    const outcome = await putting.cancelOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      code: 'METHOD_NOT_ALLOWED',
+      committed: 'no',
+      retryable: false,
+    });
   });
 
   test('a Deprecated Endpoint works, and its Deprecation is told once', async () => {
