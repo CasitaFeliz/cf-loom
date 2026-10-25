@@ -2,7 +2,7 @@ import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
 import { consumedFaultLinesOf, consumerDetailsOf, type Settled } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
-import { DeliveryLine } from './line.ts';
+import { DeliveryLine, isCut } from './line.ts';
 import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
 
@@ -21,10 +21,13 @@ export class Deliveries {
     );
   }
 
-  /** Lines deliveries up without waiting for them; a cut drops them, and `settled()` reports it. */
+  /**
+   * Lines deliveries up without waiting for them; a cut drops them, and `settled()` reports it,
+   * while a delivery that fails on its own reaches the runtime, as nothing waits for it.
+   */
   lineUp(attempts: readonly Attempt[]): void {
     for (const { consumer, delivery } of attempts) {
-      this.#line.add(() => this.#attempt(consumer, delivery)).catch(() => undefined);
+      this.#line.add(() => this.#attempt(consumer, delivery)).catch(unlessCut);
     }
   }
 
@@ -93,5 +96,12 @@ export class Deliveries {
     if (hookFailure !== undefined) {
       this.#failures.record({ lines: [hookFailure], cause: undefined });
     }
+  }
+}
+
+/** Lets a cut go, which `settled()` already reports, and rethrows anything else. */
+function unlessCut(reason: unknown): void {
+  if (!isCut(reason)) {
+    throw reason;
   }
 }

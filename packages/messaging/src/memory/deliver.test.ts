@@ -668,6 +668,42 @@ describe('pending and redeliver()', () => {
     );
   });
 
+  test('a delivery a Handler’s publish lined up whose settling rejects reaches the runtime as an unhandled rejection', async () => {
+    const broken = new Error('the console broke');
+    const unhandled: unknown[] = [];
+    const runtimeListeners = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', (reason) => void unhandled.push(reason));
+    const broker = memory();
+    const { consume, publisher } = await messaging(contract, broker);
+    await consume({
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, async () => {
+          await publisher.publish('OrderCreated', { v1: charge, v2: created }, { factId: 'o-1' });
+        }),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, throwing),
+        auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
+        notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+      },
+      readers,
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {
+      throw broken;
+    });
+
+    await broker.deliver(chargeCardV1, charge, { factId: 'o-1' });
+    await rejectionOf(broker.settled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.removeAllListeners('unhandledRejection');
+    for (const listener of runtimeListeners) {
+      process.on('unhandledRejection', listener);
+    }
+
+    expect(unhandled).toEqual([broken]);
+  });
+
   test('pending lists the wire body, not the form the Handler read', async () => {
     const { broker, received } = await running(() => ({ notify: throwing }));
 

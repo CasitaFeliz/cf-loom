@@ -4,6 +4,14 @@ const limit = 1000;
 /** What a cut says, and what `settled()` rejects with when a chain of Messages is cut. */
 const cutMessage = `a chain of Messages was cut after ${limit.toLocaleString('en-US')} deliveries`;
 
+/** The error a cut drops a delivery with, which `settled()` reports. */
+class Cut extends Error {}
+
+/** Whether a delivery was dropped by a cut, rather than failing on its own. */
+export function isCut(reason: unknown): boolean {
+  return reason instanceof Cut;
+}
+
 /** One delivery lined up: what it runs, and how its caller hears of a cut. */
 type LinedUp = {
   readonly run: () => Promise<void>;
@@ -60,7 +68,7 @@ export class DeliveryLine {
   }
 
   #cut(): void {
-    const cut = new Error(cutMessage);
+    const cut = new Cut(cutMessage);
     const dropped = this.#lined.splice(0);
     this.#onCut(cut);
     for (const { drop } of dropped) {
