@@ -1,10 +1,17 @@
 import { basePathOf } from '@cf-loom/client/internal';
-import { type Match, matchOf, type TextSource } from '@cf-loom/contract/internal';
+import { allowedMethodsOf, type Match, matchOf, type TextSource } from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { ListedEndpoint, Provided } from './provided.ts';
 
-/** A request that reached a listed Endpoint, with where its text comes from. */
-export type Matched = { readonly listed: ListedEndpoint; readonly source: TextSource };
+/**
+ * A request that reached a listed Endpoint, with where its text comes from and the other methods
+ * the Provider's exported Endpoints take on its path, which a scripted `METHOD_NOT_ALLOWED` lists.
+ */
+export type Matched = {
+  readonly listed: ListedEndpoint;
+  readonly source: TextSource;
+  readonly otherMethods: readonly string[];
+};
 
 /**
  * The listed Endpoint a request reaches: its path, under the base URL's path, matched against
@@ -27,8 +34,12 @@ export function matchedOf(provided: Provided, request: Request): Matched {
       const what = `${unmatched}; that path takes ${match.allowed.join(', ')}`;
       throw mistakeOf({ provider: provided.provider, what });
     }
-    case 'matched':
-      return listedMatchOf(provided, match, `${request.method} ${path}`);
+    case 'matched': {
+      const listed = listedMatchOf(provided, match, `${request.method} ${path}`);
+      const allowed = allowedMethodsOf(provided.exported, routed);
+      const otherMethods = allowed.filter((method) => method !== request.method);
+      return { ...listed, otherMethods };
+    }
   }
 }
 
@@ -37,7 +48,7 @@ function listedMatchOf(
   provided: Provided,
   match: Extract<Match<Provided['exported'][number]>, { readonly kind: 'matched' }>,
   reached: string,
-): Matched {
+): Omit<Matched, 'otherMethods'> {
   const { listed, identity } = match.matched;
   if (listed === undefined) {
     const what = `the Dependency does not list ${identity}, which ${reached} reaches`;

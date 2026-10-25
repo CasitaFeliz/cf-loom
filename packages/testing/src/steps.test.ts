@@ -326,6 +326,7 @@ describe('fakeProvider: steps', () => {
   test.each([
     ['RETIRED', 410, 'no'],
     ['NO_SUCH_ENDPOINT', 404, 'no'],
+    ['METHOD_NOT_ALLOWED', 405, 'no'],
     ['BODY_TOO_LARGE', 413, 'no'],
     ['INVALID_OUTCOME', 500, 'unknown'],
   ] as const)(
@@ -341,6 +342,22 @@ describe('fakeProvider: steps', () => {
       expect(outcome).toMatchObject({ kind: 'fault', code, committed, retryable: false });
     },
   );
+
+  test('fault({ code: METHOD_NOT_ALLOWED }) carries Allow with the other methods the Provider takes on that path', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+    payments.on('capturePayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+
+    const shared = await payments.fetch(at, {});
+    const alone = await payments.fetch(`${at}/capture`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ amount: 1 }),
+    });
+
+    expect(shared.headers.get('allow')).toBe('DELETE');
+    expect(alone.headers.get('allow')).toBe('');
+  });
 
   test('an abort while a step waits rejects fetch with the signal’s reason', async () => {
     const payments = fakeProvider(paymentsDependency);

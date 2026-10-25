@@ -55,17 +55,27 @@ export function matchedOf<Matched extends Matchable>(
   return best;
 }
 
-/** No Endpoint with this method: the methods of those that have the path, once each in code point order, or none. */
+/** No Endpoint with this method: the methods of those that have the path, or none. */
 function unmatchedOf<Matched extends Matchable>(
   declared: readonly Matched[],
   texts: readonly string[],
 ): Match<Matched> {
+  const allowed = methodsOnPathOf(declared, texts);
+  return allowed.length === 0 ? { kind: 'none' } : { kind: 'other-method', allowed };
+}
+
+/** The methods declared Endpoints take on a request's path, once each in code point order, as `Allow` lists them. */
+export function allowedMethodsOf(
+  declared: readonly Matchable[],
+  request: Request,
+): readonly string[] {
+  const texts = segmentTextsOf(new URL(request.url).pathname);
+  return texts.every(isSegmentText) ? methodsOnPathOf(declared, texts) : [];
+}
+
+function methodsOnPathOf(declared: readonly Matchable[], texts: readonly string[]): string[] {
   const onPath = declared.filter((candidate) => isMatchedBy(candidate.segments, texts));
-  if (onPath.length === 0) {
-    return { kind: 'none' };
-  }
-  const allowed = [...new Set(onPath.map(({ method }) => method))].sort();
-  return { kind: 'other-method', allowed };
+  return [...new Set(onPath.map(({ method }) => method))].sort();
 }
 
 /** The decoded segments of a request path; the root has none. */

@@ -163,6 +163,7 @@ export type {
   TransportHeaderFit,
 } from '../wire/index.ts';
 export {
+  allowedMethodsOf,
   bodyOf,
   brokerHeaderBytesOf,
   brokerHeadersOf,

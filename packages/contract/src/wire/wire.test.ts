@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { defineRejection, invalidInput, notFound } from '../index.ts';
 import {
+  allowedMethodsOf,
   bodyOf,
   committedValues,
   deprecatedAtOfHeader,
@@ -19,6 +20,7 @@ import {
   jsonMediaType,
   jsonOfBytes,
   malformedBodyIssueOf,
+  pathSegmentsOf,
   type ReservedCode,
   receivedBodyOf,
   receivedEnvelopeOf,
@@ -314,6 +316,25 @@ describe('the Envelopes as they travel', () => {
       ['x-total', '3'],
     ]);
     expect(await response.json()).toEqual({ id: 'o-1' });
+  });
+});
+
+describe('allowedMethodsOf', () => {
+  test('lists the methods declared Endpoints take on a request’s path, literal and param, once each in code point order', () => {
+    const declared = [
+      ['POST', '/orders/:orderId'],
+      ['GET', '/orders/summary'],
+      ['GET', '/orders/:orderId'],
+      ['DELETE', '/orders/:orderId'],
+      ['PUT', '/items/:itemId'],
+    ].map(([method = '', path = '']) => ({ method, segments: pathSegmentsOf(path) }));
+
+    const allowed = [
+      allowedMethodsOf(declared, new Request('http://test/orders/summary', { method: 'PATCH' })),
+      allowedMethodsOf(declared, new Request('http://test/customers')),
+    ];
+
+    expect(allowed).toEqual([['DELETE', 'GET', 'POST'], []]);
   });
 });
 
