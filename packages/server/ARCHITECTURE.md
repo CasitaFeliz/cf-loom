@@ -19,7 +19,7 @@ The request and response sides are free of Handlers and hosts and live in `@cf-l
 1. The method and the decoded segments are matched against every declared Endpoint, Retired ones included: none is `NO_SUCH_ENDPOINT`, a Retired one `RETIRED`.
 2. The contract's reading reads the request in the order of [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md. Each GuardHandler runs with the admitted Context of the Guards it lists, the Endpoint's Qualifier for it and the Resources; a body too large is answered alone, unread; a throw while the request is parsed, such as a stack overflow on deeply nested Input, is answered as a Handler's throw, not committed.
 3. The EndpointHandler runs with the Input, the admitted Context of the Guards the Endpoint attaches and the Resources, and what it answered is sent; a Deprecated Endpoint's response, whatever it is, carries the `Deprecation` header.
-4. A `ServedFault` goes to `onServiceFault`, then the request's record to `onOutcome`.
+4. A `ServedFault` goes to `onServiceFault`, then the request's record to `onOutcome`, each awaited and contained.
 
 An Issue at `context` or `qualifier` means `serve` built something the Contract refuses: it is the runtime's own bug, answered as a Fault not committed and reported as `runtime-bug`, never as the Caller's invalid input.
 

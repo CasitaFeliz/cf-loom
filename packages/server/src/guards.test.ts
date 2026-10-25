@@ -272,7 +272,11 @@ describe('serve: Guards', () => {
     const http = serve(
       contract,
       { ...handlers, guards: { ...handlers.guards, userToken: broken } },
-      { onServiceFault: (fault) => faults.push(fault) },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
     );
 
     const response = await http(put(ORDER_ID));
@@ -289,8 +293,9 @@ describe('serve: Guards', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'updateOrder',
-        guard: 'userToken',
+        element: updateOrder,
+        identity: 'updateOrder',
+        guard: userToken,
         issues: [
           { part: 'context', path: ['userId'], code: 'invalid_type', message: expect.any(String) },
         ],
@@ -300,7 +305,11 @@ describe('serve: Guards', () => {
 
   test('a Qualifier serve hands a Guard that breaks its schema is the runtime’s own bug', async () => {
     const faults: ServedFault[] = [];
-    const http = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const http = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
 
     const response = await http(
       new Request('http://test/misattached', { headers: { authorization: 'Bearer u-1' } }),
@@ -313,8 +322,9 @@ describe('serve: Guards', () => {
     expect(faults).toMatchObject([
       {
         kind: 'runtime-bug',
-        endpoint: 'misattached',
-        guard: 'permission',
+        element: misattached,
+        identity: 'misattached',
+        guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },
     ]);

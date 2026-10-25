@@ -156,7 +156,7 @@ function handlersOf(
 async function aMessaging(
   prefix: string,
   settings: {
-    readonly onServiceFault?: (fault: ConsumedFault) => void;
+    readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
     readonly replacing?: Replacing;
     readonly servers?: string;
     readonly inboxPrefix?: string;
@@ -794,6 +794,32 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  }, 10_000);
+
+  test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    const received: Received[] = [];
+    const hook = new Error('the hook is down');
+    const orders = await aMessaging(prefix, {
+      onServiceFault: async () => Promise.reject(hook),
+    });
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
+    expect(logged).toHaveBeenCalledWith(
+      'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      hook,
+    );
   }, 10_000);
 
   test('a Handler running past the ack wait keeps its Message: another process of the Service is not given it meanwhile', async () => {

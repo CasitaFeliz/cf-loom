@@ -7,7 +7,8 @@ import {
 } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { reservedResponseOf } from '@cf-loom/contract/internal';
+import { faultResponseOf, internalError, reservedResponseOf } from '@cf-loom/contract/internal';
+import { faultLineOf, logOf } from '@cf-loom/handlers/internal';
 import type { Http } from '../answering/index.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
@@ -23,8 +24,7 @@ type Incoming =
 
 /**
  * Connects the handler `serve` returns to `node:http` as a request listener, for a server the
- * Service creates itself; what `http` rejects with, a hook's throw, reaches the process, and
- * nothing else does.
+ * Service creates itself.
  */
 export function nodeListener(http: Http): RequestListener {
   return (incoming, outgoing) => {
@@ -43,7 +43,7 @@ export function nodeHttp(http: Http): Server {
  */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
   const read = incomingOf(incoming);
-  const response = read.kind === 'request' ? await http(read.request) : read.response;
+  const response = read.kind === 'request' ? await answeredOf(http, read.request) : read.response;
   if (!incoming.complete) {
     outgoing.setHeader('connection', 'close');
   }
@@ -51,6 +51,16 @@ async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerRe
     await written(response, outgoing);
   } catch {
     outgoing.destroy();
+  }
+}
+
+/** What `http` answers, or the internal Fault when it rejects, logged, so no rejection reaches the process. */
+async function answeredOf(http: Http, request: Request): Promise<Response> {
+  try {
+    return await http(request);
+  } catch (e) {
+    console.error(...logOf(faultLineOf('nodeListener', { message: 'the handler rejected' }), e));
+    return faultResponseOf({ committed: 'unknown', retryable: false, message: internalError });
   }
 }
 

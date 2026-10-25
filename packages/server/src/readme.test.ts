@@ -83,15 +83,12 @@ describe('the READMEs', () => {
     const http = serve(contract, handlers, {
       resources,
       maxBodyBytes: 1_000_000,
-      onServiceFault: (fault) => expectTypeOf(fault.endpoint).toEqualTypeOf<string>(),
-      onOutcome: ({ method, endpoint, path, status, kind, durationMs }) => [
-        method,
-        endpoint,
-        path,
-        status,
-        kind,
-        durationMs,
-      ],
+      onServiceFault: (fault) => {
+        expectTypeOf(fault.identity).toEqualTypeOf<string>();
+      },
+      onOutcome: async ({ method, endpoint, path, status, kind, durationMs }) => {
+        expectTypeOf([method, endpoint, path, status, kind, durationMs]).not.toBeNever();
+      },
     });
 
     expectTypeOf(http).toEqualTypeOf<Http>();

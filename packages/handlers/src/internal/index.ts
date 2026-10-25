@@ -1,8 +1,16 @@
-export type { EndpointRun, GuardRun, MessageGiven, MessageRun } from '../calls/index.ts';
+export type {
+  EndpointRun,
+  GuardRun,
+  HandlerFailure,
+  HandlerFaultBase,
+  MessageGiven,
+  MessageRun,
+} from '../calls/index.ts';
 export {
   elementNameOf,
   faultLineOf,
   faultLogOf,
+  hookThrewLineOf,
   issueLineOf,
   logOf,
   notRunFaultOf,

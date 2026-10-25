@@ -97,7 +97,11 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
       guards: {},
       deprecatedAt: {},
     },
-    { onServiceFault: (serviceFault) => faults.push(serviceFault) },
+    {
+      onServiceFault: (serviceFault) => {
+        faults.push(serviceFault);
+      },
+    },
   );
   return { http, faults };
 }
@@ -169,7 +173,8 @@ describe('serve: a Success', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         issues: [
           {
             part: 'success.headers',
@@ -234,7 +239,9 @@ describe('a direct call and serve agree', () => {
       const response = await http(getRequest.clone());
 
       expect(response.status).toBe(500);
-      expect(faults).toEqual([{ kind: 'invalid-outcome', endpoint: 'getOrder', issues: thrown }]);
+      expect(faults).toEqual([
+        { kind: 'invalid-outcome', element: getOrder, identity: 'getOrder', issues: thrown },
+      ]);
     },
   );
 
@@ -351,7 +358,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'returned',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Try again', cause },
       },
     ]);
@@ -399,7 +407,7 @@ describe('serve: a Fault', () => {
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'getOrder', fault: { cause: broken } },
+      { kind: 'thrown', element: getOrder, identity: 'getOrder', cause: broken },
     ]);
   });
 
@@ -409,7 +417,7 @@ describe('serve: a Fault', () => {
     const response = await http(getRequest.clone());
 
     expect(response.status).toBe(500);
-    expect(faults).toMatchObject([{ kind: 'thrown', fault: { cause: expect.any(TypeError) } }]);
+    expect(faults).toMatchObject([{ kind: 'thrown', cause: expect.any(TypeError) }]);
   });
 
   test('an Outcome that breaks a constraint is INVALID_OUTCOME, its issues to the Service only', async () => {
@@ -431,7 +439,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        element: getOrder,
+        identity: 'getOrder',
         issues: [
           { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
         ],

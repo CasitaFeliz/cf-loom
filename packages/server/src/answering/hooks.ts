@@ -1,22 +1,27 @@
-import type { Endpoint, Method } from '@cf-loom/contract';
-import type { Fault, Issue } from '@cf-loom/handlers';
-import { faultLogOf, issueLineOf } from '@cf-loom/handlers/internal';
+import type { Endpoint, Guard, Method } from '@cf-loom/contract';
+import type { Issue } from '@cf-loom/handlers';
+import {
+  faultLineOf,
+  faultLogOf,
+  type HandlerFailure,
+  type HandlerFaultBase,
+  hookThrewLineOf,
+  issueLineOf,
+  logOf,
+} from '@cf-loom/handlers/internal';
 
 /**
- * A Fault the Service's side produced, which `onServiceFault` receives, naming the Endpoint and,
- * when a GuardHandler produced it, the Guard: one its Handler returned, threw or answered with no
- * Outcome, an Outcome that broke the Contract, or a Context or Qualifier `serve` built that broke
- * it, the runtime's own bug.
+ * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint as `element`
+ * with its name as `identity`, the Guard when its GuardHandler produced it, then how it failed.
  */
-export type ServedFault = { readonly endpoint: string; readonly guard?: string } & (
-  | { readonly kind: 'returned'; readonly fault: Fault }
-  | { readonly kind: 'thrown'; readonly fault: Fault }
-  | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
-  | { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] }
-);
+export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard } & (
+    | HandlerFailure
+    | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
+    | { readonly kind: 'runtime-bug'; readonly issues: readonly Issue[] }
+  );
 
 /** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-export type FaultedBy = Pick<ServedFault, 'endpoint' | 'guard'>;
+export type FaultedBy = Pick<ServedFault, 'element' | 'identity' | 'guard'>;
 
 /**
  * One request answered, for metrics and tracing: its method, and the Endpoint it matched with that
@@ -58,28 +63,45 @@ export function answeredRequestOf(
   return { method: endpoint.method, endpoint: endpoint.name, path: endpoint.path, ...sent };
 }
 
-/** Hands a Service's Fault to its hook, or to the console without one. */
-export function reportServedFault(
+/** Hands a Service's Fault to its hook, or to the console without one; a hook that fails is logged. */
+export async function reportServedFault(
   servedFault: ServedFault,
-  onServiceFault: ((fault: ServedFault) => void) | undefined,
-): void {
-  if (onServiceFault !== undefined) {
-    onServiceFault(servedFault);
+  onServiceFault: ((fault: ServedFault) => void | Promise<void>) | undefined,
+): Promise<void> {
+  if (onServiceFault === undefined) {
+    logServedFault(servedFault);
     return;
   }
-  logServedFault(servedFault);
+  try {
+    await onServiceFault(servedFault);
+  } catch (e) {
+    console.error(...logOf(hookThrewLineOf(sourceOf(servedFault), 'onServiceFault'), e));
+  }
+}
+
+/** Hands a request's record to `onOutcome`, if any; one that fails is logged. */
+export async function recordAnswered(
+  record: AnsweredRequest,
+  onOutcome: ((request: AnsweredRequest) => void | Promise<void>) | undefined,
+): Promise<void> {
+  try {
+    await onOutcome?.(record);
+  } catch (e) {
+    console.error(...logOf(hookThrewLineOf(record.endpoint ?? 'serve', 'onOutcome'), e));
+  }
 }
 
 /** A Service's Fault on the console: each Issue's part, path, code and message, or the Fault and its cause. */
 function logServedFault(servedFault: ServedFault): void {
-  const where =
-    servedFault.guard === undefined
-      ? servedFault.endpoint
-      : `${servedFault.endpoint} ${servedFault.guard}`;
+  const where = sourceOf(servedFault);
   switch (servedFault.kind) {
     case 'returned':
-    case 'thrown':
       console.error(...faultLogOf(where, servedFault.fault));
+      return;
+    case 'thrown':
+      console.error(
+        ...logOf(faultLineOf(where, { message: 'the Handler threw' }), servedFault.cause),
+      );
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
@@ -87,4 +109,9 @@ function logServedFault(servedFault: ServedFault): void {
         console.error(issueLineOf(where, issue));
       }
   }
+}
+
+/** What names a Service's Fault in a line: the Endpoint's name, and the Guard's when it has one. */
+function sourceOf({ identity, guard }: FaultedBy): string {
+  return guard === undefined ? identity : `${identity} ${guard.name}`;
 }

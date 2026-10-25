@@ -43,10 +43,11 @@ export async function answerOf(served: ServedContract, request: Request): Promis
 }
 
 async function answeredCallOf(call: Call, served: ServedContract): Promise<Answered> {
-  const faultedBy = { endpoint: call.endpoint.declared.name };
+  const { declared } = call.endpoint;
+  const faultedBy = { element: declared, identity: declared.name };
   const runs = guardRunsOf(call, served);
   const source = { ...partsOf(call, served), admit: runs.admit };
-  const reading = await readingOrThrownOf(call.endpoint.declared, source);
+  const reading = await readingOrThrownOf(declared, source);
   switch (reading.kind) {
     case 'stopped':
       return reading.answer;

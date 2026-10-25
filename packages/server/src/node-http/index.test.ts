@@ -1,10 +1,9 @@
-import { spawnSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type AddressInfo, connect } from 'node:net';
 import { PassThrough, Readable } from 'node:stream';
 import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type Http, serve } from '../index.ts';
 import { nodeHttp, nodeListener } from './index.ts';
@@ -88,6 +87,7 @@ const handlers = {
 const servers: ReturnType<typeof nodeHttp>[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -418,23 +418,42 @@ describe('nodeHttp', () => {
     expect((await fetch(`${url}/ok`)).status).toBe(204);
   });
 
-  test('what the handler rejects with, a hook’s throw, reaches the process', () => {
-    const entry = new URL('../../dist/node-http/index.js', import.meta.url).href;
-    const script = [
-      `const { nodeHttp } = await import(${JSON.stringify(entry)});`,
-      "const server = nodeHttp(async () => { throw new Error('the hook broke'); }).listen(0);",
-      "await new Promise((resolve) => server.once('listening', resolve));",
-      "await fetch('http://127.0.0.1:' + server.address().port + '/').catch(() => undefined);",
-      'await new Promise((resolve) => setTimeout(resolve, 1000));',
-    ].join('\n');
+  test('nodeListener answers an Http that rejects with 500 and the Fault Envelope, logs it, and keeps serving', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = new Error('the handler broke');
+    const rejecting: Http = async (request) => {
+      if (new URL(request.url).pathname === '/ok') {
+        return new Response(null, { status: 204 });
+      }
+      throw broken;
+    };
+    const url = await listening(nodeHttp(rejecting));
 
-    const ran = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
-      encoding: 'utf8',
-      timeout: 10_000,
+    const rejected = await fetch(`${url}/broken`);
+    const after = await fetch(`${url}/ok`);
+
+    expect(rejected.status).toBe(500);
+    expect(await rejected.json()).toEqual({
+      fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
+    expect(logged).toHaveBeenCalledWith('nodeListener: the handler rejected', broken);
+    expect(after.status).toBe(204);
+  });
 
-    expect(ran.status).not.toBe(0);
-    expect(ran.stderr).toContain('the hook broke');
+  test('with two requests in flight and an onOutcome that throws on the first, both are answered', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    let records = 0;
+    const onOutcome = () => {
+      records += 1;
+      if (records === 1) {
+        throw new Error('the hook broke');
+      }
+    };
+    const url = await listening(nodeHttp(serve(contract, handlers, { onOutcome })));
+
+    const answered = await Promise.all([fetch(`${url}/orders/o-1`), fetch(`${url}/orders/o-2`)]);
+
+    expect(answered.map(({ status }) => status)).toEqual([200, 200]);
   });
 
   test('an absolute target with credentials is answered 400, and the process lives on', async () => {

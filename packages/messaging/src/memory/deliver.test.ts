@@ -172,7 +172,9 @@ async function running(
   const broker = memory();
   const faults: ConsumedFault[] = [];
   const started = await messaging(contract, broker, {
-    onServiceFault: (consumedFault) => faults.push(consumedFault),
+    onServiceFault: (consumedFault) => {
+      faults.push(consumedFault);
+    },
   });
   const connection = { broker, received, faults, ...started };
   const answers = handlers(connection);

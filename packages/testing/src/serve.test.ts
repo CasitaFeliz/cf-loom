@@ -143,7 +143,11 @@ const served = serve(
     guards: {},
     deprecatedAt: { getPayment: '1970-01-01T00:00:00Z' },
   },
-  { onServiceFault: (serviceFault) => serviceFaults.push(serviceFault) },
+  {
+    onServiceFault: (serviceFault) => {
+      serviceFaults.push(serviceFault);
+    },
+  },
 );
 
 /** The fake, scripted to answer each payment as the Provider's Handler does. */
@@ -216,7 +220,8 @@ describe('fakeProvider and serve answer alike', () => {
     expect(serviceFaults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getPayment',
+        element: expect.objectContaining({ name: 'getPayment' }),
+        identity: 'getPayment',
         issues: [
           {
             part: 'success.headers',

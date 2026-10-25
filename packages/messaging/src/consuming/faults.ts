@@ -1,8 +1,14 @@
-import { elementNameOf, faultLineOf, issueLineOf, logOf } from '@cf-loom/handlers/internal';
+import {
+  elementNameOf,
+  faultLineOf,
+  hookThrewLineOf,
+  issueLineOf,
+  logOf,
+} from '@cf-loom/handlers/internal';
 import type { BrokerConsumer, ConsumedFault, Delivery } from '../broker/index.ts';
 
-/** What hears of a `ConsumedFault`: the Service's `onServiceFault`, or the console without one. */
-export type Report = (fault: ConsumedFault) => void;
+/** What hears of a `ConsumedFault`, and is awaited: the Service's `onServiceFault`, or the console without one. */
+export type Report = (fault: ConsumedFault) => void | Promise<void>;
 
 /** The Service's hook, or the console line of every fault. */
 export function reportOf(onServiceFault: Report | undefined): Report {
@@ -23,23 +29,26 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
 }
 
 /** What a fault says of where it came from: the Element handled and the Message. */
-export type About = Pick<ConsumedFault, 'element' | 'subject' | 'messageId' | 'factId'>;
+export type About = Pick<
+  ConsumedFault,
+  'element' | 'identity' | 'subject' | 'messageId' | 'factId'
+>;
 
 /** Where a delivery went: the Element its consumer handles, its subject and the Message's ids. */
 export function aboutOf(
   { element, subject }: Pick<BrokerConsumer, 'element' | 'subject'>,
   { messageId, factId }: Pick<Delivery, 'messageId' | 'factId'>,
 ): About {
-  return { element: elementNameOf(element), subject, messageId, factId };
+  return { element, identity: elementNameOf(element), subject, messageId, factId };
 }
 
-/** The line for a delivery whose `receive` rejected, which only an `onServiceFault` that throws causes. */
+/** The line for a delivery whose `receive` rejected, which only an `onServiceFault` that throws or rejects causes. */
 export function receiveFailureLineOf(
   consumer: Pick<BrokerConsumer, 'element' | 'subject'>,
   delivery: Pick<Delivery, 'messageId' | 'factId'>,
 ): string {
   const source = sourceOf(aboutOf(consumer, delivery));
-  return faultLineOf(source, { message: 'onServiceFault threw' });
+  return hookThrewLineOf(source, 'onServiceFault');
 }
 
 /** A fault on the console: each of its lines, then its cause when it has one. */
@@ -61,6 +70,6 @@ function causeOf(fault: ConsumedFault): unknown {
 }
 
 /** What names a Message in a line: the Element handling it, its subject, broker message id and Fact id. */
-function sourceOf({ element, subject, messageId, factId }: About): string {
-  return `${element} ${subject} ${messageId} ${factId}`;
+function sourceOf({ identity, subject, messageId, factId }: About): string {
+  return `${identity} ${subject} ${messageId} ${factId}`;
 }

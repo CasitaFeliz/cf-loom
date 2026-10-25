@@ -249,7 +249,11 @@ describe('serve: maxBodyBytes', () => {
 
   test('a body nested past the stack answers the Fault 500, which onServiceFault receives as thrown', async () => {
     const faults: ServedFault[] = [];
-    const watched = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const watched = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 
     const response = await watched(
@@ -261,7 +265,7 @@ describe('serve: maxBodyBytes', () => {
       fault: { committed: 'no', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'nest', fault: { cause: expect.any(RangeError) } },
+      { kind: 'thrown', element: nest, identity: 'nest', cause: expect.any(RangeError) },
     ]);
   });
 });

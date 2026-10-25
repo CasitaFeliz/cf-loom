@@ -6,6 +6,7 @@ import { answerOf } from './answer.ts';
 import {
   type AnsweredRequest,
   answeredRequestOf,
+  recordAnswered,
   reportServedFault,
   type ServedFault,
 } from './hooks.ts';
@@ -21,9 +22,9 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
    * Receives every Fault the Service's side produced: one a Handler returned or threw, an Outcome
    * that broke the Contract, or the runtime's own bug; never the Caller's. The console without it.
    */
-  readonly onServiceFault?: (fault: ServedFault) => void;
+  readonly onServiceFault?: (fault: ServedFault) => void | Promise<void>;
   /** Receives one record per request answered, for metrics and tracing. */
-  readonly onOutcome?: (request: AnsweredRequest) => void;
+  readonly onOutcome?: (request: AnsweredRequest) => void | Promise<void>;
 };
 
 /**
@@ -45,12 +46,15 @@ export function serve(
     const started = performance.now();
     const { endpoint, answered } = await answerOf(served, request);
     if (answered.kind === 'fault' && answered.servedFault !== undefined) {
-      reportServedFault(answered.servedFault, options.onServiceFault);
+      await reportServedFault(answered.servedFault, options.onServiceFault);
     }
     const { status } = answered.response;
     const durationMs = performance.now() - started;
     const sent = { status, kind: answered.kind, durationMs };
-    options.onOutcome?.(answeredRequestOf(request.method, endpoint?.declared, sent));
+    await recordAnswered(
+      answeredRequestOf(request.method, endpoint?.declared, sent),
+      options.onOutcome,
+    );
     return answered.response;
   };
 }

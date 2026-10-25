@@ -1,10 +1,12 @@
 export type { HandledElement, MessageElement } from './elements.ts';
 export { isMessageElement } from './elements.ts';
+export type { HandlerFailure, HandlerFaultBase } from './errors.ts';
 export {
   answerOf,
   elementNameOf,
   faultLineOf,
   faultLogOf,
+  hookThrewLineOf,
   InvalidInputError,
   InvalidOutcomeError,
   issueLineOf,
