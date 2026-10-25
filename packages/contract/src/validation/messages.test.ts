@@ -440,6 +440,86 @@ describe('validateContract: a Message Version’s version keeps its text and its
   );
 });
 
+const recursiveArray: z.ZodType = z.array(z.lazy(() => recursiveArray)).meta({ id: 'rs' });
+
+const tree = z
+  .object({
+    value: z.string(),
+    get children() {
+      return z.array(tree);
+    },
+  })
+  .meta({ id: 'tree' });
+
+const lazyNode: z.ZodType = z
+  .object({ value: z.string(), next: z.lazy(() => lazyNode).optional() })
+  .meta({ id: 'lazyNode' });
+
+const notObjects = {
+  'a string': z.string(),
+  'a literal': z.literal('created'),
+  'an array of objects': z.array(z.object({ orderId: z.uuid() })),
+  'a record': z.record(z.string(), z.string()),
+  'a discriminated union': z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('a') }),
+    z.object({ kind: z.literal('b') }),
+  ]),
+  'a nullable object': z.object({ orderId: z.uuid() }).nullable(),
+  'a recursive array': recursiveArray,
+};
+
+const objects = {
+  'an object': z.object({ orderId: z.uuid() }),
+  'an intersection of objects': z.intersection(
+    z.object({ orderId: z.uuid() }),
+    z.object({ total: z.int() }),
+  ),
+  'a z.lazy() object': z.lazy(() => z.object({ orderId: z.uuid() })),
+  'a recursive object written with a getter': tree,
+  'a recursive object written with z.lazy()': lazyNode,
+};
+
+describe('validateContract: a Message body is an object of its fields', () => {
+  const eventAt = ['groups', 'orders', 'events', 'OrderCreated@1', 'body'];
+  const commandAt = ['groups', 'orders', 'commands', 'ChargeCard@1', 'body'];
+
+  test.each(Object.entries(notObjects))('an Event whose body is %s fails', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        eventAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: OrderCreated@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(notObjects))('a Command whose body is %s fails', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        commandAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: ChargeCard@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(objects))('an Event whose body is %s validates', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test.each(Object.entries(objects))('a Command whose body is %s validates', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+});
+
 describe('validateContract: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],

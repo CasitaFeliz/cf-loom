@@ -340,13 +340,18 @@ describe('validateContract: a plain union reaching an Open Enum', () => {
   });
 
   test('a union reaching an Open Enum in a Message body is not allowed', () => {
-    const body = z.union([z.object({ t: openEnum(['a']) }), z.object({ t: z.literal('b') })]);
+    const choice = z.union([z.object({ t: openEnum(['a']) }), z.object({ t: z.literal('b') })]);
 
-    const validated = validatedWithMessageBody(body);
+    const validated = validatedWithMessageBody(z.object({ choice }));
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [{ ...unionRefusal, at: ['groups', 'shapes', 'events', 'Shaped@1', 'body'] }],
+      failures: [
+        {
+          ...unionRefusal,
+          at: ['groups', 'shapes', 'events', 'Shaped@1', 'body', 'fields', 'choice'],
+        },
+      ],
     });
   });
 

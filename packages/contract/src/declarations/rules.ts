@@ -1,3 +1,4 @@
+import type * as core from 'zod/v4/core';
 import type { GroupedField } from './grouped.ts';
 import type { ReservedName } from './reserved-names.ts';
 
@@ -86,6 +87,23 @@ export type RejectionsOnceRule<
 > = Rejections extends readonly [infer First, ...infer Rest]
   ? ListedOnceRule<OnceKeyOf<First>, Rest, Earlier>
   : unknown;
+
+type BodyRefusal = 'A Message body is an object of its fields';
+
+/** A body schema a Message can grow with: an object, or a schema `generate` reads through to one. */
+type GrowableBody = core.$ZodObject | core.$ZodIntersection | core.$ZodLazy;
+
+/**
+ * What a Message body must also satisfy: an object of its fields, so the Message can grow. It
+ * says nothing where the schema's kind is not one literal, as for a `z.ZodType<T>` written for
+ * recursion: `generate` judges it.
+ */
+export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }> =
+  IsOneLiteral<Declaration['body']['_zod']['def']['type']> extends true
+    ? Declaration['body'] extends GrowableBody
+      ? unknown
+      : { readonly body: Refusal<BodyRefusal> }
+    : unknown;
 
 type VersionRefusal = 'A Message version is one literal whole number from 1';
 

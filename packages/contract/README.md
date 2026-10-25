@@ -221,7 +221,7 @@ export const chargeCardV1 = defineCommand({
 
 An Event takes `visibility`, a Command none, and a Public Event is a type error; which Visibilities each kind of Element may have is in [Visibility and Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#visibility-and-guards) in ARCHITECTURE.md.
 
-A `version` is a whole number from 1 to `Number.MAX_SAFE_INTEGER`: a literal that is not one, one written with an exponent (`1e21`) and a union of versions are type errors, and `generate` fails on any other number; which Message Versions `generate` refuses, how versions are numbered, and that a Command has at most one Active version are in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
+A Message body is an object of its fields, so a Message can grow without a new Message Version; a scalar, a list, a record, a union or a nullable object as a body is a type error, and `generate` fails on one the types cannot tell. A `version` is a whole number from 1 to `Number.MAX_SAFE_INTEGER`: a literal that is not one, one written with an exponent (`1e21`) and a union of versions are type errors, and `generate` fails on any other number; which Message Versions `generate` refuses, how versions are numbered, and that a Command has at most one Active version are in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#messages).
 
 ## Lifecycle
 

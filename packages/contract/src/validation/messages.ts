@@ -1,15 +1,18 @@
 import { eventVisibilities, isMessageVersion, lifecycleOf } from '../declarations/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
   type LocatedCommand,
   type LocatedEvent,
   messageIdentityOf,
+  slotAt,
   textOf,
 } from '../written/index.ts';
 import { type ClosedValue, closedValueFailures, lifecycle } from './closed-values.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { repeated } from './names.ts';
+import type { Nodes } from './schemas.ts';
 
 /** An Event's or a Command's Message Version where it sits, read the same for both kinds. */
 type LocatedMessage = {
@@ -41,6 +44,40 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
     ...kindFailures(events, commands),
     ...activeCommandFailures(commands),
   ];
+}
+
+/** A Message body is an object of its fields, judged on the walked node, so a Message can grow. */
+export function messageBodyFailures(
+  { events, commands }: Declarations,
+  { nodeOf, defs }: Nodes,
+): readonly DeclarationFailure[] {
+  const located = [
+    ...events.map(({ at, event }) => ({ at, message: event })),
+    ...commands.map(({ at, command }) => ({ at, message: command })),
+  ];
+  const notObjects = located.filter(({ message }) => {
+    const body = nodeOf(message, 'body');
+    return body !== undefined && !isObjectOf(body, defs);
+  });
+  return notObjects.map((message) =>
+    failure(
+      slotAt(message.at, 'body'),
+      'not-an-object-schema',
+      `A Message body is an object of its fields: ${identityOf(message)}`,
+    ),
+  );
+}
+
+/** Whether a node is an object, a `ref` read through its def; a nullable one is not. */
+function isObjectOf(node: SchemaNode, defs: Nodes['defs']): boolean {
+  if (node.nullable === true) {
+    return false;
+  }
+  if (node.type !== 'ref') {
+    return node.type === 'object';
+  }
+  const def = defs[node.name];
+  return def !== undefined && isObjectOf(def, defs);
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
