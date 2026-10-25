@@ -1,30 +1,90 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { AckPolicy, type ConsumerConfig } from '@nats-io/jetstream';
 
-/** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject. */
-export function durableShapeOf(subject: string): {
-  readonly ack_policy: AckPolicy;
-  readonly filter_subject: string;
-} {
-  return { ack_policy: AckPolicy.Explicit, filter_subject: subject };
+/** One setting of a pull consumer cf-loom pulls from: the value `apply` writes, `undefined` to clear it, and how a durable consumer differs in it. */
+type ShapeSetting = {
+  readonly value: (subject: string) => unknown;
+  readonly difference: (config: ConsumerConfig, subject: string) => string | undefined;
+};
+
+/** A setting `apply` clears whose own value is no difference: another setting's difference reports it. */
+const cleared = { value: (): undefined => undefined, difference: (): undefined => undefined };
+
+/** Every setting that decides whether a durable consumer is one cf-loom pulls from, so what `apply` writes and what `consume` refuses cannot drift apart. */
+const shapeSettings = {
+  deliver_subject: {
+    ...cleared,
+    difference: (config) => {
+      return config.deliver_subject ? 'is a push consumer, not a pull consumer' : undefined;
+    },
+  },
+  ack_policy: {
+    value: () => AckPolicy.Explicit,
+    difference: (config) => {
+      const pulled = AckPolicy.Explicit;
+      return config.ack_policy === pulled
+        ? undefined
+        : `has the ack policy ${config.ack_policy}, not ${pulled}`;
+    },
+  },
+  filter_subject: {
+    value: (subject: string) => subject,
+    difference: (config, subject) => {
+      const filters = filtersOf(config);
+      if (filters.length === 1 && filters[0] === subject) {
+        return undefined;
+      }
+      const filtered = filters.length === 0 ? 'every subject' : filters.join(', ');
+      return `filters ${filtered}, not ${subject}`;
+    },
+  },
+  filter_subjects: cleared,
+  headers_only: {
+    value: (): false => false,
+    difference: (config) => {
+      return config.headers_only ? "delivers headers only, not the Message's body" : undefined;
+    },
+  },
+  priority_groups: {
+    ...cleared,
+    difference: (config) => {
+      const groups = config.priority_groups ?? [];
+      if (groups.length === 0) {
+        return undefined;
+      }
+      const policy = config.priority_policy;
+      return `has the priority groups ${groups.join(', ')} with the policy ${policy}, which a pull must name`;
+    },
+  },
+  priority_policy: cleared,
+  priority_timeout: cleared,
+} satisfies Record<string, ShapeSetting>;
+
+type DurableShape = {
+  readonly [Name in keyof typeof shapeSettings]: ReturnType<(typeof shapeSettings)[Name]['value']>;
+};
+
+/** A durable consumer's settings as `apply` sends them: NATS's own, with every setting of the shape named, so those that make a durable consumer not one cf-loom pulls from are always cleared. */
+export type DurableSettings = Omit<Partial<ConsumerConfig>, keyof DurableShape> & DurableShape;
+
+/** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject, its Messages' bodies delivered, no deliver subject and no priority groups. */
+export function durableShapeOf(subject: string): DurableShape {
+  const entries = Object.entries(shapeSettings).map(([name, setting]) => {
+    return [name, setting.value(subject)];
+  });
+  return Object.fromEntries(entries) as DurableShape;
 }
 
 /** How an existing durable consumer differs from a pull consumer of `durableShapeOf(subject)`; none when it is one. */
 export function shapeDifferencesOf(config: ConsumerConfig, subject: string): readonly string[] {
-  const shape = durableShapeOf(subject);
-  const differences: string[] = [];
-  if (config.deliver_subject) {
-    differences.push('is a push consumer, not a pull consumer');
-  }
-  if (config.ack_policy !== shape.ack_policy) {
-    differences.push(`has the ack policy ${config.ack_policy}, not ${shape.ack_policy}`);
-  }
-  const filters = filtersOf(config);
-  if (filters.length !== 1 || filters[0] !== shape.filter_subject) {
-    const filtered = filters.length === 0 ? 'every subject' : filters.join(', ');
-    differences.push(`filters ${filtered}, not ${shape.filter_subject}`);
-  }
-  return differences;
+  const differences = Object.values(shapeSettings).map((setting) => {
+    return setting.difference(config, subject);
+  });
+  return differences.filter(isDifference);
+}
+
+function isDifference(difference: string | undefined): difference is string {
+  return difference !== undefined;
 }
 
 function filtersOf(config: ConsumerConfig): readonly string[] {

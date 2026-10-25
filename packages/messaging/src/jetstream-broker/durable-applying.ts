@@ -1,5 +1,6 @@
-import { JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
+import { type ConsumerConfig, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
 import { type Applied, isApiError, refusedBy } from './applied.ts';
+import type { DurableSettings } from './durable-shape.ts';
 import type { PlannedDurable } from './settings.ts';
 
 type Held = 'no-stream' | 'no-durable' | 'held';
@@ -20,7 +21,8 @@ async function createOrUpdate(
   manager: JetStreamManager,
   durable: PlannedDurable,
 ): Promise<Applied> {
-  const { name, stream, settings } = durable;
+  const { name, stream } = durable;
+  const settings = natsSettingsOf(durable.settings);
   switch (await heldOf(manager, durable)) {
     case 'no-stream':
       return {
@@ -34,6 +36,11 @@ async function createOrUpdate(
       await manager.consumers.update(stream, name, settings);
       return { kind: 'applied' };
   }
+}
+
+/** nats.js types its optional settings without `undefined`, yet its `update` sends a key given as `undefined` as cleared: the one way through its typed API to clear a setting. */
+function natsSettingsOf(settings: DurableSettings): Partial<ConsumerConfig> {
+  return settings as unknown as Partial<ConsumerConfig>;
 }
 
 async function heldOf(manager: JetStreamManager, durable: PlannedDurable): Promise<Held> {
