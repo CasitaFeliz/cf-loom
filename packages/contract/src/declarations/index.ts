@@ -69,7 +69,7 @@ export { isReservedCode } from './reserved-codes.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
 export type { Refusal } from './rules.ts';
-export { messageBodyRefusal } from './rules.ts';
+export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,

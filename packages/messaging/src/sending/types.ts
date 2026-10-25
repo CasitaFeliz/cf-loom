@@ -23,10 +23,6 @@ type PublishedNameOf<C extends Contract> = LiveOf<OwnEventOf<C>>['name'];
 /** Every version of the named Event, Retired included. */
 type VersionsOf<C extends Contract, Name> = Extract<OwnEventOf<C>, { readonly name: Name }>;
 
-/** What `publish` is told about an Event whose version is typed `number`. */
-type NumberVersionRefusal =
-  Refusal<'An Event version typed number keys no body: declare the version as one literal'>;
-
 /** One required body per live version of the named Event, keyed `v<n>`. */
 type LiveBodiesOf<C extends Contract, Name> = {
   readonly [E in LiveOf<VersionsOf<C, Name>> as `v${E['version']}`]: core.output<E['body']>;
@@ -42,7 +38,7 @@ type RetiredKeysOf<C extends Contract, Name> = {
 
 /** What `publish` takes for an Event: its live versions' bodies, unless a version is typed `number`. */
 type PublishedBodiesOf<C extends Contract, Name> = number extends VersionsOf<C, Name>['version']
-  ? NumberVersionRefusal
+  ? Refusal<'An Event version typed number keys no body: declare the version as one literal'>
   : LiveBodiesOf<C, Name> & RetiredKeysOf<C, Name>;
 
 /** The Message Versions that are Active: neither Deprecated nor Retired. */

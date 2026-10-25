@@ -107,7 +107,9 @@ export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }
       : { readonly body: Refusal<typeof messageBodyRefusal> }
     : unknown;
 
-type VersionRefusal = 'A Message version is a whole number from 1 to Number.MAX_SAFE_INTEGER';
+/** Why a Message version is refused, as the types and `generate` both say it. */
+export const messageVersionRefusal =
+  'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER';
 
 /** Whether a literal number's text is not a whole number from 1 written without an exponent. */
 type IsNotWholeFromOne<Version extends number> = `${Version}` extends
@@ -129,6 +131,6 @@ export type VersionRule<Declaration extends { readonly version: number }> =
     ? unknown
     : IsOneLiteral<Declaration['version']> extends true
       ? IsNotWholeFromOne<Declaration['version']> extends true
-        ? { readonly version: Refusal<VersionRefusal> }
+        ? { readonly version: Refusal<typeof messageVersionRefusal> }
         : unknown
-      : { readonly version: Refusal<VersionRefusal> };
+      : { readonly version: Refusal<typeof messageVersionRefusal> };
