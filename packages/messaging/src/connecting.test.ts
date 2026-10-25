@@ -7,12 +7,14 @@ import {
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
   type BrokerConsumer,
   type BrokerService,
+  type BrokerTrouble,
+  type ConsumeRun,
   type Delivery,
   MessageNotSentError,
   type Messaging,
@@ -77,13 +79,17 @@ const body = { orderId: ORDER_ID };
 
 type Opened = Messaging<typeof contract>;
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 /** A broker that records what messaging asks of it, built on the public `Broker` type. */
 function aBroker(failing: { readonly connect?: Error; readonly consumes?: number } = {}) {
   const recorded = {
     connectedWith: [] as BrokerService[],
     published: [] as OutgoingMessage[],
     consumers: [] as BrokerConsumer[],
-    closings: [] as AbortSignal[],
+    runs: [] as ConsumeRun[],
     consumes: 0,
     closes: 0,
   };
@@ -98,9 +104,9 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
           recorded.published.push(message);
           return { duplicate: false };
         },
-        consume: async (consumers, closing) => {
+        consume: async (consumers, run) => {
           recorded.consumes += 1;
-          recorded.closings.push(closing);
+          recorded.runs.push(run);
           if (recorded.consumes <= (failing.consumes ?? 0)) {
             throw new Error('no such durable consumer');
           }
@@ -424,10 +430,10 @@ describe('messaging() and close', () => {
     });
     const { recorded, deliver, close } = await consumingWith(notifying);
     const delivered = deliver('orders-service.event.OrderCreated.v1', body);
-    const abortedBeforeClose = recorded.closings.map((closing) => closing.aborted);
+    const abortedBeforeClose = recorded.runs.map(({ closing }) => closing.aborted);
 
     const closing = close();
-    const abortedWhileRunning = recorded.closings.map((signal) => signal.aborted);
+    const abortedWhileRunning = recorded.runs.map((run) => run.closing.aborted);
     gate.open();
     await Promise.all([delivered, closing]);
 
@@ -598,5 +604,130 @@ describe('messaging() and close', () => {
     expect(recorded.published).toHaveLength(2);
     expect(recorded.consumers).toHaveLength(2);
     expect(recorded.closes).toBe(1);
+  });
+});
+
+/** A messaging consuming with the hooks given, the broker's records, and the consumer of `notifyOnCreated` its adapter reports on. */
+async function consumingReported(options: Parameters<typeof messaging>[2] = {}) {
+  const recording = aBroker();
+  const opened = await messaging(contract, recording.broker, options);
+  await opened.consume(handlers);
+  const notifying = recording.recorded.consumers.find(
+    (consumer) => consumer.subject === 'orders-service.event.OrderCreated.v1',
+  ) as BrokerConsumer;
+  const troubled = (recording.recorded.runs[0] as ConsumeRun).troubled;
+  return { ...recording, ...opened, notifying, troubled };
+}
+
+describe('onBrokerTrouble', () => {
+  test('a consumer the adapter reports failing reaches onBrokerTrouble with its Element, identity, durable consumer, stream and cause', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    const cause = new Error('NATS answered a pull with 503');
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause });
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(1));
+    expect(troubles).toEqual([
+      {
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
+        durable: 'orders-service_notify-on-created',
+        stream: 'orders-service',
+        kind: 'pull-failed',
+        cause,
+      },
+    ]);
+  });
+
+  test('a recovery reaches onBrokerTrouble as recovered', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { notifying, troubled } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    troubled({ consumer: notifying, kind: 'recovered' });
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    expect(troubles[1]).toEqual({
+      element: notifyOnCreated,
+      identity: 'notifyOnCreated',
+      durable: 'orders-service_notify-on-created',
+      stream: 'orders-service',
+      kind: 'recovered',
+    });
+  });
+
+  test('without onBrokerTrouble, a failing consumer is one console line with its cause, and a recovery another', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { notifying, troubled, close } = await consumingReported();
+    const cause = new Error('NATS answered a pull with 503');
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause });
+    troubled({ consumer: notifying, kind: 'recovered' });
+    await close();
+
+    expect(logged.mock.calls).toEqual([
+      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing', cause],
+      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are answered again'],
+    ]);
+  });
+
+  test('an onBrokerTrouble that rejects is logged with its onBrokerTrouble threw line, and the next report still reaches it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const error = new Error('the alerting is down');
+    const kinds: string[] = [];
+    const { notifying, troubled, close } = await consumingReported({
+      onBrokerTrouble: async ({ kind }) => {
+        kinds.push(kind);
+        throw error;
+      },
+    });
+
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+    troubled({ consumer: notifying, kind: 'recovered' });
+    await close();
+
+    expect(kinds).toEqual(['pull-failed', 'recovered']);
+    expect(logged).toHaveBeenCalledWith(
+      'notifyOnCreated orders-service_notify-on-created orders-service: onBrokerTrouble threw',
+      error,
+    );
+  });
+
+  test('close waits for an onBrokerTrouble in flight', async () => {
+    const gate = aGate();
+    const { notifying, troubled, close, recorded } = await consumingReported({
+      onBrokerTrouble: () => gate.opened,
+    });
+    troubled({ consumer: notifying, kind: 'pull-failed', cause: new Error('503') });
+
+    const closing = close();
+    await Promise.resolve();
+    const closesWhileReporting = recorded.closes;
+    gate.open();
+    await closing;
+
+    expect(closesWhileReporting).toBe(0);
+    expect(recorded.closes).toBe(1);
+  });
+
+  test('troubled given a consumer the core did not build throws, naming no adapter', async () => {
+    const { troubled } = await consumingReported({ onBrokerTrouble: () => undefined });
+    const stranger: BrokerConsumer = {
+      durable: 'orders-service_notify-on-created',
+      stream: 'orders-service',
+      subject: 'orders-service.event.OrderCreated.v1',
+      receive: async () => 'acked',
+    };
+
+    const reporting = () => troubled({ consumer: stranger, kind: 'recovered' });
+
+    expect(reporting).toThrow(
+      new Error('a BrokerConsumer the core did not build was handed back to it'),
+    );
   });
 });

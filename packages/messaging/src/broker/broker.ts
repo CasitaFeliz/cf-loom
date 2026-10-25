@@ -18,13 +18,30 @@ export type BrokerConnection = {
   readonly publish: (message: OutgoingMessage) => Promise<BrokerAck>;
   /**
    * Hands the consumers to the broker; resolves once consuming has started and rejects having
-   * started nothing. Once `closing` aborts, or if it already has, it hands nothing more to `receive`;
-   * a Message still handed over is left pending by the core.
+   * started nothing. Once `run.closing` aborts, or if it already has, it hands nothing more to
+   * `receive`; a Message still handed over is left pending by the core.
    */
-  readonly consume: (consumers: readonly BrokerConsumer[], closing: AbortSignal) => Promise<void>;
+  readonly consume: (consumers: readonly BrokerConsumer[], run: ConsumeRun) => Promise<void>;
   /** Called once every `receive` has settled; ends what `consume` started and finishes applying any Settlement. */
   readonly close: () => Promise<void>;
 };
+
+/** What `consume` hands the adapter besides the consumers: the signal the core aborts when `close()` starts, and where it reports a consumer that stopped or resumed being pulled from. */
+export type ConsumeRun = {
+  readonly closing: AbortSignal;
+  /**
+   * Called once when a consumer stops being pulled from, with why, and once when its pulls are
+   * answered again; never once `closing` has aborted. Returns at once; a consumer the core did not
+   * build throws.
+   */
+  readonly troubled: (trouble: ConsumerTrouble) => void;
+};
+
+/** A consumer an adapter stopped pulling from, with why, or whose pulls are answered again. */
+export type ConsumerTrouble = { readonly consumer: BrokerConsumer } & (
+  | { readonly kind: 'pull-failed'; readonly cause: unknown }
+  | { readonly kind: 'recovered' }
+);
 
 /** What the Broker answers a Message it took: whether it already held one with that `messageId` and dropped this one. */
 export type BrokerAck = { readonly duplicate: boolean };

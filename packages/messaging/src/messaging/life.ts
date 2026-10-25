@@ -1,5 +1,11 @@
-import type { BrokerConnection, BrokerConsumer, Delivery } from '../broker/index.ts';
-import { leftPending, type Received, type Settle, type Settled } from '../consuming/index.ts';
+import type { BrokerConnection, BrokerConsumer, ConsumeRun, Delivery } from '../broker/index.ts';
+import {
+  leftPending,
+  type Received,
+  type Settle,
+  type Settled,
+  type TroubleReport,
+} from '../consuming/index.ts';
 import { MessagingClosedError } from './closed.ts';
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
@@ -38,7 +44,7 @@ export class MessagingLife {
     }
   }
 
-  /** A call in flight, a `publish`, a `send`, the adapter's `consume` or a Handler running, which `close` waits for. */
+  /** A call in flight, a `publish`, a `send`, the adapter's `consume`, a Handler running or a trouble report, which `close` waits for. */
   tracked<Settled>(call: Promise<Settled>): Promise<Settled> {
     this.#inFlight.add(call);
     const forget = () => this.#forget(call);
@@ -48,9 +54,12 @@ export class MessagingLife {
 
   /**
    * Hands the broker its consumers, once, built with `received`, which runs a delivery only while
-   * open; a broker that rejects them leaves `consume` to retry.
+   * open, and where it reports their trouble; a broker that rejects them leaves `consume` to retry.
    */
-  async consume(consumersOf: (received: Received) => readonly BrokerConsumer[]): Promise<void> {
+  async consume(
+    consumersOf: (received: Received) => readonly BrokerConsumer[],
+    report: TroubleReport,
+  ): Promise<void> {
     const state = this.#state;
     switch (state.kind) {
       case 'closing':
@@ -63,8 +72,12 @@ export class MessagingLife {
     }
     const consumers = consumersOf((settle) => (delivery) => this.#received(settle, delivery));
     this.#consumption('taken');
+    const run: ConsumeRun = {
+      closing: this.#closing.signal,
+      troubled: (trouble) => void this.tracked(report(trouble)),
+    };
     try {
-      await this.tracked(this.#connection.consume(consumers, this.#closing.signal));
+      await this.tracked(this.#connection.consume(consumers, run));
     } catch (e) {
       this.#consumption('none');
       throw e;

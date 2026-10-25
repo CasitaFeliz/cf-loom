@@ -26,8 +26,9 @@ export const leftPending: Settled = {
 };
 
 /**
- * What the in-memory Broker reads of a consumer beyond the Broker seam: the Element it consumes,
- * its identity, the Reader its Handler reads with, and `settle`, `receive` with what it reported.
+ * What the core's trouble report and the in-memory Broker read of a consumer beyond the Broker
+ * seam: the Element it consumes, its identity, the Reader its Handler reads with, and `settle`,
+ * `receive` with what it reported.
  */
 export type ConsumerDetails = {
   readonly element: Subscription | Command;
@@ -38,7 +39,7 @@ export type ConsumerDetails = {
 
 const detailsByConsumer = new WeakMap<BrokerConsumer, ConsumerDetails>();
 
-/** Keeps the details of a consumer the core built, for the in-memory Broker to read. */
+/** Keeps the details of a consumer the core built, for the trouble report and the in-memory Broker to read. */
 export function registerConsumerDetails(consumer: BrokerConsumer, details: ConsumerDetails): void {
   detailsByConsumer.set(consumer, details);
 }
@@ -47,7 +48,7 @@ export function registerConsumerDetails(consumer: BrokerConsumer, details: Consu
 export function consumerDetailsOf(consumer: BrokerConsumer): ConsumerDetails {
   const details = detailsByConsumer.get(consumer);
   if (details === undefined) {
-    throw new Error('a BrokerConsumer the core did not build reached the in-memory Broker');
+    throw new Error('a BrokerConsumer the core did not build was handed back to it');
   }
   return details;
 }

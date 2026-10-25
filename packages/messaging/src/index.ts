@@ -4,11 +4,13 @@ export type {
   BrokerConnection,
   BrokerConsumer,
   BrokerService,
+  ConsumeRun,
+  ConsumerTrouble,
   Delivery,
   OutgoingMessage,
   Settlement,
 } from './broker/index.ts';
-export type { ConsumedFault } from './consuming/index.ts';
+export type { BrokerTrouble, ConsumedFault } from './consuming/index.ts';
 export type { ConsumeOptions, Messaging, MessagingOptions } from './messaging/index.ts';
 export { MessagingClosedError, messaging } from './messaging/index.ts';
 export type {

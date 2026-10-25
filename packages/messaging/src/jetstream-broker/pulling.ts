@@ -1,23 +1,32 @@
 import type { NatsConnection } from '@nats-io/nats-core';
+import type { BrokerConsumer, ConsumeRun, ConsumerTrouble } from '../broker/index.ts';
 import { deliver } from './delivering.ts';
 import type { FoundDurable } from './finding.ts';
-import { pullOnce } from './pull-once.ts';
+import { type Pull, pullOnce } from './pull-once.ts';
 import type { PulledMessage } from './pulled-message.ts';
 
 /** How long a durable consumer waits before it pulls again after a pull failed, as when its durable consumer was deleted. */
 const retryPauseMs = 1_000;
 
+/** What one durable consumer's pulls run with: the core's `closing` and `troubled`, and `stopping`, which also aborts when the connection closes. */
+export type PullRun = ConsumeRun & { readonly stopping: AbortSignal };
+
 /**
  * Pulls one Message at a time from a durable consumer and delivers it, until `stopping` aborts, which is
- * when the core starts closing or the connection closes; a pull that fails is tried again after a pause, silently.
+ * when the core starts closing or the connection closes; a pull that fails is tried again after a pause.
  */
 export async function pullFrom(
   durable: FoundDurable,
   natsConnection: NatsConnection,
-  stopping: AbortSignal,
+  run: PullRun,
 ): Promise<void> {
+  const { stopping } = run;
+  const reporting = troubleReportingOf(durable.consumer, run);
   while (isPulling(natsConnection, stopping)) {
     const pull = await pullOnce(durable.request, natsConnection, stopping);
+    if (isPulling(natsConnection, stopping)) {
+      reporting.pulled(pull);
+    }
     switch (pull.kind) {
       case 'message':
         await deliveredOrHandedBack(pull.message, durable, stopping);
@@ -29,6 +38,36 @@ export async function pullFrom(
         break;
     }
   }
+  reporting.ended();
+}
+
+/**
+ * Tells the core of a durable consumer's first failed pull, of the first answered one after it, and
+ * of a loop that ended while not failing and not closing, which only a closed connection ends; nothing once closing.
+ */
+function troubleReportingOf(consumer: BrokerConsumer, { closing, troubled }: ConsumeRun) {
+  let failing = false;
+  const report = (trouble: ConsumerTrouble) => {
+    if (!closing.aborted) {
+      troubled(trouble);
+    }
+  };
+  return {
+    pulled: (pull: Pull) => {
+      if (pull.kind === 'failed' && !failing) {
+        report({ consumer, kind: 'pull-failed', cause: pull.cause });
+      }
+      if (pull.kind !== 'failed' && failing) {
+        report({ consumer, kind: 'recovered' });
+      }
+      failing = pull.kind === 'failed';
+    },
+    ended: () => {
+      if (!failing) {
+        report({ consumer, kind: 'pull-failed', cause: new Error('The NATS connection closed') });
+      }
+    },
+  };
 }
 
 function isPulling(natsConnection: NatsConnection, stopping: AbortSignal): boolean {
