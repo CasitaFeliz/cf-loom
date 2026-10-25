@@ -152,6 +152,17 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
+  test('reject takes no body for a code that declares none', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error NO_PAYMENT declares no body, so none is given, not even undefined
+      .once((r) => r.reject('NO_PAYMENT', undefined));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
   test('success takes the Success as a Caller reads it: an Open Enum’s Unknown case, never a bare string', () => {
     const payments = fakeProvider(paymentsDependency);
 

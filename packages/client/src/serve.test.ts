@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   type ContractPackage,
@@ -284,27 +285,47 @@ describe('end to end against serve through node:http and the global fetch', () =
         method,
         rejection: {
           kind: 'rejection',
-          known: true,
+          source: 'provider',
           code: 'ORDER_LOCKED',
+          status: 409,
           message: 'The order can no longer be changed',
           body: { lockedAt: '2026-10-18T10:00:00Z' },
         },
-        fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
+        fault: {
+          kind: 'fault',
+          source: 'provider',
+          status: 503,
+          committed: 'no',
+          retryable: true,
+          message: 'Internal error',
+        },
       })),
     );
   });
 
-  test('a Success arrives with its body and its typed headers', async () => {
+  test('a Success arrives with its status, its typed headers and its body', async () => {
     const outcome = await ordersClient().getOrder({ params: { orderId: 'o-1' } });
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', by: 'caller-7' },
+      status: 200,
       headers: { 'x-stage': 'shipped', 'x-count': 2 },
+      body: { id: 'o-1', by: 'caller-7' },
     });
   });
 
-  test('a Standard and a declared Rejection arrive known, with their bodies', async () => {
+  test('a Success the client receives equals what a direct call of its EndpointHandler returns', async () => {
+    const direct = await handlers.endpoints.getOrder(
+      { params: { orderId: 'o-1' }, headers: { 'x-api-key': 'caller-7' } },
+      { apiKey: { callerId: 'caller-7' } },
+    );
+
+    const outcome = await ordersClient().getOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toEqual(direct);
+  });
+
+  test('a Standard and a declared Rejection arrive with their status and, where declared, their body', async () => {
     const orders = ordersClient();
 
     const outcomes = [
@@ -312,16 +333,45 @@ describe('end to end against serve through node:http and the global fetch', () =
       await orders.getOrder({ params: { orderId: 'locked' } }),
     ];
 
-    expect(outcomes).toEqual([
-      { kind: 'rejection', known: true, code: 'NOT_FOUND', message: 'Not found', body: undefined },
+    expect(outcomes).toStrictEqual([
       {
         kind: 'rejection',
-        known: true,
+        source: 'provider',
+        code: 'NOT_FOUND',
+        status: 404,
+        message: 'Not found',
+      },
+      {
+        kind: 'rejection',
+        source: 'provider',
         code: 'ORDER_LOCKED',
+        status: 409,
         message: 'The order can no longer be changed',
         body: { lockedAt: '2026-10-18T10:00:00Z' },
       },
     ]);
+  });
+
+  test('the invalid-input Rejection the Provider answers arrives with source provider', async () => {
+    const keyless = client(ordersDependency, {
+      baseUrl,
+      fetch: (request) => {
+        request.headers.delete('x-api-key');
+        return fetch(request);
+      },
+    });
+
+    const outcome = await keyless.getOrder({
+      params: { orderId: 'o-1' },
+      headers: { 'x-api-key': 'caller-7' },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'INVALID_INPUT',
+      status: 400,
+    });
   });
 
   test('a Fault the Handler returned arrives as sent, with the retryAfter serve sent', async () => {
@@ -329,6 +379,8 @@ describe('end to end against serve through node:http and the global fetch', () =
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'provider',
+      status: 503,
       committed: 'no',
       retryable: true,
       message: 'Internal error',
@@ -346,15 +398,33 @@ describe('end to end against serve through node:http and the global fetch', () =
       await orders.getOrder({ params: { orderId: 'broken' } }),
       await client(ordersDependency, {
         baseUrl,
-        fetch: (url, init) => fetch(url, { ...init, body: JSON.stringify(large) }),
+        fetch: (request) => fetch(new Request(request, { body: JSON.stringify(large) })),
       }).createOrder({ body: large }),
     ];
 
     expect(outcomes).toMatchObject([
-      { kind: 'fault', code: 'RETIRED', committed: 'no', retryable: false },
-      { kind: 'fault', code: 'NO_SUCH_ENDPOINT', committed: 'no', retryable: false },
-      { kind: 'fault', code: 'INVALID_OUTCOME', committed: 'unknown', retryable: false },
-      { kind: 'fault', code: 'BODY_TOO_LARGE', committed: 'no', retryable: false },
+      { source: 'provider', status: 410, code: 'RETIRED', committed: 'no', retryable: false },
+      {
+        source: 'provider',
+        status: 404,
+        code: 'NO_SUCH_ENDPOINT',
+        committed: 'no',
+        retryable: false,
+      },
+      {
+        source: 'provider',
+        status: 500,
+        code: 'INVALID_OUTCOME',
+        committed: 'unknown',
+        retryable: false,
+      },
+      {
+        source: 'provider',
+        status: 413,
+        code: 'BODY_TOO_LARGE',
+        committed: 'no',
+        retryable: false,
+      },
     ]);
   });
 
@@ -362,7 +432,7 @@ describe('end to end against serve through node:http and the global fetch', () =
     const putting = client(ordersDependency, {
       baseUrl,
       headers: { 'x-api-key': async () => 'caller-7' },
-      fetch: (url, init) => fetch(url, { ...init, method: 'PUT' }),
+      fetch: (request) => fetch(new Request(request, { method: 'PUT' })),
     });
 
     const outcome = await putting.cancelOrder({ params: { orderId: 'o-1' } });
@@ -381,9 +451,87 @@ describe('end to end against serve through node:http and the global fetch', () =
     const outcome = await orders.createOrder({ body: { quantity: 3 } });
     await orders.createOrder({ body: { quantity: 4 } });
 
-    expect(outcome).toEqual({ kind: 'success', value: { quantity: 3 }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 201, body: { quantity: 3 } });
     expect(notices).toEqual([
       { provider: 'orders-service', endpoint: 'createOrder', deprecatedAt: '2026-10-17T09:30:00Z' },
     ]);
+  });
+});
+
+/** A Provider that answers `status` with a `location` at another origin, and that other origin, which records what reaches it. */
+async function redirectingTo(status: 307 | 303) {
+  const reached: string[] = [];
+  const elsewhere = createServer((request, response) => {
+    reached.push(`${request.method} ${request.url} ${request.headers['x-api-key']}`);
+    response.writeHead(200, { 'content-type': 'application/json' }).end('{"id":"elsewhere"}');
+  });
+  await new Promise<void>((resolve) => elsewhere.listen(0, '127.0.0.1', resolve));
+  const elsewherePort = (elsewhere.address() as AddressInfo).port;
+  const redirecting = createServer((_request, response) => {
+    response.writeHead(status, { location: `http://localhost:${elsewherePort}/x` }).end();
+  });
+  await new Promise<void>((resolve) => redirecting.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${(redirecting.address() as AddressInfo).port}/`;
+  const close = () => {
+    redirecting.close();
+    elsewhere.close();
+  };
+  return { baseUrl, reached, close };
+}
+
+describe('a redirect', () => {
+  test('a cross-origin 307 is a Fault and the other origin receives nothing', async () => {
+    const { baseUrl, reached, close } = await redirectingTo(307);
+    const orders = client(ordersDependency, { baseUrl, headers: { 'x-api-key': 'SECRET' } });
+
+    const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });
+    close();
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'status',
+      status: 307,
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 307',
+    });
+    expect(reached).toEqual([]);
+  });
+
+  test('a 303 is a Fault and no GET follows it', async () => {
+    const { baseUrl, reached, close } = await redirectingTo(303);
+    const orders = client(ordersDependency, { baseUrl });
+
+    const outcome = await orders.createOrder({ body: { quantity: 1 } });
+    close();
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'status',
+      status: 303,
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 303',
+    });
+    expect(reached).toEqual([]);
+  });
+});
+
+describe('serve in the same process', () => {
+  test('what serve returns is a client’s fetch with no adapter', async () => {
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      headers: { 'x-api-key': 'caller-7' },
+      fetch: serve(provider, handlers),
+    });
+
+    const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });
+
+    expect(outcome).toEqual({
+      kind: 'success',
+      status: 200,
+      headers: { 'x-stage': 'shipped', 'x-count': 2 },
+      body: { id: 'o-1', by: 'caller-7' },
+    });
   });
 });

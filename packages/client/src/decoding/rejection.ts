@@ -4,28 +4,38 @@ import {
   rejectionBodyReaderOf,
 } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
-import { type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
+import { type Arrival, type DecodedOutcome, invalidOutcomeOf, issuesAt } from './outcomes.ts';
 
 /**
  * A Rejection Envelope as the Caller receives it: a code the Endpoint answers, with its body read
- * by its Reader schema and any body dropped where it declares none, or a code it does not know.
+ * by its Reader schema and none where it declares none, or a code it does not know.
  */
 export function rejectionOf(
   envelope: RejectionEnvelope['rejection'],
+  arrival: Arrival,
   called: CalledEndpoint,
 ): DecodedOutcome {
+  const { status, source } = arrival;
   const { code, message, body } = envelope;
   const rejection = called.rejectionsByCode.get(code);
   if (rejection === undefined) {
-    return { kind: 'rejection', known: false, code, message, body };
+    const unknown = {
+      kind: 'unknown-rejection',
+      source: 'provider',
+      code,
+      status,
+      message,
+    } as const;
+    return body === undefined ? unknown : { ...unknown, body };
   }
+  const known = { kind: 'rejection', source, code, status, message } as const;
   const schema = rejectionBodyReaderOf(rejection, called.standards);
   if (schema === undefined) {
-    return { kind: 'rejection', known: true, code, message, body: undefined };
+    return known;
   }
   const parsed = parseValue(schema, body);
   if (parsed.kind === 'issues') {
-    return invalidOutcomeOf({ committed: 'unknown', issues: issuesAt('body', parsed) });
+    return invalidOutcomeOf({ status, committed: 'unknown', issues: issuesAt('body', parsed) });
   }
-  return { kind: 'rejection', known: true, code, message, body: parsed.value };
+  return { ...known, body: parsed.value };
 }

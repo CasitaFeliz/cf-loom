@@ -125,13 +125,46 @@ test('the README’s fakeProvider example runs: each Outcome in order, and the c
   const calls = payments.calls('getPayment');
 
   expect(settlement.outcomes).toMatchObject([
-    { kind: 'rejection', known: true, code: 'NOT_FOUND', message: 'Not found', body: undefined },
-    { kind: 'rejection', known: false, code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: {} },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'No connection to the Provider' },
-    { kind: 'fault', committed: 'unknown', retryable: true, message: 'The connection failed' },
-    { kind: 'fault', committed: 'unknown', retryable: false, message: 'The Provider answered 502' },
-    { kind: 'success', value: { id: PAYMENT_ID, amount }, headers: {} },
+    { kind: 'rejection', source: 'provider', code: 'NOT_FOUND', status: 404, message: 'Not found' },
+    {
+      kind: 'unknown-rejection',
+      source: 'provider',
+      code: 'CARD_EXPIRED',
+      status: 422,
+      message: 'CARD_EXPIRED',
+      body: {},
+    },
+    {
+      kind: 'fault',
+      source: 'provider',
+      status: 503,
+      committed: 'no',
+      retryable: true,
+      message: 'Internal error',
+    },
+    {
+      kind: 'fault',
+      source: 'no-connection',
+      committed: 'no',
+      retryable: true,
+      message: 'No connection to the Provider',
+    },
+    {
+      kind: 'fault',
+      source: 'connection-lost',
+      committed: 'unknown',
+      retryable: true,
+      message: 'The connection failed',
+    },
+    {
+      kind: 'fault',
+      source: 'status',
+      status: 502,
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 502',
+    },
+    { kind: 'success', status: 200, body: { id: PAYMENT_ID, amount } },
   ]);
   const input = { params: { paymentId: PAYMENT_ID }, headers: { 'x-api-key': 'k' } };
   expect(calls).toEqual(Array.from({ length: 7 }, () => ({ kind: 'valid', input })));

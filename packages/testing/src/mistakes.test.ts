@@ -366,7 +366,7 @@ describe('fakeProvider: a test’s mistakes', () => {
   test('an Endpoint the Dependency does not list is a mistake', async () => {
     const payments = fakeProvider(paymentsDependency);
 
-    const answering = payments.fetch('https://payments-service.test/payments', {});
+    const answering = payments.fetch(new Request('https://payments-service.test/payments'));
 
     await expect(answering).rejects.toThrow('the Dependency does not list GET /payments');
   });
@@ -374,7 +374,7 @@ describe('fakeProvider: a test’s mistakes', () => {
   test('a path outside the base URL is a mistake', async () => {
     const payments = fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/pay' });
 
-    const answering = payments.fetch('https://gateway.test/payments/pay-1', {});
+    const answering = payments.fetch(new Request('https://gateway.test/payments/pay-1'));
 
     await expect(answering).rejects.toThrow(FakeProviderError);
   });
