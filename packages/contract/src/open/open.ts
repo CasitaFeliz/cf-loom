@@ -11,7 +11,7 @@ declare const openEnumBrand: unique symbol;
  * An enum whose readers handle values they do not know; what it derives with `exclude` or
  * `extract` stays open. A `z.enum()` is not one.
  */
-export interface OpenEnum<T extends core.util.EnumLike = core.util.EnumLike> extends z.ZodEnum<T> {
+export interface OpenEnum<T extends core.util.EnumLike> extends z.ZodEnum<T> {
   readonly [openEnumBrand]: true;
   extract<const Keys extends readonly (keyof T)[]>(
     values: Keys,

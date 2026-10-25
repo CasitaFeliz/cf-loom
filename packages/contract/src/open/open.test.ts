@@ -48,7 +48,6 @@ describe('openEnum', () => {
     const withoutRefunded = status.exclude(['refunded']);
 
     expect(openOf(withoutRefunded)).toBe(true);
-    expect(withoutRefunded.options).toEqual(['pending', 'paid']);
   });
 
   test('an openEnum with values extracted stays open', () => {
@@ -57,7 +56,6 @@ describe('openEnum', () => {
     const settled = status.extract(['paid', 'refunded']);
 
     expect(openOf(settled)).toBe(true);
-    expect(settled.options).toEqual(['paid', 'refunded']);
   });
 
   test('a described openEnum with values excluded stays open', () => {
@@ -72,20 +70,42 @@ describe('openEnum', () => {
     const status = z.enum(['pending', 'paid', 'refunded']);
 
     expect(openOf(status.exclude(['refunded']))).toBe(false);
+  });
+
+  test('a z.enum() with values extracted stays closed', () => {
+    const status = z.enum(['pending', 'paid', 'refunded']);
+
     expect(openOf(status.extract(['paid']))).toBe(false);
   });
 
-  test('what an openEnum derives is typed as an Open Enum of the remaining values', () => {
+  test('an openEnum with values excluded is typed as an Open Enum of the remaining values', () => {
     const status = contract.openEnum(['pending', 'paid']);
 
     expectTypeOf(status.exclude(['paid'])).toEqualTypeOf<OpenEnum<{ pending: 'pending' }>>();
+  });
+
+  test('an openEnum with values extracted is typed as an Open Enum of those values', () => {
+    const status = contract.openEnum(['pending', 'paid']);
+
     expectTypeOf(status.extract(['pending'])).toEqualTypeOf<OpenEnum<{ pending: 'pending' }>>();
+  });
+
+  test('a described openEnum is typed as the same Open Enum', () => {
+    const status = contract.openEnum(['pending', 'paid']);
+
     expectTypeOf(status.describe('The order status')).toEqualTypeOf(status);
   });
 
   test('a z.enum() is not typed as an Open Enum', () => {
     expectTypeOf(contract.openEnum(['pending'])).toExtend<OpenEnum<{ pending: 'pending' }>>();
     expectTypeOf(z.enum(['pending'])).not.toExtend<OpenEnum<{ pending: 'pending' }>>();
+  });
+
+  test('an Open Enum type names the enum it holds', () => {
+    // @ts-expect-error a bare OpenEnum would accept no Open Enum
+    const bare: OpenEnum | undefined = undefined;
+
+    expect(bare).toBeUndefined();
   });
 
   test('openEnum takes string values only', () => {

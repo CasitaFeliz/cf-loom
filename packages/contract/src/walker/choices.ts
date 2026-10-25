@@ -17,6 +17,9 @@ import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from 
 /** An enum of string values, open when `openEnum()` declared it or zod derived it from one. */
 export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
   const values: readonly unknown[] = Object.values(schema._zod.def.entries);
+  if (values.length === 0) {
+    return notAllowed(at, refused.emptyEnum);
+  }
   const strings = values.filter(isString);
   if (strings.length !== values.length) {
     return notAllowed(at, refused.numericEnum);
