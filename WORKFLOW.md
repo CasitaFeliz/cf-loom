@@ -199,9 +199,8 @@ round, at most two rounds. The reviewer reads once the change passes locally.
   to a registry you started yourself.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
-`scripts/refuse-agent-bash.ts`, a hook in [`.claude/settings.json`](.claude/settings.json), refuses the commonest
-breaks of these rules: reading `~/.npmrc`, using port 4873, publishing to a registry that is not on 127.0.0.1, and
-deleting a glob under `/tmp`.
+[`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools; the rest
+of these rules rest on the agents.
 
 ## Changesets
 
