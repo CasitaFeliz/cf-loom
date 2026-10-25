@@ -120,9 +120,9 @@ const service: Readonly<Record<string, string>> = {
     '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
     '  success: { status: 204 },',
     '});',
-    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto] });",
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
-    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes], events: [shaped] });",
+    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto], events: [shaped] });",
+    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
 

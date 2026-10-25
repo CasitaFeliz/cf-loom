@@ -1,4 +1,10 @@
-import { defineCommand, defineContract, defineEvent, openEnum } from '@cf-loom/contract';
+import {
+  defineCommand,
+  defineContract,
+  defineEvent,
+  defineGroup,
+  openEnum,
+} from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -77,8 +83,20 @@ const grownV10 = defineEvent({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV3, orderCreatedV1, orderCreatedV2, grownV9, grownV10],
-  commands: [chargeCardV1, chargeCardV2],
+  groups: [
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      events: [orderCreatedV1, orderCreatedV2, grownV9, grownV10],
+      commands: [chargeCardV1],
+    }),
+    defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      events: [orderCreatedV3],
+      commands: [chargeCardV2],
+    }),
+  ],
 });
 
 const v2 = { orderId: ORDER_ID, total: 12 };
@@ -130,7 +148,7 @@ async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
 }
 
 describe('publisher.publish', () => {
-  test('publish sends one Message per Active and Deprecated version, in version order, on <service>.event.<Name>.v<n>', async () => {
+  test('publish sends one Message per Active and Deprecated version, in version order, on <service>.event.<Name>.v<n> whatever Group lists each version', async () => {
     const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 });
@@ -494,7 +512,7 @@ describe('publisher.publish', () => {
 });
 
 describe('sender.send', () => {
-  test('send sends the Command’s one Active version on <service>.command.<Name>.v<n>, never a Deprecated one', async () => {
+  test('send sends the Command’s one Active version on <service>.command.<Name>.v<n>, never a Deprecated one, whatever Group lists it', async () => {
     const { sender, published } = await opened();
 
     await sender.send('ChargeCard', charge);

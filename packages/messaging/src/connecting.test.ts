@@ -3,6 +3,7 @@ import {
   defineCommand,
   defineContract,
   defineEvent,
+  defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
@@ -47,9 +48,15 @@ const notifyOnCreated = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 const readers = readersOf({
@@ -200,8 +207,14 @@ describe('messaging() and close', () => {
       });
     const evolved = defineContract({
       name: 'orders-service',
-      events: [orderCreated(3), orderCreated(1, 'retired'), orderCreated(2, 'deprecated')],
-      commands: [chargeCard(1, 'deprecated'), chargeCard(2)],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreated(3), orderCreated(1, 'retired'), orderCreated(2, 'deprecated')],
+          commands: [chargeCard(1, 'deprecated'), chargeCard(2)],
+        }),
+      ],
     });
     const { broker, recorded } = aBroker();
 
@@ -226,13 +239,18 @@ describe('messaging() and close', () => {
     expect(recorded.connectedWith).toEqual([]);
   });
 
-  test('a Subscription whose Event neither the root nor a Dependency lists rejects messaging(), naming it', async () => {
-    const unlisted = defineContract({ name: 'orders-service', subscriptions: [notifyOnCreated] });
+  test('a Subscription whose Event neither a Group nor a Dependency lists rejects messaging(), naming it', async () => {
+    const notifying = defineGroup({
+      name: 'notifications',
+      description: 'Notifications',
+      subscriptions: [notifyOnCreated],
+    });
+    const unlisted = defineContract({ name: 'orders-service', groups: [notifying] });
 
     const opening = messaging(unlisted, aBroker().broker);
 
     await expect(opening).rejects.toThrow(
-      'notifyOnCreated subscribes to an Event neither the root nor a Dependency lists',
+      'notifyOnCreated subscribes to an Event neither a Group nor a Dependency lists',
     );
   });
 

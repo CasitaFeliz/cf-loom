@@ -1,4 +1,4 @@
-import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
+import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
@@ -28,8 +28,14 @@ const chargeCardV1 = defineCommand({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+    }),
+  ],
 });
 
 let server: NatsServer;
@@ -207,7 +213,8 @@ describe('jetstream()', () => {
   });
 
   test('without a prefix, the stream checked is the one named after the Service, on unprefixed subjects', async () => {
-    const unprefixed = defineContract({ name: 'unprefixed-service', events: [orderCreatedV1] });
+    const orders = defineGroup({ name: 'orders', description: 'Orders', events: [orderCreatedV1] });
+    const unprefixed = defineContract({ name: 'unprefixed-service', groups: [orders] });
     await arrangeStream(server.url, {
       name: 'unprefixed-service',
       subjects: ['unprefixed-service.event.OrderCreated.v1'],

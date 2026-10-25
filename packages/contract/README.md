@@ -8,7 +8,7 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections` and a root's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a root's and a Group's lists left out are empty, except an Application's `dependencies`, which it always lists. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included.
 
 ## The root
 
@@ -20,14 +20,11 @@ export const contract = defineContract({
   name: 'orders-service',
   definitions: [orgDefinitions],
   groups: [ordersGroup],
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnSettled],
   dependencies: [paymentsDeps],
 });
 ```
 
-The root lists everything in the Contract: what it lists is exactly what the Snapshot describes. A root's `name`, a Service's, an Application's or a Definitions Package's, must equal the unscoped part of the `name` in its package.json, or `generate` fails. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections. A Contract's `events` and `commands` are listed inline in `defineContract`, as literal tuples, so each keeps its exact type and `publish` and `send` know its versions (see [Publishing and sending](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#publishing-and-sending) in the messaging README).
+The root lists everything in the Contract, its Elements and Subscriptions through its Groups: what it lists is exactly what the Snapshot describes. A root's `name`, a Service's, an Application's or a Definitions Package's, must equal the unscoped part of the `name` in its package.json, or `generate` fails. A Contract lists each Definitions Package once, under a name of its own, and at most one listed Definitions Package may declare Standard Rejections. A Group reaches the root as `defineGroup` typed it, never annotated `Group`, so each Message Version keeps its exact type and `publish` and `send` know every version of an Event or a Command, whatever Group lists it (see [Publishing and sending](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#publishing-and-sending) in the messaging README).
 
 Names follow fixed grammars, so they are safe in code, subjects and broker names, and `generate` fails on a name that breaks its grammar: a Service, Application, Definitions Package or Group name is kebab-case (`^[a-z0-9]+(-[a-z0-9]+)*$`); an Endpoint, Guard or Subscription name is camelCase (`^[a-z][a-zA-Z0-9]*$`) and none of the words code cannot use as a name: no ECMAScript reserved word, strict mode's included, nor `eval`, `arguments` or `handle`, which every stub imports; a Message name is PascalCase (`^[A-Z][a-zA-Z0-9]*$`); a Rejection code is UPPER_SNAKE_CASE (`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`). A Message Version is written `OrderCreated@2` in the Snapshot, the CLI and logs, `orderCreatedV2` in code, and `OrderCreated.v2` inside a subject.
 
@@ -75,20 +72,23 @@ export const definitions = defineDefinitions({
 
 Services import its Guards and schemas directly and list its `definitions` on their root (see [The root](#the-root)). It lists every Guard and Rejection it exports or its Guards reach, through their `guards` and `rejections`; one it leaves out fails `generate`. It is published built, as JavaScript with its `.d.ts`, from erasable TypeScript source, since Node strips no types under `node_modules`. It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
 
-## Groups and Endpoints
+## Groups
 
-Every Endpoint belongs to exactly one Group.
+Every Endpoint, Event's or Command's Message Version, and Subscription belongs to exactly one Group; two Message Versions of one Event or Command may sit in different Groups. Guards belong to none.
 
 ```ts
-// src/contract/endpoints/orders/orders.group.ts
+// src/contract/groups/orders.group.ts
 export const ordersGroup = defineGroup({
   name: 'orders',
   description: 'Order lifecycle',
   endpoints: [getOrder, createOrder],
+  events: [orderCreatedV1, orderCreatedV2],
+  commands: [chargeCardV1],
+  subscriptions: [notifyOnSettled],
 });
 ```
 
-A Group lists at least one Endpoint; an empty list is a type error. A Group's name is unique in the Contract; a duplicate fails `generate`.
+A Group lists at least one Endpoint, Event, Command or Subscription; one that lists nothing, or an empty list, is a type error, and `generate` fails on a Group that lists nothing. A Group's name is unique in the Contract; a duplicate fails `generate`.
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
@@ -198,7 +198,7 @@ guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],
 Each Message Version is its own declaration and file.
 
 ```ts
-// src/contract/events/order-created.v2.event.ts
+// src/contract/events/orders/order-created.v2.event.ts
 export const orderCreatedV2 = defineEvent({
   name: 'OrderCreated',
   version: 2,
@@ -209,7 +209,7 @@ export const orderCreatedV2 = defineEvent({
 ```
 
 ```ts
-// src/contract/commands/charge-card.v1.command.ts
+// src/contract/commands/orders/charge-card.v1.command.ts
 export const chargeCardV1 = defineCommand({
   name: 'ChargeCard',
   version: 1,
@@ -227,7 +227,7 @@ A literal `version` that is not a whole number from 1 is a type error; which Mes
 Any Element takes `lifecycle: 'deprecated'`:
 
 ```ts
-// src/contract/events/order-created.v1.event.ts
+// src/contract/events/orders/order-created.v1.event.ts
 export const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
   version: 1,
@@ -288,7 +288,7 @@ A Contract Package's Elements are its declarations: a Dependency keeps the Endpo
 ## Subscriptions
 
 ```ts
-// src/contract/subscriptions/notify-on-settled.subscription.ts
+// src/contract/subscriptions/orders/notify-on-settled.subscription.ts
 export const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
@@ -296,7 +296,7 @@ export const notifyOnSettled = defineSubscription({
 });
 ```
 
-`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in its root's `events`, or one listed in a Dependency, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one listed in a Dependency, and not Retired; another fails `generate`, and a Retired one is also a type error. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 

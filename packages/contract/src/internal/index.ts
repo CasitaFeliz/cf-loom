@@ -26,7 +26,12 @@ export {
   snapshotPathOf,
   versionBumpOf,
 } from '../compatibility/index.ts';
-export type { ProvidedEvent, ReservedCode } from '../declarations/index.ts';
+export type {
+  GroupedField,
+  GroupedOf,
+  ProvidedEvent,
+  ReservedCode,
+} from '../declarations/index.ts';
 export {
   codeNameOf,
   isCommand,
@@ -212,10 +217,12 @@ export {
   answerableByCodeOf,
   answerableRejectionsOf,
   attachmentsOf,
+  commandsOf,
   contextProvidersOf,
   demandParts,
   endpointsOf,
   eventServiceOf,
+  eventsOf,
   inputParts,
   isInputPart,
   isPlainObject,
@@ -233,5 +240,6 @@ export {
   resolutionOf,
   schemaOf,
   standardRejectionsOf,
+  subscriptionsOf,
   successParts,
 } from '../written/index.ts';

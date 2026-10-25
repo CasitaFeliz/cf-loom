@@ -318,6 +318,23 @@ const aServiceWithoutEndpoints = aRootProject([
   "export const contract = defineContract({ name: 'orders-service' });",
 ]);
 
+/** A Service with a Group of one Endpoint and a Group that lists only an Event. */
+const aServiceWithMessagesGroup = aRootProject([
+  "import { defineContract, defineEndpoint, defineEvent, defineGroup } from '@cf-loom/contract';",
+  "import { z } from 'zod';",
+  'export const getOrder = defineEndpoint({',
+  "  name: 'getOrder', method: 'GET', path: '/orders', visibility: 'public',",
+  "  description: 'Gets', success: { status: 204 },",
+  '});',
+  'export const orderCreatedV1 = defineEvent({',
+  "  name: 'OrderCreated', version: 1, visibility: 'internal',",
+  "  description: 'An order was placed', body: z.object({ orderId: z.uuid() }),",
+  '});',
+  "const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });",
+  "const events = defineGroup({ name: 'events', description: 'Events', events: [orderCreatedV1] });",
+  "export const contract = defineContract({ name: 'orders-service', groups: [orders, events] });",
+]);
+
 /** A Service whose Endpoints take the recursive schemas given as their Input bodies, in the order given. */
 function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<string, string>> {
   const declared = recursive.map((id, index) => [
@@ -750,6 +767,14 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
       { name: 'orders' },
       { name: 'shapes' },
     ]);
+  });
+
+  test('a Group that lists no Endpoint is no tag', () => {
+    const project = aGeneratedProject(aServiceWithMessagesGroup);
+
+    const written = JSON.parse(cfLoom(project, 'openapi').stdout);
+
+    expect(valueAt(written, 'tags')).toEqual([{ name: 'orders' }]);
   });
 
   test('public, internal and private Endpoints are all written, each with its Visibility', () => {

@@ -1,6 +1,6 @@
 import { handle } from '@cf-loom/handlers';
-import { readers } from '../readers.generated.ts';
-import type { Needs } from '../resources.ts';
+import { readers } from '../../readers.generated.ts';
+import type { Needs } from '../../resources.ts';
 
 export default handle(
   readers.subscriptions.chargeOnCreated,

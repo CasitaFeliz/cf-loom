@@ -1,13 +1,6 @@
-import type { Contract, Definitions, Endpoint } from '../declarations/index.ts';
-import {
-  isContract,
-  isDefinitions,
-  isDependencies,
-  isEndpoint,
-  isGroup,
-} from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { identityOf } from './identity.ts';
+import type { Definitions } from '../declarations/index.ts';
+import { isContract, isDefinitions, isDependencies } from '../declarations/index.ts';
+import { groupedOf, groupsOf } from './grouped.ts';
 import type {
   LocatedCode,
   LocatedCommand,
@@ -22,7 +15,6 @@ import type {
   LocatedSubscription,
   Root,
 } from './located.ts';
-import { messagingOf } from './messaging.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
 
@@ -54,7 +46,7 @@ export type Declarations = {
 export function declarationsOf(root: Root): Declarations {
   const listedDefinitions = definitionsOf(root);
   const groups = groupsOf(root);
-  const endpoints = distinctEndpoints(groups.flatMap(locatedEndpointsOf));
+  const { endpoints, events, commands, subscriptions } = groupedOf(groups);
   const allPackages =
     root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
   const sources = { root, allPackages, endpoints };
@@ -71,32 +63,10 @@ export function declarationsOf(root: Root): Declarations {
     codes: codesOf(sources, { guards, rejections }),
     standardRejections: allPackages.flatMap(standardRejectionsOf),
     dependencies: dependenciesOf(root),
-    ...messagingOf(root),
+    events,
+    commands,
+    subscriptions,
   };
-}
-
-/** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
-export function endpointsOf(contract: Contract): readonly Endpoint[] {
-  const located = distinctEndpoints(groupsOf(contract).flatMap(locatedEndpointsOf));
-  return located.map(({ endpoint }) => endpoint);
-}
-
-/** Where an Endpoint sits under its Group: the one place that spells an Endpoint's location. */
-export function endpointAt(groupAt: Path, endpoint: Endpoint): Path {
-  return [...groupAt, 'endpoints', identityOf(endpoint.method, endpoint.path)];
-}
-
-/** An Endpoint listed twice is one Endpoint, where first met; the Groups rule reports the repeat. */
-function distinctEndpoints(endpoints: readonly LocatedEndpoint[]): readonly LocatedEndpoint[] {
-  const seen = new Set<Endpoint>();
-  const distinct: LocatedEndpoint[] = [];
-  for (const located of endpoints) {
-    if (!seen.has(located.endpoint)) {
-      seen.add(located.endpoint);
-      distinct.push(located);
-    }
-  }
-  return distinct;
 }
 
 /** A Standard Rejection declaration as written, before the structure rule has judged it. */
@@ -137,21 +107,6 @@ function definitionsOf(root: Root): readonly LocatedDefinitions[] {
     at: ['definitions', textOf(definitions.name)],
     definitions,
   }));
-}
-
-function groupsOf(root: Root): readonly LocatedGroup[] {
-  if (root.kind !== 'contract') {
-    return [];
-  }
-  return listOf(root.groups)
-    .filter(isGroup)
-    .map((group) => ({ at: ['groups', textOf(group.name)], group }));
-}
-
-function locatedEndpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
-  return listOf(group.endpoints)
-    .filter(isEndpoint)
-    .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint, group }));
 }
 
 function dependenciesOf(root: Root): readonly LocatedDependencies[] {

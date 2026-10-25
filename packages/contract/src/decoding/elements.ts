@@ -54,12 +54,17 @@ export const publishedEndpoint: z.ZodType<PublishedEndpoint> = published(
 
 /** Format 1's Event Message Version in a published Snapshot: declared, or its tombstone. */
 export const publishedEvent: z.ZodType<PublishedEvent> = published(
-  { visibility: z.enum(visibilities), description: z.string(), body: schemaNode },
+  {
+    group: z.string(),
+    visibility: z.enum(visibilities),
+    description: z.string(),
+    body: schemaNode,
+  },
   messageTombstone,
 );
 
 /** Format 1's Command Message Version in a published Snapshot: declared, or its tombstone. */
 export const publishedCommand: z.ZodType<PublishedCommand> = published(
-  { description: z.string(), body: schemaNode },
+  { group: z.string(), description: z.string(), body: schemaNode },
   messageTombstone,
 );

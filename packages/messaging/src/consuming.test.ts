@@ -4,6 +4,7 @@ import {
   defineContract,
   defineDependencies,
   defineEvent,
+  defineGroup,
   defineSubscription,
   openEnum,
   openEnumReader,
@@ -97,9 +98,15 @@ const notifyOnSettled = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1, chargeCardV2, refundV1],
-  subscriptions: [notifyOnCreated, notifyOnSettled],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1, chargeCardV2, refundV1],
+      subscriptions: [notifyOnCreated, notifyOnSettled],
+    }),
+  ],
   dependencies: [paymentsDeps],
 });
 

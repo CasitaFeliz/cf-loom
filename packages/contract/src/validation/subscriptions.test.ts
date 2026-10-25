@@ -5,6 +5,7 @@ import {
   defineContract,
   defineDependencies,
   defineEvent,
+  defineGroup,
   defineSubscription,
   type Event,
   type Subscription,
@@ -60,10 +61,15 @@ function validateSubscriptions(
   subscriptions: readonly Subscription[],
   events: readonly Event[] = [orderCreatedV1],
 ) {
-  const contract = defineContract({
-    name: 'orders-service',
+  const ordersGroup = defineGroup({
+    name: 'orders',
+    description: 'Orders',
     events,
     subscriptions,
+  } as unknown as Parameters<typeof defineGroup>[0]);
+  const contract = defineContract({
+    name: 'orders-service',
+    groups: [ordersGroup],
     dependencies: [paymentsDeps],
   });
   return validateContract(contract, {
@@ -113,7 +119,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'auditOrders', 'event'],
+        ['groups', 'orders', 'subscriptions', 'auditOrders', 'event'],
         'subscription-event',
         "A Subscription's Event is the Service's own or one listed in a Dependency: OrderCreated@1",
       ),
@@ -131,7 +137,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'onFailed', 'event'],
+        ['groups', 'orders', 'subscriptions', 'onFailed', 'event'],
         'subscription-event',
         "A Subscription's Event is the Service's own or one listed in a Dependency: PaymentFailed@1",
       ),
@@ -145,7 +151,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'onSomething', 'event'],
+        ['groups', 'orders', 'subscriptions', 'onSomething', 'event'],
         'not-a-declaration',
         'event is not an Event',
       ),
@@ -163,7 +169,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'charge-on-created', 'name'],
+        ['groups', 'orders', 'subscriptions', 'charge-on-created', 'name'],
         'name-grammar',
         'A Subscription name is camelCase: charge-on-created',
       ),
@@ -184,7 +190,9 @@ describe('validateContract: Subscriptions', () => {
 
     const result = validateSubscriptions([named]);
 
-    expect(result).toEqual(failed(['subscriptions', name, 'name'], 'name-grammar', message));
+    expect(result).toEqual(
+      failed(['groups', 'orders', 'subscriptions', name, 'name'], 'name-grammar', message),
+    );
   });
 
   test('two Subscriptions with one name fail', () => {
@@ -198,7 +206,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'notifyOnSettled', 'name'],
+        ['groups', 'orders', 'subscriptions', 'notifyOnSettled', 'name'],
         'duplicate-subscription-name',
         'A Subscription name is unique in the Service: notifyOnSettled',
       ),
@@ -220,7 +228,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'auditOrders', 'event'],
+        ['groups', 'orders', 'subscriptions', 'auditOrders', 'event'],
         'retired-event-subscribed',
         "A Subscription's Event is not Retired: OrderCreated@1",
       ),
@@ -255,7 +263,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'onNothing', 'event'],
+        ['groups', 'orders', 'subscriptions', 'onNothing', 'event'],
         'required-field',
         'event is a required field',
       ),
@@ -272,7 +280,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'onNothing', 'description'],
+        ['groups', 'orders', 'subscriptions', 'onNothing', 'description'],
         'required-field',
         'description is a required string',
       ),
@@ -294,7 +302,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'onCreated', 'filter'],
+        ['groups', 'orders', 'subscriptions', 'onCreated', 'filter'],
         'undeclared-field',
         'filter is not a declared field',
       ),

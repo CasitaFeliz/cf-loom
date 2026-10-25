@@ -1,12 +1,8 @@
-import type { Endpoint } from '../declarations/index.ts';
-import { isEndpoint, isLive } from '../declarations/index.ts';
+import { isLive } from '../declarations/index.ts';
 import {
   type Declarations,
-  endpointAt,
   identityOf,
   type LocatedEndpoint,
-  type LocatedGroup,
-  listOf,
   type Root,
   textOf,
 } from '../written/index.ts';
@@ -106,38 +102,6 @@ function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFa
       `A Contract lists one Dependency per Provider: ${textOf(listed.provider)}`,
     ),
   );
-}
-
-/** Every Group lists at least one Endpoint, and every Endpoint is in exactly one Group. */
-export function groupFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const groupByEndpoint = new Map<Endpoint, LocatedGroup>();
-  const failures: DeclarationFailure[] = [];
-  for (const located of declarations.groups) {
-    const endpoints = listOf(located.group.endpoints).filter(isEndpoint);
-    if (Array.isArray(located.group.endpoints) && located.group.endpoints.length === 0) {
-      const message = 'A Group lists at least one Endpoint';
-      failures.push(failure([...located.at, 'endpoints'], 'empty-group', message));
-    }
-    for (const endpoint of endpoints) {
-      failures.push(...membershipFailures(endpoint, located, groupByEndpoint));
-      groupByEndpoint.set(endpoint, groupByEndpoint.get(endpoint) ?? located);
-    }
-  }
-  return failures;
-}
-
-function membershipFailures(
-  endpoint: Endpoint,
-  located: LocatedGroup,
-  groupByEndpoint: ReadonlyMap<Endpoint, LocatedGroup>,
-): readonly DeclarationFailure[] {
-  const first = groupByEndpoint.get(endpoint);
-  if (first === undefined) {
-    return [];
-  }
-  const at = endpointAt(located.at, endpoint);
-  const message = `An Endpoint belongs to exactly one Group: ${textOf(endpoint.name)} is also in ${textOf(first.group.name)}`;
-  return [failure(at, 'group-membership', message)];
 }
 
 function identityOfEndpoint({ endpoint }: LocatedEndpoint): string {

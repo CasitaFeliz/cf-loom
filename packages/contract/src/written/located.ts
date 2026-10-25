@@ -67,11 +67,28 @@ export type LocatedStandardRejection = {
   readonly listedIn: LocatedDefinitions;
 };
 
-/** An Event's Message Version and where it sits in its root, by identity: `['events', 'OrderCreated@2']`. */
-export type LocatedEvent = { readonly at: Path; readonly event: Event };
+/**
+ * An Event's Message Version, its Group, and where it sits in its root, under its Group and by
+ * identity: `['groups', <group>, 'events', 'OrderCreated@2']`.
+ */
+export type LocatedEvent = { readonly at: Path; readonly event: Event; readonly group: Group };
 
-/** A Command's Message Version and where it sits in its root, by identity: `['commands', 'ChargeCard@1']`. */
-export type LocatedCommand = { readonly at: Path; readonly command: Command };
+/**
+ * A Command's Message Version, its Group, and where it sits in its root, under its Group and by
+ * identity: `['groups', <group>, 'commands', 'ChargeCard@1']`.
+ */
+export type LocatedCommand = {
+  readonly at: Path;
+  readonly command: Command;
+  readonly group: Group;
+};
 
-/** A Subscription and where it sits in its root, by name: `['subscriptions', 'notifyOnSettled']`. */
-export type LocatedSubscription = { readonly at: Path; readonly subscription: Subscription };
+/**
+ * A Subscription, its Group, and where it sits in its root, under its Group and by name:
+ * `['groups', <group>, 'subscriptions', 'notifyOnSettled']`.
+ */
+export type LocatedSubscription = {
+  readonly at: Path;
+  readonly subscription: Subscription;
+  readonly group: Group;
+};

@@ -2,6 +2,7 @@ import {
   defineCommand,
   defineContract,
   defineEvent,
+  defineGroup,
   defineSubscription,
   openEnum,
   openEnumReader,
@@ -82,9 +83,20 @@ const onAudited = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2, orderArchivedV1, orderAuditedV1],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnV1, notifyOnCreated, auditCreated, onAudited],
+  groups: [
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      events: [orderCreatedV1, orderArchivedV1],
+      commands: [chargeCardV1],
+    }),
+    defineGroup({
+      name: 'audits',
+      description: 'Audits',
+      events: [orderCreatedV2, orderAuditedV1],
+      subscriptions: [notifyOnV1, notifyOnCreated, auditCreated, onAudited],
+    }),
+  ],
 });
 
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });

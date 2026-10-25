@@ -1,4 +1,4 @@
-import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
+import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
 import { jetstream as jetStreamClientOf, jetstreamManager } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -36,8 +36,14 @@ const chargeCardV1 = defineCommand({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+    }),
+  ],
 });
 
 let server: NatsServer;

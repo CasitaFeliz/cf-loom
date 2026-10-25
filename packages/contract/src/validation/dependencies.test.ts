@@ -7,6 +7,7 @@ import {
   defineDependencies,
   defineEndpoint,
   defineEvent,
+  defineGroup,
   defineSubscription,
 } from '../index.ts';
 import { type RootPackage, validateContract } from '../internal/index.ts';
@@ -93,7 +94,13 @@ describe('validateContract: a Service’s Dependencies', () => {
     });
     const contract = defineContract({
       name: 'orders-service',
-      subscriptions: [notifyOnSettled],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          subscriptions: [notifyOnSettled],
+        }),
+      ],
       dependencies: [paymentsDeps],
     });
 
@@ -269,7 +276,13 @@ describe('validateContract: a Dependency whose exported Elements are not there',
     const paymentsDeps = defineDependencies(provider, selection);
     const contract = defineContract({
       name: 'orders-service',
-      subscriptions: [notifyOnSettled],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          subscriptions: [notifyOnSettled],
+        }),
+      ],
       dependencies: [paymentsDeps],
     });
 

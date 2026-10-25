@@ -1,6 +1,6 @@
 import { notFound } from '@cf-loom/contract';
 import { fault, handle, reject, success } from '@cf-loom/handlers';
-import { createInvoice } from '../contract/endpoints/invoices/create-invoice.endpoint.ts';
+import { createInvoice } from '../contract/endpoints/billing/create-invoice.endpoint.ts';
 import { orderLocked } from '../contract/rejections/order-locked.rejection.ts';
 import { orderNotBillable } from '../contract/rejections/order-not-billable.rejection.ts';
 import type { Needs } from '../resources.ts';

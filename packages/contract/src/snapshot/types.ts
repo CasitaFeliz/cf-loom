@@ -74,8 +74,9 @@ export type StandardRejectionsSnapshot = Readonly<
   Record<StandardRejectionName, StandardRejectionSnapshot>
 >;
 
-/** A Message Version by its identity. */
+/** A Message Version by its identity, with the Group that lists it. */
 export type EventSnapshot = {
+  readonly group: string;
   readonly visibility: Visibility;
   readonly lifecycle: Lifecycle;
   readonly description: string;
@@ -85,8 +86,12 @@ export type EventSnapshot = {
 /** A Command Version by its identity; a Command is always Private. */
 export type CommandSnapshot = Omit<EventSnapshot, 'visibility'>;
 
-/** A Subscription by its name, with what it is for and the Event it receives. */
-export type SubscriptionSnapshot = { readonly description: string; readonly event: string };
+/** A Subscription by its name, with the Group that lists it, what it is for and the Event it receives. */
+export type SubscriptionSnapshot = {
+  readonly group: string;
+  readonly description: string;
+  readonly event: string;
+};
 
 /** What a Contract uses of one Provider: the version it relied on and the Elements it selects. */
 export type DependencySnapshot = {

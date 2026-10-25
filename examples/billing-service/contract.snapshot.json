@@ -152,7 +152,7 @@
   "endpoints": {
     "POST /invoices": {
       "description": "Bills a paid order for its total",
-      "group": "invoices",
+      "group": "billing",
       "guards": [],
       "input": {
         "body": {
@@ -338,7 +338,8 @@
   "subscriptions": {
     "draftInvoiceOnCreated": {
       "description": "Drafts an invoice for each order created",
-      "event": "orders-service:OrderCreated@1"
+      "event": "orders-service:OrderCreated@1",
+      "group": "billing"
     }
   }
 }

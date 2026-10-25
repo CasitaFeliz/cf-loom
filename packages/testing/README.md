@@ -45,7 +45,7 @@ payments.calls('getPayment');                            // the requests the cod
 
 ```ts
 import { fakeEvent } from '@cf-loom/testing';
-import notifyOnSettledHandler from '../src/subscriptions/notify-on-settled.handler.ts';
+import notifyOnSettledHandler from '../src/subscriptions/orders/notify-on-settled.handler.ts';
 
 const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
 await notifyOnSettledHandler(

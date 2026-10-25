@@ -84,7 +84,7 @@ function targetOf(ref: string): unknown {
 
 /** The lines that declare the Events of `theService`, around the Commands and Subscription. */
 const theEvents = [
-  "import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';",
+  "import { defineCommand, defineContract, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
   "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purge-node' });",
@@ -144,15 +144,24 @@ const theEvents = [
   "export const auditCreated = defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 });",
 ];
 
-/** A Service named `orders-service` with an Event of each Visibility and Lifecycle, a Command and a Subscription. */
+/**
+ * A Service named `orders-service` with an Event of each Visibility and Lifecycle in the Groups
+ * `trees`, `orders` and `notes`, its one Retired Event alone in `purges`, and a Command and a
+ * Subscription.
+ */
 const theService = aContractProject([
   ...theEvents,
-  'export const contract = defineContract({',
-  "  name: 'orders-service',",
-  '  events: [orderCreatedV1, orderCreatedV2, orderNotedV1, orderPurgedV1, treeGrownV1],',
+  "const trees = defineGroup({ name: 'trees', description: 'Trees', events: [treeGrownV1] });",
+  'const orders = defineGroup({',
+  "  name: 'orders',",
+  "  description: 'Orders',",
+  '  events: [orderCreatedV1, orderCreatedV2],',
   '  commands: [chargeCardV1],',
   '  subscriptions: [auditCreated],',
   '});',
+  "const notes = defineGroup({ name: 'notes', description: 'Notes', events: [orderNotedV1] });",
+  "const purges = defineGroup({ name: 'purges', description: 'Purges', events: [orderPurgedV1] });",
+  "export const contract = defineContract({ name: 'orders-service', groups: [trees, orders, notes, purges] });",
 ]);
 
 /** A Service named `orders-service` that declares no Event. */
@@ -173,10 +182,11 @@ function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<strin
   ]);
   const names = recursive.map((_id, index) => `posted${index}`);
   return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...declared.flat(),
-    `export const contract = defineContract({ name: 'orders-service', events: [${names.join(', ')}] });`,
+    `const posts = defineGroup({ name: 'posts', description: 'Posts', events: [${names.join(', ')}] });`,
+    "export const contract = defineContract({ name: 'orders-service', groups: [posts] });",
   ]);
 }
 
@@ -201,7 +211,7 @@ function aServiceWithDescribedTree(
   lifecycle: 'active' | 'deprecated',
 ): Readonly<Record<string, string>> {
   return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
     'export const treeGrownV1 = defineEvent({',
@@ -209,7 +219,8 @@ function aServiceWithDescribedTree(
     "  description: 'A tree grew',",
     "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
     '});',
-    "export const contract = defineContract({ name: 'orders-service', events: [treeGrownV1] });",
+    "const trees = defineGroup({ name: 'trees', description: 'Trees', events: [treeGrownV1] });",
+    "export const contract = defineContract({ name: 'orders-service', groups: [trees] });",
   ]);
 }
 
@@ -231,10 +242,11 @@ function aServiceWithVersions(count: number): Readonly<Record<string, string>> {
   ]);
   const names = versions.map((version) => `orderCreatedV${version}`);
   return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...declared.flat(),
-    `export const contract = defineContract({ name: 'orders-service', events: [${names.join(', ')}] });`,
+    `const orders = defineGroup({ name: 'orders', description: 'Orders', events: [${names.join(', ')}] });`,
+    "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
   ]);
 }
 
@@ -264,6 +276,14 @@ describe('cf-loom asyncapi', () => {
 
   test('the document is at version 0.0.0', () => {
     expect(valueAt(document, 'info', 'version')).toBe('0.0.0');
+  });
+
+  test('the document’s tags are the Groups of its Events that are not Retired, each once, in code point order', () => {
+    expect(valueAt(document, 'info', 'tags')).toEqual([
+      { name: 'notes' },
+      { name: 'orders' },
+      { name: 'trees' },
+    ]);
   });
 
   test('the document’s default content type is application/json', () => {
@@ -397,6 +417,10 @@ describe('cf-loom asyncapi: the operations', () => {
     expect(valueAt(operationOf('OrderCreated@2'), 'messages')).toEqual([
       { $ref: '#/channels/OrderCreated@2/messages/OrderCreated@2' },
     ]);
+  });
+
+  test('a send operation is tagged with its Event’s Group', () => {
+    expect(valueAt(operationOf('OrderNoted@1'), 'tags')).toEqual([{ name: 'notes' }]);
   });
 
   test('a Retired Message Version has no operation', () => {
@@ -619,7 +643,12 @@ describe('cf-loom asyncapi: what it prints', () => {
   });
 
   test('an operation’s keys are in AsyncAPI’s usual order', () => {
-    expect(keysOf(operationOf('OrderCreated@2'))).toEqual(['action', 'channel', 'messages']);
+    expect(keysOf(operationOf('OrderCreated@2'))).toEqual([
+      'action',
+      'channel',
+      'tags',
+      'messages',
+    ]);
   });
 
   test('a description holding U+2028 is printed as its JSON escape and parses back to the same text', () => {

@@ -3,6 +3,7 @@ import {
   defineCommand,
   defineContract,
   defineEvent,
+  defineGroup,
   defineSubscription,
   type Event,
   type Subscription,
@@ -35,9 +36,15 @@ const notifyOnCreated = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 const broker = memory();

@@ -65,6 +65,7 @@ function aRetired<Element extends { readonly lifecycle: Lifecycle }>(
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
   return {
+    group: 'orders',
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
@@ -74,11 +75,17 @@ function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
 }
 
 function aCommand(fields: Partial<CommandSnapshot> = {}): CommandSnapshot {
-  return { lifecycle: 'active', description: 'Charge a card', body: emptyObject, ...fields };
+  return {
+    group: 'orders',
+    lifecycle: 'active',
+    description: 'Charge a card',
+    body: emptyObject,
+    ...fields,
+  };
 }
 
 function aSubscription(event: string): SubscriptionSnapshot {
-  return { description: 'Receives it', event };
+  return { group: 'orders', description: 'Receives it', event };
 }
 
 function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
@@ -240,7 +247,7 @@ describe('publishedSnapshotOf', () => {
     expect(published.endpoints['GET /orders/{}']).toEqual(aRetired(anEndpoint(), '3.0.0'));
   });
 
-  test('a Retired Message Version whose declaration is deleted becomes a tombstone with the Baseline’s retiredIn', () => {
+  test('a Retired Message Version whose declaration is deleted becomes a tombstone with the Baseline’s retiredIn and no Group', () => {
     const baseline = aBaseline({
       events: { 'OrderPlaced@1': aRetired(anEvent(), '3.0.0') },
       commands: { 'ChargeCard@1': aRetired(aCommand(), '3.1.0') },
@@ -378,7 +385,7 @@ describe('publishedSnapshotOf', () => {
     expect(published.codes).toEqual({ [orderLocked]: aCode({ status: 423 }) });
   });
 
-  test('a removed Subscription becomes a tombstone with its Event and removedIn the version, and no description', () => {
+  test('a removed Subscription becomes a tombstone with its Event and removedIn the version, and no description or Group', () => {
     const baseline = aBaseline({
       subscriptions: {
         legacySync: aSubscription('orders-service:OrderPlaced@1'),

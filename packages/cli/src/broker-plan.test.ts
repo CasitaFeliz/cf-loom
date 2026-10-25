@@ -182,7 +182,7 @@ const notifyOnSettled = 'notifyOnSettled';
 
 const auditCreated = 'auditCreated';
 
-/** What a messaging root lists, each as the text of one of `defineContract`'s fields. */
+/** What a messaging root's Group lists, each as the text of one of `defineGroup`'s fields; an empty one is left out. */
 type MessagingLists = {
   readonly events?: string;
   readonly commands?: string;
@@ -200,8 +200,15 @@ function aMessagingService({
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
   subscriptions: listed = [notifyOnSettled, auditCreated],
 }: MessagingLists = {}): Readonly<Record<string, string>> {
+  const grouped = [
+    ['events', events],
+    ['commands', commands],
+    ['subscriptions', `[${listed.join(', ')}]`],
+  ]
+    .filter(([, list]) => list !== '[]')
+    .map(([field, list]) => `  ${field}: ${list},`);
   const root = lines([
-    "import { defineContract, defineDependencies } from '@cf-loom/contract';",
+    "import { defineContract, defineDependencies, defineGroup } from '@cf-loom/contract';",
     importOf(
       '{ chargeCardV1, chargeCardV2, orderCreatedV1, orderCreatedV2, orderPurgedV1, refundCardV1 }',
       './messages.ts',
@@ -211,11 +218,15 @@ function aMessagingService({
     '',
     'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
     '',
+    'const orders = defineGroup({',
+    "  name: 'orders',",
+    "  description: 'Orders',",
+    ...grouped,
+    '});',
+    '',
     'export const contract = defineContract({',
     "  name: 'orders-service',",
-    `  events: ${events},`,
-    `  commands: ${commands},`,
-    `  subscriptions: [${listed.join(', ')}],`,
+    '  groups: [orders],',
     '  dependencies: [paymentsDeps],',
     '});',
   ]);

@@ -1,4 +1,10 @@
-import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
+import {
+  defineCommand,
+  defineContract,
+  defineEvent,
+  defineGroup,
+  defineSubscription,
+} from '@cf-loom/contract';
 import { type HandlerMap, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
@@ -76,9 +82,21 @@ const notifyOnCreated = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2, orderCreatedV3, orderArchivedV1],
-  commands: [chargeCardV1, chargeCardV2, refundV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+    }),
+    defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      events: [orderCreatedV3, orderArchivedV1],
+      commands: [chargeCardV2, refundV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 const readers = readersOf({
@@ -108,7 +126,7 @@ describe('publish and send types', () => {
     expect(opening).toBeInstanceOf(Promise);
   });
 
-  test('publish takes one body per Active and Deprecated version, keyed v<n>, each typed by its schema', () => {
+  test('publish takes one body per Active and Deprecated version, keyed v<n>, each typed by its schema, whatever Group lists it', () => {
     const publishing = () => publisher.publish('OrderCreated', { v2, v3 });
 
     const mistyped = () =>
@@ -143,7 +161,7 @@ describe('publish and send types', () => {
     expect([unlisted, archived]).toHaveLength(2);
   });
 
-  test('send takes a Command name with an Active version and that version’s body', () => {
+  test('send takes a Command name with an Active version and that version’s body, whatever Group lists it', () => {
     const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 });
 
     // @ts-expect-error: the Active ChargeCard@2 requires its amount

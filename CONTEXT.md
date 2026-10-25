@@ -16,6 +16,10 @@ _Avoid_: schema (overloaded with the zod schemas inside a Contract), registry (f
 A declared part of a Contract that has a Visibility and a lifecycle: an Endpoint or a Message Version (of an Event or a Command).
 _Avoid_: item, entry, member
 
+**Group**:
+A named set of Endpoints, Events, Commands and Subscriptions, for organizing code and documentation only; it adds nothing to what it lists.
+_Avoid_: router, family, tag, module
+
 **Contract Package**:
 The published artifact that carries exactly one Contract: its Public and Internal Elements and its Snapshot, which also records its Dependencies. Versioned with semantic versioning.
 _Avoid_: schemas package, public package (Visibility is not about the registry)
@@ -53,10 +57,6 @@ _Avoid_: access, exposure, scope (for Visibility)
 **Endpoint**:
 One HTTP method on one literal path, which identify it, with a name for code, the schemas of its Input, its Success and its Rejections, and the Guards it attaches.
 _Avoid_: route, operation, action, call
-
-**Group**:
-A named set of Endpoints, for organizing code and documentation only; it adds nothing to the Endpoints in it.
-_Avoid_: router, family, tag
 
 **Guard**:
 A reusable requirement an Endpoint attaches explicitly: what it demands from the request, the Guards whose Context it reads, the Context it provides, and the Rejections it may answer instead of admitting the request.

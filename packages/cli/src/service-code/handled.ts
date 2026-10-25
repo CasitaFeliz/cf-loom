@@ -12,11 +12,14 @@ export type MessageHandled =
   | { readonly kind: 'command'; readonly name: string; readonly version: number }
   | { readonly kind: 'subscription'; readonly name: string };
 
+/** A Command's Message Version or a Subscription with the Group that lists it, where the layout may place its Handler. */
+export type PlacedMessage = MessageHandled & { readonly group: string };
+
 /**
  * An Endpoint, a Guard, a Command's Message Version or a Subscription a Service writes a Handler
  * for, by what names its Handler file.
  */
-export type Handled = DeclarationHandled | MessageHandled;
+export type Handled = DeclarationHandled | PlacedMessage;
 
 /** A declared Element with a Handler, and whether the Handler map holds its Handler. */
 export type DeclaredHandled = { readonly handled: Handled; readonly isMapped: boolean };
@@ -55,7 +58,7 @@ function declaredGuardsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[]
 /** Each Command's Message Version, by name in code, mapped unless Retired. */
 function declaredCommandsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
   const commands = Object.entries(snapshot.commands).map(([identity, command]) => ({
-    handled: { kind: 'command' as const, ...nameAndVersionOf(identity) },
+    handled: { kind: 'command' as const, ...nameAndVersionOf(identity), group: command.group },
     isMapped: isLive(command),
   }));
   return commands.sort((left, right) => byCommandName(left.handled, right.handled));
@@ -63,8 +66,11 @@ function declaredCommandsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled
 
 /** Each Subscription, in the canonical Snapshot's order, always mapped: it has no lifecycle. */
 function declaredSubscriptionsOf(snapshot: ServiceSnapshot): readonly DeclaredHandled[] {
-  return Object.keys(snapshot.subscriptions).map(
-    (name): DeclaredHandled => ({ handled: { kind: 'subscription', name }, isMapped: true }),
+  return Object.entries(snapshot.subscriptions).map(
+    ([name, { group }]): DeclaredHandled => ({
+      handled: { kind: 'subscription', name, group },
+      isMapped: true,
+    }),
   );
 }
 

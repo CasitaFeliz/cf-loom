@@ -163,6 +163,7 @@
         "type": "object"
       },
       "description": "Charges the customer’s card for an order’s total",
+      "group": "orders",
       "lifecycle": "active"
     }
   },
@@ -531,6 +532,7 @@
         "type": "object"
       },
       "description": "An order was placed, pending, for its total",
+      "group": "orders",
       "lifecycle": "active",
       "visibility": "internal"
     }
@@ -672,7 +674,8 @@
   "subscriptions": {
     "chargeOnCreated": {
       "description": "Charges the card for each order created",
-      "event": "orders-service:OrderCreated@1"
+      "event": "orders-service:OrderCreated@1",
+      "group": "orders"
     }
   }
 }

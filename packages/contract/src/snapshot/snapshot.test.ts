@@ -192,8 +192,14 @@ const notifyOnFailed = defineSubscription({
 const contract = defineContract({
   name: 'orders-service',
   definitions: [orgDefinitions],
-  groups: [ordersGroup],
-  subscriptions: [notifyOnSettled, notifyOnFailed],
+  groups: [
+    ordersGroup,
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      subscriptions: [notifyOnSettled, notifyOnFailed],
+    }),
+  ],
   dependencies: [paymentsDeps],
 });
 
@@ -718,8 +724,8 @@ const chargeCardV1 = defineCommand({
 
 /** A Service that declares Messages and subscribes to its own Event and to a Dependency's. */
 function messagingSnapshot(declared: {
-  readonly events?: readonly (typeof orderCreatedV1 | typeof orderCreatedV2)[];
-  readonly commands?: readonly (typeof chargeCardV1)[];
+  readonly events?: readonly [typeof orderCreatedV1 | typeof orderCreatedV2];
+  readonly commands?: readonly [typeof chargeCardV1];
 }) {
   const auditOrders = defineSubscription({
     name: 'auditOrders',
@@ -728,9 +734,19 @@ function messagingSnapshot(declared: {
   });
   const root = defineContract({
     name: 'orders-service',
-    events: declared.events ?? [orderCreatedV1, orderCreatedV2],
-    commands: declared.commands ?? [chargeCardV1],
-    subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
+    groups: [
+      defineGroup({
+        name: 'orders',
+        description: 'Orders',
+        events: declared.events ?? [orderCreatedV1, orderCreatedV2],
+      }),
+      defineGroup({
+        name: 'payments',
+        description: 'Payments',
+        commands: declared.commands ?? [chargeCardV1],
+        subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
+      }),
+    ],
     dependencies: [paymentsDeps],
   });
   return serviceSnapshot(root, aContext({ packages: [] }));
@@ -743,10 +759,11 @@ const orderIdBody = {
 };
 
 describe('snapshotOf: Messages and Subscriptions', () => {
-  test('Events are written by identity with their Visibility, lifecycle, description and body', () => {
+  test('Events are written by identity with their Group, Visibility, lifecycle, description and body', () => {
     const snapshot = messagingSnapshot({});
 
     expect(snapshot.events['OrderCreated@1']).toEqual({
+      group: 'orders',
       visibility: 'internal',
       lifecycle: 'deprecated',
       description: 'An order was placed',
@@ -754,11 +771,12 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     });
   });
 
-  test('Commands are written by identity with no Visibility', () => {
+  test('Commands are written by identity with their Group and no Visibility', () => {
     const snapshot = messagingSnapshot({});
 
     expect(snapshot.commands).toEqual({
       'ChargeCard@1': {
+        group: 'payments',
         lifecycle: 'active',
         description: 'Charges the order’s card',
         body: orderIdBody,
@@ -784,6 +802,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     const snapshot = messagingSnapshot({ commands: [retiredV1] });
 
     expect(snapshot.commands['ChargeCard@1']).toEqual({
+      group: 'payments',
       lifecycle: 'retired',
       description: 'Charges the order’s card',
       body: orderIdBody,
@@ -803,6 +822,36 @@ describe('snapshotOf: Messages and Subscriptions', () => {
 
     expect(snapshot.subscriptions).toMatchObject({
       notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
+    });
+  });
+
+  test('a Subscription writes its Group', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions).toMatchObject({ notifyOnSettled: { group: 'payments' } });
+  });
+
+  test('two Message Versions of one Command are written each with its own Group', () => {
+    const chargeCardV2 = defineCommand({
+      name: 'ChargeCard',
+      version: 2,
+      description: 'Charges the order’s card, again',
+      lifecycle: 'deprecated',
+      body: orderBody,
+    });
+    const root = defineContract({
+      name: 'orders-service',
+      groups: [
+        defineGroup({ name: 'orders', description: 'Orders', commands: [chargeCardV1] }),
+        defineGroup({ name: 'payments', description: 'Payments', commands: [chargeCardV2] }),
+      ],
+    });
+
+    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+
+    expect(snapshot.commands).toMatchObject({
+      'ChargeCard@1': { group: 'orders' },
+      'ChargeCard@2': { group: 'payments' },
     });
   });
 
@@ -827,8 +876,14 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     });
     const root = defineContract({
       name: 'orders-service',
-      events: [orderCreatedV2],
-      subscriptions: [settle2x, settle2X],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV2],
+          subscriptions: [settle2x, settle2X],
+        }),
+      ],
     });
 
     const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
@@ -846,7 +901,13 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     });
     const root = defineContract({
       name: 'orders-service',
-      events: [orderCreatedV2, orderCreatedV10],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV2, orderCreatedV10],
+        }),
+      ],
     });
 
     const text = textOf(serviceSnapshot(root, aContext({ packages: [] })));
@@ -990,8 +1051,12 @@ describe('canonicalTextOf', () => {
           description: 'Order lifecycle',
           endpoints: [editOrder, aGetOrder([notFound, orderLocked])],
         }),
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          subscriptions: [notifyOnFailed, notifyOnSettled],
+        }),
       ],
-      subscriptions: [notifyOnFailed, notifyOnSettled],
       dependencies: [
         defineDependencies(payments, {
           endpoints: [payments.endpoints.listPayments, payments.endpoints.getPayment],

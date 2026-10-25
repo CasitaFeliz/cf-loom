@@ -412,15 +412,16 @@ function inlineSubscription(name: string): string {
   return `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
 }
 
-/** What a messaging root lists beside its Group, each line one of `defineContract`'s fields. */
+/** What the Group `payments` of a messaging root lists, each line one of `defineGroup`'s fields. */
 type MessagingLists = {
   readonly commands?: string;
   readonly subscriptions?: readonly string[];
 };
 
 /**
- * The root of `aService()`, also listing its Events and Commands, and the Subscriptions of
- * `subscriptions.ts`: one to a Dependency's Event, then one to its own `OrderCreated@2`.
+ * The root of `aService()`, its Group `orders` also listing its Events, and a Group `payments`
+ * listing its Commands and the Subscriptions of `subscriptions.ts`: one to a Dependency's Event,
+ * then one to its own `OrderCreated@2`.
  */
 function aMessagingRoot({
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
@@ -454,15 +455,23 @@ function aMessagingRoot({
       lines([
         'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
         '',
-        'export const contract = defineContract({',
-        "  name: 'orders-service',",
-        '  groups: [orders],',
-        '  events: [orderCreatedV1, orderCreatedV2, orderPurgedV1],',
+        'const paymentsGroup = defineGroup({',
+        "  name: 'payments',",
+        "  description: 'Payments',",
         `  commands: ${commands},`,
         `  subscriptions: [${subscriptions.join(', ')}],`,
+        '});',
+        '',
+        'export const contract = defineContract({',
+        "  name: 'orders-service',",
+        '  groups: [orders, paymentsGroup],',
         '  dependencies: [paymentsDeps],',
         '});',
       ]).trimEnd(),
+    )
+    .replace(
+      /( {2}endpoints: \[.*\],\n)/,
+      '$1  events: [orderCreatedV1, orderCreatedV2, orderPurgedV1],\n',
     );
 }
 
@@ -584,16 +593,19 @@ describe('cf-loom generate: the Handler map', () => {
     expect(read(project, 'src/handlers.generated.ts')).toBe(
       lines([
         header,
-        importOf('chargeCardV1CommandHandler', './commands/charge-card.v1.handler.ts'),
-        importOf('chargeCardV2CommandHandler', './commands/charge-card.v2.handler.ts'),
+        importOf('chargeCardV1CommandHandler', './commands/payments/charge-card.v1.handler.ts'),
+        importOf('chargeCardV2CommandHandler', './commands/payments/charge-card.v2.handler.ts'),
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
         importOf('apiKeyGuardHandler', './guards/api-key.handler.ts'),
         importOf('{ readers }', './readers.generated.ts'),
-        importOf('auditCreatedSubscriptionHandler', './subscriptions/audit-created.handler.ts'),
+        importOf(
+          'auditCreatedSubscriptionHandler',
+          './subscriptions/payments/audit-created.handler.ts',
+        ),
         importOf(
           'notifyOnSettledSubscriptionHandler',
-          './subscriptions/notify-on-settled.handler.ts',
+          './subscriptions/payments/notify-on-settled.handler.ts',
         ),
         '',
         'export default {',
@@ -629,13 +641,13 @@ describe('cf-loom generate: the Handler map', () => {
         'Wrote contract.snapshot.json',
         'Wrote src/handlers.generated.ts',
         'Wrote src/readers.generated.ts',
-        'Wrote src/commands/charge-card.v1.handler.ts',
-        'Wrote src/commands/charge-card.v2.handler.ts',
+        'Wrote src/commands/payments/charge-card.v1.handler.ts',
+        'Wrote src/commands/payments/charge-card.v2.handler.ts',
         'Wrote src/endpoints/orders/create-order.handler.ts',
         'Wrote src/endpoints/orders/get-order.handler.ts',
         'Wrote src/guards/api-key.handler.ts',
-        'Wrote src/subscriptions/audit-created.handler.ts',
-        'Wrote src/subscriptions/notify-on-settled.handler.ts',
+        'Wrote src/subscriptions/payments/audit-created.handler.ts',
+        'Wrote src/subscriptions/payments/notify-on-settled.handler.ts',
       ]),
     );
   });
@@ -1009,30 +1021,30 @@ describe('cf-loom generate: stubs', () => {
     expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(stub);
     expect(handlerFiles(project)).toHaveLength(3);
   });
-  test('a Command’s Message Version’s stub sits at src/commands/<name>.v<n>.handler.ts and imports its pairing from readers.generated.ts', () => {
+  test('a Command’s Message Version’s stub sits at src/commands/<group>/<name>.v<n>.handler.ts and imports its pairing from readers.generated.ts', () => {
     const project = aProject(aMessagingService());
 
     cfLoom(project, 'generate');
 
-    expect(read(project, 'src/commands/charge-card.v2.handler.ts')).toBe(
+    expect(read(project, 'src/commands/payments/charge-card.v2.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { readers } from '../readers.generated.ts';",
+        "import { readers } from '../../readers.generated.ts';",
         '',
         'export default handle.stub(readers.commands.chargeCardV2);',
       ]),
     );
   });
 
-  test('a Subscription’s stub sits at src/subscriptions/<name in kebab-case>.handler.ts and imports its pairing from readers.generated.ts', () => {
+  test('a Subscription’s stub sits at src/subscriptions/<group>/<name in kebab-case>.handler.ts and imports its pairing from readers.generated.ts', () => {
     const project = aProject(aMessagingService());
 
     cfLoom(project, 'generate');
 
-    expect(read(project, 'src/subscriptions/notify-on-settled.handler.ts')).toBe(
+    expect(read(project, 'src/subscriptions/payments/notify-on-settled.handler.ts')).toBe(
       lines([
         "import { handle } from '@cf-loom/handlers';",
-        "import { readers } from '../readers.generated.ts';",
+        "import { readers } from '../../readers.generated.ts';",
         '',
         'export default handle.stub(readers.subscriptions.notifyOnSettled);',
       ]),
@@ -1044,7 +1056,9 @@ describe('cf-loom generate: stubs', () => {
 
     cfLoom(project, 'generate');
 
-    expect(existsSync(join(project, 'src/commands/refund-card.v1.handler.ts'))).toBe(false);
+    expect(existsSync(join(project, 'src/commands/payments/refund-card.v1.handler.ts'))).toBe(
+      false,
+    );
   });
 
   test('a Command stub’s direct call reads its body with the generated Reader first, then throws, since consume never runs it', () => {
@@ -1056,7 +1070,7 @@ describe('cf-loom generate: stubs', () => {
     const thrown = probe(
       project,
       lines([
-        probeImportOf('stub', 'src/commands/charge-card.v2.handler.ts'),
+        probeImportOf('stub', 'src/commands/payments/charge-card.v2.handler.ts'),
         'const nameOf = (call) => call.then(() => "none", (error) => error.constructor.name);',
         'const messageOf = (call) => call.then(() => "none", (error) => error.message);',
         `const meta = ${JSON.stringify(meta)};`,
@@ -1621,7 +1635,7 @@ describe('cf-loom generate: what it refuses', () => {
   test('the Handler of a Retired Command’s Message Version that is still declared is no orphan', () => {
     const project = aProject({
       ...aMessagingService(),
-      'src/commands/refund-card.v1.handler.ts': "export default 'retired';\n",
+      'src/commands/payments/refund-card.v1.handler.ts': "export default 'retired';\n",
     });
 
     const ran = cfLoom(project, 'generate');
@@ -1645,7 +1659,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: `subscriptions.${name}.name name-grammar: A Subscription name is ${rule}: ${name}\n`,
+      stderr: `groups.payments.subscriptions.${name}.name name-grammar: A Subscription name is ${rule}: ${name}\n`,
     });
   });
 
@@ -1940,9 +1954,9 @@ describe('cf-loom generate: the Service type-checks', () => {
     const project = aProject({ ...aMessagingService(), 'tsconfig.json': tsconfig });
     expect(cfLoom(project, 'generate').status).toBe(0);
     write(project, {
-      'src/subscriptions/audit-created.handler.ts': lines([
+      'src/subscriptions/payments/audit-created.handler.ts': lines([
         "import { handle } from '@cf-loom/handlers';",
-        importOf('{ readers }', '../readers.generated.ts'),
+        importOf('{ readers }', '../../readers.generated.ts'),
         '',
         'export default handle(readers.subscriptions.auditCreated, async (body) => {',
         "  const status: 'pending' | 'paid' | { unknown: string } = body.status;",
@@ -1968,8 +1982,8 @@ describe('cf-loom generate: the Service type-checks', () => {
   });
 
   test.each([
-    'src/commands/charge-card.v2.handler.ts',
-    'src/subscriptions/audit-created.handler.ts',
+    'src/commands/payments/charge-card.v2.handler.ts',
+    'src/subscriptions/payments/audit-created.handler.ts',
   ])('a deleted Message Handler file %s is a type error', (path) => {
     const project = aProject({ ...aMessagingService(), 'tsconfig.json': tsconfig });
     expect(cfLoom(project, 'generate').status).toBe(0);
@@ -1988,8 +2002,8 @@ describe('cf-loom generate: the Service type-checks', () => {
       ...service,
       'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
         .replace(
-          'export const contract',
-          'const listed = [notifyOnSettled, auditCreated];\n\nexport const contract',
+          'const paymentsGroup',
+          'const listed = [notifyOnSettled, auditCreated] as const;\n\nconst paymentsGroup',
         )
         .replace('subscriptions: [notifyOnSettled, auditCreated],', 'subscriptions: listed,'),
       'tsconfig.json': tsconfig.replace(
@@ -2203,7 +2217,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
         'contract.snapshot.json was edited or is out of date: run cf-loom generate',
         'src/handlers.generated.ts was edited or is out of date: run cf-loom generate',
         'src/readers.generated.ts was edited or is out of date: run cf-loom generate',
-        'src/commands/charge-card.v2.handler.ts is missing: run cf-loom generate',
+        'src/commands/payments/charge-card.v2.handler.ts is missing: run cf-loom generate',
       ]),
     });
   });
@@ -2652,5 +2666,219 @@ describe('cf-loom generate and verify: what the file system holds', () => {
 
     expect(ran.status).toBe(3);
     expect(ran.stderr).toMatch(/^init takes one kind\. Usage: /);
+  });
+});
+
+/** `aMessagingService()` with its root's text changed, as when a declaration moves between Groups. */
+function withRoot(
+  files: Readonly<Record<string, string>>,
+  change: (root: string) => string,
+): Readonly<Record<string, string>> {
+  return { ...files, 'src/contract/index.ts': change(files['src/contract/index.ts'] ?? '') };
+}
+
+/** The Group `orders` of a messaging root, also listing the given fields. */
+function ordersAlsoListing(fields: string): (root: string) => string {
+  const events = '  events: [orderCreatedV1, orderCreatedV2, orderPurgedV1],';
+  return (root) => root.replace(events, `${events}\n${fields}`);
+}
+
+/** A messaging root whose Group `payments` is named otherwise. */
+function paymentsNamed(name: string): (root: string) => string {
+  return (root) => root.replace("  name: 'payments',", `  name: '${name}',`);
+}
+
+describe('cf-loom generate and verify: Message Handlers follow their Group', () => {
+  test('two Message Versions of one Command in two Groups are each written under their own Group', () => {
+    const service = aMessagingService({ commands: '[chargeCardV2, refundCardV1]' });
+    const project = aProject(withRoot(service, ordersAlsoListing('  commands: [chargeCardV1],')));
+
+    cfLoom(project, 'generate');
+
+    expect(handlerFiles(project)).toEqual(
+      expect.arrayContaining([
+        'commands/orders/charge-card.v1.handler.ts',
+        'commands/payments/charge-card.v2.handler.ts',
+      ]),
+    );
+  });
+
+  test('moving a Subscription to another Group leaves the readers file unchanged', () => {
+    const before = aProject(aMessagingService());
+    const moved = withRoot(
+      aMessagingService({ subscriptions: ['notifyOnSettled'] }),
+      ordersAlsoListing('  subscriptions: [auditCreated],'),
+    );
+    const after = aProject(moved);
+
+    cfLoom(before, 'generate');
+    cfLoom(after, 'generate');
+
+    expect(read(after, 'src/readers.generated.ts')).toBe(read(before, 'src/readers.generated.ts'));
+  });
+
+  test('src/{group}/{name}.handler.ts places an Endpoint and a Subscription of one Group side by side', () => {
+    const service = withRoot(
+      aMessagingService({ subscriptions: ['notifyOnSettled'] }),
+      ordersAlsoListing('  subscriptions: [auditCreated],'),
+    );
+    const sideBySide =
+      "{ endpoint: 'src/{group}/{name}.handler.ts', subscription: 'src/{group}/{name}.handler.ts' }";
+    const project = aProject(withLayout(service, sideBySide));
+
+    cfLoom(project, 'generate');
+
+    expect(handlerFiles(project)).toEqual(
+      expect.arrayContaining(['orders/audit-created.handler.ts', 'orders/get-order.handler.ts']),
+    );
+  });
+
+  test.each([
+    {
+      kind: 'an Endpoint',
+      layout: "{ endpoint: 'src/{group}/{name}.handler.ts' }",
+      change: (root: string) => root.replace("  name: 'orders',", "  name: 'contract',"),
+      placed: 'endpoints.createOrder is src/contract/create-order.handler.ts',
+    },
+    {
+      kind: 'a Command',
+      layout: "{ command: 'src/{group}/{name}.v{version}.handler.ts' }",
+      change: paymentsNamed('contract'),
+      placed: 'commands.ChargeCard@1 is src/contract/charge-card.v1.handler.ts',
+    },
+    {
+      kind: 'a Subscription',
+      layout: "{ subscription: 'src/{group}/{name}.handler.ts' }",
+      change: paymentsNamed('contract'),
+      placed: 'subscriptions.auditCreated is src/contract/audit-created.handler.ts',
+    },
+  ])(
+    '$kind whose Group fills its Handler path into src/contract/ exits 3 naming it, and writes nothing',
+    ({ layout, change, placed }) => {
+      const project = aProject(withLayout(withRoot(aMessagingService(), change), layout));
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `${placed}, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n`,
+      });
+      expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+      expect(handlerFiles(project)).toEqual([]);
+    },
+  );
+
+  test('a Group that fills a Handler path into src/contract/ by concatenation exits 3', () => {
+    const layout = "{ subscription: 'src/contr{group}/{name}.handler.ts' }";
+    const project = aProject(
+      withLayout(withRoot(aMessagingService(), paymentsNamed('act')), layout),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('two Subscriptions of one Group at one filled path exit 3 naming both', () => {
+    const layout = "{ subscription: 'src/subscriptions/{group}.handler.ts' }";
+    const project = aProject(withLayout(aMessagingService(), layout));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'subscriptions.auditCreated and subscriptions.notifyOnSettled are both src/subscriptions/payments.handler.ts: give each its own path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('after a Command’s Message Version moves to another Group, its Handler left in the old folder is an orphan', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    const moved = withRoot(
+      aMessagingService({ commands: '[chargeCardV1, refundCardV1]' }),
+      ordersAlsoListing('  commands: [chargeCardV2],'),
+    );
+    write(project, { 'src/contract/index.ts': moved['src/contract/index.ts'] ?? '' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "src/commands/payments/charge-card.v2.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+    });
+  });
+
+  test('after a Group is renamed, its Message Handlers left in the old folder are orphans', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    const renamed = withRoot(aMessagingService(), paymentsNamed('billing'));
+    write(project, { 'src/contract/index.ts': renamed['src/contract/index.ts'] ?? '' });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr.split('\n').filter((line) => line !== '')).toEqual(
+      [
+        'src/commands/payments/charge-card.v1.handler.ts',
+        'src/commands/payments/charge-card.v2.handler.ts',
+        'src/subscriptions/payments/audit-created.handler.ts',
+        'src/subscriptions/payments/notify-on-settled.handler.ts',
+      ].map(
+        (path) =>
+          `${path} names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it`,
+      ),
+    );
+  });
+
+  test('verify exits 0 when Message Handlers sit under their Groups', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(0);
+  });
+
+  test('verify exits 3 on a Handler path filled into src/contract/', () => {
+    const layout = "{ subscription: 'src/{group}/{name}.handler.ts' }";
+    const project = aProject(
+      withLayout(withRoot(aMessagingService(), paymentsNamed('contract')), layout),
+    );
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+    });
+  });
+
+  test('after a Subscription moves to another Group, verify exits 1 naming the Handler left behind', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    const moved = withRoot(
+      aMessagingService({ subscriptions: ['notifyOnSettled'] }),
+      ordersAlsoListing('  subscriptions: [auditCreated],'),
+    );
+    write(project, { 'src/contract/index.ts': moved['src/contract/index.ts'] ?? '' });
+
+    const ran = cfLoom(project, 'verify');
+
+    expect(ran.status).toBe(1);
+    expect(ran.stderr).toContain(
+      "src/subscriptions/payments/audit-created.handler.ts names no declared Endpoint, Guard, Command's Message Version or Subscription: delete it\n",
+    );
   });
 });

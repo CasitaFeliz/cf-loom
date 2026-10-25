@@ -7,6 +7,7 @@ import {
   defineContract,
   defineDependencies,
   defineEvent,
+  defineGroup,
   defineSubscription,
 } from '@cf-loom/contract';
 import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
@@ -54,9 +55,15 @@ const notifyOnCreated = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 const readers = readersOf({
@@ -486,8 +493,14 @@ describe('consuming over jetstream()', () => {
   test('without a prefix, consume looks for the unprefixed durable consumer names', async () => {
     const unprefixed = defineContract({
       name: 'unprefixed-service',
-      events: [orderCreatedV1],
-      subscriptions: [notifyOnCreated],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV1],
+          subscriptions: [notifyOnCreated],
+        }),
+      ],
     });
     await arrangePlanOf(server.url, unprefixed, null);
     await arrangeDurablesOf(server.url, planOf(unprefixed, null));
@@ -534,7 +547,13 @@ describe('consuming over jetstream()', () => {
     });
     const billing = defineContract({
       name: 'billing-service',
-      subscriptions: [notifyOnSettled],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          subscriptions: [notifyOnSettled],
+        }),
+      ],
       dependencies: [defineDependencies(payments, { events: [paymentSettledV1] })],
     });
     const broker = jetstream({

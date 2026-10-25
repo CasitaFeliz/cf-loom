@@ -1,17 +1,21 @@
 import {
-  isCommand,
   isDefinitions,
   isDependencies,
-  isEndpoint,
-  isEvent,
   isGroup,
   isGuard,
   isRejection,
   isStandardRejection,
-  isSubscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import { type Declarations, isPlainObject, listOf, textOf } from '../written/index.ts';
+import {
+  type Declarations,
+  fieldListings,
+  groupedFields,
+  isPlainObject,
+  type LocatedGroup,
+  listOf,
+  textOf,
+} from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { type Readable, readableOf } from './fields.ts';
 
@@ -34,22 +38,16 @@ type ObjectPart = { readonly at: Path; readonly value: unknown; readonly require
 /** Every list is a list, every object part an object, and every item the declaration that belongs there. */
 export function structureFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
-    ...listingsOf(declarations).flatMap(listingFailures),
+    ...listsOf(declarations).flatMap(listingFailures),
     ...readableOf(declarations).flatMap(objectPartsOf).flatMap(objectPartFailures),
   ];
 }
 
-function listingsOf(declarations: Declarations): readonly Listing[] {
+function listsOf(declarations: Declarations): readonly Listing[] {
   const { root, groups, endpoints, guards, allPackages } = declarations;
   return [
     ...rootListings(root),
-    ...groups.map(({ at, group }) => ({
-      at: [...at, 'endpoints'],
-      list: group.endpoints,
-      noun: 'an Endpoint',
-      fits: isEndpoint,
-      required: true as const,
-    })),
+    ...groups.flatMap(groupListings),
     ...endpoints.flatMap(({ at, endpoint }) => [
       { at: [...at, 'guards'], list: endpoint.guards, noun: 'an Attachment' },
       {
@@ -80,6 +78,16 @@ function listingsOf(declarations: Declarations): readonly Listing[] {
   ];
 }
 
+/** A Group's lists, none required, since a list left out is empty. */
+function groupListings({ at, group }: LocatedGroup): readonly Listing[] {
+  return groupedFields.map((field) => ({
+    at: [...at, field],
+    list: group[field],
+    noun: fieldListings[field].noun,
+    fits: fieldListings[field].fits,
+  }));
+}
+
 function rootListings(root: Declarations['root']): readonly Listing[] {
   switch (root.kind) {
     case 'contract':
@@ -91,14 +99,6 @@ function rootListings(root: Declarations['root']): readonly Listing[] {
           fits: isDefinitions,
         },
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
-        { at: ['events'], list: root.events, noun: 'an Event', fits: isEvent },
-        { at: ['commands'], list: root.commands, noun: 'a Command', fits: isCommand },
-        {
-          at: ['subscriptions'],
-          list: root.subscriptions,
-          noun: 'a Subscription',
-          fits: isSubscription,
-        },
         {
           at: ['dependencies'],
           list: root.dependencies,

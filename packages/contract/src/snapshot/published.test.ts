@@ -56,6 +56,7 @@ const getOrder = {
 } as const satisfies EndpointSnapshot;
 
 const orderPlaced = {
+  group: 'orders',
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',

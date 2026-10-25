@@ -1,3 +1,5 @@
+import type { GroupedField } from './grouped.ts';
+
 type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
 /** What a declaration must also satisfy: each field it holds is one its kind declares. */
@@ -7,6 +9,15 @@ export type DeclaredFieldsRule<Declaration, Shape> = {
     keyof Shape
   >]: Refusal<`${Field & string} is not a declared field`>;
 };
+
+/** What a Group must also satisfy: it lists at least one Endpoint, Event, Command or Subscription. */
+export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, GroupedField>] extends [
+  never,
+]
+  ? {
+      readonly [Field in GroupedField]: Refusal<'A Group lists at least one Endpoint, Event, Command or Subscription'>;
+    }
+  : unknown;
 
 type IntersectionOf<Members> = (
   Members extends unknown

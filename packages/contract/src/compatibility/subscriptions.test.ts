@@ -50,7 +50,7 @@ function aSubscription(
   event = 'orders-service:OrderPlaced@1',
   description = 'Receives it',
 ): SubscriptionSnapshot {
-  return { description, event };
+  return { group: 'orders', description, event };
 }
 
 function aRemovedSubscription(event = 'orders-service:OrderPlaced@1'): SubscriptionTombstone {
@@ -148,6 +148,16 @@ describe('compatibilityReportOf, Subscriptions', () => {
     const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const reworded = aSubscription('orders-service:OrderPlaced@1', 'Tells the customer');
     const proposed = aProposed({ subscriptions: { notifyOnPlaced: reworded } });
+
+    const report = reportOf(baseline, proposed);
+
+    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+  });
+
+  test('moving a Subscription to another Group gives no Change, only a changed hash', () => {
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
+    const moved = { ...aSubscription(), group: 'billing' };
+    const proposed = aProposed({ subscriptions: { notifyOnPlaced: moved } });
 
     const report = reportOf(baseline, proposed);
 

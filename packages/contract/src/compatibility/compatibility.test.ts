@@ -63,6 +63,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
   return {
+    group: 'orders',
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
@@ -72,7 +73,13 @@ function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
 }
 
 function aCommand(fields: Partial<CommandSnapshot> = {}): CommandSnapshot {
-  return { lifecycle: 'active', description: 'Charge a card', body: emptyObject, ...fields };
+  return {
+    group: 'orders',
+    lifecycle: 'active',
+    description: 'Charge a card',
+    body: emptyObject,
+    ...fields,
+  };
 }
 
 function aLive<Element extends { readonly lifecycle: Lifecycle }>(

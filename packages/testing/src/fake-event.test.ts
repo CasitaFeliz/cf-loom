@@ -3,6 +3,7 @@ import {
   defineContract,
   defineDependencies,
   defineEvent,
+  defineGroup,
   defineSubscription,
   openEnumReader,
 } from '@cf-loom/contract';
@@ -53,7 +54,13 @@ const notifyOnSettled = defineSubscription({
 
 const contract = defineContract({
   name: 'orders-service',
-  subscriptions: [notifyOnSettled],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      subscriptions: [notifyOnSettled],
+    }),
+  ],
   dependencies: [paymentsDeps],
 });
 
