@@ -9,7 +9,7 @@ import {
   relativeSpecifierOf,
   stringLiteralOf,
 } from '../source-text/index.ts';
-import { handlerLocalOf, pairingNameOf } from './code-names.ts';
+import { handlerLocalOf, nameInCodeOf } from './code-names.ts';
 import type { DeprecationStamp, Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
 import { readersTable } from './readers.ts';
@@ -93,7 +93,7 @@ function mapLinesOf(key: string, handled: readonly Handled[]): readonly string[]
     return [`  ${key}: {},`];
   }
   const entries = handled.map(
-    (element) => `    ${keyOf(mapKeyOf(element))}: ${handlerLocalOf(element)},`,
+    (element) => `    ${keyOf(nameInCodeOf(element))}: ${handlerLocalOf(element)},`,
   );
   return [`  ${key}: {`, ...entries, '  },'];
 }
@@ -106,19 +106,4 @@ function stampLinesOf(stamps: readonly DeprecationStamp[]): readonly string[] {
     ({ name, deprecatedAt }) => `    ${keyOf(name)}: ${stringLiteralOf(deprecatedAt)},`,
   );
   return ['  deprecatedAt: {', ...entries, '  },'];
-}
-
-/**
- * The key a Handler is mapped under: an Endpoint's, Guard's or Subscription's name, a Command's
- * Message Version's name in code.
- */
-function mapKeyOf(handled: Handled): string {
-  switch (handled.kind) {
-    case 'endpoint':
-    case 'guard':
-    case 'subscription':
-      return handled.name;
-    case 'command':
-      return pairingNameOf(handled);
-  }
 }

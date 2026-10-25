@@ -1,3 +1,4 @@
+export { oneOf } from './closed-values.ts';
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';
 export { follows, kebabCase, upperSnakeCase } from './grammars.ts';

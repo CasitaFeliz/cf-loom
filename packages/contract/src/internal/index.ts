@@ -117,6 +117,7 @@ export {
   follows,
   kebabCase,
   locationOf,
+  oneOf,
   problemLineOf,
   problemOf,
   upperSnakeCase,

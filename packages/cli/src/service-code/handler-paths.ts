@@ -3,7 +3,7 @@ import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
 import { contractFolder, isUnderContract } from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
-import type { HandlerLocal } from './code-names.ts';
+import type { LocalParts } from './code-names.ts';
 import {
   type DeclarationHandled,
   declaredHandledOf,
@@ -102,7 +102,7 @@ export function elementLabelOf(handled: DeclarationHandled | MessageHandled): st
 }
 
 /** An Element no longer declared, by its name in code: `endpoints.getOrder`, `commands.chargeCardV1`. */
-export function recordedLabelOf({ kind, name }: HandlerLocal): string {
+export function recordedLabelOf({ kind, name }: LocalParts): string {
   return labelOf(kind, name);
 }
 

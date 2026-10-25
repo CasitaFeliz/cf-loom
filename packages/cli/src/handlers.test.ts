@@ -160,9 +160,8 @@ function heldLine(old: string, element: string, now: string): string {
   return movedLine(old, element, now).replace(/move it$/, 'delete it');
 }
 
-/** The files of `aService()` changed so its Endpoint `getOrder` is named `fetchOrder`. */
-function getOrderRenamed(): Readonly<Record<string, string>> {
-  const service = aService();
+/** The files of a Service changed so its Endpoint `getOrder` is named `fetchOrder`. */
+function getOrderRenamed(service = aService()): Readonly<Record<string, string>> {
   const endpoint = 'src/contract/endpoints/orders/get-order.endpoint.ts';
   const root = 'src/contract/index.ts';
   return {
@@ -1478,6 +1477,34 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     ]);
   });
 
+  test('after layout.endpoint changes with the Handler map in a folder of its own, the Handlers left behind are named with where they go', () => {
+    const generatedFolder =
+      "handlerMap: 'src/generated/handlers.generated.ts', readers: 'src/generated/readers.generated.ts'";
+    const project = aProject(withLayout(aService(), `{ ${generatedFolder} }`));
+    cfLoom(project, 'generate');
+    const layout = `{ endpoint: 'src/http/{group}/{name}.handler.ts', ${generatedFolder} }`;
+    write(project, withLayout({}, layout));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        movedLine(
+          'src/endpoints/orders/get-order.handler.ts',
+          'endpoints.getOrder',
+          'src/http/orders/get-order.handler.ts',
+        ),
+      ]),
+    });
+  });
+
   test('a Handler left at the old path and written at the new one is named to delete', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
@@ -1810,9 +1837,17 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test('a Handler of an Endpoint no longer declared lists every Endpoint that lacks its Handler', () => {
-    const project = aProject(aService());
+    const listOrders = 'src/contract/endpoints/orders/list-orders.endpoint.ts';
+    const service = aService();
+    const project = aProject(service);
     cfLoom(project, 'generate');
-    write(project, getOrderRenamed());
+    write(project, {
+      ...getOrderRenamed(),
+      [listOrders]: (service[listOrders] ?? '').replace(
+        "lifecycle: 'retired'",
+        "lifecycle: 'active'",
+      ),
+    });
     rmSync(join(project, 'src/endpoints/orders/create-order.handler.ts'));
 
     const ran = cfLoom(project, 'generate');
@@ -1821,8 +1856,73 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to the Handler path of the Element that replaces it, endpoints.createOrder (src/endpoints/orders/create-order.handler.ts) or endpoints.fetchOrder (src/endpoints/orders/fetch-order.handler.ts), else delete it\n',
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to the Handler path of the Element that replaces it, endpoints.createOrder (src/endpoints/orders/create-order.handler.ts), endpoints.fetchOrder (src/endpoints/orders/fetch-order.handler.ts) or endpoints.listOrders (src/endpoints/orders/list-orders.handler.ts), else delete it\n',
     });
+  });
+
+  test('a Handler of an Endpoint no longer declared is offered no path another Handler moves to after a Group is renamed', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const renamed = getOrderRenamed();
+    write(project, {
+      ...renamed,
+      'src/contract/index.ts': (renamed['src/contract/index.ts'] ?? '').replace(
+        "  name: 'orders',",
+        "  name: 'sales',",
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/endpoints/sales/create-order.handler.ts',
+        ),
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/endpoints/sales/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it',
+      ]),
+    });
+  });
+
+  test('a Handler of an Endpoint no longer declared is offered no path another Handler moves to after the layout changes', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    write(project, {
+      ...getOrderRenamed(),
+      ...withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: lines([
+        movedLine(
+          'src/endpoints/orders/create-order.handler.ts',
+          'endpoints.createOrder',
+          'src/http/orders/create-order.handler.ts',
+        ),
+        'src/endpoints/orders/get-order.handler.ts is the Handler of endpoints.getOrder, which is no longer declared: move it to src/http/orders/fetch-order.handler.ts if endpoints.fetchOrder replaces it, else delete it',
+      ]),
+    });
+  });
+
+  test('a Handler of an Endpoint no longer declared is offered Endpoints only, though a Guard and a Subscription lack their files', () => {
+    const service = aMessagingService();
+    const project = aProject(service);
+    cfLoom(project, 'generate');
+    write(project, getOrderRenamed(service));
+    rmSync(join(project, 'src/guards/api-key.handler.ts'));
+    rmSync(join(project, 'src/subscriptions/payments/audit-created.handler.ts'));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${renamedGetOrderLine}\n` });
   });
 
   test('a Handler of an Endpoint deleted from the Contract is named to delete when no Endpoint lacks a Handler', () => {

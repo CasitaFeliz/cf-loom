@@ -1,16 +1,16 @@
 import { defaultImportsOf, pathOfSpecifier } from '../source-text/index.ts';
-import { type HandlerLocal, handlerOfLocal } from './code-names.ts';
+import { type LocalParts, localPartsOf } from './code-names.ts';
 
 /** A Handler a Handler map imports: what its local name stands for, that name, and where its file is. */
-export type RecordedHandler = HandlerLocal & { readonly local: string; readonly path: string };
+export type RecordedHandler = LocalParts & { readonly local: string; readonly path: string };
 
 /** The Handlers the text of the Handler map at `mapPath` imports, which is what cf-loom placed. */
 export function recordedHandlersOf(mapPath: string, text: string): readonly RecordedHandler[] {
   const recorded: RecordedHandler[] = [];
   for (const { local, specifier } of defaultImportsOf(text)) {
-    const handler = handlerOfLocal(local);
-    if (handler !== undefined) {
-      recorded.push({ ...handler, local, path: pathOfSpecifier(mapPath, specifier) });
+    const parts = localPartsOf(local);
+    if (parts !== undefined) {
+      recorded.push({ ...parts, local, path: pathOfSpecifier(mapPath, specifier) });
     }
   }
   return recorded;

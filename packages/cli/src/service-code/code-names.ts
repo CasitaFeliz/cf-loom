@@ -29,9 +29,6 @@ export function readerNameOf(message: MessageVersion): string {
 
 type HandlerKind = Handled['kind'];
 
-/** The kinds of Handler, in the order the Handler map lists them. */
-const handlerKinds: readonly HandlerKind[] = ['endpoint', 'guard', 'command', 'subscription'];
-
 /** What ends the Handler map's local name of a Handler, by kind, so locals of two kinds never meet. */
 const localSuffixes: Readonly<Record<HandlerKind, string>> = {
   endpoint: 'EndpointHandler',
@@ -40,16 +37,22 @@ const localSuffixes: Readonly<Record<HandlerKind, string>> = {
   subscription: 'SubscriptionHandler',
 };
 
+const handlerKinds = Object.keys(localSuffixes).filter(isHandlerKind);
+
+function isHandlerKind(key: string): key is HandlerKind {
+  return Object.hasOwn(localSuffixes, key);
+}
+
 /** The Handler map's local name of a Handler: its name in code, suffixed by its kind. */
 export function handlerLocalOf(handled: Handled): string {
   return `${nameInCodeOf(handled)}${localSuffixes[handled.kind]}`;
 }
 
 /** The kind and the name in code a Handler map's local name was made of. */
-export type HandlerLocal = { readonly kind: HandlerKind; readonly name: string };
+export type LocalParts = { readonly kind: HandlerKind; readonly name: string };
 
-/** What a local name stands for, or nothing when it is no Handler's; the inverse of `handlerLocalOf`. */
-export function handlerOfLocal(local: string): HandlerLocal | undefined {
+/** What a local name was made of, or nothing when it is no Handler's; the inverse of `handlerLocalOf`. */
+export function localPartsOf(local: string): LocalParts | undefined {
   for (const kind of handlerKinds) {
     const suffix = localSuffixes[kind];
     if (local.endsWith(suffix) && local.length > suffix.length) {
@@ -59,7 +62,8 @@ export function handlerOfLocal(local: string): HandlerLocal | undefined {
   return undefined;
 }
 
-function nameInCodeOf(handled: Handled): string {
+/** The name in code a Handler is keyed under in the Handler map: `getOrder`, `chargeCardV1`. */
+export function nameInCodeOf(handled: Handled): string {
   switch (handled.kind) {
     case 'endpoint':
     case 'guard':

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { byCodePoint } from '@cf-loom/contract/internal';
+import { byCodePoint, oneOf } from '@cf-loom/contract/internal';
 import { generatedEnding, layoutFolder } from '../config/index.ts';
 import { filesUnder, insideContractOf, oneLineOf } from '../loading/index.ts';
 import {
@@ -93,56 +93,53 @@ function handlerOrphansOf(
 ): readonly Orphan[] {
   const { directory } = service.project;
   const recorded = files.flatMap(({ path, text }) => recordedHandlersOf(path, text));
+  const standing = recorded.filter(({ path }) => !isNothingAt(join(directory, path)));
+  const held = new Set(standing.map(({ local }) => local));
+  const lacking = missingHandlersOf(service).filter(
+    ({ handled }) => !held.has(handlerLocalOf(handled)),
+  );
   const declared = new Map(
     service.handlerPaths.map((placed) => [handlerLocalOf(placed.handled), placed]),
   );
-  const missing = missingHandlersOf(service);
   const orphans: Orphan[] = [];
-  for (const handler of recorded) {
+  for (const handler of standing) {
     const placed = declared.get(handler.local);
-    if (isNothingAt(join(directory, handler.path)) || placed?.path === handler.path) {
-      continue;
+    if (placed?.path !== handler.path) {
+      const line =
+        placed === undefined
+          ? goneLineOf(handler, lacking)
+          : movedLineOf(directory, handler, placed);
+      orphans.push({ path: handler.path, line });
     }
-    const line =
-      placed === undefined
-        ? goneLineOf(handler, missing)
-        : movedLineOf(handler, placed, isNothingAt(join(directory, placed.path)));
-    orphans.push({ path: handler.path, line });
   }
   return orphans;
 }
 
 /** The line for a Handler whose Element the layout now places at another path. */
-function movedLineOf(handler: RecordedHandler, placed: HandlerPath, isFree: boolean): string {
-  const action = isFree ? 'move it' : 'delete it';
+function movedLineOf(directory: string, handler: RecordedHandler, placed: HandlerPath): string {
+  const action = isNothingAt(join(directory, placed.path)) ? 'move it' : 'delete it';
   const now = `is the Handler of ${elementLabelOf(placed.handled)}, which is now ${placed.path}`;
   return `${handler.path} ${now}: ${action}`;
 }
 
 /** The line for a Handler whose Element is no longer declared, naming the Elements that may replace it. */
-function goneLineOf(handler: RecordedHandler, missing: readonly HandlerPath[]): string {
-  const replacements = missing.filter(({ handled }) => handled.kind === handler.kind);
+function goneLineOf(handler: RecordedHandler, lacking: readonly HandlerPath[]): string {
+  const replacements = lacking.filter(({ handled }) => handled.kind === handler.kind);
   const gone = `is the Handler of ${recordedLabelOf(handler)}, which is no longer declared`;
-  return `${handler.path} ${gone}: ${moveAdviceOf(replacements)}delete it`;
+  return `${handler.path} ${gone}: ${adviceOf(replacements)}`;
 }
 
-/** Where a Handler file may move to: the Handlers of its kind that lack a file, or nothing to say. */
-function moveAdviceOf(replacements: readonly HandlerPath[]): string {
+/** What to do with a Handler whose Element is gone: move it to the Handler path that lacks a file, else delete it. */
+function adviceOf(replacements: readonly HandlerPath[]): string {
   const [only, ...others] = replacements;
   if (only === undefined) {
-    return '';
+    return 'delete it';
   }
   if (others.length === 0) {
-    return `move it to ${only.path} if ${elementLabelOf(only.handled)} replaces it, else `;
+    return `move it to ${only.path} if ${elementLabelOf(only.handled)} replaces it, else delete it`;
   }
   const candidates = replacements.map(
     ({ handled, path }) => `${elementLabelOf(handled)} (${path})`,
   );
-  return `move it to the Handler path of the Element that replaces it, ${orListOf(candidates)}, else `;
-}
-
-/** Alternatives as a sentence names them: `a or b`, `a, b or c`. */
-function orListOf(items: readonly string[]): string {
-  const last = items.at(-1) ?? '';
-  return `${items.slice(0, -1).join(', ')} or ${last}`;
+  return `move it to the Handler path of the Element that replaces it, ${oneOf(candidates)}, else delete it`;
 }
