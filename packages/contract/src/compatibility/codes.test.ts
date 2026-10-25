@@ -56,7 +56,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {

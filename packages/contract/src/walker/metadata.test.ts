@@ -53,7 +53,6 @@ describe('walkSchemas: metadata', () => {
     expect(walkBody(order)).toEqual(
       walkedTo({
         type: 'object',
-        mode: 'open',
         fields: { note: { required: false, schema: { type: 'string', description: 'A note' } } },
       }),
     );
@@ -89,7 +88,6 @@ describe('walkSchemas: origin', () => {
         type: 'array',
         items: {
           type: 'object',
-          mode: 'open',
           fields: { amount: { required: true, schema: { type: 'number', int: true } } },
           origin: '@org/definitions@4.2.0#money',
         },

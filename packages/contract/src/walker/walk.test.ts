@@ -82,7 +82,6 @@ describe('walkSchemas', () => {
 
     const moneyNode = {
       type: 'object',
-      mode: 'open',
       fields: {
         amount: { required: true, schema: { type: 'number', int: true } },
         currency: { required: true, schema: { type: 'enum', values: ['eur', 'usd'], open: false } },

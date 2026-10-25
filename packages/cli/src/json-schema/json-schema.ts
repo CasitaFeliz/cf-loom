@@ -113,7 +113,7 @@ function enumSchemaOf({ values, open }: EnumNode): JsonSchema {
   return { type: types.length === 1 ? types[0] : types, enum: values };
 }
 
-function objectSchemaOf({ fields, mode }: ObjectNode, dialect: JsonSchemaDialect): JsonSchema {
+function objectSchemaOf({ fields }: ObjectNode, dialect: JsonSchemaDialect): JsonSchema {
   const entries = Object.entries(fields);
   const required = entries.filter(([, field]) => field.required).map(([name]) => name);
   return definedOf({
@@ -122,7 +122,6 @@ function objectSchemaOf({ fields, mode }: ObjectNode, dialect: JsonSchemaDialect
       entries.map(([name, field]) => [name, jsonSchemaOf(field.schema, dialect)]),
     ),
     required: required.length === 0 ? undefined : required,
-    additionalProperties: mode === 'strict' ? false : undefined,
   });
 }
 

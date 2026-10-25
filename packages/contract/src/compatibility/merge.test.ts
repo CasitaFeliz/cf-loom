@@ -31,7 +31,7 @@ const orderPaid = 'ORDER_PAID';
 const oldCode = 'OLD_CODE';
 const keptCode = 'KEPT';
 const newCode = 'NEW_CODE';
-const emptyObject = { type: 'object', mode: 'strict', fields: {} } as const;
+const emptyObject = { type: 'object', fields: {} } as const;
 
 function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
   return {

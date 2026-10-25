@@ -57,10 +57,9 @@ export type EnumNode = Annotations & {
 /** A field of an object: whether it must be present is apart from whether it may be null. */
 export type Field = { readonly required: boolean; readonly schema: SchemaNode };
 
-/** An object with named fields; a `strict` one takes no other keys. */
+/** An object with named fields; always open, since a Contract declares no strict object. */
 export type ObjectNode = Annotations & {
   readonly type: 'object';
-  readonly mode: 'open' | 'strict';
   readonly fields: Readonly<Record<string, Field>>;
 };
 

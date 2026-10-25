@@ -166,11 +166,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
-}
-
-function aKeyedRecord(fields: Readonly<Record<string, Field>>): ObjectNode {
-  return { type: 'object', mode: 'strict', fields };
+  return { type: 'object', fields };
 }
 
 function aTagged(
@@ -260,7 +256,6 @@ const shared: Place = {
   proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
 };
 const places = [input, success, message, shared];
-const readersOfInput = [input, shared];
 
 /** The classes of one difference in Input, Success, Message and a shared schema, in that order. */
 type Classes = readonly [Class, Class, Class, Class];
@@ -389,13 +384,6 @@ const fieldRows: readonly Row[] = [
     found: [found({ kind: 'field-removed' }, guaranteesLess, noteField)],
   },
   {
-    change: 'removing a key from a record keyed by an enum',
-    from: aKeyedRecord({ note: required(aString), id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'key-removed' }, breaksEverywhere, noteField)],
-    places: readersOfInput,
-  },
-  {
     change: 'changing a field’s type',
     from: anObject({ note: required(aString) }),
     to: anObject({ note: required(aNumber) }),
@@ -408,13 +396,6 @@ const fieldRows: readonly Row[] = [
     from: anObject({ id: required(aString) }),
     to: { type: 'record', key: aString, value: aString },
     found: [found({ kind: 'type-changed', from: 'object', to: 'record' }, breaksEverywhere)],
-  },
-  {
-    change: 'turning an object into a record keyed by an enum',
-    from: anObject({ id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'mode-changed', from: 'open', to: 'strict' }, breaksEverywhere)],
-    places: readersOfInput,
   },
   {
     change: 'turning an array into a tuple',

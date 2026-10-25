@@ -42,20 +42,6 @@ export const inputParts = [
 /** The parts of an Endpoint's Success. */
 export const successParts = ['success.headers', 'success.body'] as const satisfies readonly Part[];
 
-/** The bodies of Read shapes; a Success's headers are judged as headers. */
-export const readShapeParts = ['success.body', 'body'] as const satisfies readonly Part[];
-
-/** Whether a part is the body of a Read shape. */
-export function isReadShapePart(part: Part): boolean {
-  const parts: readonly Part[] = readShapeParts;
-  return parts.includes(part);
-}
-
-/** Whether a part is a query or headers object: a text part whose keys a request does not fix. */
-export function isQueryOrHeadersPart(part: Part): boolean {
-  return isObjectPart(part) && part !== 'input.params';
-}
-
 /** The parts of the request a Guard may demand. */
 export const demandParts = ['demands.headers', 'demands.query'] as const satisfies readonly Part[];
 

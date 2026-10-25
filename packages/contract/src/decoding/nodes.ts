@@ -22,7 +22,6 @@ const field = z.strictObject({ required: z.boolean(), schema: child });
 
 /** Format 1's object node, which an Endpoint's Input and a Guard's demands are made of. */
 export const objectNode = node('object', {
-  mode: z.enum(['open', 'strict']),
   fields: byKey(field),
 });
 const refNode = node('ref', { name: z.string() });
@@ -60,7 +59,7 @@ const nodes = [
   node('boolean', {}),
   node('enum', { values: z.array(primitive), open: z.boolean() }),
   objectNode,
-  node('record', { key: child, value: child }),
+  node('record', { key: stringNode, value: child }),
   node('array', { items: child, min: bound, max: bound }),
   node('tuple', { items: z.array(child), rest: child.exactOptional() }),
   node('union', { options: z.array(child) }),

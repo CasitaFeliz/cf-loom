@@ -63,14 +63,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "The request is invalid",
@@ -96,7 +94,6 @@
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "The order can no longer be changed",
@@ -153,13 +150,11 @@
                   }
                 }
               },
-              "mode": "open",
               "origin": "@org/definitions@0.0.0#money",
               "type": "object"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "description": "Charges the customer’s card for an order’s total",
@@ -200,7 +195,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": null,
@@ -228,7 +222,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "params": {
@@ -241,7 +234,6 @@
               }
             }
           },
-          "mode": "strict",
           "type": "object"
         },
         "query": null
@@ -318,13 +310,11 @@
                     }
                   }
                 },
-                "mode": "open",
                 "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": null,
@@ -374,13 +364,11 @@
                     }
                   }
                 },
-                "mode": "open",
                 "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": {
@@ -392,7 +380,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "params": null,
@@ -466,13 +453,11 @@
                     }
                   }
                 },
-                "mode": "open",
                 "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": null,
@@ -522,13 +507,11 @@
                   }
                 }
               },
-              "mode": "open",
               "origin": "@org/definitions@0.0.0#money",
               "type": "object"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "description": "An order was placed, pending, for its total",
@@ -550,7 +533,6 @@
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "demands": {
@@ -563,7 +545,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "query": null
@@ -643,14 +624,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "code": "BAD_REQUEST",

@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
 import type {
   EnumNode,
   Field,
@@ -112,30 +111,11 @@ function enumOf(node: EnumNode, writing: Writing): string {
   return `loom.${call}([${values}])`;
 }
 
-/** An object as zod declares it; a strict one is the record it was walked from. */
 function objectOf(node: ObjectNode, writing: Writing): string {
-  if (node.mode === 'strict') {
-    return keyedRecordOf(node, writing);
-  }
   const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
   return fields.length === 0 ? 'z.object({})' : `z.object({ ${fields.join(', ')} })`;
-}
-
-/**
- * A record keyed by an enum or literal, since a Contract declares no strict object: one enum of
- * the object's keys, whose fields share one schema and requiredness.
- */
-function keyedRecordOf(node: ObjectNode, writing: Writing): string {
-  const fields = Object.values(node.fields);
-  const [first] = fields;
-  if (first === undefined || !fields.every((field) => isDeepStrictEqual(field, first))) {
-    throw new Error('A strict object is a keyed record, one field per key, all alike: a bug.');
-  }
-  const keys = Object.keys(node.fields).map(stringLiteralOf).join(', ');
-  const call = first.required ? 'z.record' : 'z.partialRecord';
-  return `${call}(z.enum([${keys}]), ${zodExpressionOf(first.schema, writing)})`;
 }
 
 /** A field's schema, optional unless it is required. */

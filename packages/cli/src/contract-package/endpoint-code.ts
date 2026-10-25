@@ -54,17 +54,11 @@ function endpointBodyOf(
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),
     ...guardsLinesOf(endpoint.guards),
-    ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
+    ...partsLinesOf('input', endpoint.input, declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
     ...(listed.length === 0 ? [] : [`  rejections: [${listed.join(', ')}],`]),
     '});',
   ];
-}
-
-/** The Input as a Service declares it: its params an open object, since the path decides them. */
-function declaredInputOf(input: EndpointSnapshot['input']): EndpointSnapshot['input'] {
-  const params = input.params === null ? null : { ...input.params, mode: 'open' as const };
-  return { ...input, params };
 }
 
 /** The method and path of an identity, its params' names put back in order. */

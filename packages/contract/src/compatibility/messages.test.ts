@@ -46,7 +46,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anObject(fields: Readonly<Record<string, Field>>): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 const plain = anObject({ id: required({ type: 'string' }) });

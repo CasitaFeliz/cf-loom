@@ -747,7 +747,6 @@ describe('validateContract: the README’s examples', () => {
     expect(written?.rejection).toBe(orderLocked);
     expect(schemas.nodeOf(written?.rejection, 'body')).toEqual({
       type: 'object',
-      mode: 'open',
       fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
     });
   });

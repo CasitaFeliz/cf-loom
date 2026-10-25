@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
-import type { Field, JsonPrimitive, ObjectNode, Path, SchemaNode } from './nodes.ts';
+import type { Field, ObjectNode, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
 import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
 
@@ -20,12 +20,12 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   if (refusals.length > 0 || fields.kind === 'not-allowed') {
     return failed(failuresOf([...refusals, fields]));
   }
-  return walked({ type: 'object', mode: 'open', fields: Object.fromEntries(fields.value) });
+  return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
 }
 
 /**
- * A `record` for a string key; for an enum or literal key, a `strict` object with a field per
- * key, required unless the record is partial.
+ * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
+ * object, which a Contract never declares.
  */
 export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): Walked {
   if (def.mode === 'loose') {
@@ -33,28 +33,14 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
   }
   const key = walker.schema(def.keyType, [...at, 'key']);
   const value = walker.schema(def.valueType, [...at, 'value']);
+  const refusal = key.kind === 'walked' ? keyRefusalOf(key.value) : undefined;
+  if (refusal !== undefined) {
+    return failed(failuresOf([notAllowed(at, refusal), value]));
+  }
   if (key.kind === 'not-allowed' || value.kind === 'not-allowed') {
     return failed(failuresOf([key, value]));
   }
-  if (key.value.nullable === true) {
-    return notAllowed(at, refused.nullableRecordKey);
-  }
-  if (key.value.type === 'enum' && key.value.open) {
-    return notAllowed(at, refused.openRecordKey);
-  }
-  if (key.value.type === 'string') {
-    return walked({ type: 'record', key: key.value, value: value.value });
-  }
-  const keys = keysOf(key.value);
-  if (keys === undefined) {
-    return notAllowed(at, refused.recordKey);
-  }
-  if (keys.includes(protoKey)) {
-    return notAllowed(at, refused.protoField);
-  }
-  const field: Field = { required: def.partial !== true, schema: value.value };
-  const fields = Object.fromEntries(keys.map((name) => [name, field]));
-  return walked({ type: 'object', mode: 'strict', fields });
+  return walked({ type: 'record', key: key.value, value: value.value });
 }
 
 /**
@@ -91,34 +77,25 @@ function catchallRefusalOf(def: core.$ZodObjectDef): Refused | undefined {
   }
 }
 
+/** Why a walked key cannot key a `record`: it is nullable, open or not a string, or an enum or literal. */
+function keyRefusalOf(key: SchemaNode): Refused | undefined {
+  if (key.nullable === true) {
+    return refused.nullableRecordKey;
+  }
+  if (key.type === 'string') {
+    return undefined;
+  }
+  if (key.type !== 'enum') {
+    return refused.recordKey;
+  }
+  return key.open ? refused.openRecordKey : refused.keyedRecord;
+}
+
 function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]> {
   return field.kind === 'walked' ? walked([key, field.value]) : field;
 }
 
-function keysOf(key: SchemaNode): readonly string[] | undefined {
-  const values = keyValuesOf(key);
-  const keys = values.filter(isString);
-  if (keys.length === 0 || keys.length !== values.length) {
-    return undefined;
-  }
-  return keys;
-}
-
-function keyValuesOf(key: SchemaNode): readonly JsonPrimitive[] {
-  if (key.type === 'enum') {
-    return key.values;
-  }
-  return [];
-}
-
-function isString(value: JsonPrimitive): value is string {
-  return typeof value === 'string';
-}
-
 function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
-  if (left.mode === 'strict' || right.mode === 'strict') {
-    return notAllowed(at, refused.keyedRecordIntersection);
-  }
   const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
   const differs = shared.some(
     (key) => canonicalJson(left.fields[key]) !== canonicalJson(right.fields[key]),
@@ -128,5 +105,5 @@ function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
   }
   const fields = { ...left.fields, ...right.fields };
   const nullable = left.nullable === true && right.nullable === true;
-  return walked({ type: 'object', mode: 'open', fields, ...(nullable && { nullable }) });
+  return walked({ type: 'object', fields, ...(nullable && { nullable }) });
 }

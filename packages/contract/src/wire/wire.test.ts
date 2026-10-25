@@ -46,7 +46,6 @@ function queryValueOf(node: SchemaNode, texts: readonly string[]): unknown {
   const nodes: TextPartNodes = {
     'input.query': {
       type: 'object',
-      mode: 'open',
       fields: { v: { required: true, schema: node } },
     },
   };
@@ -672,7 +671,6 @@ describe('headerValuesOf', () => {
   test('each declared header present is converted by its node, others left out', () => {
     const node: SchemaNode = {
       type: 'object',
-      mode: 'open',
       fields: {
         'x-count': { required: true, schema: number },
         'x-ok': { required: false, schema: boolean },

@@ -56,12 +56,12 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 function theParams(...fields: readonly (readonly [string, SchemaNode])[]): ObjectNode {
   const entries = fields.map(([name, schema]) => [name, required(schema)]);
-  return { type: 'object', mode: 'strict', fields: Object.fromEntries(entries) };
+  return { type: 'object', fields: Object.fromEntries(entries) };
 }
 
 function anInput(fields: Partial<Input> = {}): Input {

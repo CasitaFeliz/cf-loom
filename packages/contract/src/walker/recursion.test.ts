@@ -24,7 +24,6 @@ const dateRefused = { construct: 'z.date()', instead: 'z.iso.datetime()' };
 
 const categoryDef = {
   type: 'object',
-  mode: 'open',
   fields: {
     name: { required: true, schema: { type: 'string' } },
     children: {
@@ -101,7 +100,6 @@ describe('walkSchemas: recursion', () => {
       defs: {
         inner: {
           type: 'object',
-          mode: 'open',
           fields: {
             c: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'outer' } } },
           },
@@ -492,7 +490,6 @@ describe('walkSchemas: recursion', () => {
         defs: {
           itself: {
             type: 'object',
-            mode: 'open',
             fields: { self: { required: true, schema: { type: 'ref', name: 'itself' } } },
           },
         },
@@ -691,7 +688,6 @@ describe('walkSchemas: recursion', () => {
       defs: {
         node: {
           type: 'object',
-          mode: 'open',
           fields: {
             children: {
               required: true,
@@ -717,7 +713,6 @@ describe('walkSchemas: recursion', () => {
       defs: {
         ['__proto__']: {
           type: 'object',
-          mode: 'open',
           fields: {
             children: {
               required: true,
@@ -736,7 +731,6 @@ describe('walkSchemas: recursion', () => {
       located: [
         walkedAt(['body'], {
           type: 'object',
-          mode: 'open',
           fields: { amount: { required: true, schema: { type: 'number', int: true } } },
         }),
       ],
@@ -760,12 +754,10 @@ describe('walkSchemas: recursion', () => {
 
     const teamNode = {
       type: 'object',
-      mode: 'open',
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     } as const;
     const departmentDef = {
       type: 'object',
-      mode: 'open',
       fields: { teams: { required: true, schema: { type: 'array', items: teamNode } } },
     } as const;
     const expected = {
@@ -845,14 +837,12 @@ describe('walkSchemas: recursion', () => {
 
     const departmentDef = {
       type: 'object',
-      mode: 'open',
       fields: {
         teams: { required: true, schema: { type: 'array', items: { type: 'ref', name: 'team' } } },
       },
     };
     const teamDef = {
       type: 'object',
-      mode: 'open',
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     };
     const defs = { department: departmentDef, team: teamDef };
@@ -903,7 +893,6 @@ describe('walkSchemas: recursion', () => {
 
     const leafNode = {
       type: 'object',
-      mode: 'open',
       fields: {
         type: { required: true, schema: { type: 'enum', values: ['leaf'], open: false } },
         value: { required: true, schema: { type: 'number' } },
@@ -916,7 +905,6 @@ describe('walkSchemas: recursion', () => {
     } as const;
     const branchDef = {
       type: 'object',
-      mode: 'open',
       fields: {
         type: { required: true, schema: { type: 'enum', values: ['branch'], open: false } },
         children: { required: true, schema: { type: 'array', items: treeNode } },

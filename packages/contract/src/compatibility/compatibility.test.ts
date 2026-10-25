@@ -26,10 +26,9 @@ const standardRejections: ServiceSnapshot['standardRejections'] = {
   notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
   notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
 };
-const emptyObject = { type: 'object', mode: 'strict', fields: {} } as const;
+const emptyObject = { type: 'object', fields: {} } as const;
 const orderIdParam = {
   type: 'object',
-  mode: 'strict',
   fields: { orderId: { required: true, schema: { type: 'string' } } },
 } as const;
 const heading = {
@@ -510,7 +509,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
   const retiredEndpoint = aRetired(anEndpoint());
   const stillRetired = { lifecycle: 'retired' } as const;
   const requiredField = { required: true, schema: { type: 'string' } } as const;
-  const changedBody = { type: 'object', mode: 'strict', fields: { id: requiredField } } as const;
+  const changedBody = { type: 'object', fields: { id: requiredField } } as const;
   const rows = [
     {
       name: 'an Endpoint’s body',
