@@ -31,6 +31,16 @@ const createOrder = defineEndpoint({
   },
 });
 
+const noteOrder = defineEndpoint({
+  name: 'noteOrder',
+  method: 'POST',
+  path: '/notes',
+  visibility: 'public',
+  description: 'A note on an order, with no Guard',
+  input: { body: z.object({ text: z.string() }) },
+  success: { status: 200, body: z.object({ text: z.string() }) },
+});
+
 const getOrder = defineEndpoint({
   name: 'getOrder',
   method: 'GET',
@@ -57,7 +67,7 @@ const contract = defineContract({
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [createOrder, getOrder, greet],
+      endpoints: [createOrder, noteOrder, getOrder, greet],
     }),
   ],
 });
@@ -67,6 +77,7 @@ const handlers = {
     createOrder: handle(createOrder, ({ body }, { apiKey: caller }) =>
       success({ headers: { 'x-order-count': 1 }, body: { ...body, by: caller.callerId } }),
     ),
+    noteOrder: handle(noteOrder, ({ body }) => success(body)),
     getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId })),
     greet: handle(greet, ({ query }) => success({ headers: { 'x-greeted': query.name } })),
   },
@@ -105,6 +116,35 @@ async function raw(url: string, text: string): Promise<string> {
   });
 }
 
+/**
+ * Sends raw HTTP/1.1 text and waits at most `ms` for the server to close the socket: what came
+ * back, and whether it closed in time.
+ */
+async function rawFor(url: string, text: string, ms: number) {
+  const { port } = new URL(url);
+  return await new Promise<{ readonly received: string; readonly closed: boolean }>((resolve) => {
+    const socket = connect(Number(port), '127.0.0.1');
+    let received = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve({ received, closed: false });
+    }, ms);
+    socket.on('data', (chunk) => {
+      received += chunk.toString('latin1');
+    });
+    socket.on('error', () => undefined);
+    socket.on('close', () => {
+      clearTimeout(timer);
+      resolve({ received, closed: true });
+    });
+    socket.write(text);
+  });
+}
+
+function statusLinesOf(received: string): string[] {
+  return received.match(/^HTTP\/1\.1 \d+ .+$/gm) ?? [];
+}
+
 function statusLineOf(received: string): string {
   return received.split('\r\n')[0] ?? '';
 }
@@ -140,6 +180,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
   const outgoing = Object.assign(written, {
     statusCode: 0,
     appendHeader: () => outgoing,
+    setHeader: () => outgoing,
     writeHead: () => outgoing,
   });
   const finished = new Promise((resolve) => written.on('finish', resolve));
@@ -442,18 +483,81 @@ describe('nodeHttp', () => {
     expect(statusLineOf(answer)).toBe('HTTP/1.1 413 Payload Too Large');
   });
 
-  test('the connection serves the next request after a BODY_TOO_LARGE', async () => {
-    const url = await listening(nodeHttp(serve(contract, handlers, { maxBodyBytes: 16 })));
-    const body = JSON.stringify({ quantity: 2, padding: 'x'.repeat(40) });
+  test('a body serve leaves unread is answered with connection: close, and the socket closes at once', async () => {
+    const url = await listening();
+    const body = 'x'.repeat(300_000);
+    const first = `POST /nope HTTP/1.1\r\nHost: test\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n';
+
+    const answer = await rawFor(url, first + second, 1000);
+
+    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found']);
+    expect(answer.received).toMatch(/^connection: close$/im);
+    expect(answer.closed).toBe(true);
+  });
+
+  test('after an unread large body to an undeclared path, the next fetches are answered at once', async () => {
+    const url = await listening();
+    const started = performance.now();
+
+    const unread = await fetch(`${url}/nope`, { method: 'POST', body: 'x'.repeat(300_000) });
+    await unread.arrayBuffer();
+    const second = await fetch(`${url}/orders/o-1`);
+    await second.arrayBuffer();
+    const third = await fetch(`${url}/orders/o-1`);
+
+    expect([unread.status, second.status, third.status]).toEqual([404, 200, 200]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('a body over maxBodyBytes reaches the Caller as 413 and closes its connection, and the next fetches are served at once', async () => {
+    const url = await listening(nodeHttp(serve(contract, handlers, { maxBodyBytes: 1000 })));
+    const body = JSON.stringify({ text: 'x'.repeat(300_000) });
+    const headers = { 'content-type': 'application/json' };
+    const started = performance.now();
+
+    const tooLarge = await fetch(`${url}/notes`, { method: 'POST', headers, body });
+    await tooLarge.arrayBuffer();
+    const second = await fetch(`${url}/orders/o-1`);
+    await second.arrayBuffer();
+    const third = await fetch(`${url}/orders/o-1`);
+
+    expect([tooLarge.status, second.status, third.status]).toEqual([413, 200, 200]);
+    expect(tooLarge.headers.get('connection')).toBe('close');
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('a small body serve leaves unread closes the connection too', async () => {
+    const url = await listening();
+    const first = 'POST /nope HTTP/1.1\r\nHost: test\r\nContent-Length: 10\r\n\r\n0123456789';
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n';
+
+    const answer = await rawFor(url, first + second, 1000);
+
+    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found']);
+    expect(answer.received).toMatch(/^connection: close$/im);
+  });
+
+  test('a request whose body serve read keeps its connection alive', async () => {
+    const url = await listening();
+    const body = JSON.stringify({ quantity: 2 });
     const first = `POST /orders HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nX-Api-Key: c-1\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
     const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
 
     const answer = await raw(url, first + second);
 
-    expect(answer.match(/^HTTP\/1\.1 \d+ .+$/gm)).toEqual([
-      'HTTP/1.1 413 Payload Too Large',
-      'HTTP/1.1 200 OK',
-    ]);
+    expect(statusLinesOf(answer)).toEqual(['HTTP/1.1 201 Created', 'HTTP/1.1 200 OK']);
+    expect(answer.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
+  });
+
+  test('a bodiless request keeps its connection alive', async () => {
+    const url = await listening();
+    const first = 'POST /nope HTTP/1.1\r\nHost: test\r\nContent-Length: 0\r\n\r\n';
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
+
+    const answer = await raw(url, first + second);
+
+    expect(statusLinesOf(answer)).toEqual(['HTTP/1.1 404 Not Found', 'HTTP/1.1 200 OK']);
   });
 
   test('nodeListener serves a node:http server the Service creates itself', async () => {

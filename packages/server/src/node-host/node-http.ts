@@ -37,9 +37,16 @@ export function nodeHttp(http: Http): Server {
   return createServer(nodeListener(http));
 }
 
+/**
+ * Answers an incoming message with what `http` returns; one answered before its body arrived whole
+ * closes the connection, so a body `serve` did not read never stalls the next request.
+ */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
   const read = incomingOf(incoming);
   const response = read.kind === 'request' ? await http(read.request) : read.response;
+  if (!incoming.complete) {
+    outgoing.setHeader('connection', 'close');
+  }
   try {
     await written(response, outgoing);
   } catch {
