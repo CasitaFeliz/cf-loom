@@ -9,6 +9,7 @@ export type Rule =
   | 'undeclared-field'
   | 'required-field'
   | 'not-a-string'
+  | 'blank-text'
   | 'name-grammar'
   | 'duplicate-group-name'
   | 'duplicate-definitions-name'

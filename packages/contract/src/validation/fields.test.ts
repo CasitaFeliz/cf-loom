@@ -3,12 +3,15 @@ import { z } from 'zod';
 import {
   type Attachment,
   defineApplication,
+  defineCommand,
   defineContract,
   defineDefinitions,
   defineEndpoint,
+  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineSubscription,
   type Endpoint,
 } from '../index.ts';
 import { type RootPackage, validateContract } from '../internal/index.ts';
@@ -454,6 +457,95 @@ describe('validateContract: required fields', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards }))).toEqual(
       required([...endpointAt, 'guards', 0, 'qualifier'], 'qualifier is a required field'),
+    );
+  });
+});
+
+/** A Contract holding one declaration of each kind that has a `description`, the one named written as `text`. */
+function contractWithDescription(kind: string, text: string) {
+  const description = (own: string) => (own === kind ? text : 'Described');
+  const guard = defineGuard({ name: 'quota', description: description('guard') });
+  const endpoint = defineEndpoint({
+    ...listing,
+    description: description('endpoint'),
+    guards: [guard],
+  });
+  const event = defineEvent({
+    name: 'OrderCreated',
+    version: 1,
+    visibility: 'internal',
+    description: description('event'),
+    body: z.object({ orderId: z.uuid() }),
+  });
+  const command = defineCommand({
+    name: 'ChargeCard',
+    version: 1,
+    description: description('command'),
+    body: z.object({ orderId: z.uuid() }),
+  });
+  const subscription = defineSubscription({
+    name: 'notifyOnCreated',
+    description: description('subscription'),
+    event,
+  });
+  const orders = defineGroup({
+    name: 'orders',
+    description: description('group'),
+    endpoints: [endpoint],
+    events: [event],
+    commands: [command],
+    subscriptions: [subscription],
+  });
+  return defineContract({ name: 'orders-service', groups: [orders] });
+}
+
+const blankTexts = ['', ' ', ' \t\n'];
+
+describe('validateContract: a description or a message is never blank', () => {
+  test('a Contract whose declarations are all described validates', () => {
+    expect(validateInPackage(contractWithDescription('none', ''), noOrigin).kind).toBe('valid');
+  });
+
+  const described: readonly (readonly [string, readonly (string | number)[]])[] = [
+    ['Endpoint', [...endpointAt, 'description']],
+    ['Guard', ['guards', 'quota', 'description']],
+    ['Group', ['groups', 'orders', 'description']],
+    ['Event', ['groups', 'orders', 'events', 'OrderCreated@1', 'description']],
+    ['Command', ['groups', 'orders', 'commands', 'ChargeCard@1', 'description']],
+    ['Subscription', ['groups', 'orders', 'subscriptions', 'notifyOnCreated', 'description']],
+  ];
+
+  test.each(blankTexts.flatMap((text) => described.map(([kind, at]) => [kind, text, at] as const)))(
+    'a %s whose description is %j fails',
+    (kind, text, at) => {
+      const contract = contractWithDescription(kind.toLowerCase(), text);
+
+      expect(validateInPackage(contract, noOrigin)).toEqual(
+        failed(at, 'blank-text', 'A description is never blank'),
+      );
+    },
+  );
+
+  test.each(blankTexts)('a Rejection whose message is %j fails', (message) => {
+    const rejection = defineRejection({ code: 'ORDER_LOCKED', status: 409, message });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(['rejections', 'ORDER_LOCKED', 'message'], 'blank-text', 'A message is never blank'),
+    );
+  });
+
+  test.each(blankTexts)('a Standard Rejection whose message is %j fails', (message) => {
+    const definitions = defineDefinitions({
+      name: 'definitions',
+      standardRejections: { notFound: { code: 'NOT_FOUND', status: 404, message } },
+    });
+
+    expect(validateInPackage(definitions, noOrigin)).toEqual(
+      failed(
+        ['standardRejections', 'notFound', 'message'],
+        'blank-text',
+        'A message is never blank',
+      ),
     );
   });
 });
