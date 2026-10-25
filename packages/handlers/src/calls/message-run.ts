@@ -3,10 +3,11 @@ import type { Checked, Issue } from '../checks/index.ts';
 import { type Fault, isFault } from '../outcomes/index.ts';
 import type { MessageElement } from './elements.ts';
 import { returnedOf } from './implementation.ts';
+import type { Pairing } from './pairing.ts';
 import type { Written } from './run.ts';
 
-/** What a Message Handler was written with: its Command or Subscription, the Reader schema it reads a body with, its implementation, and whether it is a stub. */
-export type MessageWritten = Written<MessageElement> & { readonly reader: core.$ZodType };
+/** What a Message Handler was written with: its Command or Subscription, the pairing that gives the Reader schema it reads a body with, its implementation, and whether it is a stub. */
+export type MessageWritten = Written<MessageElement> & { readonly pairing: Pairing };
 
 /** What a Message Handler receives beside its body: the Message's ids, which attempt this is, and the transport headers it was published with. */
 export type MessageMeta = {
@@ -49,11 +50,11 @@ export async function messageRunOf(
 }
 
 async function messageCallOf(
-  { element, reader, implementation }: MessageWritten,
+  { element, pairing, implementation }: MessageWritten,
   { body, meta, resources }: MessageGiven,
   readBody: BodyReading,
 ): Promise<MessageRun> {
-  const checked = readBody(reader, body);
+  const checked = readBody(pairing.reader, body);
   if (checked.kind === 'issues') {
     return { kind: 'invalid-input', issues: checked.issues };
   }

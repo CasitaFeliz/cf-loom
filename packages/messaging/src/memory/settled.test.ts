@@ -1,5 +1,5 @@
 import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
+import { type Fault, fault, handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Messaging, type MessagingOptions, messaging } from '../index.ts';
@@ -49,11 +49,13 @@ const contract = defineContract({
   subscriptions: [notifyOnCreated, onAudited],
 });
 
-const pairings = {
-  chargeCard: withReader(chargeCardV1, orderBody),
-  notifyOnCreated: withReader(notifyOnCreated, orderBody),
-  onAudited: withReader(onAudited, z.object({ orderId: z.uuid() })),
-};
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  subscriptions: {
+    notifyOnCreated: { element: notifyOnCreated, reader: orderBody },
+    onAudited: { element: onAudited, reader: z.object({ orderId: z.uuid() }) },
+  },
+});
 
 type Implementation = (
   body: { readonly orderId: string },
@@ -78,11 +80,12 @@ async function running(
   const connection = { broker, ...started };
   const { charge, notify } = handlers(connection);
   await started.consume({
-    commands: { chargeCardV1: handle(pairings.chargeCard, charge ?? (() => undefined)) },
+    commands: { chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)) },
     subscriptions: {
-      notifyOnCreated: handle(pairings.notifyOnCreated, notify ?? (() => undefined)),
-      onAudited: handle(pairings.onAudited, () => undefined),
+      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
+      onAudited: handle(readers.subscriptions.onAudited, () => undefined),
     },
+    readers,
   });
   return connection;
 }

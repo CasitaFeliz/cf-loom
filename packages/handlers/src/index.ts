@@ -1,4 +1,4 @@
-export type { MessageMeta } from './calls/index.ts';
+export type { MessageMeta, Pairing } from './calls/index.ts';
 export { InvalidInputError, InvalidOutcomeError } from './calls/index.ts';
 export type { Issue } from './checks/index.ts';
 export type {
@@ -14,11 +14,11 @@ export type {
   GuardImplementation,
   HandlerMap,
   MessageCall,
+  Readers,
   ResourcesOf,
-  WithReader,
   WithResources,
 } from './handlers/index.ts';
-export { handle, withReader } from './handlers/index.ts';
+export { handle, readersOf } from './handlers/index.ts';
 export type {
   Admission,
   Committed,

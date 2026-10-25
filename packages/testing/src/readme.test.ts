@@ -12,7 +12,7 @@ import {
   notFound,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { expect, test } from 'vitest';
 import { z } from 'zod';
 import { fakeEvent, fakeProvider } from './index.ts';
@@ -143,10 +143,19 @@ test('the README’s fakeEvent example runs: a faked PaymentSettled reaches noti
     description: 'Notify on settled',
     event: paymentsDeps.events.paymentSettledV1,
   });
+  const readers = readersOf({
+    commands: {},
+    subscriptions: {
+      notifyOnSettled: {
+        element: notifyOnSettled,
+        reader: paymentsDeps.events.paymentSettledV1.body,
+      },
+    },
+  });
   const received: unknown[] = [];
   const notifications = { send: async (paymentId: string) => void received.push({ paymentId }) };
   const notifyOnSettledHandler = handle(
-    withReader(notifyOnSettled, paymentsDeps.events.paymentSettledV1.body),
+    readers.subscriptions.notifyOnSettled,
     async (
       body,
       _meta,

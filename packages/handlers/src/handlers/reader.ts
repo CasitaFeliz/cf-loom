@@ -1,32 +1,44 @@
-import { isSchema } from '@cf-loom/contract/internal';
-import type * as core from 'zod/v4/core';
-import { isMessageElement, type MessageElement } from '../calls/index.ts';
+import type { Command, Subscription } from '@cf-loom/contract';
+import { isPairing, type Pairing } from '../calls/index.ts';
 
-/** A Command's Message Version or a Subscription with the Reader schema its Handler reads a body with, as the readers file (`readers.generated.ts` by default) pairs them. */
-export type WithReader<
-  Element extends MessageElement = MessageElement,
-  Reader extends core.$ZodType = core.$ZodType,
-> = { readonly element: Element; readonly reader: Reader };
+/** Each Command's Message Version and Subscription with its Reader, keyed as the Handler map keys their Handlers. */
+export type Readers = {
+  readonly commands: Readonly<Record<string, Pairing<Command>>>;
+  readonly subscriptions: Readonly<Record<string, Pairing<Subscription>>>;
+};
 
-/** Pairs a Command's Message Version or a Subscription with its Reader schema, generated from the Snapshot, so its Handler reads a body as a Subscriber does. */
-export function withReader<const Element extends MessageElement, Reader extends core.$ZodType>(
-  element: Element,
-  reader: Reader,
-): WithReader<Element, Reader> {
-  const pairing = { element, reader };
-  if (!isWithReader(pairing)) {
+const tableKeys = ['commands', 'subscriptions'] as const;
+
+/** Pairs each Command's Message Version and Subscription with the Reader schema generated from the Snapshot, so its Handler reads a body as a Subscriber does; the readers file calls it. */
+export function readersOf<const Table extends Readers>(table: Table): Table {
+  const refused = refusedKeyOf(table);
+  if (refused !== undefined) {
     throw new Error(
-      'withReader() takes a Command or a Subscription declared with @cf-loom/contract and a zod schema',
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${refused}`,
     );
   }
-  return Object.freeze(pairing);
+  for (const key of tableKeys) {
+    for (const pairing of Object.values(table[key])) {
+      Object.freeze(pairing);
+    }
+    Object.freeze(table[key]);
+  }
+  Object.freeze(table);
+  return table;
 }
 
-/** Whether a value is a Command or Subscription paired with its Reader, which `handle()` takes. */
-export function isWithReader(value: unknown): value is WithReader {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+/** The first key the table cannot be built with: a table left out or no object, or a pairing that is none. */
+function refusedKeyOf(table: Readers): string | undefined {
+  for (const key of tableKeys) {
+    const pairings: unknown = table[key];
+    if (typeof pairings !== 'object' || pairings === null) {
+      return key;
+    }
+    for (const [name, pairing] of Object.entries(pairings)) {
+      if (!isPairing(pairing)) {
+        return `${key}.${name}`;
+      }
+    }
   }
-  const { element, reader } = value as Partial<WithReader>;
-  return isMessageElement(element) && isSchema(reader);
+  return undefined;
 }

@@ -11,9 +11,9 @@ import {
   fault,
   handle,
   InvalidInputError,
+  readersOf,
   success,
   type WithResources,
-  withReader,
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -59,9 +59,17 @@ const notifyOnSettled = defineSubscription({
   event: paymentSettledV1,
 });
 
-const chargeCard = withReader(chargeCardV1, readBody);
-const notifyOnPaidReader = withReader(notifyOnPaid, readBody);
-const notifyOnSettledReader = withReader(notifyOnSettled, notifyOnSettled.event.body);
+const readers = readersOf({
+  commands: { chargeCardV1: { element: chargeCardV1, reader: readBody } },
+  subscriptions: {
+    notifyOnPaid: { element: notifyOnPaid, reader: readBody },
+    notifyOnSettled: { element: notifyOnSettled, reader: notifyOnSettled.event.body },
+  },
+});
+
+const chargeCard = readers.commands.chargeCardV1;
+const notifyOnPaidReader = readers.subscriptions.notifyOnPaid;
+const notifyOnSettledReader = readers.subscriptions.notifyOnSettled;
 
 const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 

@@ -13,7 +13,7 @@ export type { CallArgument, NoResources, ResourcesField } from '../handlers/inde
 export {
   isStub,
   mappedHandlerOf,
-  readerOf,
+  mappedMessageHandlerOf,
   runEndpoint,
   runGuard,
   runMessage,
