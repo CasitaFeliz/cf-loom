@@ -2,9 +2,12 @@ import type * as core from 'zod/v4/core';
 import type { JoinedNames, LiteralNames } from './rules.ts';
 
 /** The HTTP methods an Endpoint may declare, as values, so the runtime repeats the type's rule. */
-export const methods = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
+export const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
 
-/** The HTTP methods an Endpoint may declare; any other is a type error. */
+/**
+ * The HTTP methods an Endpoint may declare; any other is a type error. `HEAD` is not one: its
+ * response has no body, so no Envelope, and only a Success could reach the Caller.
+ */
 export type Method = (typeof methods)[number];
 
 /** The statuses a Success may declare, as values, so the runtime repeats the type's rule. */

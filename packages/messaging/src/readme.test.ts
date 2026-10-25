@@ -100,8 +100,8 @@ describe('the messaging README', () => {
     await close();
 
     expect(published.map((message) => message.messageId).slice(3)).toEqual([
-      'OrderCreated.v1:o-1:created',
-      'OrderCreated.v2:o-1:created',
+      'event.OrderCreated.v1:o-1:created',
+      'event.OrderCreated.v2:o-1:created',
     ]);
     expect(published[4]?.headers).toEqual({ traceparent });
   });
@@ -137,7 +137,7 @@ describe('the messaging README', () => {
       { resources },
     );
     const meta = {
-      messageId: 'OrderCreated.v2:o-1:created',
+      messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 2,
       headers: { traceparent: '00-abc-def-01' },

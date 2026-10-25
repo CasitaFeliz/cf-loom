@@ -51,14 +51,14 @@ const updateOrder = defineEndpoint({
   success: { status: 204 },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
+const orderTotal = defineEndpoint({
+  name: 'orderTotal',
+  method: 'GET',
+  path: '/orders/:orderId/total',
   visibility: 'public',
-  description: 'Whether an order exists',
+  description: 'The total of an order, in a header',
   input: { params: z.object({ orderId: z.string() }) },
-  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+  success: { status: 204, headers: z.object({ 'x-total': z.int() }) },
 });
 
 const definitions = defineDefinitions({
@@ -76,7 +76,7 @@ const contract = defineContract({
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [getOrder, updateOrder, headOrder],
+      endpoints: [getOrder, updateOrder, orderTotal],
     }),
   ],
 });
@@ -92,7 +92,7 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
       endpoints: {
         getOrder: handle(getOrder, implementation),
         updateOrder: handle(updateOrder, () => success()),
-        headOrder: handle(headOrder, () => success({ headers: { 'x-total': 3 } })),
+        orderTotal: handle(orderTotal, () => success({ headers: { 'x-total': 3 } })),
       },
       guards: {},
       deprecatedAt: {},
@@ -192,12 +192,12 @@ describe('serve: a Success', () => {
     expect(await response.text()).toBe('');
   });
 
-  test('a HEAD Endpoint’s Success sends its status and headers only', async () => {
+  test('a headers-only Success sends its status and headers only', async () => {
     const { http } = serveWith(() => reject(notFound));
 
-    const response = await http(new Request('http://test/orders/o-1', { method: 'HEAD' }));
+    const response = await http(new Request('http://test/orders/o-1/total'));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(204);
     expect(response.headers.get('x-total')).toBe('3');
     expect(response.headers.get('content-type')).toBeNull();
     expect(await response.text()).toBe('');

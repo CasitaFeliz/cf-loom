@@ -38,14 +38,14 @@ const cancelOrder = defineEndpoint({
   success: { status: 204 },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
+const orderTotal = defineEndpoint({
+  name: 'orderTotal',
+  method: 'GET',
+  path: '/orders/:orderId/total',
   visibility: 'public',
-  description: 'Whether an order exists',
+  description: 'The total of an order, in a header',
   input: { params: z.object({ orderId: z.string() }) },
-  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+  success: { status: 204, headers: z.object({ 'x-total': z.int() }) },
 });
 
 /**
@@ -84,11 +84,11 @@ const defaultStandards = {
   notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
 } as const;
 
-const orders = contractPackageOf({ getOrder, cancelOrder, headOrder }, defaultStandards);
+const orders = contractPackageOf({ getOrder, cancelOrder, orderTotal }, defaultStandards);
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [getOrder, cancelOrder, headOrder],
+  endpoints: [getOrder, cancelOrder, orderTotal],
 });
 
 const params = { params: { orderId: 'o-1' } };
@@ -138,22 +138,11 @@ describe('a Success', () => {
     expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
   });
 
-  test('a Success declaring no body, whose stream already failed, is still the Success', async () => {
-    const failed = new ReadableStream<Uint8Array>({
-      start: (controller) => controller.error(new Error('reset')),
-    });
+  test('a headers-only Success carries its headers only', async () => {
     const headers = { 'x-total': '7' };
-    const orders = ordersAnswering(() => new Response(failed, { status: 200, headers }));
+    const orders = ordersAnswering(() => new Response(null, { status: 204, headers }));
 
-    const outcome = await orders.headOrder(params);
-
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
-  });
-
-  test('a HEAD Success carries its headers only', async () => {
-    const orders = ordersAnswering(() => new Response(null, { headers: { 'x-total': '7' } }));
-
-    const outcome = await orders.headOrder(params);
+    const outcome = await orders.orderTotal(params);
 
     expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
   });

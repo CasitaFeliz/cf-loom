@@ -54,12 +54,12 @@ function paymentEndpointsOf<const Stage extends z.ZodType, const Reason extends 
   });
   const checkPayment = defineEndpoint({
     name: 'checkPayment',
-    method: 'HEAD',
-    path: '/payments/:paymentId',
+    method: 'GET',
+    path: '/payments/:paymentId/check',
     visibility: 'internal',
-    description: 'Whether a payment exists',
+    description: 'Checks a payment, answering its count in a header',
     input: { params: z.object({ paymentId: z.string() }) },
-    success: { status: 200, headers: z.object({ 'x-count': z.int() }) },
+    success: { status: 204, headers: z.object({ 'x-count': z.int() }) },
   });
   const capturePayment = defineEndpoint({
     name: 'capturePayment',
@@ -191,7 +191,7 @@ describe('fakeProvider: steps', () => {
     });
   });
 
-  test('success() answers a 204 with no body, and a HEAD Endpoint its headers alone', async () => {
+  test('success() answers a 204 with no body, and a 204 with headers its headers alone', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('cancelPayment').otherwise((r) => r.success());
     payments.on('checkPayment').otherwise((r) => r.success({ headers: { 'x-count': 3 } }));

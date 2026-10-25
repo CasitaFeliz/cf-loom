@@ -282,16 +282,8 @@ const shapes = [
   "  description: 'Is up\\u2028and running',",
   '  success: { status: 200, body: z.object({ up: z.boolean() }) },',
   '});',
-  'export const healthHead = defineEndpoint({',
-  "  name: 'healthHead',",
-  "  method: 'HEAD',",
-  "  path: '/health',",
-  "  visibility: 'private',",
-  "  description: 'Is it up',",
-  '  success: { status: 200 },',
-  '});',
   "const shapesGroup = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, extra, proto] });",
-  "const infrastructureGroup = defineGroup({ name: 'infrastructure', description: 'Infrastructure', endpoints: [health, healthHead] });",
+  "const infrastructureGroup = defineGroup({ name: 'infrastructure', description: 'Infrastructure', endpoints: [health] });",
 ];
 
 /** A Service named `orders-service` with an Endpoint of each Visibility, Lifecycle and shape. */
@@ -1015,16 +1007,6 @@ describe('cf-loom openapi: the responses', () => {
       '501',
       '503',
     ]);
-  });
-
-  test('every response of a HEAD OpenAPI operation has no content, since the host drops every body', () => {
-    const responses = valueAt(operationOf('/health', 'head'), 'responses');
-
-    const withContent = keysOf(responses).filter((status) =>
-      Object.hasOwn(valueAt(responses, status) as object, 'content'),
-    );
-
-    expect([keysOf(responses).length > 0, withContent]).toEqual([true, []]);
   });
 });
 

@@ -259,7 +259,7 @@ describe('memory(): what the Service publishes and sends', () => {
 
     const notified = received.find(({ handler }) => handler === 'notifyOnCreated');
     expect(notified?.meta).toEqual({
-      messageId: 'OrderCreated.v2:o-1:created',
+      messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 1,
       headers,
@@ -367,21 +367,21 @@ describe('memory(): what the Service publishes and sends', () => {
     expect(broker.messages).toEqual([
       {
         subject: 'orders-service.event.OrderCreated.v1',
-        messageId: 'OrderCreated.v1:o-1:created',
+        messageId: 'event.OrderCreated.v1:o-1:created',
         factId: 'o-1:created',
         headers,
         body: v1Body,
       },
       {
         subject: 'orders-service.event.OrderCreated.v2',
-        messageId: 'OrderCreated.v2:o-1:created',
+        messageId: 'event.OrderCreated.v2:o-1:created',
         factId: 'o-1:created',
         headers,
         body: v2Body,
       },
       {
         subject: 'orders-service.command.ChargeCard.v1',
-        messageId: 'ChargeCard.v1:o-1:charge',
+        messageId: 'command.ChargeCard.v1:o-1:charge',
         factId: 'o-1:charge',
         headers: {},
         body: { orderId: 'o-1' },

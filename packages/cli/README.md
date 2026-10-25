@@ -247,7 +247,6 @@ Exit 3, a tooling error:
 | `package.json names <name>, but a Definitions Package of scope <scope> publishes as <scope>/<name>` | `publish` |
 | `package.json lists <name> in <field> as <range>, which npm cannot install from the registry`, for a `workspace:`, `catalog:`, `file:` or `link:` range in a Definitions Package's `dependencies` or `optionalDependencies`, `<field>` being the one that lists it | `publish` |
 | `npm pack --dry-run listed no files` | `publish` |
-| `The codes <code> and <code> are one name in code: rename one of them` | `package`, `publish` |
 | `<element> is <path>, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts`, for the first Handler path in the Handler map's order that lies there once filled, where `<element>` is as in the next row | `generate`, `verify` |
 | `<element> and <element> are both <path>: give each its own path in the layout of cf-loom.config.ts`, or `<element> and <element> are both the same file, <path> and <path>: give each its own path in the layout of cf-loom.config.ts` when a link makes two paths one file, where `<element>` is `endpoints.<name>`, `guards.<name>`, `commands.<Name>@<version>` or `subscriptions.<name>` | `generate`, `verify` |
 | `cf-loom failed: [<file>:<line>: ]<what was thrown>`, for a throw, which is a bug of cf-loom, with the file of cf-loom's own package it was thrown in when its stack names one: with `--json`, stdout also holds `{"format":1,"status":3,"errors":[…]}` | every command |
@@ -334,7 +333,7 @@ The responses are one per status, in status order; when several answer one statu
 | 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one |
 | 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` |
 
-A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input. The OpenAPI operation of a `HEAD` Endpoint has no body in any response, since the host drops them.
+A Deprecated Endpoint's every response carries the header `deprecation` with the `const` `@<unix seconds>` of its `deprecatedAt`. A Retired Endpoint that is still declared answers only `410` with `RETIRED`, before any Guard, so it keeps its path params and nothing else of its Input.
 
 The `authorization` header is no header parameter, since OpenAPI tools ignore one: it is a security scheme. Each Guard of an Endpoint that is not Retired that demands an `authorization` header is the scheme `components.securitySchemes.<Guard name>`, `{ "type": "apiKey", "in": "header", "name": "authorization" }`; an `authorization` header that no Guard demands, so the Endpoint's own, is the scheme `authorization`. The OpenAPI operation's `security` is one requirement naming every such scheme in code point order, followed by `{}` as an alternative when the header is optional. A document with no such header has no `securitySchemes`.
 

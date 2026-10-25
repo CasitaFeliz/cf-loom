@@ -198,7 +198,7 @@ describe('the handlers README', () => {
 
     const answer = await notifyOnSettledHandler(
       settled,
-      { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
+      { messageId: 'event.PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
       { resources },
     );
 
@@ -206,7 +206,12 @@ describe('the handlers README', () => {
     expect(sent).toEqual([
       [
         'pay-1',
-        { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1, headers: {} },
+        {
+          messageId: 'event.PaymentSettled.v1:pay-1',
+          factId: 'pay-1',
+          deliveryCount: 1,
+          headers: {},
+        },
       ],
     ]);
   });
