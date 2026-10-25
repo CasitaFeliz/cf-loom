@@ -1,7 +1,6 @@
 /**
- * The lines of a Contract file that declare a schema of every node a Snapshot has, as `everything`
- * for a Success body, and with records keyed by an enum or literal, which only Input holds, as
- * `everythingIn` for an Input body; the file imports `z` and `openEnum`.
+ * The lines of a Contract file that declare a schema of every node a Snapshot has, as `everything`;
+ * the file imports `z` and `openEnum`.
  */
 export const everything: readonly string[] = [
   "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
@@ -46,6 +45,8 @@ export const everything: readonly string[] = [
   "  digest: z.hash('sha256'),",
   "  digest2: z.hash('md5', { enc: 'base64' }),",
   '  scores: z.record(z.string().min(2), z.number()),',
+  '  partialScores: z.partialRecord(z.string(), z.number()),',
+  '  optionals: z.object({ note: z.string().optional() }),',
   "  rooted: z.object({ tree: tree.optional().describe('The root') }).required(),",
   '  forest,',
   '  node,',
@@ -79,18 +80,5 @@ export const everything: readonly string[] = [
   "  optional: z.string().optional().meta({ examples: ['x'] }),",
   '  tree,',
   '  bough,',
-  '});',
-  'const twin = z',
-  '  .object({',
-  '    get kids() {',
-  "      return z.partialRecord(z.enum(['l', 'r']), z.lazy(() => twin).describe('A child'));",
-  '    },',
-  '  })',
-  "  .meta({ id: 'twin' });",
-  'const everythingIn = everything.extend({',
-  '  twin: twin.optional(),',
-  "  keyed: z.record(z.enum(['a', 'b']), z.number()),",
-  "  partial: z.partialRecord(z.enum(['a', 'b']), z.number()),",
-  "  single: z.record(z.literal('a'), z.number()),",
   '});',
 ];

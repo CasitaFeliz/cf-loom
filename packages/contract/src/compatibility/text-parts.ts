@@ -13,7 +13,7 @@ export type TextParts = {
   readonly proposed: ObjectNode | null;
 };
 
-const noFields: ObjectNode = { type: 'object', mode: 'open', fields: {} };
+const noFields: ObjectNode = { type: 'object', fields: {} };
 
 /**
  * Path params compared by position, as the URL matches them: a name changed is a rename, and each

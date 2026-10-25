@@ -117,7 +117,6 @@ const serviceHeading = {
 
 const idParams: EndpointSnapshot['input']['params'] = {
   type: 'object',
-  mode: 'strict',
   fields: { id: { required: true, schema: { type: 'string' } } },
 };
 
@@ -285,7 +284,7 @@ describe('versionBumpOf', () => {
       group: 'orders',
       lifecycle: 'active',
       description: 'Charge a card',
-      body: { type: 'object', mode: 'strict', fields: {} },
+      body: { type: 'object', fields: {} },
     };
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
@@ -310,7 +309,7 @@ describe('versionBumpOf', () => {
         visibility: 'public',
         lifecycle: 'active',
         description: 'An order was placed',
-        body: { type: 'object', mode: 'strict', fields },
+        body: { type: 'object', fields },
       }) as const;
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
@@ -445,7 +444,7 @@ describe('versionBumpOf', () => {
       visibility: 'internal',
       lifecycle: 'active',
       description: 'An order was placed',
-      body: { type: 'object', mode: 'strict', fields: {} },
+      body: { type: 'object', fields: {} },
     };
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,

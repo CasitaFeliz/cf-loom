@@ -48,7 +48,6 @@ function hasOnlyItsType(node: SchemaNode): boolean {
     case 'array':
     case 'tuple':
       return true;
-    case 'literal':
     case 'enum':
     case 'union':
     case 'tagged':
@@ -69,8 +68,6 @@ function shapeOf(node: SchemaNode, dialect: JsonSchemaDialect): JsonSchema {
       return numberSchemaOf(node);
     case 'boolean':
       return { type: 'boolean' };
-    case 'literal':
-      return { type: typeof node.value, const: node.value };
     case 'enum':
       return enumSchemaOf(node);
     case 'object':
@@ -100,16 +97,23 @@ function shapeOf(node: SchemaNode, dialect: JsonSchemaDialect): JsonSchema {
   }
 }
 
-/** A closed enum is typed by its values' JSON types, so a parameter's text can be coerced to one. */
+/**
+ * A closed enum is typed by its values' JSON types, so a parameter's text can be coerced to one;
+ * one value is a `const`.
+ */
 function enumSchemaOf({ values, open }: EnumNode): JsonSchema {
   if (open) {
     return { anyOf: [{ enum: values }, { type: 'string' }] };
+  }
+  const [only] = values;
+  if (values.length === 1 && only !== undefined) {
+    return { type: typeof only, const: only };
   }
   const types = [...new Set(values.map((value) => typeof value))];
   return { type: types.length === 1 ? types[0] : types, enum: values };
 }
 
-function objectSchemaOf({ fields, mode }: ObjectNode, dialect: JsonSchemaDialect): JsonSchema {
+function objectSchemaOf({ fields }: ObjectNode, dialect: JsonSchemaDialect): JsonSchema {
   const entries = Object.entries(fields);
   const required = entries.filter(([, field]) => field.required).map(([name]) => name);
   return definedOf({
@@ -118,7 +122,6 @@ function objectSchemaOf({ fields, mode }: ObjectNode, dialect: JsonSchemaDialect
       entries.map(([name, field]) => [name, jsonSchemaOf(field.schema, dialect)]),
     ),
     required: required.length === 0 ? undefined : required,
-    additionalProperties: mode === 'strict' ? false : undefined,
   });
 }
 

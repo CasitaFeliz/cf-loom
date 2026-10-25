@@ -35,7 +35,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSnapshot {
@@ -243,7 +243,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   });
 
   test.each([
-    ['Context', { context: { type: 'object', mode: 'strict', fields: {} } }],
+    ['Context', { context: { type: 'object', fields: {} } }],
     ['guards', { guards: ['session'] }],
     ['qualifier', { qualifier: { type: 'string' } }],
     ['description', { description: 'Checks the session' }],

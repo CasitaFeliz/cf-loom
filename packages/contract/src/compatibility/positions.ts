@@ -52,10 +52,8 @@ function inputAndSuccessClassesOf(shape: ShapeDifference): readonly [ChangeClass
       return ['neutral', 'breaking'];
     case 'enum-closed':
       return ['neutral', 'additive'];
-    case 'key-removed':
     case 'discriminator-changed':
     case 'union-changed':
-    case 'mode-changed':
     case 'type-changed':
     case 'constraint-replaced':
     case 'rest-added':

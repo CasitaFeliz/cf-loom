@@ -63,8 +63,6 @@ function valueOfOneText(node: SchemaNode, text: string): unknown {
       return numberText.test(text) ? Number(text) : text;
     case 'boolean':
       return booleanOf(text);
-    case 'literal':
-      return declaredValueOf([node.value], text);
     case 'enum':
       return declaredValueOf(node.values, text);
     case 'string':

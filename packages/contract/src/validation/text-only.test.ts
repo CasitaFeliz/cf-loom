@@ -9,7 +9,7 @@ import {
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { type RootPackage, snapshotOf, validateContract } from '../internal/index.ts';
+import { type RootPackage, validateContract } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
 function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
@@ -440,130 +440,5 @@ describe('validateContract: one schema per header or query name on an Endpoint',
         'A query param has one schema across an Endpoint and its Guards: tenant differs between userToken and tenant',
       ),
     );
-  });
-});
-
-describe('validateContract: a record keyed by an enum or literal as query or headers', () => {
-  const keyed = () => z.record(z.enum(['tenant']), z.string()) as unknown as z.ZodObject;
-  const refusal = {
-    kind: 'not-allowed',
-    construct: 'a record keyed by an enum or literal as query or headers',
-    instead: 'z.object()',
-  };
-
-  test.each([
-    ['an Endpoint’s query', { input: { query: keyed() } }, [...endpointAt, 'input', 'query']],
-    ['an Endpoint’s headers', { input: { headers: keyed() } }, [...endpointAt, 'input', 'headers']],
-    [
-      'Success headers',
-      { success: { ...listing.success, headers: keyed() } },
-      [...endpointAt, 'success', 'headers'],
-    ],
-  ])('a keyed record as %s fails', (_part, declared, at) => {
-    const validated = validateEndpoint(defineEndpoint({ ...listing, ...declared } as never));
-
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at }] });
-  });
-
-  test.each([
-    ['query', { query: keyed() }],
-    ['headers', { headers: keyed() }],
-  ])('a keyed record a Guard demands as %s fails', (part, demands) => {
-    const tenant = defineGuard({ name: 'tenant', description: 'A tenant', demands });
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }));
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [{ ...refusal, at: ['guards', 'tenant', 'demands', part] }],
-    });
-  });
-
-  test('a keyed record as query fails whether the Endpoint or only its Guard declares it', () => {
-    const tenant = defineGuard({
-      name: 'tenant',
-      description: 'A tenant',
-      demands: { query: keyed() },
-    });
-    const endpoint = defineEndpoint({
-      ...listing,
-      guards: [tenant],
-      input: { query: keyed() },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [
-        { ...refusal, at: [...endpointAt, 'input', 'query'] },
-        { ...refusal, at: ['guards', 'tenant', 'demands', 'query'] },
-      ],
-    });
-  });
-
-  test('a keyed record as query fails once, its values not judged as text', () => {
-    const query = z.record(z.enum(['tenant']), z.object({})) as unknown as z.ZodObject;
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [{ ...refusal, at: [...endpointAt, 'input', 'query'] }],
-    });
-  });
-
-  test('a keyed record as params has its values judged as text', () => {
-    const params = z.record(z.enum(['orderId']), z.object({})) as unknown as z.ZodObject;
-    const endpoint = defineEndpoint({
-      ...listing,
-      path: '/orders/:orderId',
-      input: { params },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
-        'not-text',
-        `A path param ${text}: orderId`,
-      ),
-    );
-  });
-
-  test('a keyed record in a query field is reported once, as a field that is not text', () => {
-    const query = z.object({ tenant: z.record(z.enum(['a']), z.string()) }) as z.ZodObject;
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
-
-    expect(validated).toEqual(
-      failed(
-        [...endpointAt, 'input', 'query', 'fields', 'tenant'],
-        'not-text',
-        `A query param ${text}, or a list of those: tenant`,
-      ),
-    );
-  });
-
-  test('a keyed record as params is allowed and stored strict, since the path decides their keys', () => {
-    const params = z.record(z.enum(['orderId']), z.uuid()) as unknown as z.ZodObject;
-    const endpoint = defineEndpoint({
-      ...listing,
-      path: '/orders/:orderId',
-      input: { params },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated.kind).toBe('valid');
-    const context = { generator: 'cf-loom@1.0.0', packages: [], committed: undefined, now: 0 };
-    const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
-    const stored = snapshot?.kind === 'service' ? snapshot.endpoints['GET /orders/{}'] : undefined;
-    expect(stored?.input.params).toEqual({
-      type: 'object',
-      mode: 'strict',
-      fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
-    });
   });
 });

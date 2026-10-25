@@ -145,13 +145,9 @@ function aBaselineDefinitions(
   return { ...aDefinitions(), version: '4.2.0', ...fields };
 }
 
-const aString: SchemaNode = { type: 'string' };
+const aString: StringNode = { type: 'string' };
 const aNumber: SchemaNode = { type: 'number' };
 const aBoolean: SchemaNode = { type: 'boolean' };
-
-function aLiteral(value: Value): SchemaNode {
-  return { type: 'literal', value };
-}
 
 function aClosedEnum(...values: readonly Value[]): SchemaNode {
   return { type: 'enum', values, open: false };
@@ -170,11 +166,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
-}
-
-function aKeyedRecord(fields: Readonly<Record<string, Field>>): ObjectNode {
-  return { type: 'object', mode: 'strict', fields };
+  return { type: 'object', fields };
 }
 
 function aTagged(
@@ -183,7 +175,7 @@ function aTagged(
 ): TaggedNode {
   const entries = Object.entries(variants).map(([value, fields]) => [
     JSON.stringify(value),
-    anObject({ [discriminator]: required(aLiteral(value)), ...fields }),
+    anObject({ [discriminator]: required(aClosedEnum(value)), ...fields }),
   ]);
   return { type: 'tagged', discriminator, variants: Object.fromEntries(entries) };
 }
@@ -264,7 +256,6 @@ const shared: Place = {
   proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
 };
 const places = [input, success, message, shared];
-const readersOfInput = [input, shared];
 
 /** The classes of one difference in Input, Success, Message and a shared schema, in that order. */
 type Classes = readonly [Class, Class, Class, Class];
@@ -393,13 +384,6 @@ const fieldRows: readonly Row[] = [
     found: [found({ kind: 'field-removed' }, guaranteesLess, noteField)],
   },
   {
-    change: 'removing a key from a record keyed by an enum',
-    from: aKeyedRecord({ note: required(aString), id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'key-removed' }, breaksEverywhere, noteField)],
-    places: readersOfInput,
-  },
-  {
     change: 'changing a field’s type',
     from: anObject({ note: required(aString) }),
     to: anObject({ note: required(aNumber) }),
@@ -412,13 +396,6 @@ const fieldRows: readonly Row[] = [
     from: anObject({ id: required(aString) }),
     to: { type: 'record', key: aString, value: aString },
     found: [found({ kind: 'type-changed', from: 'object', to: 'record' }, breaksEverywhere)],
-  },
-  {
-    change: 'turning an object into a record keyed by an enum',
-    from: anObject({ id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'mode-changed', from: 'open', to: 'strict' }, breaksEverywhere)],
-    places: readersOfInput,
   },
   {
     change: 'turning an array into a tuple',
@@ -552,7 +529,7 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'widening a literal to an enum containing it',
-    from: aLiteral('a'),
+    from: aClosedEnum('a'),
     to: aClosedEnum(...sizes),
     found: [found({ kind: 'value-added', value: 'b', enum: 'closed' }, guaranteesLess)],
   },
@@ -573,7 +550,7 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'widening a literal to its base type',
-    from: aLiteral(7),
+    from: aClosedEnum(7),
     to: aNumber,
     found: [found({ kind: 'enum-widened', to: 'number' }, guaranteesLess)],
   },
@@ -586,13 +563,13 @@ const enumRows: readonly Row[] = [
   {
     change: 'narrowing an enum to one of its literals',
     from: aClosedEnum(...sizes),
-    to: aLiteral('a'),
+    to: aClosedEnum('a'),
     found: [found({ kind: 'value-removed', value: 'b' }, acceptsLess)],
   },
   {
     change: 'changing a literal, which adds a value and removes one',
-    from: aLiteral('a'),
-    to: aLiteral('b'),
+    from: aClosedEnum('a'),
+    to: aClosedEnum('b'),
     found: [
       found({ kind: 'value-removed', value: 'a' }, acceptsLess),
       found({ kind: 'value-added', value: 'b', enum: 'closed' }, guaranteesLess),
@@ -642,8 +619,8 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'turning true into "true", which are different values',
-    from: aLiteral(true),
-    to: aLiteral('true'),
+    from: aClosedEnum(true),
+    to: aClosedEnum('true'),
     found: [
       found({ kind: 'value-added', value: 'true', enum: 'closed' }, guaranteesLess),
       found({ kind: 'value-removed', value: true }, acceptsLess),
@@ -1135,7 +1112,7 @@ function anArray(items: SchemaNode, counts: Counts = {}): SchemaNode {
   return { type: 'array', items, ...counts };
 }
 
-function aRecord(key: SchemaNode, value: SchemaNode): SchemaNode {
+function aRecord(key: StringNode, value: SchemaNode): SchemaNode {
   return { type: 'record', key, value };
 }
 
@@ -1481,7 +1458,7 @@ const refRows: readonly Row[] = [
     change: 'changing a def that is a discriminated union’s variant',
     from: aTagged('kind', { card: {} }),
     to: { ...aTagged('kind', {}), variants: { '"card"': aRefVariant('card') } },
-    toDefs: { card: anObject({ kind: required(aLiteral('card')), last4: required(aString) }) },
+    toDefs: { card: anObject({ kind: required(aClosedEnum('card')), last4: required(aString) }) },
     found: [found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])],
   },
   {
@@ -1507,7 +1484,7 @@ function aNodeTagged(): SchemaNode {
 }
 
 function aNodeDef(extra: Readonly<Record<string, Field>>): ObjectNode {
-  const fields = { kind: required(aLiteral('node')), child: optional(aNodeTagged()), ...extra };
+  const fields = { kind: required(aClosedEnum('node')), child: optional(aNodeTagged()), ...extra };
   return anObject(fields);
 }
 
@@ -1685,7 +1662,7 @@ describe('compatibilityReportOf, refs', () => {
   test.each(places)(
     'a variant that is a ref follows the field rules inside its def in $name',
     (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
+      const card = anObject({ kind: required(aClosedEnum('card')) });
       const variants = { '"card"': aRefVariant('card') };
       const tagged: SchemaNode = { type: 'tagged', discriminator: 'kind', variants };
 
@@ -1705,7 +1682,7 @@ describe('compatibilityReportOf, refs', () => {
   test.each(places)(
     'a variant that turns from inline to a ref of the same shape is no Change in $name',
     (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
+      const card = anObject({ kind: required(aClosedEnum('card')) });
       const refVariants = { '"card"': aRefVariant('card') };
 
       const report = reportOf(place, {
@@ -1754,7 +1731,7 @@ describe('compatibilityReportOf, refs', () => {
   test.each(places)(
     'a variant that is a ref to an unchanged def is no Change in $name',
     (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
+      const card = anObject({ kind: required(aClosedEnum('card')) });
       const variants = { '"card"': aRefVariant('card') };
       const tagged: SchemaNode = { type: 'tagged', discriminator: 'kind', variants };
 

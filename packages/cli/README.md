@@ -150,7 +150,6 @@ The kinds of a shape, the `<shape>` of a `schema` Difference:
 | --- | --- | --- |
 | `field-added` | `required` | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): add a required field, add an optional field |
 | `field-removed` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): remove a field |
-| `key-removed` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): remove a key from a record keyed by an enum or literal |
 | `field-made-required` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): optional → required |
 | `field-made-optional` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): required → optional |
 | `nullability-added` |  | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): add nullability |
@@ -165,7 +164,6 @@ The kinds of a shape, the `<shape>` of a `schema` Difference:
 | `variant-removed` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): discriminated union, remove a variant |
 | `discriminator-changed` | `from`, `to` | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): discriminated union, rename the discriminator |
 | `union-changed` |  | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions): plain union or tuple, any change; discriminated union turned into a plain union |
-| `mode-changed` | `from`, `to` (`open` or `strict`) | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): change a type |
 | `type-changed` | `from`, `to` | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields): change a type |
 | `constraint-tightened` | `constraint` | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints): tighten, or add where there was none |
 | `constraint-relaxed` | `constraint` | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints): relax, or remove |

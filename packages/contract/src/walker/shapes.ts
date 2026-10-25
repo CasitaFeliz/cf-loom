@@ -13,7 +13,7 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'object':
       return { ...own, fields: fieldShapes(own.fields) };
     case 'record':
-      return { ...own, key: shapeOf(own.key), value: shapeOf(own.value) };
+      return { ...own, key: withoutNeutral(own.key), value: shapeOf(own.value) };
     case 'array':
       return { ...own, items: shapeOf(own.items) };
     case 'tuple':
@@ -29,7 +29,6 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'string':
     case 'number':
     case 'boolean':
-    case 'literal':
     case 'enum':
     case 'json':
     case 'ref':
@@ -38,10 +37,10 @@ export function shapeOf(node: SchemaNode): SchemaNode {
 }
 
 /** A node without its Neutral annotations; what remains is its shape and its children. */
-function withoutNeutral(node: SchemaNode): SchemaNode {
+function withoutNeutral<Node extends SchemaNode>(node: Node): Node {
   const neutral: readonly string[] = neutralAnnotations;
   const kept = Object.entries(node).filter(([key]) => !neutral.includes(key));
-  return Object.fromEntries(kept) as SchemaNode;
+  return Object.fromEntries(kept) as Node;
 }
 
 /** The canonical JSON of a node's shape, so two shapes compare as text. */

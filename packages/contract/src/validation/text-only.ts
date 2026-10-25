@@ -1,16 +1,8 @@
 import { reservedHeaderNames } from '../declarations/index.ts';
-import {
-  isKeyedRecord,
-  keyedRecordsOf,
-  type ObjectNode,
-  type Path,
-  type SchemaNode,
-  shapeKey,
-} from '../walker/index.ts';
+import { type ObjectNode, type Path, type SchemaNode, shapeKey } from '../walker/index.ts';
 import {
   attachedGuardsOf,
   isObjectPart,
-  isQueryOrHeadersPart,
   type LocatedEndpoint,
   type Part,
   partFieldOf,
@@ -29,7 +21,7 @@ function textPartOf(part: Part): TextIn | undefined {
   return isObjectPart(part) ? partFieldOf(part) : undefined;
 }
 
-const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
+const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
 
 const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',
@@ -42,15 +34,6 @@ const nouns: Readonly<Record<TextIn, string>> = {
  * the runtime's startup check read text parts by the same rules.
  */
 export function textPartFailures(nodes: Nodes): readonly Failure[] {
-  const queryOrHeaders = nodes.slots.filter((slot) => isQueryOrHeadersPart(slot.part));
-  return [
-    ...textFailures(nodes),
-    ...keyedRecordsOf({ queryOrHeaders, readShapes: [] }, nodes.defs),
-  ];
-}
-
-/** Every text part holds only text, judged on the walked nodes. */
-function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
   return nodes.slots.flatMap(partFailures);
 }
 
@@ -82,9 +65,6 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   }
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
-  }
-  if (isQueryOrHeadersPart(slot.part) && isKeyedRecord(node)) {
-    return [];
   }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
     ...headerNameFailures(at, part, field),

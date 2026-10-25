@@ -11,7 +11,6 @@ export { decimalDigitsOf } from './decimal-digits.ts';
 export { formatOptionKeysOf } from './format-options.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
-export { isKeyedRecord, keyedRecordsOf } from './keyed-records.ts';
 export type {
   EnumNode,
   Field,

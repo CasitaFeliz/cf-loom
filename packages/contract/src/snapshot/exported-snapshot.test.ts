@@ -95,7 +95,7 @@ function anEventEntry(fields: Partial<EventSnapshot> = {}): EventSnapshot {
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    body: { type: 'object', fields: {} },
     ...fields,
   };
 }
@@ -105,7 +105,7 @@ function aRef(name: string): SchemaNode {
 }
 
 function anObjectWith(node: SchemaNode): ObjectNode {
-  return { type: 'object', mode: 'strict', fields: { item: { required: true, schema: node } } };
+  return { type: 'object', fields: { item: { required: true, schema: node } } };
 }
 
 const aString: SchemaNode = { type: 'string' };

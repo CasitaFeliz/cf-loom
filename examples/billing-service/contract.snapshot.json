@@ -63,14 +63,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "The request is invalid",
@@ -96,7 +94,6 @@
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "The order is locked and cannot be billed",
@@ -114,7 +111,6 @@
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "message": "Only a paid order can be billed",
@@ -162,7 +158,6 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": null,
@@ -219,13 +214,11 @@
                     }
                   }
                 },
-                "mode": "open",
                 "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
         "headers": null,
@@ -304,14 +297,12 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
         "type": "object"
       },
       "code": "BAD_REQUEST",

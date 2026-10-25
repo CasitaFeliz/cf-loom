@@ -125,7 +125,7 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/echo',",
     "  visibility: 'public',",
     "  description: 'Answers what it is sent',",
-    '  input: { body: everythingIn },',
+    '  input: { body: everything },',
     '  success: { status: 200, body: everything },',
     '});',
     ...richEndpoint,
@@ -155,6 +155,8 @@ const sample = {
   digest: 'a'.repeat(64),
   digest2: `${'a'.repeat(22)}==`,
   scores: { ab: 1 },
+  partialScores: { any: 1 },
+  optionals: {},
   rooted: { tree: { label: 'root', children: [] } },
   forest: {
     inner: { a: 'x' },
@@ -357,6 +359,13 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(written.filter((text) => text.includes('loom.openEnumReader(['))).not.toEqual([]);
   });
 
+  test('a one-value Open Enum is written as an Open Enum reader, not as a literal', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src')).join('\n');
+
+    expect(written).toContain("loom.openEnumReader(['ok'])");
+    expect(written).not.toContain("z.literal('ok')");
+  });
+
   test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {
     const parsed = read({ ...sample, payment: { type: 'crypto', coin: 'btc' } });
 
@@ -412,16 +421,6 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(plain === undefined ? undefined : z.globalRegistry.get(plain)).toEqual({
       description: "It's a text",
-    });
-  });
-
-  test('the Input schema refuses a key outside an enum-keyed record’s keys, as the Service does', () => {
-    const records = { keyed: { a: 1, b: 2, c: 3 }, partial: { a: 1 }, single: { a: 1 } };
-
-    const parsed = echo.input.body['~standard'].validate({ ...sample, ...records });
-
-    expect(parsed).toMatchObject({
-      issues: [{ code: 'unrecognized_keys', keys: ['c'], path: ['keyed'] }],
     });
   });
 

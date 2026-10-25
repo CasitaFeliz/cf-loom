@@ -26,18 +26,16 @@ const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
 
 const cardNode = {
   type: 'object',
-  mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'card' } },
+    type: { required: true, schema: { type: 'enum', values: ['card'], open: false } },
     last4: { required: true, schema: { type: 'string' } },
   },
 } as const;
 
 const transferNode = {
   type: 'object',
-  mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'transfer' } },
+    type: { required: true, schema: { type: 'enum', values: ['transfer'], open: false } },
     iban: { required: true, schema: { type: 'string' } },
   },
 } as const;
@@ -88,7 +86,6 @@ const declaredOptions = [
     schema: z.object({ id: z.string() }),
     node: {
       type: 'object',
-      mode: 'open',
       fields: { id: { required: true, schema: { type: 'string' } } },
     },
   },

@@ -20,7 +20,7 @@ export type Annotations = {
 /** A regex as `RegExp.prototype.source` and `flags` give it, so two compare equal only if identical. */
 export type Regex = { readonly source: string; readonly flags: string };
 
-/** A value a literal or an enum can hold, kept with its JSON type: `true` is not `"true"`. */
+/** A value an enum can hold, kept with its JSON type: `true` is not `"true"`. */
 export type JsonPrimitive = string | number | boolean;
 
 /** A string, with a known format, a regex and length bounds when declared. */
@@ -47,9 +47,6 @@ export type NumberNode = Annotations & {
 /** A boolean. */
 export type BooleanNode = Annotations & { readonly type: 'boolean' };
 
-/** One value. */
-export type LiteralNode = Annotations & { readonly type: 'literal'; readonly value: JsonPrimitive };
-
 /** One of several values; an open one's readers handle values they do not know. */
 export type EnumNode = Annotations & {
   readonly type: 'enum';
@@ -60,17 +57,16 @@ export type EnumNode = Annotations & {
 /** A field of an object: whether it must be present is apart from whether it may be null. */
 export type Field = { readonly required: boolean; readonly schema: SchemaNode };
 
-/** An object with named fields; a `strict` one takes no other keys. */
+/** An object with named fields; always open, since a Contract declares no strict object. */
 export type ObjectNode = Annotations & {
   readonly type: 'object';
-  readonly mode: 'open' | 'strict';
   readonly fields: Readonly<Record<string, Field>>;
 };
 
 /** An object whose keys are dynamic strings, all with one value schema. */
 export type RecordNode = Annotations & {
   readonly type: 'record';
-  readonly key: SchemaNode;
+  readonly key: StringNode;
   readonly value: SchemaNode;
 };
 
@@ -122,7 +118,6 @@ export type SchemaNode =
   | StringNode
   | NumberNode
   | BooleanNode
-  | LiteralNode
   | EnumNode
   | ObjectNode
   | RecordNode
