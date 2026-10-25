@@ -2,7 +2,15 @@ import type * as core from 'zod/v4/core';
 import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
 import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
-import { allWalked, failed, failuresOf, type Walked, type Walker, walked } from './walked.ts';
+import {
+  allWalked,
+  failed,
+  failuresOf,
+  type LocatedSchema,
+  type Walked,
+  type Walker,
+  walked,
+} from './walked.ts';
 
 /** The key zod drops when it parses, since assigning it sets the prototype instead. */
 const protoKey = '__proto__';
@@ -13,7 +21,7 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
   const fieldEntries = Object.entries(def.shape).map(([key, schema]) =>
     key === protoKey
-      ? notAllowed([...at, 'fields', key], refused.protoField)
+      ? protoFieldFailure({ at: [...at, 'fields', key], schema }, walker)
       : walkedEntry(key, walker.field(schema, [...at, 'fields', key])),
   );
   const fields = allWalked(fieldEntries);
@@ -23,16 +31,21 @@ export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): W
   return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
 }
 
+/** A field named `__proto__`, refused beside what lies inside its schema. */
+function protoFieldFailure({ at, schema }: LocatedSchema, walker: Walker): Walked<never> {
+  return failed(failuresOf([notAllowed(at, refused.protoField), walker.field(schema, at)]));
+}
+
 /**
  * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
  * object, which a Contract never declares.
  */
 export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): Walked {
-  if (def.mode === 'loose') {
-    return notAllowed(at, refused.looseRecord);
-  }
   const key = walker.schema(def.keyType, [...at, 'key']);
   const value = walker.schema(def.valueType, [...at, 'value']);
+  if (def.mode === 'loose') {
+    return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]));
+  }
   if (key.kind === 'not-allowed') {
     return failed(failuresOf([key, value]));
   }

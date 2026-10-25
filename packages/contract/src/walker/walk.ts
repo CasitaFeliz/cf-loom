@@ -6,6 +6,8 @@ import { notAllowed, refusedWrapperId } from './not-allowed.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   distinctFailures,
+  failed,
+  failuresOf,
   type LocatedSchema,
   type Walked,
   type Walker,
@@ -76,12 +78,12 @@ function walkSchema(schema: core.$ZodType, at: Path, state: WalkState): Walked {
 function walkField(schema: core.$ZodType, at: Path, state: WalkState): Walked<Field> {
   const def = schema._zod.def as Def;
   if (def.type === 'optional') {
-    const wrapper = { schema, at, kind: def.type };
-    return optionalField(wrapped(wrapper, () => walkSchema(def.innerType, at, state), state));
+    const inner = walkSchema(def.innerType, at, state);
+    return optionalField(throughWrapper({ schema, at, kind: def.type }, inner, state));
   }
   if (def.type === 'nonoptional') {
-    const wrapper = { schema, at, kind: def.type };
-    return requiredField(wrapped(wrapper, () => walkRequired(def.innerType, at, state), state));
+    const inner = walkRequired(def.innerType, at, state);
+    return requiredField(throughWrapper({ schema, at, kind: def.type }, inner, state));
   }
   return requiredField(walkSchema(schema, at, state));
 }
@@ -91,27 +93,24 @@ function walkRequired(schema: core.$ZodType, at: Path, state: WalkState): Walked
   if (def.type !== 'optional') {
     return walkSchema(schema, at, state);
   }
-  const wrapper = { schema, at, kind: def.type };
-  return wrapped(wrapper, () => walkSchema(def.innerType, at, state), state);
+  const inner = walkSchema(def.innerType, at, state);
+  return throughWrapper({ schema, at, kind: def.type }, inner, state);
 }
 
 /** A field's `.optional()` or `.nonoptional()`, where it sits and which of the two it is. */
 type Wrapper = LocatedSchema & { readonly kind: 'optional' | 'nonoptional' };
 
 /**
- * A field's wrapper says what any schema does: its checks and its own metadata apply. It names
- * no cycle, so an id on it is refused and nothing inside it is walked.
+ * A field's wrapper says what any schema does: its checks and its own metadata apply. It names no
+ * cycle, so an id on it is refused beside whatever the schema inside fails by.
  */
-function wrapped(wrapper: Wrapper, walkInner: () => Walked, state: WalkState): Walked {
+function throughWrapper(wrapper: Wrapper, inner: Walked, state: WalkState): Walked {
   const { schema, at, kind } = wrapper;
-  const metadata = ownMetadata(schema, at, state.originOf);
-  if (hasOwnId(schema)) {
-    return annotatedBy(notAllowed(at, refusedWrapperId(kind)), metadata);
-  }
-  const inner = walkInner();
   const checks = checksOf(schema);
   const checked = inner.kind === 'walked' ? constrained(inner.value, checks, at) : inner;
-  return annotatedBy(checked, metadata);
+  const refusals = hasOwnId(schema) ? [notAllowed(at, refusedWrapperId(kind))] : [];
+  const joined = refusals.length === 0 ? checked : failed(failuresOf([...refusals, checked]));
+  return annotatedBy(joined, ownMetadata(schema, at, state.originOf));
 }
 
 function requiredField(result: Walked): Walked<Field> {

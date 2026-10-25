@@ -32,6 +32,36 @@ const customPattern = 'a format with a custom pattern';
 const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
+  test('.nonoptional() outside an object field fails, and so does the .optional() inside it', () => {
+    const failures = [
+      { kind: 'not-allowed', at: ['body'], construct: '.nonoptional()' },
+      { kind: 'not-allowed', at: ['body'], construct: '.optional()' },
+    ];
+
+    expect(walkBody(z.string().optional().nonoptional())).toEqual({
+      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
+      defs: {},
+    });
+  });
+
+  test('what lies inside a refused construct is reported beside it', () => {
+    const order = z.object({ when: z.array(z.date()).default([]) });
+
+    const failures = [
+      { kind: 'not-allowed', at: ['body', 'fields', 'when'], construct: '.default()' },
+      {
+        kind: 'not-allowed',
+        at: ['body', 'fields', 'when', 'items'],
+        construct: 'z.date()',
+        instead: 'z.iso.datetime()',
+      },
+    ];
+    expect(walkBody(order)).toEqual({
+      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
+      defs: {},
+    });
+  });
+
   test('a format whose options its own zod refuses fails instead of throwing', () => {
     const id = z.uuid();
     Object.assign(id._zod.def, { version: 'v9' });
@@ -83,11 +113,6 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.readonly()', z.array(z.string()).readonly(), '.readonly()'],
     ['numeric z.enum() values', z.enum({ low: 1, high: 2 }), 'numeric z.enum() values'],
     ['.optional() outside an object field', z.string().optional(), '.optional()'],
-    [
-      '.nonoptional() outside an object field',
-      z.string().optional().nonoptional(),
-      '.nonoptional()',
-    ],
     ['z.literal(NaN)', z.literal(Number.NaN), nonFinite],
     ['z.literal(Infinity)', z.literal(Number.POSITIVE_INFINITY), nonFinite],
     ['.max(Infinity) on a number', z.number().max(Number.POSITIVE_INFINITY), nonFinite],
