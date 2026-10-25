@@ -65,7 +65,9 @@ describe('memory types', () => {
 
     expectTypeOf(broker.deliver).parameter(0).toEqualTypeOf<Event | Command>();
     expectTypeOf(broker.deliver).parameter(2).toEqualTypeOf<DeliveryMeta | undefined>();
-    expectTypeOf(broker.deliver).returns.resolves.toEqualTypeOf<'acked' | 'pending' | 'ended'>();
+    expectTypeOf(broker.deliver).returns.resolves.toEqualTypeOf<
+      'acked' | 'pending' | 'ended' | 'handed-back'
+    >();
     expect(deliveringSubscription).toBeTypeOf('function');
   });
 

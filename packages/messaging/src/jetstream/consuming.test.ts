@@ -27,7 +27,13 @@ import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
-import { type ConsumedFault, messaging } from '../index.ts';
+import {
+  type BrokerTrouble,
+  CloseAbortedError,
+  type ConsumedFault,
+  DeadlineError,
+  messaging,
+} from '../index.ts';
 import { memory } from '../memory/index.ts';
 import { type BrokerPlan, jetstream } from './index.ts';
 
@@ -160,6 +166,7 @@ async function aMessaging(
   prefix: string,
   settings: {
     readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
+    readonly onBrokerTrouble?: (trouble: BrokerTrouble) => void | Promise<void>;
     readonly replacing?: Replacing;
     readonly servers?: string;
     readonly inboxPrefix?: string;
@@ -168,9 +175,17 @@ async function aMessaging(
   const service = aConnect(settings.replacing, settings.servers, settings.inboxPrefix);
   const broker = jetstream({ connect: service.connect, prefix });
   const onServiceFault = settings.onServiceFault ?? (() => undefined);
-  const opened = await messaging(contract, broker, { onServiceFault });
-  onTestFinished(() => opened.close());
+  const onBrokerTrouble = settings.onBrokerTrouble ?? (() => undefined);
+  const opened = await messaging(contract, broker, { onServiceFault, onBrokerTrouble });
+  onTestFinished(() => opened.close().catch(unlessHandedBack));
   return { ...opened, connections: service.opened };
+}
+
+/** Lets a test that handed Messages back end, since its closing already rejected as it expected; rethrows anything else. */
+function unlessHandedBack(error: unknown): void {
+  if (!(error instanceof CloseAbortedError)) {
+    throw error;
+  }
 }
 
 /** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
@@ -271,11 +286,17 @@ function activeTimers(): number {
 }
 
 /** A consuming messaging whose durable consumers were deleted, with its pulls failing and each loop waiting out its retry pause. */
-async function aConsumingWithFailingPulls(prefix: string) {
+async function aConsumingWithFailingPulls(
+  prefix: string,
+  onBrokerTrouble?: (trouble: BrokerTrouble) => void,
+) {
   const names = anOrders(prefix);
   await arrangeOrders(prefix);
   const pulls: RecordedPull[] = [];
-  const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
+  const orders = await aMessaging(prefix, {
+    replacing: recordingPulls(pulls),
+    ...(onBrokerTrouble === undefined ? {} : { onBrokerTrouble }),
+  });
   await orders.consume(handlersOf([]));
   await dropDurable(server.url, names.stream, names.notifyDurable);
   await dropDurable(server.url, names.stream, names.chargeDurable);
@@ -285,6 +306,43 @@ async function aConsumingWithFailingPulls(prefix: string) {
   });
   await sleep(150);
   return orders;
+}
+
+/** The message of a `pull-failed` report's cause, or nothing for a recovery. */
+function causeOf(trouble: BrokerTrouble): string | undefined {
+  return trouble.kind === 'pull-failed' ? (trouble.cause as Error).message : undefined;
+}
+
+/** The seed of the random order of pull outcomes, printed in its test's name. */
+const seed = 1 + (Date.now() % 2_147_483_646);
+
+type Step = 'failed' | 'answered';
+
+/** A sequence of pull outcomes drawn from the seed, the same for the same seed. */
+function randomStepsOf(from: number, count: number): readonly Step[] {
+  let state = from;
+  const steps: Step[] = [];
+  for (let index = 0; index < count; index += 1) {
+    state = (state * 48_271) % 2_147_483_647;
+    steps.push(state % 2 === 0 ? 'failed' : 'answered');
+  }
+  return steps;
+}
+
+/** The reports a sequence of pull outcomes makes: the first failure after an answer, and the first answer after a failure. */
+function changesOf(steps: readonly Step[]): readonly string[] {
+  const changes: string[] = [];
+  let failing = false;
+  for (const step of steps) {
+    if (step === 'failed' && !failing) {
+      changes.push('pull-failed');
+    }
+    if (step === 'answered' && failing) {
+      changes.push('recovered');
+    }
+    failing = step === 'failed';
+  }
+  return changes;
 }
 
 /** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
@@ -654,6 +712,7 @@ describe('consuming over jetstream()', () => {
       deliveryCount: 1,
       lastAttempt: false,
       headers: { traceparent: '00-abc-def-01' },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -930,53 +989,63 @@ describe('consuming over jetstream()', () => {
     );
   }, 10_000);
 
-  test('a Handler running past the ack wait keeps its Message: another process of the Service is not given it meanwhile', async () => {
+  test('a Handler that never settles is given up at its 1 s ack wait: onServiceFault receives a thrown DeadlineError, and NATS delivers the Message again with delivery count 2', async () => {
     const prefix = aPrefix();
-    const names = anOrders(prefix);
-    await arrangeOrders(prefix, { ack_wait: oneSecond });
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
     const received: Received[] = [];
-    const slow = () => sleep(2_500).then(() => undefined);
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: slow }));
-    }
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
 
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-93' },
-    );
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-93' });
 
-    await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    expect(received).toHaveLength(1);
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    const cause = (faults[0] as { cause: unknown }).cause;
+    expect(faults[0]).toMatchObject({ kind: 'thrown', deliveryCount: 1 });
+    expect(cause).toBeInstanceOf(DeadlineError);
+    expect(cause).toHaveProperty('message', "The Handler ran past its delivery's wait of 1000 ms");
   }, 10_000);
 
-  test('a durable consumer with a backoff whose later wait is shorter keeps that delivery’s Message too', async () => {
+  test('past the wait the durable consumer pulls its next Message while the first Handler still runs', async () => {
     const prefix = aPrefix();
-    const names = anOrders(prefix);
-    const waits = [2_400_000_000, 600_000_000];
-    await arrangeOrders(prefix, { ack_wait: waits[0] as number, backoff: waits });
+    await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
-    const throwingThenSlow = async ({ meta }: Received) => {
-      if (meta.deliveryCount === 1) {
-        throw new Error('the database is down');
-      }
-      await sleep(1_500);
-      return undefined;
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    const holdingTheFirstDelivery = ({ body, meta }: Received) => {
+      const first = (body as { orderId: string }).orderId === 'o-1' && meta.deliveryCount === 1;
+      return first ? gate.opened : undefined;
     };
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: throwingThenSlow }));
-    }
+    await orders.consume(handlersOf(received, { notify: holdingTheFirstDelivery }));
 
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-94' },
-    );
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-94' });
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-95' });
 
-    await waitUntilSettled(names.stream, names.notifyDurable, 2);
-    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    const bodies = () => received.map(({ body }) => body);
+    await vi.waitFor(() => expect(bodies()).toContainEqual({ orderId: 'o-2' }), { timeout: 4_000 });
+    expect(received[0]?.body).toEqual({ orderId: 'o-1' });
+  }, 10_000);
+
+  test('with a backoff, a delivery’s wait is its backoff entry', async () => {
+    const prefix = aPrefix();
+    const waits = [oneSecond / 2, 2 * oneSecond];
+    await arrangeOrders(prefix, { ack_wait: oneSecond / 2, backoff: waits, max_deliver: 3 });
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-96' });
+
+    await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 8_000 });
+    const waited = faults.map((consumed) => (consumed as { cause: DeadlineError }).cause.waitMs);
+    expect(waited).toEqual([500, 2_000, 2_000]);
   }, 15_000);
 
   test('each durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
@@ -1021,17 +1090,49 @@ describe('consuming over jetstream()', () => {
     gate.open();
   });
 
-  test('a durable consumer deleted and created again while consuming is consumed again, with no new consume', async () => {
+  test('a durable consumer deleted while consuming reaches onBrokerTrouble once as pull-failed, with NATS’s answer as cause', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
-    const consoleSpies = spiesOnConsole();
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aMessaging(prefix, {
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    await orders.consume(handlersOf([]));
+    await waitUntilPulling(names.stream, names.notifyDurable);
+
+    await dropDurable(server.url, names.stream, names.notifyDurable);
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
+    await sleep(2_500);
+    expect(troubles).toEqual([
+      {
+        element: notifyOnCreated,
+        identity: 'notifyOnCreated',
+        durable: 'orders-service_notify-on-created',
+        stream: 'orders-service',
+        kind: 'pull-failed',
+        cause: new Error(
+          `NATS answered a pull from ${names.notifyDurable} with 409 Consumer Deleted`,
+        ),
+      },
+    ]);
+  }, 10_000);
+
+  test('the same durable consumer created again reaches onBrokerTrouble once as recovered, and its Messages reach their Handler', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const troubles: BrokerTrouble[] = [];
     const received: Received[] = [];
-    const orders = await aMessaging(prefix);
+    const orders = await aMessaging(prefix, {
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
     await orders.consume(handlersOf(received));
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-99' });
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     await dropDurable(server.url, names.stream, names.notifyDurable);
+    await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
     await arrangeDurable(server.url, names.stream, {
       durable_name: names.notifyDurable,
       ack_policy: 'explicit',
@@ -1043,8 +1144,143 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
-    expect(consoleSpies.map((spy) => spy.mock.calls)).toEqual([[], [], [], [], []]);
+    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual([
+      ['notifyOnCreated', 'pull-failed'],
+      ['notifyOnCreated', 'recovered'],
+    ]);
   }, 10_000);
+
+  test('a connection that closes for good while consuming reaches onBrokerTrouble once per durable consumer as pull-failed, and nothing after', async () => {
+    const own = await aNatsServer();
+    onTestFinished(() => own.stop());
+    const prefix = aPrefix();
+    await arrangePlanOf(own.url, contract, prefix);
+    await arrangeDurablesOf(own.url, planOf(contract, prefix));
+    const troubles: BrokerTrouble[] = [];
+    const connectOnce = async () => {
+      const connection = await connect({ servers: own.url, reconnect: false });
+      onTestFinished(() => connection.close());
+      return connection;
+    };
+    const orders = await messaging(contract, jetstream({ connect: connectOnce, prefix }), {
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    onTestFinished(() => orders.close());
+    await orders.consume(handlersOf([]));
+    const names = anOrders(prefix);
+    await vi.waitFor(async () => {
+      const notify = await durableInfoOf(own.url, names.stream, names.notifyDurable);
+      const charge = await durableInfoOf(own.url, names.stream, names.chargeDurable);
+      expect([notify?.num_waiting, charge?.num_waiting]).toEqual([1, 1]);
+    });
+
+    await own.stop();
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2), { timeout: 4_000 });
+    await aWhile();
+    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    expect(reported.sort()).toEqual([
+      [
+        'ChargeCard@1',
+        'pull-failed',
+        `NATS answered a pull from ${prefix}_orders-service_command_ChargeCard_v1 with 409 Server Shutdown`,
+      ],
+      [
+        'notifyOnCreated',
+        'pull-failed',
+        `NATS answered a pull from ${prefix}_orders-service_notify-on-created with 409 Server Shutdown`,
+      ],
+    ]);
+  }, 10_000);
+
+  test('the Service closing its own connection while consuming reaches onBrokerTrouble once per durable consumer as pull-failed, the connection closed', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix);
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aMessaging(prefix, {
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    await orders.consume(handlersOf([]));
+    await waitUntilPulling(names.stream, names.notifyDurable);
+
+    await orders.connections[0]?.close();
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    await aWhile();
+    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    expect(reported.sort()).toEqual([
+      ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
+      ['notifyOnCreated', 'pull-failed', 'The NATS connection closed'],
+    ]);
+  });
+
+  test('a connection that closes while a durable consumer’s pulls fail reports nothing more for it, and no recovered', async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    let lost = 0;
+    const losingEveryNotifyPull: Replacing = (connection) => ({
+      publish: (subject, data, options) => {
+        if (subject.endsWith(`.${names.notifyDurable}`)) {
+          lost += 1;
+          return;
+        }
+        connection.publish(subject, data, options);
+      },
+    });
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aMessaging(prefix, {
+      replacing: losingEveryNotifyPull,
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    await orders.consume(handlersOf([]));
+    await vi.waitFor(() => expect([troubles.length, lost]).toEqual([1, 2]), { timeout: 4_000 });
+
+    await orders.connections[0]?.close();
+
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    await aWhile();
+    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    expect(reported.sort()).toEqual([
+      ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
+      [
+        'notifyOnCreated',
+        'pull-failed',
+        `NATS did not answer a pull from ${names.notifyDurable} within 1000 ms`,
+      ],
+    ]);
+  }, 10_000);
+
+  test(`pulls failing and answered in a random order are reported once per change, failing first (seed ${seed})`, async () => {
+    const prefix = aPrefix();
+    const names = anOrders(prefix);
+    await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
+    const steps = randomStepsOf(seed, 10);
+    let pulled = 0;
+    const followingTheSteps: Replacing = (connection) => ({
+      publish: (subject, data, options) => {
+        if (!subject.endsWith(`.CONSUMER.MSG.NEXT.${names.stream}.${names.notifyDurable}`)) {
+          connection.publish(subject, data, options);
+          return;
+        }
+        const step = steps[pulled] ?? 'answered';
+        pulled += 1;
+        const missing = `${subject}-missing`;
+        connection.publish(step === 'failed' ? missing : subject, data, options);
+      },
+    });
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aMessaging(prefix, {
+      replacing: followingTheSteps,
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+
+    await orders.consume(handlersOf([]));
+
+    await vi.waitFor(() => expect(pulled).toBeGreaterThan(steps.length + 1), { timeout: 20_000 });
+    expect(troubles.map(({ kind }) => kind)).toEqual(changesOf([...steps, 'answered']));
+  }, 30_000);
   test('two fresh Messages on one durable consumer reach the Handler with delivery count 1 each', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
@@ -1058,37 +1294,6 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
   });
-
-  test('the wait of a second fresh Message is the first entry of the backoff, so a slow Handler keeps it too', async () => {
-    const prefix = aPrefix();
-    const names = anOrders(prefix);
-    const waits = [oneSecond, 6 * oneSecond];
-    await arrangeOrders(prefix, { ack_wait: oneSecond, backoff: waits });
-    const received: Received[] = [];
-    const slowSecond = ({ body }: Received) => {
-      return (body as { orderId: string }).orderId === 'o-2'
-        ? sleep(2_500).then(() => undefined)
-        : undefined;
-    };
-    const processes = [await aMessaging(prefix), await aMessaging(prefix)];
-    for (const process of processes) {
-      await process.consume(handlersOf(received, { notify: slowSecond }));
-    }
-
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-1' } },
-      { factId: 'f-103' },
-    );
-    await processes[0]?.publisher.publish(
-      'OrderCreated',
-      { v1: { orderId: 'o-2' } },
-      { factId: 'f-104' },
-    );
-
-    await waitUntilSettled(names.stream, names.notifyDurable, 2);
-    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
-  }, 15_000);
 });
 
 describe('closing while consuming over jetstream()', () => {
@@ -1178,6 +1383,43 @@ describe('closing while consuming over jetstream()', () => {
     expect(received[0]?.meta.deliveryCount).toBe(2);
   }, 10_000);
 
+  test('close({ signal }) with a Handler that never settles hands its Message back, so the next consumer gets it at once with delivery count 2', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: 30 * oneSecond });
+    const received: Received[] = [];
+    const orders = await aMessaging(prefix);
+    const gate = aGate();
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-112' });
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+
+    const closing = orders.close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
+    const next = await aMessaging(prefix);
+    await next.consume(handlersOf(received));
+    await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
+    expect(received[1]?.meta.deliveryCount).toBe(2);
+  }, 10_000);
+
+  test('close after a wait passed leaves no timer behind', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 1 });
+    const timersBefore = activeTimers();
+    const faults: ConsumedFault[] = [];
+    const orders = await aMessaging(prefix, {
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const gate = aGate();
+    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-113' });
+    await vi.waitFor(() => expect(faults).toHaveLength(1), { timeout: 4_000 });
+
+    await orders.close();
+
+    expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
+  }, 10_000);
+
   test('close with pulls open leaves no timer or pull behind: the connection is closed and no durable consumer has a pull open', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
@@ -1263,27 +1505,40 @@ describe('pulling over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 3_000 });
   });
 
-  test('a pull the Broker never answers is asked again', async () => {
+  test('a pull the Broker never answers reaches onBrokerTrouble once as pull-failed, naming the wait, and the answer to the next as recovered', async () => {
     const prefix = aPrefix();
+    const names = anOrders(prefix);
     await arrangeOrders(prefix, { max_expires: oneSecond });
     const received: Received[] = [];
+    const troubles: BrokerTrouble[] = [];
     let lost = 0;
-    const losingTheFirstTwoPulls: Replacing = (connection) => ({
+    const losingTheFirstPull: Replacing = (connection) => ({
       publish: (subject, data, options) => {
-        if (subject.includes('.CONSUMER.MSG.NEXT.') && lost < 2) {
+        if (subject.endsWith(`.${names.notifyDurable}`) && lost < 1) {
           lost += 1;
           return;
         }
         connection.publish(subject, data, options);
       },
     });
-    const orders = await aMessaging(prefix, { replacing: losingTheFirstTwoPulls });
+    const orders = await aMessaging(prefix, {
+      replacing: losingTheFirstPull,
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-111' });
 
     await orders.consume(handlersOf(received));
 
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 6_000 });
-    expect(lost).toBe(2);
+    await vi.waitFor(() => expect(troubles).toHaveLength(2));
+    expect(troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)])).toEqual([
+      [
+        'notifyOnCreated',
+        'pull-failed',
+        `NATS did not answer a pull from ${names.notifyDurable} within 2000 ms`,
+      ],
+      ['notifyOnCreated', 'recovered', undefined],
+    ]);
   }, 10_000);
 
   test('pulls that expire leave no subscription behind', async () => {
@@ -1428,6 +1683,20 @@ describe('pulling over jetstream()', () => {
     await orders.close();
 
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
+  }, 10_000);
+
+  test('close while pulls fail reports nothing more', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const orders = await aConsumingWithFailingPulls(aPrefix(), (trouble) => {
+      troubles.push(trouble);
+    });
+    const reportedBefore = troubles.map(({ identity, kind }) => [identity, kind]);
+
+    await orders.close();
+    await aWhile();
+
+    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual(reportedBefore);
+    expect(reportedBefore).toHaveLength(2);
   }, 10_000);
 
   test('the Service closing its own connection while pulls fail leaves no retry pause running', async () => {

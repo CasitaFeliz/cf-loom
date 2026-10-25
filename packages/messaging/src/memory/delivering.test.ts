@@ -266,6 +266,7 @@ describe('memory(): what the Service publishes and sends', () => {
       deliveryCount: 1,
       lastAttempt: false,
       headers,
+      signal: expect.any(AbortSignal),
     });
   });
 

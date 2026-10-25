@@ -15,8 +15,11 @@ export type Settled = {
 /** Runs a delivery through its Handler and answers how it settled. */
 export type Settle = (delivery: Delivery) => Promise<Settled>;
 
+/** What names a consumer's deliveries when `close` hands them back: its identity and subject. */
+export type Named = { readonly identity: string; readonly subject: string };
+
 /** Wraps a consumer's `settle` as the messaging's life allows it: run while open, left pending once closing. */
-export type Received = (settle: Settle) => Settle;
+export type Received = (settle: Settle, named: Named) => Settle;
 
 /** A delivery left for redelivery without running its Handler, so with nothing reported. */
 export const leftPending: Settled = {
@@ -26,8 +29,9 @@ export const leftPending: Settled = {
 };
 
 /**
- * What the in-memory Broker reads of a consumer beyond the Broker seam: the Element it consumes,
- * its identity, the Reader its Handler reads with, and `settle`, `receive` with what it reported.
+ * What the core's trouble report and the in-memory Broker read of a consumer beyond the Broker
+ * seam: the Element it consumes, its identity, the Reader its Handler reads with, and `settle`,
+ * `receive` with what it reported.
  */
 export type ConsumerDetails = {
   readonly element: Subscription | Command;
@@ -38,7 +42,7 @@ export type ConsumerDetails = {
 
 const detailsByConsumer = new WeakMap<BrokerConsumer, ConsumerDetails>();
 
-/** Keeps the details of a consumer the core built, for the in-memory Broker to read. */
+/** Keeps the details of a consumer the core built, for the trouble report and the in-memory Broker to read. */
 export function registerConsumerDetails(consumer: BrokerConsumer, details: ConsumerDetails): void {
   detailsByConsumer.set(consumer, details);
 }
@@ -47,7 +51,7 @@ export function registerConsumerDetails(consumer: BrokerConsumer, details: Consu
 export function consumerDetailsOf(consumer: BrokerConsumer): ConsumerDetails {
   const details = detailsByConsumer.get(consumer);
   if (details === undefined) {
-    throw new Error('a BrokerConsumer the core did not build reached the in-memory Broker');
+    throw new Error('a BrokerConsumer the core did not build was reported to it');
   }
   return details;
 }

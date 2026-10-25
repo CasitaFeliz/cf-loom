@@ -403,6 +403,7 @@ describe('runMessage', () => {
     deliveryCount: 1,
     lastAttempt: false,
     headers: {},
+    signal: new AbortController().signal,
   };
 
   test('runMessage reads a received body with its Reader, without writing it back', async () => {

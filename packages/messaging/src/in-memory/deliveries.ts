@@ -7,7 +7,7 @@ import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
 
 /** How severe a settlement is, the most severe first. */
-const bySeverity: readonly Settlement[] = ['ended', 'pending', 'acked'];
+const bySeverity: readonly Settlement[] = ['ended', 'pending', 'handed-back', 'acked'];
 
 /** What a `memory()` does with its consumers: delivers to them one at a time, and keeps what became of each delivery. */
 export class Deliveries {
@@ -79,6 +79,7 @@ export class Deliveries {
         this.#pending.leave(consumer, delivery.messageId);
         break;
       case 'pending':
+      case 'handed-back':
         this.#pending.put({ consumer, delivery });
         break;
       case 'ended':

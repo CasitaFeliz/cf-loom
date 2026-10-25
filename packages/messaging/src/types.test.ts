@@ -10,9 +10,15 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
+  type BrokerConnection,
   type BrokerConsumer,
   type BrokerService,
+  type BrokerTrouble,
+  type CloseOptions,
   type ConsumedFault,
+  type ConsumeRun,
+  type ConsumerTrouble,
+  type Delivery,
   type Messaging,
   type MessagingOptions,
   messaging,
@@ -297,6 +303,31 @@ describe('publish and send types', () => {
     expect(consuming).toBeTypeOf('function');
   });
 
+  test('MessagingOptions takes an onBrokerTrouble that receives a BrokerTrouble', () => {
+    const options: MessagingOptions = {
+      onBrokerTrouble: async (trouble) => {
+        expectTypeOf(trouble).toEqualTypeOf<BrokerTrouble>();
+      },
+    };
+
+    expectTypeOf<BrokerTrouble['kind']>().toEqualTypeOf<'pull-failed' | 'recovered'>();
+    expectTypeOf<Extract<BrokerTrouble, { kind: 'pull-failed' }>['cause']>().toBeUnknown();
+    expectTypeOf<Omit<BrokerTrouble, 'kind' | 'cause'>>().toEqualTypeOf<{
+      readonly element: BrokerTrouble['element'];
+      readonly identity: string;
+      readonly durable: string;
+      readonly stream: string;
+    }>();
+    expect(options.onBrokerTrouble).toBeTypeOf('function');
+  });
+
+  test('close takes an optional signal', () => {
+    expectTypeOf<Messaging<typeof contract>['close']>().toEqualTypeOf<
+      (options?: CloseOptions) => Promise<void>
+    >();
+    expectTypeOf<CloseOptions>().toEqualTypeOf<{ readonly signal?: AbortSignal | undefined }>();
+  });
+
   test('consume without the Resources its Message Handlers take is a type error', () => {
     type Notifications = { readonly notifications: { readonly send: () => void } };
     const notifying = handle(
@@ -344,7 +375,30 @@ describe('the Broker seam', () => {
     >();
   });
 
-  test('a Settlement is acked, pending or ended', () => {
-    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended'>();
+  test('an adapter’s consume receives the consumers and a ConsumeRun of closing and troubled', () => {
+    expectTypeOf<Parameters<BrokerConnection['consume']>>().toEqualTypeOf<
+      [consumers: readonly BrokerConsumer[], run: ConsumeRun]
+    >();
+    expectTypeOf<ConsumeRun>().toEqualTypeOf<{
+      readonly closing: AbortSignal;
+      readonly troubled: (trouble: ConsumerTrouble) => void;
+    }>();
+    expectTypeOf<ConsumerTrouble>().toEqualTypeOf<
+      { readonly consumer: BrokerConsumer } & (
+        | { readonly kind: 'pull-failed'; readonly cause: unknown }
+        | { readonly kind: 'recovered' }
+      )
+    >();
+  });
+
+  test('a Settlement is acked, pending, ended or handed-back', () => {
+    expectTypeOf<Settlement>().toEqualTypeOf<'acked' | 'pending' | 'ended' | 'handed-back'>();
+  });
+
+  test('a Delivery says its waitMs, a number or undefined', () => {
+    expectTypeOf<Delivery['waitMs']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<keyof Delivery>().toEqualTypeOf<
+      'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt' | 'waitMs' | 'headers' | 'body'
+    >();
   });
 });

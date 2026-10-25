@@ -3,6 +3,7 @@ import type { Fault } from '@cf-loom/handlers';
 import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
+import { type DeliveryEnds, OneDelivery } from './deadline.ts';
 import type { Settled } from './details.ts';
 import { type About, aboutOf, type ConsumedFault, type Report } from './faults.ts';
 
@@ -16,17 +17,27 @@ export type Pulled = {
 /** A run as the Broker would settle it, before its Fault is reported. */
 type Ran = Omit<Settled, 'hookFailure'>;
 
+/** How one delivery is settled: where its Fault is reported, and what ends it early. */
+export type Settling = { readonly report: Report; readonly ends: DeliveryEnds };
+
 /**
- * What became of one delivery once its Handler ran, every Fault it built reported; a hook that
- * failed leaves it pending, since the Service did not hear of the Fault.
+ * What became of one delivery, unless `close`'s signal hands it back first: its Handler's run, or a
+ * `DeadlineError` once its wait passed, every Fault reported.
  */
 export async function settlementOf(
   pulled: Pulled,
   delivery: Delivery,
-  report: Report,
+  { report, ends }: Settling,
 ): Promise<Settled> {
-  const run = await runOf(pulled, delivery);
-  const { settlement, fault } = ranOf(run, aboutOf(pulled.consumed, delivery));
+  const one = new OneDelivery(delivery.waitMs, ends);
+  const about = aboutOf(pulled.consumed, delivery);
+  const running = runOf(pulled, delivery, one.signal);
+  return await one.settled(running, (run) => reportedOf(run, about, report));
+}
+
+/** What became of one delivery once its Handler ran or its wait passed; a hook that failed leaves it pending, since the Service did not hear of the Fault. */
+async function reportedOf(run: MessageRun, about: About, report: Report): Promise<Settled> {
+  const { settlement, fault } = ranOf(run, about);
   if (fault === undefined) {
     return { settlement, fault, hookFailure: undefined };
   }
@@ -38,13 +49,17 @@ export async function settlementOf(
 }
 
 /** The Handler's run on the body received, or the body's one Issue when it is no UTF-8 JSON. */
-async function runOf({ handler, resources }: Pulled, delivery: Delivery): Promise<MessageRun> {
+async function runOf(
+  { handler, resources }: Pulled,
+  delivery: Delivery,
+  signal: AbortSignal,
+): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
     return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
   }
   const { messageId, factId, deliveryCount, lastAttempt, headers } = delivery;
-  const meta = { messageId, factId, deliveryCount, lastAttempt, headers };
+  const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
   return await runMessage(handler, { body: json.value, meta, resources });
 }
 

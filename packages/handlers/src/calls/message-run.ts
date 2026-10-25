@@ -9,7 +9,7 @@ import type { Written } from './run.ts';
 /** What a Message Handler was written with: its Command or Subscription, the pairing that gives the Reader schema it reads a body with, its implementation, and whether it is a stub. */
 export type MessageWritten = Written<MessageElement> & { readonly pairing: Pairing };
 
-/** What a Message Handler receives beside its body: the Message's ids, which attempt this is, whether it is the last, and the transport headers it was published with. */
+/** What a Message Handler receives beside its body: the Message's ids, which attempt this is, whether it is the last, the transport headers it was published with, and the signal that tells it to stop. */
 export type MessageMeta = {
   readonly messageId: string;
   readonly factId: string;
@@ -17,6 +17,8 @@ export type MessageMeta = {
   /** Whether the Broker will not deliver this Message again, so a retryable Fault or a throw is its last. */
   readonly lastAttempt: boolean;
   readonly headers: Readonly<Record<string, string>>;
+  /** Aborts when messaging starts closing, its reason a `MessagingClosedError`, or when the delivery's wait passes, its reason a `DeadlineError`; past either, the Handler's answer may no longer be waited for. */
+  readonly signal: AbortSignal;
 };
 
 /** What one call of a Message Handler is given: its body as a Subscriber reads it, its meta, and its Resources, which are passed on unchecked. */

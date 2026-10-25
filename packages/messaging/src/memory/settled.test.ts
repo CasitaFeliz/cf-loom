@@ -351,6 +351,26 @@ describe('settled()', () => {
     expect(broker.pending).toMatchObject([{ identity: 'ChargeCard@1', deliveryCount: 1 }]);
   });
 
+  test('a Message close({ signal }) handed back is listed in pending', async () => {
+    const handling = Promise.withResolvers<void>();
+    const { broker, close } = await running(() => ({
+      notify: () => {
+        handling.resolve();
+        return new Promise(() => undefined);
+      },
+    }));
+    const delivered = broker.deliver(orderCreatedV1, created, { factId: 'o-1' });
+    await handling.promise;
+
+    const closing = close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toThrow('close stopped waiting and handed back 1 Message');
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(broker.pending).toMatchObject([
+      { identity: 'notifyOnCreated', factId: 'o-1', deliveryCount: 1 },
+    ]);
+  });
+
   test('an onServiceFault that rejects causes no unhandled rejection', async () => {
     const unhandled: unknown[] = [];
     const listener = (reason: unknown) => {
