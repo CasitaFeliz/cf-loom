@@ -11,12 +11,7 @@ import { managerOf } from './stream-check.ts';
 
 type Checked = ResolvedPlan | { readonly kind: 'refused'; readonly message: string };
 
-/**
- * Applies a Service's broker plan, under the Broker prefix the plan names: creates its Streams,
- * then its Durable consumers, adding subjects and updating limits and never removing anything,
- * on a connection of its own that it drains; it refuses a plan or limits it cannot read before it
- * connects, and stops at the first Stream or Durable consumer it cannot apply, keeping what it did.
- */
+/** Applies a Service's broker plan under the Broker prefix the plan names; the organization calls it, `messaging()` never does. */
 export async function applyBrokerPlan(
   connecting: JetStreamConnecting,
   plan: BrokerPlan,

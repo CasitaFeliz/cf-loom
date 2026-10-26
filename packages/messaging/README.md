@@ -232,7 +232,7 @@ await running.close();
 
 ## Applying the plan
 
-Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` or of what `jetstream()` returns (see [Types](#types)): `messaging()` never applies anything.
+Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything.
 
 ```ts
 import { connect } from '@nats-io/transport-node';
@@ -286,6 +286,5 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 - `PendingMessage`, `{ element, identity, subject, messageId, factId, deliveryCount, headers, body }`: a Message a consumer left unacknowledged, its body the wire JSON.
 - `JetStreamConnecting`, `{ connect, jetstream? }`: how a NATS connection is opened, the Service's own function that opens it and the options of nats.js's JetStream client.
 - `JetStreamBrokerOptions`, `{ connect, prefix?, jetstream? }`: what `jetstream()` takes, a `JetStreamConnecting` and the Broker prefix, and what it returns is a `Broker`.
-- `applyBrokerPlan(connecting, plan, limits)`: applies a `BrokerPlan` under the prefix it names, on the connection a `JetStreamConnecting` opens (see [Applying the plan](#applying-the-plan)).
 - `BrokerPlan`, `{ prefix, streams, consumers }`, with `BrokerPlanStream`, `{ service, subjects }`, and `BrokerPlanConsumer`, `{ service, stream, subject }`: the `plan` of the document `cf-loom broker-plan --json` prints.
 - `BrokerLimits`, `{ streamDefaults?, consumerDefaults?, streams?, consumers? }`, with `StreamLimits`, `{ retention, maxAge, duplicateWindow, replicas, storage }`, `DurableConsumerLimits`, `{ deliverPolicy, ackWait, maxDeliver, maxAckPending }`, and `Duration`: what `applyBrokerPlan` takes besides the plan.
