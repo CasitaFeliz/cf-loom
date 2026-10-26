@@ -1,6 +1,6 @@
 import type { Command, Event } from '@cf-loom/contract';
-import { providerOf, subjectOf } from '@cf-loom/contract/internal';
-import type { BrokerService, OutgoingMessage } from '../broker/index.ts';
+import type { OutgoingMessage } from '../broker/index.ts';
+import type { ServiceVersion } from '../subjects/index.ts';
 import { jsonBodyOf } from './bodies.ts';
 import type { RecordedMessage } from './types.ts';
 
@@ -30,14 +30,15 @@ function isRecordedOn<M extends Event | Command>(subject: string) {
   return (message: RecordedMessage): message is RecordedMessage<M> => message.subject === subject;
 }
 
-/** The Messages among `messages` that the connected Service published or sent as `version`; none before it connected, and none for a Provided version, which another Service publishes. */
+/** The Messages among `messages` that the Service published or sent as `version`, found among the `versions` it lists by the declaration itself; none for any other. */
 export function recordedOf<const M extends Event | Command>(
   messages: readonly RecordedMessage[],
-  service: BrokerService | undefined,
+  versions: readonly ServiceVersion[],
   version: M,
 ): readonly RecordedMessage<M>[] {
-  if (service === undefined || providerOf(version) !== undefined) {
+  const listed = versions.find(({ message }) => message === version);
+  if (listed === undefined) {
     return [];
   }
-  return messages.filter(isRecordedOn<M>(subjectOf(service.stream, version)));
+  return messages.filter(isRecordedOn<M>(listed.subject));
 }

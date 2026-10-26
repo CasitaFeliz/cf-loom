@@ -1,4 +1,4 @@
-import type { BrokerService } from '../broker/index.ts';
+import { type ServiceVersion, serviceVersionsOf } from '../subjects/index.ts';
 import { injectedAttemptsOf } from './attempts.ts';
 import { MemoryConnection } from './connection.ts';
 import { Deliveries } from './deliveries.ts';
@@ -12,22 +12,24 @@ import type { MemoryBroker } from './types.ts';
 export function memory(): MemoryBroker {
   const deliveries = new Deliveries();
   const connection = new MemoryConnection(deliveries);
-  let connectedService: BrokerService | undefined;
+  let connected = false;
+  let listedVersions: readonly ServiceVersion[] = [];
   return {
     connect: async (service) => {
-      if (connectedService !== undefined) {
+      if (connected) {
         throw new Error(
           'memory() serves one connection: create another memory() for another messaging()',
         );
       }
-      connectedService = service;
+      connected = true;
+      listedVersions = serviceVersionsOf(service);
       return connection;
     },
     settled: () => deliveries.settled(),
     get messages() {
       return connection.messages();
     },
-    messagesOf: (message) => recordedOf(connection.messages(), connectedService, message),
+    messagesOf: (message) => recordedOf(connection.messages(), listedVersions, message),
     deliver: async (message, body, meta = {}) => {
       connection.assertOpen();
       const attempts = injectedAttemptsOf(connection.consumers(), { message, body, meta });

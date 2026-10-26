@@ -864,6 +864,22 @@ describe('memory().messagesOf', () => {
     expect(broker.messagesOf(ownSettledV1)).toHaveLength(1);
   });
 
+  test('lists nothing for a declaration outside the Contract, whatever its name and version', async () => {
+    const outsideOrderCreatedV2 = defineEvent({
+      name: 'OrderCreated',
+      version: 2,
+      visibility: 'internal',
+      description: 'An order was created, as another Contract declares it',
+      body: z.object({ total: z.number() }),
+    });
+    const { broker, publisher } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+
+    const outside = broker.messagesOf(outsideOrderCreatedV2);
+
+    expect(outside).toEqual([]);
+  });
+
   test('the lists of every Message Version partition messages, each in order (seed 305)', async () => {
     const versions = [
       orderCreatedV1,
