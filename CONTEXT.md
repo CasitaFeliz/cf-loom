@@ -9,7 +9,7 @@ This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILI
 ### Contract and its parties
 
 **Contract**:
-The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints, Internal Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies), and the Guards its Endpoints attach.
+The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints, Internal Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies, and Subscriptions to other Services' Events), and the Guards its Endpoints attach.
 _Avoid_: schema (overloaded with the zod schemas inside a Contract), registry (for the Contract itself), API definition
 
 **Element**:

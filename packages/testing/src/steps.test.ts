@@ -666,7 +666,7 @@ describe('fakeProvider: steps', () => {
     },
   );
 
-  test('fault({ code: METHOD_NOT_ALLOWED }) carries Allow with the other methods the Provider takes on that path', async () => {
+  test('fault({ code: METHOD_NOT_ALLOWED }) carries Allow with the other methods the listed and shadowing Endpoints take on that path', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
     payments.on('capturePayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));

@@ -55,6 +55,7 @@ export {
   isGuard,
   isLive,
   isMethod,
+  isProvidedElement,
   isRejection,
   isReservedCode,
   isRoot,

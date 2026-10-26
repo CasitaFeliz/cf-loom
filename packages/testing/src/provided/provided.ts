@@ -1,4 +1,4 @@
-import type { AnyDependency } from '@cf-loom/client/internal';
+import { type AnyDependency, baseUrlOf } from '@cf-loom/client/internal';
 import type {
   Endpoint,
   Lifecycle,
@@ -61,21 +61,29 @@ export type FakedProvider = {
  * Snapshot cut it carries, and with those every other one their cuts list as `shadowing`, so the
  * winner of a request is the Provider's.
  */
-export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProvider {
+export function fakedProviderOf(
+  dependency: AnyDependency,
+  baseUrl: string | URL | undefined,
+): FakedProvider {
   const { endpoints } = dependency;
   const { name, standardRejections } = listedProviderOf(dependency);
+  const base = baseUrlOf(baseUrl ?? `https://${name}.test`);
   const declaredByCode = declaredByCodeOf(endpoints, standardRejections);
   const cuts = endpoints.map(cutOf);
-  const listed = cuts.map((cut) => listedEndpointOf(cut, declaredByCode));
+  const listed = cuts.map((cut) =>
+    listedEndpointOf(cut, { name, standardRejections }, declaredByCode),
+  );
   const declared = [...listed, ...shadowingEndpointsOf(cuts)];
   return { provider: name, base, listed, declared };
 }
 
 /** The Provider whose Endpoints a Dependency lists, as they carry it: its name, which names its fake, and its Standard Rejections. */
-export function listedProviderOf(dependency: AnyDependency): {
+type ListedProvider = {
   readonly name: string;
   readonly standardRejections: ProvidedStandardRejections;
-} {
+};
+
+function listedProviderOf(dependency: AnyDependency): ListedProvider {
   const [first] = dependency.endpoints;
   if (first === undefined) {
     throw new Error('A Dependency lists at least one Endpoint, so its fake has a Provider');
@@ -111,16 +119,17 @@ function shadowingEndpointsOf(cuts: readonly Cut[]): readonly ShadowingEndpoint[
 
 function listedEndpointOf(
   { endpoint, identity, entry }: Cut,
+  provider: ListedProvider,
   declaredByCode: ReadonlyMap<string, AnswerableRejection>,
 ): ListedEndpoint {
-  const standards = carriedStandardRejectionsOf(endpoint);
+  const standards = provider.standardRejections;
   const { method, path } = methodAndPathOf(identity, entry.params);
   return {
     kind: 'listed',
     identity,
     method,
     segments: pathSegmentsOf(path),
-    provider: providerOf(endpoint),
+    provider: provider.name,
     name: endpoint.name,
     endpoint,
     nodes: textPartNodesOf(entry),

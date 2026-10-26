@@ -132,10 +132,6 @@ describe('the provided-Element constructors', () => {
     expectTypeOf(endpoint).not.toExtend<ProvidedEndpoint<typeof endpoint, 'payments-service'>>();
   });
 
-  test('an Endpoint of no Contract Package carries no Standard Rejections', () => {
-    expect(carriedStandardRejectionsOf(defineEndpoint(trackOrder))).toBeUndefined();
-  });
-
   test('a provided Event is the declaration, frozen and kept by identity, as defineEvent returns it', () => {
     const event = providedEvent('orders-service', orderPaid);
 

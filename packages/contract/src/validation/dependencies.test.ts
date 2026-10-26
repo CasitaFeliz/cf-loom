@@ -427,7 +427,7 @@ describe('validateRoot: the installed Contract Package of a Provider', () => {
       failed(
         '(root) dependencies[0]',
         'dependency-package',
-        "A Provider's Contract Package has a name and a version: payments-service's, @org/contract-payments-service has no version in its package.json",
+        "A Provider's Contract Package has a name and a version: payments-service's comes from @org/contract-payments-service, which has no version in its package.json",
       ),
     );
   });
@@ -444,7 +444,7 @@ describe('validateRoot: the installed Contract Package of a Provider', () => {
       failed(
         '(root) dependencies[0]',
         'dependency-package',
-        "A Provider's Contract Package has a name and a version: payments-service's, node_modules/contract-payments/package.json has no name",
+        "A Provider's Contract Package has a name and a version: payments-service's comes from node_modules/contract-payments/package.json, which has no name",
       ),
     );
   });
@@ -492,6 +492,25 @@ describe('validateRoot: the installed Contract Package of a Provider', () => {
         },
       ],
     });
+  });
+
+  test('a Dependency listing two of a Provider’s Endpoints gets one dependency-package line', () => {
+    const contract = defineService({
+      name: 'orders-service',
+      dependencies: [defineDependency({ endpoints: [getPayment, refundPayment] })],
+    });
+
+    const validated = summarized(
+      validateRoot(contract, aRootPackage(contract, { contractPackages: [] })),
+    );
+
+    expect(validated).toEqual(
+      failed(
+        '(root) dependencies[0]',
+        'dependency-package',
+        "A Provider's Elements come from an installed Contract Package: no installed package exports payments-service's Elements",
+      ),
+    );
   });
 
   test('a package that re-exports the Elements of another is passed over for the one it imports them from', () => {
@@ -553,6 +572,28 @@ describe('snapshotOf: the Providers a Contract uses', () => {
       'payments-service': {
         against: '2.3.0',
         endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
+      },
+    });
+  });
+
+  test('an Endpoint listed in two Dependencies is recorded once', () => {
+    const contract = defineService({
+      name: 'orders-service',
+      dependencies: [
+        defineDependency({ endpoints: [getPayment] }),
+        defineDependency({ endpoints: [refundPayment, getPayment] }),
+      ],
+    });
+
+    const snapshot = snapshotAmong(contract);
+
+    expect(snapshot.dependencies).toEqual({
+      'payments-service': {
+        against: '1.0.0',
+        endpoints: [
+          { id: 'GET /payments/{}', name: 'getPayment' },
+          { id: 'POST /payments/{}/refund', name: 'refundPayment' },
+        ],
       },
     });
   });

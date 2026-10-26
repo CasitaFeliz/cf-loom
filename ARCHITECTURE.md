@@ -100,7 +100,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 ## Dependencies
 
-- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which lists the Provided Endpoints it calls: a Dependency enables the typed client of those Endpoints, and a Subscription to an Event another Service's Contract Package exports enables a Message Handler Stub. Code cannot call what was not declared.
+- A Service or Application reaches a Provider only through a Dependency, which lists the Endpoints it calls, or a Subscription to an Event its Contract Package exports, both declared with the tools: a Dependency enables the typed client of those Endpoints, and such a Subscription enables a Message Handler Stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
 
 ## Wire protocol

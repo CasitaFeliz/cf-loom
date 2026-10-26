@@ -413,7 +413,7 @@ describe('fakeProvider: a test’s mistakes', () => {
       .catch((e: unknown) => e);
 
     expect(firstLineOf(error)).toBe(
-      "payments-service: getPayment: the Endpoint answers no code PAYMENT_LOST; r.unknownRejection sends a code the Provider's Contract does not declare",
+      'payments-service: getPayment: the Endpoint answers no code PAYMENT_LOST; r.unknownRejection sends a code the listed Endpoints do not declare',
     );
   });
 

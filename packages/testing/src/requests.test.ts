@@ -222,9 +222,10 @@ function fakeOverPaths() {
 }
 
 /**
- * A fake over a Provider that exports `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in
- * that order, and also declares a Retired `GET /beta/latest` and a live Private `GET /beta/stats`,
- * which only the cut of `getBeta`, not the first Endpoint, lists as `shadowing`.
+ * A fake of a Dependency listing `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in that
+ * order, over a Provider that also declares a Retired `GET /beta/latest` and a live Private
+ * `GET /beta/stats`, which only the cut of `getBeta`, not the first listed Endpoint's, lists as
+ * `shadowing`.
  */
 function fakeOverTwoEndpoints() {
   const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
@@ -264,10 +265,18 @@ function fakeOverTwoEndpoints() {
   const exported = { getAlpha, getBeta, getBetaFirst };
   const provider = contractPackageOf(exported, [...Object.values(exported), betaLatest, betaStats]);
   const dependency = defineDependency({
-    endpoints: [provider.endpoints.getBeta, provider.endpoints.getBetaFirst],
+    endpoints: [
+      provider.endpoints.getAlpha,
+      provider.endpoints.getBeta,
+      provider.endpoints.getBetaFirst,
+    ],
   });
   const fake = fakeProvider(dependency);
-  const taken = { getBeta: 0, getBetaFirst: 0 };
+  const taken = { getAlpha: 0, getBeta: 0, getBetaFirst: 0 };
+  fake.on('getAlpha').otherwise((builder) => {
+    taken.getAlpha += 1;
+    return builder.success();
+  });
   fake.on('getBeta').otherwise((builder) => {
     taken.getBeta += 1;
     return builder.success();
@@ -612,7 +621,17 @@ describe('fakeProvider: requests', () => {
     await fake.fetch(new Request('https://payments-service.test/beta/first'));
     await fake.fetch(new Request('https://payments-service.test/beta/other'));
 
-    expect(taken).toEqual({ getBeta: 1, getBetaFirst: 1 });
+    expect(taken).toEqual({ getAlpha: 0, getBeta: 1, getBetaFirst: 1 });
+  });
+
+  test('a Dependency with no Endpoint, written through a cast, is a bug, refused when the fake is created', () => {
+    const empty = defineDependency({ endpoints: [] } as unknown as Parameters<
+      typeof defineDependency
+    >[0]);
+
+    const create = () => fakeProvider(empty);
+
+    expect(create).toThrow('A Dependency lists at least one Endpoint, so its fake has a Provider');
   });
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {

@@ -14,17 +14,15 @@ import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
 import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
-import { packageModuleOf, type SchemaFile, type Sibling } from './modules.ts';
-import { bindingOf, fileOf, providedOpeningOf, siblingOf } from './names.ts';
-import { packagePaths } from './paths.ts';
+import { packageModuleOf, type SchemaFile } from './modules.ts';
+import {
+  bindingOf,
+  fileOf,
+  providedOpeningOf,
+  siblingOf,
+  standardRejectionsSibling,
+} from './names.ts';
 import { declaredTextPartOf, partsLinesOf } from './schema-lines.ts';
-
-/** The Service's Standard Rejections, which each Endpoint module imports to carry them. */
-const standardRejectionsSibling: Sibling = {
-  name: 'standardRejections',
-  path: packagePaths.standardRejections,
-  kind: 'value',
-};
 
 /**
  * An exported Endpoint rebuilt from its Snapshot entry and marked as the Service's, so its Input,
@@ -48,7 +46,7 @@ export function endpointModuleOf(
     path: fileOf(packaged),
     body: [
       ...deprecatedLinesOf(endpoint),
-      providedOpeningOf(packaged, snapshot.name),
+      providedOpeningOf(packaged, providerTextOf(snapshot.name)),
       ...endpointBodyOf(exported, rejections, needs),
       closingLineOf(exportedCutOf(snapshot, exported.id)),
     ],
@@ -56,6 +54,11 @@ export function endpointModuleOf(
     needs,
   });
   return { file, defUses: [...needs.defs.values()] };
+}
+
+/** The Provider an Endpoint is marked with: its name, and its Standard Rejections, which the module imports. */
+function providerTextOf(provider: string): string {
+  return `{ name: ${stringLiteralOf(provider)}, ${standardRejectionsSibling.name} }`;
 }
 
 /** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */

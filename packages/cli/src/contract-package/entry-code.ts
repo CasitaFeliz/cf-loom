@@ -14,7 +14,7 @@ import {
 import { relativeSpecifierOf, stringLiteralOf } from '../source-text/index.ts';
 import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';
-import { bindingOf, fileOf, type ProvidedDeclaration } from './names.ts';
+import { bindingOf, fileOf, type ProvidedDeclaration, standardRejectionsSibling } from './names.ts';
 import { packagePaths } from './paths.ts';
 
 /** What a Service's entry exports: its Endpoints and Events, its defs' types. */
@@ -67,9 +67,9 @@ export function standardRejectionsModuleOf(
     standardRejectionLinesOf(name, snapshot, reader),
   );
   return packageModuleOf({
-    path: packagePaths.standardRejections,
+    path: standardRejectionsSibling.path,
     body: [
-      'export const standardRejections = {',
+      `export const ${standardRejectionsSibling.name} = {`,
       ...lines,
       '} as const satisfies loom.ProvidedStandardRejections;',
     ],

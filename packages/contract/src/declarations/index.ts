@@ -79,6 +79,7 @@ export type { Provided, ProvidedEndpoint } from './provided.ts';
 export {
   carriedCutOf,
   carriedStandardRejectionsOf,
+  isProvidedElement,
   providedEndpoint,
   providedEvent,
   providedRejection,

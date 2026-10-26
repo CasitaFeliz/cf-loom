@@ -2,12 +2,12 @@ import type { ByKey, DependencySnapshot } from '../snapshot/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import type { Difference, SiteDifferences } from './report.ts';
 
-/** An Endpoint a Dependency selects, by identity, with the name its Provider gave it. */
+/** An Endpoint a Dependency lists, by identity, with the name its Provider gave it. */
 type Selected = DependencySnapshot['endpoints'][number];
 
 /**
- * A Service's or an Application's Dependencies by Provider in code point order: added, removed, or
- * kept, the version it is declared against and then the Endpoints it selects by identity. Each is
+ * The Providers a Service or an Application uses, in code point order: added, removed, or kept,
+ * the version it is declared against and then the Endpoints its Dependencies list by identity. Each is
  * Neutral, since no Consumer relies on what a Service itself consumes.
  */
 export function dependencyDifferencesOf(

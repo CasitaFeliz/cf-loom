@@ -1,4 +1,4 @@
-import { type ImportedContractPackage, providerOf } from '@cf-loom/contract/internal';
+import { type ImportedContractPackage, isProvidedElement } from '@cf-loom/contract/internal';
 import { type Exporter, exportersOf, linkedPackagesOf } from './exporting-packages.ts';
 import type { ImportedPackage } from './imported-packages.ts';
 
@@ -19,11 +19,6 @@ export function contractPackagesOf(
       reaches,
     }),
   );
-}
-
-/** A value its Provider's name marks: an Element a Contract Package exports. */
-function isProvidedElement(value: unknown): value is object {
-  return providerOf(value) !== undefined;
 }
 
 /** The exporters of one package, by its package.json, as one exporter of all their Elements. */

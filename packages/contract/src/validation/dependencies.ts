@@ -1,6 +1,7 @@
 import {
   type Endpoint,
   isEndpoint,
+  isProvidedElement,
   providerOf,
   type Root,
   reaches,
@@ -14,7 +15,7 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
-const exported = "A Dependency lists Endpoints a Provider's Contract Package exports";
+const exportedRule = "A Dependency lists Endpoints a Provider's Contract Package exports";
 
 /** An Endpoint a Dependency lists and where it sits, by its position in the list. */
 type Selected = { readonly at: Place; readonly endpoint: Endpoint };
@@ -57,12 +58,11 @@ function isSelected(listed: {
 
 /** The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL. */
 function providerFailures(at: Place, selected: readonly Selected[]): readonly DeclarationFailure[] {
-  const providers = new Set(selected.map(({ endpoint }) => providerOf(endpoint)));
-  providers.delete(undefined);
+  const providers = new Set(selected.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
   if (providers.size < 2) {
     return [];
   }
-  const names = [...providers].filter(isName).sort(byCodePoint).join(', ');
+  const names = [...providers].sort(byCodePoint).join(', ');
   const message = `A Dependency lists one Provider's Endpoints: ${names}`;
   return [failure(at, 'dependency-selection', message)];
 }
@@ -75,8 +75,8 @@ function selectedFailures(
   { at, endpoint }: Selected,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
-  if (providerOf(endpoint) === undefined) {
-    const message = `${exported}: ${endpoint.name} is no Provider's`;
+  if (!isProvidedElement(endpoint)) {
+    const message = `${exportedRule}: ${endpoint.name} is no Provider's`;
     return [failure(at, 'dependency-selection', message)];
   }
   const packageKind = rootKind === 'application' ? 'application' : 'service';
@@ -90,7 +90,7 @@ function selectedFailures(
 function unreachableEndpointFailure(at: Place, endpoint: Endpoint): DeclarationFailure {
   const { visibility } = endpoint;
   if (visibility === 'private') {
-    return failure(at, 'dependency-selection', `${exported}: ${labelOf(endpoint)} is private`);
+    return failure(at, 'dependency-selection', `${exportedRule}: ${labelOf(endpoint)} is private`);
   }
   const message = `An Application depends on Public Endpoints only: ${labelOf(endpoint)} is ${visibility}`;
   return failure(at, 'application-dependency', message);

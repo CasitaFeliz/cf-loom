@@ -1,8 +1,8 @@
-import { isEndpoint, providerOf } from '../declarations/index.ts';
+import { isEndpoint, isProvidedElement, providerOf } from '../declarations/index.ts';
 import type { Place } from '../walker/index.ts';
 import { type Declarations, listOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { identityLineOf, originAmong, type Provenance, packageLabelOf } from './provenance.ts';
+import { lackOf, originAmong, type Provenance, packageLabelOf } from './provenance.ts';
 import type { ImportedContractPackage } from './validate.ts';
 
 /**
@@ -22,10 +22,10 @@ export function usedProvidersOf({
 }: Pick<Declarations, 'dependencies' | 'subscriptions'>): readonly UsedProvider[] {
   const used = new Map<string, { elements: unknown[]; holders: Place[] }>();
   const hold = (at: Place, element: unknown) => {
-    const name = providerOf(element);
-    if (name === undefined) {
+    if (!isProvidedElement(element)) {
       return;
     }
+    const name = providerOf(element);
     const provider = used.get(name) ?? { elements: [], holders: [] };
     pushOnce(provider.elements, element);
     pushOnce(provider.holders, at);
@@ -62,12 +62,7 @@ export function contractPackageOf(
   return originAmong(exporting);
 }
 
-/**
- * For each Provider no one installed Contract Package can be named for (none exports its Elements,
- * two export them and neither imports them from the other, or the one that does has no name or
- * version in its package.json, which `against` records), one failure at each Dependency and
- * Subscription holding one of its Elements.
- */
+/** A Provider's problem with its Contract Package, at each Dependency and Subscription holding its Elements, since each is where an author fixes the import. */
 export function dependencyPackageFailures(
   declarations: Declarations,
   packages: readonly ImportedContractPackage[],
@@ -107,6 +102,6 @@ function identityProblemOf(origin: ImportedContractPackage, provider: string): s
       return undefined;
     case 'unnamed':
     case 'unversioned':
-      return `A Provider's Contract Package has a name and a version: ${provider}'s, ${identityLineOf(origin)}`;
+      return `A Provider's Contract Package has a name and a version: ${provider}'s comes from ${packageLabelOf(origin)}, which ${lackOf(origin)}`;
   }
 }

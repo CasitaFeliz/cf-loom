@@ -18,7 +18,7 @@ export function eventModuleOf(
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
     ...deprecatedLinesOf(event),
-    providedOpeningOf(declared, provider),
+    providedOpeningOf(declared, stringLiteralOf(provider)),
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${version},`,
     ...elementLinesOf(event),

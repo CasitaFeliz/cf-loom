@@ -48,6 +48,11 @@ export function providerOf(value: unknown): string | undefined {
   return typeof provider === 'string' ? provider : undefined;
 }
 
+/** Whether a value is a Provided Element: its Provider's name marks it. */
+export function isProvidedElement(value: unknown): value is Provided<object> {
+  return providerOf(value) !== undefined;
+}
+
 /** The exported Snapshot cut a Provided Endpoint carries, as written; none for any other Endpoint. */
 export function carriedCutOf(endpoint: Endpoint): unknown {
   return Reflect.get(endpoint, exportedMark);
@@ -56,17 +61,8 @@ export function carriedCutOf(endpoint: Endpoint): unknown {
 /** The Standard Rejections of its Provider a Provided Endpoint carries, as its type gives them. */
 export function carriedStandardRejectionsOf<Standards extends ProvidedStandardRejections>(
   endpoint: ProvidedEndpoint<unknown, string, Standards>,
-): Standards;
-/** The Standard Rejections of its Provider a Provided Endpoint carries; none for any other Endpoint. */
-export function carriedStandardRejectionsOf(
-  endpoint: Endpoint,
-): ProvidedStandardRejections | undefined;
-/** The Standard Rejections of its Provider a Provided Endpoint carries; none for any other Endpoint. */
-export function carriedStandardRejectionsOf(
-  endpoint: object,
-): ProvidedStandardRejections | undefined {
-  const carried: unknown = Reflect.get(endpoint, standardRejectionsMark);
-  return carried === undefined ? undefined : (carried as ProvidedStandardRejections);
+): Standards {
+  return Reflect.get(endpoint, standardRejectionsMark) as Standards;
 }
 
 /**

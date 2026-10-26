@@ -2665,7 +2665,7 @@ describe('cf-loom generate: the Contract Package a Provider is against', () => {
       status: 1,
       stdout: '',
       stderr: dependencyPackageLine(
-        `A Provider's Contract Package has a name and a version: payments-service's, ${paymentsSpecifier} has no version in its package.json`,
+        `A Provider's Contract Package has a name and a version: payments-service's comes from ${paymentsSpecifier}, which has no version in its package.json`,
       ),
     });
   });
@@ -2688,7 +2688,7 @@ describe('cf-loom generate: the Contract Package a Provider is against', () => {
       status: 1,
       stdout: '',
       stderr: dependencyPackageLine(
-        `A Provider's Contract Package has a name and a version: payments-service's, node_modules/${paymentsSpecifier}/package.json has no name`,
+        `A Provider's Contract Package has a name and a version: payments-service's comes from node_modules/${paymentsSpecifier}/package.json, which has no name`,
       ),
     });
   });
