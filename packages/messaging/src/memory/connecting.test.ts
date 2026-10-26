@@ -8,7 +8,7 @@ import {
 import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { messaging } from '../index.ts';
+import { type Broker, messaging } from '../index.ts';
 import { memory } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
@@ -111,6 +111,17 @@ describe('memory(): one connection', () => {
 
     await expect(whileOpen).rejects.toThrow(oneConnection);
     await expect(afterClose).rejects.toThrow(oneConnection);
+  });
+
+  test('a Broker that connects memory() with a copy of what messaging() told it rejects, since only messaging() tells memory() what the Service lists', async () => {
+    const broker = memory();
+    const copying: Broker = { connect: (service) => broker.connect({ ...service }) };
+
+    const connecting = messaging(contract, copying);
+
+    await expect(connecting).rejects.toThrow(
+      'a BrokerService the core did not build was passed to memory()',
+    );
   });
 
   test('Messages still lined up when messaging closes are left pending, their Handlers never run', async () => {

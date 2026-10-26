@@ -17,7 +17,11 @@ export function brokerServiceOf(subjects: Subjects): BrokerService {
   return service;
 }
 
-/** The Message Versions a `BrokerService` the core built lists, with their subjects; none for one it did not build. */
+/** The Message Versions a `BrokerService` the core built lists, with their subjects; one it did not build is a bug, and throws. */
 export function serviceVersionsOf(service: BrokerService): readonly ServiceVersion[] {
-  return versionsByService.get(service) ?? [];
+  const versions = versionsByService.get(service);
+  if (versions === undefined) {
+    throw new Error('a BrokerService the core did not build was passed to memory()');
+  }
+  return versions;
 }

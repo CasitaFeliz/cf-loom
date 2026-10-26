@@ -21,8 +21,8 @@ export function memory(): MemoryBroker {
           'memory() serves one connection: create another memory() for another messaging()',
         );
       }
-      connected = true;
       listedVersions = serviceVersionsOf(service);
+      connected = true;
       return connection;
     },
     settled: () => deliveries.settled(),
