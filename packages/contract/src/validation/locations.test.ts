@@ -200,6 +200,17 @@ describe('failure lines: a declaration with no usable name', () => {
     ]);
   });
 
+  test('a Rejection whose code is no string sits at the Guard that lists it before its export', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const locker = defineGuard({ name: 'locker', description: 'Locks', rejections: [nameless] });
+    const root = defineDefinitions({});
+    const rootExports = { nameless, locker };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.locker rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
   test('a Guard whose name is no string sits at the place that attaches it', () => {
     const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
     const guarded = oneAnEndpoint('guarded', 'GET /a', { guards: [nameless] });

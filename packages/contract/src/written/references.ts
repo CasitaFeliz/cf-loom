@@ -128,7 +128,7 @@ function placedBy(site: Site | undefined, held: Place, declaration: unknown): Pl
 /** A Rejection and the place that lists it: an export of a Definitions Package, or a list of a Guard or an Endpoint. */
 type Listed = { readonly rejection: unknown; readonly held: Place };
 
-/** Every Rejection a Root reaches, each once: a Definitions Package's exports, a Guard's, an Endpoint's. */
+/** Every Rejection a Root reaches, each once: a Guard's, an Endpoint's, then a Definitions Package's exports. */
 export function rejectionsOf(
   { ownMembers, endpoints }: Sources,
   guards: readonly LocatedGuard[],
@@ -138,7 +138,7 @@ export function rejectionsOf(
   const ofEndpoints = endpoints.flatMap(({ at, endpoint }) => listedIn(at, endpoint.rejections));
   const seen = new Set<unknown>();
   const located: LocatedRejection[] = [];
-  for (const { rejection, held } of [...exported, ...ofGuards, ...ofEndpoints]) {
+  for (const { rejection, held } of [...ofGuards, ...ofEndpoints, ...exported]) {
     if (isRejection(rejection) && !seen.has(rejection)) {
       seen.add(rejection);
       const code = rejection.code;

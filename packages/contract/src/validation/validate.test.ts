@@ -257,8 +257,8 @@ describe('validateRoot', () => {
       endpoints: [],
       guards: [{ guard: apiKey }],
       codes: [
-        { code: 'ORDER_LOCKED', rejection: orderLocked },
         { code: 'UNAUTHENTICATED', rejection: unauthenticated },
+        { code: 'ORDER_LOCKED', rejection: orderLocked },
       ],
     });
   });
