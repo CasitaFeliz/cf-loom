@@ -7,9 +7,13 @@ import type {
   GroupedField,
   Subscription,
 } from '../declarations/index.ts';
-import { isCommand, isEndpoint, isEvent, isGroup, isSubscription } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { identityOf, messageIdentityOf } from './identity.ts';
+import { isGroup, providerOf } from '../declarations/index.ts';
+import {
+  fieldListings,
+  type GroupedDeclarations,
+  groupedFields,
+  type Listed,
+} from './field-listings.ts';
 import type {
   LocatedCommand,
   LocatedEndpoint,
@@ -19,58 +23,6 @@ import type {
   Root,
 } from './located.ts';
 import { listOf, textOf } from './written.ts';
-
-/** The declaration each field of a Group lists. */
-type GroupedDeclarations = {
-  readonly endpoints: Endpoint;
-  readonly events: Event;
-  readonly commands: Command;
-  readonly subscriptions: Subscription;
-};
-
-/**
- * A declaration as a Group lists it, its Group, and where it sits under that Group: an Endpoint
- * and a Message Version by identity, a Subscription by name.
- */
-export type Listed<Field extends GroupedField> = {
-  readonly at: Path;
-  readonly declaration: GroupedDeclarations[Field];
-  readonly group: Group;
-};
-
-/** What belongs in a field of a Group, as the structure rule names it, and the key that locates it there. */
-export type FieldListing<Field extends GroupedField> = {
-  readonly noun: string;
-  readonly fits: (item: unknown) => item is GroupedDeclarations[Field];
-  readonly keyOf: (declaration: GroupedDeclarations[Field]) => string;
-};
-
-/** Each field of a Group: the one place that says what it holds and how each item is located. */
-export const fieldListings: { readonly [Field in GroupedField]: FieldListing<Field> } = {
-  endpoints: {
-    noun: 'an Endpoint',
-    fits: isEndpoint,
-    keyOf: (endpoint) => identityOf(endpoint.method, endpoint.path),
-  },
-  events: {
-    noun: 'an Event',
-    fits: isEvent,
-    keyOf: (event) => messageIdentityOf(event.name, event.version),
-  },
-  commands: {
-    noun: 'a Command',
-    fits: isCommand,
-    keyOf: (command) => messageIdentityOf(command.name, command.version),
-  },
-  subscriptions: {
-    noun: 'a Subscription',
-    fits: isSubscription,
-    keyOf: (subscription) => textOf(subscription.name),
-  },
-};
-
-/** The fields a Group lists declarations in, in the order the rules read them. */
-export const groupedFields = Object.keys(fieldListings) as readonly GroupedField[];
 
 /** What a root's Groups list, each declaration once, where first met, located under its Group. */
 export type Grouped = {
@@ -116,34 +68,61 @@ export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
   };
 }
 
-/** Whether a value is an Endpoint, Event, Command or Subscription, which a Group lists. */
+/**
+ * Whether a value is an Endpoint, Event, Command or Subscription of the Contract that declares it,
+ * which a Group lists; a Provider's Element is not.
+ */
 export function isListable(value: unknown): value is GroupedDeclarations[GroupedField] {
-  return groupedFields.some((field) => fieldListings[field].fits(value));
+  return isOwn(value) && groupedFields.some((field) => fieldListings[field].fits(value));
 }
 
-/** Every declaration a Group lists in one field, in its order, repeats included. */
+/** Every declaration a Group lists in one field that is the Contract's own, in its order, repeats included. */
 export function listingsOf<Field extends GroupedField>(
-  { at, group }: LocatedGroup,
+  located: LocatedGroup,
   field: Field,
 ): readonly Listed<Field>[] {
-  const { keyOf } = fieldListings[field];
-  return declarationsListedIn(group, field).map((declaration) => ({
-    at: [...at, field, keyOf(declaration)],
-    declaration,
-    group,
-  }));
+  return locatedIn(located, field, fittingIn(located.group, field).filter(isOwn));
 }
 
-/** Every declaration a Group's lists hold, in field order; what fits no field is left out. */
+/** Every Provider's Element a Group lists in one field, in its order, located as `listingsOf` locates them. */
+export function providedListingsOf<Field extends GroupedField>(
+  located: LocatedGroup,
+  field: Field,
+): readonly Listed<Field>[] {
+  return locatedIn(located, field, fittingIn(located.group, field).filter(isProvided));
+}
+
+/** Every own declaration a Group's lists hold, in field order; what fits no field is left out. */
 export function declarationsListedBy(group: Group): readonly unknown[] {
-  return groupedFields.flatMap((field) => declarationsListedIn(group, field));
+  return groupedFields.flatMap((field) => fittingIn(group, field).filter(isOwn));
 }
 
-function declarationsListedIn<Field extends GroupedField>(
+function isOwn(value: unknown): boolean {
+  return providerOf(value) === undefined;
+}
+
+function isProvided(value: unknown): boolean {
+  return providerOf(value) !== undefined;
+}
+
+function fittingIn<Field extends GroupedField>(
   group: Group,
   field: Field,
 ): readonly GroupedDeclarations[Field][] {
   return listOf(group[field]).filter(fieldListings[field].fits);
+}
+
+function locatedIn<Field extends GroupedField>(
+  { at, group }: LocatedGroup,
+  field: Field,
+  declarations: readonly GroupedDeclarations[Field][],
+): readonly Listed<Field>[] {
+  const { keyOf } = fieldListings[field];
+  return declarations.map((declaration) => ({
+    at: [...at, field, keyOf(declaration)],
+    declaration,
+    group,
+  }));
 }
 
 /** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */

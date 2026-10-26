@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { Def } from './def-types.ts';
 import {
   annotatedBy,
   hasOwnId,
@@ -17,7 +18,7 @@ import {
   type Walker,
   walked,
 } from './walked.ts';
-import { type Def, walkDefinition, withOwnChecks } from './zod-types.ts';
+import { walkDefinition, withOwnChecks } from './zod-types.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages installed. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;

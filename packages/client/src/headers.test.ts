@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -7,10 +6,12 @@ import {
   type Endpoint,
   type ExportedSnapshot,
   type ProvidedStandardRejections,
+  providedEndpoint,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
@@ -55,7 +56,7 @@ const ping = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -73,7 +74,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const defaultStandards = providedStandardRejections();
@@ -82,7 +91,7 @@ const orders = contractPackageOf({ getOrder, createOrder, ping }, defaultStandar
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [getOrder, createOrder, ping],
+  endpoints: [orders.endpoints.getOrder, orders.endpoints.createOrder, orders.endpoints.ping],
 });
 
 /** Every request a client sent, as its `fetch` received it. */
@@ -193,7 +202,7 @@ describe('headers given to client()', () => {
       input: { headers: z.object({ 'x-trace': z.string().optional() }) },
       success: { status: 204 },
     });
-    const named = defineEndpoint({
+    const named = providedEndpoint('orders-service', {
       name: 'trace',
       method: 'GET',
       path: '/trace',

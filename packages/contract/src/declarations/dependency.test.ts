@@ -1,8 +1,14 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type ContractPackage, defineDependency, defineEndpoint, defineEvent } from '../index.ts';
+import {
+  type ContractPackage,
+  defineDependency,
+  defineEndpoint,
+  providedEndpoint,
+  providedEvent,
+} from '../index.ts';
 
-const getPayment = defineEndpoint({
+const getPayment = providedEndpoint('payments-service', {
   name: 'getPayment',
   method: 'GET',
   path: '/payments/:paymentId',
@@ -12,7 +18,7 @@ const getPayment = defineEndpoint({
   success: { status: 200, body: z.object({ amount: z.int() }) },
 });
 
-const refundPayment = defineEndpoint({
+const refundPayment = providedEndpoint('payments-service', {
   name: 'refundPayment',
   method: 'POST',
   path: '/payments/:paymentId/refund',
@@ -22,7 +28,7 @@ const refundPayment = defineEndpoint({
   success: { status: 204 },
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',

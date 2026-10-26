@@ -6,6 +6,7 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
+  providedEvent,
 } from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
@@ -44,7 +45,7 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',

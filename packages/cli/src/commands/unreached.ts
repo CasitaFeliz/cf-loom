@@ -1,14 +1,7 @@
 import type { Group } from '@cf-loom/contract';
-import {
-  declarationsListedBy,
-  isGroup,
-  isListable,
-  providerExportsOf,
-} from '@cf-loom/contract/internal';
+import { declarationsListedBy, isGroup, isListable } from '@cf-loom/contract/internal';
 import type { ExportedValue } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
-
-type ValidatedDeclarations = BuiltService['validated']['declarations'];
 
 /**
  * A line for every Group a file under `src/contract/` exports that the root does not list, then
@@ -21,10 +14,7 @@ export function unreachedLinesOf(
 ): readonly string[] {
   const rootGroups = validated.declarations.groups.map(({ group }) => group);
   const unlistedGroups = unlistedGroupsOf(rootGroups, exports);
-  const reached = reachedOf(validated.declarations.dependencies, [
-    ...rootGroups,
-    ...unlistedGroups,
-  ]);
+  const reached = reachedOf([...rootGroups, ...unlistedGroups]);
   const groups = firstExportsOf(exports, (value) =>
     unlistedGroups.some((group) => group === value),
   );
@@ -43,17 +33,9 @@ function unlistedGroupsOf(
     .filter((group) => !rootGroups.includes(group));
 }
 
-/** What needs no line: whatever a Group lists, the root's or an unlisted one, and what a Provider exports. */
-function reachedOf(
-  dependencies: ValidatedDeclarations['dependencies'],
-  groups: readonly Group[],
-): ReadonlySet<unknown> {
-  return new Set<unknown>([
-    ...groups.flatMap(declarationsListedBy),
-    ...dependencies.flatMap(({ dependency }) =>
-      Object.values(providerExportsOf(dependency)).flat(),
-    ),
-  ]);
+/** What needs no line: whatever a Group lists, the root's or an unlisted one. A Provider's Element is no Group's to list. */
+function reachedOf(groups: readonly Group[]): ReadonlySet<unknown> {
+  return new Set<unknown>(groups.flatMap(declarationsListedBy));
 }
 
 /** The first export of each exported value that `isUnreached` holds for. */

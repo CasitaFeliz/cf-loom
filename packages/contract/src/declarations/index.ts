@@ -3,7 +3,7 @@ export type { Command } from './command.ts';
 export { defineCommand } from './command.ts';
 export type { Definitions } from './definitions.ts';
 export { defineDefinitions } from './definitions.ts';
-export type { ContractPackage, Dependency, ProvidedEvent } from './dependency.ts';
+export type { ContractPackage, Dependency } from './dependency.ts';
 export { defineDependency } from './dependency.ts';
 export type { Lifecycle, LiveOf, Visibility } from './element.ts';
 export {
@@ -71,6 +71,8 @@ export {
   isStandardRejection,
   isSubscription,
 } from './predicates.ts';
+export type { Provided } from './provided.ts';
+export { providedEndpoint, providedEvent, providedRejection, providerOf } from './provided.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
@@ -78,7 +80,7 @@ export { isReservedCode } from './reserved-codes.ts';
 export { prototypeNames } from './reserved-names.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
-export type { IsOneLiteral, Refusal } from './rules.ts';
+export type { IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
 export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {

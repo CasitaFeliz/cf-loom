@@ -33,7 +33,6 @@ export type {
   GroupedOf,
   IsOneLiteral,
   LiveOf,
-  ProvidedEvent,
   Refusal,
   SuccessValueOf,
 } from '../declarations/index.ts';
@@ -151,13 +150,16 @@ export {
   walkedTextPartsOf,
 } from '../validation/index.ts';
 export type {
+  Catchalls,
   Defs,
+  DefTypes,
   EnumNode,
   Field,
   HashFormat,
   NumberNode,
   ObjectNode,
   Path,
+  PipeRefusals,
   RefNode,
   SchemaNode,
   StringFormat,
@@ -277,7 +279,6 @@ export {
   packageNamePartsOf,
   partFieldOf,
   pathSegmentsOf,
-  providerExportsOf,
   readEndpointIdentity,
   readEventReference,
   resolutionOf,

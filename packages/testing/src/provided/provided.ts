@@ -34,7 +34,7 @@ export type ExportedEndpoint = Matchable & {
 };
 
 /** A Provider as its fake answers it: where it is reached, and every Endpoint it exports. */
-export type Provided = {
+export type FakedProvider = {
   readonly provider: string;
   readonly base: URL;
   readonly exported: readonly ExportedEndpoint[];
@@ -44,7 +44,7 @@ export type Provided = {
  * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, so routing
  * precedence is the Provider's, and each listed one with what its requests are read by.
  */
-export function providedOf(dependency: AnyDependency, base: URL): Provided {
+export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProvider {
   const { provider } = dependency;
   checkExportedFormat(provider);
   const endpoints = Object.values(provider.endpoints);

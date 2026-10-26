@@ -7,7 +7,7 @@ import {
   type ListedName,
 } from '@cf-loom/client/internal';
 import type { Http, InputOf } from '@cf-loom/contract';
-import { providedOf } from '../provided/index.ts';
+import { fakedProviderOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
@@ -55,7 +55,7 @@ export function fakeProvider<const D extends AnyDependency>(
   options: FakeProviderOptions = {},
 ): FakeProvider<D> {
   const base = baseUrlOf(options.baseUrl ?? `https://${dependency.provider.name}.test`);
-  const faking: Faking = fakingOf(providedOf(dependency, base));
+  const faking: Faking = fakingOf(fakedProviderOf(dependency, base));
   const fetch = fakeFetchOf(faking);
   const fake: FakeProvider<D> = {
     fetch,

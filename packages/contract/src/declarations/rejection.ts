@@ -1,10 +1,11 @@
 import type * as core from 'zod/v4/core';
+import type { SchemaRule } from '../walker/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { RejectionStatus } from './http.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 
 /** What an author writes to declare a Rejection; a Rejection without `body` has none. */
-type RejectionDeclaration = {
+export type RejectionDeclaration = {
   readonly code: string;
   readonly status: RejectionStatus;
   readonly message: string;
@@ -15,9 +16,15 @@ type RejectionDeclaration = {
 export type Rejection<Declaration extends RejectionDeclaration = RejectionDeclaration> =
   Readonly<Declaration> & { readonly kind: 'rejection' };
 
+type BodyRule<Declaration extends RejectionDeclaration> = {
+  readonly body?: SchemaRule<Declaration['body']>;
+};
+
 /** Declares a Rejection once, to be referenced wherever it can be answered. */
 export function defineRejection<const Declaration extends RejectionDeclaration>(
-  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, RejectionDeclaration>>,
+  declaration: Declaration &
+    BodyRule<Declaration> &
+    NoInfer<DeclaredFieldsRule<Declaration, RejectionDeclaration>>,
 ): Rejection<Declaration> {
   return freezeDeclaration('rejection', declaration);
 }

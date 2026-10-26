@@ -1,4 +1,4 @@
-import type { Group, GroupedField } from '../declarations/index.ts';
+import { type Group, type GroupedField, providerOf } from '../declarations/index.ts';
 import {
   type Declarations,
   fieldListings,
@@ -7,6 +7,7 @@ import {
   type Listed,
   type LocatedGroup,
   listingsOf,
+  providedListingsOf,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -34,11 +35,15 @@ const memberships: { readonly [Field in GroupedField]: Membership<Field> } = {
   },
 };
 
-/** Every Group lists something, and every Endpoint, Message Version and Subscription is in exactly one Group. */
+/**
+ * Every Group lists something, every Endpoint, Message Version and Subscription is in exactly one
+ * Group, and what a Group lists is its Contract's own, never a Provider's.
+ */
 export function groupFailures({ groups }: Declarations): readonly DeclarationFailure[] {
   return [
     ...groups.filter(listsNothing).map(({ at }) => emptyGroupFailure(at)),
     ...groupedFields.flatMap((field) => membershipFailures(groups, field)),
+    ...groupedFields.flatMap((field) => providedFailures(groups, field)),
   ];
 }
 
@@ -69,4 +74,19 @@ function membershipFailures<Field extends GroupedField>(
     firstGroupOf.set(listed.declaration, first ?? listed.group);
   }
   return failures;
+}
+
+/** Each Provider's Element a Group lists, named with its Provider. */
+function providedFailures<Field extends GroupedField>(
+  groups: readonly LocatedGroup[],
+  field: Field,
+): readonly DeclarationFailure[] {
+  const { labelOf } = memberships[field];
+  return groups.flatMap((group) =>
+    providedListingsOf(group, field).map((listed) => {
+      const provider = providerOf(listed.declaration);
+      const message = `A Group lists the Contract's own Elements: ${labelOf(listed)} is ${provider}'s`;
+      return failure(listed.at, 'provided-element', message);
+    }),
+  );
 }

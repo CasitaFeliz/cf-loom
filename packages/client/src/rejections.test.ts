@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -13,6 +12,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
@@ -68,7 +68,7 @@ const getOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -86,7 +86,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 /** A Provider whose Definitions Package resolved its Standard Rejections to codes of its own. */
@@ -99,7 +107,10 @@ const orders = contractPackageOf(
   }),
 );
 
-const ordersDependency = defineDependency({ provider: orders, endpoints: [editOrder, getOrder] });
+const ordersDependency = defineDependency({
+  provider: orders,
+  endpoints: [orders.endpoints.editOrder, orders.endpoints.getOrder],
+});
 
 const edit = {
   params: { orderId: 'o-1' },

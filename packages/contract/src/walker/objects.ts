@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
 import { inCanonicalJsonOrder } from './canonical-json.ts';
+import { catchallRefusalKeyOf } from './def-types.ts';
 import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
 import { shapeKey } from './shapes.ts';
@@ -98,19 +99,10 @@ export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker
   return walked({ type: 'allOf', items: inCanonicalJsonOrder(items.value) });
 }
 
-/** What a catchall declares, which a Contract never does: a strict, loose or other catchall. */
+/** What a catchall declares, which a Contract never does, worded as `catchalls` reads its def type. */
 function catchallRefusalOf(def: core.$ZodObjectDef): Refused | undefined {
   const catchall = def.catchall?._zod.def.type;
-  switch (catchall) {
-    case undefined:
-      return undefined;
-    case 'never':
-      return refused.strictObject;
-    case 'unknown':
-      return refused.looseObject;
-    default:
-      return refused.catchall;
-  }
+  return catchall === undefined ? undefined : refused[catchallRefusalKeyOf(catchall)];
 }
 
 /** A walked key that can key a `record`, or why it cannot: only a string, not nullable, can. */
