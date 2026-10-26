@@ -218,6 +218,65 @@ function fakeOverPaths() {
   return { fake, taken };
 }
 
+/**
+ * A fake over a Provider that exports `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in
+ * that order, and also declares a Retired `GET /beta/latest` and a live Private `GET /beta/stats`,
+ * which only the cut of `getBeta`, not the first Endpoint, lists as `shadowing`.
+ */
+function fakeOverTwoEndpoints() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const getAlpha = defineEndpoint({
+    ...base,
+    name: 'getAlpha',
+    path: '/alpha/:x',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const getBeta = defineEndpoint({
+    ...base,
+    name: 'getBeta',
+    path: '/beta/:y',
+    visibility: 'internal',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const getBetaFirst = defineEndpoint({
+    ...base,
+    name: 'getBetaFirst',
+    path: '/beta/first',
+    visibility: 'internal',
+  });
+  const betaLatest = defineEndpoint({
+    ...base,
+    name: 'betaLatest',
+    path: '/beta/latest',
+    visibility: 'internal',
+    lifecycle: 'retired',
+  });
+  const betaStats = defineEndpoint({
+    ...base,
+    name: 'betaStats',
+    path: '/beta/stats',
+    visibility: 'private',
+  });
+  const exported = { getAlpha, getBeta, getBetaFirst };
+  const provider = contractPackageOf(exported, [...Object.values(exported), betaLatest, betaStats]);
+  const dependency = defineDependency({
+    provider,
+    endpoints: [provider.endpoints.getBeta, provider.endpoints.getBetaFirst],
+  });
+  const fake = fakeProvider(dependency);
+  const taken = { getBeta: 0, getBetaFirst: 0 };
+  fake.on('getBeta').otherwise((builder) => {
+    taken.getBeta += 1;
+    return builder.success();
+  });
+  fake.on('getBetaFirst').otherwise((builder) => {
+    taken.getBetaFirst += 1;
+    return builder.success();
+  });
+  return { fake, taken };
+}
+
 function captureInit(body: string, contentType = 'application/json'): RequestInit {
   return { method: 'POST', headers: { 'content-type': contentType }, body };
 }
@@ -520,6 +579,38 @@ describe('fakeProvider: requests', () => {
       expect(taken.getPayment).toBe(0);
     },
   );
+
+  test('a request a Retired Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is answered RETIRED as serve answers it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/beta/latest'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request a live Private Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is a mistake naming it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const answering = fake.fetch(new Request('https://payments-service.test/beta/stats'));
+
+    await expect(answering).rejects.toThrow(FakeProviderError);
+    await expect(answering).rejects.toThrow(
+      'payments-service: the Provider does not export GET /beta/stats, which GET /beta/stats reaches',
+    );
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request an exported literal wins over an exported param is answered by that literal once, whichever cuts list it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    await fake.fetch(new Request('https://payments-service.test/beta/first'));
+    await fake.fetch(new Request('https://payments-service.test/beta/other'));
+
+    expect(taken).toEqual({ getBeta: 1, getBetaFirst: 1 });
+  });
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () =>

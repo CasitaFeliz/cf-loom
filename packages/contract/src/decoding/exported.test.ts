@@ -12,9 +12,16 @@ import {
 const orders = exportedOrders();
 const examples = new URL('../../../../examples/', import.meta.url);
 
-/** `getOrder` as orders-service's Contract Package exports it, carrying `cut` as its exported Snapshot. */
+/**
+ * Any Endpoint a Contract Package exports, as `provider`'s, carrying `cut` as its exported
+ * Snapshot cut: the decoder reads the cut and the Provider's name, not the Endpoint.
+ */
+function markedAs(provider: string, cut: unknown) {
+  return providedEndpoint(provider, getOrder, cut);
+}
+
 function carrying(cut: unknown) {
-  return providedEndpoint('orders-service', getOrder, cut);
+  return markedAs('orders-service', cut);
 }
 
 const providing = carrying(orders);
@@ -43,7 +50,7 @@ describe('providedSnapshotOf', () => {
   });
 
   test.each(['orders-service', 'billing-service'])(
-    'the cut of every Endpoint of the example %s is read back as it was written',
+    'the cut of every Endpoint of the example %s is read back as it was written, whatever Endpoint carries it',
     (example) => {
       const file = new URL(`${example}/contract.snapshot.json`, examples);
       const declared: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
@@ -51,7 +58,7 @@ describe('providedSnapshotOf', () => {
         exportedCutOf(declared, identity),
       );
 
-      const read = cuts.map((cut) => providedSnapshotOf(providedEndpoint(example, getOrder, cut)));
+      const read = cuts.map((cut) => providedSnapshotOf(markedAs(example, cut)));
 
       expect(read).toStrictEqual(cuts);
     },

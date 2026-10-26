@@ -230,7 +230,7 @@ const service: Readonly<Record<string, string>> = {
     'export const adminOrder = defineEndpoint({',
     "  name: 'adminOrder',",
     "  method: 'GET',",
-    "  path: '/admin/orders',",
+    "  path: '/orders/admin',",
     "  visibility: 'private',",
     "  description: 'For admins',",
     '  guards: [apiKey],',
@@ -731,8 +731,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     for (const absent of [...absents, 'OrderPurged', 'ChargeCard', 'auditPlaced']) {
       expect(code).not.toContain(absent);
     }
-    const imports = code.split('\n').filter((line) => line.startsWith('import '));
-    expect(imports.join('\n')).not.toContain('@org/definitions');
+    expect(code).not.toContain("'@org/definitions");
     expect(read(out, 'package.json')).not.toContain('@org/definitions');
   });
 
@@ -1246,7 +1245,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(unclosed).toEqual([]);
   });
 
-  test('each exported Endpoint carries the Snapshot cut to it: its entry and the Guards, codes and defs it reaches, and no Event', async () => {
+  test('each exported Endpoint carries the Snapshot cut to it: its entry, the Guards, codes and defs it reaches, the Private Endpoint that beats it, and no Event', async () => {
     const out = builtPackage();
     expect(typeCheck(out).status).toBe(0);
 
@@ -1266,7 +1265,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
         ORDER_LOCKED: snapshot.codes.ORDER_LOCKED,
       },
-      shadowing: {},
+      shadowing: { 'GET /orders/admin': { lifecycle: 'active' } },
     });
     expect(providedSnapshotOf(endpoints.listOrders)).toEqual({
       format: 1,
