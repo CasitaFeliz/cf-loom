@@ -5,24 +5,26 @@ import { byCodePoint } from '../walker/index.ts';
 import { inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText, stampText } from './texts.ts';
+import { declaredOrTombstone } from './tombstones.ts';
 
 const retired = { lifecycle: z.literal('retired'), retiredIn: semanticVersionText };
 
 /**
  * A published Element: still declared with its lifecycle, a Deprecated one also with what only
- * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone.
+ * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone,
+ * which keeps no Group.
  */
 function published<
   Fields extends z.core.$ZodShape,
   Deprecation extends z.core.$ZodShape,
   Tombstone extends z.core.$ZodType,
 >(fields: Fields, deprecation: Deprecation, tombstone: Tombstone) {
-  return z.union([
+  const declared = z.discriminatedUnion('lifecycle', [
     z.strictObject({ ...fields, lifecycle: z.literal('active') }),
     z.strictObject({ ...fields, ...deprecation, lifecycle: z.literal('deprecated') }),
     z.strictObject({ ...fields, ...retired }),
-    tombstone,
   ]);
+  return declaredOrTombstone(declared, tombstone);
 }
 
 const messageTombstone = z.strictObject(retired);

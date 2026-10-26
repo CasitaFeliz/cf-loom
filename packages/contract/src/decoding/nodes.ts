@@ -19,7 +19,10 @@ const keyAnnotations = {
 const annotations = { nullable: z.literal(true).exactOptional(), ...keyAnnotations };
 
 const bound = z.number().exactOptional();
-const primitive = z.union([z.string(), z.number(), z.boolean()]);
+const primitive = z.union(
+  [z.string(), z.number(), z.boolean()],
+  'is not a string, a number, true or false',
+);
 
 function node<const Type extends string, Shape extends z.core.$ZodShape>(type: Type, shape: Shape) {
   return z.strictObject({ type: z.literal(type), ...annotations, ...shape });

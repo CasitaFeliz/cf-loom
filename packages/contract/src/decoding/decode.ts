@@ -8,9 +8,10 @@ import {
   snapshotNestingLimit,
   tooDeepPathOf,
 } from '../snapshot/index.ts';
-import { problemOf } from '../validation/index.ts';
+import { readWith } from '../validation/index.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
+import { formatDefiner } from './texts.ts';
 
 /** A `snapshot.json` as decoded: the published Snapshot, or why it cannot be trusted. */
 export type DecodedSnapshot =
@@ -74,13 +75,13 @@ function decodedWithinStack(
 }
 
 function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): DecodedSnapshot {
-  const structured = structure.safeParse(json);
-  if (!structured.success) {
-    return { kind: 'malformed', ...problemOf(structured.error.issues, 'its format') };
+  const structured = readWith(structure, json, formatDefiner);
+  if (structured.kind === 'refused') {
+    return { kind: 'malformed', ...structured.problems[0] };
   }
-  const problem = heldProblemOf(structured.data);
+  const problem = heldProblemOf(structured.value);
   if (problem !== undefined) {
     return { kind: 'malformed', ...problem };
   }
-  return { kind: 'decoded', snapshot: canonicalSnapshotOf(structured.data) };
+  return { kind: 'decoded', snapshot: canonicalSnapshotOf(structured.value) };
 }

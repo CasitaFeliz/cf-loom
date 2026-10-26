@@ -889,7 +889,7 @@ describe('decodeSnapshot', () => {
 
       const result = decodedFrom(declared);
 
-      expect(result).toEqual(malformedAt(['version']));
+      expect(result).toEqual(malformedAt(['version'], 'is missing'));
     });
 
     test.each(['3.4', 'v3.4.0', '^3.4.0', 'latest', 340])(
@@ -900,6 +900,28 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(malformedAt(['version']));
       },
     );
+
+    test('a generator that is no string is malformed at generator, in cf-loom’s words', () => {
+      const result = serviceWith({ generator: 42 });
+
+      expect(result).toEqual(malformedAt(['generator'], 'is not a string'));
+    });
+
+    test('a Snapshot without a generator is malformed at generator: it is missing', () => {
+      const { generator: _generator, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['generator'], 'is missing'));
+    });
+
+    test('a Snapshot without a kind is malformed at kind: it is missing', () => {
+      const { kind: _kind, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['kind'], 'is missing'));
+    });
 
     test('a kind the format does not define is malformed at kind', () => {
       const result = serviceWith({ kind: 'library' });
@@ -1115,25 +1137,234 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['events', 'OrderPlaced@1']);
     });
 
-    test.each([
-      ['a node type', { defs: { tree: { type: 'bogus' } } }, ['defs', 'tree', 'type']],
-      ['a kind', { kind: 'library' }, ['kind']],
-    ])('%s the format does not define says it is no value its format defines', (_, fields, at) => {
-      const result = serviceWith(fields);
-
-      expect(result).toEqual(malformedAt(at, 'is not a value its format defines'));
-    });
-
-    test('an Element that fits none of the forms an Element takes is reported at the Element, with one reason', () => {
-      const endpoint = { ...anEndpoint, lifecycle: 'retired' };
-
-      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+    test('a node type the format does not define lists the node types it defines', () => {
+      const result = serviceWith({ defs: { tree: { type: 'bogus' } } });
 
       expect(result).toEqual(
         malformedAt(
-          ['endpoints', 'GET /orders/{}'],
-          'matches none of the forms its format defines',
+          ['defs', 'tree', 'type'],
+          expect.stringMatching(/^is none of "string", "number", "boolean", .*"ref"$/),
         ),
+      );
+    });
+
+    test('a kind the format does not define lists the kinds it defines', () => {
+      const result = serviceWith({ kind: 'library' });
+
+      expect(result).toEqual(
+        malformedAt(['kind'], 'is none of "service", "application", "definitions"'),
+      );
+    });
+
+    test.for([null, {}, ['a']])(
+      'an enum value that is no string, number or boolean is malformed at that value: %j',
+      (value) => {
+        const enumNode = { type: 'enum', values: [value], open: false };
+
+        const result = serviceWith({ defs: { tree: enumNode } });
+
+        expect(result).toEqual(
+          malformedAt(['defs', 'tree', 'values', 0], 'is not a string, a number, true or false'),
+        );
+      },
+    );
+
+    describe('an Element is read as declared or as a tombstone by its Group, a declared one by its lifecycle, so the key that breaks it is named', () => {
+      const deprecatedAt = '2026-10-17T09:30:00Z';
+      const elements = [
+        {
+          kind: 'Endpoint',
+          map: 'endpoints',
+          identity: 'GET /orders/{}',
+          forms: {
+            active: anEndpoint,
+            deprecated: { ...anEndpoint, lifecycle: 'deprecated', deprecatedAt },
+            retired: retiredEndpoint,
+            tombstone: endpointTombstone,
+          },
+        },
+        {
+          kind: 'Event',
+          map: 'events',
+          identity: 'OrderPlaced@1',
+          forms: {
+            active: anEvent,
+            deprecated: { ...anEvent, lifecycle: 'deprecated' },
+            retired: { ...anEvent, lifecycle: 'retired', retiredIn: '3.0.0' },
+            tombstone: messageTombstone,
+          },
+        },
+        {
+          kind: 'Command',
+          map: 'commands',
+          identity: 'ChargeCard@1',
+          forms: {
+            active: aCommand,
+            deprecated: { ...aCommand, lifecycle: 'deprecated' },
+            retired: { ...aCommand, lifecycle: 'retired', retiredIn: '3.0.0' },
+            tombstone: messageTombstone,
+          },
+        },
+      ];
+      const everyForm = elements.flatMap(({ kind, map, identity, forms }) =>
+        Object.entries(forms).map(([form, element]) => ({ kind, map, identity, form, element })),
+      );
+      const everyField = everyForm.flatMap((placed) =>
+        Object.keys(placed.element).map((field) => ({ ...placed, field })),
+      );
+
+      const declaredForms = elements.flatMap(({ kind, map, identity, forms }) => [
+        { kind, form: 'active', map, identity, element: forms.active },
+        { kind, form: 'deprecated', map, identity, element: forms.deprecated },
+      ]);
+
+      test.each(declaredForms)(
+        'the $form form of a published $kind without its Group is read as a tombstone, as the format defines',
+        ({ map, identity, element }) => {
+          const { group: _group, ...tombstoneLike } = element;
+
+          const result = serviceWith({ [map]: { [identity]: tombstoneLike } });
+
+          expect(result).toEqual(malformedAt([map, identity, 'lifecycle'], 'is not "retired"'));
+        },
+      );
+
+      test('a Retired Endpoint without its Group is read as a tombstone, so its first other key is named', () => {
+        const { group: _group, ...tombstoneLike } = retiredEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': tombstoneLike } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is a key its format does not define',
+          ),
+        );
+      });
+
+      test('a published Endpoint with a visibility that is no Visibility is malformed at the visibility', () => {
+        const endpoint = { ...anEndpoint, visibility: 'nope' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is none of "public", "internal", "private"',
+          ),
+        );
+      });
+
+      test('a Deprecated Endpoint with a description that is no string is malformed at the description', () => {
+        const endpoint = { ...anEndpoint, lifecycle: 'deprecated', description: 42 };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'description'], 'is not a string'),
+        );
+      });
+
+      test.each(elements)(
+        'the tombstone of a published $kind with a key of its own is malformed at that key',
+        ({ map, identity, forms }) => {
+          const tombstone = { ...forms.tombstone, extra: true };
+
+          const result = serviceWith({ [map]: { [identity]: tombstone } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, 'extra'], 'is a key its format does not define'),
+          );
+        },
+      );
+
+      test.each([
+        [
+          'a lifecycle that is none of the three',
+          { ...anEndpoint, lifecycle: 'archived' },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        [
+          'a lifecycle that is no string',
+          { ...anEndpoint, lifecycle: null },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        ['no lifecycle', { ...anEndpoint, lifecycle: undefined }, 'is missing'],
+      ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint, reason) => {
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'lifecycle'], reason));
+      });
+
+      test('an Endpoint without a visibility is malformed at the visibility: it is missing', () => {
+        const { visibility: _visibility, ...endpoint } = anEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'visibility'], 'is missing'),
+        );
+      });
+
+      test.each(everyForm)(
+        'the $form form of a published $kind holding a __proto__ key is malformed at that key, never dropped',
+        ({ map, identity, element }) => {
+          const holding = { ...element, ...protoKeyed(1) };
+
+          const result = serviceWith({ [map]: { [identity]: holding } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, '__proto__'], 'is a key its format does not define'),
+          );
+        },
+      );
+
+      test('a Retired Endpoint still declared without retiredIn is malformed at the retiredIn', () => {
+        const endpoint = { ...anEndpoint, lifecycle: 'retired' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'retiredIn'], 'is missing'),
+        );
+      });
+
+      test.each(elements)(
+        'the tombstone of a published $kind without retiredIn is malformed at the retiredIn: it is missing',
+        ({ map, identity, forms }) => {
+          const { retiredIn: _retiredIn, ...tombstone } = forms.tombstone;
+
+          const result = serviceWith({ [map]: { [identity]: tombstone } });
+
+          expect(result).toEqual(malformedAt([map, identity, 'retiredIn'], 'is missing'));
+        },
+      );
+
+      test.each([
+        ['a Retired Endpoint still declared', retiredEndpoint],
+        ['an Endpoint’s tombstone', endpointTombstone],
+      ])('%s with a retiredIn that is no semantic version keeps that reason', (_, retired) => {
+        const endpoint = { ...retired, retiredIn: 'three' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'retiredIn'], 'is not a semantic version'),
+        );
+      });
+
+      test.each(everyField)(
+        'the $form form of a published $kind with a $field of the wrong type is malformed at that $field',
+        ({ map, identity, element, field }) => {
+          const wrong = { ...element, [field]: null };
+          const zodsWording = /^(Invalid|Unrecognized|Too )/;
+
+          const result = serviceWith({ [map]: { [identity]: wrong } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, field], expect.not.stringMatching(zodsWording)),
+          );
+        },
       );
     });
 
@@ -1178,6 +1409,109 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
 
       expect(elementOf(result)).toEqual(['subscriptions', 'notifyOnPlaced']);
+    });
+
+    describe('a Subscription is read as declared or as a tombstone by its Group, so the key that breaks it is named', () => {
+      const event = 'orders-service:OrderPlaced@1';
+      const declared = { group: 'orders', description: 'Receives it', event };
+      const removed = { event, removedIn: '3.2.0' };
+      const at = (key: string) => ['subscriptions', 'notifyOnPlaced', key];
+
+      test.each([
+        {
+          name: 'a declared Subscription’s event that is no string',
+          subscription: { ...declared, event: 42 },
+          key: 'event',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a declared Subscription’s description that is no string',
+          subscription: { ...declared, description: 42 },
+          key: 'description',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a removed Subscription’s event that is no string',
+          subscription: { ...removed, event: 42 },
+          key: 'event',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a removed Subscription’s removedIn that is no semantic version',
+          subscription: { ...removed, removedIn: 'nope' },
+          key: 'removedIn',
+          reason: 'is not a semantic version',
+        },
+        {
+          name: 'a declared Subscription with no event',
+          subscription: { group: 'orders', description: 'Receives it' },
+          key: 'event',
+          reason: 'is missing',
+        },
+        {
+          name: 'a removed Subscription with no event',
+          subscription: { removedIn: '3.2.0' },
+          key: 'event',
+          reason: 'is missing',
+        },
+        {
+          name: 'a removed Subscription with no removedIn',
+          subscription: { event },
+          key: 'removedIn',
+          reason: 'is missing',
+        },
+        {
+          name: 'a declared Subscription with a removedIn',
+          subscription: { ...declared, removedIn: '3.2.0' },
+          key: 'removedIn',
+          reason: 'is a key its format does not define',
+        },
+        {
+          name: 'a removed Subscription with a key of its own',
+          subscription: { ...removed, extra: 1 },
+          key: 'extra',
+          reason: 'is a key its format does not define',
+        },
+      ])('$name is malformed at that key', ({ subscription, key, reason }) => {
+        const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+        expect(result).toEqual(malformedAt(at(key), reason));
+      });
+
+      test('a declared Subscription without its Group is read as a tombstone, as the format defines', () => {
+        const { group: _group, ...tombstoneLike } = declared;
+
+        const result = serviceWith({ subscriptions: { notifyOnPlaced: tombstoneLike } });
+
+        expect(result).toEqual(malformedAt(at('removedIn'), 'is missing'));
+      });
+
+      test.for([null, 42, 'notifyOnPlaced', []])(
+        'a Subscription that is no object is malformed at the Subscription: %j',
+        (subscription) => {
+          const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+          expect(result).toEqual(
+            malformedAt(['subscriptions', 'notifyOnPlaced'], 'is not an object'),
+          );
+        },
+      );
+
+      test.each([
+        ['declared', declared],
+        ['removed', removed],
+      ])(
+        'a %s Subscription holding a __proto__ key is malformed at that key, never dropped',
+        (_, subscription) => {
+          const holding = { ...subscription, ...protoKeyed(1) };
+
+          const result = serviceWith({ subscriptions: { notifyOnPlaced: holding } });
+
+          expect(result).toEqual(
+            malformedAt(at('__proto__'), 'is a key its format does not define'),
+          );
+        },
+      );
     });
 
     test.each([
@@ -1562,6 +1896,16 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ dependencies });
 
       expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'against']));
+    });
+
+    test('a Dependency without an against is malformed at the against: it is missing', () => {
+      const dependencies = { 'payments-service': { endpoints: [] } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(
+        malformedAt(['dependencies', 'payments-service', 'against'], 'is missing'),
+      );
     });
 
     test('a deprecatedAt on an Active Endpoint is malformed in the Endpoint', () => {

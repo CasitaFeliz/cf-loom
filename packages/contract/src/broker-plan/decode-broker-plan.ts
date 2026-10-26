@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import type { $ZodRawIssue } from 'zod/v4/core';
-import { type Problem, problemLineOf, problemOf } from '../validation/index.ts';
+import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
@@ -10,52 +9,32 @@ export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
 
-function wrongType(reason: string) {
-  return {
-    error: (issue: $ZodRawIssue) => {
-      if (issue.code !== 'invalid_type') {
-        return undefined;
-      }
-      return issue.input === undefined ? 'is missing' : reason;
-    },
-  };
-}
-
-const text = z.string(wrongType('is not a text'));
-const stream = z.strictObject(
-  {
-    service: text,
-    subjects: z.array(text, wrongType('is not a list')).min(1, 'holds no subject'),
-  },
-  wrongType('is not an object'),
-);
-const consumer = z.strictObject(
-  { service: text, stream: text, subject: text },
-  wrongType('is not an object'),
-);
-const plan = z.strictObject(
-  {
-    prefix: z
-      .string(wrongType('is not a text or null'))
-      .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
-      .nullable(),
-    streams: z.record(z.string(), stream, wrongType('is not an object')),
-    consumers: z.record(z.string(), consumer, wrongType('is not an object')),
-  },
-  wrongType('is not an object'),
-);
+const text = z.string('is not a text');
+const stream = z.strictObject({
+  service: text,
+  subjects: z.array(text).min(1, 'holds no subject'),
+});
+const consumer = z.strictObject({ service: text, stream: text, subject: text });
+const plan = z.strictObject({
+  prefix: z
+    .string('is not a text or null')
+    .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
+    .nullable(),
+  streams: z.record(z.string(), stream),
+  consumers: z.record(z.string(), consumer),
+});
 
 /**
  * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints, refusing any other
  * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
-  const structured = plan.safeParse(value);
-  if (!structured.success) {
-    return malformedAt(problemOf(structured.error.issues, 'the broker plan'));
+  const structured = readWith(plan, value, 'the broker plan');
+  if (structured.kind === 'refused') {
+    return malformedAt(structured.problems[0]);
   }
-  const problem = uncarriedProblemOf(structured.data);
-  return problem === undefined ? { kind: 'decoded', plan: structured.data } : malformedAt(problem);
+  const problem = uncarriedProblemOf(structured.value);
+  return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {

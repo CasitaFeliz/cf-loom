@@ -31,6 +31,21 @@ export function ownOf(map: unknown, name: string): unknown {
   return Object.hasOwn(map, name) ? Reflect.get(map, name) : undefined;
 }
 
+/**
+ * Whether a value is absent at a path: a step on the way, or the last, is a key the value does not
+ * hold itself, a hole of a list included, or the value there is `undefined`.
+ */
+export function isAbsentAt(input: unknown, path: readonly PropertyKey[]): boolean {
+  let value = input;
+  for (const step of path) {
+    if (typeof value !== 'object' || value === null || !Object.hasOwn(value, step)) {
+      return true;
+    }
+    value = Reflect.get(value, step);
+  }
+  return value === undefined;
+}
+
 /** A part a declaration may leave out is empty; what a cast put there that is no object is too. */
 export function partOf<Key extends string>(part: unknown): Partial<Readonly<Record<Key, unknown>>> {
   return isPlainObject(part) ? (part as Partial<Readonly<Record<Key, unknown>>>) : {};
