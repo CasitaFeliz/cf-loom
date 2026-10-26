@@ -114,3 +114,32 @@ function paramsOf(
   }
   return Object.fromEntries(params);
 }
+
+/** A segment text no literal spells, so only a param matches it. */
+export const unmatchedText = '{}';
+
+/**
+ * The segment texts of a URL two Endpoints both match, a literal where either has one and
+ * `unmatchedText` where both have a param, or `undefined` when they share no URL.
+ */
+export function sharedUrlOf(left: Matchable, right: Matchable): readonly string[] | undefined {
+  if (left.method !== right.method || left.segments.length !== right.segments.length) {
+    return undefined;
+  }
+  const texts: string[] = [];
+  for (const [index, segment] of left.segments.entries()) {
+    const text = sharedTextAt(segment, right.segments[index]);
+    if (text === undefined) {
+      return undefined;
+    }
+    texts.push(text);
+  }
+  return texts;
+}
+
+function sharedTextAt(left: PathSegment, right: PathSegment | undefined): string | undefined {
+  if (left.kind === 'literal') {
+    return right?.kind === 'literal' && right.text !== left.text ? undefined : left.text;
+  }
+  return right?.kind === 'literal' ? right.text : unmatchedText;
+}
