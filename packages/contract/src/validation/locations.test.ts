@@ -222,9 +222,7 @@ describe('failure lines: shared refused schemas, drawn at random', () => {
     'draw %i: one line for each refused schema reached, whatever the order of declaration',
     (seed) => {
       const next = seededNext(seed);
-      const schemas = refusedSchemas.flatMap((make) =>
-        next() < 0.7 ? [make()] : [make(), make()],
-      );
+      const schemas = refusedSchemas.flatMap((make) => twiceOrOnce(make, next));
       const count = 1 + Math.floor(next() * 5);
       const endpoints = Array.from({ length: count }, (_, index) => {
         const chosen = schemas.filter(() => next() < 0.5);
@@ -248,4 +246,13 @@ describe('failure lines: shared refused schemas, drawn at random', () => {
 function reachedSchemasOf(endpoint: Endpoint): readonly unknown[] {
   const body: unknown = endpoint.success.body;
   return body instanceof z.ZodObject ? Object.values(body.shape) : [];
+}
+
+/** One schema of a kind, or two distinct ones, as the draw says. */
+function twiceOrOnce(make: () => z.ZodType, next: () => number): readonly z.ZodType[] {
+  const schemas = [make()];
+  if (next() >= 0.7) {
+    schemas.push(make());
+  }
+  return schemas;
 }
