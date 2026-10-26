@@ -174,15 +174,15 @@ describe('validateRoot', () => {
       ],
       codes: [
         {
-          code: 'UNAUTHENTICATED',
-          at: sitting({ kind: 'code', code: 'UNAUTHENTICATED' }, unauthenticated),
-          rejection: unauthenticated,
-          from: undefined,
-        },
-        {
           code: 'ORDER_LOCKED',
           at: sitting({ kind: 'code', code: 'ORDER_LOCKED' }, orderLocked),
           rejection: orderLocked,
+          from: undefined,
+        },
+        {
+          code: 'UNAUTHENTICATED',
+          at: sitting({ kind: 'code', code: 'UNAUTHENTICATED' }, unauthenticated),
+          rejection: unauthenticated,
           from: undefined,
         },
       ],

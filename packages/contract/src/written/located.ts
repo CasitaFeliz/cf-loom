@@ -37,7 +37,8 @@ export type LocatedRejection = { readonly at: Place; readonly rejection: Rejecti
 
 /**
  * A code the Root reaches and every declaration of it, which a valid Root has one of, in the
- * Root's order: a Definitions Package's exports, then the Guards', then the Endpoints'.
+ * Root's order: the Endpoints' and Guards' lists as they are read, then a Definitions Package's
+ * exports.
  */
 export type LocatedCode = {
   readonly code: string;

@@ -16,7 +16,7 @@ import type {
   NamedDefinitions,
 } from './located.ts';
 import { type Members, membersOf } from './members.ts';
-import { codesOf, guardsOf, rejectionsOf } from './references.ts';
+import { codesOf, referencesOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
 
 /**
@@ -58,8 +58,7 @@ export function declarationsOf(
   const ownMembers = root.kind === 'definitions' ? membersOf(rootExports) : undefined;
   const standardRejectionsSource = namedSourceOf(root);
   const sources = { ownMembers, endpoints };
-  const guards = guardsOf(sources);
-  const rejections = rejectionsOf(sources, guards);
+  const { guards, rejections } = referencesOf(sources);
   const declarer = standardRejectionsDeclarerOf({ root, standardRejectionsSource });
   return {
     root,
