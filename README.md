@@ -8,7 +8,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 | Package | Used by | For |
 | --- | --- | --- |
-| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declaring a Contract, an Application or a Definitions Package |
+| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declaring a Service's or an Application's Contract, or a Definitions Package |
 | [`@cf-loom/handlers`](packages/handlers/README.md) | Services | Implementing a Contract's Endpoints, Guards, Commands and Subscriptions, and calling the Handlers directly in tests |
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | Answering a Contract's Endpoints over HTTP with their Handlers |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The server's adapter for `node:http` |
@@ -30,7 +30,7 @@ Two fictional Services in `examples/` follow these steps, from their declaration
 ```
 src/
 ├── contract/                              declarations only
-│   ├── index.ts                           export const contract = defineContract({...})
+│   ├── index.ts                           export const contract = defineService({...})
 │   ├── groups/
 │   │   └── orders.group.ts                what the Group orders lists
 │   ├── endpoints/                         each Element's file under its kind, then its Group
@@ -69,13 +69,13 @@ src/
 
 The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in an optional `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
-A Definitions Package is laid out the same way under `src/definitions/`: its root `index.ts` exports `definitions` and every Guard, Rejection and schema Services import, and nothing else, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services import.
+A Definitions Package is laid out the same way under `src/definitions/`: its Root `index.ts` exports its Definitions object (`init` names it `definitions`) and every Guard, Rejection and schema Services import, and nothing else, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services import.
 
 The examples in the package READMEs follow this layout and leave out imports of `zod`, `@cf-loom/contract` and sibling files.
 
 ### Declare
 
-`cf-loom init service` creates the root under `src/contract/`; every other declaration is a file you write there, where [Layout](#layout) puts it, and a Group or the root lists it. What each declaration holds, with an example of each, is in the [`@cf-loom/contract` README](packages/contract/README.md), and the declarations in [`examples/`](examples) (`orders-service`, `billing-service`, `org-definitions`) are complete ones; a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
+`cf-loom init service` creates the Root under `src/contract/`; every other declaration is a file you write there, where [Layout](#layout) puts it, and a Group or the Root lists it. What each declaration holds, with an example of each, is in the [`@cf-loom/contract` README](packages/contract/README.md), and the declarations in [`examples/`](examples) (`orders-service`, `billing-service`, `org-definitions`) are complete ones; a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Generate
 
