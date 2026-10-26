@@ -153,4 +153,30 @@ describe('the README', () => {
     expect(sent[0]?.credentials).toBe('include');
     expect(sent[0]?.headers.get('x-api-key')).toBe('k');
   });
+
+  test('a bare TypeError, as a browser’s fetch throws it, is connection-failed and not retryable until inferFault relaxes it', async () => {
+    const blocked = async (): Promise<Response> => {
+      throw new TypeError('Failed to fetch');
+    };
+    const options = { baseUrl: 'https://payments.test', headers: { 'x-api-key': 'k' } };
+    const asIs = client(paymentsDependency, { ...options, fetch: blocked });
+    const relaxed = client(paymentsDependency, {
+      ...options,
+      fetch: blocked,
+      inferFault: (happened) =>
+        happened.kind === 'connection-failed'
+          ? { committed: 'unknown', retryable: true }
+          : undefined,
+    });
+
+    const outcomes = [
+      await asIs.getPayment({ params: { paymentId } }),
+      await relaxed.getPayment({ params: { paymentId } }),
+    ];
+
+    expect(outcomes).toMatchObject([
+      { kind: 'fault', source: 'connection-failed', committed: 'unknown', retryable: false },
+      { kind: 'fault', source: 'connection-failed', committed: 'unknown', retryable: true },
+    ]);
+  });
 });

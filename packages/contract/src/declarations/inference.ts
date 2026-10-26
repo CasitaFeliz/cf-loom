@@ -67,7 +67,7 @@ type EndpointRejectionsOf<Target extends Endpoint> =
   | ListedRejections<RejectingGuardsOf<Target>>
   | StandardRejection<AddedStandardRejectionName>;
 
-/** Every Rejection a Guard may answer: its own and the not-implemented one its stub answers. */
+/** Every Rejection a Guard may answer: its own and the not-implemented one its Stub answers. */
 type GuardRejectionsOf<Target extends Guard> =
   | ListedRejections<Target>
   | StandardRejection<'notImplemented'>;

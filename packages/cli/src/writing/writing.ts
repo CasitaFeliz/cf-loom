@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { oneLineOf } from '../loading/index.ts';
 
 /**
- * A file a command generates, relative to the project: one regenerated `always`, or a stub
+ * A file a command generates, relative to the project: one regenerated `always`, or a Stub
  * written `once`, never over a Handler that exists.
  */
 export type GeneratedFile = {
@@ -35,7 +35,7 @@ type FileWrite =
 
 /**
  * Writes each file in order: a regenerated one beside its target under a name of this run's,
- * renamed over it, so a failed or concurrent write leaves a whole file; a stub only where no
+ * renamed over it, so a failed or concurrent write leaves a whole file; a Stub only where no
  * Handler exists. A rerun completes what a failure left undone.
  */
 export function writeFiles(directory: string, files: readonly GeneratedFile[]): Written {
@@ -69,7 +69,7 @@ function writeFile(directory: string, file: GeneratedFile): FileWrite {
   }
 }
 
-/** A stub, written only where nothing is, so a Handler another run just wrote is kept too. */
+/** A Stub, written only where nothing is, so a Handler another run just wrote is kept too. */
 function writeOnce(path: string, file: GeneratedFile): FileWrite {
   try {
     writeFileSync(path, file.text, { flag: 'wx' });

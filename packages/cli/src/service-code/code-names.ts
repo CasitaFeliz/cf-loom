@@ -5,7 +5,7 @@ import type { Handled, MessageHandled } from './handled.ts';
 export type MessageVersion = { readonly name: string; readonly version: number };
 
 /**
- * The name a Command's Message Version or a Subscription is paired under, which its stub imports:
+ * The name a Command's Message Version or a Subscription is paired under, which its Stub imports:
  * `chargeCardV1`, `notifyOnSettled`.
  */
 export function pairingNameOf(handled: MessageHandled): string {

@@ -52,7 +52,7 @@ function reachedBy(
   const reached = consumers.filter((consumer) => consumes(consumer, message));
   if (reached.length === 0) {
     const named = messageIdentityOf(message.name, message.version);
-    const reason = 'nothing consume()d takes it, or its Handler is a stub';
+    const reason = 'nothing consume()d takes it, or its Handler is a Stub';
     throw new Error(`${named} has no consumer: ${reason}`);
   }
   return reached;

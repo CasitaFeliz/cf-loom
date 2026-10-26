@@ -76,6 +76,22 @@ A call whose signal was aborted before anything was sent is never offered: its F
 
 A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [Lifecycle](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#lifecycle) in the contract README). The first response of a method that carries it calls `onDeprecation({ provider, endpoint, deprecatedAt })`, once per method of each client, with the instant as a `deprecatedAt` stamp; without `onDeprecation`, `console.warn` writes `<provider>: <endpoint> is Deprecated since <deprecatedAt>`. A client created per request warns per request. What `onDeprecation` throws is caught and written with `console.error`, `<provider>: <endpoint>: onDeprecation threw` and the error, so the Outcome is never lost.
 
+## In a browser (Applications)
+
+An Application (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README) calls its Providers from a browser with this same `client`. The package uses only web-standard APIs, no Node API. The browser's own concerns of a Request, `credentials` for one, go through the `fetch` option (see [fetch and inferFault](#fetch-and-inferfault)):
+
+```ts
+const orders = client(ordersDependency, {
+  baseUrl: 'https://api.example.com',
+  headers: { 'x-api-key': apiKey },
+  fetch: (request) => fetch(new Request(request, { credentials: 'include' })),   // cookies on a cross-origin call
+});
+```
+
+- **Public Endpoints only.** An Application's Dependency lists Public Endpoints only, since an Application runs outside the internal network; any other is a type error (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README).
+- **CORS is the host's or the gateway's.** The client sets no CORS header and `serve` adds none to an Endpoint's own response; whatever wraps the handler `serve` returns, or the organization's gateway, does. A header such as `x-api-key` makes the browser send a preflight `OPTIONS` first, which `serve` answers `METHOD_NOT_ALLOWED`, or `NO_SUCH_ENDPOINT` on a path no Endpoint declares, unless the Service's `fallback`, the host or the gateway answers it (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README and [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md).
+- **A network failure is not retryable.** A browser reports a refused connection, a DNS failure and a request blocked by CORS alike as a bare `TypeError`, which tells nothing about whether the request went out, so the client infers `connection-failed`: `committed: 'unknown'`, `retryable: false` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). An organization that knows its network relaxes that with `inferFault`.
+
 ## Types
 
 - `ClientOptions<D, Configured>`, `{ baseUrl, headers?, fetch?, inferFault?, onDeprecation? }`, what `client(dependency, options)` takes; `Http`, re-exported from `@cf-loom/contract`, the type of its `fetch`, and `OnDeprecation`, the type of its `onDeprecation`.

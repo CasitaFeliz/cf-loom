@@ -1221,7 +1221,7 @@ describe('cf-loom generate: stubs', () => {
 
     expect(thrown).toEqual([
       'InvalidInputError',
-      expect.stringContaining('is a stub, which consume never runs'),
+      expect.stringContaining('is a Stub, which consume never runs'),
     ]);
   });
 });

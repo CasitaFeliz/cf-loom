@@ -69,7 +69,7 @@ export function handlerMapTextOf(
 }
 
 /**
- * What a stub hands to `handle.stub`: the export it imports under `local`, and the members read
+ * What a Stub hands to `handle.stub`: the export it imports under `local`, and the members read
  * from it, none for `getOrder`, `commands` and `chargeCardV1` for `readers.commands.chargeCardV1`.
  */
 export type StubTarget = {
@@ -83,7 +83,7 @@ export function exportedTargetOf(imported: ExportedAt, local: string): StubTarge
   return { imported, local, members: [] };
 }
 
-/** The stub of the Handler at `path`, importing what it is written for from where it is exported. */
+/** The Stub of the Handler at `path`, importing what it is written for from where it is exported. */
 export function stubTextOf(path: string, { imported, local, members }: StubTarget): string {
   const specifier = specifierOf(path, imported);
   const imports = [

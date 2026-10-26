@@ -195,7 +195,7 @@ verifyGenerated(contract);   // or generate(contract, { mode: 'verify' })
 ```
 
 **C18. Expected failures are values.** A failure the code expects (a construct the allow-list refuses, invalid
-Input, a missing durable consumer, a registry that cannot be reached) is a member of a closed union returned to the
+Input, a missing Durable consumer, a registry that cannot be reached) is a member of a closed union returned to the
 caller and decided with a `switch` (C16); cf-loom adds no `Result` library, so its packages keep no runtime dependency
 besides their peers. A `throw` is for a bug, with a message a developer reads. A user's Handler that throws is not a
 bug of cf-loom: the runtime catches it and answers a Fault, as the design says. *Why:* a failure that throws is a
