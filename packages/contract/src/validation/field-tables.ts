@@ -106,7 +106,7 @@ export const demandsFields = {
 
 /** The fields of a Rejection. */
 export const rejectionFields = {
-  declared: { kind: true, code: true, status: true, message: true, body: true },
+  declared: { kind: true, code: true, status: true, message: true, headers: true, body: true },
   required: { kind: true, code: true, status: true, message: true },
   strings: { kind: true, code: true, message: true },
   nonBlank: { message: true },

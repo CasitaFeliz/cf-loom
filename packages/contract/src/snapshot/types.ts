@@ -57,11 +57,15 @@ export type GuardSnapshot = {
   readonly rejections: readonly string[];
 };
 
-/** A code with its declaration's status, message and body shape. */
+/**
+ * A code with its declaration's status, message, body shape and headers, an object with no field
+ * when it declares none.
+ */
 export type CodeSnapshot = {
   readonly origin: Origin;
   readonly status: number;
   readonly message: string;
+  readonly headers: ObjectNode;
   readonly body: SchemaNode | null;
 };
 

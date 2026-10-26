@@ -18,11 +18,12 @@ export type SentSuccess = {
 /** What of a Fault the Service produced travels: never a code, which only the runtime's reserved Faults carry. */
 export type SentFault = Omit<TravelingFault, 'code'>;
 
-/** A Rejection as it is sent: its code, status and message resolved, and its body when it has one. */
+/** A Rejection as it is sent: its code, status and message resolved, its declared headers as checked, and its body when it has one. */
 export type SentRejection = {
   readonly code: string;
   readonly status: number;
   readonly message: string;
+  readonly headers?: Readonly<Record<string, unknown>> | undefined;
   readonly body?: unknown;
 };
 
@@ -32,7 +33,7 @@ export type SentRejection = {
  */
 export function successResponseOf(success: SentSuccess): Response {
   const headers = new Headers();
-  for (const [name, text] of sentHeaderTextsOf(success)) {
+  for (const [name, text] of sentHeaderTextsOf('success.headers', success.headers)) {
     headers.set(name, text);
   }
   if (success.body === undefined) {
@@ -42,9 +43,16 @@ export function successResponseOf(success: SentSuccess): Response {
   return new Response(JSON.stringify(success.body), { status: success.status, headers });
 }
 
-/** The response of a Rejection: its status and its Envelope. */
+/**
+ * The response of a Rejection checked before it is sent: its status, each declared header as its
+ * text, and its Envelope; a header that cannot travel is a bug of that check, thrown.
+ */
 export function rejectionResponseOf(rejection: SentRejection): Response {
-  return jsonResponseOf(rejection.status, rejectionEnvelopeOf(rejection));
+  const response = jsonResponseOf(rejection.status, rejectionEnvelopeOf(rejection));
+  for (const [name, text] of sentHeaderTextsOf('headers', rejection.headers)) {
+    response.headers.set(name, text);
+  }
+  return response;
 }
 
 /**
@@ -86,12 +94,18 @@ export function methodNotAllowedResponseOf(allowed: readonly string[]): Response
   return response;
 }
 
-function sentHeaderTextsOf(success: SentSuccess): readonly (readonly [string, string])[] {
-  const headers = headerTextsOf('success.headers', success.headers);
+/** The sent part's names in the words of its error: a Success's headers, or a Rejection's. */
+const sentNouns = { 'success.headers': 'A Success', headers: 'A Rejection' } as const;
+
+function sentHeaderTextsOf(
+  part: keyof typeof sentNouns,
+  sent: Readonly<Record<string, unknown>> | undefined,
+): readonly (readonly [string, string])[] {
+  const headers = headerTextsOf(part, sent);
   if (headers.kind === 'issues') {
     const names = headers.issues.map(({ path }) => path.join('.')).join(', ');
     throw new Error(
-      `A Success header that cannot travel was not checked before it was sent: ${names}`,
+      `${sentNouns[part]} header that cannot travel was not checked before it was sent: ${names}`,
     );
   }
   return headers.texts;

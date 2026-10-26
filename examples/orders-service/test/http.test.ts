@@ -72,6 +72,14 @@ describe('serve', () => {
     });
   });
 
+  test('the 401 carries the www-authenticate header @org/definitions’ UNAUTHENTICATED declares', async () => {
+    const request = aRequest(`/orders/${PAID_ORDER_ID}`);
+
+    const response = await http(request);
+
+    expect(response.headers.get('www-authenticate')).toBe('ApiKey realm="orders-service"');
+  });
+
   test('an unknown key is answered UNAUTHENTICATED', async () => {
     const request = aRequest(`/orders/${PAID_ORDER_ID}`, { headers: { 'x-api-key': 'stolen' } });
 

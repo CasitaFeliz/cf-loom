@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineEndpoint, openEnumReader } from '../index.ts';
-import { parsedPartOf, successFieldsOf, writtenPartOf } from '../internal/index.ts';
+import { openEnumReader } from '../index.ts';
+import { parsedPartOf, writtenPartOf } from '../internal/index.ts';
 
 const expectedNoValue = { code: 'invalid_type', message: 'Expected no value' } as const;
 
@@ -44,38 +44,5 @@ describe('parsedPartOf and writtenPartOf', () => {
     const checked = writtenPartOf('body', reader, { value: { stage: { unknown: 'refunded' } } });
 
     expect(checked).toEqual({ kind: 'value', value: { stage: 'refunded' } });
-  });
-});
-
-describe('successFieldsOf', () => {
-  const base = {
-    method: 'GET',
-    path: '/payments',
-    visibility: 'internal',
-    description: 'Payments',
-  } as const;
-
-  test('a Success with no headers declared is its body alone', () => {
-    const endpoint = defineEndpoint({
-      ...base,
-      name: 'listPayments',
-      success: { status: 200, body: z.object({ headers: z.string() }) },
-    });
-
-    const fields = successFieldsOf(endpoint, { headers: 'h' });
-
-    expect(fields).toEqual({ body: { headers: 'h' } });
-  });
-
-  test('a Success with headers declared is read by field', () => {
-    const endpoint = defineEndpoint({
-      ...base,
-      name: 'listPayments',
-      success: { status: 200, headers: z.object({ 'x-count': z.int() }), body: z.string() },
-    });
-
-    const fields = successFieldsOf(endpoint, { headers: { 'x-count': 1 }, body: 'b' });
-
-    expect(fields).toEqual({ headers: { 'x-count': 1 }, body: 'b' });
   });
 });

@@ -16,9 +16,9 @@ export function guardNodesOf({
   return [demands.headers, demands.query, context, qualifier].filter(isNode);
 }
 
-/** The schema nodes of a code: its body. */
-export function codeNodesOf({ body }: CodeSnapshot): readonly SchemaNode[] {
-  return [body].filter(isNode);
+/** The schema nodes of a code: its headers and its body. */
+export function codeNodesOf({ headers, body }: CodeSnapshot): readonly SchemaNode[] {
+  return [headers, body].filter(isNode);
 }
 
 function isNode(node: SchemaNode | null): node is SchemaNode {

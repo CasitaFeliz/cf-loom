@@ -57,11 +57,12 @@ export type Nodes = {
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
-/** The slots of a Root's Endpoints and Guards that travel as text, in declaration order. */
+/** The slots of a Root's Endpoints, Guards and Rejections that travel as text, in declaration order. */
 export function textSlotsOf(declarations: Declarations): readonly Slot[] {
   const slots = [
     ...declarations.endpoints.flatMap(endpointSlots),
     ...declarations.guards.flatMap(guardSlots),
+    ...declarations.codes.flatMap(codeSlots),
   ];
   return slots.filter((slot) => isObjectPart(slot.part));
 }
@@ -152,11 +153,12 @@ function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
   return guardParts.map((part) => slot(owned, part, writtenAt(guard, part)));
 }
 
-/** Each declaration of a code owns its body's slot; a valid Root has one per code. */
+/** Each declaration of a code owns its headers' and its body's slots; a valid Root has one declaration per code. */
 function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
-  return rejections.map(({ at, rejection }) =>
+  return rejections.flatMap(({ at, rejection }) => [
+    slot({ at, owner: rejection }, 'headers', rejection.headers),
     slot({ at, owner: rejection }, 'body', rejection.body),
-  );
+  ]);
 }
 
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */

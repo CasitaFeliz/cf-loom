@@ -24,7 +24,13 @@ const resolved: Standard = {
 const remapped: Standard = { ...resolved, notFound: 'ORDER_GONE' };
 
 function aStandardCode(status: number): CodeSnapshot {
-  return { origin: 'standard', status, message: 'Standard', body: null };
+  return {
+    origin: 'standard',
+    status,
+    message: 'Standard',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
 }
 
 /** The codes a Snapshot holds for a resolution: each Standard Rejection's. */

@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineRejection, invalidInput, notFound, type ReservedCode } from '../index.ts';
+import type { ReservedCode } from '../index.ts';
 import {
   allowedMethodsOf,
   bodyOf,
@@ -23,7 +23,6 @@ import {
   pathSegmentsOf,
   receivedBodyOf,
   receivedEnvelopeOf,
-  rejectionBodyReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,
@@ -264,6 +263,43 @@ describe('the Envelopes as they travel', () => {
     expect(envelope).toStrictEqual({
       rejection: { code: 'ORDER_LOCKED', message: 'Locked', body },
     });
+  });
+
+  test('rejectionResponseOf sends each header value as its text, one left undefined unsent, beside its Envelope', async () => {
+    const response = rejectionResponseOf({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      message: 'Unauthenticated',
+      headers: {
+        'www-authenticate': 'Bearer realm="orders"',
+        'retry-after': 30,
+        'x-note': undefined,
+      },
+    });
+
+    expect(response.status).toBe(401);
+    expect([...response.headers]).toEqual([
+      ['content-type', jsonContentType],
+      ['retry-after', '30'],
+      ['www-authenticate', 'Bearer realm="orders"'],
+    ]);
+    expect(await response.json()).toStrictEqual({
+      rejection: { code: 'UNAUTHENTICATED', message: 'Unauthenticated' },
+    });
+  });
+
+  test('a Rejection’s header that cannot travel is thrown, as a bug of the check before it', () => {
+    const send = () =>
+      rejectionResponseOf({
+        code: 'UNAUTHENTICATED',
+        status: 401,
+        message: 'Unauthenticated',
+        headers: { 'www-authenticate': 'Bearer\nrealm' },
+      });
+
+    expect(send).toThrow(
+      'A Rejection header that cannot travel was not checked before it was sent: www-authenticate',
+    );
   });
 
   test('a reserved Fault carries its code, a Handler’s Fault none', async () => {
@@ -596,43 +632,6 @@ describe('the invalid-input Rejection of a Provider whose Standard Rejections ca
         },
       },
     });
-  });
-});
-
-describe('rejectionBodyReaderOf', () => {
-  const issuesReader = z.object({ issues: z.array(z.object({ message: z.string() })) });
-  const standards = {
-    invalidInput: {
-      code: 'BAD_REQUEST',
-      status: 422,
-      message: 'The request is invalid',
-      body: issuesReader,
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
-
-  test('a Rejection’s body is read by its declared schema, and none without one', () => {
-    const locked = z.object({ lockedAt: z.iso.datetime() });
-    const orderLocked = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: locked,
-    });
-    const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });
-
-    const readers = [orderLocked, gone, notFound].map((rejection) =>
-      rejectionBodyReaderOf(rejection, standards),
-    );
-
-    expect(readers).toEqual([locked, undefined, undefined]);
-  });
-
-  test('invalid input’s body is read by the Reader the Provider’s Standard Rejections carry', () => {
-    const reader = rejectionBodyReaderOf(invalidInput, standards);
-
-    expect(reader).toBe(issuesReader);
   });
 });
 

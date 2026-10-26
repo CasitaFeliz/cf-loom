@@ -1,7 +1,7 @@
 import type { Endpoint } from '../declarations/index.ts';
 import type { TextPartNodes } from '../validation/index.ts';
 import { identityOf } from '../written/index.ts';
-import type { EndpointSnapshot, ExportedSnapshot } from './types.ts';
+import type { CodeSnapshot, EndpointSnapshot, ExportedSnapshot } from './types.ts';
 
 /**
  * An exported Endpoint's entry in its Provider's decoded exported Snapshot, found by identity;
@@ -16,6 +16,22 @@ export function exportedEntryOf(
   const entry = exported.endpoints[identity];
   if (entry === undefined) {
     throw new Error(`The exported Snapshot of ${provider} has no ${identity}`);
+  }
+  return entry;
+}
+
+/**
+ * A code's entry in its Provider's decoded exported Snapshot; every declared code an exported
+ * Endpoint answers has one, so a missing entry is a bug.
+ */
+export function exportedCodeOf(
+  provider: string,
+  exported: ExportedSnapshot,
+  code: string,
+): CodeSnapshot {
+  const entry = Object.hasOwn(exported.codes, code) ? exported.codes[code] : undefined;
+  if (entry === undefined) {
+    throw new Error(`The exported Snapshot of ${provider} has no code ${code}`);
   }
   return entry;
 }

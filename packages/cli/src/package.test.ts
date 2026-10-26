@@ -185,6 +185,7 @@ const service: Readonly<Record<string, string>> = {
     "  code: 'ORDER_LOCKED',",
     '  status: 409,',
     "  message: 'Locked',",
+    "  headers: z.object({ 'x-lock-owner': z.string(), 'retry-after': z.int().optional() }),",
     '  body: z.object({ lockedAt: z.iso.datetime() }),',
     '});',
     "export const adminOnly = defineRejection({ code: 'ADMIN_ONLY', status: 403, message: 'Admins' });",
@@ -900,6 +901,23 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     expect(read(out, 'src/rejections/order-locked.ts')).toContain(
       'export const orderLockedRejection = loom.providedRejection({',
     );
+  });
+
+  test('a Rejection’s headers are a Reader beside its body, and a Rejection without headers has none', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    const out = join(project, defaultOut);
+    const locked = read(out, 'src/rejections/order-locked.ts');
+    expect(locked).toContain(
+      [
+        "  message: 'Locked',",
+        "  headers: z.object({ 'retry-after': z.int().optional(), 'x-lock-owner': z.string() }),",
+        '  body: z.object({ lockedAt: z.iso.datetime() }),',
+      ].join('\n'),
+    );
+    expect(read(out, 'src/rejections/forbidden.ts')).not.toContain('headers:');
   });
 
   test('the entry marks a Deprecated Event’s key @deprecated with its description in the type of contract, and an Active Event’s key not', () => {

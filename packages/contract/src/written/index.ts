@@ -74,11 +74,12 @@ export {
   partFieldOf,
   schemaOf,
   slotAt,
-  successFieldsOf,
   successParts,
   writtenAt,
 } from './parts.ts';
 export { reachedCodesOf, reachedGuardsOf, reachOf } from './reach.ts';
+export type { ReadShape, ShapeFields, ShapeSide } from './read-shape.ts';
+export { rejectionShapeOf, shapeFieldsOf, shapeSides, successShapeOf } from './read-shape.ts';
 export {
   attachedGuardOf,
   attachedGuardsOf,

@@ -600,6 +600,7 @@ describe('cf-loom generate', () => {
       origin: '@org/definitions@4.2.0',
       status: 404,
       message: 'Missing',
+      headers: { type: 'object', fields: {} },
       body: null,
     });
   });

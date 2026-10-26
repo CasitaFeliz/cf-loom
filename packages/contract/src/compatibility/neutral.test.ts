@@ -104,6 +104,7 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
+    headers: { type: 'object', fields: {} },
     body: null,
     ...fields,
   };

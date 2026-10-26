@@ -1,11 +1,10 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
-  headerTextsOf,
   parsedPartOf,
-  partFieldOf,
+  parsedShapeOf,
   schemaOf,
-  successFieldsOf,
-  successParts,
+  shapeFieldsOf,
+  successShapeOf,
 } from '@cf-loom/contract/internal';
 import {
   type AnyAdmission,
@@ -16,7 +15,7 @@ import {
   type Fault,
   retryAfterProblemOf,
 } from '../outcomes/index.ts';
-import { type Checked, checkedAll, mapValue } from './checked.ts';
+import { type Checked, mapValue } from './checked.ts';
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
 
 /**
@@ -68,45 +67,21 @@ function checkedFault(built: Fault): Checked<Fault> {
   return { kind: 'issues', issues: [issue] };
 }
 
-/**
- * The value a Handler gave `success()`, read by its Endpoint and sendable: parsed, then each
- * header checked to travel as text, by the wire rule `serve` sends it with.
- */
-function checkedSuccess(
-  endpoint: Endpoint,
-  built: BuiltSuccess<unknown>,
-): Checked<CheckedOutcome<Endpoint>> {
-  const parsed = parsedSuccessOf(endpoint, built);
-  if (parsed.kind === 'issues') {
-    return parsed;
-  }
-  const headers = headerTextsOf('success.headers', parsed.value.headers);
-  return headers.kind === 'issues' ? headers : parsed;
-}
-
 /** The Success member of what a direct call returns. */
 type CheckedSuccess = Extract<CheckedOutcome<Endpoint>, { readonly kind: 'success' }>;
 
 /**
- * The value a Handler gave `success()`, read by its Endpoint: the body, or `{ headers, body }`
- * when the Endpoint declares headers; only the parts it declares come back.
+ * The value a Handler gave `success()`, read by its Endpoint's shape and sendable: the body, or
+ * `{ headers, body }` when the Endpoint declares headers; only the parts it declares come back.
  */
-function parsedSuccessOf(
+function checkedSuccess(
   endpoint: Endpoint,
   { value }: BuiltSuccess<unknown>,
-): Checked<CheckedSuccess> {
-  const given = successFieldsOf(endpoint, value);
-  const parts = successParts.map((part) => ({
-    part,
-    field: partFieldOf(part),
-    schema: schemaOf(endpoint, part),
-  }));
-  const checks = parts.map(({ part, field, schema }) => {
-    return [field, parsedPartOf(part, schema, { value: given[field] })] as const;
-  });
-  const declared = parts.filter(({ schema }) => schema !== undefined);
-  return mapValue(checkedAll(Object.fromEntries(checks)), (parsed) => {
-    const entries = declared.map(({ field }) => [field, parsed[field]]);
-    return { kind: 'success', status: endpoint.success.status, ...Object.fromEntries(entries) };
+): Checked<CheckedOutcome<Endpoint>> {
+  const shape = successShapeOf(endpoint);
+  const parsed = parsedShapeOf(shape, shapeFieldsOf(shape, value));
+  return mapValue(parsed, (parts) => {
+    const success = { kind: 'success', status: endpoint.success.status, ...parts };
+    return success as CheckedSuccess;
   });
 }

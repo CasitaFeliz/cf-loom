@@ -25,7 +25,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 | Additive | minor |
 | Neutral, or changes on Private Elements only | patch |
 
-Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. Nor does a refused Change, whatever its class, since `publish` refuses it before any version matters. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch, and its package declares no peers. A Definitions Package has no Elements: its version follows the table, every Change to it counted as on a Public Element, since the Services that import it may use all of it. A Rejection code is not an Element: a Change to its status or body counts as on the widest Visibility of the Endpoints that answer it, before or after the change, or Private when none does.
+Private Elements are checked with the same rules, Breaking Change Approval included, because two Releases of the same Service run side by side; but they never move the version past patch: the version is a signal for Consumers, and Consumers cannot see Private Elements. Nor does a refused Change, whatever its class, since `publish` refuses it before any version matters. When an Element's Visibility changes, the wider of the old and new Visibility decides the bump. An Application's Contract holds only Dependencies, so a change to it never bumps past patch, and its package declares no peers. A Definitions Package has no Elements: its version follows the table, every Change to it counted as on a Public Element, since the Services that import it may use all of it. A Rejection code is not an Element: a Change to its status, headers or body counts as on the widest Visibility of the Endpoints that answer it, before or after the change, or Private when none does.
 
 The bump applies to the highest published version that is not a prerelease. When the package lists none, the first version is 1.0.0, or the numbers of the Baseline when they are higher. When the Baseline is a prerelease, the version is the higher of that bump and the Baseline's own numbers: with `1.0.0` and `1.1.0-0` listed, a patch Change publishes `1.1.0` and a Breaking Change `2.0.0`. A version that would not be above the Baseline is never published: with a Baseline `1.1.0-rc.1`, which cf-loom's own numbering never produces, `publish --prerelease` would derive `1.1.0-0`, so it exits 3, and the version above the Baseline is published by hand.
 
@@ -59,10 +59,10 @@ The version also protects Consumers' installs. The peers of a Service's Contract
 Every shape is read in one of three Positions:
 
 - **Input**: the Caller writes, the Service reads. Breaking is whatever makes the Service accept less.
-- **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
+- **Success**, and a Rejection's headers and body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes.
 
-Readers of a Read shape (a Success, a Rejection body or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](packages/contract/README.md#not-allowed) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
+Readers of a Read shape (a Success, a Rejection's headers or body, or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](packages/contract/README.md#not-allowed) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -121,14 +121,14 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 - Changing a Success's status, or whether it has a body (204 or not), is Breaking: Callers may depend on either.
 - Adding an Input body is Breaking, since a Caller that sends none is refused as malformed, even when every field of the body is optional; removing one is Additive, since the Service no longer reads it (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md).
-- A Success's headers are an open object compared under the Success column of the tables above; their schemas may only be the types that travel as text (see [Headers, path and query](#headers-path-and-query)).
+- A Success's or a Rejection's headers are an open object compared under the Success column of the tables above; their schemas may only be the types that travel as text (see [Headers, path and query](#headers-path-and-query)).
 
 ### Headers, path and query
 
-- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input or Success, and the merged query are always open. A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
+- Input headers and query params are the Endpoint's own plus every attached Guard's demands: one required by either is required, and two declarations of the same name with different shapes (see [Neutral](#neutral)) fail `generate`. Header names are compared lower-cased, and a header object, Input, Success or Rejection, and the merged query are always open. A Guard demands no body (see [Guards](packages/contract/README.md#guards) in the contract README).
 - Adding an Input header, optional on the Endpoint or demanded by a newly attached Guard, is Additive only when its schema accepts every text value: a string with no format, regex, min, max or enum. With any other schema it is Breaking, because header names are shared with proxies, gateways and browsers, which may already send one with a value the schema refuses. A required header follows the field rules.
 - A path param is part of the path: adding or removing one moves the Endpoint. Its name is not: `/orders/:id` and `/orders/:orderId` are the same path. Renaming the param is Additive on every Visibility: the URL is the same, params are matched by position, and Dependencies do not record param names. Its type and constraints follow the rules above, and the params object is compared as a text part, each field under the name its position has now, so its description, examples and origin are Neutral like any node's.
-- Path params, query params and headers, a Success's included, travel as text (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.
+- Path params, query params and headers, a Success's and a Rejection's included, travel as text (see [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md), so their schemas may only be strings, numbers, booleans, literals and enums, and for query params arrays of those. Changing a param between a single value and a list is a type change.
 
 ### Guards
 
@@ -152,14 +152,15 @@ A Contract describes shapes, not behavior. Only the constructs listed in [Schema
 | Remove a Rejection from an Endpoint | Additive: a Caller is left with a dead case, never a failing one |
 | Rename a code on an Endpoint | A removal plus an addition |
 | Change the HTTP status of a code | Breaking |
+| Change a Rejection's headers | Same rules as a Success's headers: removing one is Breaking, since a Caller handling that Rejection reads it |
 | Change a Rejection's body | Same rules as a Success: removing a field is Breaking, since a Caller handling that Rejection reads it |
 | Change a Rejection's message | Neutral: the message is text, not Contract |
 
 Codes:
 
-- A code is declared once across the Contract and the Definitions Packages it uses (see [Rejections](packages/contract/README.md#rejections) in the contract README), so it has one status, one body and one message.
+- A code is declared once across the Contract and the Definitions Packages it uses (see [Rejections](packages/contract/README.md#rejections) in the contract README), so it has one status, one headers shape, one body and one message.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
-- The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status and body it last had, as a kept code is: another status is Breaking, and its body follows the rules of a Success.
+- The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status, headers and body it last had, as a kept code is: another status is Breaking, and its headers and body follow the rules of a Success.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new Reserved code only comes with a cf-loom major.
 
 Standard Rejections:

@@ -47,10 +47,13 @@ export {
 export type {
   ContextOf,
   DemandsOf,
+  GivenShapeOf,
   InputOf,
   ProvidedContextOf,
   QualifierOf,
+  ReceivedShapeOf,
   RejectionsOf,
+  RejectionValueOf,
   RequiredContextOf,
   SuccessOf,
   SuccessValueOf,

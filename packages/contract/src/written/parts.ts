@@ -15,6 +15,7 @@ export type Part =
   | 'demands.query'
   | 'context'
   | 'qualifier'
+  | 'headers'
   | 'body'
   | 'schema';
 
@@ -26,6 +27,7 @@ export const objectParts = [
   'success.headers',
   'demands.headers',
   'demands.query',
+  'headers',
 ] as const satisfies readonly Part[];
 
 /** A part a valid Root declares as an object of its fields. */
@@ -128,7 +130,7 @@ export function writtenAt(declaration: unknown, part: Exclude<Part, 'schema'>): 
 /** The schema an Endpoint, a Guard or a Rejection declares at a part; nothing when it declares none. */
 export function schemaOf(endpoint: Endpoint, part: EndpointPart): $ZodType | undefined;
 export function schemaOf(guard: Guard, part: GuardPart): $ZodType | undefined;
-export function schemaOf(rejection: Rejection, part: 'body'): $ZodType | undefined;
+export function schemaOf(rejection: Rejection, part: 'headers' | 'body'): $ZodType | undefined;
 export function schemaOf(
   declaration: Endpoint | Guard | Rejection,
   part: Exclude<Part, 'schema'>,
@@ -144,18 +146,4 @@ export function schemaOf(
  */
 export function isSchema(value: unknown): value is $ZodType {
   return value instanceof $ZodType;
-}
-
-/**
- * What a Success is built from, by field: the body alone where the Endpoint declares no headers,
- * else its `headers` and `body`; the one place that reads what `success()` is given.
- */
-export function successFieldsOf(
-  endpoint: Endpoint,
-  given: unknown,
-): Readonly<Record<string, unknown>> {
-  if (schemaOf(endpoint, 'success.headers') === undefined) {
-    return { body: given };
-  }
-  return typeof given === 'object' && given !== null ? { ...given } : {};
 }

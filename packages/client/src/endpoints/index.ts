@@ -1,6 +1,7 @@
 export type {
   AnyDependency,
   CalledEndpoint,
+  CalledShape,
   ListedEndpoint,
   ListedEndpoints,
   ListedName,

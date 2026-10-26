@@ -2,16 +2,17 @@ import type { Committed, ReservedCode } from '@cf-loom/contract';
 
 /**
  * What a step scripted, as written, before its Endpoint checks it: a Success, a Rejection by a
- * code the Endpoint answers or one it does not, a Fault, a reserved code, or what the client
+ * code the Endpoint answers, given as `reject` was given it, or one it does not, a Fault, a reserved code, or what the client
  * infers its Fault from, a network failure or a bare status.
  */
 export type Answer =
   | { readonly kind: 'success'; readonly success: unknown }
-  | { readonly kind: 'rejection'; readonly code: string; readonly body: unknown }
+  | { readonly kind: 'rejection'; readonly code: string; readonly given: unknown }
   | {
       readonly kind: 'unknown-rejection';
       readonly code: string;
       readonly message?: string;
+      readonly headers?: unknown;
       readonly body?: unknown;
     }
   | {

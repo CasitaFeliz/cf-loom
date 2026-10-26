@@ -51,7 +51,6 @@ export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
 export {
   invalidInputBodyOf,
   invalidInputResponseOf,
-  rejectionBodyReaderOf,
 } from './invalid-input.ts';
 export type { EndpointPath, Match, Matchable } from './match.ts';
 export {

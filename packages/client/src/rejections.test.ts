@@ -30,6 +30,21 @@ const unauthenticated = defineRejection({
   message: 'Who are you?',
 });
 
+const rateLimited = defineRejection({
+  code: 'RATE_LIMITED',
+  status: 429,
+  message: 'Slow down',
+  headers: z.object({ 'retry-after': z.int().min(0), 'x-limit': z.int().optional() }),
+  body: z.object({ limit: z.int() }),
+});
+
+const sessionExpired = defineRejection({
+  code: 'SESSION_EXPIRED',
+  status: 403,
+  message: 'Sign in again',
+  headers: z.object({ 'www-authenticate': z.string() }),
+});
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'A key per Caller',
@@ -51,6 +66,16 @@ const editOrder = defineEndpoint({
   },
   success: { status: 204 },
   rejections: [notFound, orderLocked],
+});
+
+const searchOrders = defineEndpoint({
+  name: 'searchOrders',
+  method: 'GET',
+  path: '/orders',
+  visibility: 'public',
+  description: 'Searches orders',
+  success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
+  rejections: [rateLimited, sessionExpired],
 });
 
 const getOrder = defineEndpoint({
@@ -97,7 +122,7 @@ function contractPackageOf<
 
 /** A Provider whose Definitions Package resolved its Standard Rejections to codes of its own. */
 const orders = contractPackageOf(
-  { editOrder, getOrder },
+  { editOrder, getOrder, searchOrders },
   providedStandardRejections({
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
     notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
@@ -107,7 +132,7 @@ const orders = contractPackageOf(
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [orders.endpoints.editOrder, orders.endpoints.getOrder],
+  endpoints: [orders.endpoints.editOrder, orders.endpoints.getOrder, orders.endpoints.searchOrders],
 });
 
 const edit = {
@@ -222,6 +247,136 @@ describe('a Rejection', () => {
       status: 401,
       message: 'No',
     });
+  });
+});
+
+describe('a Rejection that declares headers', () => {
+  function limited(headers: Record<string, string>, body: unknown = { limit: 100 }) {
+    return client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        Response.json(
+          { rejection: { code: 'RATE_LIMITED', message: 'Slow down', body } },
+          { status: 429, headers },
+        ),
+    });
+  }
+
+  test('arrives with its declared headers, each converted to its type, beside its body', async () => {
+    const orders = limited({ 'retry-after': '30', 'x-limit': '100', 'x-extra': 'ignored' });
+
+    const outcome = await orders.searchOrders({});
+
+    expect(outcome).toEqual({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'RATE_LIMITED',
+      status: 429,
+      message: 'Slow down',
+      headers: { 'retry-after': 30, 'x-limit': 100 },
+      body: { limit: 100 },
+    });
+  });
+
+  test('arrives with its headers alone where its code declares no body', async () => {
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        Response.json(
+          { rejection: { code: 'SESSION_EXPIRED', message: 'Sign in again' } },
+          { status: 403, headers: { 'www-authenticate': 'Bearer realm="orders"' } },
+        ),
+    });
+
+    const outcome = await orders.searchOrders({});
+
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'SESSION_EXPIRED',
+      status: 403,
+      message: 'Sign in again',
+      headers: { 'www-authenticate': 'Bearer realm="orders"' },
+    });
+  });
+
+  test('has its headers typed by their schemas', async () => {
+    const orders = limited({ 'retry-after': '30' });
+
+    const outcome = await orders.searchOrders({});
+
+    if (outcome.kind === 'rejection' && outcome.code === 'RATE_LIMITED') {
+      expectTypeOf(outcome.headers).toEqualTypeOf<{
+        'retry-after': number;
+        'x-limit'?: number | undefined;
+      }>();
+      expectTypeOf(outcome.body).toEqualTypeOf<{ limit: number }>();
+    }
+    expect(outcome).toMatchObject({ headers: { 'retry-after': 30 } });
+  });
+
+  test('a missing required header is INVALID_OUTCOME at headers, committed unknown', async () => {
+    const orders = limited({ 'x-limit': '100' });
+
+    const outcome = await orders.searchOrders({});
+
+    expect(outcome).toEqual({
+      kind: 'fault',
+      source: 'invalid-outcome',
+      status: 429,
+      code: 'INVALID_OUTCOME',
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Outcome broke the Contract',
+      issues: [
+        { part: 'headers', path: ['retry-after'], code: 'required', message: expect.any(String) },
+      ],
+    });
+  });
+
+  test('a header whose text breaks its type is INVALID_OUTCOME at headers, beside a broken body', async () => {
+    const orders = limited({ 'retry-after': 'soon' }, { limit: 'many' });
+
+    const outcome = await orders.searchOrders({});
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      code: 'INVALID_OUTCOME',
+      issues: [
+        { part: 'headers', path: ['retry-after'] },
+        { part: 'body', path: ['limit'] },
+      ],
+    });
+  });
+
+  test('a code that declares no headers has no headers key, whatever arrived', async () => {
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        Response.json(
+          {
+            rejection: {
+              code: 'ORDER_LOCKED',
+              message: 'Locked',
+              body: { lockedAt: '2026-10-18T10:00:00Z' },
+            },
+          },
+          { status: 409, headers: { 'retry-after': '30' } },
+        ),
+    });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).not.toHaveProperty('headers');
+  });
+
+  test('the invalid-input Rejection the client answers without sending has no headers key', async () => {
+    const orders = rejecting(200, {});
+
+    const outcome = await orders.editOrder({ ...edit, body: { quantity: 'two' as never } });
+
+    expect(outcome).toMatchObject({ kind: 'rejection', source: 'client', code: 'BAD_REQUEST' });
+    expect(outcome).not.toHaveProperty('headers');
   });
 });
 

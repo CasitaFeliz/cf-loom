@@ -23,18 +23,21 @@ const standardCodes = {
     origin: 'standard',
     status: 400,
     message: 'Invalid',
+    headers: { type: 'object', fields: {} },
     body: { type: 'object', fields: {} },
   },
   [notFoundCode]: {
     origin: 'standard',
     status: 404,
     message: 'Not found',
+    headers: { type: 'object', fields: {} },
     body: null,
   },
   [notImplementedCode]: {
     origin: 'standard',
     status: 501,
     message: 'No',
+    headers: { type: 'object', fields: {} },
     body: null,
   },
 } as const;

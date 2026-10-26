@@ -106,6 +106,9 @@ describe('apiKey', () => {
     const admission = await apiKeyHandler(demands, {});
 
     expect(isRejectionOf(admission, unauthenticated)).toBe(true);
+    expect(isRejectionOf(admission, unauthenticated) && admission.headers).toEqual({
+      'www-authenticate': 'ApiKey realm="orders-service"',
+    });
   });
 
   test('a missing key is answered UNAUTHENTICATED', async () => {

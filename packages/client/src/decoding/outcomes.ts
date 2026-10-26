@@ -5,12 +5,15 @@ import type {
   RejectionsOf,
   SuccessOf,
 } from '@cf-loom/contract';
-import { type Parsed, reservedFaults } from '@cf-loom/contract/internal';
+import {
+  headerValuesOf,
+  type ReceivedShapeOf,
+  reservedFaults,
+  type ShapeFields,
+} from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
-import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
+import type { AnyDependency, CalledShape, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';
-
-type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : undefined;
 
 /** A Success as decoded, before its Endpoint types it: its status, and the headers and body it declares, read. */
 export type DecodedSuccess = {
@@ -23,16 +26,21 @@ export type DecodedSuccess = {
 /** Who answered a Rejection: the Provider, or the client alone when it refused the Input unsent. */
 export type RejectionSource = 'provider' | 'client';
 
-/** How a Rejection reached the Caller: the status it came with, and who answered it. */
-export type Arrival = { readonly status: number; readonly source: RejectionSource };
+/** How a Rejection reached the Caller: the status and headers it came with, and who answered it. */
+export type Arrival = {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly source: RejectionSource;
+};
 
-/** A Rejection as decoded, before its Endpoint types it: one it answers, its body where its code declares one. */
+/** A Rejection as decoded, before its Endpoint types it: one it answers, its headers and body where its code declares them. */
 export type DecodedRejection = {
   readonly kind: 'rejection';
   readonly source: RejectionSource;
   readonly code: string;
   readonly status: number;
   readonly message: string;
+  readonly headers?: Readonly<Record<string, unknown>>;
   readonly body?: unknown;
 };
 
@@ -67,11 +75,6 @@ type Received<Code, Source extends RejectionSource> = {
   readonly message: string;
 };
 
-/** A declared Rejection's body, present only where its code declares one. */
-type DeclaredBodyOf<Answerable> = Answerable extends { readonly body: infer Body }
-  ? { readonly body: Output<Body> }
-  : Readonly<Record<never, never>>;
-
 /** A Standard Rejection by its Provider's code; only invalid input has a body, and the client may have answered it. */
 type StandardRejectionOf<
   Name extends keyof ProvidedStandardRejections,
@@ -92,10 +95,10 @@ type KnownRejectionOf<
 }
   ? StandardRejectionOf<Name, Standards>
   : Answerable extends { readonly kind: 'rejection'; readonly code: infer Code }
-    ? Received<Code, 'provider'> & DeclaredBodyOf<Answerable>
+    ? Received<Code, 'provider'> & ReceivedShapeOf<Answerable>
     : never;
 
-/** The Rejections an Endpoint answers as a Caller receives them, each with the body its code declares. */
+/** The Rejections an Endpoint answers as a Caller receives them, each with the headers and body its code declares. */
 type EndpointRejection<
   Target extends Endpoint,
   Standards extends ProvidedStandardRejections,
@@ -107,7 +110,7 @@ export type ReceivedSuccess<D extends AnyDependency, Name extends ListedName<D>>
 
 /**
  * A Rejection the method `Name` answers, as a Caller receives it: its code, a Standard one the
- * Provider's, the status it arrived with, its message, and its body where its code declares one;
+ * Provider's, the status it arrived with, its message, and its headers and body where its code declares them;
  * `source` is `client` for the invalid-input Rejection the client answered without sending.
  */
 export type ReceivedRejection<D extends AnyDependency, Name extends ListedName<D>> =
@@ -144,7 +147,12 @@ export function invalidOutcomeOf({ status, committed, issues }: BrokenOutcome): 
   };
 }
 
-/** The Issues of a value read at a part of the answer; none when it was read. */
-export function issuesAt(part: Issue['part'], parsed: Parsed): readonly Issue[] {
-  return parsed.kind === 'issues' ? parsed.issues.map((issue) => ({ part, ...issue })) : [];
+/** What a response carries of a Success or a Rejection, side by side: its headers' values by their nodes, and its body as received. */
+export function receivedFieldsOf(
+  called: CalledShape,
+  headers: Headers,
+  body: unknown,
+): ShapeFields {
+  const values = called.headers === undefined ? undefined : headerValuesOf(called.headers, headers);
+  return { headers: values, body };
 }

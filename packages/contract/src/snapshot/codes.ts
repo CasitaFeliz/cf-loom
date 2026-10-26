@@ -7,6 +7,7 @@ import type { ResolvedDefinitions, ValidatedCode } from '../validation/index.ts'
 import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 import type { SnapshotSources } from './context.ts';
+import { textPartOf } from './input.ts';
 import { packageOriginOf, standardOriginOf } from './origins.ts';
 import type { CodeSnapshot, StandardRejectionsSnapshot } from './types.ts';
 
@@ -65,8 +66,9 @@ function codeOf(
 ): readonly [string, CodeSnapshot] {
   const origin = packageOriginOf(from);
   const { status, message } = rejection;
+  const headers = textPartOf(nodeOf(rejection, 'headers'));
   const body = nodeOf(rejection, 'body') ?? null;
-  return [code, { origin, status, message, body }];
+  return [code, { origin, status, message, headers, body }];
 }
 
 function standardCodeOf(
@@ -76,7 +78,7 @@ function standardCodeOf(
   const { name, code, status, message } = standard;
   const origin = standardOriginOf(standard, standardRejectionsSource);
   const body = name === 'invalidInput' ? invalidInputNode(code) : null;
-  return [code, { origin, status, message, body }];
+  return [code, { origin, status, message, headers: textPartOf(undefined), body }];
 }
 
 function invalidInputNode(code: string): SchemaNode {

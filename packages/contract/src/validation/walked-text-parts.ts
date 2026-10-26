@@ -18,17 +18,18 @@ import { conflictFailures, textPartFailures } from './text-only.ts';
 export type TextPartNodes = Readonly<Partial<Record<ObjectPart, ObjectNode>>>;
 
 /**
- * The text parts of a Contract's Endpoints and Guards walked, by declaration, or every rule of
- * `generate` they break, so the runtime reads text by the nodes `generate` accepted.
+ * The text parts of a Contract walked, or every rule of `generate` they break, so the runtime reads
+ * and writes text by what `generate` accepted. Its nodes are the Endpoints' and Guards', since a
+ * Rejection's headers are judged and never read.
  */
 export type WalkedTextParts =
   | { readonly kind: 'valid'; readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes> }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
 
 /**
- * Walks the text parts of every Endpoint and Guard of a Contract once, and judges them by every
- * rule `generate` applies to text parts: what they hold, their names, the path's params and one
- * shape per header or query name.
+ * Walks the text parts of every Endpoint, Guard and Rejection of a Contract once, and judges them
+ * by every rule `generate` applies to text parts: what they hold, their names, the path's params
+ * and one shape per header or query name.
  */
 export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const declarations = declarationsOf(contract, {});

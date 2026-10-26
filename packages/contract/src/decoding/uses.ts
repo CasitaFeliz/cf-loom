@@ -153,8 +153,8 @@ function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoi
       ...partsAt(['guards', name, 'demands'], guard.demands),
       ...partsAt(['guards', name], { context: guard.context, qualifier: guard.qualifier }),
     ]),
-    ...Object.entries(snapshot.codes).flatMap(([code, { body }]) =>
-      partsAt(['codes', code], { body }),
+    ...Object.entries(snapshot.codes).flatMap(([code, { headers, body }]) =>
+      partsAt(['codes', code], { headers, body }),
     ),
   ];
 }

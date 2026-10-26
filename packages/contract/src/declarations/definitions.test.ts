@@ -86,6 +86,23 @@ describe('defineDefinitions', () => {
 
     expect(declare).not.toThrow();
   });
+
+  test('a Standard Rejection declares no headers', () => {
+    const declare = () =>
+      defineDefinitions({
+        standardRejections: {
+          notFound: {
+            code: 'NOT_FOUND',
+            status: 404,
+            message: 'Not found',
+            // @ts-expect-error a Standard Rejection answers no declared headers
+            headers: z.object({ 'x-resource': z.string() }),
+          },
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
 });
 
 describe('defineDefinitions fields', () => {

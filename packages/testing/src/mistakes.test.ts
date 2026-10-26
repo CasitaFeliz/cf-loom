@@ -367,7 +367,7 @@ describe('fakeProvider: a test’s mistakes', () => {
     expect(error).toBeInstanceOf(FakeProviderError);
     expect((error as Error).message).toBe(
       [
-        'payments-service: getPayment: the scripted NOT_FOUND body breaks its reader',
+        'payments-service: getPayment: the scripted NOT_FOUND breaks its readers',
         'payments-service: getPayment: body invalid_type: Expected no value',
       ].join('\n'),
     );

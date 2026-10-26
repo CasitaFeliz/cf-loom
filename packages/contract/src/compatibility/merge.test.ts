@@ -107,6 +107,7 @@ function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
     origin: 'local',
     status: 409,
     message: 'The order can no longer be changed',
+    headers: { type: 'object', fields: {} },
     body: null,
     ...fields,
   };
@@ -385,10 +386,14 @@ describe('publishedSnapshotOf', () => {
     },
   );
 
-  test('a code no Endpoint answers any more stays, with the status, body and message it last had, and removedIn the version', () => {
+  test('a code no Endpoint answers any more stays, with the status, headers, body and message it last had, and removedIn the version', () => {
     const locked = aCode({
       status: 423,
       message: 'Locked',
+      headers: {
+        type: 'object',
+        fields: { 'retry-after': { required: true, schema: { type: 'number', int: true } } },
+      },
       body: emptyObject,
       origin: '@org/definitions@4.2.0',
     });

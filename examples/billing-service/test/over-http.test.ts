@@ -124,6 +124,10 @@ describe('a client of orders-service over HTTP', () => {
 
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'UNAUTHENTICATED' });
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      code: 'UNAUTHENTICATED',
+      headers: { 'www-authenticate': 'ApiKey realm="orders-service"' },
+    });
   });
 });

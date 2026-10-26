@@ -2,12 +2,11 @@ import type { Endpoint, Guard, Rejection, StandardRejection } from '@cf-loom/con
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
-  isRejection,
   isSameRejection,
   isStandardRejection,
   ownOf,
-  parsedPartOf,
-  schemaOf,
+  parsedShapeOf,
+  rejectionShapeOf,
 } from '@cf-loom/contract/internal';
 import type { AnyRejection, BuiltRejection } from '../outcomes/index.ts';
 import { type Checked, mapValue } from './checked.ts';
@@ -63,21 +62,20 @@ function isAnsweredBy(answering: Endpoint | Guard, rejection: AnswerableRejectio
 }
 
 /**
- * A Rejection its Endpoint or Guard answers, with the body it declares and no other. The type
- * distributes over each Rejection it may be, which no single object literal states, so the
- * checked value is cast once here.
+ * A Rejection its Endpoint or Guard answers, with the headers and body it declares and no other,
+ * each header checked to travel as text. The type distributes over each Rejection it may be, which
+ * no single object literal states, so the checked value is cast once here.
  */
 function checkedBuilt<Answered extends EndpointRejection>(
   rejection: Answered,
   built: AnyRejection,
 ): Checked<BuiltRejection<Answered>> {
-  const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
-  const body = parsedPartOf('body', schema, { value: built.body });
-  return mapValue(body, (parsed) => {
-    const checked =
-      parsed === undefined
-        ? { kind: 'rejection', rejection }
-        : { kind: 'rejection', rejection, body: parsed };
+  const parsed = parsedShapeOf(rejectionShapeOf(rejection), {
+    headers: built.headers,
+    body: built.body,
+  });
+  return mapValue(parsed, (parts) => {
+    const checked = { kind: 'rejection', rejection, ...parts };
     return checked as unknown as BuiltRejection<Answered>;
   });
 }

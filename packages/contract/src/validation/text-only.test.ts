@@ -6,6 +6,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
   defineService,
   type Endpoint,
   openEnum,
@@ -29,6 +30,16 @@ const listing = {
 /** A headers object whose names the types cannot judge, as a cast lets an author write it. */
 function headersOf(shape: Record<string, core.$ZodType>) {
   return z.object(shape) as z.ZodObject;
+}
+
+/** A 401 Rejection declaring the headers it is given, whose names the types cannot judge. */
+function aRejectionWith(headers: z.ZodObject) {
+  return defineRejection({
+    code: 'UNAUTHENTICATED',
+    status: 401,
+    message: 'Unauthenticated',
+    headers,
+  });
 }
 
 function validateEndpoint(endpoint: Endpoint) {
@@ -107,6 +118,52 @@ describe('validateRoot: text-only headers, query and path params', () => {
         'not-text',
         `A header ${text}: x-page`,
       ),
+    );
+  });
+
+  test('a Rejection header that is an object fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realm': z.object({ id: z.string() }) }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realm'],
+        'not-text',
+        `A header ${text}: x-realm`,
+      ),
+    );
+  });
+
+  test('a Rejection header that is a list fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realms': z.array(z.string()) }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realms'],
+        'not-text',
+        `A header ${text}: x-realms`,
+      ),
+    );
+  });
+
+  test('a nullable Rejection header fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realm': z.string().nullable() }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realm'],
+        'nullable-text',
+        'A header is never nullable: x-realm',
+      ),
+    );
+  });
+
+  test('a Rejection header of a text type validates', () => {
+    const rejection = aRejectionWith(
+      z.object({ 'www-authenticate': z.string(), 'retry-after': z.int().optional() }),
+    );
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] })).kind).toBe(
+      'valid',
     );
   });
 
@@ -280,6 +337,18 @@ describe('validateRoot: header names', () => {
     );
   });
 
+  test('an upper-case Rejection header name fails', () => {
+    const rejection = aRejectionWith(headersOf({ 'WWW-Authenticate': z.string() }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'WWW-Authenticate'],
+        'header-names',
+        'Header names are lower-case: WWW-Authenticate',
+      ),
+    );
+  });
+
   test('an upper-case demanded header name fails', () => {
     const apiKey = defineGuard({
       name: 'apiKey',
@@ -297,7 +366,7 @@ describe('validateRoot: header names', () => {
   });
 });
 
-/** An Endpoint declaring one header name where a header can be declared: Input, Success or a Guard's demands. */
+/** An Endpoint declaring one header name where a header can be declared: Input, Success, a Rejection or a Guard's demands. */
 const headerPositions = {
   input: (name: string) =>
     defineEndpoint({ ...listing, input: { headers: headersOf({ [name]: z.string() }) } }),
@@ -306,6 +375,8 @@ const headerPositions = {
       ...listing,
       success: { ...listing.success, headers: headersOf({ [name]: z.string() }) },
     }),
+  rejection: (name: string) =>
+    defineEndpoint({ ...listing, rejections: [aRejectionWith(headersOf({ [name]: z.string() }))] }),
   demands: (name: string) =>
     defineEndpoint({
       ...listing,

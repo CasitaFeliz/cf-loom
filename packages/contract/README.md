@@ -8,7 +8,7 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## Required fields
 
-Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a Root's and a Group's lists left out are empty. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included, and a `description` or a `message` is never blank.
+Nothing in a declaration is implied: a field is optional only where leaving it out has one stated meaning. A `lifecycle` left out is Active; `success.headers`, a Rejection's `headers` and `body`, each part of an Endpoint's `input`, a Guard's `demands` and each part of it, and a Guard's `context` and `qualifier` left out are none; a Guard's `guards`, an Endpoint's `guards` and `rejections`, and a Root's and a Group's lists left out are empty. Every other field is required, `description` on Endpoints, Groups, Guards, Events, Commands and Subscriptions included, and a `description` or a `message` is never blank.
 
 ## The Root
 
@@ -132,7 +132,7 @@ export const getOrder = defineEndpoint({
 - `visibility` is required: `public`, `internal` or `private`.
 - `success` declares a `status`, 200, 201, 202, 203 or 204, a `body` and optionally `headers`, an object of the HTTP headers the Endpoint promises with its Success; nothing is implied. An Endpoint declares one Success, so a Caller never tells two cases apart by their status: what it tells apart is a part of the Success's shape, such as an Open Enum field (`effect: openEnum(['created', 'replaced'])`), to which values are added as Additive Changes, or a discriminated union of bodies, which is closed; the Compatibility Check judges how either changes (see [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) in COMPATIBILITY.md). The status is how a Success travels, not what it says: a `PUT` that may create or replace is declared as a `POST`, or as two Endpoints, since RFC 9110 (section 9.3.4) requires 201 of a `PUT` that creates and 200 or 204 of one that replaces, which one Success cannot send. A 204 has no body (`success: { status: 204 }`), and its Handler returns `success()`. A body where none belongs, or a missing one elsewhere, is a type error. Headers follow the text rules of Input headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md).
 - `input` may hold `params`, `query`, `headers` and `body`. `params` must declare exactly the `:names` in the path, and is absent when the path has none; a body on `GET` is not allowed. Both are type errors. The EndpointHandler receives only the Endpoint's own query params, not those its Guards demand. `generate` fails on an optional path param and on `nullable` anywhere in params, query or headers.
-- Header names, in `input.headers`, `success.headers` and a Guard's `demands.headers`, are lower-case: headers are case-insensitive, so each has one spelling, and an upper-case letter is a type error. A name is also an RFC 9110 token (`^[!#$%&'*+\-.^_`|~0-9a-z]+$`) and none of the names the host or cf-loom owns: `content-length`, `transfer-encoding`, `connection`, `keep-alive`, `proxy-connection`, `upgrade`, `te`, `trailer`, `host`, `content-type`, `content-encoding`, `content-range` and `deprecation`; `generate` fails on either (`cookie` and `content-location` are allowed).
+- Header names, in `input.headers`, `success.headers`, a Rejection's `headers` and a Guard's `demands.headers`, are lower-case: headers are case-insensitive, so each has one spelling, and an upper-case letter is a type error. A name is also an RFC 9110 token (`^[!#$%&'*+\-.^_`|~0-9a-z]+$`) and none of the names the host or cf-loom owns: `content-length`, `transfer-encoding`, `connection`, `keep-alive`, `proxy-connection`, `upgrade`, `te`, `trailer`, `host`, `content-type`, `content-encoding`, `content-range` and `deprecation`; `generate` fails on either (`cookie` and `content-location` are allowed).
 - `rejections` lists the Endpoint's own Rejections, `notFound` among them when it answers it. Those of its Guards, and the two Rejections cf-loom's runtime produces, invalid input and not implemented, are added without listing them, so listing `invalidInput` or `notImplemented` is a type error (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md).
 - Only shapes and declarative constraints are allowed: see [Not allowed in a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#not-allowed-in-a-contract).
 
@@ -150,9 +150,21 @@ export const orderLocked = defineRejection({
 });
 ```
 
+A Rejection may declare `headers`, as a Success does: an object of the HTTP headers it promises, which nothing implies, so RFC 9110's `WWW-Authenticate` of a 401 or `Retry-After` of a 429 is sent only where a Rejection declares it. They follow the text rules and the name rules of a Success's headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md). A Handler gives them with the body: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })` (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README).
+
+```ts
+// src/contract/rejections/unauthenticated.rejection.ts
+export const unauthenticated = defineRejection({
+  code: 'UNAUTHENTICATED',
+  status: 401,
+  message: 'The API key is missing or unknown',
+  headers: z.object({ 'www-authenticate': z.string() }),
+});
+```
+
 A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md) is a type error.
 
-The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@cf-loom/contract`. Their code, status and message come from the Definitions Package the Root names as `standardRejections` (see [The Root](#the-root)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented". The not-found and not-implemented Rejections have no body.
+The three Standard Rejections, invalid input, not found and not implemented, are referenced as `invalidInput`, `notFound` and `notImplemented`, exported by `@cf-loom/contract`. Their code, status and message come from the Definitions Package the Root names as `standardRejections` (see [The Root](#the-root)), or from cf-loom's defaults: `INVALID_INPUT` 400 "Invalid input", `NOT_FOUND` 404 "Not found", `NOT_IMPLEMENTED` 501 "Not implemented". None of the three declares headers, and the not-found and not-implemented Rejections have no body.
 
 The body of the invalid-input Rejection is cf-loom's, whatever the Definitions Package declares, and its runtime produces it:
 
@@ -287,7 +299,7 @@ groups.orders.endpoints.GET /orders/{}.success.body.fields.note not allowed: .de
 
 ### What a construct becomes
 
-Path params, query params and headers are a Contract's text parts, the schemas that travel as text, a Success's headers and a Guard's demands included (what they hold is in [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md, and what `generate` refuses in them under `input` in [Groups](#groups)). The third column says where a construct may appear.
+Path params, query params and headers are a Contract's text parts, the schemas that travel as text, a Success's and a Rejection's headers and a Guard's demands included (what they hold is in [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md, and what `generate` refuses in them under `input` in [Groups](#groups)). The third column says where a construct may appear.
 
 | Construct | Becomes | Where it may appear | The Check |
 | --- | --- | --- | --- |

@@ -2,6 +2,7 @@ import type * as core from 'zod/v4/core';
 import type { AttachedGuardOf } from './attachment.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Guard, QualifiedGuard } from './guard.ts';
+import type { Rejection } from './rejection.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
 
 type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : never;
@@ -86,23 +87,37 @@ export type DemandsOf<Target extends Guard> = Target extends { readonly demands:
 
 /** The Success an EndpointHandler returns and a Caller receives: its status, headers and body. */
 export type SuccessOf<Target extends Endpoint> = {
-  readonly [Part in keyof Target['success']]: Part extends 'status'
-    ? Target['success'][Part]
-    : Output<Target['success'][Part]>;
+  readonly [Part in keyof Target['success']]: Part extends keyof ReceivedShapeOf<Target['success']>
+    ? ReceivedShapeOf<Target['success']>[Part]
+    : Target['success'][Part];
 };
 
 /**
- * What a Success is built from, by whoever writes one for an Endpoint: the body, `{ headers, body }`
- * when it declares headers, or nothing; a body where it declares none is refused.
+ * The headers and body a Success or a Rejection declares, as whoever reads them receives them:
+ * one key per side it declares, typed by its schema.
  */
-export type SuccessValueOf<Target extends Endpoint> = Target['success'] extends {
-  readonly headers: core.$ZodType;
-}
-  ? Omit<SuccessOf<Target>, 'status'> & NoBodyOf<Target>
-  : Target['success'] extends { readonly body: core.$ZodType }
-    ? core.output<Target['success']['body']>
+export type ReceivedShapeOf<Declared> = ReceivedSidesOf<
+  Pick<Declared, keyof Declared & ('headers' | 'body')>
+>;
+
+type ReceivedSidesOf<Sides> = { readonly [Side in keyof Sides]: Output<Sides[Side]> };
+
+/**
+ * What a shape is built from by whoever writes one, given what a reader receives of it: the body,
+ * `{ headers, body }` when it declares headers, or nothing; a body where it declares none is refused.
+ */
+export type GivenShapeOf<Received> = Received extends { readonly headers: infer Headers }
+  ? Received extends { readonly body: infer Body }
+    ? { readonly headers: Headers; readonly body: Body }
+    : { readonly headers: Headers; readonly body?: never }
+  : Received extends { readonly body: infer Body }
+    ? Body
     : undefined;
 
-type NoBodyOf<Target extends Endpoint> = Target['success'] extends { readonly body: core.$ZodType }
-  ? unknown
-  : { readonly body?: never };
+/** What a Success is built from, by whoever writes one for an Endpoint. */
+export type SuccessValueOf<Target extends Endpoint> = GivenShapeOf<
+  ReceivedShapeOf<Target['success']>
+>;
+
+/** What a Rejection is built from, by whoever writes one. */
+export type RejectionValueOf<Answered extends Rejection> = GivenShapeOf<ReceivedShapeOf<Answered>>;
