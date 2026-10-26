@@ -41,6 +41,46 @@ describe('readWith', () => {
   });
 
   test.for([
+    ['a value among several', z.enum(['a', 'b'])],
+    ['a value that is the only one', z.literal(1)],
+    ['a whole number', z.int()],
+    ['a union of forms', z.union([z.string(), z.number()])],
+    ['an object', z.object({})],
+  ] as const)('%s that is not there says it is missing', ([_, schema]) => {
+    const read = readWith(z.strictObject({ key: schema }), {}, 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: ['key'], reason: 'is missing' });
+  });
+
+  test('a discriminator the object has not got says it is missing', () => {
+    const schema = z.discriminatedUnion('type', [z.object({ type: z.literal('a') })]);
+
+    const read = readWith(schema, {}, 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: ['type'], reason: 'is missing' });
+  });
+
+  test('a message function that answers nothing for a missing key leaves it to cf-loom’s words', () => {
+    const wrongText = (issue: { readonly input?: unknown }) =>
+      issue.input === undefined ? undefined : 'is not a text';
+    const schema = z.strictObject({ name: z.string({ error: wrongText }) });
+
+    const missing = readWith(schema, {}, 'its format');
+    const wrong = readWith(schema, { name: 1 }, 'its format');
+
+    expect([firstProblemOf(missing), firstProblemOf(wrong)]).toEqual([
+      { at: ['name'], reason: 'is missing' },
+      { at: ['name'], reason: 'is not a text' },
+    ]);
+  });
+
+  test('a type no document of cf-loom holds says the value is none the definer defines', () => {
+    const read = readWith(z.date(), 'x', 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: [], reason: 'is not a value its format defines' });
+  });
+
+  test.for([
     ['a value among several', z.enum(['a', 'b']), 'c', 'is none of "a", "b"'],
     ['a value that is the only one', z.literal(1), 2, 'is not 1'],
   ] as const)('%s that is not allowed lists what is', ([_, schema, value, reason]) => {

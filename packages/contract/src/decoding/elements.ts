@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { successStatuses, visibilities } from '../declarations/index.ts';
 import type { PublishedCommand, PublishedEndpoint, PublishedEvent } from '../snapshot/index.ts';
+import { type Problem, readWith } from '../validation/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import { inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
-import { semanticVersionText, stampText } from './texts.ts';
+import { formatDefiner, semanticVersionText, stampText } from './texts.ts';
 
 const retired = { lifecycle: z.literal('retired'), retiredIn: semanticVersionText };
 
@@ -21,28 +22,24 @@ function formNameOf(element: z.output<typeof withLifecycle>): FormName {
   return Object.hasOwn(element, 'group') ? 'retired' : 'tombstone';
 }
 
-/**
- * Runs the form that was chosen and hands its issues, still unworded, to the schema that chose it,
- * which words them with the rest of the document's.
- */
-function parsedAs<Form extends z.core.$ZodType>(
-  form: Form,
-  element: unknown,
-  ctx: z.core.$RefinementCtx,
-): z.output<Form> {
-  const ran = form._zod.run({ value: element, issues: [] }, { async: false });
-  if (ran instanceof Promise) {
-    throw new Error('A published Element has no asynchronous check');
+/** Hands the problems of a refused read to the schema that asked for it, at the places they have. */
+function refusedAs(problems: readonly Problem[], element: unknown, ctx: z.core.$RefinementCtx) {
+  for (const problem of problems) {
+    ctx.issues.push({
+      code: 'custom',
+      message: problem.reason,
+      path: [...problem.at],
+      input: element,
+    });
   }
-  ctx.issues.push(...ran.issues);
-  return ran.value as z.output<Form>;
+  return z.NEVER;
 }
 
 /**
  * A published Element: still declared with its lifecycle, a Deprecated one also with what only
  * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone.
- * Its lifecycle, and for a Retired one its Group, select the one form it is read as, so a failure
- * names the key that breaks that form.
+ * Its lifecycle, and for a Retired one its Group, select the one form the Element is read as, as
+ * received, so a failure names the key that breaks that form.
  */
 function published<
   Fields extends z.core.$ZodShape,
@@ -55,10 +52,14 @@ function published<
     retired: z.strictObject({ ...fields, ...retired }),
     tombstone,
   };
-  return z.pipe(
-    withLifecycle,
-    z.transform((element, ctx) => parsedAs(forms[formNameOf(element)], element, ctx)),
-  );
+  return z.unknown().transform((element, ctx) => {
+    const heading = readWith(withLifecycle, element, formatDefiner);
+    if (heading.kind === 'refused') {
+      return refusedAs(heading.problems, element, ctx);
+    }
+    const read = readWith(forms[formNameOf(heading.value)], element, formatDefiner);
+    return read.kind === 'read' ? read.value : refusedAs(read.problems, element, ctx);
+  });
 }
 
 const messageTombstone = z.strictObject(retired);

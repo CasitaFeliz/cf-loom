@@ -953,6 +953,18 @@ describe('what applying a broker plan refuses', () => {
     expect(service.opened).toHaveLength(0);
   });
 
+  test('apply refuses limits that are missing, without calling connect', async () => {
+    const service = aConnect();
+    const prefix = aPrefix();
+    const broker = jetstream({ connect: service.connect, prefix });
+    const noLimits: BrokerLimits = Reflect.get({}, 'limits');
+
+    const error = await rejectionOf(broker.apply(anOrders(prefix).plan, noLimits));
+
+    expect(error.message).toBe('limits is missing');
+    expect(service.opened).toHaveLength(0);
+  });
+
   test('apply refuses a setting name limits does not know, in the defaults or in one stream’s own limits, naming each', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);

@@ -915,6 +915,14 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(malformedAt(['generator'], 'is missing'));
     });
 
+    test('a Snapshot without a kind is malformed at kind: it is missing', () => {
+      const { kind: _kind, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['kind'], 'is missing'));
+    });
+
     test('a kind the format does not define is malformed at kind', () => {
       const result = serviceWith({ kind: 'library' });
 
@@ -1175,10 +1183,11 @@ describe('decodeSnapshot', () => {
           },
         },
       ];
-      const everyField = elements.flatMap(({ kind, map, identity, forms }) =>
-        Object.entries(forms).flatMap(([form, element]) =>
-          Object.keys(element).map((field) => ({ kind, map, identity, form, element, field })),
-        ),
+      const everyForm = elements.flatMap(({ kind, map, identity, forms }) =>
+        Object.entries(forms).map(([form, element]) => ({ kind, map, identity, form, element })),
+      );
+      const everyField = everyForm.flatMap((placed) =>
+        Object.keys(placed.element).map((field) => ({ ...placed, field })),
       );
 
       test('a published Endpoint with a visibility that is no Visibility is malformed at the visibility', () => {
@@ -1218,14 +1227,45 @@ describe('decodeSnapshot', () => {
       );
 
       test.each([
-        ['a lifecycle that is none of the four', { ...anEndpoint, lifecycle: 'archived' }],
-        ['a lifecycle that is no string', { ...anEndpoint, lifecycle: null }],
-        ['no lifecycle', { ...anEndpoint, lifecycle: undefined }],
-      ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint) => {
+        [
+          'a lifecycle that is none of the three',
+          { ...anEndpoint, lifecycle: 'archived' },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        [
+          'a lifecycle that is no string',
+          { ...anEndpoint, lifecycle: null },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        ['no lifecycle', { ...anEndpoint, lifecycle: undefined }, 'is missing'],
+      ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint, reason) => {
         const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
 
-        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'lifecycle']));
+        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'lifecycle'], reason));
       });
+
+      test('an Endpoint without a visibility is malformed at the visibility: it is missing', () => {
+        const { visibility: _visibility, ...endpoint } = anEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'visibility'], 'is missing'),
+        );
+      });
+
+      test.each(everyForm)(
+        'the $form form of a published $kind holding a __proto__ key is malformed at that key, never dropped',
+        ({ map, identity, element }) => {
+          const holding = { ...element, ...protoKeyed(1) };
+
+          const result = serviceWith({ [map]: { [identity]: holding } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, '__proto__'], 'is a key its format does not define'),
+          );
+        },
+      );
 
       test('a Retired Endpoint still declared without retiredIn is malformed at the retiredIn', () => {
         const endpoint = { ...anEndpoint, lifecycle: 'retired' };

@@ -10,40 +10,28 @@ export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
 
-function wrongType(reason: string) {
+/** The broker plan calls a string a text; a text that is missing is left to cf-loom's own words. */
+function wrongText(reason: string) {
   return {
-    error: (issue: $ZodRawIssue) => {
-      if (issue.code !== 'invalid_type') {
-        return undefined;
-      }
-      return issue.input === undefined ? 'is missing' : reason;
-    },
+    error: (issue: $ZodRawIssue) =>
+      issue.code === 'invalid_type' && issue.input !== undefined ? reason : undefined,
   };
 }
 
-const text = z.string(wrongType('is not a text'));
-const stream = z.strictObject(
-  {
-    service: text,
-    subjects: z.array(text, wrongType('is not a list')).min(1, 'holds no subject'),
-  },
-  wrongType('is not an object'),
-);
-const consumer = z.strictObject(
-  { service: text, stream: text, subject: text },
-  wrongType('is not an object'),
-);
-const plan = z.strictObject(
-  {
-    prefix: z
-      .string(wrongType('is not a text or null'))
-      .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
-      .nullable(),
-    streams: z.record(z.string(), stream, wrongType('is not an object')),
-    consumers: z.record(z.string(), consumer, wrongType('is not an object')),
-  },
-  wrongType('is not an object'),
-);
+const text = z.string(wrongText('is not a text'));
+const stream = z.strictObject({
+  service: text,
+  subjects: z.array(text).min(1, 'holds no subject'),
+});
+const consumer = z.strictObject({ service: text, stream: text, subject: text });
+const plan = z.strictObject({
+  prefix: z
+    .string(wrongText('is not a text or null'))
+    .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
+    .nullable(),
+  streams: z.record(z.string(), stream),
+  consumers: z.record(z.string(), consumer),
+});
 
 /**
  * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints, refusing any other

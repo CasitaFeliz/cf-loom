@@ -11,6 +11,7 @@ import {
 import { readWith } from '../validation/index.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
+import { formatDefiner } from './texts.ts';
 
 /** A `snapshot.json` as decoded: the published Snapshot, or why it cannot be trusted. */
 export type DecodedSnapshot =
@@ -74,7 +75,7 @@ function decodedWithinStack(
 }
 
 function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): DecodedSnapshot {
-  const structured = readWith(structure, json, 'its format');
+  const structured = readWith(structure, json, formatDefiner);
   if (structured.kind === 'refused') {
     return { kind: 'malformed', ...structured.problems[0] };
   }
