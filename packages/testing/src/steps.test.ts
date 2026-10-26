@@ -522,6 +522,44 @@ describe('fakeProvider: steps', () => {
     expect(alone.headers.get('allow')).toBe('');
   });
 
+  test('fault({ code: METHOD_NOT_ALLOWED }) lists a method only an Endpoint the Provider does not export takes on that path', async () => {
+    const routed = { visibility: 'internal', success: { status: 204 } } as const;
+    const first = defineEndpoint({
+      ...routed,
+      name: 'getFirst',
+      method: 'GET',
+      path: '/p/:x/b',
+      description: 'Exported',
+      input: { params: z.object({ x: z.string() }) },
+    });
+    const zed = defineEndpoint({
+      ...routed,
+      name: 'postZed',
+      method: 'POST',
+      path: '/p/a/z',
+      description: 'Exported and listed',
+    });
+    const retired = defineEndpoint({
+      ...routed,
+      name: 'getRetired',
+      method: 'GET',
+      path: '/p/a/:y',
+      lifecycle: 'retired',
+      description: 'Retired, so not exported',
+      input: { params: z.object({ y: z.string() }) },
+    });
+    const provider = contractPackageOf({ getFirst: first, postZed: zed }, [first, zed, retired]);
+    const dependency = defineDependency({ provider, endpoints: [provider.endpoints.postZed] });
+    const payments = fakeProvider(dependency);
+    payments.on('postZed').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+
+    const response = await payments.fetch(
+      new Request('https://payments-service.test/p/a/z', { method: 'POST' }),
+    );
+
+    expect(response.headers.get('allow')).toBe('GET');
+  });
+
   test('an abort while a step waits rejects fetch with the signal’s reason', async () => {
     const payments = fakeProvider(paymentsDependency);
     const waiting = Promise.withResolvers<void>();
