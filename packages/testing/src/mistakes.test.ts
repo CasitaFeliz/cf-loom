@@ -8,7 +8,7 @@ import {
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -63,16 +63,14 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 

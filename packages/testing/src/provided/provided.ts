@@ -14,6 +14,7 @@ import {
   type ExportedSnapshot,
   endpointPathOf,
   exportedEntryOf,
+  identityOf,
   methodAndPathOf,
   pathSegmentsOf,
   providedSnapshotOf,
@@ -58,42 +59,58 @@ export type FakedProvider = {
 };
 
 /**
- * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, and with
- * those every one it lists as `shadowing`, so the winner of a request is the Provider's, and each
- * listed one with what its requests are read by.
+ * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, each read
+ * from the exported Snapshot cut it carries, and with those every one the cuts list as `shadowing`,
+ * so the winner of a request is the Provider's, and each listed one with what its requests are read by.
  */
 export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProvider {
   const { provider } = dependency;
-  const snapshot = providedSnapshotOf(provider);
   const endpoints = Object.values(provider.endpoints);
   const declaredByCode = declaredByCodeOf(endpoints, provider.standardRejections);
-  const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
+  const listedByIdentity = new Map<string, ListedEndpoint>();
   for (const endpoint of dependency.endpoints ?? []) {
-    const { name } = endpoint;
-    const entry = exportedEntryOf(provider.name, snapshot, endpoint);
-    const listing = { name, endpoint, entry };
-    listedByEntry.set(entry, listedEndpointOf(provider, listing, declaredByCode));
+    const entry = exportedEntryOf(provider.name, providedSnapshotOf(endpoint), endpoint);
+    const listing = { name: endpoint.name, endpoint, entry };
+    const identity = identityOf(endpoint.method, endpoint.path);
+    listedByIdentity.set(identity, listedEndpointOf(provider, listing, declaredByCode));
   }
-  const exported = exportedEndpointsOf(snapshot, listedByEntry);
-  const declared = [...exported, ...shadowingEndpointsOf(snapshot)];
+  const cuts = endpoints.map((endpoint) => cutOf(provider.name, endpoint));
+  const exported = cuts.map((cut) => exportedEndpointOf(cut, listedByIdentity.get(cut.identity)));
+  const declared = [...exported, ...shadowingEndpointsOf(cuts)];
   return { provider: provider.name, base, exported, declared };
 }
 
-function exportedEndpointsOf(
-  snapshot: ExportedSnapshot,
-  listedByEntry: ReadonlyMap<EndpointSnapshot, ListedEndpoint>,
-): readonly ExportedEndpoint[] {
-  return Object.entries(snapshot.endpoints).map(([identity, entry]) => {
-    const { method, path } = methodAndPathOf(identity, entry.params);
-    const segments = pathSegmentsOf(path);
-    return { kind: 'exported', identity, method, segments, listed: listedByEntry.get(entry) };
-  });
+/** An exported Endpoint as its own cut holds it: its identity, its entry, and the Endpoints the cut lists as `shadowing`. */
+type Cut = {
+  readonly identity: string;
+  readonly entry: EndpointSnapshot;
+  readonly shadowing: ExportedSnapshot['shadowing'];
+};
+
+function cutOf(provider: string, endpoint: Endpoint): Cut {
+  const snapshot = providedSnapshotOf(endpoint);
+  const entry = exportedEntryOf(provider, snapshot, endpoint);
+  const identity = identityOf(endpoint.method, endpoint.path);
+  return { identity, entry, shadowing: snapshot.shadowing };
 }
 
-function shadowingEndpointsOf(snapshot: ExportedSnapshot): readonly ShadowingEndpoint[] {
-  return Object.entries(snapshot.shadowing).map(([identity, { lifecycle }]) => {
-    return { kind: 'shadowing', ...endpointPathOf(identity), lifecycle };
-  });
+function exportedEndpointOf(
+  { identity, entry }: Cut,
+  listed: ListedEndpoint | undefined,
+): ExportedEndpoint {
+  const { method, path } = methodAndPathOf(identity, entry.params);
+  return { kind: 'exported', identity, method, segments: pathSegmentsOf(path), listed };
+}
+
+/** The declared Endpoints the cuts list as `shadowing` that the Provider does not export, each once. */
+function shadowingEndpointsOf(cuts: readonly Cut[]): readonly ShadowingEndpoint[] {
+  const exported = new Set(cuts.map(({ identity }) => identity));
+  const listed = new Map(cuts.flatMap(({ shadowing }) => Object.entries(shadowing)));
+  return [...listed]
+    .filter(([identity]) => !exported.has(identity))
+    .map(([identity, { lifecycle }]) => {
+      return { kind: 'shadowing', ...endpointPathOf(identity), lifecycle };
+    });
 }
 
 /** A listed Endpoint by its name in code, its packaged declaration and its exported entry. */

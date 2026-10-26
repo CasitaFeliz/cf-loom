@@ -79,15 +79,6 @@ const payments = {
   endpoints: {},
   events: { paymentSettledV1 },
   standardRejections: providedStandardRejections(),
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
-  },
 } as const satisfies ContractPackage;
 
 const paymentsDependency = defineDependency({ provider: payments });

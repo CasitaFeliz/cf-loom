@@ -9,7 +9,7 @@ import {
   type ProvidedStandardRejections,
   providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -71,15 +71,13 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 
@@ -309,20 +307,24 @@ describe('an Open Enum Success header', () => {
     success: { status: 204, headers: z.object({ 'x-stage': openEnum(['packed', 'shipped']) }) },
   });
   /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
-  const trackOrderReader = providedEndpoint('orders-service', {
-    name: 'trackOrder',
-    method: 'GET',
-    path: '/orders/:orderId/track',
-    visibility: 'public',
-    description: 'Where an order stands',
-    input: { params: z.object({ orderId: z.string() }) },
-    success: {
-      status: 204,
-      headers: z.object({
-        'x-stage': openEnumReader(['packed', 'shipped']),
-      }),
+  const trackOrderReader = providedEndpoint(
+    'orders-service',
+    {
+      name: 'trackOrder',
+      method: 'GET',
+      path: '/orders/:orderId/track',
+      visibility: 'public',
+      description: 'Where an order stands',
+      input: { params: z.object({ orderId: z.string() }) },
+      success: {
+        status: 204,
+        headers: z.object({
+          'x-stage': openEnumReader(['packed', 'shipped']),
+        }),
+      },
     },
-  });
+    undefined,
+  );
   const tracking = contractPackageOf({ trackOrder: trackOrderReader }, defaultStandards, [
     trackOrder,
   ]);
@@ -361,20 +363,24 @@ describe('an Open Enum Success header', () => {
       input: { params: z.object({ orderId: z.string() }) },
       success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
     });
-    const stageOrderReader = providedEndpoint('orders-service', {
-      name: 'stageOrder',
-      method: 'GET',
-      path: '/orders/:orderId/stage',
-      visibility: 'public',
-      description: 'The stage of an order',
-      input: { params: z.object({ orderId: z.string() }) },
-      success: {
-        status: 200,
-        body: z.object({
-          stage: openEnumReader(['packed', 'shipped']),
-        }),
+    const stageOrderReader = providedEndpoint(
+      'orders-service',
+      {
+        name: 'stageOrder',
+        method: 'GET',
+        path: '/orders/:orderId/stage',
+        visibility: 'public',
+        description: 'The stage of an order',
+        input: { params: z.object({ orderId: z.string() }) },
+        success: {
+          status: 200,
+          body: z.object({
+            stage: openEnumReader(['packed', 'shipped']),
+          }),
+        },
       },
-    });
+      undefined,
+    );
     const staging = contractPackageOf({ stageOrder: stageOrderReader }, defaultStandards, [
       stageOrder,
     ]);

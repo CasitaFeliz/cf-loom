@@ -297,6 +297,7 @@ export {
   endpointsOf,
   eventServiceOf,
   eventsOf,
+  identityOf,
   inputParts,
   isAbsentAt,
   isInputPart,

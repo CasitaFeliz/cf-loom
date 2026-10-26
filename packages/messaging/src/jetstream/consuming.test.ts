@@ -648,15 +648,6 @@ describe('consuming over jetstream()', () => {
       endpoints: {},
       events: { paymentSettledV1 },
       standardRejections: providedStandardRejections(),
-      exportedSnapshot: {
-        format: 1,
-        defs: {},
-        endpoints: {},
-        events: {},
-        guards: {},
-        codes: {},
-        shadowing: {},
-      },
     } as const satisfies ContractPackage;
     const notifyOnSettled = defineSubscription({
       name: 'notifyOnSettled',
