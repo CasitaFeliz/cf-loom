@@ -262,7 +262,10 @@ describe('serve: Guards', () => {
     const broken = handle(userToken, () =>
       reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer\nrealm' } }),
     );
-    const http = serve(contract, { ...handlers, guards: { ...handlers.guards, userToken: broken } });
+    const http = serve(contract, {
+      ...handlers,
+      guards: { ...handlers.guards, userToken: broken },
+    });
 
     const response = await http(put(ORDER_ID));
 

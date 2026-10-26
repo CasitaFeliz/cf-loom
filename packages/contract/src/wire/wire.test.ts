@@ -271,7 +271,11 @@ describe('the Envelopes as they travel', () => {
       code: 'UNAUTHENTICATED',
       status: 401,
       message: 'Unauthenticated',
-      headers: { 'www-authenticate': 'Bearer realm="orders"', 'retry-after': 30, 'x-note': undefined },
+      headers: {
+        'www-authenticate': 'Bearer realm="orders"',
+        'retry-after': 30,
+        'x-note': undefined,
+      },
     });
 
     expect(response.status).toBe(401);

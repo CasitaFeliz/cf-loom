@@ -354,7 +354,13 @@ describe('a Rejection that declares headers', () => {
       baseUrl: 'http://orders.test',
       fetch: async () =>
         Response.json(
-          { rejection: { code: 'ORDER_LOCKED', message: 'Locked', body: { lockedAt: '2026-10-18T10:00:00Z' } } },
+          {
+            rejection: {
+              code: 'ORDER_LOCKED',
+              message: 'Locked',
+              body: { lockedAt: '2026-10-18T10:00:00Z' },
+            },
+          },
           { status: 409, headers: { 'retry-after': '30' } },
         ),
     });

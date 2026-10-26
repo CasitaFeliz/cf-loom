@@ -221,15 +221,30 @@ describe('providedSnapshotOf', () => {
     });
   });
 
-  test('a code whose body breaks its format is refused as malformed, naming the code', () => {
+  test.each([
+    ['body', { headers: { type: 'object', fields: {} }, body: 'text' }],
+    ['headers', { headers: 'text', body: null }],
+  ])('a code whose %s break its format is refused as malformed, naming the code', (part, held) => {
     const damaged = changed((copy) => {
-      copy['codes'] = { gone: { origin: 'local', status: 410, message: 'Gone', body: 'text' } };
+      copy['codes'] = { gone: { origin: 'local', status: 410, message: 'Gone', ...held } };
     });
 
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      "orders-service's exported Snapshot is malformed: codes.gone.body is not an object",
+      `orders-service's exported Snapshot is malformed: codes.gone.${part} is not an object`,
+    );
+  });
+
+  test('a code with no headers is refused as malformed, naming the code', () => {
+    const damaged = changed((copy) => {
+      copy['codes'] = { gone: { origin: 'local', status: 410, message: 'Gone', body: null } };
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      "orders-service's exported Snapshot is malformed: codes.gone.headers is missing",
     );
   });
 });

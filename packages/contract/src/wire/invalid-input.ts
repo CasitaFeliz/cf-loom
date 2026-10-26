@@ -59,6 +59,8 @@ export function rejectionBodyReaderOf(
 }
 
 /** The schema a Rejection's headers are read with: its declared one; a Standard Rejection declares none. */
-export function rejectionHeadersReaderOf(rejection: AnswerableRejection): core.$ZodType | undefined {
+export function rejectionHeadersReaderOf(
+  rejection: AnswerableRejection,
+): core.$ZodType | undefined {
   return isRejection(rejection) ? schemaOf(rejection, 'headers') : undefined;
 }

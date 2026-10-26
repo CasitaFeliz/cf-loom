@@ -95,7 +95,8 @@ function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndp
 function undeclaredRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
   const { code, message = code, headers, body } = answer;
   if (headers !== undefined) {
-    const what = "r.unknownRejection takes headers only for a code the Provider's Contract declares";
+    const what =
+      "r.unknownRejection takes headers only for a code the Provider's Contract declares";
     throw mistakeOf({ ...whoOf(listed), what });
   }
   const what = `the scripted ${code} body is no JSON`;

@@ -271,7 +271,9 @@ describe('fakeProvider: steps', () => {
     const payments = fakeProvider(paymentsDependency);
     payments
       .on('refundPayment')
-      .otherwise((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }));
+      .otherwise((r) =>
+        r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }),
+      );
 
     const response = await payments.fetch(new Request(`${at}/refund`, { method: 'POST' }));
     const outcome = await payments.client().refundPayment({ params });

@@ -154,7 +154,9 @@ describe('invoiceFor', () => {
       fake.on('getOrder').otherwise((respond) => {
         switch (code) {
           case 'UNAUTHENTICATED':
-            return respond.reject('UNAUTHENTICATED');
+            return respond.reject('UNAUTHENTICATED', {
+              headers: { 'www-authenticate': 'ApiKey realm="orders-service"' },
+            });
           case 'NOT_YET_IMPLEMENTED':
             return respond.reject('NOT_YET_IMPLEMENTED');
           case 'BAD_REQUEST':

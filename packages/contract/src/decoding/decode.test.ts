@@ -1087,7 +1087,10 @@ describe('decodeSnapshot', () => {
     ] as const)(
       'a header field on the code the $name Standard Rejection names is malformed at the headers',
       ({ name, code }) => {
-        const headers = { ...emptyPart, fields: { 'x-note': { required: false, schema: stringNode } } };
+        const headers = {
+          ...emptyPart,
+          fields: { 'x-note': { required: false, schema: stringNode } },
+        };
         const codes = { ...standardCodes, [code]: { ...standardCodes[code], headers } };
 
         const service = serviceWith({ codes });
@@ -1103,7 +1106,10 @@ describe('decodeSnapshot', () => {
 
     test('a described headers object without a field on the code a Standard Rejection names is malformed', () => {
       const headers = { ...emptyPart, description: 'Sent with it' };
-      const codes = { ...standardCodes, [notFoundCode]: { ...standardCodes[notFoundCode], headers } };
+      const codes = {
+        ...standardCodes,
+        [notFoundCode]: { ...standardCodes[notFoundCode], headers },
+      };
 
       const result = serviceWith({ codes });
 

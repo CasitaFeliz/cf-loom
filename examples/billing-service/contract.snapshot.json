@@ -74,12 +74,20 @@
         },
         "type": "object"
       },
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "The request is invalid",
       "origin": "@org/definitions@0.0.0",
       "status": 400
     },
     "NOT_YET_IMPLEMENTED": {
       "body": null,
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "Not implemented yet",
       "origin": "@org/definitions@0.0.0",
       "status": 501
@@ -95,6 +103,10 @@
             }
           }
         },
+        "type": "object"
+      },
+      "headers": {
+        "fields": {},
         "type": "object"
       },
       "message": "The order is locked and cannot be billed",
@@ -113,12 +125,20 @@
         },
         "type": "object"
       },
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "Only a paid order can be billed",
       "origin": "local",
       "status": 409
     },
     "RESOURCE_NOT_FOUND": {
       "body": null,
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "The resource does not exist",
       "origin": "@org/definitions@0.0.0",
       "status": 404

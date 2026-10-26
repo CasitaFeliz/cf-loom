@@ -284,12 +284,17 @@ describe('compatibilityReportOf, a Service’s codes', () => {
       name: 'adding a required header is Additive',
       from: anOpenObject({ 'retry-after': retryAfter }),
       to: anOpenObject({ 'www-authenticate': realm, 'retry-after': retryAfter }),
-      change: additive(site, headerField('www-authenticate', { kind: 'field-added', required: true })),
+      change: additive(
+        site,
+        headerField('www-authenticate', { kind: 'field-added', required: true }),
+      ),
     },
     {
       name: 'a header’s description changed is Neutral',
       from: anOpenObject({ 'www-authenticate': realm }),
-      to: anOpenObject({ 'www-authenticate': required({ type: 'string', description: 'The scheme' }) }),
+      to: anOpenObject({
+        'www-authenticate': required({ type: 'string', description: 'The scheme' }),
+      }),
       change: neutral(
         site,
         headerField('www-authenticate', { kind: 'annotation-changed', annotation: 'description' }),

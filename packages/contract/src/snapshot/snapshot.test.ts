@@ -616,7 +616,10 @@ describe('snapshotOf: a Service', () => {
           'x-limit': { required: false, schema: { type: 'string' } },
         },
       },
-      body: { type: 'object', fields: { limit: { required: true, schema: { type: 'number', int: true } } } },
+      body: {
+        type: 'object',
+        fields: { limit: { required: true, schema: { type: 'number', int: true } } },
+      },
     });
   });
 

@@ -932,9 +932,9 @@ describe('cf-loom openapi: the responses', () => {
   });
 
   test('two Rejections of one status list a header only one of them requires as not required', () => {
-    expect(valueAt(responseOf('/orders', 'post', '409'), 'headers', 'x-lock-owner', 'required')).toBe(
-      false,
-    );
+    expect(
+      valueAt(responseOf('/orders', 'post', '409'), 'headers', 'x-lock-owner', 'required'),
+    ).toBe(false);
   });
 
   test('a Rejection’s response carries its code’s Envelope', () => {

@@ -278,9 +278,7 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('refundPayment')
-      .once((r) =>
-        r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }),
-      )
+      .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }))
       .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'Bearer' } }))
       // @ts-expect-error a code that declares headers takes them
       .once((r) => r.reject('UNAUTHORIZED'))
