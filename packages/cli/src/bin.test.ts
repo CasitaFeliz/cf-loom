@@ -1003,7 +1003,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
   });
 
@@ -1018,7 +1018,7 @@ describe('cf-loom generate: what it refuses', () => {
 
     expect(ran.status).toBe(1);
     expect(ran.stderr.split('\n')).toEqual([
-      'name package-name: A Root is named as its package.json, without the scope: billing-service',
+      'name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"',
       'groups.health.endpoints.GET /ping.success.body.fields.at not allowed: z.date() (use z.iso.datetime())',
       '',
     ]);
@@ -3084,7 +3084,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
     expect(registry.requests).toEqual([]);
   });
@@ -4866,7 +4866,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
     expect(registry.requests).toEqual([]);
   });

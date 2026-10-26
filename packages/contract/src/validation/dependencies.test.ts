@@ -293,7 +293,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
       failed(
         ['dependencies', 'payments-service'],
         'duplicate-dependency',
-        'A Contract lists one Dependency per Provider: payments-service',
+        'A Contract lists one Dependency per Provider: "payments-service"',
       ),
     );
   });

@@ -67,16 +67,16 @@ describe('validateRoot: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'orderCreated@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase words: orderCreated',
+        'A Message name is PascalCase words: "orderCreated"',
       ),
     );
   });
 
   test.each([
-    ['URLRefresh', 'A Message name is PascalCase words: URLRefresh (write UrlRefresh)'],
-    ['OrderID', 'A Message name is PascalCase words: OrderID (write OrderId)'],
-    ['PlanA', 'A Message name is PascalCase words: PlanA'],
-    ['A', 'A Message name is PascalCase words: A'],
+    ['URLRefresh', 'A Message name is PascalCase words: "URLRefresh" (write UrlRefresh)'],
+    ['OrderID', 'A Message name is PascalCase words: "OrderID" (write OrderId)'],
+    ['PlanA', 'A Message name is PascalCase words: "PlanA"'],
+    ['A', 'A Message name is PascalCase words: "A"'],
   ])('a Message name %s, with a capital that starts no word, fails', (name, message) => {
     const result = validateMessages([anEvent({ name })]);
 
@@ -113,7 +113,7 @@ describe('validateRoot: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'OrderCreated@1', 'visibility'],
         'visibility',
-        "An Event's Visibility is internal or private: public",
+        `An Event's Visibility is internal or private: "public"`,
       ),
     );
   });
@@ -137,7 +137,7 @@ describe('validateRoot: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'events', 'OrderCreated@1', 'lifecycle'],
         'lifecycle',
-        'A lifecycle is active, deprecated or retired: gone',
+        'A lifecycle is active, deprecated or retired: "gone"',
       ),
     );
   });
@@ -277,7 +277,7 @@ describe('validateRoot: Events and Commands', () => {
       failed(
         ['groups', 'orders', 'commands', 'charge_card@1', 'name'],
         'name-grammar',
-        'A Message name is PascalCase words: charge_card',
+        'A Message name is PascalCase words: "charge_card"',
       ),
     );
   });

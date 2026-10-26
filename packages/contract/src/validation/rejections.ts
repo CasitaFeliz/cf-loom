@@ -11,6 +11,7 @@ import {
   type LocatedRejection,
   listOf,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { repeated } from './names.ts';
@@ -41,7 +42,7 @@ function statusFailures({ at, rejection }: LocatedRejection): readonly Declarati
   if (isWithoutValue(rejection.status) || isRejectionStatus(rejection.status)) {
     return [];
   }
-  const message = `A Rejection's status is 4xx: ${textOf(rejection.status)}`;
+  const message = `A Rejection's status is 4xx: ${writtenTextOf(rejection.status)}`;
   return [failure([...at, 'status'], 'rejection-status', message)];
 }
 

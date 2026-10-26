@@ -67,6 +67,19 @@ describe('validateRoot: Rejection statuses', () => {
     );
   });
 
+  test('a Rejection status written as a string is quoted in the message', () => {
+    const status = '409' as unknown as RejectionStatus;
+    const failing = defineRejection({ code: 'ORDER_LOCKED', status, message: 'Locked' });
+
+    expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [failing] })])).toEqual(
+      failed(
+        ['rejections', 'ORDER_LOCKED', 'status'],
+        'rejection-status',
+        `A Rejection's status is 4xx: "409"`,
+      ),
+    );
+  });
+
   test('a Standard Rejection a Definitions Package declares with a status outside 4xx fails', () => {
     const status = 200 as RejectionStatus;
     const definitions = defineDefinitions({

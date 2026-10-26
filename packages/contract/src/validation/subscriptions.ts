@@ -14,6 +14,7 @@ import {
   type LocatedSubscription,
   messageIdentityOf,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { repeated } from './names.ts';
@@ -67,7 +68,7 @@ function nameFailures(
     failure(
       [...located.at, 'name'],
       'duplicate-subscription-name',
-      `A Subscription name is unique in the Service: ${nameOf(located)}`,
+      `A Subscription name is unique in the Service: ${writtenTextOf(located.subscription.name)}`,
     ),
   );
 }

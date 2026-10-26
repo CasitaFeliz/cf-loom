@@ -7,6 +7,7 @@ import {
   packageNamePartsOf,
   providerNameOf,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { isCanonicalPath } from './paths.ts';
@@ -24,7 +25,8 @@ export function packageNameFailures(
   if (root.kind === 'definitions' || typeof root.name !== 'string' || root.name === unscoped) {
     return [];
   }
-  const message = `A Root is named as its package.json, without the scope: ${unscoped}`;
+  const sides = `${writtenTextOf(root.name)} is written, package.json names ${writtenTextOf(unscoped)}`;
+  const message = `A Root is named as its package.json, without the scope: ${sides}`;
   return [failure(['name'], 'package-name', message)];
 }
 
@@ -44,7 +46,7 @@ function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure
     failure(
       [...at, 'name'],
       'duplicate-group-name',
-      `A Group name is unique in the Contract: ${textOf(group.name)}`,
+      `A Group name is unique in the Contract: ${writtenTextOf(group.name)}`,
     ),
   );
 }
@@ -55,7 +57,7 @@ function uniqueEndpointNames({ endpoints }: Declarations): readonly DeclarationF
     failure(
       [...at, 'name'],
       'duplicate-endpoint-name',
-      `An Endpoint name is unique among the Endpoints that are not Retired: ${textOf(endpoint.name)}`,
+      `An Endpoint name is unique among the Endpoints that are not Retired: ${writtenTextOf(endpoint.name)}`,
     ),
   );
 }
@@ -76,7 +78,7 @@ function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure
     failure(
       [...at, 'name'],
       'duplicate-guard-name',
-      `A Guard name is unique across the Contract and its Definitions Packages: ${textOf(guard.name)}`,
+      `A Guard name is unique across the Contract and its Definitions Packages: ${writtenTextOf(guard.name)}`,
     ),
   );
 }
@@ -89,7 +91,7 @@ function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFa
     failure(
       located.at,
       'duplicate-dependency',
-      `A Contract lists one Dependency per Provider: ${textOf(providerOf(located))}`,
+      `A Contract lists one Dependency per Provider: ${writtenTextOf(providerOf(located))}`,
     ),
   );
 }

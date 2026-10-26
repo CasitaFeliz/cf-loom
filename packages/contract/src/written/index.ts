@@ -100,4 +100,5 @@ export {
   ownOf,
   partOf,
   textOf,
+  writtenTextOf,
 } from './written.ts';

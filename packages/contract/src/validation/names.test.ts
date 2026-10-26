@@ -69,13 +69,24 @@ describe('validateRoot: name grammars', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['name'], 'name-grammar', 'A Service name is kebab-case: OrdersService'),
+      failed(['name'], 'name-grammar', 'A Service name is kebab-case: "OrdersService"'),
+    );
+  });
+
+  test('a Service name with a line break is quoted on one line', () => {
+    const contract = defineService({
+      name: 'orders-service\n',
+      groups: [aGroup('orders', [listOrders])],
+    });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed(['name'], 'name-grammar', 'A Service name is kebab-case: "orders-service\\n"'),
     );
   });
 
   test('a Group name that is not kebab-case fails', () => {
     expect(validateGroups([aGroup('Orders', [listOrders])])).toEqual(
-      failed(['groups', 'Orders', 'name'], 'name-grammar', 'A Group name is kebab-case: Orders'),
+      failed(['groups', 'Orders', 'name'], 'name-grammar', 'A Group name is kebab-case: "Orders"'),
     );
   });
 
@@ -86,7 +97,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        'An Endpoint name is camelCase words: list_orders',
+        'An Endpoint name is camelCase words: "list_orders"',
       ),
     );
   });
@@ -99,7 +110,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['guards', 'ApiKey', 'name'],
         'name-grammar',
-        'A Guard name is camelCase words: ApiKey',
+        'A Guard name is camelCase words: "ApiKey"',
       ),
     );
   });
@@ -119,7 +130,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        `An Endpoint name is camelCase words: ${name}${hint}`,
+        `An Endpoint name is camelCase words: "${name}"${hint}`,
       ),
     );
   });
@@ -132,7 +143,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['guards', 'useAPI', 'name'],
         'name-grammar',
-        'A Guard name is camelCase words: useAPI (write useApi)',
+        'A Guard name is camelCase words: "useAPI" (write useApi)',
       ),
     );
   });
@@ -180,7 +191,7 @@ describe('validateRoot: name grammars', () => {
         failed(
           ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
           'name-grammar',
-          `An Endpoint name is camelCase words and no reserved word: ${name}`,
+          `An Endpoint name is camelCase words and no reserved word: "${name}"`,
         ),
       );
     },
@@ -202,7 +213,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        `An Endpoint name is camelCase words and no reserved word: ${name}`,
+        `An Endpoint name is camelCase words and no reserved word: "${name}"`,
       ),
     );
   });
@@ -215,7 +226,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
         'name-grammar',
-        'An Endpoint name is camelCase words and no reserved word: toJSON (write toJson)',
+        'An Endpoint name is camelCase words and no reserved word: "toJSON" (write toJson)',
       ),
     );
   });
@@ -254,7 +265,7 @@ describe('validateRoot: name grammars', () => {
         failed(
           ['guards', name, 'name'],
           'name-grammar',
-          `A Guard name is camelCase words and no reserved word: ${name}`,
+          `A Guard name is camelCase words and no reserved word: "${name}"`,
         ),
       );
     },
@@ -278,7 +289,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['rejections', 'orderLocked', 'code'],
         'name-grammar',
-        'A Rejection code is UPPER_SNAKE_CASE: orderLocked',
+        'A Rejection code is UPPER_SNAKE_CASE: "orderLocked"',
       ),
     );
   });
@@ -292,7 +303,7 @@ describe('validateRoot: name grammars', () => {
       failed(
         ['standardRejections', 'notFound', 'code'],
         'name-grammar',
-        'A Rejection code is UPPER_SNAKE_CASE: not-found',
+        'A Rejection code is UPPER_SNAKE_CASE: "not-found"',
       ),
     );
   });
@@ -306,7 +317,7 @@ describe('validateRoot: unique names and identities', () => {
       failed(
         ['groups', 'orders', 'endpoints', 'GET /orders/latest', 'name'],
         'duplicate-endpoint-name',
-        'An Endpoint name is unique among the Endpoints that are not Retired: listOrders',
+        'An Endpoint name is unique among the Endpoints that are not Retired: "listOrders"',
       ),
     );
   });
@@ -354,7 +365,7 @@ describe('validateRoot: unique names and identities', () => {
       failed(
         ['guards', 'apiKey', 'name'],
         'duplicate-guard-name',
-        'A Guard name is unique across the Contract and its Definitions Packages: apiKey',
+        'A Guard name is unique across the Contract and its Definitions Packages: "apiKey"',
       ),
     );
   });
@@ -392,7 +403,7 @@ describe('validateRoot: unique names and identities', () => {
       failed(
         ['guards', 'apiKey', 'name'],
         'duplicate-guard-name',
-        'A Guard name is unique across the Contract and its Definitions Packages: apiKey',
+        'A Guard name is unique across the Contract and its Definitions Packages: "apiKey"',
       ),
     );
   });
@@ -414,7 +425,7 @@ describe('validateRoot: Groups', () => {
       failed(
         ['groups', 'orders', 'name'],
         'duplicate-group-name',
-        'A Group name is unique in the Contract: orders',
+        'A Group name is unique in the Contract: "orders"',
       ),
     );
   });
@@ -442,7 +453,7 @@ describe('validateRoot: the Root is named as its package', () => {
           kind: 'declaration',
           at: ['name'],
           rule: 'package-name',
-          message: 'A Root is named as its package.json, without the scope: billing-service',
+          message: `A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"`,
         },
       ],
     });

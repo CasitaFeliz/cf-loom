@@ -74,6 +74,14 @@ export function textOf(value: unknown): string {
   return String(value);
 }
 
+/**
+ * A written value as a message echoes it: a string JSON-quoted, so its spaces and line breaks
+ * show and `"409"` is told from `409`, anything else in `textOf`'s words.
+ */
+export function writtenTextOf(value: unknown): string {
+  return typeof value === 'string' ? JSON.stringify(value) : textOf(value);
+}
+
 /** Whether a list field lists nothing: left out or an empty list; anything else is the structure rule's. */
 export function isEmptyField(value: unknown): boolean {
   return value === undefined || (Array.isArray(value) && value.length === 0);

@@ -1,6 +1,6 @@
 import { lifecycles } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import { textOf } from '../written/index.ts';
+import { writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 
 /** A closed value a declaration takes, as the types state it, and the rule that judges it. */
@@ -28,7 +28,7 @@ export function closedValueFailures(
   if (typeof value !== 'string' || allowed.includes(value)) {
     return [];
   }
-  return [failure(at, rule, `${noun} is ${oneOf(allowed)}: ${textOf(value)}`)];
+  return [failure(at, rule, `${noun} is ${oneOf(allowed)}: ${writtenTextOf(value)}`)];
 }
 
 /** Several allowed values in one sentence: `200, 201 or 204`. */

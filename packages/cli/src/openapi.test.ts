@@ -1415,7 +1415,7 @@ describe('cf-loom openapi: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
   });
 

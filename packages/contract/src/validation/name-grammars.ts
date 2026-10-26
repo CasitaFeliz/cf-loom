@@ -10,7 +10,7 @@ import {
   wordsOf,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-import { type Declarations, textOf } from '../written/index.ts';
+import { type Declarations, textOf, writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
@@ -69,7 +69,8 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
   return breaking.map(({ at, value, noun }) => {
     const text = textOf(value);
     const sentence = ruleSentenceOf(noun, grammar, text);
-    return failure(at, 'name-grammar', `${sentence}: ${text}${hintFor(grammar, text)}`);
+    const echoed = `${writtenTextOf(value)}${hintFor(grammar, text)}`;
+    return failure(at, 'name-grammar', `${sentence}: ${echoed}`);
   });
 }
 

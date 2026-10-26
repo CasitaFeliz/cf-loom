@@ -2259,7 +2259,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: handle\n',
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: "handle"\n',
     });
   });
 
@@ -2287,7 +2287,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: then\n',
+        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: "then"\n',
     });
   });
 
@@ -2707,7 +2707,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: `groups.payments.subscriptions.${name}.name name-grammar: A Subscription name is ${rule}: ${name}\n`,
+      stderr: `groups.payments.subscriptions.${name}.name name-grammar: A Subscription name is ${rule}: "${name}"\n`,
     });
   });
 

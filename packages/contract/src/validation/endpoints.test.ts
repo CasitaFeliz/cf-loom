@@ -77,7 +77,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
       failedAt(
         ['TRACE /orders', 'method'],
         'method',
-        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: TRACE',
+        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: "TRACE"',
       ),
     );
   });
@@ -91,7 +91,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
       failedAt(
         ['HEAD /orders', 'method'],
         'method',
-        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: HEAD',
+        'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: "HEAD"',
       ),
     );
   });
@@ -105,7 +105,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
       failedAt(
         ['GET /orders', 'visibility'],
         'visibility',
-        'A Visibility is public, internal or private: protected',
+        'A Visibility is public, internal or private: "protected"',
       ),
     );
   });
@@ -119,7 +119,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
       failedAt(
         ['GET /orders', 'lifecycle'],
         'lifecycle',
-        'A lifecycle is active, deprecated or retired: sunset',
+        'A lifecycle is active, deprecated or retired: "sunset"',
       ),
     );
   });
@@ -180,7 +180,7 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
       failedAt(
         ['GET /orders', 'lifecycle'],
         'lifecycle',
-        'A lifecycle is active, deprecated or retired: sunset',
+        'A lifecycle is active, deprecated or retired: "sunset"',
       ),
     );
   });

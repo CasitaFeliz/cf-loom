@@ -11,6 +11,7 @@ import {
   type LocatedStandardRejection,
   listOf,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
@@ -25,12 +26,12 @@ export function standardStatusFailures({
     return [];
   }
   if (name === 'notImplemented') {
-    const message = `The not-implemented Rejection's status is ${notImplementedStatus}: ${textOf(status)}`;
+    const message = `The not-implemented Rejection's status is ${notImplementedStatus}: ${writtenTextOf(status)}`;
     return status === notImplementedStatus
       ? []
       : [failure([...at, 'status'], 'rejection-status', message)];
   }
-  const message = `A Rejection's status is 4xx: ${textOf(status)}`;
+  const message = `A Rejection's status is 4xx: ${writtenTextOf(status)}`;
   return isRejectionStatus(status) ? [] : [failure([...at, 'status'], 'rejection-status', message)];
 }
 

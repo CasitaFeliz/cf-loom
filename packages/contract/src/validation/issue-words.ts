@@ -1,4 +1,5 @@
 import type { $ZodInvalidTypeExpected, $ZodIssueTooSmall, $ZodRawIssue } from 'zod/v4/core';
+import { writtenTextOf } from '../written/index.ts';
 
 type IssueOf<Code extends string> = Extract<$ZodRawIssue, { readonly code: Code }>;
 
@@ -34,12 +35,8 @@ function invalidTypeWords(issue: IssueOf<'invalid_type'>, definer: string): stri
   return expected === undefined ? isNoValueOf(definer) : `is not ${expected}`;
 }
 
-function valueText(value: unknown): string {
-  return typeof value === 'string' ? JSON.stringify(value) : String(value);
-}
-
 function valuesWords(values: readonly unknown[]): string {
-  const allowed = values.map(valueText).join(', ');
+  const allowed = values.map(writtenTextOf).join(', ');
   return values.length === 1 ? `is not ${allowed}` : `is none of ${allowed}`;
 }
 

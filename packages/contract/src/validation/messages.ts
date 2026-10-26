@@ -13,7 +13,7 @@ import {
   type LocatedEvent,
   messageIdentityOf,
   slotAt,
-  textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type ClosedValue, closedValueFailures, lifecycle } from './closed-values.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -99,7 +99,7 @@ function versionFailures({ at, message }: LocatedMessage): readonly DeclarationF
   if (isWithoutValue(version) || isMessageVersion(version)) {
     return [];
   }
-  const text = `${messageVersionRefusal}: ${textOf(version)}`;
+  const text = `${messageVersionRefusal}: ${writtenTextOf(version)}`;
   return [failure([...at, 'version'], 'message-version', text)];
 }
 

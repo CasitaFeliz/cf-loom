@@ -11,7 +11,7 @@ import {
   isWithoutValue,
   type LocatedEndpoint,
   slotAt,
-  textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type ClosedValue, closedValueFailures, lifecycle, oneOf } from './closed-values.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -81,7 +81,7 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [];
   }
   if (!successStatuses.includes(success.status)) {
-    const message = `A Success status is ${oneOf(successStatuses)}: ${textOf(success.status)}`;
+    const message = `A Success status is ${oneOf(successStatuses)}: ${writtenTextOf(success.status)}`;
     return [failure([...at, 'success', 'status'], 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');
