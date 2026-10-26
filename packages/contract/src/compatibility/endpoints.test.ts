@@ -140,6 +140,12 @@ function additive(difference: Difference): Change {
   return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
+function neutral(difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
+}
+
+const attachmentsChanged = neutral({ kind: 'attachments-changed' });
+
 type Part = Extract<Step, { readonly kind: 'part' }>['name'];
 
 function partsAt(...names: readonly Part[]): readonly Step[] {
@@ -418,6 +424,7 @@ describe('compatibilityReportOf, query', () => {
 
     expect(report.changes).toEqual([
       breaking(fieldAdded(fieldAt(['input', 'query'], 'token'), true)),
+      attachmentsChanged,
     ]);
   });
 });
@@ -493,7 +500,7 @@ describe('compatibilityReportOf, Input headers', () => {
       aProposed(attached, { guards: { traced: demanding } }),
     );
 
-    expect(report.changes).toEqual([breaking(refusesText)]);
+    expect(report.changes).toEqual([breaking(refusesText), attachmentsChanged]);
   });
 
   test('attaching a Guard that demands a required header is Breaking', () => {
@@ -506,6 +513,7 @@ describe('compatibilityReportOf, Input headers', () => {
 
     expect(report.changes).toEqual([
       breaking(fieldAdded(fieldAt(['input', 'headers'], 'authorization'), true)),
+      attachmentsChanged,
     ]);
   });
 
@@ -521,10 +529,11 @@ describe('compatibilityReportOf, Input headers', () => {
       additive(
         schemaChange(fieldAt(['input', 'headers'], 'authorization'), { kind: 'field-removed' }),
       ),
+      attachmentsChanged,
     ]);
   });
 
-  test('moving a header’s declaration from the Endpoint to a Guard gives no Change', () => {
+  test('moving a header’s declaration from the Endpoint to a Guard gives only attachments-changed', () => {
     const headers = anOpenObject({ authorization: required(aString) });
     const own = anEndpoint({ input: anInput({ headers }) });
     const throughGuard = anEndpoint({
@@ -534,7 +543,7 @@ describe('compatibilityReportOf, Input headers', () => {
 
     const report = reportOf(aBaseline(own), aProposed(throughGuard));
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([attachmentsChanged]);
   });
 
   test('removing a header is Additive', () => {
@@ -711,7 +720,10 @@ describe('compatibilityReportOf, an Endpoint’s Rejections', () => {
 
     const changes = changesOf(anEndpoint(), attached);
 
-    expect(changes).toEqual([additive({ kind: 'rejection-added', code: 'UNAUTHENTICATED' })]);
+    expect(changes).toEqual([
+      additive({ kind: 'rejection-added', code: 'UNAUTHENTICATED' }),
+      attachmentsChanged,
+    ]);
   });
 });
 
@@ -730,37 +742,56 @@ describe('compatibilityReportOf, Neutral', () => {
     { guard: 'traced', qualifier: null },
   ];
   const attached = anEndpoint({ guards });
-  const neutral: readonly (readonly [string, PublishedServiceSnapshot, ServiceSnapshot])[] = [
-    [
-      'moving an Endpoint to another Group',
-      aBaseline(anEndpoint()),
-      aProposed(anEndpoint({ group: 'archive' })),
-    ],
-    [
-      'reordering an Endpoint’s Guards',
-      aBaseline(attached),
-      aProposed(anEndpoint({ guards: [...guards].reverse() })),
-    ],
-    [
-      'changing an Attachment’s Qualifier',
-      aBaseline(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin'] }] })),
-      aProposed(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin', 'agent'] }] })),
-    ],
-    [
-      'changing a Rejection’s message',
-      aBaseline(anEndpoint({ rejections: [orderLocked] }), {
+  const codeSite: ChangeSite = { kind: 'code', code: orderLocked, visibility: 'public' };
+  const neutralRows: readonly {
+    readonly name: string;
+    readonly baseline: PublishedServiceSnapshot;
+    readonly proposed: ServiceSnapshot;
+    readonly expected: readonly Change[];
+  }[] = [
+    {
+      name: 'moving an Endpoint to another Group',
+      baseline: aBaseline(anEndpoint()),
+      proposed: aProposed(anEndpoint({ group: 'archive' })),
+      expected: [neutral({ kind: 'group-changed', from: 'orders', to: 'archive' })],
+    },
+    {
+      name: 'reordering an Endpoint’s Guards',
+      baseline: aBaseline(attached),
+      proposed: aProposed(anEndpoint({ guards: [...guards].reverse() })),
+      expected: [attachmentsChanged],
+    },
+    {
+      name: 'changing an Attachment’s Qualifier',
+      baseline: aBaseline(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin'] }] })),
+      proposed: aProposed(
+        anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin', 'agent'] }] }),
+      ),
+      expected: [attachmentsChanged],
+    },
+    {
+      name: 'changing a Rejection’s message',
+      baseline: aBaseline(anEndpoint({ rejections: [orderLocked] }), {
         codes: { [orderLocked]: aCode('Locked') },
       }),
-      aProposed(anEndpoint({ rejections: [orderLocked] }), {
+      proposed: aProposed(anEndpoint({ rejections: [orderLocked] }), {
         codes: { [orderLocked]: aCode('Frozen') },
       }),
-    ],
+      expected: [
+        {
+          site: codeSite,
+          difference: { kind: 'message-changed' },
+          class: 'neutral',
+          verdict: 'allowed',
+        },
+      ],
+    },
   ];
 
-  test.each(neutral)('%s gives no Change, only a changed hash', (_name, baseline, proposed) => {
+  test.each(neutralRows)('$name is one Neutral Change', ({ baseline, proposed, expected }) => {
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual(expected);
   });
 });
 
@@ -871,11 +902,17 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       { input: anInput({ params: theParams(['orderId', aNumber]) }) },
     ],
     ['a code answered that was not', { rejections: [orderLocked] }],
-  ])('retiring a Deprecated Endpoint with %s reports only the retirement', (_name, change) => {
-    const changes = retiringChangesOf({ ...deprecated, ...change });
+  ])(
+    'retiring a Deprecated Endpoint with %s compares nothing but reports retired-changed',
+    (_name, change) => {
+      const changes = retiringChangesOf({ ...deprecated, ...change });
 
-    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
-  });
+      expect(changes.map(({ difference }) => difference.kind)).toEqual([
+        'retired',
+        'retired-changed',
+      ]);
+    },
+  );
 
   test('an Endpoint still declared Deprecated with a changed Success reports it', () => {
     const baseline: PublishedServiceSnapshot = {

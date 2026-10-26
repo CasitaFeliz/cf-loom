@@ -105,6 +105,10 @@ function breaking(site: ChangeSite, difference: Difference): Change {
   return { site, difference, class: 'breaking', verdict: 'approval-needed' };
 }
 
+function neutral(site: ChangeSite, difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
+}
+
 function additive(site: ChangeSite, difference: Difference): Change {
   return { site, difference, class: 'additive', verdict: 'allowed' };
 }
@@ -116,6 +120,7 @@ function placeOf(site: ChangeSite): string {
     case 'guard':
     case 'export':
     case 'subscription':
+    case 'dependency':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -241,18 +246,22 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   });
 
   test.each([
-    ['Context', { context: { type: 'object', fields: {} } }],
-    ['guards', { guards: ['session'] }],
-    ['qualifier', { qualifier: { type: 'string' } }],
-    ['description', { description: 'Checks the session' }],
-    ['origin', { origin: '@org/definitions@5.0.0#authenticated' }],
-  ] as const)('a Guard’s %s changed gives no Change, only a changed hash', (_name, fields) => {
+    ['Context', { context: { type: 'object', fields: {} } }, { kind: 'context-changed' }],
+    ['guards', { guards: ['session'] }, { kind: 'guards-changed' }],
+    ['qualifier', { qualifier: { type: 'string' } }, { kind: 'qualifier-changed' }],
+    ['description', { description: 'Checks the session' }, { kind: 'description-changed' }],
+    [
+      'origin',
+      { origin: '@org/definitions@5.0.0#authenticated' },
+      { kind: 'origin-changed', from: 'local', to: '@org/definitions@5.0.0#authenticated' },
+    ],
+  ] as const)('a Guard’s %s changed is one Neutral Change', (_name, fields, difference) => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
     const proposed = aDefinitions({ guards: { authenticated: aGuard(fields) } });
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([neutral(guardSite, difference)]);
   });
 
   test('a Guard’s Changes come: query, headers, then Rejections', () => {
@@ -365,6 +374,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     expect(changes).toEqual([
       additive(codeSite(orderGone), { kind: 'added' }),
       breaking(codeSite(orderGone), { kind: 'status-changed', from: 409, to: 404 }),
+      neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
     ]);
   });
 
@@ -382,7 +392,9 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([]);
+    expect(changes).toEqual([
+      neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
+    ]);
   });
 
   test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes by code in code point order', () => {

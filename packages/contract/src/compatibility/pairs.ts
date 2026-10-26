@@ -10,8 +10,9 @@ import {
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 
 /**
- * An Element by identity as the Baseline and the proposed Snapshot hold it: added, kept, dropped
- * (declared in the Baseline only), or reused (declared where the Baseline holds a tombstone).
+ * An Element by identity as the Baseline and the proposed Snapshot hold it: added, kept, Retired
+ * on both sides while still declared, dropped (declared in the Baseline only), or reused
+ * (declared where the Baseline holds a tombstone).
  */
 export type Pair<Element> =
   | { readonly kind: 'added'; readonly identity: string; readonly proposed: Element }
@@ -21,13 +22,19 @@ export type Pair<Element> =
       readonly baseline: Element;
       readonly proposed: Element;
     }
+  | {
+      readonly kind: 'retired';
+      readonly identity: string;
+      readonly baseline: Element;
+      readonly proposed: Element;
+    }
   | { readonly kind: 'dropped'; readonly identity: string; readonly baseline: Element }
   | { readonly kind: 'reused'; readonly identity: string; readonly proposed: Element };
 
 /**
  * Every Element of the Baseline's map and the proposed one paired by identity, in code point
- * order; a tombstone the proposed map leaves out, or an Element Retired on both sides, is carried
- * silently, since nothing reads it, so it makes no pair.
+ * order; a tombstone the proposed map leaves out is carried silently, since nothing reads it, so
+ * it makes no pair.
  */
 export function pairsOf<Element extends DeclaredElement>(
   baseline: ByKey<PublishedElement<Element> | EndpointTombstone | MessageTombstone>,
@@ -78,14 +85,36 @@ export function comparedShapesOf<Element extends { readonly lifecycle: Lifecycle
   return { baseline: pair.baseline, proposed: pair.proposed };
 }
 
+/**
+ * The Baseline's and the proposed declaration of an Element Retired in the proposed Snapshot, to
+ * compare as one: nothing reads either, so only whether they differ is told.
+ */
+export function retiredShapesOf<Element extends { readonly lifecycle: Lifecycle }>(
+  pair: Pair<Element>,
+): Compared<Element> | undefined {
+  switch (pair.kind) {
+    case 'retired':
+      return { baseline: pair.baseline, proposed: pair.proposed };
+    case 'kept':
+      return pair.proposed.lifecycle === 'retired'
+        ? { baseline: pair.baseline, proposed: pair.proposed }
+        : undefined;
+    case 'added':
+    case 'dropped':
+    case 'reused':
+      return undefined;
+  }
+}
+
 function keptOf<Element extends DeclaredElement>(
   baseline: PublishedElement<Element> | EndpointTombstone | MessageTombstone,
   proposed: Element,
   identity: string,
-): Pair<Element> | undefined {
+): Pair<Element> {
   if (!isDeclared(baseline)) {
     return { kind: 'reused', identity, proposed };
   }
   const isRetiredOnBothSides = baseline.lifecycle === 'retired' && proposed.lifecycle === 'retired';
-  return isRetiredOnBothSides ? undefined : { kind: 'kept', identity, baseline, proposed };
+  const kind = isRetiredOnBothSides ? 'retired' : 'kept';
+  return { kind, identity, baseline, proposed };
 }

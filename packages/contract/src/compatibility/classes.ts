@@ -15,15 +15,31 @@ const additiveRefused: Classification = { class: 'additive', verdict: 'refused' 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the class and Verdict of each kind of difference
 export function classificationOf(site: ChangeSite, difference: Difference): Classification {
   switch (difference.kind) {
-    case 'added':
     case 'deprecated':
     case 'visibility-widened':
     case 'param-renamed':
     case 'rejection-added':
     case 'rejection-removed':
       return additive;
+    case 'added':
+      return isConsumption(site) ? neutral : additive;
+    case 'removed':
+      return isConsumption(site) ? neutral : breakingClassificationOf(site);
     case 'reactivated':
     case 'tombstoned':
+    case 'description-changed':
+    case 'group-changed':
+    case 'attachments-changed':
+    case 'guards-changed':
+    case 'qualifier-changed':
+    case 'context-changed':
+    case 'origin-changed':
+    case 'message-changed':
+    case 'against-changed':
+    case 'endpoint-added':
+    case 'endpoint-removed':
+    case 'endpoint-renamed':
+    case 'retired-changed':
       return neutral;
     case 'retired-before-deprecated':
     case 'deleted':
@@ -39,7 +55,6 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'retired':
     case 'visibility-narrowed':
       return retiredOrNarrowedClassificationOf(site);
-    case 'removed':
     case 'status-changed':
     case 'body-added':
     case 'header-refuses-text':
@@ -52,6 +67,11 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'renamed':
       return renamedClassificationOf(site, difference.baselineVisibility);
   }
+}
+
+/** What a Service itself consumes, which no Consumer relies on: adding or removing it is Neutral. */
+function isConsumption(site: ChangeSite): boolean {
+  return site.kind === 'subscription' || site.kind === 'dependency';
 }
 
 /** Renaming an Endpoint is Breaking unless it was Private, which no Consumer calls by name. */
@@ -90,6 +110,7 @@ function breakingClassificationOf(site: ChangeSite): Classification {
     case 'export':
     case 'guard':
     case 'subscription':
+    case 'dependency':
       return { class: 'breaking', verdict: 'approval-needed' };
   }
 }
@@ -108,6 +129,7 @@ function retiredOrNarrowedClassificationOf(site: ChangeSite): Classification {
     case 'export':
     case 'guard':
     case 'subscription':
+    case 'dependency':
       return { class: 'breaking', verdict: 'approval-needed' };
   }
 }

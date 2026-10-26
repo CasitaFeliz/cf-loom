@@ -1,5 +1,5 @@
 import { canonicalJson, type Defs, type SchemaNode, shapeOf } from '../walker/index.ts';
-import type { ShapeDifference } from './report.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 import type { Step } from './steps.ts';
 
 /** A schema of the Baseline and the proposed one at the same place. */

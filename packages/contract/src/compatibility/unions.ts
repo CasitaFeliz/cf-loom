@@ -9,7 +9,7 @@ import {
   type NodePairOf,
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
-import type { ShapeDifference } from './report.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 import { variantStep } from './steps.ts';
 
 /**

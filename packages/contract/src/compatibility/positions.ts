@@ -1,4 +1,5 @@
-import type { ChangeClass, Position, ShapeDifference } from './report.ts';
+import type { ChangeClass, Position } from './report.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 
 const strengthsInOrder = ['neutral', 'additive', 'breaking'] as const;
 
@@ -52,6 +53,8 @@ function inputAndSuccessClassesOf(shape: ShapeDifference): readonly [ChangeClass
       return ['neutral', 'breaking'];
     case 'enum-closed':
       return ['neutral', 'additive'];
+    case 'annotation-changed':
+      return ['neutral', 'neutral'];
     case 'discriminator-changed':
     case 'union-changed':
     case 'type-changed':

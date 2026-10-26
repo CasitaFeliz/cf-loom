@@ -4,6 +4,7 @@ import {
   type ChangeSite,
   type CodeSnapshot,
   compatibilityReportOf,
+  type Difference,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
   type SubscriptionSnapshot,
@@ -64,6 +65,10 @@ function subscriptionSite(name: string): ChangeSite {
   return { kind: 'subscription', name, visibility: 'private' };
 }
 
+function neutral(site: ChangeSite, difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
+}
+
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
   return compatibilityReportOf(baseline, proposed);
 }
@@ -82,17 +87,22 @@ describe('compatibilityReportOf, Subscriptions', () => {
       name: 'adding',
       baseline: aBaseline(),
       proposed: aProposed({ subscriptions: { notifyOnPlaced: aSubscription() } }),
+      difference: { kind: 'added' },
     },
     {
       name: 'removing',
       baseline: aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } }),
       proposed: aProposed(),
+      difference: { kind: 'removed' },
     },
-  ])('$name a Subscription gives no Change, only a changed hash', ({ baseline, proposed }) => {
-    const report = reportOf(baseline, proposed);
+  ] as const)(
+    '$name a Subscription is one Neutral Change',
+    ({ baseline, proposed, difference }) => {
+      const changes = changesOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
-  });
+      expect(changes).toEqual([neutral(subscriptionSite('notifyOnPlaced'), difference)]);
+    },
+  );
 
   test('a Subscription tombstone the proposed Snapshot leaves out is no Change', () => {
     const baseline = aBaseline({ subscriptions: { legacySync: aRemovedSubscription() } });
@@ -140,24 +150,32 @@ describe('compatibilityReportOf, Subscriptions', () => {
     ]);
   });
 
-  test('changing only a Subscription’s description gives no Change, only a changed hash', () => {
+  test('changing only a Subscription’s description is one Neutral description-changed', () => {
     const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const reworded = aSubscription('orders-service:OrderPlaced@1', 'Tells the customer');
     const proposed = aProposed({ subscriptions: { notifyOnPlaced: reworded } });
 
-    const report = reportOf(baseline, proposed);
+    const changes = changesOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(changes).toEqual([
+      neutral(subscriptionSite('notifyOnPlaced'), { kind: 'description-changed' }),
+    ]);
   });
 
-  test('moving a Subscription to another Group gives no Change, only a changed hash', () => {
+  test('moving a Subscription to another Group is one Neutral group-changed', () => {
     const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const moved = { ...aSubscription(), group: 'billing' };
     const proposed = aProposed({ subscriptions: { notifyOnPlaced: moved } });
 
-    const report = reportOf(baseline, proposed);
+    const changes = changesOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(changes).toEqual([
+      neutral(subscriptionSite('notifyOnPlaced'), {
+        kind: 'group-changed',
+        from: 'orders',
+        to: 'billing',
+      }),
+    ]);
   });
 
   test('a Subscription whose Event is unchanged gives no Change', () => {
@@ -169,7 +187,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
     expect(report).toEqual({ changes: [], hashChanged: false });
   });
 
-  test('following a new Message Version with a new Subscription beside the old one gives no Change', () => {
+  test('following a new Message Version with a new Subscription beside the old one adds only that Subscription', () => {
     const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const proposed = aProposed({
       subscriptions: {
@@ -180,7 +198,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([]);
+    expect(changes).toEqual([neutral(subscriptionSite('notifyOnPlacedV2'), { kind: 'added' })]);
   });
 
   test('Subscription Changes come after codes, by name in code point order', () => {

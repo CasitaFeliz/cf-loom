@@ -147,6 +147,7 @@ function placeOf(site: ChangeSite): string {
     case 'guard':
     case 'export':
     case 'subscription':
+    case 'dependency':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -157,6 +158,10 @@ function placeOf(site: ChangeSite): string {
 
 function breaking(site: ChangeSite, difference: Difference): Change {
   return { site, difference, class: 'breaking', verdict: 'approval-needed' };
+}
+
+function neutral(site: ChangeSite, difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
 }
 
 function additive(site: ChangeSite, difference: Difference): Change {
@@ -270,9 +275,13 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test.each([
-    ['message', { message: 'Frozen' }],
-    ['origin', { origin: '@org/definitions@2.0.0#orderLocked' }],
-  ] as const)('a Rejection’s %s changed gives no Change, only a changed hash', (_name, fields) => {
+    ['message', { message: 'Frozen' }, { kind: 'message-changed' }],
+    [
+      'origin',
+      { origin: '@org/definitions@2.0.0#orderLocked' },
+      { kind: 'origin-changed', from: 'local', to: '@org/definitions@2.0.0#orderLocked' },
+    ],
+  ] as const)('a Rejection’s %s changed is one Neutral Change', (_name, fields, difference) => {
     const baseline = aBaseline({
       ...publishedAnswering(orderLocked),
       codes: { [orderLocked]: aCode() },
@@ -284,7 +293,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([neutral(codeSite(orderLocked, 'public'), difference)]);
   });
 
   test('a code answered for the first time gives no Change at its code, only rejection-added on its Endpoints', () => {
@@ -572,7 +581,14 @@ describe('compatibilityReportOf, Standard Rejections', () => {
 
     const changes = codeChangesOf(baseline, proposed);
 
-    expect(changes).toEqual([breaking(codeSite(orderGone, 'public'), statusChanged(409, 404))]);
+    expect(changes).toEqual([
+      breaking(codeSite(orderGone, 'public'), statusChanged(409, 404)),
+      neutral(codeSite(orderGone, 'public'), {
+        kind: 'origin-changed',
+        from: 'local',
+        to: 'standard',
+      }),
+    ]);
   });
 });
 

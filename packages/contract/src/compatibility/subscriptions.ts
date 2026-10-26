@@ -6,11 +6,12 @@ import {
   type SubscriptionTombstone,
 } from '../snapshot/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
+import { describedDifferencesOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
 
 /**
- * A Service's Subscriptions by name in code point order: a removed one's name declared again, or a
- * kept one's Event changed. Adding or removing one is Neutral, and shows only in the hash.
+ * A Service's Subscriptions by name in code point order: added or removed, which is Neutral, a
+ * removed one's name declared again, a kept one's Event changed, then its description and Group.
  */
 export function subscriptionDifferencesOf(
   baseline: PublishedServiceSnapshot,
@@ -29,8 +30,9 @@ function differencesOf(
 ): readonly Difference[] {
   switch (subscription.kind) {
     case 'added':
+      return [{ kind: 'added' }];
     case 'removed':
-      return [];
+      return isSubscriptionTombstone(subscription.baseline) ? [] : [{ kind: 'removed' }];
     case 'kept':
       return keptDifferencesOf(subscription.baseline, subscription.proposed);
   }
@@ -43,7 +45,9 @@ function keptDifferencesOf(
   if (isSubscriptionTombstone(baseline)) {
     return [{ kind: 'identity-reused' }];
   }
-  return baseline.event === proposed.event
-    ? []
-    : [{ kind: 'event-changed', from: baseline.event, to: proposed.event }];
+  const event: readonly Difference[] =
+    baseline.event === proposed.event
+      ? []
+      : [{ kind: 'event-changed', from: baseline.event, to: proposed.event }];
+  return [...event, ...describedDifferencesOf(baseline, proposed)];
 }

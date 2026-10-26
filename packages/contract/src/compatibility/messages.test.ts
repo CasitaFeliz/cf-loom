@@ -264,24 +264,38 @@ describe('compatibilityReportOf, a Message Version takes no Breaking Change', ()
 });
 
 describe('compatibilityReportOf, a Message Version’s Group', () => {
-  test('moving an Event’s Message Version to another Group gives no Change, only a changed hash', () => {
+  test('moving an Event’s Message Version to another Group is one Neutral group-changed', () => {
     const baseline = aBaseline(event.held({ 'OrderPlaced@1': 'active' }));
     const moved = { ...anEvent('active', plain), group: 'billing' };
     const proposed = aProposed({ events: { 'OrderPlaced@1': moved } });
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([
+      {
+        site: event.site('OrderPlaced@1'),
+        difference: { kind: 'group-changed', from: 'orders', to: 'billing' },
+        class: 'neutral',
+        verdict: 'allowed',
+      },
+    ]);
   });
 
-  test('moving a Command’s Message Version to another Group gives no Change, only a changed hash', () => {
+  test('moving a Command’s Message Version to another Group is one Neutral group-changed', () => {
     const baseline = aBaseline(command.held({ 'ChargeCard@1': 'active' }));
     const moved = { ...aCommand('active', plain), group: 'billing' };
     const proposed = aProposed({ commands: { 'ChargeCard@1': moved } });
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([
+      {
+        site: command.site('ChargeCard@1'),
+        difference: { kind: 'group-changed', from: 'orders', to: 'billing' },
+        class: 'neutral',
+        verdict: 'allowed',
+      },
+    ]);
   });
 });
 
@@ -636,7 +650,7 @@ describe('compatibilityReportOf, retiring a Message Version compares nothing it 
 
   const cases = kinds.flatMap((kind) => bodies.map(([change, body]) => ({ kind, change, body })));
   test.each(cases)(
-    'retiring a Deprecated $kind.name with $change reports only the retirement',
+    'retiring a Deprecated $kind.name with $change compares nothing but reports retired-changed',
     ({ kind, body }) => {
       const baseline = aBaseline(kind.held({ 'OrderPlaced@1': 'deprecated' }));
       const proposed = aProposed(kind.declared({ 'OrderPlaced@1': 'retired' }, body));
@@ -649,6 +663,12 @@ describe('compatibilityReportOf, retiring a Message Version compares nothing it 
           difference: { kind: 'retired' },
           class: 'breaking',
           verdict: kind.retiring,
+        },
+        {
+          site: kind.site('OrderPlaced@1'),
+          difference: { kind: 'retired-changed' },
+          class: 'neutral',
+          verdict: 'allowed',
         },
       ]);
     },

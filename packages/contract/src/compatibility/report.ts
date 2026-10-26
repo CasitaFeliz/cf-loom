@@ -1,5 +1,5 @@
 import type { Visibility } from '../declarations/index.ts';
-import type { JsonPrimitive, SchemaNode } from '../walker/index.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 import type { Step } from './steps.ts';
 
 /**
@@ -26,12 +26,13 @@ export type ChangeSite =
    */
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
   /**
-   * A Subscription by name, Private since no Consumer relies on what a Service itself consumes; or
-   * a Definitions Package's export or Guard by name, Public since the Services that import it may
-   * use all of it.
+   * A Subscription or a Dependency by name, Private since no Consumer relies on what a Service
+   * itself consumes; a Service's Guard by name, with the widest Visibility of the Endpoints that
+   * attach it; or a Definitions Package's export or Guard by name, Public since the Services that
+   * import it may use all of it.
    */
   | {
-      readonly kind: 'subscription' | 'export' | 'guard';
+      readonly kind: 'subscription' | 'dependency' | 'export' | 'guard';
       readonly name: string;
       readonly visibility: Visibility;
     };
@@ -44,66 +45,6 @@ export type Position = 'input' | 'success' | 'message';
 
 /** Where an Endpoint's part is read: as Input by the Service, or as Success by a Caller. */
 export type EndpointPosition = Exclude<Position, 'message'>;
-
-/** A type whose values an enum can all share: a string, a number or a boolean. */
-export type BaseType = 'string' | 'number' | 'boolean';
-
-/**
- * A constraint compared on its own: a lower or an upper bound (a number's value, a string's
- * length or an array's item count; inclusive or exclusive), `int`, `multipleOf`, `format` with
- * its options, or `regex`.
- */
-export type Constraint = 'lower-bound' | 'upper-bound' | 'int' | 'multipleOf' | 'format' | 'regex';
-
-/** What differs in a schema's shape at one path; a Neutral annotation never does. */
-export type ShapeDifference =
-  | { readonly kind: 'field-added'; readonly required: boolean }
-  | { readonly kind: 'field-removed' }
-  | { readonly kind: 'field-made-required' }
-  | { readonly kind: 'field-made-optional' }
-  | { readonly kind: 'nullability-added' }
-  | { readonly kind: 'nullability-removed' }
-  /** A value added to an enum, with the Baseline's openness, which its deployed readers hold. */
-  | {
-      readonly kind: 'value-added';
-      readonly value: JsonPrimitive;
-      readonly enum: 'open' | 'closed';
-    }
-  | { readonly kind: 'value-removed'; readonly value: JsonPrimitive }
-  | { readonly kind: 'enum-opened' }
-  | { readonly kind: 'enum-closed' }
-  /** An enum widened to the base type every value shares, with no constraint. */
-  | { readonly kind: 'enum-widened'; readonly to: BaseType }
-  /** An unconstrained base type narrowed to an enum of its values. */
-  | { readonly kind: 'enum-narrowed'; readonly from: BaseType }
-  | { readonly kind: 'variant-added' }
-  | { readonly kind: 'variant-removed' }
-  | { readonly kind: 'discriminator-changed'; readonly from: string; readonly to: string }
-  | { readonly kind: 'union-changed' }
-  | {
-      readonly kind: 'type-changed';
-      readonly from: SchemaNode['type'];
-      readonly to: SchemaNode['type'];
-    }
-  /** A constraint added, or changed to admit fewer values, such as `min: 5` to `exclusiveMin: 5`. */
-  | { readonly kind: 'constraint-tightened'; readonly constraint: Constraint }
-  /** A constraint removed, or changed to admit more values. */
-  | { readonly kind: 'constraint-relaxed'; readonly constraint: Constraint }
-  /** A format, its options, a regex or a `multipleOf` changed to one neither tighter nor looser. */
-  | {
-      readonly kind: 'constraint-replaced';
-      readonly constraint: 'format' | 'regex' | 'multipleOf';
-    }
-  /** A tuple that now takes further items after its own. */
-  | { readonly kind: 'rest-added' }
-  /** A tuple that no longer takes further items after its own. */
-  | { readonly kind: 'rest-removed' }
-  /**
-   * A change no rule proves compatible, so Breaking in every Position: a tuple's items or an
-   * intersection that is not of objects, under the plain-union rule, or a path param that either
-   * Snapshot holds no schema for.
-   */
-  | { readonly kind: 'unproven'; readonly node: 'tuple' | 'allOf' | 'param' };
 
 /** What differs between the Baseline and the proposed Snapshot at one site. */
 export type Difference =
@@ -177,7 +118,38 @@ export type Difference =
   /** A code an Endpoint or a Guard answers that it did not. */
   | { readonly kind: 'rejection-added'; readonly code: string }
   /** A code an Endpoint or a Guard no longer answers. */
-  | { readonly kind: 'rejection-removed'; readonly code: string };
+  | { readonly kind: 'rejection-removed'; readonly code: string }
+  /** An Endpoint's, Message Version's, Guard's or Subscription's description changed. */
+  | { readonly kind: 'description-changed' }
+  /** An Endpoint, Message Version or Subscription moved to another Group. */
+  | { readonly kind: 'group-changed'; readonly from: string; readonly to: string }
+  /** An Endpoint's Attachments changed: which Guards, their order or their Qualifiers. */
+  | { readonly kind: 'attachments-changed' }
+  /** The Guards a Guard builds on changed. */
+  | { readonly kind: 'guards-changed' }
+  /** A Guard's Qualifier schema changed. */
+  | { readonly kind: 'qualifier-changed' }
+  /** The Context a Guard provides changed. */
+  | { readonly kind: 'context-changed' }
+  /** A Guard or a code now comes from another package, as the Snapshot spells it. */
+  | { readonly kind: 'origin-changed'; readonly from: string; readonly to: string }
+  /** A Rejection's message changed. */
+  | { readonly kind: 'message-changed' }
+  /** A Dependency is declared against another version of its Provider. */
+  | { readonly kind: 'against-changed'; readonly from: string; readonly to: string }
+  /** A Dependency selects an Endpoint of its Provider that it did not. */
+  | { readonly kind: 'endpoint-added'; readonly id: string; readonly name: string }
+  /** A Dependency no longer selects an Endpoint of its Provider. */
+  | { readonly kind: 'endpoint-removed'; readonly id: string; readonly name: string }
+  /** A Dependency's selected Endpoint is named otherwise by the Provider version it adopted. */
+  | {
+      readonly kind: 'endpoint-renamed';
+      readonly id: string;
+      readonly from: string;
+      readonly to: string;
+    }
+  /** What an Element Retired in the proposed Snapshot still declares changed; nothing reads it. */
+  | { readonly kind: 'retired-changed' };
 
 /** A site with what differs at it, before each difference is classified. */
 export type SiteDifferences = {

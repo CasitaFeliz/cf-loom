@@ -151,6 +151,7 @@ function identityOf(site: ChangeSite): string {
     case 'guard':
     case 'export':
     case 'subscription':
+    case 'dependency':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -565,15 +566,21 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
   ];
 
   test.each(rows)(
-    'an Element Retired on both sides gives no Change when $name changes, only a changed hash',
+    'an Element Retired on both sides gives one Neutral retired-changed when $name changes',
     ({ baseline, proposed }) => {
       const report = compatibilityReportOf(aBaseline(baseline), aProposed(proposed));
 
-      expect(report).toEqual({ changes: [], hashChanged: true });
+      expect(
+        report.changes.map(({ difference, class: changeClass, verdict }) => [
+          difference.kind,
+          changeClass,
+          verdict,
+        ]),
+      ).toEqual([['retired-changed', 'neutral', 'allowed']]);
     },
   );
 
-  test('an Element retired in this change is judged by its lifecycle alone, not by what it declares', () => {
+  test('an Element retired in this change is judged by its lifecycle, and what it declares only as retired-changed', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
@@ -586,7 +593,10 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
+    expect(changes.map(({ difference }) => difference.kind)).toEqual([
+      'retired',
+      'retired-changed',
+    ]);
   });
 });
 

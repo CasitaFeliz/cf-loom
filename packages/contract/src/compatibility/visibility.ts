@@ -1,4 +1,10 @@
-import type { Visibility } from '../declarations/index.ts';
+import { isLive, type Visibility } from '../declarations/index.ts';
+import {
+  type EndpointSnapshot,
+  isDeclared,
+  type PublishedServiceSnapshot,
+  type ServiceSnapshot,
+} from '../snapshot/index.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
@@ -31,6 +37,7 @@ export function siteVisibilityOf(pair: Pair<Visible>): Visibility {
     case 'dropped':
       return pair.baseline.visibility;
     case 'kept':
+    case 'retired':
       return widerOf(pair.baseline.visibility, pair.proposed.visibility);
   }
 }
@@ -49,4 +56,27 @@ function widthOf(visibility: Visibility): number {
     case 'public':
       return 2;
   }
+}
+
+/**
+ * The widest Visibility of the declared Endpoints of either Snapshot that name each key, so a
+ * Change to what they name reaches every Consumer that can see one; a Retired Endpoint answers
+ * only `RETIRED`, so it counts toward none.
+ */
+export function widestVisibilitiesOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+  namesOf: (endpoint: EndpointSnapshot) => readonly string[],
+): ReadonlyMap<string, Visibility> {
+  const endpoints = [
+    ...Object.values(baseline.endpoints).filter(isDeclared),
+    ...Object.values(proposed.endpoints),
+  ].filter(isLive);
+  const visibilities = new Map<string, Visibility>();
+  for (const endpoint of endpoints) {
+    for (const name of namesOf(endpoint)) {
+      visibilities.set(name, widerOf(visibilities.get(name) ?? 'private', endpoint.visibility));
+    }
+  }
+  return visibilities;
 }

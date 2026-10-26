@@ -16,6 +16,7 @@ export function lifecycleDifferenceOf(
       return movedTo(pair.proposed.lifecycle, pair.baseline.lifecycle);
     case 'dropped':
     case 'reused':
+    case 'retired':
       return undefined;
   }
 }
