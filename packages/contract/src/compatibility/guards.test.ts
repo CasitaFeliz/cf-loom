@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -44,7 +44,6 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
     exports: schemaExports({}),
@@ -57,7 +56,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
 function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {

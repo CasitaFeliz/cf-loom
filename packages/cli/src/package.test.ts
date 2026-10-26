@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, test } from 'vitest';
+import { canonicalTextOf } from '../test/canonical-text.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
@@ -27,6 +28,7 @@ const zodVersion: string = JSON.parse(readFileSync(join(zodDir, 'package.json'),
 const contractVersion: string = JSON.parse(
   readFileSync(join(packagesDir, 'contract', 'package.json'), 'utf8'),
 ).version;
+const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
 const folders: string[] = [];
 
 /** Where `package` writes without `--out`, relative to the project. */
@@ -104,18 +106,6 @@ function typeCheck(project: string) {
 
 function lines(written: readonly string[]): string {
   return `${written.join('\n')}\n`;
-}
-
-/** A value with every object's keys sorted, as the canonical form writes them. */
-function sortedKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortedKeys);
-  }
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-  const keys = Object.keys(value).sort();
-  return Object.fromEntries(keys.map((key) => [key, sortedKeys(Reflect.get(value, key))]));
 }
 
 const config = lines([
@@ -695,21 +685,23 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
     const snapshot = JSON.parse(read(project, `${defaultOut}/snapshot.json`));
     delete snapshot.generator;
-    const text = `${JSON.stringify(sortedKeys(snapshot), null, 2)}\n`;
-    const hash = createHash('sha256').update(text, 'utf8').digest('hex');
+    const hash = createHash('sha256').update(canonicalTextOf(snapshot), 'utf8').digest('hex');
     const manifest = JSON.parse(read(project, `${defaultOut}/package.json`));
     expect(manifest.cfLoom.snapshotHash).toBe(hash);
   });
 
-  test('snapshot.json is the Snapshot generate writes', () => {
+  test('snapshot.json is the Snapshot generate writes, with the CLI that runs package', () => {
     const project = aProject(service);
     cfLoom(project, 'generate');
 
     packageIn(project);
 
-    expect(read(project, `${defaultOut}/snapshot.json`)).toBe(
-      read(project, 'contract.snapshot.json'),
-    );
+    const declared = JSON.parse(read(project, 'contract.snapshot.json'));
+    const packaged = read(project, `${defaultOut}/snapshot.json`);
+    const generator = `@cf-loom/cli@${cliVersion}`;
+    expect(packaged).toBe(canonicalTextOf({ ...declared, generator }));
+    expect(packaged.startsWith('{\n  "format": 1,\n  "kind": "service",\n')).toBe(true);
+    expect(packaged).toContain(`\n  "generator": "${generator}",\n`);
   });
 
   test('nothing Private, no Retired Event, no Command, no Subscription and no Definitions Package is written into the package', () => {
@@ -1851,17 +1843,21 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
     });
   });
 
-  test('a committed contract.snapshot.json another CLI wrote is current for package', () => {
+  test('a committed contract.snapshot.json that names a generator is out of date for package, so no CLI but the running one is written', () => {
     const project = aProject(service);
     cfLoom(project, 'generate');
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(/"generator": "[^"]+"/, '"generator": "@cf-loom/cli@0.0.1"'),
+      text.replace('"kind"', '"generator": "@cf-loom/cli@9.9.9",\n  "kind"'),
     );
 
     const ran = cfLoom(project, 'package');
 
-    expect(ran).toMatchObject({ status: 0, stderr: '' });
-    expect(read(project, `${defaultOut}/snapshot.json`)).toContain('@cf-loom/cli@0.0.1');
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'contract.snapshot.json is missing or out of date: run cf-loom generate\n',
+    });
+    expect(existsSync(join(project, defaultOut))).toBe(false);
   });
 
   test('a committed contract.snapshot.json that cannot be read stops package in one line', () => {

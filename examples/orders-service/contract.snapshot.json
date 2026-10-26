@@ -1,4 +1,7 @@
 {
+  "format": 1,
+  "kind": "service",
+  "name": "orders-service",
   "codes": {
     "BAD_REQUEST": {
       "body": {
@@ -538,8 +541,6 @@
       "visibility": "internal"
     }
   },
-  "format": 1,
-  "generator": "@cf-loom/cli@0.0.0",
   "guards": {
     "apiKey": {
       "context": {
@@ -579,8 +580,6 @@
       ]
     }
   },
-  "kind": "service",
-  "name": "orders-service",
   "standardRejections": {
     "invalidInput": "BAD_REQUEST",
     "notFound": "RESOURCE_NOT_FOUND",

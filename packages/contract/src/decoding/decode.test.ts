@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -353,9 +353,9 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a Snapshot built from a Contract decodes once it has a version', () => {
+    test('a Snapshot built from a Contract decodes once it has a version and a generator', () => {
       const snapshot = declaredSnapshot();
-      const published = { ...snapshot, version: '1.0.0' };
+      const published = { ...snapshot, ...publishedAt('1.0.0') };
 
       const result = decodedFrom(published);
 
@@ -2017,7 +2017,7 @@ describe('decodeSnapshot', () => {
           [gone]: standardCodes[notImplementedCode],
         },
       };
-      const published = publishedSnapshotOf(aService(), proposed, '3.5.0');
+      const published = publishedSnapshotOf(aService(), proposed, publishedAt('3.5.0'));
 
       const result = roundTrip(published);
 
@@ -2162,7 +2162,7 @@ function declaredSnapshot() {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, { generator: 'test' });
+  return snapshotOf(validated);
 }
 
 const formatOneFixture = `{
@@ -2381,7 +2381,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     const published = examples.map((example) => {
       const file = new URL(`${example}/contract.snapshot.json`, examplesDirectory);
       const declared: Snapshot = JSON.parse(readFileSync(file, 'utf8'));
-      return [example, publishedSnapshotOf(undefined, declared, '1.0.0')] as const;
+      return [example, publishedSnapshotOf(undefined, declared, publishedAt('1.0.0'))] as const;
     });
     return [...published, ['the format-1 fixture', JSON.parse(formatOneFixture)]];
   }
@@ -2448,7 +2448,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
       return undefined;
     }
     const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };
-    return publishedSnapshotOf(undefined, { ...committed, defs }, '1.0.0');
+    return publishedSnapshotOf(undefined, { ...committed, defs }, publishedAt('1.0.0'));
   }
 
   /** What the decoder makes of each order-free array of the probe def reversed or holding an item twice. */

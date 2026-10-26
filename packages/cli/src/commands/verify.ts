@@ -19,10 +19,10 @@ import { unreachedLinesOf } from './unreached.ts';
 
 /**
  * Fails when a file `generate` regenerates is not what it would write, edited by hand or left
- * behind by a Contract change; which CLI wrote `contract.snapshot.json` does not count.
+ * behind by a Contract change.
  */
 export async function verify(run: Run): Promise<Exit> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }

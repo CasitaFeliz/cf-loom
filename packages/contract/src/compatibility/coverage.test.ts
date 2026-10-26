@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { seededNext } from '../../test/random-schemas.ts';
+import { publishedAt } from '../../test/snapshots.ts';
 import {
   compatibilityReportOf,
   decodeSnapshot,
@@ -121,7 +122,7 @@ function mapMutations(
 }
 
 /** The keys every Snapshot starts with, which identify the package and the format, not its Contract. */
-const headingKeys = ['format', 'kind', 'name', 'generator'];
+const headingKeys = ['format', 'kind', 'name'];
 
 /**
  * Whether `generate` never writes a place changed alone, which the decoder does not refuse: the
@@ -181,7 +182,7 @@ function writableAfter(declared: Json, mutations: readonly Mutation[]): Snapshot
   for (const mutation of mutations) {
     mutated = mutation.change(mutated);
   }
-  const published = JSON.stringify({ ...(mutated as object), version: '1.0.1' });
+  const published = JSON.stringify({ ...(mutated as object), ...publishedAt('1.0.1') });
   return decodeSnapshot(published).kind === 'decoded' ? (mutated as Snapshot) : undefined;
 }
 
@@ -205,7 +206,7 @@ function describeMutations(mutations: readonly Mutation[]): string {
 describe('compatibilityReportOf, every difference in the published text is a Change', () => {
   test.each(examples)('every single-place mutation of %s that generate can write', (example) => {
     const declared = declaredSnapshotOf(example);
-    const baseline = publishedSnapshotOf(undefined, declared as Snapshot, '1.0.0');
+    const baseline = publishedSnapshotOf(undefined, declared as Snapshot, publishedAt('1.0.0'));
     const missed: string[] = [];
     let checked = 0;
 
@@ -228,7 +229,7 @@ describe('compatibilityReportOf, every difference in the published text is a Cha
     'seeded mutations of several places of %s that generate can write',
     (example) => {
       const declared = declaredSnapshotOf(example);
-      const baseline = publishedSnapshotOf(undefined, declared as Snapshot, '1.0.0');
+      const baseline = publishedSnapshotOf(undefined, declared as Snapshot, publishedAt('1.0.0'));
       const candidates = mutationsOf(declared);
       const next = seededNext(165);
       const missed: string[] = [];

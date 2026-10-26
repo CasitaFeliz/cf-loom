@@ -25,7 +25,7 @@ export async function brokerPlanCommand(run: Run, prefix: string | null): Promis
 }
 
 async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Stopped> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

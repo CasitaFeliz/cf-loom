@@ -19,7 +19,7 @@ import { unreachedLinesOf } from './unreached.ts';
  * review; a Service also gets its Handler map, its readers and its missing Handlers' Stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
-  const built = await builtOf(run, 'running');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }

@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
+import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
@@ -212,18 +213,6 @@ const brokenManifests = [
   ['a scope alone', JSON.stringify({ name: '@org', type: 'module' })],
 ];
 
-/** A value with every object's keys sorted, as the canonical form writes them. */
-function sortedKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortedKeys);
-  }
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-  const keys = Object.keys(value).sort();
-  return Object.fromEntries(keys.map((key) => [key, sortedKeys(Reflect.get(value, key))]));
-}
-
 describe('cf-loom init', () => {
   test('init service writes the Root, named after package.json, and no configuration', () => {
     const project = aProject();
@@ -413,14 +402,17 @@ describe('cf-loom generate', () => {
     expect(ran.stdout).toMatch(/^Wrote contract\.snapshot\.json\n/);
     const text = read(project, 'contract.snapshot.json');
     const snapshot = JSON.parse(text);
-    expect(text).toBe(`${JSON.stringify(sortedKeys(snapshot), null, 2)}\n`);
+    expect(text).toBe(canonicalTextOf(snapshot));
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: `@cf-loom/cli@${cliVersion}`,
       endpoints: { 'GET /ping': { name: 'ping', group: 'health', lifecycle: 'active' } },
     });
+    expect(snapshot).not.toHaveProperty('generator');
+    expect(
+      text.startsWith('{\n  "format": 1,\n  "kind": "service",\n  "name": "orders-service",\n'),
+    ).toBe(true);
   });
 
   test('generate gives the same bytes every time', () => {
@@ -1467,7 +1459,7 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
       const fits = levels <= 256;
       expect(ran.status).toBe(fits ? 0 : 1);
       const written = fits ? read(project, 'contract.snapshot.json') : nestedOnceMore(levels);
-      const decoded = decodeSnapshot(withVersion(written));
+      const decoded = decodeSnapshot(published(written));
       expect(decoded.kind).toBe(fits ? 'decoded' : 'malformed');
     },
   );
@@ -1486,8 +1478,10 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
     );
   }
 
-  function withVersion(snapshotJson: string): string {
-    return JSON.stringify({ ...JSON.parse(snapshotJson), version: '1.0.0' });
+  /** The Snapshot as a publish would write it, which is what the decoder reads. */
+  function published(snapshotJson: string): string {
+    const heading = { version: '1.0.0', generator: `@cf-loom/cli@${cliVersion}` };
+    return JSON.stringify({ ...JSON.parse(snapshotJson), ...heading });
   }
 });
 
@@ -2570,42 +2564,20 @@ describe('cf-loom verify', () => {
     expect(ran.stderr).toMatch(/^contract\.snapshot\.json is missing: run cf-loom generate\n/);
   });
 
-  test('verify ignores which CLI wrote contract.snapshot.json', () => {
+  test('verify exits 1 for a committed file that still names a generator', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
+      text.replace('"kind"', `"generator": "@cf-loom/cli@${cliVersion}",\n  "kind"`),
     );
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran.status).toBe(0);
-  });
-
-  test('verify exits 1 when the Contract changed, whichever CLI wrote the file', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
-    );
-    write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran.status).toBe(1);
-  });
-
-  test('generate writes the CLI that runs it', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
-    );
-
-    cfLoom(project, 'generate');
-
-    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    expect(snapshot.generator).toBe(`@cf-loom/cli@${cliVersion}`);
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'contract.snapshot.json was edited or is out of date: run cf-loom generate\n',
+    });
   });
 
   test('verify exits 1 when a deprecatedAt was edited into no instant', () => {
@@ -2796,9 +2768,9 @@ function publishedAs(
   more: Readonly<Record<string, unknown>> = {},
 ): ServedVersion {
   const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-  const published = { ...snapshot, ...more, version };
+  const published = { ...snapshot, ...more, version, generator: '@cf-loom/cli@0.0.0' };
   const declared = { kind: snapshot.kind, name: snapshot.name };
-  const snapshotJson = `${JSON.stringify(published, null, 2)}\n`;
+  const snapshotJson = canonicalTextOf(published);
   return aVersion(version, { declared, snapshotJson, peers: installedPeers });
 }
 
@@ -4280,8 +4252,7 @@ const leftBehindLine =
 /** The SHA-256 of a Snapshot's canonical text without its version and generator, as `cfLoom` records it. */
 function snapshotHashOf(snapshotJson: string): string {
   const { generator: _generator, version: _version, ...hashed } = JSON.parse(snapshotJson);
-  const text = `${JSON.stringify(sortedKeys(hashed), null, 2)}\n`;
-  return createHash('sha256').update(text, 'utf8').digest('hex');
+  return createHash('sha256').update(canonicalTextOf(hashed), 'utf8').digest('hex');
 }
 
 function neverPublished(registry: Registry, packageName = ordersPackage): string {
@@ -5060,6 +5031,26 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(published.endpoints).toEqual({
       'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0' },
     });
+  });
+
+  test('the published snapshot.json names the CLI that runs publish, after the version in its heading', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+
+    const { registry } = await publishedAgainst(lab, changed);
+
+    const text = publishedFilesOf(registry)['snapshot.json']!;
+    const published = JSON.parse(text);
+    expect(published.generator).toBe(`@cf-loom/cli@${cliVersion}`);
+    expect(Object.keys(published).slice(0, 5)).toEqual([
+      'format',
+      'kind',
+      'name',
+      'version',
+      'generator',
+    ]);
+    expect(text).toBe(canonicalTextOf(published));
   });
 
   test('the published snapshot.json carries the deprecatedAt the declaration states, not the Baseline’s', async ({

@@ -37,7 +37,7 @@ export type PublishMode = 'publish' | 'dry-run';
 export type ToPublish = {
   readonly mode: PublishMode;
   readonly project: Project;
-  readonly declared: Pick<BuiltProject, 'text' | 'context'>;
+  readonly declared: Pick<BuiltProject, 'text'>;
   readonly published: PublishedSnapshot;
   readonly text: string;
   readonly peerRanges: PeerRanges;

@@ -31,7 +31,8 @@ export function compatibilityReportOf(
   proposed: Snapshot,
 ): ComparedReport {
   const changes = changesOf(baseline, proposed);
-  const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
+  const { version, generator } = baseline;
+  const merged = publishedSnapshotOf(baseline, proposed, { version, generator });
   if (changes.length === 0 && hashedTextOf(merged) !== hashedTextOf(baseline)) {
     throw new Error('The Snapshot changed but no Change was found: a bug.');
   }

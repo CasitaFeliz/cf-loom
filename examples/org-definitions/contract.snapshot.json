@@ -1,4 +1,7 @@
 {
+  "format": 1,
+  "kind": "definitions",
+  "name": "@org/definitions",
   "codes": {
     "BAD_REQUEST": {
       "body": {
@@ -135,8 +138,6 @@
       "kind": "rejection"
     }
   },
-  "format": 1,
-  "generator": "@cf-loom/cli@0.0.0",
   "guards": {
     "apiKey": {
       "context": {
@@ -176,8 +177,6 @@
       ]
     }
   },
-  "kind": "definitions",
-  "name": "@org/definitions",
   "standardRejections": {
     "invalidInput": "BAD_REQUEST",
     "notFound": "RESOURCE_NOT_FOUND",

@@ -7,6 +7,7 @@ import type {
   EndpointSnapshot,
   EventSnapshot,
   ServiceSnapshot,
+  Snapshot,
   SubscriptionSnapshot,
 } from './types.ts';
 
@@ -37,23 +38,29 @@ export type PublishedEvent = PublishedElement<EventSnapshot> | MessageTombstone;
 /** A Command's Message Version in a published Snapshot: still declared, or its tombstone. */
 export type PublishedCommand = PublishedElement<CommandSnapshot> | MessageTombstone;
 
-/** The published Snapshot of a Service: its declared Snapshot with `version` and the history only the Baseline knows. */
+/** What a published Snapshot adds to the declared one's heading: its version and the CLI that wrote it. */
+export type PublishedHeading = { readonly version: string; readonly generator: string };
+
+/** The Snapshot `package` writes: the declared one with the CLI that wrote it. */
+export type PackagedSnapshot = Snapshot & { readonly generator: string };
+
+/** The published Snapshot of a Service: its declared Snapshot with its heading and the history only the Baseline knows. */
 export type PublishedServiceSnapshot = Omit<
   ServiceSnapshot,
   'endpoints' | 'events' | 'commands' | 'subscriptions'
-> & {
-  readonly version: string;
-  readonly endpoints: ByKey<PublishedEndpoint>;
-  readonly events: ByKey<PublishedEvent>;
-  readonly commands: ByKey<PublishedCommand>;
-  readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
-};
+> &
+  PublishedHeading & {
+    readonly endpoints: ByKey<PublishedEndpoint>;
+    readonly events: ByKey<PublishedEvent>;
+    readonly commands: ByKey<PublishedCommand>;
+    readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
+  };
 
 /** The published Snapshot of an Application: its Dependencies at a version. */
-export type PublishedApplicationSnapshot = ApplicationSnapshot & { readonly version: string };
+export type PublishedApplicationSnapshot = ApplicationSnapshot & PublishedHeading;
 
 /** The published Snapshot of a Definitions Package: its declared Snapshot at a version, removed codes included. */
-export type PublishedDefinitionsSnapshot = DefinitionsSnapshot & { readonly version: string };
+export type PublishedDefinitionsSnapshot = DefinitionsSnapshot & PublishedHeading;
 
 /** A Snapshot as `publish` writes it to `snapshot.json` and `check` reads it as the Baseline. */
 export type PublishedSnapshot =

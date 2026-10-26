@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
+import { publishedAt } from '../../test/snapshots.ts';
 import {
   defineDefinitions,
   defineEndpoint,
@@ -44,7 +45,7 @@ function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const snapshot = snapshotOf(validated, { generator: 'test' });
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'definitions') {
     throw new Error('The fixture is no Definitions Package');
   }
@@ -60,8 +61,7 @@ function serviceSnapshotOf(packages: readonly ResolvedDefinitions[], endpoint = 
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test' };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -199,7 +199,7 @@ function changesOf(
   before: Readonly<Record<string, unknown>>,
   after: Readonly<Record<string, unknown>>,
 ) {
-  const baseline = { ...definitionsSnapshotOf(before), version: '1.0.0' };
+  const baseline = { ...definitionsSnapshotOf(before), ...publishedAt('1.0.0') };
   const report = compatibilityReportOf(baseline, definitionsSnapshotOf(after));
   return report.changes.filter(({ site }) => site.kind === 'export');
 }
@@ -277,7 +277,7 @@ describe('compatibilityReportOf: a Definitions Package’s exports', () => {
 
 describe('decodeSnapshot: a Definitions Package’s exports', () => {
   function textOf(snapshot: Snapshot, fields: Readonly<Record<string, unknown>>): string {
-    return JSON.stringify({ ...snapshot, version: '1.0.0', ...fields });
+    return JSON.stringify({ ...snapshot, ...publishedAt('1.0.0'), ...fields });
   }
 
   test.each([

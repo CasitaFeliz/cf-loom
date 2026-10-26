@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
+import { publishedAt } from '../../test/snapshots.ts';
 import {
   defineDefinitions,
   defineEndpoint,
@@ -30,7 +31,6 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
     format: 1,
     kind: 'service',
     name: 'orders-service',
-    generator: 'test',
     standardRejections: {
       invalidInput: 'INVALID_INPUT',
       notFound: 'NOT_FOUND',
@@ -503,7 +503,7 @@ describe('exportedSnapshotOf', () => {
   test('a published Snapshot’s tombstones and still-declared Retired Elements are left out of the exported Snapshot', () => {
     const published: PublishedServiceSnapshot = {
       ...aServiceSnapshot(),
-      version: '3.4.0',
+      ...publishedAt('3.4.0'),
       commands: {},
       subscriptions: {},
       endpoints: {
@@ -637,7 +637,7 @@ function serviceSnapshotOf(
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const snapshot = snapshotOf(validated, { generator: 'test' });
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }

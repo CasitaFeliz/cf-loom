@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type CodeSnapshot,
@@ -128,7 +128,6 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
   defs: {},
   guards: {},
@@ -144,6 +143,7 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: {},
     events: {},
     commands: {},
@@ -157,7 +157,6 @@ function anApplication(): ApplicationSnapshot {
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
   };
 }
@@ -167,7 +166,6 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
     exports: schemaExports({}),
@@ -187,7 +185,12 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Service against a Baseline of another kind',
     proposed: aProposed(),
-    baseline: { ...anApplication(), name: 'orders-service', version: '1.0.0' },
+    baseline: {
+      ...anApplication(),
+      name: 'orders-service',
+      version: '1.0.0',
+      generator: publishedBy,
+    },
   },
   {
     name: 'a Service against a Baseline of another name',
@@ -202,7 +205,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'an Application against a Baseline of another name',
     proposed: anApplication(),
-    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0' },
+    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0', generator: publishedBy },
   },
   {
     name: 'a Definitions Package against a Baseline of another kind',
@@ -212,13 +215,13 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Definitions Package against a Baseline of another name',
     proposed: aDefinitions(),
-    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0' },
+    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0', generator: publishedBy },
   },
 ];
 
 describe('publishedSnapshotOf', () => {
   test('the published Snapshot carries the version given', () => {
-    const published = publishedSnapshotOf(aBaseline(), aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(aBaseline(), aProposed(), publishedAt('3.5.0'));
 
     expect(published.version).toBe('3.5.0');
   });
@@ -228,7 +231,7 @@ describe('publishedSnapshotOf', () => {
       endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
     });
 
-    const published = publishedSnapshotOf(undefined, proposed, '1.0.0');
+    const published = publishedSnapshotOf(undefined, proposed, publishedAt('1.0.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(aRetired(anEndpoint(), '1.0.0'));
   });
@@ -245,7 +248,7 @@ describe('publishedSnapshotOf', () => {
       commands: { 'ChargeCard@1': aCommand({ lifecycle: 'retired' }) },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '4.0.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('4.0.0'));
 
     expect([
       published.endpoints['GET /orders/{}'],
@@ -266,7 +269,7 @@ describe('publishedSnapshotOf', () => {
       endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(aRetired(anEndpoint(), '3.0.0'));
   });
@@ -277,7 +280,7 @@ describe('publishedSnapshotOf', () => {
       commands: { 'ChargeCard@1': aRetired(aCommand(), '3.1.0') },
     });
 
-    const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
     expect([published.events, published.commands]).toEqual([
       { 'OrderPlaced@1': { lifecycle: 'retired', retiredIn: '3.0.0' } },
@@ -290,7 +293,7 @@ describe('publishedSnapshotOf', () => {
       endpoints: { 'GET /orders/{}': aRetired(anEndpoint(), '3.0.0') },
     });
 
-    const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
     expect(published.endpoints).toEqual({
       'GET /orders/{}': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getOrder' },
@@ -306,7 +309,7 @@ describe('publishedSnapshotOf', () => {
       commands: { 'ChargeCard@1': { lifecycle: 'retired', retiredIn: '2.2.0' } },
     });
 
-    const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
     expect([published.endpoints, published.events, published.commands]).toEqual([
       baseline.endpoints,
@@ -318,7 +321,7 @@ describe('publishedSnapshotOf', () => {
   test('a deleted Element not Retired in the Baseline is left out, since the check refuses it', () => {
     const baseline = aBaseline({ events: { 'OrderPlaced@1': aLive(anEvent()) } });
 
-    const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
     expect(published.events).toEqual({});
   });
@@ -338,7 +341,7 @@ describe('publishedSnapshotOf', () => {
       },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(
       anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
@@ -356,7 +359,7 @@ describe('publishedSnapshotOf', () => {
       },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(
       anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
@@ -376,7 +379,7 @@ describe('publishedSnapshotOf', () => {
       });
       const proposed = aProposed({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } });
 
-      const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+      const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
       expect(published.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
     },
@@ -392,7 +395,7 @@ describe('publishedSnapshotOf', () => {
     const baseline = aBaseline({ codes: { [orderLocked]: locked, [orderPaid]: aCode() } });
     const proposed = aProposed({ codes: { [orderPaid]: aCode() } });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes).toEqual({
       [orderLocked]: { ...locked, removed: true },
@@ -404,7 +407,7 @@ describe('publishedSnapshotOf', () => {
     const baseline = aBaseline({ codes: { [orderLocked]: aCode({ status: 423, removed: true }) } });
     const proposed = aProposed({ codes: { [orderLocked]: aCode({ status: 423 }) } });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes).toEqual({ [orderLocked]: aCode({ status: 423 }) });
   });
@@ -420,7 +423,7 @@ describe('publishedSnapshotOf', () => {
       subscriptions: { notifyOnSettled: aSubscription('payments-service:PaymentSettled@1') },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.subscriptions).toEqual({
       legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.5.0' },
@@ -432,7 +435,7 @@ describe('publishedSnapshotOf', () => {
     const tombstone = { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' };
     const baseline = aBaseline({ subscriptions: { legacySync: tombstone } });
 
-    const published = publishedSnapshotOf(baseline, aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
     expect(published.subscriptions).toEqual({ legacySync: tombstone });
   });
@@ -441,32 +444,40 @@ describe('publishedSnapshotOf', () => {
     const baseline: PublishedDefinitionsSnapshot = {
       ...aDefinitions({ codes: { [oldCode]: aCode(), [keptCode]: aCode() } }),
       version: '4.2.0',
+      generator: publishedBy,
     };
     const proposed = aDefinitions({ codes: { [keptCode]: aCode(), [newCode]: aCode() } });
 
-    const published = publishedSnapshotOf(baseline, proposed, '4.3.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('4.3.0'));
 
     expect(published).toEqual({
       ...proposed,
       version: '4.3.0',
+      generator: publishedBy,
       codes: { [oldCode]: aCode({ removed: true }), [keptCode]: aCode(), [newCode]: aCode() },
     });
   });
 
   test('an Application’s published Snapshot is its declared one at the version', () => {
-    const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
+    const baseline: PublishedApplicationSnapshot = {
+      ...anApplication(),
+      version: '1.0.0',
+      generator: publishedBy,
+    };
     const proposed: ApplicationSnapshot = {
       ...anApplication(),
       dependencies: { 'orders-service': { against: '3.4.0', endpoints: [] } },
     };
 
-    const published = publishedSnapshotOf(baseline, proposed, '1.0.1');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('1.0.1'));
 
-    expect(published).toEqual({ ...proposed, version: '1.0.1' });
+    expect(published).toEqual({ ...proposed, version: '1.0.1', generator: publishedBy });
   });
 
   test.each(mismatches)('$name is a bug, so the merge throws', ({ proposed, baseline }) => {
-    expect(() => publishedSnapshotOf(baseline, proposed, '3.5.0')).toThrow('is no Baseline of');
+    expect(() => publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'))).toThrow(
+      'is no Baseline of',
+    );
   });
 
   test('what the merge writes decodes back to itself', () => {
@@ -485,7 +496,7 @@ describe('publishedSnapshotOf', () => {
       codes: { ...standardCodes, [orderLocked]: aCode() },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(decodeSnapshot(canonicalTextOf(published))).toEqual({
       kind: 'decoded',
@@ -514,7 +525,7 @@ describe('publishedSnapshotOf', () => {
       },
     });
 
-    const published = publishedSnapshotOf(baseline, proposed, '9.9.9');
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('9.9.9'));
 
     expect(hashedTextOf(published)).toBe(hashedTextOf(baseline));
   });
@@ -522,15 +533,15 @@ describe('publishedSnapshotOf', () => {
 
 describe('publishedSnapshotOf, its types', () => {
   test('a Service’s Baseline and Snapshot merge into a published Service Snapshot', () => {
-    const published = publishedSnapshotOf(aBaseline(), aProposed(), '3.5.0');
+    const published = publishedSnapshotOf(aBaseline(), aProposed(), publishedAt('3.5.0'));
 
     expectTypeOf(published).toEqualTypeOf<PublishedServiceSnapshot>();
     expect(published.kind).toBe('service');
   });
 
   test('an Application’s and a Definitions Package’s merge by their own kind', () => {
-    const application = publishedSnapshotOf(undefined, anApplication(), '1.0.0');
-    const definitions = publishedSnapshotOf(undefined, aDefinitions(), '1.0.0');
+    const application = publishedSnapshotOf(undefined, anApplication(), publishedAt('1.0.0'));
+    const definitions = publishedSnapshotOf(undefined, aDefinitions(), publishedAt('1.0.0'));
 
     expectTypeOf(application).toEqualTypeOf<PublishedApplicationSnapshot>();
     expectTypeOf(definitions).toEqualTypeOf<PublishedDefinitionsSnapshot>();

@@ -94,12 +94,11 @@ export type DependencySnapshot = {
   readonly endpoints: readonly { readonly id: string; readonly name: string }[];
 };
 
-/** What every Snapshot starts with; `version` is left to `publish`. */
+/** What every declared Snapshot starts with; `version` and `generator` are left to `package` and `publish`. */
 type Heading<Kind extends string> = {
   readonly format: SnapshotFormat;
   readonly kind: Kind;
   readonly name: string;
-  readonly generator: string;
 };
 
 /** A map of a Snapshot, keyed by identity or name. */

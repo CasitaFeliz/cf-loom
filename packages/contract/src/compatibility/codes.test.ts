@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
+import { publishedBy } from '../../test/snapshots.ts';
 import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   type Change,
@@ -37,7 +38,6 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
   defs: {},
   guards: {},
@@ -114,7 +114,7 @@ function aCommand(): CommandSnapshot {
 }
 
 function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
-  return { ...heading, version: '3.4.0', endpoints: {}, ...fields };
+  return { ...heading, version: '3.4.0', generator: publishedBy, endpoints: {}, ...fields };
 }
 
 function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
@@ -645,8 +645,7 @@ function generatedCodeOf(code: string): CodeSnapshot {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: '@cf-loom/cli@2.1.0' };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   const generated = snapshot.kind === 'service' ? snapshot.codes[code] : undefined;
   if (generated === undefined) {
     throw new Error(`The fixture holds no ${code}`);

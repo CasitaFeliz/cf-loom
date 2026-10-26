@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
@@ -80,7 +80,6 @@ function anApplication(): ApplicationSnapshot {
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
   };
 }
@@ -100,7 +99,6 @@ const serviceHeading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections: {
     invalidInput: 'INVALID_INPUT',
     notFound: 'NOT_FOUND',
@@ -158,6 +156,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
   };
   const proposed: ServiceSnapshot = {
@@ -191,6 +190,7 @@ function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): C
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
     codes: { [orderLocked]: aCode(409) },
   };
@@ -207,7 +207,6 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections: serviceHeading.standardRejections,
     defs: {},
     exports: schemaExports({}),
@@ -220,7 +219,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
 function comparedReportOf(
@@ -301,6 +300,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: {},
     };
     const proposed: ServiceSnapshot = {
@@ -326,6 +326,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: {},
       events: { 'OrderPlaced@1': event({}) },
     };
@@ -356,6 +357,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: { [orderById]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
     };
     const proposed: ServiceSnapshot = {
@@ -461,6 +463,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: {},
       events: { 'OrderPlaced@1': { ...event, lifecycle: 'active' } },
     };
@@ -512,6 +515,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedApplicationSnapshot = {
       ...anApplication(),
       version: '1.0.0',
+      generator: publishedBy,
       dependencies: { 'orders-service': ordersDependency('3.4.0') },
     };
     const proposed: ApplicationSnapshot = {

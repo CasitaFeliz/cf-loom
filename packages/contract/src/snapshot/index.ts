@@ -1,5 +1,4 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
-export type { SnapshotContext } from './context.ts';
 export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
@@ -12,12 +11,14 @@ export type {
   DeclaredElement,
   EndpointTombstone,
   MessageTombstone,
+  PackagedSnapshot,
   PublishedApplicationSnapshot,
   PublishedCommand,
   PublishedDefinitionsSnapshot,
   PublishedElement,
   PublishedEndpoint,
   PublishedEvent,
+  PublishedHeading,
   PublishedServiceSnapshot,
   PublishedSnapshot,
   SubscriptionTombstone,

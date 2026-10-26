@@ -13,7 +13,7 @@ import {
 export type EntryToCheck = {
   readonly project: Pick<Project, 'packageName'>;
   readonly staged: InstalledPackage;
-  readonly declared: Pick<BuiltProject, 'text' | 'context'>;
+  readonly declared: Pick<BuiltProject, 'text'>;
 };
 
 /**
@@ -32,7 +32,7 @@ export async function checkedEntryOf({ project, staged, declared }: EntryToCheck
   if (root.kind === 'tooling') {
     return notImportable(packageName, root.message);
   }
-  const entry = declaredOf(root.declared, declared.context);
+  const entry = declaredOf(root.declared);
   switch (entry.kind) {
     case 'tooling':
       return notImportable(packageName, entry.message);

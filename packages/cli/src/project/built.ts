@@ -6,7 +6,6 @@ import {
   type RootPackage,
   type ServiceSnapshot,
   type Snapshot,
-  type SnapshotContext,
   snapshotOf,
   type ValidatedRoot,
   type ValidRoot,
@@ -16,21 +15,12 @@ import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type FileComparison, fileComparisonOf } from '../writing/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
-import { runningGeneratorOf } from './generator.ts';
 import { type DeclaredRoot, type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
 /**
- * Which CLI the declared Snapshot names: the one running, as `generate` writes it, or the
- * committed file's, as `verify` and `package` compare it, so upgrading cf-loom alone fails
- * neither.
- */
-export type Generator = 'running' | 'committed';
-
-/**
  * What every command builds before it writes: the project, its valid Root, the declared Snapshot
- * in canonical order with its text and bytes, the committed file and the context the Snapshot was
- * declared in; or why it could not be built.
+ * in canonical order with its text and bytes, and the committed file; or why it could not be built.
  */
 export type Built =
   | {
@@ -41,7 +31,6 @@ export type Built =
       readonly text: string;
       readonly bytes: Buffer;
       readonly committed: Committed;
-      readonly context: SnapshotContext;
     }
   | ProjectFailure;
 
@@ -63,10 +52,10 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 }
 
 /**
- * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only its bytes and, for `verify` and `package`, its generator.
+ * Builds the declared Snapshot of the project where the command runs, offline, from its source and
+ * its installed packages alone; the committed file is read only for its bytes.
  */
-export async function builtOf(run: Run, generator: Generator): Promise<Built> {
+export async function builtOf(run: Run): Promise<Built> {
   const read = await projectOf(run.cwd);
   if (read.kind === 'tooling') {
     return read;
@@ -76,14 +65,12 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   if (committed.kind === 'tooling') {
     return committed;
   }
-  const parsed = committed.kind === 'json' ? committed.parsed : undefined;
-  const context: SnapshotContext = { generator: generatorOf(generator, parsed) };
-  const declared = declaredOf(project, context);
+  const declared = declaredOf(project);
   if (declared.kind !== 'declared') {
     return declared;
   }
   const { validated, snapshot, text, bytes } = declared;
-  return { kind: 'built', project, validated, snapshot, text, bytes, committed, context };
+  return { kind: 'built', project, validated, snapshot, text, bytes, committed };
 }
 
 /** A Root's declared Snapshot in canonical order with its text and bytes, or why the Root declares none. */
@@ -101,14 +88,14 @@ export type Declared =
  * Validates a Root and declares its Snapshot in canonical order, the one way every Snapshot is
  * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
  */
-export function declaredOf(declaring: DeclaredRoot, context: SnapshotContext): Declared {
+export function declaredOf(declaring: DeclaredRoot): Declared {
   const validated = validatedOf(declaring);
   switch (validated.kind) {
     case 'tooling':
     case 'invalid':
       return validated;
     case 'valid': {
-      const snapshot = canonicalSnapshotOf(snapshotOf(validated, context));
+      const snapshot = canonicalSnapshotOf(snapshotOf(validated));
       const tooDeep = tooDeepOf(snapshot);
       if (tooDeep !== undefined) {
         return tooDeep;
@@ -138,16 +125,4 @@ function validatedOf(declaring: DeclaredRoot): ValidatedRoot | Tooling {
   } catch (e) {
     return tooling(`${rootFile} threw while it was read: ${oneLineOf(e, directory)}`);
   }
-}
-
-/** The CLI the Snapshot names: the committed file's for `verify` and `package`, else the one running. */
-function generatorOf(generator: Generator, committed: unknown): string {
-  const written =
-    typeof committed === 'object' && committed !== null
-      ? Reflect.get(committed, 'generator')
-      : undefined;
-  if (generator === 'committed' && typeof written === 'string') {
-    return written;
-  }
-  return runningGeneratorOf();
 }
