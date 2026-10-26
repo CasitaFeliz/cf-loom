@@ -1,9 +1,12 @@
-import type { PathSegment } from '../written/index.ts';
+import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
 import type { TextSource } from './text-parts.ts';
 import { isSegmentText, segmentTextOf } from './url-text.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
+
+/** A declared Endpoint as routing reads it: its identity, method and path segments. */
+export type EndpointPath = Matchable & { readonly identity: string };
 
 /**
  * The declared Endpoint a request matched, with where its text comes from; the methods its path
@@ -142,4 +145,9 @@ function sharedTextAt(left: PathSegment, right: PathSegment | undefined): string
     return right?.kind === 'literal' && right.text !== left.text ? undefined : left.text;
   }
   return right?.kind === 'literal' ? right.text : unmatchedText;
+}
+
+/** An Endpoint's identity as routing reads it, a `{}` as a param. */
+export function endpointPathOf(identity: string): EndpointPath {
+  return { identity, ...endpointSegmentsOf(identity) };
 }

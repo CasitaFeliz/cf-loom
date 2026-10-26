@@ -105,6 +105,7 @@ export type {
   PublishedSnapshot,
   SemanticVersionParts,
   ServiceSnapshot,
+  ShadowingSnapshot,
   Snapshot,
   SubscriptionSnapshot,
   SubscriptionTombstone,

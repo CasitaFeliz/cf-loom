@@ -53,8 +53,15 @@ export {
   invalidInputResponseOf,
   rejectionBodyReaderOf,
 } from './invalid-input.ts';
-export type { Match, Matchable } from './match.ts';
-export { allowedMethodsOf, matchedOf, matchOf, sharedUrlOf, unmatchedText } from './match.ts';
+export type { EndpointPath, Match, Matchable } from './match.ts';
+export {
+  allowedMethodsOf,
+  endpointPathOf,
+  matchedOf,
+  matchOf,
+  sharedUrlOf,
+  unmatchedText,
+} from './match.ts';
 export type { SentRejection, SentSuccess } from './responses.ts';
 export {
   faultResponseOf,

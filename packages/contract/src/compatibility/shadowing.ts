@@ -6,18 +6,15 @@ import {
 } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import {
-  type Matchable,
+  type EndpointPath,
+  endpointPathOf,
   matchedOf,
   sharedUrlOf,
   textAcceptanceOf,
   unmatchedText,
 } from '../wire/index.ts';
-import { endpointSegmentsOf } from '../written/index.ts';
 import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
-
-/** A declared Endpoint as routing reads it: its identity, method and path segments. */
-export type EndpointPath = Matchable & { readonly identity: string };
 
 /**
  * The Endpoints each side routes, Retired ones still declared included, and those the Baseline
@@ -36,8 +33,8 @@ export function endpointPathsOf(
 ): EndpointPaths {
   const before = Object.entries(baseline.endpoints)
     .filter(([, endpoint]) => isDeclared(endpoint))
-    .map(([identity]) => pathOf(identity));
-  const after = Object.keys(proposed.endpoints).map((identity) => pathOf(identity));
+    .map(([identity]) => endpointPathOf(identity));
+  const after = Object.keys(proposed.endpoints).map((identity) => endpointPathOf(identity));
   const declaredBefore = new Set(before.map(({ identity }) => identity));
   const added = after.filter(({ identity }) => !declaredBefore.has(identity));
   return { baseline: before, proposed: after, added };
@@ -56,7 +53,7 @@ export function shadowingDifferencesOf(
     return [];
   }
   const sides = [compared.baseline, compared.proposed] as const;
-  const kept: KeptPath = { ...pathOf(pair.identity), sides };
+  const kept: KeptPath = { ...endpointPathOf(pair.identity), sides };
   const takers = new Set<string>();
   for (const added of paths.added) {
     const taker = takerOf(kept, added, paths);
@@ -106,8 +103,4 @@ function paramMayTake(side: EndpointSnapshot, index: number, text: string): bool
   const name = side.params[index];
   const field = name !== undefined && Object.hasOwn(fields, name) ? fields[name] : undefined;
   return field === undefined || textAcceptanceOf(field.schema, text) !== 'refused';
-}
-
-function pathOf(identity: string): EndpointPath {
-  return { identity, ...endpointSegmentsOf(identity) };
 }

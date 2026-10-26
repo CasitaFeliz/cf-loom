@@ -146,6 +146,53 @@ describe('providedSnapshotOf', () => {
     );
   });
 
+  test.each(['active', 'deprecated', 'retired'])(
+    'an Endpoint shadowing as %s is read back as it was written',
+    (lifecycle) => {
+      const shadowed = changed((copy) => {
+        copy['shadowing'] = { 'GET /orders/latest': { lifecycle } };
+      });
+
+      const read = providedSnapshotOf(shadowed);
+
+      expect(read.shadowing).toStrictEqual({ 'GET /orders/latest': { lifecycle } });
+    },
+  );
+
+  test('a shadowing entry whose lifecycle is none of the three is refused as malformed, naming the entry', () => {
+    const damaged = changed((copy) => {
+      copy['shadowing'] = { 'GET /orders/latest': { lifecycle: 'gone' } };
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      `orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.lifecycle is none of "active", "deprecated", "retired"`,
+    );
+  });
+
+  test('a shadowing entry with a key its format does not define is refused as malformed', () => {
+    const damaged = changed((copy) => {
+      copy['shadowing'] = { 'GET /orders/latest': { lifecycle: 'active', name: 'latest' } };
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      "orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.name is a key its format does not define",
+    );
+  });
+
+  test('an exported Snapshot without shadowing is refused as malformed', () => {
+    const damaged = changed((copy) => {
+      delete copy['shadowing'];
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow("orders-service's exported Snapshot is malformed: shadowing is missing");
+  });
+
   test('a Deprecated Endpoint keeps its instant', () => {
     const read = providedSnapshotOf(providing);
 
