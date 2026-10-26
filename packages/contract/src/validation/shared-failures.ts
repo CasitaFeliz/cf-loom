@@ -62,10 +62,10 @@ function failureOf(refusals: readonly NotAllowed[]): NotAllowedFailure {
 }
 
 function byLocation(left: NotAllowed, right: NotAllowed): number {
-  return byCodePoint(locationOf(left), locationOf(right));
+  return byCodePoint(locationTextOf(left), locationTextOf(right));
 }
 
-function locationOf({ site, steps }: NotAllowed): string {
+function locationTextOf({ site, steps }: NotAllowed): string {
   return siteLocationOf(site, steps);
 }
 
