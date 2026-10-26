@@ -179,7 +179,7 @@ describe('parseValue', () => {
     expect(codes).toEqual(['required']);
   });
 
-  test('a key a class instance only inherits is required, even when its getter answers', () => {
+  test('a key a class instance only inherits, whose getter answers the wrong type, is required', () => {
     const codes = codesOf(z.object({ total: z.number() }), new Priced());
 
     expect(codes).toEqual(['required']);
