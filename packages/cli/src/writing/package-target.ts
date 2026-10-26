@@ -1,10 +1,14 @@
+import { Buffer } from 'node:buffer';
 import {
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -99,7 +103,8 @@ function isLink(target: string): boolean {
  * cf-loom would give it.
  */
 function isPreviousOutput(target: string): boolean {
-  if (!filesOutsideKeptOf(target).every((path) => isWrittenByPackage(target, path))) {
+  const entries = entriesOutsideKeptOf(target);
+  if (!entries.every((entry) => entry.isFile && isWrittenByPackage(target, entry.path))) {
     return false;
   }
   const manifestPath = join(target, packagePaths.manifest);
@@ -113,28 +118,49 @@ function isPreviousOutput(target: string): boolean {
   }
 }
 
-/** Whether `package` wrote a file: one of the three it writes as JSON, or a module that starts with its header. */
+/** Whether `package` wrote a regular file: one of the three it writes as JSON, or a module that starts with its header. */
 function isWrittenByPackage(target: string, path: string): boolean {
   const asJson: readonly string[] = [
     packagePaths.manifest,
     packagePaths.snapshot,
     packagePaths.tsconfig,
   ];
-  return asJson.includes(path) || isWrittenBy('package', readFileSync(join(target, path), 'utf8'));
+  return asJson.includes(path) || isWrittenBy('package', startOf(join(target, path)));
 }
 
-/** Every file of a folder outside the folders a previous output keeps, by its path in it. */
-function filesOutsideKeptOf(target: string): readonly string[] {
+/** Room for the header line, a byte order mark and a carriage return, and more, so a longer first line is no header. */
+const startLength = 256;
+
+/** The start of a regular file, which holds its first line. */
+function startOf(path: string): string {
+  const descriptor = openSync(path, 'r');
+  try {
+    const start = Buffer.alloc(startLength);
+    const length = readSync(descriptor, start, 0, startLength, 0);
+    return start.toString('utf8', 0, length);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/** A path under a folder, by its path in it, and whether it is a regular file: a link, a pipe and the like are not. */
+type Entry = { readonly path: string; readonly isFile: boolean };
+
+/** Every entry of a folder that is no folder, outside the folders a previous output keeps, links not followed. */
+function entriesOutsideKeptOf(target: string): readonly Entry[] {
   const top = readdirSync(target, { withFileTypes: true });
   const searched = top.filter(({ name }) => !keptFolders.includes(name));
   return searched.flatMap((entry) => {
     if (!entry.isDirectory()) {
-      return [entry.name];
+      return [{ path: entry.name, isFile: entry.isFile() }];
     }
     const inside = readdirSync(join(target, entry.name), { recursive: true, withFileTypes: true });
     return inside
       .filter((found) => !found.isDirectory())
-      .map((found) => relative(target, join(found.parentPath, found.name)).split(sep).join('/'));
+      .map((found) => ({
+        path: relative(target, join(found.parentPath, found.name)).split(sep).join('/'),
+        isFile: found.isFile(),
+      }));
   });
 }
 

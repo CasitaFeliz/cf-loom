@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -2024,6 +2025,67 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
 
       expect(ran.status).toBe(3);
       expect(read(project, `${defaultOut}/src/events/${file}`)).toBe('export {};\n');
+    },
+  );
+
+  const asLeftInOutput: readonly (readonly [string, (project: string, out: string) => string])[] = [
+    [
+      'a link to a file that bears the header',
+      (project, out) => {
+        write(project, { 'outside.ts': `${packageHeader}\nexport {};\n` });
+        symlinkSync(join(project, 'outside.ts'), join(out, 'src/linked.ts'));
+        return 'src/linked.ts';
+      },
+    ],
+    [
+      'a link to a folder',
+      (project, out) => {
+        mkdirSync(join(project, 'elsewhere'));
+        symlinkSync(join(project, 'elsewhere'), join(out, 'src/old'), 'dir');
+        return 'src/old';
+      },
+    ],
+    [
+      'a link to nothing',
+      (project, out) => {
+        symlinkSync(join(project, 'gone'), join(out, 'src/dangling.ts'));
+        return 'src/dangling.ts';
+      },
+    ],
+    [
+      'a src that is a link',
+      (project, out) => {
+        renameSync(join(out, 'src'), join(project, 'real-src'));
+        symlinkSync(join(project, 'real-src'), join(out, 'src'), 'dir');
+        return 'src';
+      },
+    ],
+    [
+      'a named pipe',
+      (_project, out) => {
+        spawnSync('mkfifo', [join(out, 'src/pipe.ts')]);
+        return 'src/pipe.ts';
+      },
+    ],
+  ];
+
+  test.each(asLeftInOutput)(
+    'a previous output holding %s is refused and kept, whatever it leads to',
+    (_what, leave) => {
+      const project = aProject(service);
+      packageIn(project);
+      const out = join(project, defaultOut);
+      const left = leave(project, out);
+
+      const ran = spawnSync(process.execPath, [bin, 'package'], {
+        cwd: project,
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toContain(`${defaultOut} holds files package did not write`);
+      expect(() => lstatSync(join(out, left))).not.toThrow();
     },
   );
 
