@@ -235,7 +235,7 @@ _Avoid_: dispatcher, bus
 ### Compatibility
 
 **Snapshot**:
-A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports; each Endpoint a Contract Package exports carries the exported Snapshot cut to it.
+A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports; the **exported Snapshot cut** of an Endpoint is the exported Snapshot cut to it, which each Endpoint a Contract Package exports carries.
 _Avoid_: schema dump, manifest
 
 **Baseline**:
@@ -243,11 +243,11 @@ The Snapshot of the highest published version of a Contract Package or Definitio
 _Avoid_: previous snapshot, reference
 
 **Reader schema**:
-A schema generated from a Snapshot for whoever reads a Success, a Rejection's headers or body, or a Message: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
+A schema generated from a Snapshot for whoever reads the headers and body of a Success or a Rejection, or a Message body: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
 
 **Read shape**:
-A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection's headers or body, or a Message body. Every object in it is open to its readers.
+A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: the headers and body of a Success or a Rejection, or a Message body. Every object in it is open to its readers.
 _Avoid_: output, response, payload
 
 **Position**:
