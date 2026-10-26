@@ -5,7 +5,7 @@ import type { Path } from '../walker/index.ts';
 import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
 
-/** A value read as a broker plan: the plan, or the first place it breaks the shape `cf-loom broker-plan --json` prints. */
+/** A value read as a broker plan: the plan, or the first place it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
 export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
@@ -46,8 +46,8 @@ const plan = z.strictObject(
 );
 
 /**
- * Reads a value as the broker plan `cf-loom broker-plan --json` prints, refusing any other shape, so
- * an errors document or a hand-edited plan never reaches a Broker.
+ * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints, refusing any other
+ * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
   const structured = plan.safeParse(value);
