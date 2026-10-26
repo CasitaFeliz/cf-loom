@@ -9,7 +9,7 @@ import {
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
-/** Creates a durable consumer as a test arranges it, with the NATS client and not through `apply`. */
+/** Creates a durable consumer as a test arranges it, with the NATS client and not through `applyBrokerPlan`. */
 export async function arrangeDurable(
   url: string,
   stream: string,
@@ -26,7 +26,7 @@ export async function arrangeDurable(
 
 /**
  * Creates every durable consumer of a broker plan as the organization's tooling would from
- * `cf-loom broker-plan`, with the NATS client and not `apply`: a pull consumer with explicit
+ * `cf-loom broker-plan`, with the NATS client and not `applyBrokerPlan`: a pull consumer with explicit
  * acknowledgements filtered on its subject, with `settings` over that.
  */
 export async function arrangeDurablesOf(

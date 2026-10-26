@@ -153,7 +153,7 @@ The Broker's named, persistent position of one Subscription, or of one Command's
 _Avoid_: subscriber, queue group, cursor
 
 **Broker prefix**:
-An optional kebab-case name in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it; it is no part of a Contract or a Snapshot.
+An optional kebab-case name in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the plan; it is no part of a Contract or a Snapshot.
 _Avoid_: namespace, environment, prefix (alone)
 
 **Broker message id**:
