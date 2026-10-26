@@ -1,10 +1,10 @@
 import type { Lifecycle } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
+import { partsOf } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
 import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
-import { partsOf } from './steps.ts';
 
 /** A body of the Baseline and the proposed one, `null` where none is declared. */
 export type Bodies = {

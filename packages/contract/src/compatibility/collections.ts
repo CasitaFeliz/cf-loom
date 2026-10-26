@@ -1,7 +1,7 @@
 import type { TupleNode } from '../walker/index.ts';
+import { itemsStep, keyStep, restStep, valueStep } from '../walker/index.ts';
 import { boundFindingsOf } from './constraints.ts';
 import { type BothDefs, type Finding, found, inside, type NodePairOf } from './findings.ts';
-import { itemsStep, keyStep, restStep, valueStep } from './steps.ts';
 import { plainUnionFindingsOf } from './unions.ts';
 
 /** An array's item counts under the constraint rules, then its items under the field rules. */

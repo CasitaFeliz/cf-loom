@@ -1,7 +1,6 @@
-import type { PeerRangeMove } from '@cf-loom/contract/internal';
+import { type PeerRangeMove, siteTextOf, tokenOf } from '@cf-loom/contract/internal';
 import { type Derived, type DerivedVersion, firstStableOf, type Why } from '../versioning/index.ts';
-import { tokenOf } from './author-path.ts';
-import { type Checked, type Ending, reasonOf, siteOf } from './checked.ts';
+import { type Checked, type Ending, reasonOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
@@ -23,7 +22,7 @@ export function changeLineOf(change: CheckedChange): string {
     ...fieldsOf(difference),
   ].join(' ');
   const hint = change.hint === null ? '' : `; ${change.hint}`;
-  return `${siteOf(site)} ${described}: ${judgmentOf(change)}${hint}`;
+  return `${siteTextOf(site)} ${described}: ${judgmentOf(change)}${hint}`;
 }
 
 /** The Position, written only when the path does not already start with it. */

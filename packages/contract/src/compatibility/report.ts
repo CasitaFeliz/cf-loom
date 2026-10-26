@@ -1,48 +1,25 @@
 import type { Visibility } from '../declarations/index.ts';
+import type { ChangedSite, Step } from '../walker/index.ts';
 import type { ShapeDifference } from './shape-differences.ts';
-import type { Step } from './steps.ts';
 
 /**
  * Where a Change is, with the Visibility that decides its bump: the wider of the Baseline's and
- * the proposed one when it moved, else the side the Element is on.
+ * the proposed one when it moved, else the side the Element is on. By kind:
+ *
+ * - an Endpoint: its proposed name, or the Baseline's when it is dropped;
+ * - a Command: always Private;
+ * - a code, which is no Element: the widest of the Endpoints that answer it before or after the
+ *   change, Private when none does, Public in a Definitions Package;
+ * - a Subscription or a Dependency: Private, since no Consumer relies on what a Service itself
+ *   consumes;
+ * - a Service's Guard: the widest of the Endpoints that attach it; a Definitions Package's: Public;
+ * - a Service's Group: the widest of the Endpoints and Events it lists that are not Retired,
+ *   Private when none;
+ * - a Definitions Package's export: Public, since the Services that import it may use all of it;
+ * - a Standard Rejection: the widest of the Endpoints that list either code, Private when none
+ *   does, Public in a Definitions Package.
  */
-export type ChangeSite =
-  /** An Endpoint by identity, with its name: the proposed one, or the Baseline's when it is dropped. */
-  | {
-      readonly kind: 'endpoint';
-      readonly identity: string;
-      readonly name: string;
-      readonly visibility: Visibility;
-    }
-  /** An Event or a Command by identity; a Command is always Private. */
-  | {
-      readonly kind: 'event' | 'command';
-      readonly identity: string;
-      readonly visibility: Visibility;
-    }
-  /**
-   * A Rejection code, which is no Element: its Visibility is the widest of the Endpoints that answer
-   * it before or after the change, or Private when none does, or Public in a Definitions Package.
-   */
-  | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
-  /** A Subscription or a Dependency by name, Private since no Consumer relies on what a Service itself consumes. */
-  | {
-      readonly kind: 'subscription' | 'dependency';
-      readonly name: string;
-      readonly visibility: Visibility;
-    }
-  /** A Service's Guard by name, with the widest Visibility of the Endpoints that attach it, or a Definitions Package's, Public. */
-  | { readonly kind: 'guard'; readonly name: string; readonly visibility: Visibility }
-  /** A Service's Group by name, with the widest Visibility of the Endpoints and Events that are not Retired and that it lists, Private when none. */
-  | { readonly kind: 'group'; readonly name: string; readonly visibility: Visibility }
-  /** A Definitions Package's export by name, Public since the Services that import it may use all of it. */
-  | { readonly kind: 'export'; readonly name: string; readonly visibility: Visibility }
-  /**
-   * A Standard Rejection by name, whose resolved code the Snapshot records; its Visibility is the
-   * widest of the Endpoints that list either code, or Private when none does, or Public in a
-   * Definitions Package.
-   */
-  | { readonly kind: 'standard-rejection'; readonly name: string; readonly visibility: Visibility };
+export type ChangeSite = ChangedSite & { readonly visibility: Visibility };
 
 /**
  * Where a shape is read, which decides what makes a change to it Breaking: Input, Success (a

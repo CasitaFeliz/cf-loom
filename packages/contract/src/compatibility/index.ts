@@ -13,6 +13,4 @@ export type {
   Verdict,
 } from './report.ts';
 export type { ShapeDifference } from './shape-differences.ts';
-export type { Step } from './steps.ts';
-export { snapshotPathOf } from './steps.ts';
 export { versionBumpOf } from './versioning.ts';

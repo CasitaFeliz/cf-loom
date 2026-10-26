@@ -1,4 +1,5 @@
 import {
+  authorPathOf,
   type Change,
   type ChangeClass,
   type ChangeSite,
@@ -7,7 +8,6 @@ import {
   snapshotPathOf,
   type Verdict,
 } from '@cf-loom/contract/internal';
-import { authorPathOf } from './author-path.ts';
 import { hintOf } from './hints.ts';
 
 type WithSnapshotPath<Each> = Each extends { readonly at: unknown }

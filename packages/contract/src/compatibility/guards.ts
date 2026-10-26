@@ -6,12 +6,12 @@ import type {
   PublishedServiceSnapshot,
   ServiceSnapshot,
 } from '../snapshot/index.ts';
+import { partsOf } from '../walker/index.ts';
 import { answeredDifferencesOf } from './codes.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import { guardNeutralOf, guardSourcesOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
-import { partsOf } from './steps.ts';
 import { inputHeaderDifferencesOf, textPartDifferencesOf } from './text-parts.ts';
 import { widestVisibilitiesOf } from './visibility.ts';
 

@@ -1,4 +1,4 @@
-import type { SchemaNode } from '../walker/index.ts';
+import type { SchemaNode, Step } from '../walker/index.ts';
 import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
@@ -14,7 +14,6 @@ import {
 } from './findings.ts';
 import { type EnteredKey, followedOf } from './refs.ts';
 import type { Difference, EndpointPosition, Position } from './report.ts';
-import type { Step } from './steps.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
 /** Where a schema sits: the Position it is read in, and its steps from the site. */
