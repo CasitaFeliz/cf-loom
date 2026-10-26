@@ -194,6 +194,7 @@ export {
 } from '../walker/index.ts';
 export type {
   DurableConsumed,
+  EndpointPath,
   InputIssue,
   InvalidInputBody,
   Match,
@@ -218,6 +219,7 @@ export {
   deprecationHeaderOf,
   discardBodyOf,
   durableNameOf,
+  endpointPathOf,
   envelopeOf,
   factIdHeader,
   faultResponseOf,

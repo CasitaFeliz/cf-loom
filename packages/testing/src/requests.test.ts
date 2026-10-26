@@ -6,7 +6,12 @@ import {
   defineService,
   type Endpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import {
+  exportedSnapshotOf,
+  reservedResponseOf,
+  snapshotOf,
+  validateRoot,
+} from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -147,6 +152,20 @@ function countingFake(options: { readonly baseUrl?: string } = {}) {
   fake.on('capturePayment').otherwise((builder, { params, body }) => {
     taken.capturePayment += 1;
     return builder.success({ id: params.paymentId, amount: body.amount });
+  });
+  return { fake, taken };
+}
+
+/** A fake of `getPayment` whose Provider also declares `latest`, which its Contract Package does not export. */
+function fakeBesides(latest: ReturnType<typeof latestPayment>) {
+  const declared = [getPayment, capturePayment, getSummary, latest];
+  const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
+  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
+  const fake = fakeProvider(dependency);
+  const taken = { getPayment: 0 };
+  fake.on('getPayment').otherwise((builder, { params }) => {
+    taken.getPayment += 1;
+    return builder.success({ id: params.paymentId });
   });
   return { fake, taken };
 }
@@ -387,30 +406,39 @@ describe('fakeProvider: requests', () => {
     expect(taken.getPayment).toBe(0);
   });
 
-  test.each([
-    ['Private', latestPayment({ visibility: 'private', lifecycle: 'active' })],
-    ['Retired', latestPayment({ visibility: 'internal', lifecycle: 'retired' })],
-  ])(
-    'a %s Endpoint whose literal would beat a listed param never takes a request: the param does',
-    async (_, latest) => {
-      const declared = [getPayment, capturePayment, getSummary, latest];
-      const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const dependency = defineDependency({
-        provider: provider,
-        endpoints: [provider.endpoints.getPayment],
-      });
-      const fake = fakeProvider(dependency);
-      fake
-        .on('getPayment')
-        .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
+  test.each(['private', 'internal'] as const)(
+    'a request a Retired %s Endpoint wins is answered RETIRED as serve answers it, and takes no step',
+    async (visibility) => {
+      const { fake, taken } = fakeBesides(latestPayment({ visibility, lifecycle: 'retired' }));
 
       const response = await fake.fetch(
         new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
       );
 
-      expect(await response.json()).toEqual({ id: 'latest' });
+      const retired = reservedResponseOf('RETIRED');
+      expect(response.status).toBe(retired.status);
+      expect(response.headers.get('content-type')).toBe(retired.headers.get('content-type'));
+      expect(await response.text()).toBe(await retired.text());
+      expect(response.headers.has('deprecation')).toBe(false);
+      expect(taken.getPayment).toBe(0);
     },
   );
+
+  test('a request a Private Endpoint wins is a mistake naming it, and takes no step', async () => {
+    const { fake, taken } = fakeBesides(
+      latestPayment({ visibility: 'private', lifecycle: 'active' }),
+    );
+
+    const answering = fake.fetch(
+      new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+    );
+
+    await expect(answering).rejects.toThrow(FakeProviderError);
+    await expect(answering).rejects.toThrow(
+      'payments-service: the Provider does not export GET /payments/latest, which GET /payments/latest reaches',
+    );
+    expect(taken.getPayment).toBe(0);
+  });
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () =>
