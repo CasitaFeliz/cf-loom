@@ -1,18 +1,14 @@
 import {
-  type ExportedSnapshot,
   exportedSnapshotOf,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
+  type WholeExportedSnapshot,
 } from '@cf-loom/contract/internal';
 import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
 import { type ServiceEntry, serviceEntryOf, standardRejectionsModuleOf } from './entry-code.ts';
 import { eventModuleOf } from './event-code.ts';
-import {
-  exportedEndpointsOf,
-  exportedEventsOf,
-  exportedSnapshotModuleOf,
-} from './exported-snapshot.ts';
+import { exportedEndpointsOf, exportedEventsOf } from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { type ContractSnapshot, manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts';
@@ -59,7 +55,6 @@ function serviceSourcesOf(
   );
   return [
     serviceEntryOf({ name: snapshot.name, endpoints, events, defUses }),
-    exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(exported, defUses),
@@ -69,8 +64,8 @@ function serviceSourcesOf(
 /** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */
 function schemaFilesOf(
   { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
-  exported: ExportedSnapshot,
-  snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
+  exported: WholeExportedSnapshot,
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
 ): readonly SchemaFile[] {
   return [
     ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),
@@ -85,7 +80,7 @@ function schemaFilesOf(
 }
 
 function defsFilesOf(
-  exported: ExportedSnapshot,
+  exported: WholeExportedSnapshot,
   defUses: readonly DefUse[],
 ): readonly PackageFile[] {
   if (defUses.length === 0) {

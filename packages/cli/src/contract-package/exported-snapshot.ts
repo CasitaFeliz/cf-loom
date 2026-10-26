@@ -3,18 +3,15 @@ import {
   codeNameOf,
   type EndpointSnapshot,
   type EventSnapshot,
-  type ExportedSnapshot,
   nameAndVersionOf,
+  type WholeExportedSnapshot,
 } from '@cf-loom/contract/internal';
-import { jsonLiteralOf } from '../source-text/index.ts';
-import { type PackageFile, packageModuleOf } from './modules.ts';
-import { packagePaths } from './paths.ts';
 
 /** An Endpoint the package exports, with the identity the Snapshot keys it by. */
 export type ExportedEndpoint = { readonly id: string; readonly endpoint: EndpointSnapshot };
 
 /** The Endpoints of the exported Snapshot by name, as the package's entry lists them. */
-export function exportedEndpointsOf(exported: ExportedSnapshot): readonly ExportedEndpoint[] {
+export function exportedEndpointsOf(exported: WholeExportedSnapshot): readonly ExportedEndpoint[] {
   return Object.entries(exported.endpoints)
     .map(([id, endpoint]): ExportedEndpoint => ({ id, endpoint }))
     .sort((left, right) => byCodePoint(left.endpoint.name, right.endpoint.name));
@@ -28,17 +25,8 @@ export type ExportedEvent = {
 };
 
 /** The Events of the exported Snapshot in code point order of their names in code, as the entry lists them. */
-export function exportedEventsOf(exported: ExportedSnapshot): readonly ExportedEvent[] {
+export function exportedEventsOf(exported: WholeExportedSnapshot): readonly ExportedEvent[] {
   return Object.entries(exported.events)
     .map(([id, event]): ExportedEvent => ({ ...nameAndVersionOf(id), event }))
     .sort((left, right) => byCodePoint(codeNameOf(left), codeNameOf(right)));
-}
-
-/** The exported Snapshot as a module, typed `unknown` since the cf-loom that reads it reads it by the format it names. */
-export function exportedSnapshotModuleOf(exported: ExportedSnapshot): PackageFile {
-  const literal = jsonLiteralOf(exported, 'indented');
-  return packageModuleOf({
-    path: packagePaths.exportedSnapshot,
-    body: [`export const exportedSnapshot: unknown = ${literal};`],
-  });
 }

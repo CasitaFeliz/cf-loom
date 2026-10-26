@@ -56,19 +56,16 @@ export function serviceEntryOf(entry: ServiceEntry): PackageFile {
     ...typeLinesOf('endpoints', endpoints),
     ...typeLinesOf('events', events),
     '  readonly standardRejections: typeof standardRejections;',
-    '  readonly exportedSnapshot: unknown;',
     '} = {',
     `  name: ${stringLiteralOf(name)} as const,`,
     ...mapLinesOf('endpoints', endpoints),
     ...mapLinesOf('events', events),
     '  standardRejections,',
-    '  exportedSnapshot,',
     '} satisfies loom.ContractPackage;',
     ...defTypesExportOf(defUses),
   ];
   const siblings: readonly Sibling[] = [
     ...[...endpoints, ...events].map(({ declared }) => siblingOf(declared)),
-    { name: 'exportedSnapshot', path: packagePaths.exportedSnapshot, kind: 'value' },
     { name: 'standardRejections', path: packagePaths.standardRejections, kind: 'value' },
   ];
   return packageModuleOf({ path: packagePaths.entry, body, siblings, needs: loomNeeds() });

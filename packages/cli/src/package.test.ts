@@ -17,6 +17,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { providedSnapshotOf } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test } from 'vitest';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { peerRangesOf } from './internal/index.ts';
@@ -639,7 +640,6 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       'src/events',
       'src/events/order-placed.v1.ts',
       'src/events/order-placed.v2.ts',
-      'src/exported-snapshot.ts',
       'src/guards',
       'src/guards/permission.ts',
       'src/guards/user-token.ts',
@@ -731,8 +731,8 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     for (const absent of [...absents, 'OrderPurged', 'ChargeCard', 'auditPlaced']) {
       expect(code).not.toContain(absent);
     }
-    const imports = code.replace(read(out, 'src/exported-snapshot.ts'), '');
-    expect(imports).not.toContain('@org/definitions');
+    const imports = code.split('\n').filter((line) => line.startsWith('import '));
+    expect(imports.join('\n')).not.toContain('@org/definitions');
     expect(read(out, 'package.json')).not.toContain('@org/definitions');
   });
 
@@ -972,7 +972,6 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
         '    readonly orderPlacedV2: typeof orderPlacedEventV2;',
         '  };',
         '  readonly standardRejections: typeof standardRejections;',
-        '  readonly exportedSnapshot: unknown;',
         '} = {',
         "  name: 'orders-service' as const,",
         '  endpoints: {',
@@ -984,7 +983,6 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
         '    orderPlacedV2: orderPlacedEventV2,',
         '  },',
         '  standardRejections,',
-        '  exportedSnapshot,',
         '} satisfies loom.ContractPackage;',
       ].join('\n'),
     );
@@ -1248,25 +1246,19 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(unclosed).toEqual([]);
   });
 
-  test('its contract carries the Snapshot cut to the Endpoints and Events it exports and what they reach', async () => {
+  test('each exported Endpoint carries the Snapshot cut to it: its entry and the Guards, codes and defs it reaches, and no Event', async () => {
     const out = builtPackage();
     expect(typeCheck(out).status).toBe(0);
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
     const snapshot = JSON.parse(read(out, 'snapshot.json'));
-    const exported = built.contract.exportedSnapshot;
-    expect(exported).toEqual({
+    const { endpoints } = built.contract;
+    expect(providedSnapshotOf(endpoints.getOrder)).toEqual({
       format: 1,
       defs: {},
-      endpoints: {
-        'GET /orders': snapshot.endpoints['GET /orders'],
-        'GET /orders/{}': snapshot.endpoints['GET /orders/{}'],
-      },
-      events: {
-        'OrderPlaced@1': snapshot.events['OrderPlaced@1'],
-        'OrderPlaced@2': snapshot.events['OrderPlaced@2'],
-      },
+      endpoints: { 'GET /orders/{}': snapshot.endpoints['GET /orders/{}'] },
+      events: {},
       guards: { permission: snapshot.guards.permission, userToken: snapshot.guards.userToken },
       codes: {
         // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
@@ -1276,10 +1268,25 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       },
       shadowing: {},
     });
-    const names = Object.values(exported.endpoints).map((endpoint) =>
-      Reflect.get(Object(endpoint), 'name'),
-    );
-    expect(names.sort()).toEqual(Object.keys(built.contract.endpoints).sort());
+    expect(providedSnapshotOf(endpoints.listOrders)).toEqual({
+      format: 1,
+      defs: {},
+      endpoints: { 'GET /orders': snapshot.endpoints['GET /orders'] },
+      events: {},
+      guards: {},
+      codes: {},
+      shadowing: {},
+    });
+  });
+
+  test('the package carries no whole exported Snapshot: no file of it, and no exportedSnapshot in its contract', async () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+
+    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+
+    expect(filesIn(out)).not.toContain('src/exported-snapshot.ts');
+    expect(built.contract).not.toHaveProperty('exportedSnapshot');
   });
 
   test('a Consumer declares a Dependency on it, type-checks and generates', () => {
@@ -1681,7 +1688,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
-  test('the exported Snapshot’s defs are exactly the defs defs.ts declares', async () => {
+  test('the defs an Endpoint’s cut carries are exactly the defs defs.ts declares', async () => {
     const files = withDeclarations(
       [
         "export const leaf = z.object({ get up() { return z.array(leaf); } }).meta({ id: 'leaf' });",
@@ -1704,10 +1711,11 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
-    expect(Object.keys(built.contract.exportedSnapshot.defs).sort()).toEqual(['branch', 'leaf']);
+    const cut = providedSnapshotOf(built.contract.endpoints.ping);
+    expect(Object.keys(cut.defs).sort()).toEqual(['branch', 'leaf']);
   });
 
-  test('a recursive def only an exported Event reaches is written to defs.ts and kept in the exported Snapshot', async () => {
+  test('a recursive def only an exported Event reaches is written to defs.ts and kept in no Endpoint’s cut', async () => {
     const project = aProject(
       withEvents(
         [
@@ -1724,7 +1732,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
-    expect(Object.keys(built.contract.exportedSnapshot.defs)).toEqual(['leaf']);
+    expect(Object.keys(providedSnapshotOf(built.contract.endpoints.ping).defs)).toEqual([]);
     expect(read(out, 'src/defs.ts')).toContain('export const leafDefReader');
   });
 
