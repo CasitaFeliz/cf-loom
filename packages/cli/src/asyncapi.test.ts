@@ -733,7 +733,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
 
   test.for([
     ['--out', ['--out', 'folder'], 'Only package takes --out'],
-    ['--json', ['--json'], 'Only check and broker-plan take --json'],
+    ['--json', ['--json'], 'Only check, broker-plan and publish take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
     ['--prerelease', ['--prerelease'], 'Only check and publish take --prerelease'],
   ] as const)('asyncapi does not take %s', ([option, options, message]) => {

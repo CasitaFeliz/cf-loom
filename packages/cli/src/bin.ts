@@ -17,6 +17,7 @@ const optionTypes = {
   prefix: { type: 'string' },
   against: { type: 'string' },
   json: { type: 'boolean' },
+  'dry-run': { type: 'boolean' },
   force: { type: 'boolean' },
   prerelease: { type: 'boolean' },
   help: { type: 'boolean', short: 'h' },
@@ -50,17 +51,19 @@ function parsedOf(args: readonly string[]) {
   });
 }
 
-/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--against <version|dist-tag>`, `--json`, `--force`, `--prerelease`, `--help` and `--version` are the options, any other a usage error. */
+/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--against <version|dist-tag>`, `--json`, `--dry-run`, `--force`, `--prerelease`, `--help` and `--version` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const parsed = parsedOf(args);
   const { positionals, values } = parsed;
   const { out, prefix, against, force, prerelease, help, version } = values;
+  const dryRun = values['dry-run'] === true;
   const output = outputOf(parsed);
   const broken = optionProblemIn(parsed);
   if (broken !== undefined) {
     return { kind: 'usage', exit: usageError(broken), output };
   }
-  const options = { positionals, output, force: force === true, prerelease: prerelease === true };
+  const flagged = { force: force === true, prerelease: prerelease === true, dryRun };
+  const options = { positionals, output, ...flagged };
   const called: Called = {
     ...options,
     help: help === true,

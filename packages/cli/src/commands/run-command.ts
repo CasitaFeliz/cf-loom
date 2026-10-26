@@ -27,6 +27,7 @@ export type Called = {
   readonly output: Output;
   readonly force: boolean;
   readonly prerelease: boolean;
+  readonly dryRun: boolean;
   readonly help: boolean;
   readonly version: boolean;
 };
@@ -38,7 +39,7 @@ export function crashedExitOf(thrown: unknown): Exit {
 
 /** Runs the command the arguments name where and when the CLI runs. */
 export async function runCommand(called: Called, run: Run): Promise<Exit> {
-  const { positionals, out, force, prerelease } = called;
+  const { positionals, out, force, prerelease, dryRun } = called;
   const [command, ...rest] = positionals;
   const answered = misplacedOptionIn(called, command) ?? askedAboutOf(called);
   if (answered !== undefined) {
@@ -66,7 +67,7 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
     case 'publish':
       return rest.length > 0
         ? usageError('publish takes no argument')
-        : await publish(run, { force, prerelease });
+        : await publish(run, { force, prerelease, dryRun });
     default:
       return usageError(`Unknown command: ${command ?? '(none)'}`);
   }
@@ -83,7 +84,7 @@ function askedAboutOf({ help, version, positionals }: Called): Exit | undefined 
 
 /** The usage error of an option given to a command that does not take it. */
 function misplacedOptionIn(
-  { out, prefix, against, output, force, prerelease }: Called,
+  { out, prefix, against, output, force, prerelease, dryRun }: Called,
   command: string | undefined,
 ): Exit | undefined {
   if (out !== undefined && command !== 'package') {
@@ -95,8 +96,11 @@ function misplacedOptionIn(
   if (prefix !== undefined && command !== 'broker-plan' && command !== 'asyncapi') {
     return usageError('Only broker-plan and asyncapi take --prefix');
   }
-  if (output === 'json' && command !== 'check' && command !== 'broker-plan') {
-    return usageError('Only check and broker-plan take --json');
+  if (output === 'json' && !['check', 'broker-plan', 'publish'].includes(command ?? '')) {
+    return usageError('Only check, broker-plan and publish take --json');
+  }
+  if (dryRun && command !== 'publish') {
+    return usageError('Only publish takes --dry-run');
   }
   if (force && command !== 'publish') {
     return usageError('Only publish takes --force');

@@ -1431,7 +1431,7 @@ describe('cf-loom openapi: what it refuses', () => {
   test.for([
     ['--out', ['--out', 'folder'], 'Only package takes --out'],
     ['--prefix', ['--prefix', 'staging'], 'Only broker-plan and asyncapi take --prefix'],
-    ['--json', ['--json'], 'Only check and broker-plan take --json'],
+    ['--json', ['--json'], 'Only check, broker-plan and publish take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
     ['--prerelease', ['--prerelease'], 'Only check and publish take --prerelease'],
   ] as const)('openapi does not take %s', ([option, options, message]) => {

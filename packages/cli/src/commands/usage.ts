@@ -12,7 +12,7 @@ const syntaxes = {
   'broker-plan': 'broker-plan [--prefix <p>] [--json]',
   openapi: 'openapi',
   asyncapi: 'asyncapi [--prefix <p>]',
-  publish: 'publish [--force] [--prerelease]',
+  publish: 'publish [--json] [--dry-run] [--force] [--prerelease]',
 } as const;
 
 type CommandName = keyof typeof syntaxes;
