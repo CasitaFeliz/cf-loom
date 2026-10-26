@@ -5,6 +5,7 @@ import {
   isReserved,
   kebabCase,
   pascalCase,
+  type RootKind,
   upperSnakeCase,
   wordsOf,
 } from '../declarations/index.ts';
@@ -15,7 +16,7 @@ import { type DeclarationFailure, failure } from './failures.ts';
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
 type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
 
-/** Every name of a root follows the grammar of its kind; a name that is no string is another rule's. */
+/** Every name of a Root follows the grammar of its kind; a name that is no string is another rule's. */
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, groups, endpoints, guards, rejections, standardRejections } = declarations;
   const { events, commands, subscriptions } = declarations;
@@ -90,15 +91,12 @@ const rootNameGrammar = kebabCase;
 /** What a Service's and an Application's name is called in a sentence. */
 const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
 
-/** The kinds of root, as `init` names them. */
-type RootNameKind = 'service' | 'application' | 'definitions';
-
 /**
- * Why a name cannot be a root's, as the clause validation fails it with, such as `a Service name
+ * Why a name cannot be a Root's, as the clause validation fails it with, such as `a Service name
  * is kebab-case`; nothing when it follows the grammar of its kind, and for a Definitions Package,
  * which has no name but its package.json's.
  */
-export function rootNameProblemOf(kind: RootNameKind, name: string): string | undefined {
+export function rootNameProblemOf(kind: RootKind, name: string): string | undefined {
   switch (kind) {
     case 'service':
     case 'application': {
@@ -116,7 +114,7 @@ export function rootNameProblemOf(kind: RootNameKind, name: string): string | un
 /** A Service's or Application's name follows its grammar; a Definitions Package has none. */
 function rootNameFailures(root: Declarations['root']): readonly DeclarationFailure[] {
   switch (root.kind) {
-    case 'contract':
+    case 'service':
       return grammarFailures(rootNamed('service', root.name), rootNameGrammar);
     case 'application':
       return grammarFailures(rootNamed('application', root.name), rootNameGrammar);

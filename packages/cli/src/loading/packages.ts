@@ -8,13 +8,13 @@ import {
 import { definitionsPackagesOf } from './definitions-packages.ts';
 import type { ImportedPackage } from './imported-packages.ts';
 
-/** The Definitions Packages the root's import reached, or why the Contract cannot take its Standard Rejections. */
+/** The Definitions Packages the Root's import reached, or why the Contract cannot take its Standard Rejections. */
 export type ResolvedPackages =
   | { readonly kind: 'resolved'; readonly packages: readonly ImportedDefinitions[] }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * The Definitions Packages the root's import reached, as their package.json names them or not; the
+ * The Definitions Packages the Root's import reached, as their package.json names them or not; the
  * one a Contract names as `standardRejections` must belong to exactly one of them, with a name and
  * a version.
  */

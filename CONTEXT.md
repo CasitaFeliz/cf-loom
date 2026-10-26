@@ -25,8 +25,12 @@ The published artifact that carries exactly one Contract: its Public and Interna
 _Avoid_: schemas package, public package (Visibility is not about the registry)
 
 **Definitions Package**:
-A versioned package of declarations that several Contracts import by name: the Guards, Rejections and shared schemas its root file exports. It owns no Elements and no Handlers.
+A versioned package of declarations that several Contracts import by name: the Guards, Rejections and shared schemas its Root file exports. It owns no Elements and no Handlers.
 _Avoid_: shared kit, common contract, library
+
+**Root**:
+The declaration `generate` runs on, which its project's Root file, `src/contract/index.ts` or `src/definitions/index.ts`, exports under any name and its Snapshot describes: a Service's Contract, an Application's Contract or a Definitions Package.
+_Avoid_: entry (the Contract Package's entry is a file), manifest, top-level
 
 **Service**:
 The deployable unit that owns and implements exactly one Contract and offers Elements.

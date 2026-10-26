@@ -1,4 +1,4 @@
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { serve } from './index.ts';
@@ -37,7 +37,7 @@ const oldOrders = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

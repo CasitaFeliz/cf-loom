@@ -4,20 +4,20 @@ import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   providedEndpoint,
   providedEvent,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+/** Validates a Root as the package it names: its package.json named as the Root is. */
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const getPayment = providedEndpoint('payments-service', {
@@ -96,13 +96,13 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: a Service’s Dependencies', () => {
+describe('validateRoot: a Service’s Dependencies', () => {
   test('a Dependency on Public and Internal Endpoints validates', () => {
     const paymentsDependency = defineDependency({
       provider: payments,
       endpoints: [getPayment, refundPayment],
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       dependencies: [paymentsDependency],
     });
@@ -112,7 +112,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
   test('a Dependency only a Subscription uses, through its Provider’s Event, validates', () => {
     const paymentsDependency = defineDependency({ provider: payments });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [messages],
       dependencies: [paymentsDependency],
@@ -123,7 +123,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
   test('a Dependency that selects no Endpoint and whose Event no Subscription receives fails', () => {
     const paymentsDependency = defineDependency({ provider: payments, endpoints: [] });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -136,7 +136,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
   test('a second Dependency exporting a Subscription’s Event gives it nothing, so it is unused', () => {
     const mirror = { ...payments, name: 'mirror-service' };
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [messages],
       dependencies: [
@@ -173,7 +173,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       events: [orderCreatedV1],
       subscriptions: [auditOrders],
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [orders],
       dependencies: [dependencyAsWritten({ provider: { ...payments, name: 'orders-service' } })],
@@ -190,7 +190,7 @@ describe('validateContract: a Service’s Dependencies', () => {
 
   test('a Dependency on an Endpoint the Provider does not export fails', () => {
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints: [getReceipt] });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -212,7 +212,7 @@ describe('validateContract: a Service’s Dependencies', () => {
     });
     const provider = { ...payments, endpoints: { healthCheck } };
     const paymentsDependency = dependencyAsWritten({ provider, endpoints: [healthCheck] });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -226,7 +226,7 @@ describe('validateContract: a Service’s Dependencies', () => {
   test('a Dependency on something that is not an Endpoint fails, by its position', () => {
     const endpoints = [getPayment, { name: 'refundPayment' }];
     const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -243,7 +243,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       endpoints: [getPayment],
       events: [paymentSettledV1],
     });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -259,7 +259,7 @@ describe('validateContract: a Service’s Dependencies', () => {
       provider: payments,
       endpoints: [getPayment, refundPayment, getPayment],
     });
-    const contract = defineContract({ name: 'orders-service', dependencies: [paymentsDependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -273,7 +273,7 @@ describe('validateContract: a Service’s Dependencies', () => {
   test('two Dependencies on one Provider fail', () => {
     const first = defineDependency({ provider: payments, endpoints: [getPayment] });
     const second = defineDependency({ provider: payments, endpoints: [refundPayment] });
-    const contract = defineContract({ name: 'orders-service', dependencies: [first, second] });
+    const contract = defineService({ name: 'orders-service', dependencies: [first, second] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -285,7 +285,7 @@ describe('validateContract: a Service’s Dependencies', () => {
   });
 });
 
-describe('validateContract: a Dependency written as the types refuse', () => {
+describe('validateRoot: a Dependency written as the types refuse', () => {
   test.each([
     {
       what: 'an Endpoint written undefined',
@@ -380,17 +380,17 @@ describe('validateContract: a Dependency written as the types refuse', () => {
     },
   ])('$what fails with one line', ({ declaration, line }) => {
     const dependency = dependencyAsWritten(declaration);
-    const contract = defineContract({ name: 'orders-service', dependencies: [dependency] });
+    const contract = defineService({ name: 'orders-service', dependencies: [dependency] });
 
     expect(validateInPackage(contract)).toEqual(failed(line.at, line.rule, line.message));
   });
 });
 
-describe('validateContract: Dependencies whose providers have no name', () => {
+describe('validateRoot: Dependencies whose providers have no name', () => {
   test('two of them fail once each, by position, and never as one Provider listed twice', () => {
     const first = dependencyAsWritten({ provider: undefined, endpoints: [getPayment] });
     const second = dependencyAsWritten({ provider: { ...payments, name: 5 } });
-    const contract = defineContract({ name: 'orders-service', dependencies: [first, second] });
+    const contract = defineService({ name: 'orders-service', dependencies: [first, second] });
 
     const message = "A Dependency's provider is the contract a Contract Package exports";
     expect(validateInPackage(contract)).toEqual({
@@ -403,7 +403,7 @@ describe('validateContract: Dependencies whose providers have no name', () => {
   });
 });
 
-describe('validateContract: an Application’s Dependencies', () => {
+describe('validateRoot: an Application’s Dependencies', () => {
   test('an Application depending on Public Endpoints validates', () => {
     const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
     const application = defineApplication({

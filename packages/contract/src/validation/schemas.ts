@@ -44,20 +44,20 @@ export type SchemaSlot = Slot & { readonly value: $ZodType };
 /** A slot whose schema walked to a node. */
 export type WalkedSlot = Slot & { readonly node: SchemaNode };
 
-/** Every slot of a root that holds a schema, and the slots a cast filled with no schema. */
+/** Every slot of a Root that holds a schema, and the slots a cast filled with no schema. */
 export type SchemaSlots = {
   readonly slots: readonly SchemaSlot[];
   readonly failures: readonly DeclarationFailure[];
 };
 
-/** The walked nodes of a root, by the declaration that owns them and the part, with their `defs`. */
+/** The walked nodes of a Root, by the declaration that owns them and the part, with their `defs`. */
 export type Nodes = {
   readonly slots: readonly WalkedSlot[];
   readonly nodeOf: (owner: unknown, part: Part) => SchemaNode | undefined;
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
-/** The slots of a root's Endpoints and Guards that travel as text, in declaration order. */
+/** The slots of a Root's Endpoints and Guards that travel as text, in declaration order. */
 export function textSlotsOf(declarations: Declarations): readonly Slot[] {
   const slots = [
     ...declarations.endpoints.flatMap(endpointSlots),
@@ -66,7 +66,7 @@ export function textSlotsOf(declarations: Declarations): readonly Slot[] {
   return slots.filter((slot) => isObjectPart(slot.part));
 }
 
-/** Every slot of a root that holds a value, in declaration order, so the walk sees each once. */
+/** Every slot of a Root that holds a value, in declaration order, so the walk sees each once. */
 export function schemaSlotsOf(declarations: Declarations): SchemaSlots {
   const slots = [
     ...declarations.endpoints.flatMap(endpointSlots),
@@ -152,7 +152,7 @@ function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
   return guardParts.map((part) => slot(owned, part, writtenAt(guard, part)));
 }
 
-/** Each declaration of a code owns its body's slot; a valid root has one per code. */
+/** Each declaration of a code owns its body's slot; a valid Root has one per code. */
 function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
   return rejections.map(({ at, rejection }) =>
     slot({ at, owner: rejection }, 'body', rejection.body),

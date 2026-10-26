@@ -41,7 +41,7 @@ export function isSameRejection(listed: AnswerableRejection, rejection: unknown)
   return listed === rejection;
 }
 
-/** A Rejection's code, status and message: its own, or, for a Standard one, the root's resolved. */
+/** A Rejection's code, status and message: its own, or, for a Standard one, the Root's resolved. */
 export function resolutionOf(
   rejection: AnswerableRejection,
   standards: StandardRejections,

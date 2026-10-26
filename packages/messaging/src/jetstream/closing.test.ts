@@ -1,4 +1,4 @@
-import { defineContract, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';
+import { defineEvent, defineGroup, defineService, defineSubscription } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
 import type { ConnectionOptions, NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -28,7 +28,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

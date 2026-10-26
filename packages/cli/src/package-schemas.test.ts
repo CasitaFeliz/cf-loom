@@ -108,7 +108,7 @@ const service: Readonly<Record<string, string>> = {
   ]),
   'src/contract/index.ts': lines([
     'import {',
-    '  defineContract,',
+    '  defineService,',
     '  defineEndpoint,',
     '  defineEvent,',
     '  defineGroup,',
@@ -141,7 +141,7 @@ const service: Readonly<Record<string, string>> = {
     '});',
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
     "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, overlap, proto], events: [shaped] });",
-    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes] });",
+    "export const contract = defineService({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
 

@@ -290,11 +290,11 @@ function anEndpoint({
   ]);
 }
 
-/** The root, listing the Group `orders` of the given Endpoints, each exported from its file. */
+/** The Root, listing the Group `orders` of the given Endpoints, each exported from its file. */
 function aRoot(endpoints: Readonly<Record<string, string>>): string {
   const names = Object.keys(endpoints);
   return lines([
-    "import { defineContract, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineGroup } from '@cf-loom/contract';",
     ...names.map((name) => `import { ${name} } from '${endpoints[name]}';`),
     '',
     'const orders = defineGroup({',
@@ -303,7 +303,7 @@ function aRoot(endpoints: Readonly<Record<string, string>>): string {
     `  endpoints: [${names.join(', ')}],`,
     '});',
     '',
-    "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
   ]);
 }
 
@@ -385,8 +385,8 @@ function withDefinitionsGuard(): Readonly<Record<string, string>> {
     }),
     'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
       .replace(
-        "import { defineContract, defineGroup } from '@cf-loom/contract';",
-        "import { defineContract, defineGroup } from '@cf-loom/contract';\nimport { definitions } from '@org/definitions';",
+        "import { defineService, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineGroup } from '@cf-loom/contract';\nimport { definitions } from '@org/definitions';",
       )
       .replace(
         "name: 'orders-service',",
@@ -481,7 +481,7 @@ const messages = lines([
   '});',
 ]);
 
-/** The Subscriptions every messaging root lists, each exported under its name in code. */
+/** The Subscriptions every messaging Root lists, each exported under its name in code. */
 const subscriptions = lines([
   "import { defineSubscription } from '@cf-loom/contract';",
   "import { orderCreatedV2 } from './messages.ts';",
@@ -500,19 +500,19 @@ const subscriptions = lines([
   '});',
 ]);
 
-/** A Subscription to `OrderCreated@2` written where the root lists it, so no file exports it. */
+/** A Subscription to `OrderCreated@2` written where the Root lists it, so no file exports it. */
 function inlineSubscription(name: string): string {
   return `defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 })`;
 }
 
-/** What the Group `payments` of a messaging root lists, each line one of `defineGroup`'s fields. */
+/** What the Group `payments` of a messaging Root lists, each line one of `defineGroup`'s fields. */
 type MessagingLists = {
   readonly commands?: string;
   readonly subscriptions?: readonly string[];
 };
 
 /**
- * The root of `aService()`, its Group `orders` also listing its Events, and a Group `payments`
+ * The Root of `aService()`, its Group `orders` also listing its Events, and a Group `payments`
  * listing its Commands and the Subscriptions of `subscriptions.ts`: one to a Provider's Event,
  * then one to its own `OrderCreated@2`.
  */
@@ -523,10 +523,10 @@ function aMessagingRoot({
   const root = aService()['src/contract/index.ts'] ?? '';
   return root
     .replace(
-      "import { defineContract, defineGroup } from '@cf-loom/contract';",
+      "import { defineService, defineGroup } from '@cf-loom/contract';",
       lines([
         'import {',
-        '  defineContract,',
+        '  defineService,',
         '  defineDependency,',
         '  defineGroup,',
         '  defineSubscription,',
@@ -544,7 +544,7 @@ function aMessagingRoot({
       ]).trimEnd(),
     )
     .replace(
-      "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
+      "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
       lines([
         'const paymentsDependency = defineDependency({ provider: payments });',
         '',
@@ -555,7 +555,7 @@ function aMessagingRoot({
         `  subscriptions: [${subscriptions.join(', ')}],`,
         '});',
         '',
-        'export const contract = defineContract({',
+        'export const contract = defineService({',
         "  name: 'orders-service',",
         '  groups: [orders, paymentsGroup],',
         '  dependencies: [paymentsDependency],',
@@ -585,7 +585,7 @@ function aMessagingService(lists: MessagingLists = {}): Readonly<Record<string, 
 
 /**
  * `aMessagingService` before the Command's Message Version `name` was declared: its file does not
- * export it and the root does not import it, so a root that lists it later is a Contract change.
+ * export it and the Root does not import it, so a Root that lists it later is a Contract change.
  */
 function aMessagingServiceWithout(
   name: string,
@@ -612,7 +612,7 @@ function probe(project: string, script: string): unknown {
 }
 
 /** The probe's import of a module of the project, by its path from the project's folder. */
-/** The Handler map's import of its root, by type, for `satisfies HandlerMapOf<typeof contract>`. */
+/** The Handler map's import of its Root, by type, for `satisfies HandlerMapOf<typeof contract>`. */
 function contractImport(specifier: string): string {
   return `import type { contract } from '${specifier}';`;
 }
@@ -1009,7 +1009,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(text).toContain("import * as loom from '@cf-loom/contract';");
   });
 
-  test('Commands are paired in code point order of their names in code, whatever the root’s order', () => {
+  test('Commands are paired in code point order of their names in code, whatever the Root’s order', () => {
     const project = aProject(
       aMessagingService({
         commands: '[chargeCardV1, chargeCardV2, refundCardV1, shipOrderV10, shipV1, shipOrderV1]',
@@ -2824,7 +2824,7 @@ describe('cf-loom generate: what it refuses', () => {
   });
 });
 
-describe('cf-loom generate: roots that offer no Elements', () => {
+describe('cf-loom generate: Roots that offer no Elements', () => {
   test.each([
     [
       'an Application',
@@ -3010,7 +3010,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked.stdout).toContain(path.replace('src/', './'));
   });
 
-  test('a root whose subscriptions are held in a variable generates a Service that passes tsc with noUncheckedIndexedAccess', () => {
+  test('a Root whose subscriptions are held in a variable generates a Service that passes tsc with noUncheckedIndexedAccess', () => {
     const service = aMessagingService();
     const project = aProject({
       ...service,
@@ -3356,7 +3356,7 @@ describe('cf-loom generate: the Service type-checks', () => {
           ],
         ),
         'src/contract/index.ts': lines([
-          "import { defineContract, defineGroup } from '@cf-loom/contract';",
+          "import { defineService, defineGroup } from '@cf-loom/contract';",
           importOfName(command, 'chargeCardV1', './commands/charge-card.v1.command.ts'),
           importOfName(endpoint, 'createOrder', './endpoints/create-order.endpoint.ts'),
           importOf('{ orderCreatedV1 }', './events/order-created.v1.event.ts'),
@@ -3375,7 +3375,7 @@ describe('cf-loom generate: the Service type-checks', () => {
           '  subscriptions: [auditCreated],',
           '});',
           '',
-          "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
+          "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
         ]),
         'tsconfig.json': tsconfig,
       };
@@ -3610,7 +3610,7 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     });
   });
 
-  test('verify exits 0 when the root’s commands are reordered, since readers.generated.ts imports them by export', () => {
+  test('verify exits 0 when the Root’s commands are reordered, since readers.generated.ts imports them by export', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     write(project, {
@@ -3922,7 +3922,7 @@ describe('cf-loom generate: linked folders and other runs', () => {
   });
 
   test.each(['generate', 'verify'])(
-    'a file under src/contract the root does not import that cannot be loaded is a tooling error of %s',
+    'a file under src/contract the Root does not import that cannot be loaded is a tooling error of %s',
     (command) => {
       const project = aProject({ ...aService(), 'src/contract/broken.ts': 'export const = ;\n' });
 
@@ -4073,7 +4073,7 @@ describe('cf-loom generate and verify: what the file system holds', () => {
   });
 });
 
-/** `aMessagingService()` with its root's text changed, as when a declaration moves between Groups. */
+/** `aMessagingService()` with its Root's text changed, as when a declaration moves between Groups. */
 function withRoot(
   files: Readonly<Record<string, string>>,
   change: (root: string) => string,
@@ -4081,13 +4081,13 @@ function withRoot(
   return { ...files, 'src/contract/index.ts': change(files['src/contract/index.ts'] ?? '') };
 }
 
-/** The Group `orders` of a messaging root, also listing the given fields. */
+/** The Group `orders` of a messaging Root, also listing the given fields. */
 function ordersAlsoListing(fields: string): (root: string) => string {
   const events = '  events: [orderCreatedV1, orderCreatedV2, orderPurgedV1],';
   return (root) => root.replace(events, `${events}\n${fields}`);
 }
 
-/** A messaging root whose Group `payments` is named otherwise. */
+/** A messaging Root whose Group `payments` is named otherwise. */
 function paymentsNamed(name: string): (root: string) => string {
   return (root) => root.replace("  name: 'payments',", `  name: '${name}',`);
 }
@@ -4399,7 +4399,7 @@ function withProviderEndpoint(
   };
 }
 
-describe('cf-loom generate and verify: a declaration the root does not reach', () => {
+describe('cf-loom generate and verify: a declaration the Root does not reach', () => {
   test('an Endpoint exported under src/contract that no Group lists exits 1 naming its file, and writes nothing', () => {
     const project = aProject(withUnlistedEndpoint(aService()));
 
@@ -4649,7 +4649,7 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
     expect(ran.stderr).toBe(`${unreachedLine('src/contract/archive.ts', 'listArchived')}\n`);
   });
 
-  test('a Group the root does not list is reported once, and what it lists is not', () => {
+  test('a Group the Root does not list is reported once, and what it lists is not', () => {
     const project = aProject({
       ...withRoot(aMessagingService(), (root) =>
         root
@@ -4693,7 +4693,7 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
       status: 1,
       stdout: '',
       stderr:
-        'src/contract/groups/archive.group.ts exports archiveGroup, which the root does not list: list it in groups or delete it\n',
+        'src/contract/groups/archive.group.ts exports archiveGroup, which the Root does not list: list it in groups or delete it\n',
     });
   });
 
@@ -4726,8 +4726,8 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
         (root) =>
           root
             .replace(
-              "import { defineContract, defineGroup } from '@cf-loom/contract';",
-              `import { defineContract, defineGroup } from '@cf-loom/contract';\n${importOf('{ archivedOrders }', './endpoints/orders/archived-orders.endpoint.ts')}`,
+              "import { defineService, defineGroup } from '@cf-loom/contract';",
+              `import { defineService, defineGroup } from '@cf-loom/contract';\n${importOf('{ archivedOrders }', './endpoints/orders/archived-orders.endpoint.ts')}`,
             )
             .replace(
               'endpoints: [getOrder, createOrder, listOrders]',

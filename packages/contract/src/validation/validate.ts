@@ -1,17 +1,12 @@
-import {
-  type Definitions,
-  isApplication,
-  isContract,
-  isDefinitions,
-} from '../declarations/index.ts';
+import type { Definitions, Root } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import { openCompositionsOf, walkMeetingSchemas } from '../walker/index.ts';
-import { type Declarations, declarationsOf, type Root } from '../written/index.ts';
+import { type Declarations, declarationsOf } from '../written/index.ts';
 import { codeOnceFailures } from './code-once.ts';
 import { exportFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
 import { endpointFailures } from './endpoints.ts';
-import { type DeclarationFailure, type Failure, failure } from './failures.ts';
+import type { DeclarationFailure, Failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
 import { groupFailures } from './groups.ts';
 import { attachmentFailures, guardFailures, qualifierFailures } from './guards.ts';
@@ -36,7 +31,7 @@ import { conflictFailures, textPartFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
 /**
- * The walked schemas of a valid root and their `defs`: `nodeOf` finds the node of a declaration's
+ * The walked schemas of a valid Root and their `defs`: `nodeOf` finds the node of a declaration's
  * part, a shared schema being its own declaration.
  */
 export type ValidatedSchemas = {
@@ -58,7 +53,7 @@ export type PackageIdentity =
   | Unidentified;
 
 /**
- * A Definitions Package the root's files import, as Node resolved it: who its package.json says it
+ * A Definitions Package the Root's files import, as Node resolved it: who its package.json says it
  * is, its Definitions object, what its module exports by name, and the other imported Definitions
  * Packages its files import, directly or through any package, which says which of two exporters of
  * one object imports it from the other.
@@ -73,9 +68,9 @@ export type ImportedDefinitions = PackageIdentity & {
 export type ResolvedDefinitions = Extract<ImportedDefinitions, { readonly kind: 'identified' }>;
 
 /**
- * The package a root sits in: its package.json name, scope included; every Definitions Package its
- * files import, as Node resolved them, named by their package.json or not; and what the root file
- * exports beside the root, by name, which a Definitions root's members are.
+ * The package a Root sits in: its package.json name, scope included; every Definitions Package its
+ * files import, as Node resolved them, named by their package.json or not; and what the Root file
+ * exports beside the Root, by name, which a Definitions Package's members are.
  */
 export type RootPackage = {
   readonly packageName: string;
@@ -84,10 +79,10 @@ export type RootPackage = {
 };
 
 /**
- * A root validated: its schemas walked and its declarations gathered for the Snapshot, or every
+ * A Root validated: its schemas walked and its declarations gathered for the Snapshot, or every
  * failure in it, declarations and schemas alike.
  */
-export type ValidatedContract =
+export type ValidatedRoot =
   | {
       readonly kind: 'valid';
       readonly schemas: ValidatedSchemas;
@@ -95,19 +90,15 @@ export type ValidatedContract =
     }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
 
-/** A root the validation found valid: the only input a Snapshot is built from. */
-export type ValidContract = Extract<ValidatedContract, { readonly kind: 'valid' }>;
+/** A Root the validation found valid: the only input a Snapshot is built from. */
+export type ValidRoot = Extract<ValidatedRoot, { readonly kind: 'valid' }>;
 
 /**
- * Checks every rule `generate` enforces on a root's declarations and walks every schema of it
+ * Checks every rule `generate` enforces on a Root's declarations and walks every schema of it
  * once, reporting all failures together, since a cast or a widened type skips the rules the
- * types state; what a module exports as its root is judged whatever it is.
+ * types state.
  */
-export function validateContract(root: unknown, rootPackage: RootPackage): ValidatedContract {
-  if (!isRoot(root)) {
-    const message = 'A root is a Contract, an Application or a Definitions Package';
-    return invalid([failure([], 'not-a-root', message)]);
-  }
+export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoot {
   const { packages, rootExports } = rootPackage;
   const declarations = declarationsOf(root, rootExports);
   const slots = schemaSlotsOf(declarations);
@@ -167,14 +158,10 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
   ];
 }
 
-function isRoot(value: unknown): value is Root {
-  return isContract(value) || isApplication(value) || isDefinitions(value);
-}
-
-function invalid(failures: readonly Failure[]): ValidatedContract {
+function invalid(failures: readonly Failure[]): ValidatedRoot {
   const [first, ...others] = failures;
   if (first === undefined) {
-    throw new Error('An invalid root must name at least one failure.');
+    throw new Error('An invalid Root must name at least one failure.');
   }
   return { kind: 'invalid', failures: [first, ...others] };
 }

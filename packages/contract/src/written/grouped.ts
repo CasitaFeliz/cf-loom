@@ -1,10 +1,11 @@
 import type {
   Command,
-  Contract,
   Endpoint,
   Event,
   Group,
   GroupedField,
+  Root,
+  ServiceContract,
   Subscription,
 } from '../declarations/index.ts';
 import { isGroup, providerOf } from '../declarations/index.ts';
@@ -20,11 +21,10 @@ import type {
   LocatedEvent,
   LocatedGroup,
   LocatedSubscription,
-  Root,
 } from './located.ts';
 import { listOf, textOf } from './written.ts';
 
-/** What a root's Groups list, each declaration once, where first met, located under its Group. */
+/** What a Root's Groups list, each declaration once, where first met, located under its Group. */
 export type Grouped = {
   readonly endpoints: readonly LocatedEndpoint[];
   readonly events: readonly LocatedEvent[];
@@ -32,9 +32,9 @@ export type Grouped = {
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** A root's Groups, each where it sits by name; only a Contract has them. */
+/** A Root's Groups, each where it sits by name; only a Service's Contract has them. */
 export function groupsOf(root: Root): readonly LocatedGroup[] {
-  if (root.kind !== 'contract') {
+  if (root.kind !== 'service') {
     return [];
   }
   return listOf(root.groups)
@@ -42,7 +42,7 @@ export function groupsOf(root: Root): readonly LocatedGroup[] {
     .map((group) => ({ at: ['groups', textOf(group.name)], group }));
 }
 
-/** Gathers what a root's Groups list; a declaration listed twice is the Groups rule's to report. */
+/** Gathers what a Root's Groups list; a declaration listed twice is the Groups rule's to report. */
 export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
   return {
     endpoints: distinctListed(groups, 'endpoints').map(({ at, declaration, group }) => ({
@@ -125,28 +125,28 @@ function locatedIn<Field extends GroupedField>(
   }));
 }
 
-/** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
-export function endpointsOf(contract: Contract): readonly Endpoint[] {
+/** Every Endpoint a Contract lists through its Groups, each once, in the Root's order. */
+export function endpointsOf(contract: ServiceContract): readonly Endpoint[] {
   return declarationsListed(contract, 'endpoints');
 }
 
-/** Every Event's Message Version a Contract lists through its Groups, each once, in the root's order. */
-export function eventsOf(contract: Contract): readonly Event[] {
+/** Every Event's Message Version a Contract lists through its Groups, each once, in the Root's order. */
+export function eventsOf(contract: ServiceContract): readonly Event[] {
   return declarationsListed(contract, 'events');
 }
 
-/** Every Command's Message Version a Contract lists through its Groups, each once, in the root's order. */
-export function commandsOf(contract: Contract): readonly Command[] {
+/** Every Command's Message Version a Contract lists through its Groups, each once, in the Root's order. */
+export function commandsOf(contract: ServiceContract): readonly Command[] {
   return declarationsListed(contract, 'commands');
 }
 
-/** Every Subscription a Contract lists through its Groups, each once, in the root's order. */
-export function subscriptionsOf(contract: Contract): readonly Subscription[] {
+/** Every Subscription a Contract lists through its Groups, each once, in the Root's order. */
+export function subscriptionsOf(contract: ServiceContract): readonly Subscription[] {
   return declarationsListed(contract, 'subscriptions');
 }
 
 function declarationsListed<Field extends GroupedField>(
-  contract: Contract,
+  contract: ServiceContract,
   field: Field,
 ): readonly GroupedDeclarations[Field][] {
   return distinctListed(groupsOf(contract), field).map(({ declaration }) => declaration);

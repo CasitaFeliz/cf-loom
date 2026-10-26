@@ -2,7 +2,6 @@ import type { NotAllowed, Path } from '../walker/index.ts';
 
 /** The rules `generate` enforces on declarations, one id per documented rule, so a caller decides by rule. */
 export type Rule =
-  | 'not-a-root'
   | 'not-a-list'
   | 'not-a-declaration'
   | 'not-a-schema'
@@ -74,7 +73,7 @@ export type DeclarationFailure = {
   readonly message: string;
 };
 
-/** What makes a root invalid: a declaration that breaks a rule, or a construct that is not allowed. */
+/** What makes a Root invalid: a declaration that breaks a rule, or a construct that is not allowed. */
 export type Failure = DeclarationFailure | NotAllowed;
 
 /** One declaration failure, as every rule returns it. */
@@ -87,7 +86,7 @@ export function locationOf(at: Path): string {
   return at.length === 0 ? '(root)' : at.join('.');
 }
 
-/** One failure on one line, where it sits first, as every tool that reports a root's rules words it. */
+/** One failure on one line, where it sits first, as every tool that reports a Root's rules words it. */
 export function failureLineOf(broken: Failure): string {
   const location = locationOf(broken.at);
   switch (broken.kind) {

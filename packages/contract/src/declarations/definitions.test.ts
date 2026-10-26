@@ -11,7 +11,7 @@ import {
 } from '../index.ts';
 
 describe('defineDefinitions', () => {
-  test('guards, schemas and rejections are type errors: what the root file exports is what a Definitions Package shares', () => {
+  test('guards, schemas and rejections are type errors: what the Root file exports is what a Definitions Package shares', () => {
     // @ts-expect-error: guards is not a declared field
     const guards = defineDefinitions({ guards: [] });
     // @ts-expect-error: schemas is not a declared field

@@ -32,7 +32,7 @@ export type AnsweredRequest = {
   readonly status: number;
   /** Whether a Success, a Rejection or a Fault was sent. */
   readonly kind: 'success' | 'rejection' | 'fault';
-  /** The code sent: a Rejection's, as the root resolved it, or a reserved Fault's; none for a Success or a Fault the Service produced. */
+  /** The code sent: a Rejection's, as the Root resolved it, or a reserved Fault's; none for a Success or a Fault the Service produced. */
   readonly code?: string;
   /** Whether the Caller went away before `serve` had its answer: the request's signal when the record is built. */
   readonly aborted: boolean;

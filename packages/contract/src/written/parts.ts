@@ -18,7 +18,7 @@ export type Part =
   | 'body'
   | 'schema';
 
-/** The parts that travel as text and are objects of their fields in a valid root. */
+/** The parts that travel as text and are objects of their fields in a valid Root. */
 export const objectParts = [
   'input.params',
   'input.query',
@@ -28,7 +28,7 @@ export const objectParts = [
   'demands.query',
 ] as const satisfies readonly Part[];
 
-/** A part a valid root declares as an object of its fields. */
+/** A part a valid Root declares as an object of its fields. */
 export type ObjectPart = (typeof objectParts)[number];
 
 /** The parts of an Endpoint's Input, in the order the Snapshot lists them. */
@@ -107,7 +107,7 @@ export function inOf(part: InputPart): InputIn {
   return partFieldOf(part);
 }
 
-/** Whether a part travels as text and is an object of its fields in a valid root. */
+/** Whether a part travels as text and is an object of its fields in a valid Root. */
 export function isObjectPart(part: Part): part is ObjectPart {
   const textParts: readonly Part[] = objectParts;
   return textParts.includes(part);

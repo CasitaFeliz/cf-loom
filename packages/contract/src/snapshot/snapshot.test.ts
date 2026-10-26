@@ -1,11 +1,10 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
   defineDependency,
   defineEndpoint,
@@ -13,6 +12,7 @@ import {
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   notFound,
   providedEndpoint,
@@ -22,10 +22,12 @@ import {
   canonicalTextOf,
   isEmptyTextPart,
   type ResolvedDefinitions,
+  type Root,
+  type RootKind,
   type Snapshot,
   type SnapshotContext,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
@@ -205,7 +207,7 @@ const notifyOnFailed = defineSubscription({
   event: payments.events.paymentFailedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   standardRejections: orgDefinitions,
   groups: [
@@ -230,15 +232,15 @@ function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
   };
 }
 
-/** The Snapshot of a root, beside the Definitions Packages installed, `@org/definitions` by default. */
+/** The Snapshot of a Root, beside the Definitions Packages installed, `@org/definitions` by default. */
 function snapshotFor(
-  root: unknown,
+  root: Root,
   context: SnapshotContext = aContext(),
   packages: readonly ResolvedDefinitions[] = [orgPackage],
 ): Snapshot {
   const { definitions: _root, ...exported } = orgPackage.exports;
   const rootExports = root === orgDefinitions ? exported : {};
-  const validated = validateContract(root, aRootPackage(root, { packages, rootExports }));
+  const validated = validateRoot(root, aRootPackage(root, { packages, rootExports }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -246,7 +248,7 @@ function snapshotFor(
 }
 
 function serviceSnapshot(
-  root: unknown = contract,
+  root: Root = contract,
   context: SnapshotContext = aContext(),
   packages: readonly ResolvedDefinitions[] = [orgPackage],
 ) {
@@ -281,7 +283,7 @@ function searchQueryOf({
     success: { status: 200, body: z.object({ count: z.int() }) },
   });
   const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
-  const root = defineContract({ name: 'search-service', groups: [group] });
+  const root = defineService({ name: 'search-service', groups: [group] });
   return serviceSnapshot(root, aContext(), []).endpoints['GET /search']?.input.query;
 }
 
@@ -318,7 +320,7 @@ function codeReachSnapshot() {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     standardRejections: orgDefinitions,
     groups: [group],
@@ -666,7 +668,7 @@ describe('snapshotOf: a Service', () => {
       success: { status: 200, body: category },
     });
     const group = defineGroup({ name: 'tree', description: 'Tree', endpoints: [tree] });
-    const root = defineContract({ name: 'tree-service', groups: [group] });
+    const root = defineService({ name: 'tree-service', groups: [group] });
 
     const snapshot = serviceSnapshot(root, aContext(), []);
 
@@ -712,7 +714,7 @@ function messagingSnapshot(declared: {
     description: 'Audits each order created',
     event: orderCreatedV2,
   });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     groups: [
       defineGroup({
@@ -762,7 +764,7 @@ describe('snapshotOf: one Snapshot for one Contract', () => {
       },
     });
     const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
-    return defineContract({ name: 'ping-service', groups: [group] });
+    return defineService({ name: 'ping-service', groups: [group] });
   }
 
   test.each([
@@ -809,7 +811,7 @@ function aPingServiceWithQuery() {
     success: { status: 204 },
   });
   const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
-  return defineContract({ name: 'ping-service', groups: [group] });
+  return defineService({ name: 'ping-service', groups: [group] });
 }
 
 describe('isEmptyTextPart', () => {
@@ -916,7 +918,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       lifecycle: 'deprecated',
       body: orderBody,
     });
-    const root = defineContract({
+    const root = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({ name: 'orders', description: 'Orders', commands: [chargeCardV1] }),
@@ -951,7 +953,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       description: 'Settles upper',
       event: orderCreatedV2,
     });
-    const root = defineContract({
+    const root = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({
@@ -976,7 +978,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       description: 'An order was placed',
       body: orderBody,
     });
-    const root = defineContract({
+    const root = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({
@@ -1116,6 +1118,30 @@ describe('snapshotOf: a Definitions Package', () => {
   });
 });
 
+describe('the kind of a Root', () => {
+  test('a Root’s declared Snapshot has the kind its declaration has, for every kind of Root', () => {
+    const roots = [
+      defineService({ name: 'orders-service' }),
+      defineApplication({ name: 'web-admin' }),
+      defineDefinitions({}),
+    ] satisfies readonly Root[];
+
+    const kinds = roots.map((root) => snapshotFor(root, aContext(), []).kind);
+
+    expect(kinds).toEqual(['service', 'application', 'definitions']);
+    expect(kinds).toEqual(roots.map((root) => root.kind));
+  });
+
+  test('the kind of a Root is the kind of its Snapshot', () => {
+    const service = defineService({ name: 'orders-service' });
+
+    const kind: RootKind = snapshotFor(service, aContext(), []).kind;
+
+    expectTypeOf<RootKind>().toEqualTypeOf<Snapshot['kind']>();
+    expect(kind).toBe(service.kind);
+  });
+});
+
 describe('canonicalTextOf', () => {
   test('keys are sorted by code point, indented by two spaces, with a final newline', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
@@ -1137,7 +1163,7 @@ describe('canonicalTextOf', () => {
   });
 
   test('the same Contract written in another order gives the same bytes', () => {
-    const reordered = defineContract({
+    const reordered = defineService({
       name: 'orders-service',
       standardRejections: orgDefinitions,
       groups: [
@@ -1180,7 +1206,7 @@ describe('canonicalTextOf', () => {
       success: { status: 200, body: variants },
     });
     const group = defineGroup({ name: 'tagged', description: 'Tagged', endpoints: [tagged] });
-    const root = defineContract({ name: 'tagged-service', groups: [group] });
+    const root = defineService({ name: 'tagged-service', groups: [group] });
 
     const text = textOf(snapshotFor(root, aContext(), []));
 

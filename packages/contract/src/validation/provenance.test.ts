@@ -7,20 +7,21 @@ import {
 } from '../../test/root-package.ts';
 import {
   type Definitions,
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Guard,
   type Rejection,
 } from '../index.ts';
 import {
   type ImportedDefinitions,
+  type Root,
   type Snapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const context = { generator: 'test', committed: undefined, now: 0 };
@@ -41,7 +42,7 @@ function aService(
     rejections: [...rejections],
   });
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
-  return defineContract({
+  return defineService({
     name: 'ping-service',
     groups: [group],
     ...(standardRejections === undefined ? {} : { standardRejections }),
@@ -54,11 +55,11 @@ type Reached = {
   readonly body?: z.ZodObject;
 };
 
-function validatedOf(root: unknown, packages: readonly ImportedDefinitions[]) {
-  return validateContract(root, aRootPackage(root, { packages }));
+function validatedOf(root: Root, packages: readonly ImportedDefinitions[]) {
+  return validateRoot(root, aRootPackage(root, { packages }));
 }
 
-function snapshotIn(root: unknown, packages: readonly ImportedDefinitions[]): Snapshot {
+function snapshotIn(root: Root, packages: readonly ImportedDefinitions[]): Snapshot {
   const validated = validatedOf(root, packages);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
@@ -66,7 +67,7 @@ function snapshotIn(root: unknown, packages: readonly ImportedDefinitions[]): Sn
   return snapshotOf(validated, context);
 }
 
-function serviceIn(root: unknown, packages: readonly ImportedDefinitions[]) {
+function serviceIn(root: Root, packages: readonly ImportedDefinitions[]) {
   const snapshot = snapshotIn(root, packages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
@@ -104,7 +105,7 @@ const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 const money = z.object({ amount: z.int() });
 
-describe('validateContract and snapshotOf: where a reached declaration came from', () => {
+describe('validateRoot and snapshotOf: where a reached declaration came from', () => {
   test('a Guard, a Rejection and a schema an installed package exports take its origin, with no list', () => {
     const org = aPackage('@org/definitions', { apiKey, forbidden, money });
     const root = aService({
@@ -309,12 +310,12 @@ describe('validateContract and snapshotOf: where a reached declaration came from
     });
   });
 
-  test('a Definitions root re-exporting another package’s Guard writes that package’s origin, and its own Guards stay local', () => {
+  test('a Definitions Package re-exporting another package’s Guard writes that package’s origin, and its own Guards stay local', () => {
     const p2 = aPackage('@p2/defs', { apiKey });
     const own = defineGuard({ name: 'own', description: 'Its own', guards: [apiKey] });
     const root = defineDefinitions({});
 
-    const validated = validateContract(
+    const validated = validateRoot(
       root,
       aRootPackage(root, { packages: [p2], rootExports: { apiKey, own } }),
     );
@@ -377,7 +378,7 @@ function isExportedBy(owner: 'p1' | 'p2', by: Exporters): boolean {
   return by === owner || by === 'both';
 }
 
-describe('validateContract and snapshotOf: provenance follows identity and imports', () => {
+describe('validateRoot and snapshotOf: provenance follows identity and imports', () => {
   test.each(rows)(
     'a Guard exported by $guardBy and a code by $codeBy, P1 reaching P2: $edge, P2 $p2',
     (row) => {
@@ -444,7 +445,7 @@ function seededNext(seed: number): () => number {
   };
 }
 
-describe('validateContract and snapshotOf: origins are exactly the packages used', () => {
+describe('validateRoot and snapshotOf: origins are exactly the packages used', () => {
   test('the origins name exactly the packages whose Guards, codes and schemas the Contract reaches, two copies of one name counted as two', () => {
     const next = seededNext(178);
     const versions = ['1.0.0', '2.0.0', '3.0.0'];

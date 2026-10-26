@@ -29,5 +29,5 @@ export { publishedNameOf } from './published-name.ts';
 export { realPathOf } from './real-path.ts';
 export type { LoadedRoot } from './root.ts';
 export { loadRoot } from './root.ts';
-export type { RootKind, RootPlace } from './roots.ts';
-export { isRootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
+export type { RootPlace } from './roots.ts';
+export { isRootKind, rootFiles, rootPlaces } from './roots.ts';

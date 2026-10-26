@@ -23,7 +23,7 @@ type Written =
 /**
  * The Service a command that prints a document works on, from the committed Snapshot, which must be
  * what `generate` would write, so the document describes the reviewed file; an Application or a
- * Definitions Package stops it with the line `noDocumentLineOf` words for the root.
+ * Definitions Package stops it with the line `noDocumentLineOf` words for the Root.
  */
 export async function committedServiceOf(
   run: Run,

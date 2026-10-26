@@ -5,16 +5,16 @@ import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   type Event,
   providedEvent,
   type Subscription,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { validateRoot } from '../internal/index.ts';
 
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
@@ -75,12 +75,12 @@ function validateSubscriptions(
     events,
     subscriptions,
   } as unknown as Parameters<typeof defineGroup>[0]);
-  const contract = defineContract({
+  const contract = defineService({
     name: 'orders-service',
     groups: [ordersGroup],
     dependencies: [defineDependency({ provider })],
   });
-  return validateContract(contract, aRootPackage(contract, { packageName: 'orders-service' }));
+  return validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' }));
 }
 
 const notifyOnSettled = defineSubscription({
@@ -93,7 +93,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: Subscriptions', () => {
+describe('validateRoot: Subscriptions', () => {
   test('a Subscription to the Service’s own Event validates', () => {
     const audit = defineSubscription({
       name: 'auditOrders',
@@ -118,7 +118,7 @@ describe('validateContract: Subscriptions', () => {
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event the root does not list fails', () => {
+  test('a Subscription to an Event the Root does not list fails', () => {
     const audit = defineSubscription({
       name: 'auditOrders',
       description: 'Receives it',

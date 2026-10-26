@@ -4,13 +4,13 @@ import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   type InputOf,
   openEnum,
@@ -21,7 +21,7 @@ import {
   providedRejection,
   type SuccessOf,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { validateRoot } from '../internal/index.ts';
 
 const trackOrder = {
   name: 'trackOrder',
@@ -117,8 +117,8 @@ const pingService = {
 function failuresOfListing(lists: Readonly<Record<string, readonly unknown[]>>) {
   const declaration = { name: 'billing', description: 'Billing', ...lists };
   const group = defineGroup(declaration as unknown as Parameters<typeof defineGroup>[0]);
-  const root = defineContract({ name: 'billing-service', groups: [group] });
-  const validated = validateContract(root, aRootPackage(root));
+  const root = defineService({ name: 'billing-service', groups: [group] });
+  const validated = validateRoot(root, aRootPackage(root));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 

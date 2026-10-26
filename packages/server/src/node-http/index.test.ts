@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { type AddressInfo, connect } from 'node:net';
 import { PassThrough, Readable } from 'node:stream';
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
@@ -60,7 +60,7 @@ const greet = defineEndpoint({
   success: { status: 204, headers: z.object({ 'x-greeted': z.string() }) },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

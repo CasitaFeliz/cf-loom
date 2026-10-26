@@ -1,10 +1,10 @@
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   notFound,
 } from '@cf-loom/contract';
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
@@ -67,7 +67,7 @@ const importOrders = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -567,11 +567,11 @@ describe('serve: what the hooks receive beside the record', () => {
     expect(answered.map(({ method }) => method)).toEqual(['OPTIONS', 'HEAD']);
   });
 
-  test('a Rejection is recorded with the code its root resolves', async () => {
+  test('a Rejection is recorded with the code its Root resolves', async () => {
     const definitions = defineDefinitions({
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Nothing here' } },
     });
-    const rooted = defineContract({
+    const rooted = defineService({
       name: 'orders-service',
       standardRejections: definitions,
       groups: contract.groups,
@@ -588,13 +588,13 @@ describe('serve: what the hooks receive beside the record', () => {
     expect(answered[0]?.code).toBe('MISSING');
   });
 
-  test('the invalid-input Rejection is recorded with the code its root resolves', async () => {
+  test('the invalid-input Rejection is recorded with the code its Root resolves', async () => {
     const definitions = defineDefinitions({
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
       },
     });
-    const rooted = defineContract({
+    const rooted = defineService({
       name: 'orders-service',
       standardRejections: definitions,
       groups: contract.groups,

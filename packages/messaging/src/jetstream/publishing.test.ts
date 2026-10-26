@@ -1,4 +1,4 @@
-import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
+import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
 import { jetstream as jetStreamClientOf, jetstreamManager } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -34,7 +34,7 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -269,7 +269,7 @@ describe('publishing over jetstream()', () => {
       description: 'Makes a charge',
       body: z.object({ orderId: z.string() }),
     });
-    const sameName = defineContract({
+    const sameName = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({

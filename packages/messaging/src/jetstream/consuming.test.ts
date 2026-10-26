@@ -4,10 +4,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   providedEvent,
 } from '@cf-loom/contract';
@@ -61,7 +61,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -606,7 +606,7 @@ describe('consuming over jetstream()', () => {
   });
 
   test('without a prefix, consume looks for the unprefixed durable consumer names', async () => {
-    const unprefixed = defineContract({
+    const unprefixed = defineService({
       name: 'unprefixed-service',
       groups: [
         defineGroup({
@@ -656,7 +656,7 @@ describe('consuming over jetstream()', () => {
       description: 'Notify on settled',
       event: paymentSettledV1,
     });
-    const billing = defineContract({
+    const billing = defineService({
       name: 'billing-service',
       groups: [
         defineGroup({

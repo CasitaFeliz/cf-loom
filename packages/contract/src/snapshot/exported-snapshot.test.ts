@@ -2,13 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
 } from '../index.ts';
 import {
   type CodeSnapshot,
@@ -22,7 +22,7 @@ import {
   type SchemaNode,
   type ServiceSnapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
@@ -596,7 +596,7 @@ function declaredSnapshot(): ServiceSnapshot {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   return serviceSnapshotOf(root);
 }
 
@@ -620,20 +620,20 @@ function eventsSnapshot(): ServiceSnapshot {
     }),
   ] as const;
   const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', events });
-  const root = defineContract({ name: 'orders-service', groups: [ordersGroup] });
+  const root = defineService({ name: 'orders-service', groups: [ordersGroup] });
   return serviceSnapshotOf(root);
 }
 
-/** The Snapshot of a Service root, the Definitions Packages it lists given resolved. */
+/** The Snapshot of a Service's Root, the Definitions Packages it lists given resolved. */
 function serviceSnapshotOf(
-  root: ReturnType<typeof defineContract>,
+  root: ReturnType<typeof defineService>,
   packages: readonly ResolvedDefinitions[] = [],
 ): ServiceSnapshot {
   const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
     packages,
   });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -671,7 +671,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     success: { status: 200, body: z.object({ id: z.string() }) },
   });
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     groups: [group],
   });
@@ -725,7 +725,7 @@ function codeReachSnapshot(): ServiceSnapshot {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     groups: [group],
   });

@@ -5,21 +5,21 @@ import {
   type Attachment,
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   type Endpoint,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+/** Validates a Root as the package it names: its package.json named as the Root is. */
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const listing = {
@@ -56,7 +56,7 @@ function withoutField<Declaration extends object>(
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 function undeclared(at: readonly (string | number)[]) {
@@ -73,7 +73,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
 
 const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
 
-describe('validateContract: undeclared fields', () => {
+describe('validateRoot: undeclared fields', () => {
   test('a Contract with only declared fields validates', () => {
     const orders = defineGroup({
       name: 'orders',
@@ -82,19 +82,19 @@ describe('validateContract: undeclared fields', () => {
         defineEndpoint({ ...listing, guards: [{ guard: quota, qualifier: { perMinute: 1 } }] }),
       ],
     });
-    const contract = defineContract({ name: 'orders-service', groups: [orders] });
+    const contract = defineService({ name: 'orders-service', groups: [orders] });
 
     expect(validateInPackage(contract).kind).toBe('valid');
   });
 
   test('definitions on a Contract is an undeclared field: what it reaches says which Definitions Packages it uses', () => {
-    const contract = defineContract(withField({ name: 'orders-service' }, 'definitions'));
+    const contract = defineService(withField({ name: 'orders-service' }, 'definitions'));
 
     expect(validateInPackage(contract)).toEqual(undeclared(['definitions']));
   });
 
   test('an undeclared field on a Contract fails', () => {
-    const contract = defineContract(withField({ name: 'orders-service' }, 'endpoints'));
+    const contract = defineService(withField({ name: 'orders-service' }, 'endpoints'));
 
     expect(validateInPackage(contract)).toEqual(undeclared(['endpoints']));
   });
@@ -115,7 +115,7 @@ describe('validateContract: undeclared fields', () => {
 
   test('an undeclared field on the Definitions Package a Contract takes its Standard Rejections from fails where it is named', () => {
     const definitions = defineDefinitions(withField({}, 'endpoints'));
-    const contract = defineContract({ name: 'orders-service', standardRejections: definitions });
+    const contract = defineService({ name: 'orders-service', standardRejections: definitions });
 
     expect(validateInPackage(contract)).toEqual(undeclared(['standardRejections', 'endpoints']));
   });
@@ -128,7 +128,7 @@ describe('validateContract: undeclared fields', () => {
       ),
     );
 
-    expect(validateInPackage(defineContract({ name: 'orders-service', groups: [group] }))).toEqual(
+    expect(validateInPackage(defineService({ name: 'orders-service', groups: [group] }))).toEqual(
       undeclared(['groups', 'orders', 'prefix']),
     );
   });
@@ -218,15 +218,15 @@ describe('validateContract: undeclared fields', () => {
   });
 });
 
-describe('validateContract: required fields', () => {
-  test('a root without a name fails', () => {
-    const contract = defineContract(withoutField({ name: 'orders-service' }, 'name'));
+describe('validateRoot: required fields', () => {
+  test('a Root without a name fails', () => {
+    const contract = defineService(withoutField({ name: 'orders-service' }, 'name'));
 
     expect(validateInPackage(contract)).toEqual(required(['name'], 'name is a required string'));
   });
 
   test('a name that is not a string fails once', () => {
-    const contract = defineContract({ name: 7 as unknown as string });
+    const contract = defineService({ name: 7 as unknown as string });
 
     expect(validateInPackage(contract)).toEqual(
       failed(['name'], 'not-a-string', 'name is a string'),
@@ -364,7 +364,7 @@ describe('validateContract: required fields', () => {
       ),
     );
 
-    expect(validateInPackage(defineContract({ name: 'orders-service', groups: [group] }))).toEqual(
+    expect(validateInPackage(defineService({ name: 'orders-service', groups: [group] }))).toEqual(
       required(['groups', 'orders', 'description'], 'description is a required string'),
     );
   });
@@ -484,12 +484,12 @@ function contractWithDescription(kind: string, text: string) {
     commands: [command],
     subscriptions: [subscription],
   });
-  return defineContract({ name: 'orders-service', groups: [orders] });
+  return defineService({ name: 'orders-service', groups: [orders] });
 }
 
 const blankTexts = ['', ' ', ' \t\n'];
 
-describe('validateContract: a description or a message is never blank', () => {
+describe('validateRoot: a description or a message is never blank', () => {
   test('a Contract whose declarations are all described validates', () => {
     expect(validateInPackage(contractWithDescription('none', '')).kind).toBe('valid');
   });

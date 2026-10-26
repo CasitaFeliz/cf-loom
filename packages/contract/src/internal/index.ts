@@ -36,6 +36,8 @@ export type {
   IsOneLiteral,
   LiveOf,
   Refusal,
+  Root,
+  RootKind,
   SuccessValueOf,
 } from '../declarations/index.ts';
 export {
@@ -43,7 +45,6 @@ export {
   follows,
   frozenCopyOf,
   isCommand,
-  isContract,
   isDefinitions,
   isEndpoint,
   isEvent,
@@ -53,6 +54,8 @@ export {
   isMethod,
   isRejection,
   isReservedCode,
+  isRoot,
+  isServiceContract,
   isStamp,
   isStandardRejection,
   isSubscription,
@@ -134,8 +137,8 @@ export type {
   RootPackage,
   TextPartNodes,
   Unidentified,
-  ValidatedContract,
-  ValidContract,
+  ValidatedRoot,
+  ValidRoot,
 } from '../validation/index.ts';
 export {
   definitionsPackageOf,
@@ -149,7 +152,7 @@ export {
   problemLineOf,
   problemOf,
   rootNameProblemOf,
-  validateContract,
+  validateRoot,
   walkedTextPartsOf,
 } from '../validation/index.ts';
 export type {

@@ -1,3 +1,4 @@
+import type { Root } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
@@ -12,18 +13,17 @@ import {
   type LocatedSubscription,
   type Members,
   type ResolvedStandard,
-  type Root,
   resolvedStandards,
 } from '../written/index.ts';
 import { definitionsPackageOf } from './provenance.ts';
 import type { ImportedDefinitions, ResolvedDefinitions, RootPackage } from './validate.ts';
 
-/** A Guard a valid root reaches, and the Definitions Package it belongs to; none for the root's own. */
+/** A Guard a valid Root reaches, and the Definitions Package it belongs to; none for the Root's own. */
 export type ValidatedGuard = LocatedGuard & { readonly from: ResolvedDefinitions | undefined };
 
 /**
- * A code a valid root reaches: its one declaration, where it sits, and the Definitions Package
- * that declaration belongs to; none for the root's own.
+ * A code a valid Root reaches: its one declaration, where it sits, and the Definitions Package
+ * that declaration belongs to; none for the Root's own.
  */
 export type ValidatedCode = {
   readonly code: string;
@@ -32,27 +32,27 @@ export type ValidatedCode = {
   readonly from: ResolvedDefinitions | undefined;
 };
 
-/** A Subscription of a valid root and the Service whose Event it receives, its own included. */
+/** A Subscription of a valid Root and the Service whose Event it receives, its own included. */
 export type ValidatedSubscription = LocatedSubscription & { readonly service: string };
 
 /**
- * The declarations of a valid root as gathered, in the root's order: the root itself, its Groups,
+ * The declarations of a valid Root as gathered, in the Root's order: the Root itself, its Groups,
  * Endpoints by identity, the Guards and codes it reaches, each code with its one declaration and
  * the Definitions Package each came from, the Standard Rejections resolved, the Dependencies by Provider, and the Message
  * Versions and Subscriptions. The Snapshot's writer puts them in canonical form.
  */
 export type ValidatedDeclarations = {
   readonly root: Root;
-  /** The package.json name of the package the root sits in, scope included. */
+  /** The package.json name of the package the Root sits in, scope included. */
   readonly packageName: string;
-  /** What a Definitions root's file exports that it shares; none for another root. */
+  /** What a Definitions Package's Root file exports that it shares; none for another Root. */
   readonly ownMembers: Members | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
   readonly guards: readonly ValidatedGuard[];
   readonly codes: readonly ValidatedCode[];
   readonly standardRejections: readonly ResolvedStandard[];
-  /** The installed package a Contract names as `standardRejections`; none for cf-loom's defaults or a Definitions root's own. */
+  /** The installed package a Contract names as `standardRejections`; none for cf-loom's defaults or a Definitions Package's own. */
   readonly standardRejectionsSource: ResolvedDefinitions | undefined;
   readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
@@ -60,7 +60,7 @@ export type ValidatedDeclarations = {
   readonly subscriptions: readonly ValidatedSubscription[];
 };
 
-/** What a valid root declares, so the Snapshot's writer never gathers it again. */
+/** What a valid Root declares, so the Snapshot's writer never gathers it again. */
 export function validatedDeclarationsOf(
   declarations: Declarations,
   { packageName, packages }: Pick<RootPackage, 'packageName' | 'packages'>,
@@ -90,7 +90,7 @@ export function validatedDeclarationsOf(
   };
 }
 
-/** Each Subscription with its Event's Service, resolved once; a valid root's always has one. */
+/** Each Subscription with its Event's Service, resolved once; a valid Root's always has one. */
 function validatedSubscriptionsOf({
   root,
   subscriptions,
@@ -98,7 +98,7 @@ function validatedSubscriptionsOf({
   return subscriptions.map((located) => {
     const service = eventServiceOf(root, located.subscription.event);
     if (service === undefined) {
-      throw new Error('A valid root subscribed to an Event of no Service: a bug.');
+      throw new Error('A valid Root subscribed to an Event of no Service: a bug.');
     }
     return { ...located, service };
   });

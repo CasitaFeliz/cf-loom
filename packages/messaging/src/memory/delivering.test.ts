@@ -1,8 +1,8 @@
 import {
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   openEnum,
   openEnumReader,
@@ -81,7 +81,7 @@ const onAudited = defineSubscription({
   event: orderAuditedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

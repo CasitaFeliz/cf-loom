@@ -2,12 +2,12 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Endpoint,
   invalidInput,
   notFound,
@@ -15,11 +15,11 @@ import {
   type Rejection,
   type RejectionStatus,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+/** Validates a Root as the package it names: its package.json named as the Root is. */
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const listing = {
@@ -40,14 +40,14 @@ const orderLocked = defineRejection({
 
 function validateEndpoints(endpoints: readonly [Endpoint, ...Endpoint[]]) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: Rejection statuses', () => {
+describe('validateRoot: Rejection statuses', () => {
   test('a Rejection with a 4xx status validates', () => {
     const endpoint = defineEndpoint({ ...listing, rejections: [orderLocked] });
 
@@ -98,7 +98,7 @@ describe('validateContract: Rejection statuses', () => {
   });
 });
 
-describe('validateContract: an Endpoint or a Guard lists each Rejection once', () => {
+describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () => {
   const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
 
   test('an Endpoint listing one Rejection twice fails at the second listing, naming the code', () => {
@@ -185,7 +185,7 @@ describe('validateContract: an Endpoint or a Guard lists each Rejection once', (
   });
 });
 
-describe('validateContract: reserved codes', () => {
+describe('validateRoot: reserved codes', () => {
   test.each([
     'RETIRED',
     'NO_SUCH_ENDPOINT',
@@ -221,7 +221,7 @@ describe('validateContract: reserved codes', () => {
   });
 });
 
-describe('validateContract: Standard Rejections', () => {
+describe('validateRoot: Standard Rejections', () => {
   test('an Endpoint listing notFound validates', () => {
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [notFound] })]).kind).toBe(
       'valid',
@@ -292,7 +292,7 @@ describe('validateContract: Standard Rejections', () => {
       description: 'Orders',
       endpoints: [defineEndpoint({ ...listing, rejections: [badRequest, notFoundAgain] })],
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       standardRejections: definitions,
       groups: [orders],
@@ -343,7 +343,7 @@ describe('validateContract: Standard Rejections', () => {
         notImplemented: { code: 'GONE', status: 501, message: 'Later' },
       },
     });
-    const contract = defineContract({ name: 'orders-service', standardRejections: definitions });
+    const contract = defineService({ name: 'orders-service', standardRejections: definitions });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
@@ -384,7 +384,7 @@ describe('validateContract: Standard Rejections', () => {
     const definitions = defineDefinitions({
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
     });
-    const contract = defineContract({ name: 'orders-service', standardRejections: definitions });
+    const contract = defineService({ name: 'orders-service', standardRejections: definitions });
 
     expect(validateInPackage(contract).kind).toBe('valid');
   });

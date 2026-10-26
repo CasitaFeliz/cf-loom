@@ -1,5 +1,5 @@
 export type {
-  Application,
+  ApplicationContract,
   Attachment,
   Command,
   ContextOf,
@@ -26,6 +26,7 @@ export type {
   RejectionsOf,
   RequiredContextOf,
   ReservedCode,
+  ServiceContract,
   StandardRejection,
   StandardRejections,
   Subscription,
@@ -36,7 +37,6 @@ export type {
 export {
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
   defineDependency,
   defineEndpoint,
@@ -44,6 +44,7 @@ export {
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   invalidInput,
   notFound,

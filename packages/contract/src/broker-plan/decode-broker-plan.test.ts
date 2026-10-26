@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineCommand, defineContract, defineEvent, defineGroup } from '../index.ts';
+import { defineCommand, defineEvent, defineGroup, defineService } from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
   decodeBrokerPlan,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -26,7 +26,7 @@ const chargeCardV1 = defineCommand({
 });
 
 function aServicePlan(prefix: string | null): BrokerPlan {
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     groups: [
       defineGroup({
@@ -37,7 +37,7 @@ function aServicePlan(prefix: string | null): BrokerPlan {
       }),
     ],
   });
-  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
+  const validated = validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

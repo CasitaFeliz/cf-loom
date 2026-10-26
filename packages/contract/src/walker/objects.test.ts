@@ -5,16 +5,16 @@ import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   openEnum,
 } from '../index.ts';
-import { type SchemaNode, validateContract, walkSchemas } from '../internal/index.ts';
+import { type Root, type SchemaNode, validateRoot, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
   return walkSchemas([{ at: ['body'], schema }], () => undefined);
@@ -499,7 +499,7 @@ function contractWith(parts: {
     events,
     commands,
   } as never);
-  return defineContract({ name: 'shapes-service', groups: [group] });
+  return defineService({ name: 'shapes-service', groups: [group] });
 }
 
 function anEvent(body: core.$ZodType) {
@@ -512,19 +512,19 @@ function aCommand(body: core.$ZodType) {
   return defineCommand({ ...written, description: 'Charge' } as never);
 }
 
-/** What each Definitions root of a row exports beside it. */
+/** What each Definitions Package of a row exports beside it. */
 const exportedBy = new Map<unknown, Readonly<Record<string, unknown>>>();
 
-/** A Definitions root whose file exports the schemas given. */
+/** A Definitions Package whose Root file exports the schemas given. */
 function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) {
   const definitions = defineDefinitions({});
   exportedBy.set(definitions, schemas);
   return definitions;
 }
 
-function failuresIn(root: unknown) {
+function failuresIn(root: Root) {
   const rootExports = exportedBy.get(root) ?? {};
-  const validated = validateContract(root, aRootPackage(root, { rootExports }));
+  const validated = validateRoot(root, aRootPackage(root, { rootExports }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -536,7 +536,7 @@ const refusedStrict = {
   instead: 'z.object(): objects are open',
 };
 
-describe('validateContract: a strict object fails wherever it sits', () => {
+describe('validateRoot: a strict object fails wherever it sits', () => {
   test.each([
     [
       'in Input',
@@ -578,7 +578,7 @@ describe('validateContract: a strict object fails wherever it sits', () => {
       ['rejections', 'DENIED', 'body'],
     ],
     [
-      'in a shared schema of a Definitions root',
+      'in a shared schema of a Definitions Package',
       () => definitionsExporting({ scope: strictObject() }),
       ['exports', 'scope'],
     ],
@@ -593,7 +593,7 @@ const keyed = () => z.record(z.enum(['eur']), z.number());
 const refusedKeyed = { kind: 'not-allowed', construct: keyedRecord, instead: keyedRecordInstead };
 const echoAt = ['groups', 'shapes', 'endpoints', 'POST /echo/{}'];
 
-describe('validateContract: a record keyed by an enum or literal fails wherever it sits', () => {
+describe('validateRoot: a record keyed by an enum or literal fails wherever it sits', () => {
   test.each([
     [
       'in path params',
@@ -659,7 +659,7 @@ describe('validateContract: a record keyed by an enum or literal fails wherever 
       ['guards', 'gate', 'qualifier'],
     ],
     [
-      'in a shared schema of a Definitions root',
+      'in a shared schema of a Definitions Package',
       () => definitionsExporting({ totals: keyed() }),
       ['exports', 'totals'],
     ],
@@ -803,7 +803,7 @@ const namedFieldPlaces = fieldPlaces.flatMap((place) =>
   inheritedNames.filter(place.appliesTo).map((name) => ({ ...place, name })),
 );
 
-describe('validateContract: a field named what every object already has fails wherever it sits', () => {
+describe('validateRoot: a field named what every object already has fails wherever it sits', () => {
   test.each(namedFieldPlaces)('$place named $name fails generate', ({ contractOf, at, name }) => {
     const failures = failuresIn(contractOf(name));
 

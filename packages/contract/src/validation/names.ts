@@ -1,4 +1,4 @@
-import { isLive } from '../declarations/index.ts';
+import { isLive, type Root } from '../declarations/index.ts';
 import {
   type Declarations,
   identityOf,
@@ -6,7 +6,6 @@ import {
   type LocatedEndpoint,
   packageNamePartsOf,
   providerNameOf,
-  type Root,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -25,7 +24,7 @@ export function packageNameFailures(
   if (root.kind === 'definitions' || typeof root.name !== 'string' || root.name === unscoped) {
     return [];
   }
-  const message = `A root is named as its package.json, without the scope: ${unscoped}`;
+  const message = `A Root is named as its package.json, without the scope: ${unscoped}`;
   return [failure(['name'], 'package-name', message)];
 }
 

@@ -1,5 +1,5 @@
+import type { RootKind } from '@cf-loom/contract/internal';
 import { type PackageName, packageJsonNameOf } from './project-package.ts';
-import type { RootKind } from './roots.ts';
 
 /**
  * The npm name a project publishes as: `<scope>/contract-<name>`, or `contract-<name>` unscoped,

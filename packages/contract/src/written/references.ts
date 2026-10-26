@@ -5,7 +5,7 @@ import { type Members, memberGuardsOf, memberRejectionsOf } from './members.ts';
 import { reachedGuardsOf } from './reach.ts';
 import { isPlainObject, listOf, textOf } from './written.ts';
 
-/** What the Guards and Rejections of a root are gathered from: its Endpoints and, for a Definitions root, its members. */
+/** What the Guards and Rejections of a Root are gathered from: its Endpoints and, for a Definitions Package, its members. */
 type Sources = {
   readonly ownMembers: Members | undefined;
   readonly endpoints: readonly LocatedEndpoint[];
@@ -58,8 +58,8 @@ export function attachedGuardOf(attachment: Attachment): Guard | undefined {
 }
 
 /**
- * Every Guard a root reaches by reference, each once, the Guards one lists before it: the
- * Endpoints' first, then those a Definitions root exports.
+ * Every Guard a Root reaches by reference, each once, the Guards one lists before it: the
+ * Endpoints' first, then those a Definitions Package exports.
  */
 export function guardsOf({ ownMembers, endpoints }: Sources): readonly LocatedGuard[] {
   const attached = endpoints.flatMap(({ endpoint }) => attachedGuardsOf(endpoint));
@@ -67,7 +67,7 @@ export function guardsOf({ ownMembers, endpoints }: Sources): readonly LocatedGu
   return reachedGuardsOf([...attached, ...exported]).map(locatedGuardOf);
 }
 
-/** Every Rejection a root reaches, each once: a Definitions root's exports, a Guard's, an Endpoint's. */
+/** Every Rejection a Root reaches, each once: a Definitions Package's exports, a Guard's, an Endpoint's. */
 export function rejectionsOf(
   { ownMembers, endpoints }: Sources,
   guards: readonly LocatedGuard[],
@@ -83,7 +83,7 @@ export function rejectionsOf(
   }));
 }
 
-/** Each code a root reaches once, with every declaration of it, in the order the Rejections were met. */
+/** Each code a Root reaches once, with every declaration of it, in the order the Rejections were met. */
 export function codesOf(rejections: readonly LocatedRejection[]): readonly LocatedCode[] {
   const byCode = new Map<string, LocatedCode>();
   for (const located of rejections) {

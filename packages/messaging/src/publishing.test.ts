@@ -1,8 +1,8 @@
 import {
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   openEnum,
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
@@ -83,7 +83,7 @@ const grownV10 = defineEvent({
   body: z.object({ treeId: z.string() }),
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -549,7 +549,7 @@ describe('publisher.publish', () => {
     ]);
   });
 
-  test('a name the root does not publish throws at runtime', async () => {
+  test('a name the Root does not publish throws at runtime', async () => {
     const { publisher } = await opened();
 
     const publishing = publisher.publish('OrderShipped' as never, {} as never, fact);
@@ -709,7 +709,7 @@ describe('messaging() over memory(): publish and send', () => {
       description: 'Makes a charge',
       body: z.object({ orderId: z.uuid() }),
     });
-    const sameName = defineContract({
+    const sameName = defineService({
       name: 'probe-service',
       groups: [
         defineGroup({
@@ -748,7 +748,7 @@ describe('publisher.publish, given a body nested past the stack', () => {
       description: 'A deep body',
       body: tree,
     });
-    const nesting = defineContract({
+    const nesting = defineService({
       name: 'nesting-service',
       groups: [defineGroup({ name: 'nesting', description: 'Nesting', events: [nestedV1] })],
     });

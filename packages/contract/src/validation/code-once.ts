@@ -9,7 +9,7 @@ import { definitionsPackageOf, originTextOf, packageLabelOf } from './provenance
 import type { ImportedDefinitions } from './validate.ts';
 
 /**
- * A code is declared once: by one Rejection the root reaches, or one Standard Rejection resolving
+ * A code is declared once: by one Rejection the Root reaches, or one Standard Rejection resolving
  * to it. A code with more fails once, naming every declaration by where it came from.
  */
 export function codeOnceFailures(

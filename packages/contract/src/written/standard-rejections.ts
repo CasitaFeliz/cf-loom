@@ -1,5 +1,5 @@
 import {
-  type Contract,
+  type ServiceContract,
   type StandardRejectionName,
   type StandardRejections,
   standardRejectionDefaults,
@@ -11,8 +11,8 @@ import type { LocatedStandardRejection } from './located.ts';
 import { textOf } from './written.ts';
 
 /**
- * A Standard Rejection as the root resolves it: the declaration of the Definitions Package the
- * root names as `standardRejections`, else cf-loom's, with the declaration it came from when it did.
+ * A Standard Rejection as the Root resolves it: the declaration of the Definitions Package the
+ * Root names as `standardRejections`, else cf-loom's, with the declaration it came from when it did.
  */
 export type ResolvedStandard = {
   readonly name: StandardRejectionName;
@@ -24,7 +24,7 @@ export type ResolvedStandard = {
 };
 
 /**
- * Each Standard Rejection as the root resolves it, in the order cf-loom names them; one cf-loom
+ * Each Standard Rejection as the Root resolves it, in the order cf-loom names them; one cf-loom
  * resolves sits where the declaring Definitions Package would have declared it.
  */
 export function resolvedStandards(
@@ -48,10 +48,10 @@ export function resolvedStandards(
 }
 
 /**
- * The code, status and message of each Standard Rejection a valid root resolves, as `serve`
- * answers them; a valid root's statuses are the ones the type allows.
+ * The code, status and message of each Standard Rejection a valid Root resolves, as `serve`
+ * answers them; a valid Root's statuses are the ones the type allows.
  */
-export function standardRejectionsOf(root: Contract): StandardRejections {
+export function standardRejectionsOf(root: ServiceContract): StandardRejections {
   const resolved = resolvedStandards(declarationsOf(root, {}));
   const entries = resolved.map(({ name, code, status, message }) => [
     name,

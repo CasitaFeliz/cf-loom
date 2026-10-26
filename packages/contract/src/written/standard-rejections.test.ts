@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { defineContract, defineDefinitions } from '../index.ts';
+import { defineDefinitions, defineService } from '../index.ts';
 import { standardRejectionsOf } from '../internal/index.ts';
 
 describe('standardRejectionsOf', () => {
@@ -9,7 +9,7 @@ describe('standardRejectionsOf', () => {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
       },
     });
-    const contract = defineContract({ name: 'orders-service', standardRejections: definitions });
+    const contract = defineService({ name: 'orders-service', standardRejections: definitions });
 
     const standards = standardRejectionsOf(contract);
 
@@ -20,8 +20,8 @@ describe('standardRejectionsOf', () => {
     });
   });
 
-  test('a root listing no Definitions Package resolves to cf-loom’s defaults', () => {
-    const contract = defineContract({ name: 'orders-service' });
+  test('a Root listing no Definitions Package resolves to cf-loom’s defaults', () => {
+    const contract = defineService({ name: 'orders-service' });
 
     const standards = standardRejectionsOf(contract);
 

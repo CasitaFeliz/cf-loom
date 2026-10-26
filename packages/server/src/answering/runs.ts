@@ -17,7 +17,7 @@ import type { EndpointRun, GuardRun } from '@cf-loom/handlers/internal';
 import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
 /**
- * How one request was answered, with the code sent: a Rejection's as its root resolves it, or a
+ * How one request was answered, with the code sent: a Rejection's as its Root resolves it, or a
  * reserved Fault's; only a Fault may be the Service's, for `onServiceFault`.
  */
 export type Answered =
@@ -64,7 +64,7 @@ export function answeredOfSuccess(success: SentSuccess): Answered {
 
 /**
  * A Rejection or a Fault a Handler answered, as sent: a Rejection with the code, status and message
- * its root resolves; a returned Fault is the Service's too.
+ * its Root resolves; a returned Fault is the Service's too.
  */
 export function answeredOfNotSuccess(
   answer: NotSuccess,
@@ -83,7 +83,7 @@ export function answeredOfNotSuccess(
   }
 }
 
-/** A Rejection as built, as it travels: its code, status and message as the root resolves them, and its body. */
+/** A Rejection as built, as it travels: its code, status and message as the Root resolves them, and its body. */
 function sentRejectionOf(
   { rejection, ...built }: Extract<NotSuccess, { readonly kind: 'rejection' }>,
   standards: StandardRejections,

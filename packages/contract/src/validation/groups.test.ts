@@ -3,18 +3,18 @@ import { z } from 'zod';
 import { ping, pingedV1, pingKey, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  type Contract,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
+  defineService,
   defineSubscription,
   type Group,
+  type ServiceContract,
 } from '../index.ts';
-import { endpointsOf, eventsOf, validateContract } from '../internal/index.ts';
+import { endpointsOf, eventsOf, type Root, validateRoot } from '../internal/index.ts';
 
 const listOrders = defineEndpoint({
   name: 'listOrders',
@@ -60,19 +60,19 @@ function aGroup(name: string, lists: Readonly<Record<string, unknown>>): Group {
   return defineGroup(declaration as unknown as Parameters<typeof defineGroup>[0]);
 }
 
-function validateRoot(root: unknown) {
-  return validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
+function validateOrders(root: Root) {
+  return validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
 }
 
 function validateGroups(groups: readonly Group[]) {
-  return validateRoot(defineContract({ name: 'orders-service', groups }));
+  return validateOrders(defineService({ name: 'orders-service', groups }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: what a Group lists', () => {
+describe('validateRoot: what a Group lists', () => {
   test('a Group of Messages and a Group of Endpoints validate', () => {
     const result = validateGroups([
       aGroup('orders', { endpoints: [listOrders] }),
@@ -147,19 +147,19 @@ describe('validateContract: what a Group lists', () => {
   });
 
   test.each(['events', 'commands', 'subscriptions'])(
-    'a root that still lists %s fails as an undeclared field',
+    'a Root that still lists %s fails as an undeclared field',
     (field) => {
       const groups = [aGroup('orders', { endpoints: [listOrders] })];
-      const root = defineContract({ name: 'orders-service', groups, [field]: [] } as never);
+      const root = defineService({ name: 'orders-service', groups, [field]: [] } as never);
 
-      expect(validateRoot(root)).toEqual(
+      expect(validateOrders(root)).toEqual(
         failed([field], 'undeclared-field', `${field} is not a declared field`),
       );
     },
   );
 });
 
-describe('validateContract: each declaration in exactly one Group', () => {
+describe('validateRoot: each declaration in exactly one Group', () => {
   test('an Endpoint listed in two Groups fails', () => {
     const result = validateGroups([
       aGroup('orders', { endpoints: [listOrders] }),
@@ -266,15 +266,15 @@ describe('validateContract: each declaration in exactly one Group', () => {
 /** A Contract of Groups with the Dependency on the ping-service its Endpoint gives, or none. */
 function aContract(groups: readonly Group[], dependencies: 'none' | 'ping-service' = 'none') {
   const dependency = defineDependency({ provider: pingService, endpoints: [ping] });
-  return defineContract({
+  return defineService({
     name: 'billing-service',
     groups,
     ...(dependencies === 'none' ? {} : { dependencies: [dependency] }),
   });
 }
 
-function validateBilling(contract: Contract) {
-  return validateContract(contract, aRootPackage(contract));
+function validateBilling(contract: ServiceContract) {
+  return validateRoot(contract, aRootPackage(contract));
 }
 
 function providedElementFailure(field: 'endpoints' | 'events', key: string, label: string) {
@@ -286,7 +286,7 @@ function providedElementFailure(field: 'endpoints' | 'events', key: string, labe
   };
 }
 
-describe('validateContract: a Group lists the Contract’s own Elements', () => {
+describe('validateRoot: a Group lists the Contract’s own Elements', () => {
   test.each(['none', 'ping-service'] as const)(
     'a Group listing a Provider’s Event fails provided-element, with %s as a Dependency',
     (dependencies) => {

@@ -1,4 +1,4 @@
-import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineService, type Endpoint } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
@@ -86,7 +86,7 @@ const handlers = {
 };
 
 function contractOf(endpoints: readonly [Endpoint, ...Endpoint[]]) {
-  return defineContract({
+  return defineService({
     name: 'orders-service',
     groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints })],
   });

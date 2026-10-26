@@ -2,18 +2,19 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEvent,
   defineGroup,
   defineGuard,
+  defineService,
 } from '../index.ts';
 import {
   codeNameOf,
   type Failure,
   kebabCaseOf,
+  type Root,
   type RootPackage,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const alphabet = ['a', 'b', 'A', 'B', '1'];
@@ -49,11 +50,11 @@ function isNameGrammar(broken: Failure): boolean {
 
 /** The names whose `name-grammar` failure sits at `nameAt` of the location, a Message Version's `@1` cut. */
 function failingNames(
-  root: unknown,
+  root: Root,
   given: Partial<RootPackage>,
   nameAt: number,
 ): ReadonlySet<string> {
-  const validated = validateContract(root, aRootPackage(root, given));
+  const validated = validateRoot(root, aRootPackage(root, given));
   const failures = validated.kind === 'invalid' ? validated.failures : [];
   const grammar = failures.filter((broken) => isNameGrammar(broken));
   return new Set(grammar.map(({ at }) => String(at[nameAt]).replace(/@1$/, '')));
@@ -76,7 +77,7 @@ const refusedElementNames = failingNames(
 
 /** The Message names, out of the candidates, that the name grammar refuses. */
 const refusedMessageNames = failingNames(
-  defineContract({
+  defineService({
     name: 'orders-service',
     groups: [
       defineGroup({
@@ -101,7 +102,7 @@ const refusedMessageNames = failingNames(
 const elementNames = candidates.filter((name) => !refusedElementNames.has(name));
 const messageNames = candidates.filter((name) => !refusedMessageNames.has(name));
 
-describe('validateContract: names are words', () => {
+describe('validateRoot: names are words', () => {
   test('an Element name is accepted exactly when it starts lower-case and every capital starts a word', () => {
     const expected = candidates.filter((name) => /^[a-z]/.test(name) && startsEveryWord(name));
 

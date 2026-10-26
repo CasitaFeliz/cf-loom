@@ -5,24 +5,25 @@ import type { Group } from './group.ts';
 import type { DeclaredFieldsRule, JoinedNames } from './rules.ts';
 
 /**
- * What a Service's root lists: its Groups, which list its Elements and Subscriptions, and its
+ * What a Service's Root lists: its Groups, which list its Elements and Subscriptions, and its
  * Dependencies, and the Definitions Package whose Standard Rejections it takes, if any; without one
  * it takes cf-loom's defaults. The Definitions Packages it uses are the ones whose Guards,
  * Rejections and schemas it reaches. An absent list is empty.
  */
-type ContractDeclaration = {
+type ServiceContractDeclaration = {
   readonly name: string;
   readonly standardRejections?: Definitions;
   readonly groups?: readonly Group[];
   readonly dependencies?: readonly Dependency[];
 };
 
-/** A Service's declared Contract, the root `generate`, `serve` and `messaging` read. */
-export type Contract<Declaration extends ContractDeclaration = ContractDeclaration> =
-  Readonly<Declaration> & { readonly kind: 'contract' };
+/** A Service's declared Contract, the Root `generate`, `serve` and `messaging` read. */
+export type ServiceContract<
+  Declaration extends ServiceContractDeclaration = ServiceContractDeclaration,
+> = Readonly<Declaration> & { readonly kind: 'service' };
 
-/** What an Application's root lists: its Dependencies and nothing else; an absent list is empty. */
-type ApplicationDeclaration = {
+/** What an Application's Root lists: its Dependencies and nothing else; an absent list is empty. */
+type ApplicationContractDeclaration = {
   readonly name: string;
   readonly dependencies?: readonly Dependency[];
 };
@@ -42,7 +43,7 @@ type NonPublicOf<Dependencies> = Dependencies extends readonly (infer Listed)[]
   : never;
 
 /** What an Application must also satisfy: it depends on Public Endpoints only, as it runs outside the network. */
-type PublicOnlyRule<Declaration extends ApplicationDeclaration> = [
+type PublicOnlyRule<Declaration extends ApplicationContractDeclaration> = [
   NonPublicOf<Declaration['dependencies']>,
 ] extends [never]
   ? unknown
@@ -51,21 +52,31 @@ type PublicOnlyRule<Declaration extends ApplicationDeclaration> = [
     };
 
 /** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */
-export type Application<Declaration extends ApplicationDeclaration = ApplicationDeclaration> =
-  Readonly<Declaration> & { readonly kind: 'application' };
+export type ApplicationContract<
+  Declaration extends ApplicationContractDeclaration = ApplicationContractDeclaration,
+> = Readonly<Declaration> & { readonly kind: 'application' };
+
+/** A Contract as the glossary defines it: a Service's or an Application's. */
+export type Contract = ServiceContract | ApplicationContract;
+
+/** What `generate` runs on: a Service's Contract, an Application's Contract or a Definitions Package. */
+export type Root = Contract | Definitions;
+
+/** The kind of a Root, which its Snapshot's `kind` repeats and `cf-loom init` takes. */
+export type RootKind = Root['kind'];
 
 /** Declares a Service's Contract from everything it offers, keeps and requires. */
-export function defineContract<const Declaration extends ContractDeclaration>(
-  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ContractDeclaration>>,
-): Contract<Declaration> {
-  return freezeDeclaration('contract', declaration);
+export function defineService<const Declaration extends ServiceContractDeclaration>(
+  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ServiceContractDeclaration>>,
+): ServiceContract<Declaration> {
+  return freezeDeclaration('service', declaration);
 }
 
 /** Declares an Application's Contract, which holds only Dependencies. */
-export function defineApplication<const Declaration extends ApplicationDeclaration>(
+export function defineApplication<const Declaration extends ApplicationContractDeclaration>(
   declaration: Declaration &
     PublicOnlyRule<Declaration> &
-    NoInfer<DeclaredFieldsRule<Declaration, ApplicationDeclaration>>,
-): Application<Declaration> {
+    NoInfer<DeclaredFieldsRule<Declaration, ApplicationContractDeclaration>>,
+): ApplicationContract<Declaration> {
   return freezeDeclaration('application', declaration);
 }

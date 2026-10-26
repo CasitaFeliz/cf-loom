@@ -55,7 +55,6 @@ export type {
   LocatedStandardRejection,
   LocatedSubscription,
   NamedDefinitions,
-  Root,
 } from './located.ts';
 export type { Member, Members } from './members.ts';
 export { memberGuardsOf, memberRejectionsOf, membersOf } from './members.ts';

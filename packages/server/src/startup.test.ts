@@ -1,9 +1,9 @@
 import {
   defineApplication,
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
 } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
@@ -50,7 +50,7 @@ const oldOrders = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -82,12 +82,12 @@ describe('serve: what it checks before the first request', () => {
     expect(typeof http).toBe('function');
   });
 
-  test('a root that is no Contract throws', () => {
+  test('a Root that is no Service’s Contract throws', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
     const serving = () => serve(application as never, handlers);
 
-    expect(serving).toThrow('serve() takes a Contract declared with defineContract');
+    expect(serving).toThrow("serve() takes a Service's Contract declared with defineService");
   });
 
   test('a live Endpoint without a Handler throws, naming it', () => {
@@ -236,7 +236,7 @@ describe('serve: what it checks before the first request', () => {
       success: { status: 204 },
       ...(written as object),
     } as never);
-    const withOdd = defineContract({
+    const withOdd = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
     });
@@ -267,7 +267,7 @@ describe('serve: what it checks before the first request', () => {
       input: { headers: z.object({ 'x-tenant': z.string() }) },
       success: { status: 204 },
     });
-    const withListed = defineContract({
+    const withListed = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [listed] })],
     });
@@ -311,7 +311,7 @@ describe('serve: what it checks before the first request', () => {
       input: { query: { term: z.string() } as never },
       success: { status: 204 },
     });
-    const withLookup = defineContract({
+    const withLookup = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [lookup] })],
     });
@@ -336,7 +336,7 @@ describe('serve: what it checks before the first request', () => {
       input: { query: z.object({ at: z.date() as never }) },
       success: { status: 204 },
     });
-    const withSince = defineContract({
+    const withSince = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [since] })],
     });
@@ -363,7 +363,7 @@ describe('serve: what it checks before the first request', () => {
       input: { query: z.string() as never },
       success: { status: 204 },
     });
-    const withLookup = defineContract({
+    const withLookup = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [lookup] })],
     });

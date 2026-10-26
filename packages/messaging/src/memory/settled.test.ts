@@ -1,8 +1,8 @@
 import {
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
 } from '@cf-loom/contract';
 import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
@@ -48,7 +48,7 @@ const onAudited = defineSubscription({
   event: orderAuditedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

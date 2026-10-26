@@ -15,7 +15,7 @@ type DefinitionsDeclaration = {
 
 /**
  * A declared Definitions Package, which a Contract names as `standardRejections` to take its
- * Standard Rejections. What it holds is what its root file exports beside it: Guards, Rejections
+ * Standard Rejections. What it holds is what its Root file exports beside it: Guards, Rejections
  * and zod schemas, each under the name Services import it by.
  */
 export type Definitions<Declaration extends DefinitionsDeclaration = DefinitionsDeclaration> =
@@ -38,7 +38,7 @@ type NestedFieldsRule<Declaration extends DefinitionsDeclaration> = {
 };
 
 /**
- * Declares a Definitions Package; the Guards, Rejections and zod schemas its root file exports
+ * Declares a Definitions Package; the Guards, Rejections and zod schemas its Root file exports
  * beside it are what it shares.
  */
 export function defineDefinitions<const Declaration extends DefinitionsDeclaration>(

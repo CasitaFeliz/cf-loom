@@ -1,17 +1,24 @@
-import { type Contract, type Dependency, isDependency } from '../declarations/index.ts';
+import {
+  type Dependency,
+  isDependency,
+  type Root,
+  type ServiceContract,
+} from '../declarations/index.ts';
 import { providerExportsOf, providerNameOf } from './declarations.ts';
 import { eventsOf } from './grouped.ts';
-import type { Root } from './located.ts';
 import { listOf, textOf } from './written.ts';
 
 /**
  * Where a Contract takes an Event it subscribes to from: the Contract itself when one of its Groups
  * lists it, else the listed Dependency whose Contract Package exports that very Event; none when
- * neither does, or the root is no Contract. Events are compared, never Contract Packages, since a
+ * neither does, or the Root is no Service's Contract. Events are compared, never Contract Packages, since a
  * Dependency holds a frozen copy of the one imported.
  */
-export function eventSourceOf(root: Root, event: unknown): Contract | Dependency | undefined {
-  if (root.kind !== 'contract') {
+export function eventSourceOf(
+  root: Root,
+  event: unknown,
+): ServiceContract | Dependency | undefined {
+  if (root.kind !== 'service') {
     return undefined;
   }
   const ownEvents: readonly unknown[] = eventsOf(root);

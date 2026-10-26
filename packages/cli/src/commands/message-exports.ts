@@ -16,7 +16,7 @@ type ExportedMessage = Extract<LocatedMessage, { readonly kind: 'exported' }>;
 type RefusedMessage = Extract<LocatedMessage, { readonly kind: 'refused' }>;
 
 /**
- * Where the valid root's Commands' Message Versions, Retired ones included, and Subscriptions are
+ * Where the valid Root's Commands' Message Versions, Retired ones included, and Subscriptions are
  * exported: Commands, then Subscriptions, each in code point order of its name in code.
  */
 export function messageExportsOf(
@@ -57,7 +57,7 @@ function atOf(atByLabel: ReadonlyMap<string, FileExport>, message: MessageHandle
   const label = elementLabelOf(message);
   const at = atByLabel.get(label);
   if (at === undefined) {
-    throw new Error(`The root declares no ${label}, which its Snapshot holds: a bug.`);
+    throw new Error(`The Root declares no ${label}, which its Snapshot holds: a bug.`);
   }
   return at;
 }

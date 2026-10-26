@@ -3,7 +3,7 @@ import { type Guard, isGuard, isRejection, type Rejection } from '../declaration
 import { byCodePoint } from '../walker/index.ts';
 import { isSchema } from './parts.ts';
 
-/** One export of a Definitions Package's root file that it shares: a Guard, a Rejection or a zod schema, under its export name. */
+/** One export of a Definitions Package's Root file that it shares: a Guard, a Rejection or a zod schema, under its export name. */
 export type Member =
   | { readonly name: string; readonly kind: 'guard'; readonly value: Guard }
   | { readonly name: string; readonly kind: 'rejection'; readonly value: Rejection }

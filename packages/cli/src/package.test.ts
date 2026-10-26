@@ -166,7 +166,7 @@ const service: Readonly<Record<string, string>> = {
   'src/contract/index.ts': lines([
     'import {',
     '  defineCommand,',
-    '  defineContract,',
+    '  defineService,',
     '  defineEndpoint,',
     '  defineEvent,',
     '  defineGroup,',
@@ -289,7 +289,7 @@ const service: Readonly<Record<string, string>> = {
     '  commands: [chargeCardV1],',
     '  subscriptions: [auditPlaced],',
     '});',
-    'export const contract = defineContract({',
+    'export const contract = defineService({',
     "  name: 'orders-service',",
     '  standardRejections: definitions,',
     '  groups: [orders, messages],',
@@ -307,7 +307,7 @@ function withDeclarations(
     'package.json': JSON.stringify({ name: '@org/orders-service', type: 'module' }),
     'cf-loom.config.ts': config,
     'src/contract/index.ts': lines([
-      "import { defineContract, defineEndpoint, defineGroup, defineRejection } from '@cf-loom/contract';",
+      "import { defineService, defineEndpoint, defineGroup, defineRejection } from '@cf-loom/contract';",
       "import { z } from 'zod';",
       ...declarations,
       'export const ping = defineEndpoint({',
@@ -320,7 +320,7 @@ function withDeclarations(
       `  ${rejections}`,
       '});',
       "const pings = defineGroup({ name: 'pings', description: 'Pings', endpoints: [ping] });",
-      "export const contract = defineContract({ name: 'orders-service', groups: [pings] });",
+      "export const contract = defineService({ name: 'orders-service', groups: [pings] });",
     ]),
   };
 }
@@ -348,7 +348,7 @@ function withRejectionsOf(codes: readonly string[]): Readonly<Record<string, str
   return withDeclarations(declarations, `rejections: [${names.join(', ')}],`);
 }
 
-/** A Service as `withDeclarations` writes it, its root also listing the Events given. */
+/** A Service as `withDeclarations` writes it, its Root also listing the Events given. */
 function withEvents(
   declarations: readonly string[],
   events: string,
@@ -486,7 +486,7 @@ function aSubscriber(more: readonly string[]): string {
       include: ['src'],
     }),
     'src/contract/index.ts': lines([
-      "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
+      "import { defineService, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
       "import { contract as orders } from '@org/contract-orders-service';",
       '',
       'export const ordersDependency = defineDependency({ provider: orders });',
@@ -500,7 +500,7 @@ function aSubscriber(more: readonly string[]): string {
       "  description: 'Audit placed v2',",
       '  event: orders.events.orderPlacedV2,',
       '});',
-      'export const contract = defineContract({',
+      'export const contract = defineService({',
       "  name: 'billing-service',",
       "  groups: [defineGroup({ name: 'audits', description: 'Audits', subscriptions: [auditPlacedV1, auditPlacedV2] })],",
       '  dependencies: [ordersDependency],',
@@ -531,7 +531,7 @@ function wordOf(next: () => number, length: number): string {
 }
 
 /**
- * package.json names both a package.json and a root name accept, scoped and not: the longest one
+ * package.json names both a package.json and a Root name accept, scoped and not: the longest one
  * whose Contract Package's name npm still takes, then pseudo-random ones.
  */
 function projectNames(): readonly string[] {
@@ -543,14 +543,14 @@ function projectNames(): readonly string[] {
   return [`@s/${'n'.repeat(214 - '@s/contract-'.length)}`, ...random];
 }
 
-/** A Service project named `packageName` whose root declares nothing. */
+/** A Service project named `packageName` whose Root declares nothing. */
 function aServiceNamed(packageName: string): Readonly<Record<string, string>> {
   const name = packageName.split('/').at(-1);
   return {
     'package.json': JSON.stringify({ name: packageName, type: 'module' }),
     'src/contract/index.ts': lines([
-      "import { defineContract } from '@cf-loom/contract';",
-      `export const contract = defineContract({ name: '${name}' });`,
+      "import { defineService } from '@cf-loom/contract';",
+      `export const contract = defineService({ name: '${name}' });`,
     ]),
   };
 }
@@ -580,11 +580,11 @@ function aServiceOfDeprecatedEndpoints(
     'package.json': JSON.stringify({ name: '@org/orders-service', type: 'module' }),
     'cf-loom.config.ts': config,
     'src/contract/index.ts': lines([
-      "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+      "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
       "import { z } from 'zod';",
       ...endpoints,
       `const all = defineGroup({ name: 'all', description: 'All', endpoints: [${names.join(', ')}] });`,
-      "export const contract = defineContract({ name: 'orders-service', groups: [all] });",
+      "export const contract = defineService({ name: 'orders-service', groups: [all] });",
     ]),
   };
 }
@@ -1222,7 +1222,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
     write(consumer, {
       'src/contract/index.ts': lines([
-        "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
+        "import { defineService, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
         "import { contract as orders } from '@org/contract-orders-service';",
         '',
         'export const ordersDependency = defineDependency({ provider: orders });',
@@ -1231,7 +1231,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         "  description: 'Audit placed',",
         '  event: orders.events.orderPlacedV1,',
         '});',
-        'export const contract = defineContract({',
+        'export const contract = defineService({',
         "  name: 'billing-service',",
         '  groups: [defineGroup({',
         "    name: 'audits',",
@@ -1321,11 +1321,11 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       "  description: 'Audit placed again',",
       '  event: orders.events.orderPlacedV1,',
       '});',
-      'export const contract = defineContract({',
+      'export const contract = defineService({',
     ].join('\n');
     edit(consumer, 'src/contract/index.ts', (text) =>
       text
-        .replace('export const contract = defineContract({', again)
+        .replace('export const contract = defineService({', again)
         .replace(
           'subscriptions: [auditPlacedV1, auditPlacedV2]',
           'subscriptions: [auditPlacedV1, auditPlacedV2, auditPlacedAgain]',
@@ -1381,7 +1381,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     });
   });
 
-  test('cfLoom.dependencies is in canonical order, whatever order the root lists them in', () => {
+  test('cfLoom.dependencies is in canonical order, whatever order the Root lists them in', () => {
     const alpha = aProviderPackage('alpha-service');
     const beta = aProviderPackage('beta-service');
     const applicationOf = (listed: string) => {
@@ -2036,7 +2036,7 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
 });
 
 describe('cf-loom package: what it refuses', () => {
-  test('a Definitions Package root is refused before any Snapshot is looked at', () => {
+  test('a Definitions Package’s Root is refused before any Snapshot is looked at', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'cf-loom.config.ts': config,
@@ -2056,7 +2056,7 @@ describe('cf-loom package: what it refuses', () => {
     });
   });
 
-  test('a Definitions Package root is a tooling error', () => {
+  test('a Definitions Package’s Root is a tooling error', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'cf-loom.config.ts': config,
@@ -2162,7 +2162,7 @@ describe('cf-loom package: what it refuses', () => {
     expect(built).toEqual({ status: 0, stdout: '' });
   });
 
-  test('zod not installed beside the root is a tooling error', () => {
+  test('zod not installed beside the Root is a tooling error', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
       'cf-loom.config.ts': config,

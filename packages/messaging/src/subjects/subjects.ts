@@ -1,12 +1,12 @@
-import type { Command, Contract, Event, Subscription } from '@cf-loom/contract';
+import type { Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
 import {
   codeNameOf,
   commandsOf,
   durableNameOf,
   eventServiceOf,
   eventsOf,
-  isContract,
   isLive,
+  isServiceContract,
   lifecycleOf,
   streamNameOf,
   subjectOf,
@@ -40,7 +40,7 @@ export type Subjects = {
   readonly consumed: readonly Consumed[];
 };
 
-/** The subjects of a root, which must be a Contract whose every Subscription's Event is listed. */
+/** The subjects of a Root, which must be a Service's Contract whose every Subscription's Event is listed. */
 export function subjectsOf(root: unknown): Subjects {
   const contract = contractOf(root);
   const service = contract.name;
@@ -79,9 +79,9 @@ export function sentVersionOf(subjects: Subjects, name: string): SentVersion {
   return sent;
 }
 
-function contractOf(root: unknown): Contract {
-  if (!isContract(root)) {
-    throw new Error('messaging() takes a Contract declared with defineContract');
+function contractOf(root: unknown): ServiceContract {
+  if (!isServiceContract(root)) {
+    throw new Error("messaging() takes a Service's Contract declared with defineService");
   }
   return root;
 }
@@ -100,7 +100,7 @@ function consumedCommandOf(service: string, command: Command): Consumed {
   };
 }
 
-function consumedSubscriptionOf(contract: Contract, subscription: Subscription): Consumed {
+function consumedSubscriptionOf(contract: ServiceContract, subscription: Subscription): Consumed {
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
     const message = `${subscription.name} subscribes to an Event neither a Group lists nor a listed Dependency's Provider exports`;

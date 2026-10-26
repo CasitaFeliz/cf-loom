@@ -148,12 +148,12 @@ function aRoot({
       '',
     ].join('\n'),
     'src/contract/index.ts': [
-      "import { defineContract, defineGroup } from '@cf-loom/contract';",
+      "import { defineService, defineGroup } from '@cf-loom/contract';",
       "import { ping } from './ping.endpoint.ts';",
       '',
       "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
       '',
-      "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+      "export const contract = defineService({ name: 'orders-service', groups: [health] });",
       '',
     ].join('\n'),
   };
@@ -182,7 +182,7 @@ function installedDefinitions(
   };
 }
 
-/** Names `@org/definitions` as the project root's `standardRejections`. */
+/** Names `@org/definitions` as the project Root's `standardRejections`. */
 function takeStandardRejections(project: string): void {
   write(project, {
     'src/contract/index.ts': read(project, 'src/contract/index.ts')
@@ -223,7 +223,7 @@ function sortedKeys(value: unknown): unknown {
 }
 
 describe('cf-loom init', () => {
-  test('init service writes the root, named after package.json, and no configuration', () => {
+  test('init service writes the Root, named after package.json, and no configuration', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'service');
@@ -231,9 +231,9 @@ describe('cf-loom init', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     expect(read(project, 'src/contract/index.ts')).toBe(
       [
-        "import { defineContract } from '@cf-loom/contract';",
+        "import { defineService } from '@cf-loom/contract';",
         '',
-        'export const contract = defineContract({',
+        'export const contract = defineService({',
         "  name: 'orders-service',",
         '});',
         '',
@@ -242,7 +242,7 @@ describe('cf-loom init', () => {
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
   });
 
-  test('init service in an unscoped package writes the root, and generate then passes', () => {
+  test('init service in an unscoped package writes the Root, and generate then passes', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: 'orders-service', type: 'module' }),
     });
@@ -267,7 +267,7 @@ describe('cf-loom init', () => {
     expect(read(project, 'src/contract/index.ts')).toContain('export const contract =');
   });
 
-  test('init application writes an Application’s root', () => {
+  test('init application writes an Application’s Root', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'application');
@@ -285,7 +285,7 @@ describe('cf-loom init', () => {
     );
   });
 
-  test('init definitions writes a Definitions Package’s root under src/definitions', () => {
+  test('init definitions writes a Definitions Package’s Root under src/definitions', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'definitions');
@@ -301,7 +301,7 @@ describe('cf-loom init', () => {
     );
   });
 
-  test('init refuses to overwrite a root, a tooling error', () => {
+  test('init refuses to overwrite a Root, a tooling error', () => {
     const project = aProject(aRoot());
     const root = read(project, 'src/contract/index.ts');
 
@@ -326,7 +326,7 @@ describe('cf-loom init', () => {
     });
   });
 
-  test('init refuses when the root of another kind exists', () => {
+  test('init refuses when the Root of another kind exists', () => {
     const project = aProject({ 'src/definitions/index.ts': 'export {};\n' });
 
     const ran = cfLoom(project, 'init', 'service');
@@ -352,7 +352,7 @@ describe('cf-loom init', () => {
     expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
-  test('init reports a root it cannot write in one line, and keeps what was there', () => {
+  test('init reports a Root it cannot write in one line, and keeps what was there', () => {
     const project = aProject({ 'src/contract/kept.ts': '' });
     symlinkSync('missing/index.ts', join(project, 'src/contract/index.ts'));
 
@@ -389,7 +389,7 @@ describe('cf-loom init', () => {
     ['service', 'orders-service'],
     ['application', 'orders-service'],
     ['definitions', '@org/orders-service'],
-  ])('the %s root init writes generates its Snapshot, named %s', (kind, name) => {
+  ])('the %s Root init writes generates its Snapshot, named %s', (kind, name) => {
     const project = aProject();
     cfLoom(project, 'init', kind);
 
@@ -565,7 +565,7 @@ describe('cf-loom generate', () => {
     });
   });
 
-  test('a root that fails to load is a tooling error', () => {
+  test('a Root that fails to load is a tooling error', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       'src/contract/index.ts':
@@ -578,13 +578,16 @@ describe('cf-loom generate', () => {
     expect(ran.stderr).toMatch(/^src\/contract\/index\.ts cannot be loaded: /);
   });
 
-  test('a project without a root is a tooling error', () => {
+  test('a project without a Root is a tooling error', () => {
     const project = aProject({ 'cf-loom.config.ts': config });
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toContain('run cf-loom init');
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: 'No Root in src/contract/index.ts or src/definitions/index.ts: run cf-loom init\n',
+    });
   });
 
   test('an imported Definitions Package is recorded at the exact version installed, in its origins', () => {
@@ -985,7 +988,7 @@ describe('cf-loom: the layout of cf-loom.config.ts', () => {
 });
 
 describe('cf-loom generate: what it refuses', () => {
-  test('a root whose name is not the unscoped name of package.json exits 1', () => {
+  test('a Root whose name is not the unscoped name of package.json exits 1', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
@@ -998,11 +1001,11 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
   });
 
-  test('a wrong root name is reported with every other failure at once', () => {
+  test('a wrong Root name is reported with every other failure at once', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot({ body: 'z.object({ at: z.date() })' }),
@@ -1013,7 +1016,7 @@ describe('cf-loom generate: what it refuses', () => {
 
     expect(ran.status).toBe(1);
     expect(ran.stderr.split('\n')).toEqual([
-      'name package-name: A root is named as its package.json, without the scope: billing-service',
+      'name package-name: A Root is named as its package.json, without the scope: billing-service',
       'groups.health.endpoints.GET /ping.success.body.fields.at not allowed: z.date() (use z.iso.datetime())',
       '',
     ]);
@@ -1041,18 +1044,127 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran.stderr).toContain('"type": "module"');
   });
 
-  test('a root file that exports two roots is a tooling error', () => {
+  test.for([
+    [
+      'a Service’s Contract and an Application’s',
+      'src/contract/index.ts',
+      [
+        "import { defineApplication, defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
+        "export const application = defineApplication({ name: 'orders-service' });",
+        '',
+      ].join('\n'),
+      'application and contract',
+    ],
+    [
+      'a Definitions Package and a second one',
+      'src/definitions/index.ts',
+      [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        'export const definitions = defineDefinitions({});',
+        'export const other = defineDefinitions({});',
+        '',
+      ].join('\n'),
+      'definitions and other',
+    ],
+    [
+      'two Definitions Packages, one named outside the Basic Multilingual Plane',
+      'src/definitions/index.ts',
+      [
+        "import { defineDefinitions } from '@cf-loom/contract';",
+        'export const \u{1D44E} = defineDefinitions({});',
+        'export const \uFF41 = defineDefinitions({});',
+        '',
+      ].join('\n'),
+      '\uFF41 and \u{1D44E}',
+    ],
+  ] as const)(
+    'a Root file that exports %s is a tooling error naming both exports',
+    ([, file, text, names]) => {
+      const project = aProject({ 'cf-loom.config.ts': config, [file]: text });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `${file} exports more than one Root: ${names}\n`,
+      });
+    },
+  );
+
+  test('a Service’s Root file that exports its Root under two names generates', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     edit(project, 'src/contract/index.ts', (text) =>
-      text.concat('export const application = contract;\n'),
+      text.concat('export const service = contract;\n'),
     );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test.for([
+    ['again', 'definitions'],
+    ['\uFF41', '\u{1D44E}'],
+  ] as const)(
+    'a Definitions Package’s Root file that exports its Definitions object as %s and %s fails definitions-export, naming the later name in code point order',
+    ([first, later]) => {
+      const project = aProject({
+        'cf-loom.config.ts': config,
+        'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
+        'src/definitions/index.ts': [
+          "import { defineDefinitions } from '@cf-loom/contract';",
+          `export const ${later} = defineDefinitions({});`,
+          `export const ${first} = ${later};`,
+          '',
+        ].join('\n'),
+      });
+
+      const ran = cfLoom(project, 'generate');
+
+      expect(ran).toEqual({
+        status: 1,
+        stdout: '',
+        stderr: `exports.${later} definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: its definitions once, not as ${later}\n`,
+      });
+    },
+  );
+
+  test.each([
+    [
+      'a hand-built object of the kind service',
+      "export const contract = { kind: 'service', name: 'orders-service' };\n",
+    ],
+    ['a value that is no declaration', 'export const contract = 1;\n'],
+    ['nothing', 'export {};\n'],
+  ])('a Root file that exports %s exports no Root, a tooling error', (_exports, text) => {
+    const project = aProject({ 'cf-loom.config.ts': config, 'src/contract/index.ts': text });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: 'src/contract/index.ts exports one root, not contract and application\n',
+      stderr:
+        "src/contract/index.ts exports no Root: a Service's Contract, an Application's Contract or a Definitions Package, declared with defineService, defineApplication or defineDefinitions\n",
+    });
+  });
+
+  test('a project with both Root files is a tooling error naming them', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'src/definitions/index.ts': 'export {};\n',
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'A project has one Root: both src/contract/index.ts and src/definitions/index.ts exist\n',
     });
   });
 
@@ -1123,7 +1235,7 @@ describe('cf-loom generate: what it refuses', () => {
     );
   });
 
-  test('an imported Definitions Package is resolved from the root file, not the working directory', () => {
+  test('an imported Definitions Package is resolved from the Root file, not the working directory', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
@@ -1157,7 +1269,7 @@ describe('cf-loom generate: what it refuses', () => {
 });
 
 describe('cf-loom generate: what the user’s code throws', () => {
-  test('a root file that throws what is no Error reports its first line', () => {
+  test('a Root file that throws what is no Error reports its first line', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       'src/contract/index.ts': "throw 'first line\\nsecond line';\n",
@@ -1173,7 +1285,7 @@ describe('cf-loom generate: what the user’s code throws', () => {
   });
 
   test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
-    'a root file that throws a text holding %s reports it as one line, with the line break written escaped',
+    'a Root file that throws a text holding %s reports it as one line, with the line break written escaped',
     (visible) => {
       const project = aProject({
         'cf-loom.config.ts': config,
@@ -1405,7 +1517,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         '',
       ].join('\n'),
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { apiKey, definitions, money } from '@org/definitions';",
         '',
         'export const price = defineEndpoint({',
@@ -1418,7 +1530,7 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
         '  success: { status: 200, body: money },',
         '});',
         "const prices = defineGroup({ name: 'prices', description: 'Prices', endpoints: [price] });",
-        'export const contract = defineContract({',
+        'export const contract = defineService({',
         "  name: 'orders-service',",
         '  standardRejections: definitions,',
         '  groups: [prices],',
@@ -1438,8 +1550,8 @@ describe('cf-loom generate: a Definitions Package installed as built JavaScript'
   });
 });
 
-describe('cf-loom generate: a Definitions Package root', () => {
-  test('a Definitions Package writes every Guard, Rejection and schema its root file exports under exports', () => {
+describe('cf-loom generate: a Definitions Package’s Root', () => {
+  test('a Definitions Package writes every Guard, Rejection and schema its Root file exports under exports', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'src/definitions/index.ts': [
@@ -1480,7 +1592,7 @@ describe('cf-loom generate: a Definitions Package root', () => {
     expect(ran.stderr).toMatch(/^guards undeclared-field: [^\n]+\n$/);
   });
 
-  test('a helper the root file exports fails generate with one line, and nothing is written', () => {
+  test('a helper the Root file exports fails generate with one line, and nothing is written', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'src/definitions/index.ts': [
@@ -1499,7 +1611,7 @@ describe('cf-loom generate: a Definitions Package root', () => {
       status: 1,
       stdout: '',
       stderr:
-        "exports.isMoney definitions-export: A Definitions Package's root file exports only its definitions, Guards, Rejections and zod schemas: isMoney is none of them\n",
+        "exports.isMoney definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: isMoney is none of them\n",
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -1541,7 +1653,7 @@ function anInstalledPackage(
   return { [`${at}/package.json`]: packageJson, ...Object.fromEntries(written) };
 }
 
-/** A module declaring a Definitions Package with a Guard, whose not-found code is `code`, so a Snapshot tells which module the root holds. */
+/** A module declaring a Definitions Package with a Guard, whose not-found code is `code`, so a Snapshot tells which module the Root holds. */
 function definitionsModuleOf(code: string): string {
   return [
     "import { defineDefinitions, defineGuard } from '@cf-loom/contract';",
@@ -1553,7 +1665,7 @@ function definitionsModuleOf(code: string): string {
   ].join('\n');
 }
 
-/** A Service root, named `name`, that imports `imports` and takes its Standard Rejections from `source`. */
+/** A Service's Root, named `name`, that imports `imports` and takes its Standard Rejections from `source`. */
 function aServiceTaking(
   imports: readonly string[],
   source: string,
@@ -1561,23 +1673,23 @@ function aServiceTaking(
 ): Readonly<Record<string, string>> {
   return {
     'src/contract/index.ts': [
-      "import { defineContract } from '@cf-loom/contract';",
+      "import { defineService } from '@cf-loom/contract';",
       ...imports,
       '',
-      `export const contract = defineContract({ name: '${name}', standardRejections: ${source} });`,
+      `export const contract = defineService({ name: '${name}', standardRejections: ${source} });`,
       '',
     ].join('\n'),
   };
 }
 
-/** A Service root that lists `definitions` and attaches its Guard `apiKey`, imported from `from`. */
+/** A Service’s Root that lists `definitions` and attaches its Guard `apiKey`, imported from `from`. */
 function aServiceGuardedFrom(
   definitionsFrom: string,
   guardFrom: string,
 ): Readonly<Record<string, string>> {
   return {
     'src/contract/index.ts': [
-      "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+      "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
       "import { z } from 'zod';",
       `import { definitions } from '${definitionsFrom}';`,
       `import { apiKey } from '${guardFrom}';`,
@@ -1592,7 +1704,7 @@ function aServiceGuardedFrom(
       '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
       '});',
       "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-      'export const contract = defineContract({',
+      'export const contract = defineService({',
       "  name: 'orders-service',",
       '  standardRejections: definitions,',
       '  groups: [health],',
@@ -1602,7 +1714,7 @@ function aServiceGuardedFrom(
   };
 }
 
-/** The files of a Definitions Package whose Guard `apiKey` sits in `guards.js`, exported at `./guards` and by its root file. */
+/** The files of a Definitions Package whose Guard `apiKey` sits in `guards.js`, exported at `./guards` and by its Root file. */
 const guardsModules: Readonly<Record<string, string>> = {
   'guards.js': [
     "import { defineGuard } from '@cf-loom/contract';",
@@ -1695,7 +1807,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
       code: 'MISSING_DEFAULT',
     },
   ])(
-    'a package whose "." maps $maps is read from the module the root holds',
+    'a package whose "." maps $maps is read from the module the Root holds',
     ({ nodeOptions, entry, code }) => {
       const project = aProject({
         'cf-loom.config.ts': config,
@@ -1832,7 +1944,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
   test('Guards of two Definitions Packages of two scopes take each its own package’s origin', () => {
     const project = aProject({
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         "import { apiKey } from '@org/definitions';",
         "import { gate } from '@platform/definitions';",
@@ -1847,7 +1959,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
         '});',
         "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-        "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+        "export const contract = defineService({ name: 'orders-service', groups: [health] });",
         '',
       ].join('\n'),
       ...anInstalledPackage(
@@ -1967,7 +2079,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
   test('a reached packaged Guard no module the project imports exports exits 1 with the stub line', () => {
     const project = aProject({
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         "import { permission } from '@p1/defs';",
         '',
@@ -1981,7 +2093,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
         '});',
         "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-        "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+        "export const contract = defineService({ name: 'orders-service', groups: [health] });",
         '',
       ].join('\n'),
       ...anInstalledPackage(
@@ -2038,7 +2150,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
       );
     const project = aProject({
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         "import { auth } from '@org/auth-definitions';",
         "import { billing } from '@org/billing-definitions';",
@@ -2053,7 +2165,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
         '});',
         "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-        "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+        "export const contract = defineService({ name: 'orders-service', groups: [health] });",
         '',
       ].join('\n'),
       ...packageOf('@org/auth-definitions', 'auth', 'Not allowed'),
@@ -2081,7 +2193,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     const newer = copyOf('2.0.0', 'MISSING_NEW');
     const project = aProject({
       'src/contract/index.ts': [
-        "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+        "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
         "import { z } from 'zod';",
         "import { apiKey } from '@p1/defs';",
         "import { definitions } from '@org/definitions';",
@@ -2096,7 +2208,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
         '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
         '});',
         "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-        'export const contract = defineContract({',
+        'export const contract = defineService({',
         "  name: 'orders-service',",
         '  standardRejections: definitions,',
         '  groups: [health],',
@@ -2632,7 +2744,7 @@ function aMessagingRoot({
 function aSubscribingRoot(): Files {
   const root = aRoot();
   const index = [
-    "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
+    "import { defineService, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
     "import { ping } from './ping.endpoint.ts';",
     "import { payments } from './payments.ts';",
     '',
@@ -2644,7 +2756,7 @@ function aSubscribingRoot(): Files {
     '',
     "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping], subscriptions: [notifyOnSettled] });",
     '',
-    'export const contract = defineContract({',
+    'export const contract = defineService({',
     "  name: 'orders-service',",
     '  groups: [health],',
     '  dependencies: [defineDependency({ provider: payments })],',
@@ -2654,7 +2766,7 @@ function aSubscribingRoot(): Files {
   return { ...root, 'src/contract/index.ts': index, 'src/contract/payments.ts': payments };
 }
 
-/** The Definitions Package `@org/definitions`, whose root declares nothing. */
+/** The Definitions Package `@org/definitions`, whose Root declares nothing. */
 const aDefinitionsRoot: Files = {
   'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
   'src/definitions/index.ts': [
@@ -2678,7 +2790,7 @@ const aDefinitionsRootOfEverySite: Files = {
   ].join('\n'),
 };
 
-/** The Application `@org/web-admin`, whose root lists no Dependency. */
+/** The Application `@org/web-admin`, whose Root lists no Dependency. */
 const anApplicationRoot: Files = {
   'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
   'src/contract/index.ts': [
@@ -2742,7 +2854,7 @@ function checkedAgainst(lab: Lab, changed: Checkable, ...args: string[]) {
   return ranAgainst(lab, changed, 'check', ...args);
 }
 
-/** A project whose root `before` was published as the versions given, then became `after` and was generated. */
+/** A project whose Root `before` was published as the versions given, then became `after` and was generated. */
 async function aChangedProjectListing(
   lab: Lab,
   { before, after }: { before: Files; after: Files },
@@ -2766,7 +2878,7 @@ function withoutRetiredHandlers(project: string): void {
   }
 }
 
-/** A project whose root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */
+/** A project whose Root `before` was published as 1.0.0, and as the other versions given, then became `after` and was generated. */
 function aChangedProject(
   lab: Lab,
   roots: { before: Files; after: Files },
@@ -2854,7 +2966,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(registry.requests).toEqual([]);
   });
 
-  test('a root that breaks a rule fails check with generate’s lines', async ({ lab }) => {
+  test('a Root that breaks a rule fails check with generate’s lines', async ({ lab }) => {
     const broken = {
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
     };
@@ -2870,7 +2982,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
     expect(registry.requests).toEqual([]);
   });
@@ -3607,7 +3719,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
   test.for([
     [
-      'a root that breaks a rule',
+      'a Root that breaks a rule',
       1,
       { 'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }) },
     ],
@@ -4067,7 +4179,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
 const publishTimeout = 120_000;
 const stagingFolder = 'node_modules/.cache/cf-loom';
 
-/** The root of `removedSuccessField` the other way round: a Success field added. */
+/** The Roots of `removedSuccessField` the other way round: a Success field added. */
 const addedSuccessField = {
   before: removedSuccessField.after,
   after: removedSuccessField.before,
@@ -4076,13 +4188,13 @@ const addedSuccessField = {
 /** A Service that declares no Endpoint, Event or Command. */
 const aRootWithoutEndpoints: Files = {
   'src/contract/index.ts': [
-    "import { defineContract } from '@cf-loom/contract';",
-    "export const contract = defineContract({ name: 'orders-service', groups: [] });",
+    "import { defineService } from '@cf-loom/contract';",
+    "export const contract = defineService({ name: 'orders-service', groups: [] });",
     '',
   ].join('\n'),
 };
 
-/** The root file of a Definitions Package, which exports what is given besides `definitions`. */
+/** The Root file of a Definitions Package, which exports what is given besides `definitions`. */
 function aDefinitionsModule(exported: readonly string[] = []): string {
   const imports =
     "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';";
@@ -4516,7 +4628,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(registry.requests).toEqual([]);
   });
 
-  test('a root that breaks a rule fails publish with generate’s lines, and nothing is published', async ({
+  test('a Root that breaks a rule fails publish with generate’s lines, and nothing is published', async ({
     lab,
   }) => {
     const broken = {
@@ -4531,7 +4643,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
     expect(registry.requests).toEqual([]);
   });
@@ -5245,6 +5357,32 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
         /^@org\/definitions cannot be imported as installed: [^\n]+: build, then publish\n$/,
       );
       expect(ran.stderr).toContain(reason);
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    [
+      'exports no Root',
+      aDefinitionsModule().replace('export const definitions =', 'const unexported ='),
+    ],
+    ['exports two Roots', aDefinitionsModule(['export const other = defineDefinitions({});'])],
+  ] as const)(
+    'a Definitions Package whose entry %s cannot be imported as installed, and nothing is put or left behind',
+    async ([, built], { lab }) => {
+      const project = await aGeneratedProject(
+        lab,
+        aBuiltDefinitions({}, { source: aDefinitionsModule(), built }),
+      );
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout).toBe(`${neverPublished(registry, '@org/definitions')}\n`);
+      expect(ran.stderr).toMatch(
+        /^@org\/definitions cannot be imported as installed: its entry exports (no|more than one) Root: [^\n]+: build, then publish\n$/,
+      );
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },

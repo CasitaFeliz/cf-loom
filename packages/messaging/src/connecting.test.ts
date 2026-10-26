@@ -1,9 +1,9 @@
 import {
   defineApplication,
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
@@ -50,7 +50,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -219,7 +219,7 @@ describe('messaging() and close', () => {
         description: 'Charges the order’s card',
         body: orderBody,
       });
-    const evolved = defineContract({
+    const evolved = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({
@@ -241,14 +241,14 @@ describe('messaging() and close', () => {
     ]);
   });
 
-  test('messaging() given something that is no Contract rejects and connects nothing', async () => {
+  test('messaging() given something that is no Service’s Contract rejects and connects nothing', async () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
     const { broker, recorded } = aBroker();
 
     const opening = messaging(application as never, broker);
 
     await expect(opening).rejects.toThrow(
-      'messaging() takes a Contract declared with defineContract',
+      "messaging() takes a Service's Contract declared with defineService",
     );
     expect(recorded.connectedWith).toEqual([]);
   });
@@ -259,7 +259,7 @@ describe('messaging() and close', () => {
       description: 'Notifications',
       subscriptions: [notifyOnCreated],
     });
-    const unlisted = defineContract({ name: 'orders-service', groups: [notifying] });
+    const unlisted = defineService({ name: 'orders-service', groups: [notifying] });
 
     const opening = messaging(unlisted, aBroker().broker);
 

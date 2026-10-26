@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
-  defineContract,
   defineEndpoint,
   defineGuard,
   defineRejection,
+  defineService,
   invalidInput,
   notFound,
   notImplemented,
@@ -25,7 +25,7 @@ const unauthenticated = defineRejection({
   message: 'Unauthenticated',
 });
 const standardRejectionDefaults = standardRejectionsOf(
-  defineContract({ name: 'orders-service', groups: [] }),
+  defineService({ name: 'orders-service', groups: [] }),
 );
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
@@ -160,7 +160,7 @@ describe('resolutionOf', () => {
     expect(resolution).toEqual({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
   });
 
-  test('a Standard Rejection resolves to the code, status and message the root resolved', () => {
+  test('a Standard Rejection resolves to the code, status and message the Root resolved', () => {
     const standards = {
       ...standardRejectionDefaults,
       notFound: { code: 'MISSING', status: 404, message: 'Missing' },

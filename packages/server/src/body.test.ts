@@ -1,4 +1,4 @@
-import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineService } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -42,7 +42,7 @@ const nest = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

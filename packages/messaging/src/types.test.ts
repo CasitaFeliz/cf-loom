@@ -1,8 +1,8 @@
 import {
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
@@ -130,7 +130,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV3,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -242,8 +242,8 @@ describe('publish and send types', () => {
     }>();
   });
 
-  test('a name the root does not list, or whose every version is Retired, is a type error', () => {
-    // @ts-expect-error: the root lists no OrderShipped
+  test('a name the Root does not list, or whose every version is Retired, is a type error', () => {
+    // @ts-expect-error: the Root lists no OrderShipped
     const unlisted = () => publisher.publish('OrderShipped', {}, fact);
     // @ts-expect-error: OrderArchived's every version is Retired
     const archived = () => publisher.publish('OrderArchived', {}, fact);

@@ -3,6 +3,7 @@ import {
   type Dependency,
   type Endpoint,
   isEndpoint,
+  type Root,
   reaches,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
@@ -14,7 +15,6 @@ import {
   type LocatedDependency,
   listOf,
   providerExportsOf,
-  type Root,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';

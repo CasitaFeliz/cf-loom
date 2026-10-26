@@ -16,7 +16,7 @@ import {
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
-/** The versions of the two peers the package is built with, as installed beside the root. */
+/** The versions of the two peers the package is built with, as installed beside the Root. */
 export type Peers = { readonly contract: string; readonly zod: string };
 
 /** Who the package is published as, at which version, and the peer ranges it declares. */

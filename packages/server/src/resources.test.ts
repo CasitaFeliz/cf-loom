@@ -1,10 +1,10 @@
 import {
   defineCommand,
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   notFound,
 } from '@cf-loom/contract';
 import { admit, handle, readersOf, reject, success, type WithResources } from '@cf-loom/handlers';
@@ -66,7 +66,7 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder, health] })],
 });

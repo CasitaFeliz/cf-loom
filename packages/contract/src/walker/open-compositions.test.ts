@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineContract, defineEndpoint, defineEvent, defineGroup, openEnum } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { defineEndpoint, defineEvent, defineGroup, defineService, openEnum } from '../index.ts';
+import { validateRoot } from '../internal/index.ts';
 
 /** Validates a Contract whose one Endpoint answers the body given. */
 function validatedWithBody(body: core.$ZodType) {
@@ -16,8 +16,8 @@ function validatedWithBody(body: core.$ZodType) {
     success: { status: 200, body },
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
-  const root = defineContract({ name: 'shapes-service', groups: [group] });
-  return validateContract(root, aRootPackage(root));
+  const root = defineService({ name: 'shapes-service', groups: [group] });
+  return validateRoot(root, aRootPackage(root));
 }
 
 /** Validates a Contract whose one Endpoint takes the body given as its Input. */
@@ -32,8 +32,8 @@ function validatedWithInputBody(body: core.$ZodType) {
     success: { status: 204 },
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
-  const root = defineContract({ name: 'shapes-service', groups: [group] });
-  return validateContract(root, aRootPackage(root));
+  const root = defineService({ name: 'shapes-service', groups: [group] });
+  return validateRoot(root, aRootPackage(root));
 }
 
 /** Validates a Contract whose one Event carries the body given. */
@@ -46,8 +46,8 @@ function validatedWithMessageBody(body: core.$ZodType) {
     body,
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', events: [shaped] });
-  const root = defineContract({ name: 'shapes-service', groups: [group] });
-  return validateContract(root, aRootPackage(root));
+  const root = defineService({ name: 'shapes-service', groups: [group] });
+  return validateRoot(root, aRootPackage(root));
 }
 
 const refusal = {
@@ -58,7 +58,7 @@ const refusal = {
 
 const bodyAt = ['groups', 'shapes', 'endpoints', 'GET /echo', 'success', 'body'];
 
-describe('validateContract: an intersection reaching an Open Enum', () => {
+describe('validateRoot: an intersection reaching an Open Enum', () => {
   test('an intersection of an object and a discriminated union is allowed', () => {
     const payment = z.discriminatedUnion('type', [z.object({ type: z.literal('card') })]);
     const body = z.intersection(z.object({ type: z.string() }), payment);
@@ -227,7 +227,7 @@ const unionRefusal = {
 
 const inputBodyAt = ['groups', 'shapes', 'endpoints', 'POST /echo', 'input', 'body'];
 
-describe('validateContract: a plain union reaching an Open Enum', () => {
+describe('validateRoot: a plain union reaching an Open Enum', () => {
   test('an Open Enum option of a union is not allowed, at the union', () => {
     const body = z.union([openEnum(['a']), z.literal('b')]);
 

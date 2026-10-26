@@ -119,7 +119,7 @@ describe('handle', () => {
     expect(write).toThrow(handleRefusal);
   });
 
-  test("a Message Handler carries the root's own Command or Subscription as its element", () => {
+  test("a Message Handler carries the Root's own Command or Subscription as its element", () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const notifyOnPaidStub = handle.stub(notifyOnPaid);
 

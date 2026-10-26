@@ -7,13 +7,13 @@ import { schemaExports } from '../../test/snapshots.ts';
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   providedEvent,
 } from '../index.ts';
@@ -36,7 +36,7 @@ import {
   type ServiceSnapshot,
   type Snapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
   walkSchemas,
 } from '../internal/index.ts';
 
@@ -1789,7 +1789,7 @@ function declaredSnapshot() {
     exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
   } as const satisfies ContractPackage;
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
     groups: [
       group,
@@ -1814,7 +1814,7 @@ function declaredSnapshot() {
     ],
     dependencies: [defineDependency({ provider: payments })],
   });
-  const validated = validateContract(root, aRootPackage(root, { packageName: 'orders-service' }));
+  const validated = validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

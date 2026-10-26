@@ -3,12 +3,12 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Guard,
 } from '../index.ts';
 import {
@@ -17,7 +17,7 @@ import {
   type ResolvedDefinitions,
   type Snapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 /** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
@@ -36,11 +36,11 @@ function nameOf(next: () => number): string {
   return Array.from({ length }, () => letters[Math.floor(next() * letters.length)]).join('');
 }
 
-/** The Snapshot of a Definitions root whose file exports what is given beside it. */
+/** The Snapshot of a Definitions Package whose Root file exports what is given beside it. */
 function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
   const rootPackage = aRootPackage(root, { rootExports: exported });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -58,9 +58,9 @@ function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
 /** The Snapshot of a Service beside the packages given, with one Endpoint. */
 function serviceSnapshotOf(packages: readonly ResolvedDefinitions[], endpoint = aPing()) {
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [endpoint] });
-  const root = defineContract({ name: 'ping-service', groups: [group] });
+  const root = defineService({ name: 'ping-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packages });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -114,7 +114,7 @@ describe('snapshotOf: a Definitions Package’s exports', () => {
     expect(Object.keys(snapshot.guards)).toEqual(['apiKey']);
   });
 
-  test('the exports keys are the root file’s export names, each naming its value', () => {
+  test('the exports keys are the Root file’s export names, each naming its value', () => {
     const next = seededNext(179);
     for (let draw = 0; draw < 50; draw += 1) {
       const values = [

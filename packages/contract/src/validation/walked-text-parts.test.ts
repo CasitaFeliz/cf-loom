@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
 } from '../index.ts';
 import { walkedTextPartsOf } from '../internal/index.ts';
@@ -18,7 +18,7 @@ const userToken = defineGuard({
 
 /** A Contract of the given Endpoints, in one Group. */
 function contractOf(...endpoints: readonly [Endpoint, ...Endpoint[]]) {
-  return defineContract({
+  return defineService({
     name: 'orders-service',
     groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints })],
   });

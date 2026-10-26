@@ -30,7 +30,7 @@ const aBarePackage = {
 
 /** A Service with one Endpoint, `ping`. */
 const aService = aContractProject([
-  "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+  "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   'export const ping = defineEndpoint({',
   "  name: 'ping',",
@@ -41,7 +41,7 @@ const aService = aContractProject([
   '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
   '});',
   "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-  "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+  "export const contract = defineService({ name: 'orders-service', groups: [health] });",
 ]);
 
 const crlfLine = (path: string) => `${path} has CRLF line endings: set eol=lf in .gitattributes\n`;
@@ -140,8 +140,8 @@ describe('cf-loom: a Contract module that keeps the process alive', () => {
     const project = aProject(
       aContractProject([
         'setInterval(() => {}, 1_000_000);',
-        "import { defineContract } from '@cf-loom/contract';",
-        "export const contract = defineContract({ name: 'orders-service' });",
+        "import { defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
       ]),
     );
 
@@ -232,7 +232,7 @@ function completed(attributes: string): string {
 }
 
 describe('cf-loom init: .gitattributes', () => {
-  test('init writes a .gitattributes keeping the generated files’ line endings, and says it created it and the root', () => {
+  test('init writes a .gitattributes keeping the generated files’ line endings, and says it created it and the Root', () => {
     const project = aProject(aBarePackage);
 
     const ran = cfLoom(project, 'init');
@@ -266,7 +266,7 @@ describe('cf-loom init: .gitattributes', () => {
     },
   );
 
-  test('init that cannot write the root leaves a .gitattributes as it was', () => {
+  test('init that cannot write the Root leaves a .gitattributes as it was', () => {
     const project = aProject({
       ...aBarePackage,
       '.gitattributes': another,
@@ -280,7 +280,7 @@ describe('cf-loom init: .gitattributes', () => {
     expect(readFileSync(join(project, '.gitattributes'), 'utf8')).toBe(another);
   });
 
-  test.skipIf(isRoot)('init that cannot write .gitattributes removes the root it wrote', () => {
+  test.skipIf(isRoot)('init that cannot write .gitattributes removes the Root it wrote', () => {
     const project = aProject({ ...aBarePackage, '.gitattributes': `${another}\n` });
     chmodSync(join(project, '.gitattributes'), 0o444);
 
@@ -293,7 +293,7 @@ describe('cf-loom init: .gitattributes', () => {
   });
 
   test.skipIf(spawnSync('prlimit', ['--version']).error !== undefined)(
-    'init whose append writes part of its text and fails puts back the bytes .gitattributes held, and removes the root',
+    'init whose append writes part of its text and fails puts back the bytes .gitattributes held, and removes the Root',
     () => {
       const held = `#${'a'.repeat(998)}\n`;
       const project = aProject({ ...aBarePackage, '.gitattributes': held });

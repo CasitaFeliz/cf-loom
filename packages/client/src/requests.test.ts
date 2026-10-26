@@ -1,16 +1,16 @@
 import {
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
   type ExportedSnapshot,
   type Http,
   openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
@@ -84,9 +84,9 @@ function contractPackageOf<
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -318,7 +318,7 @@ describe('what a call sends', () => {
       guards: {},
       deprecatedAt: {},
     };
-    const provider = defineContract({
+    const provider = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'prices', description: 'Prices', endpoints: [priceOrder] })],
     });
@@ -759,7 +759,7 @@ describe('every header and query param the Provider reads reaches the request, w
   );
 
   test('a header only a Guard demands reaches the Provider that reads it', async () => {
-    const provider = defineContract({
+    const provider = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({
@@ -806,7 +806,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
       guards: {},
       deprecatedAt: {},
     };
-    const provider = defineContract({
+    const provider = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'large', description: 'Large', endpoints: [echoLarge] })],
     });

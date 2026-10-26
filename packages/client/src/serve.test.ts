@@ -1,12 +1,12 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Endpoint,
   type Method,
   notFound,
@@ -14,7 +14,7 @@ import {
   openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
@@ -127,9 +127,9 @@ function contractPackageOf<
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -175,7 +175,7 @@ const ordersDependency = defineDependency({
 });
 
 /** The Provider's Release: `refundOrder` not served yet, `archiveOrder` Retired. */
-const provider = defineContract({
+const provider = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -258,7 +258,7 @@ async function outcomesOfEndpointWith(method: Method) {
     rejections: [orderLocked],
   });
   const group = defineGroup({ name: 'probes', description: 'Probes', endpoints: [probe] });
-  const service = defineContract({ name: 'orders-service', groups: [group] });
+  const service = defineService({ name: 'orders-service', groups: [group] });
   const answering = handle(probe, ({ params }) =>
     params.answer === 'rejection'
       ? reject(orderLocked, { lockedAt: '2026-10-18T10:00:00Z' })

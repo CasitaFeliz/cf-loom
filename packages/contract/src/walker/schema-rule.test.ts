@@ -4,25 +4,25 @@ import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  type Contract,
   defineCommand,
-  defineContract,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Endpoint,
   type Event,
   openEnum,
   openEnumReader,
+  type ServiceContract,
 } from '../index.ts';
 import {
   type Catchalls,
   type DefTypes,
   type PipeRefusals,
   type Refusal,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const createOrder = {
@@ -61,19 +61,19 @@ const apiKey = {
   description: 'An API key per Caller',
 } as const;
 
-function failuresOf(root: Contract) {
-  const validated = validateContract(root, aRootPackage(root));
+function failuresOf(root: ServiceContract) {
+  const validated = validateRoot(root, aRootPackage(root));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
 function failuresOfEndpoint(endpoint: Endpoint) {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return failuresOf(defineContract({ name: 'orders-service', groups: [group] }));
+  return failuresOf(defineService({ name: 'orders-service', groups: [group] }));
 }
 
 function failuresOfEvent(event: Event) {
   const group = defineGroup({ name: 'orders', description: 'Orders', events: [event] });
-  return failuresOf(defineContract({ name: 'orders-service', groups: [group] }));
+  return failuresOf(defineService({ name: 'orders-service', groups: [group] }));
 }
 
 describe('schema types in every declaration', () => {

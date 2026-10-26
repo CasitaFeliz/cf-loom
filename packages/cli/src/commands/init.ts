@@ -8,12 +8,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { rootNameProblemOf } from '@cf-loom/contract/internal';
+import { type RootKind, rootNameProblemOf } from '@cf-loom/contract/internal';
 import {
   oneLineOf,
   type PackageName,
   projectPackageOf,
-  type RootKind,
   rootFiles,
   rootPlaces,
 } from '../loading/index.ts';
@@ -25,7 +24,7 @@ import { rootTemplateOf } from './templates.ts';
 /** What `init` appends to `.gitattributes`, and the bytes the file held before, if it existed. */
 type Appended = { readonly text: string; readonly original: Buffer | undefined };
 
-/** What `init` writes: the root, and the lines it appends to `.gitattributes`, if it lacks any. */
+/** What `init` writes: the Root, and the lines it appends to `.gitattributes`, if it lacks any. */
 type Planned = {
   readonly kind: 'planned';
   readonly root: { readonly path: string; readonly text: string };
@@ -35,7 +34,7 @@ type Planned = {
 type Refused = { readonly kind: 'refused'; readonly message: string };
 
 /**
- * Creates a root that declares nothing yet, and makes `.gitattributes` keep the line endings of
+ * Creates a Root that declares nothing yet, and makes `.gitattributes` keep the line endings of
  * the files `generate` writes. It checks every target before writing and never overwrites, so it
  * writes everything or nothing; a `.gitattributes` it finds only gets the lines it lacks.
  */
@@ -125,7 +124,7 @@ function isNoFolder(path: string): boolean {
 }
 
 /**
- * Writes the root, then appends to `.gitattributes`; on a failure removes the root and the
+ * Writes the Root, then appends to `.gitattributes`; on a failure removes the Root and the
  * folders it created, innermost first, puts back the bytes `.gitattributes` held, and says why.
  */
 function writeAll(cwd: string, { root, attributes }: Planned): string | undefined {

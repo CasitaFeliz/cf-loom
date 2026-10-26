@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineContract, defineEndpoint, defineGroup } from '../index.ts';
+import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   type Change,
   type ChangeSite,
@@ -19,7 +19,7 @@ import {
   type SchemaNode,
   type ServiceSnapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
   versionBumpOf,
 } from '../internal/index.ts';
 
@@ -640,8 +640,8 @@ function generatedCodeOf(code: string): CodeSnapshot {
     success: { status: 200, body: z.object({ ok: z.boolean() }) },
   });
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
-  const root = defineContract({ name: 'ping-service', groups: [group] });
-  const validated = validateContract(root, aRootPackage(root, { packageName: 'ping-service' }));
+  const root = defineService({ name: 'ping-service', groups: [group] });
+  const validated = validateRoot(root, aRootPackage(root, { packageName: 'ping-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
