@@ -17,7 +17,13 @@ import {
   openEnum,
   openEnumReader,
 } from '../index.ts';
-import { type Refusal, validateContract } from '../internal/index.ts';
+import {
+  type Catchalls,
+  type DefTypes,
+  type PipeRefusals,
+  type Refusal,
+  validateContract,
+} from '../internal/index.ts';
 
 const createOrder = {
   name: 'createOrder',
@@ -303,55 +309,32 @@ describe('schema types in every declaration', () => {
   });
 });
 
-type DefType = core.$ZodTypes['_zod']['def']['type'];
+type DefType = keyof DefTypes;
 
-/** What the types do with each zod def type: walk through it and judge what it holds, or refuse it. */
-const treatment = {
-  string: 'walked',
-  number: 'walked',
-  boolean: 'walked',
-  literal: 'walked',
-  enum: 'walked',
-  object: 'walked',
-  record: 'walked',
-  array: 'walked',
-  tuple: 'walked',
-  union: 'walked',
-  intersection: 'walked',
-  lazy: 'walked',
-  nullable: 'walked',
-  optional: 'walked',
-  nonoptional: 'walked',
-  default: 'refused',
-  prefault: 'refused',
-  catch: 'refused',
-  readonly: 'refused',
-  transform: 'refused',
-  pipe: 'refused',
-  custom: 'refused',
-  date: 'refused',
-  null: 'refused',
-  undefined: 'refused',
-  any: 'refused',
-  unknown: 'refused',
-  bigint: 'refused',
-  symbol: 'refused',
-  void: 'refused',
-  never: 'refused',
-  nan: 'refused',
-  map: 'refused',
-  set: 'refused',
-  file: 'refused',
-  promise: 'refused',
-  function: 'refused',
-  success: 'refused',
-  // biome-ignore lint/style/useNamingConvention: zod's name of the def type
-  template_literal: 'refused',
-} as const satisfies Record<DefType, 'walked' | 'refused'>;
-
-type DefTypeThatIs<Kind> = {
-  [Type in DefType]: (typeof treatment)[Type] extends Kind ? Type : never;
+/** The def types the table treats one way: refused by name, or walked for the schemas they hold. */
+type DefTypeThatIs<Kind extends 'refused' | 'walked'> = {
+  [Type in DefType]: DefTypes[Type] extends { readonly refuses: string }
+    ? Kind extends 'refused'
+      ? Type
+      : never
+    : Kind extends 'walked'
+      ? Type
+      : never;
 }[DefType];
+
+/** Each key of a walked def type the table lists, as `<def type>.<key>`: what lies under it is walked. */
+type ChildSlot = {
+  [Type in DefTypeThatIs<'walked'>]: DefTypes[Type] extends {
+    readonly walks: readonly (infer Key extends string)[];
+  }
+    ? `${Type}.${Key}`
+    : DefTypes[Type] extends { readonly fields: infer Key extends string }
+      ? `${Type}.${Key}`
+      : never;
+}[DefTypeThatIs<'walked'>];
+
+/** What a pipe is refused as: by each rule on its shape, or as the table refuses a pipe. */
+type PipeKey = PipeRefusals[number]['refuses'] | DefTypes['pipe']['refuses'];
 
 /** An Event declared with one schema as a field of its body, and what `generate` says of it. */
 type Row = { readonly name: string; readonly event: () => Event };
@@ -359,8 +342,7 @@ type Row = { readonly name: string; readonly event: () => Event };
 /** A schema that holds a refused construct, and the construct as the Not allowed list names it. */
 type RefusedRow = { readonly name: string; readonly schema: core.$ZodType };
 
-/** Each refused def type has rows. */
-const aCodec = z.codec(z.string(), z.number(), { decode: Number, encode: String });
+/** Each refused def type but `pipe`, which `pipeRows` splits, has rows. */
 const aTemplateLiteral = z.templateLiteral([z.string(), '-', z.number()]);
 
 const refusedRows = {
@@ -372,13 +354,9 @@ const refusedRows = {
   catch: [{ name: '.catch()', schema: z.object({ f: z.string().catch('a') }) }],
   readonly: [{ name: '.readonly()', schema: z.object({ f: z.object({}).readonly() }) }],
   transform: [{ name: '.transform()', schema: z.object({ f: z.transform((text) => text) }) }],
-  pipe: [
-    { name: '.transform()', schema: z.object({ f: z.string().transform(Number) }) },
-    { name: '.preprocess()', schema: z.object({ f: z.preprocess(String, z.string()) }) },
-    { name: '.pipe()', schema: z.object({ f: z.string().pipe(z.string()) }) },
-    { name: 'z.codec()', schema: z.object({ f: aCodec }) },
-    { name: 'z.stringbool()', schema: z.object({ f: z.stringbool() }) },
-    { name: 'z.codec()', schema: z.object({ f: openEnumReader(['a']) }) },
+  optional: [{ name: '.optional()', schema: z.object({ f: z.array(z.string().optional()) }) }],
+  nonoptional: [
+    { name: '.nonoptional()', schema: z.object({ f: z.array(z.string().nonoptional()) }) },
   ],
   custom: [{ name: 'z.custom()', schema: z.object({ f: z.custom<string>() }) }],
   date: [
@@ -408,60 +386,122 @@ const refusedRows = {
   success: [{ name: 'z.success()', schema: z.object({ f: z.success(z.string()) }) }],
   // biome-ignore lint/style/useNamingConvention: zod's name of the def type
   template_literal: [{ name: 'z.templateLiteral()', schema: z.object({ f: aTemplateLiteral }) }],
-} as const satisfies Record<DefTypeThatIs<'refused'>, readonly RefusedRow[]>;
+} as const satisfies Record<Exclude<DefTypeThatIs<'refused'>, 'pipe'>, readonly RefusedRow[]>;
 
-/** Refused beside their def type, which is otherwise walked: coercion and a catchall of a typed schema or `z.any()`. */
-const refusedBesideRows = [
+/** Each way a pipe is refused has rows. */
+const aCodec = z.codec(z.string(), z.number(), { decode: Number, encode: String });
+
+const pipeRows = {
+  transform: [{ name: '.transform()', schema: z.object({ f: z.string().transform(Number) }) }],
+  preprocess: [
+    { name: '.preprocess()', schema: z.object({ f: z.preprocess(String, z.string()) }) },
+  ],
+  pipe: [{ name: '.pipe()', schema: z.object({ f: z.string().pipe(z.string()) }) }],
+  codec: [
+    { name: 'z.codec()', schema: z.object({ f: aCodec }) },
+    { name: 'z.codec()', schema: z.object({ f: openEnumReader(['a']) }) },
+  ],
+  stringbool: [{ name: 'z.stringbool()', schema: z.object({ f: z.stringbool() }) }],
+} as const satisfies Record<PipeKey, readonly RefusedRow[]>;
+
+/**
+ * Each catchall the table words has rows, and so has any other; a catchall of `z.unknown()` is
+ * a loose object's output, which the types leave to `generate` (below).
+ */
+const catchallRows = {
+  never: [
+    { name: 'z.strictObject()', schema: z.object({ f: z.object({}).catchall(z.never()) }) },
+    { name: 'z.strictObject()', schema: z.object({ f: zm.catchall(zm.object({}), zm.never()) }) },
+  ],
+  other: [
+    { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.string()) }) },
+    { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.any()) }) },
+    { name: '.catchall()', schema: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) },
+  ],
+} as const satisfies Record<Exclude<keyof Catchalls, 'unknown'> | 'other', readonly RefusedRow[]>;
+
+/** Coercion, refused beside the node its type still builds. */
+const coerceRows = [
   { name: 'z.coerce.*', schema: z.object({ f: z.coerce.string() }) },
   { name: 'z.coerce.*', schema: z.object({ f: z.coerce.number() }) },
   { name: 'z.coerce.*', schema: z.object({ f: z.coerce.boolean() }) },
   { name: 'z.coerce.*', schema: z.object({ f: zm.coerce.number() }) },
-  { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.string()) }) },
-  { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.any()) }) },
-  { name: '.catchall()', schema: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) },
 ] as const satisfies readonly RefusedRow[];
 
-/** A refused construct inside each kind of schema the types walk, so the walk drops none. */
-const refusedInsideRows = [
-  { name: 'z.date()', schema: z.object({ f: z.object({ at: z.date() }) }) },
-  { name: 'z.date()', schema: z.object({ f: z.array(z.date()) }) },
-  { name: 'z.date()', schema: z.object({ f: z.union([z.string(), z.date()]) }) },
-  {
-    name: 'z.date()',
-    schema: z.object({
-      f: z.discriminatedUnion('kind', [z.object({ kind: z.literal('a'), at: z.date() })]),
-    }),
-  },
-  { name: 'z.date()', schema: z.object({ f: z.record(z.string(), z.date()) }) },
-  {
-    name: '.transform()',
-    schema: z.object({
-      f: z.record(
-        z.string().transform((text) => text),
-        z.string(),
-      ),
-    }),
-  },
-  { name: 'z.date()', schema: z.object({ f: z.tuple([z.date()]) }) },
-  { name: 'z.date()', schema: z.object({ f: z.tuple([z.string()], z.date()) }) },
-  {
-    name: 'z.date()',
-    schema: z.object({ f: z.intersection(z.object({ a: z.date() }), z.object({ b: z.string() })) }),
-  },
-  {
-    name: 'z.date()',
-    schema: z.object({ f: z.intersection(z.object({ a: z.string() }), z.object({ b: z.date() })) }),
-  },
-  { name: 'z.date()', schema: z.object({ f: z.lazy(() => z.date()) }) },
-  { name: 'z.date()', schema: z.object({ f: z.date().nullable() }) },
-  { name: 'z.date()', schema: z.object({ f: z.date().optional() }) },
-  { name: 'z.date()', schema: z.object({ f: z.date().optional().nonoptional() }) },
-] as const satisfies readonly RefusedRow[];
+/** A refused construct under each key the table walks, so the walk drops none. */
+const refusedInsideRows = {
+  'object.shape': [
+    { name: 'z.date()', schema: z.object({ f: z.object({ at: z.date() }) }) },
+    { name: 'z.date()', schema: z.object({ f: z.object({ at: z.date().optional() }) }) },
+    {
+      name: 'z.date()',
+      schema: z.object({ f: z.object({ at: z.date().optional().nonoptional() }) }),
+    },
+  ],
+  'array.element': [{ name: 'z.date()', schema: z.object({ f: z.array(z.date()) }) }],
+  'union.options': [
+    { name: 'z.date()', schema: z.object({ f: z.union([z.string(), z.date()]) }) },
+    {
+      name: 'z.date()',
+      schema: z.object({
+        f: z.discriminatedUnion('kind', [z.object({ kind: z.literal('a'), at: z.date() })]),
+      }),
+    },
+    { name: 'z.null()', schema: z.object({ f: z.union([z.json(), z.null()]) }) },
+    { name: 'z.null()', schema: z.object({ f: zm.union([zm.json(), zm.null()]) }) },
+  ],
+  'record.keyType': [
+    {
+      name: '.transform()',
+      schema: z.object({
+        f: z.record(
+          z.string().transform((text) => text),
+          z.string(),
+        ),
+      }),
+    },
+  ],
+  'record.valueType': [
+    { name: 'z.date()', schema: z.object({ f: z.record(z.string(), z.date()) }) },
+  ],
+  'tuple.items': [{ name: 'z.date()', schema: z.object({ f: z.tuple([z.date()]) }) }],
+  'tuple.rest': [{ name: 'z.date()', schema: z.object({ f: z.tuple([z.string()], z.date()) }) }],
+  'intersection.left': [
+    {
+      name: 'z.date()',
+      schema: z.object({
+        f: z.intersection(z.object({ a: z.date() }), z.object({ b: z.string() })),
+      }),
+    },
+  ],
+  'intersection.right': [
+    {
+      name: 'z.date()',
+      schema: z.object({
+        f: z.intersection(z.object({ a: z.string() }), z.object({ b: z.date() })),
+      }),
+    },
+  ],
+  'lazy.getter': [{ name: 'z.date()', schema: z.object({ f: z.lazy(() => z.date()) }) }],
+  'nullable.innerType': [{ name: 'z.date()', schema: z.object({ f: z.date().nullable() }) }],
+} as const satisfies Record<ChildSlot, readonly RefusedRow[]>;
+
+type RowsOf<Rows extends Record<string, readonly RefusedRow[]>> = Rows[keyof Rows][number];
 
 type RefusedRows =
-  | (typeof refusedRows)[keyof typeof refusedRows][number]
-  | (typeof refusedBesideRows)[number]
-  | (typeof refusedInsideRows)[number];
+  | RowsOf<typeof refusedRows>
+  | RowsOf<typeof pipeRows>
+  | RowsOf<typeof catchallRows>
+  | (typeof coerceRows)[number]
+  | RowsOf<typeof refusedInsideRows>;
+
+const everyRefusedRow: readonly RefusedRow[] = [
+  ...Object.values(refusedRows).flat(),
+  ...Object.values(pipeRows).flat(),
+  ...Object.values(catchallRows).flat(),
+  ...coerceRows,
+  ...Object.values(refusedInsideRows).flat(),
+];
 
 /** What an Event's body is judged by, as the editor reads it, when its body is one schema. */
 type BodyOf<Schema extends core.$ZodType> = Parameters<
@@ -501,11 +541,7 @@ describe('every construct the types refuse', () => {
     expectTypeOf<Misnamed<RefusedRows>>().toEqualTypeOf<never>();
   });
 
-  test.each([
-    ...Object.values(refusedRows).flat(),
-    ...refusedBesideRows,
-    ...refusedInsideRows,
-  ] as readonly RefusedRow[])(
+  test.each(everyRefusedRow)(
     '$name fails generate with the construct its type error names',
     ({ name, schema }) => {
       const body: Parameters<typeof defineEvent>[0] = { ...base, body: schema };
@@ -642,19 +678,6 @@ const walkedRows: Record<DefTypeThatIs<'walked'>, readonly Row[]> = {
       event: () => defineEvent({ ...base, body: z.object({ f: z.string().nullable() }) }),
     },
   ],
-  optional: [
-    {
-      name: '.optional() on a field',
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().optional() }) }),
-    },
-  ],
-  nonoptional: [
-    {
-      name: '.nonoptional() on a field',
-      event: () =>
-        defineEvent({ ...base, body: z.object({ f: z.string().optional().nonoptional() }) }),
-    },
-  ],
 };
 
 const aDiscriminatedUnion = z.discriminatedUnion('kind', [
@@ -674,7 +697,32 @@ describe('every schema generate maps', () => {
   );
 });
 
+describe('a field’s wrapper', () => {
+  test('a field’s .optional() and .nonoptional() compile and pass generate', () => {
+    const event = defineEvent({
+      ...base,
+      body: z.object({ a: z.string().optional(), b: z.string().optional().nonoptional() }),
+    });
+
+    expect(failuresOfEvent(event)).toEqual([]);
+  });
+});
+
 describe('what the types leave to generate', () => {
+  test('.catchall(z.unknown()) compiles, and generate refuses it as a loose object', () => {
+    const event = defineEvent({
+      ...base,
+      body: z.object({ f: z.object({}).catchall(z.unknown()) }),
+    });
+
+    expect(failuresOfEvent(event)).toEqual([
+      expect.objectContaining({
+        kind: 'not-allowed',
+        construct: 'z.looseObject() or .passthrough()',
+      }),
+    ]);
+  });
+
   test('.refine(), z.strictObject() and z.looseObject() compile, and generate refuses them', () => {
     const refined = defineEvent({
       ...base,

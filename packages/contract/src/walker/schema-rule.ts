@@ -1,8 +1,17 @@
 import type * as core from 'zod/v4/core';
 import type { IsOneLiteral, JoinedNames, Refusal } from '../declarations/index.ts';
+import type {
+  catchalls,
+  DefOfType,
+  DefType,
+  defTypes,
+  pipeRefusals,
+  WalkedDefType,
+} from './def-types.ts';
 import type { refused } from './not-allowed.ts';
 
 type Table = typeof refused;
+type Treatments = typeof defTypes;
 
 /** The level below each one, so a schema is read ten levels deep and no deeper. */
 type Remaining = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -15,50 +24,80 @@ type DefTypeIn<Part> = Part extends {
   ? Type
   : never;
 
-/** The Not allowed entry a pipe or codec is refused as, split as the walker splits it. */
-type PipeRefusal<Def> = Def extends { readonly reverseTransform: unknown }
-  ? Def extends { readonly in: infer In; readonly out: infer Out }
-    ? [DefTypeIn<In>, DefTypeIn<Out>] extends ['string', 'boolean']
-      ? 'stringbool'
-      : 'codec'
-    : 'codec'
-  : Def extends { readonly in: infer In }
-    ? DefTypeIn<In> extends 'transform'
-      ? 'preprocess'
-      : PipeOutRefusal<Def>
-    : 'pipe';
+/** The def types of a tuple of schemas, in their order. */
+type DefTypesIn<Parts> = Parts extends readonly [infer First, ...infer Rest]
+  ? [DefTypeIn<First>, ...DefTypesIn<Rest>]
+  : [];
 
-type PipeOutRefusal<Def> = Def extends { readonly out: infer Out }
-  ? DefTypeIn<Out> extends 'transform'
-    ? 'transform'
-    : 'pipe'
-  : 'pipe';
+/** A pipe's shape, as the rules of `pipeRefusals` read it. */
+type PipeShapeOf<Def> = {
+  readonly reversed: Def extends { readonly reverseTransform: unknown } ? true : false;
+  readonly in: Def extends { readonly in: infer In } ? DefTypeIn<In> : never;
+  readonly out: Def extends { readonly out: infer Out } ? DefTypeIn<Out> : never;
+};
 
-/** Whether a schema reads more than it writes, as `z.coerce.*` does: its input type is `unknown`. */
+/** What the first rule a pipe's shape satisfies refuses it as, else what `defTypes` refuses a pipe as. */
+type PipeRefusalKey<Def, Rules = typeof pipeRefusals> = Rules extends readonly [
+  infer First,
+  ...infer Rest,
+]
+  ? PipeShapeOf<Def> extends Omit<First, 'refuses'>
+    ? First extends { readonly refuses: infer Key }
+      ? Key
+      : never
+    : PipeRefusalKey<Def, Rest>
+  : Treatments['pipe']['refuses'];
+
+/**
+ * The walked def types whose def carries `coerce`, which zod types as a plain boolean: the type
+ * reads coercion from the input instead, which `z.coerce.*` alone makes `unknown`.
+ */
+type CoercibleDefType = {
+  [Type in WalkedDefType]: 'coerce' extends keyof DefOfType<Type> ? Type : never;
+}[WalkedDefType];
+
 type IsCoerced<Schema> = unknown extends core.input<Schema & core.$ZodType> ? true : false;
 
 /** Whether a type is `any`, which no other type is as `0` is assignable to its intersection with `1`. */
 type IsAny<Value> = 0 extends 1 & Value ? true : false;
 
 /**
- * Whether an object takes keys beyond its fields, as `.catchall()` does: its config's output is
- * indexed by a typed schema or `any`. A catchall of `unknown` is a loose object's output, which
- * TypeScript cannot tell from it.
+ * The def type of an object's catchall, read from its config's output, where zod keeps it: `never`
+ * and `any` are those schemas' alone, and a typed index is some other schema. An index of
+ * `unknown` is a loose object's and a wide `core.$ZodObject`'s too, so the type reads none there.
  */
-type HasCatchall<Schema> = Schema extends {
+type CatchallDefTypeOf<Schema> = Schema extends {
   readonly _zod: { readonly config: { readonly out: infer Out } };
 }
   ? string extends keyof Out
-    ? unknown extends Out[string]
-      ? IsAny<Out[string]>
-      : true
-    : false
-  : false;
+    ? IsAny<Out[string]> extends true
+      ? 'any'
+      : [Out[string]] extends [never]
+        ? 'never'
+        : unknown extends Out[string]
+          ? never
+          : 'typed'
+    : never
+  : never;
 
-/** Whether a union is `z.json()`, which holds `z.null()` and is no union of its own options. */
-type IsJson<Schema> = [core.output<Schema & core.$ZodType>] extends [core.util.JSONType]
-  ? [core.util.JSONType] extends [core.output<Schema & core.$ZodType>]
-    ? true
+/** What `catchalls` refuses an object's catchall as, by the catchall's def type. */
+type CatchallKey<Schema> = [CatchallDefTypeOf<Schema>] extends [never]
+  ? never
+  : CatchallDefTypeOf<Schema> extends keyof typeof catchalls
+    ? (typeof catchalls)[CatchallDefTypeOf<Schema>]
+    : 'catchall';
+
+/**
+ * Whether a union is `z.json()`, read as the walk reads it: a string, a number, a boolean, null, an
+ * array and a record as its options, and every JSON value as its output.
+ */
+type IsJson<Schema, Def> = Def extends { readonly options: infer Options }
+  ? DefTypesIn<Options> extends ['string', 'number', 'boolean', 'null', 'array', 'record']
+    ? [core.output<Schema & core.$ZodType>] extends [core.util.JSONType]
+      ? [core.util.JSONType] extends [core.output<Schema & core.$ZodType>]
+        ? true
+        : false
+      : false
     : false
   : false;
 
@@ -69,60 +108,62 @@ type TextOf<Key> = Key extends keyof Table
     : Table[Key]['construct']
   : never;
 
-/** How the Not allowed list words what a schema is refused as by its own type, if it is. */
-type OwnRefusal<Schema, Type extends string> = Type extends 'pipe'
-  ? TextOf<PipeRefusal<DefOf<Schema>>>
-  : Type extends 'template_literal'
-    ? TextOf<'templateLiteral'>
-    : Type extends 'optional' | 'nonoptional'
-      ? never
-      : Type extends keyof Table
-        ? TextOf<Type>
-        : Type extends 'string' | 'number' | 'boolean'
-          ? IsCoerced<Schema> extends true
-            ? TextOf<'coerce'>
-            : never
-          : Type extends 'object'
-            ? HasCatchall<Schema> extends true
-              ? TextOf<'catchall'>
-              : never
-            : never;
+/** What a walked def type is refused as beside its node: coercion, or an object's catchall. */
+type BesideRefusalKey<Schema, Type extends DefType> = Type extends CoercibleDefType
+  ? IsCoerced<Schema> extends true
+    ? 'coerce'
+    : never
+  : Type extends 'object'
+    ? CatchallKey<Schema>
+    : never;
 
-/** The schemas a schema holds, which the walker reads next; none inside a refused construct. */
-type ChildrenOf<Schema, Def> = Def extends { readonly type: 'object'; readonly shape: infer Shape }
-  ? Shape[keyof Shape]
-  : Def extends { readonly type: 'array'; readonly element: infer Element }
-    ? Element
-    : Def extends { readonly type: 'union'; readonly options: readonly (infer Option)[] }
-      ? IsJson<Schema> extends true
-        ? never
-        : Option
-      : Def extends {
-            readonly type: 'record';
-            readonly keyType: infer Key;
-            readonly valueType: infer Value;
-          }
-        ? Key | Value
-        : Def extends {
-              readonly type: 'tuple';
-              readonly items: readonly (infer Item)[];
-              readonly rest: infer Rest;
-            }
-          ? Item | Exclude<Rest, null>
-          : Def extends {
-                readonly type: 'intersection';
-                readonly left: infer Left;
-                readonly right: infer Right;
-              }
-            ? Left | Right
-            : Def extends { readonly type: 'lazy'; readonly getter: () => infer Got }
-              ? Got
-              : Def extends {
-                    readonly type: 'nullable' | 'optional' | 'nonoptional';
-                    readonly innerType: infer Inner;
-                  }
-                ? Inner
-                : never;
+/** The Not allowed entry a schema is refused as, by `defTypes`: a pipe by its shape. */
+type OwnRefusalKey<Schema, Type extends DefType> = Treatments[Type] extends {
+  readonly refuses: infer Key;
+}
+  ? Type extends 'pipe'
+    ? PipeRefusalKey<DefOf<Schema>>
+    : Key
+  : BesideRefusalKey<Schema, Type>;
+
+/** The schemas under a def's key: one, a list of them or a getter of one. */
+type SchemasUnder<Value> = Value extends core.$ZodType
+  ? Value
+  : Value extends readonly (infer Item)[]
+    ? SchemasUnder<Item>
+    : Value extends () => infer Got
+      ? Got
+      : never;
+
+/**
+ * The schema a field is judged by, as the walk reads a field: through its own `.optional()`, or
+ * its `.nonoptional()` and the `.optional()` that undoes.
+ */
+type FieldSchemaOf<Field> = Field extends unknown
+  ? DefOf<Field> extends { readonly type: 'optional'; readonly innerType: infer Inner }
+    ? Inner
+    : DefOf<Field> extends { readonly type: 'nonoptional'; readonly innerType: infer Inner }
+      ? RequiredOf<Inner>
+      : Field
+  : never;
+
+type RequiredOf<Inner> =
+  DefOf<Inner> extends {
+    readonly type: 'optional';
+    readonly innerType: infer Required;
+  }
+    ? Required
+    : Inner;
+
+/** The schemas a walked schema holds, which the walk reads next, as `defTypes` lists their keys. */
+type ChildrenOf<Schema, Def, Type extends DefType> =
+  IsJson<Schema, Def> extends true
+    ? never
+    : Treatments[Type] extends { readonly fields: infer Key extends keyof Def }
+      ? FieldSchemaOf<Def[Key][keyof Def[Key]]>
+      : Treatments[Type] extends { readonly walks: readonly (infer Key extends keyof Def)[] }
+        ? SchemasUnder<Def[Key]>
+        : never;
 
 /** How the Not allowed list words each refusal in a schema, or in one it holds. */
 type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
@@ -131,9 +172,11 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
     ? DefOf<Schema> extends { readonly type: infer Type extends string }
       ? IsOneLiteral<Type> extends false
         ? never
-        : [OwnRefusal<Schema, Type>] extends [never]
-          ? RefusedIn<ChildrenOf<Schema, DefOf<Schema>>, Remaining[Depth]>
-          : OwnRefusal<Schema, Type>
+        : Type extends DefType
+          ? [OwnRefusalKey<Schema, Type>] extends [never]
+            ? RefusedIn<ChildrenOf<Schema, DefOf<Schema>, Type>, Remaining[Depth]>
+            : TextOf<OwnRefusalKey<Schema, Type>>
+          : never
       : never
     : never;
 

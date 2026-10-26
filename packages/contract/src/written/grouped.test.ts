@@ -83,7 +83,8 @@ describe('declarationsListedBy', () => {
 
     expect(listed).toEqual([listOrders]);
   });
-  test('a Group lists its Contract’s own declarations: a Provider’s Element a cast put there is left out', () => {
+
+  test('a Group lists only its Contract’s own declarations: a Provider’s Element, one listed despite the type error, is left out', () => {
     const cast = defineGroup({
       name: 'orders',
       description: 'Order lifecycle',

@@ -150,13 +150,16 @@ export {
   walkedTextPartsOf,
 } from '../validation/index.ts';
 export type {
+  Catchalls,
   Defs,
+  DefTypes,
   EnumNode,
   Field,
   HashFormat,
   NumberNode,
   ObjectNode,
   Path,
+  PipeRefusals,
   RefNode,
   SchemaNode,
   StringFormat,
