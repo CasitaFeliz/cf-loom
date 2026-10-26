@@ -6,6 +6,9 @@ import {
   defineService,
   defineSubscription,
   type Event,
+  openEnum,
+  openEnumReader,
+  providedEvent,
   type Subscription,
 } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
@@ -13,12 +16,30 @@ import { z } from 'zod';
 import { type Broker, messaging } from '../index.ts';
 import { type DeliveryMeta, memory, type PendingMessage, type RecordedMessage } from './index.ts';
 
+const statuses = ['pending', 'paid'] as const;
+
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
   version: 1,
   visibility: 'internal',
   description: 'An order was created',
   body: z.object({ orderId: z.string() }),
+});
+
+const orderPlacedV1 = defineEvent({
+  name: 'OrderPlaced',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was placed',
+  body: z.object({ orderId: z.string(), status: openEnum(statuses) }),
+});
+
+const paymentSettledV1 = providedEvent('payments-service', {
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.string(), status: openEnumReader(statuses) }),
 });
 
 const chargeCardV1 = defineCommand({
@@ -69,6 +90,52 @@ describe('memory types', () => {
       'acked' | 'pending' | 'ended' | 'handed-back'
     >();
     expect(deliveringSubscription).toBeTypeOf('function');
+  });
+
+  test('deliver takes the body its Message Version’s writer writes: a misspelled field is a type error', () => {
+    const delivering = () =>
+      // @ts-expect-error: ordrId is no field of OrderCreated's body
+      broker.deliver(orderCreatedV1, { ordrId: 'o-1' });
+
+    expectTypeOf(broker.deliver<typeof orderCreatedV1>)
+      .parameter(1)
+      .toEqualTypeOf<{ orderId: string }>();
+    expect(delivering).toBeTypeOf('function');
+  });
+
+  test('deliver of a Command takes its Message Version’s body type', () => {
+    const delivering = () =>
+      // @ts-expect-error: amount is no field of ChargeCard's body
+      broker.deliver(chargeCardV1, { orderId: 'o-1', amount: 12 });
+
+    expectTypeOf(broker.deliver<typeof chargeCardV1>)
+      .parameter(1)
+      .toEqualTypeOf<{ orderId: string }>();
+    expect(delivering).toBeTypeOf('function');
+  });
+
+  test('deliver of a Provided Event takes its Reader’s body, an Unknown case of an Open Enum included', () => {
+    const delivering = () =>
+      broker.deliver(paymentSettledV1, { paymentId: 'p-1', status: { unknown: 'refunded' } });
+
+    expectTypeOf(broker.deliver<typeof paymentSettledV1>)
+      .parameter(1)
+      .toEqualTypeOf<{
+        paymentId: string;
+        status: 'pending' | 'paid' | { unknown: string };
+      }>();
+    expect(delivering).toBeTypeOf('function');
+  });
+
+  test('deliver of an own Event refuses an Unknown case of an Open Enum at compile time', () => {
+    const delivering = () =>
+      // @ts-expect-error: an own Event's writer writes a declared case, never an Unknown one
+      broker.deliver(orderPlacedV1, { orderId: 'o-1', status: { unknown: 'refunded' } });
+
+    expectTypeOf(broker.deliver<typeof orderPlacedV1>)
+      .parameter(1)
+      .toEqualTypeOf<{ orderId: string; status: 'pending' | 'paid' }>();
+    expect(delivering).toBeTypeOf('function');
   });
 
   test('redeliver and settled resolve to nothing', () => {

@@ -1,6 +1,10 @@
 import type { Command, Event, Subscription } from '@cf-loom/contract';
+import type * as core from 'zod/v4/core';
 import type { Broker, Settlement } from '../broker/index.ts';
 import type { GivenHeaders } from '../sending/index.ts';
+
+/** The body a Message Version's writer writes, what `publish` or `send` takes for it; a Provided Event's is its Reader's. */
+type WrittenBodyOf<M extends Event | Command> = core.output<M['body']>;
 
 /**
  * What `memory()` returns: a `Broker` that keeps everything in memory, serves one connection and
@@ -17,11 +21,13 @@ export type MemoryBroker = Broker & {
   readonly messages: readonly RecordedMessage[];
   /**
    * Delivers one new Message as attempt 1: an Event reaches every Subscription to it, a Command its
-   * CommandHandler; resolves to the most severe settlement. A Handler that awaits it never settles.
+   * CommandHandler; resolves to the most severe settlement. Its body is typed as its Message
+   * Version's writer writes it and is written back through each consumer's Reader. A Handler that
+   * awaits it never settles.
    */
-  readonly deliver: (
-    message: Event | Command,
-    body: unknown,
+  readonly deliver: <const M extends Event | Command>(
+    message: M,
+    body: WrittenBodyOf<M>,
     meta?: DeliveryMeta,
   ) => Promise<Settlement>;
   /**
