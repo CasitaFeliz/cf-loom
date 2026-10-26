@@ -18,16 +18,13 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, test } from 'vitest';
 import { canonicalTextOf } from '../test/canonical-text.ts';
+import { peerRangesOf } from './internal/index.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
 const bin = join(cliDir, 'src', 'bin.ts');
 const tsc = join(packagesDir, '..', 'node_modules', '.bin', 'tsc');
 const zodDir = realpathSync(join(cliDir, 'node_modules/zod'));
-const zodVersion: string = JSON.parse(readFileSync(join(zodDir, 'package.json'), 'utf8')).version;
-const contractVersion: string = JSON.parse(
-  readFileSync(join(packagesDir, 'contract', 'package.json'), 'utf8'),
-).version;
 const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
 const folders: string[] = [];
 
@@ -663,7 +660,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
   });
 
-  test('package.json names the package after the Service, at 0.0.0, with the two peers as built', () => {
+  test('package.json names the package after the Service, at 0.0.0, with the two peers the CLI declares', () => {
     const project = aProject(service);
 
     packageIn(project);
@@ -679,10 +676,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       },
       files: ['dist', 'snapshot.json'],
       sideEffects: false,
-      peerDependencies: {
-        '@cf-loom/contract': `^${contractVersion}`,
-        zod: `^${zodVersion}`,
-      },
+      peerDependencies: peerRangesOf(cliVersion),
       cfLoom: {
         format: 1,
         kind: 'service',
@@ -2203,49 +2197,6 @@ describe('cf-loom package: what it refuses', () => {
     const built = typeCheck(out);
 
     expect(built).toEqual({ status: 0, stdout: '' });
-  });
-
-  test('zod not installed beside the Root is a tooling error', () => {
-    const project = aProject({
-      'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
-      'cf-loom.config.ts': config,
-      'src/contract/index.ts': lines([
-        "import { defineApplication } from '@cf-loom/contract';",
-        "export const application = defineApplication({ name: 'web-admin', dependencies: [] });",
-      ]),
-    });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    rmSync(join(project, 'node_modules/zod'));
-
-    const ran = cfLoom(project, 'package');
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: "zod is not installed: the package's peer range is taken from it\n",
-    });
-  });
-
-  test('@cf-loom/contract installed with no version is a tooling error', () => {
-    const project = aProject(service);
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    const at = join(project, 'node_modules/@cf-loom/contract');
-    const real = realpathSync(at);
-    rmSync(at);
-    mkdirSync(at);
-    const manifest = JSON.parse(readFileSync(join(real, 'package.json'), 'utf8'));
-    writeFileSync(join(at, 'package.json'), JSON.stringify({ ...manifest, version: undefined }));
-    symlinkSync(join(real, 'dist'), join(at, 'dist'), 'dir');
-    symlinkSync(join(real, 'node_modules'), join(at, 'node_modules'), 'dir');
-
-    const ran = cfLoom(project, 'package');
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr:
-        "@cf-loom/contract has no version in its package.json: the package's peer range is taken from it\n",
-    });
   });
 
   test('package takes no argument but --out', () => {

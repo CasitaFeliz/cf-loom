@@ -16,9 +16,6 @@ import {
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
-/** The versions of the two peers the package is built with, as installed beside the Root. */
-export type Peers = { readonly contract: string; readonly zod: string };
-
 /** Who the package is published as, at which version, and the peer ranges it declares. */
 export type Packaging = {
   readonly name: string;
@@ -37,8 +34,8 @@ export type ContractSnapshot =
  * The package.json: named as the project publishes, at its version, with `package.json` and
  * `snapshot.json` among its exports, and the `cfLoom` metadata: the hash and kind the check reads
  * without downloading the package, and its Dependencies. A Service's also exports its code, peers
- * on `zod` and `@cf-loom/contract` only with a caret on the versions built with; an Application's
- * has no code, so it has no peers.
+ * on `zod` and `@cf-loom/contract` only, at the ranges the CLI declares; an Application's has no
+ * code, so it has no peers.
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
@@ -79,11 +76,6 @@ const fileExports = {
 /** A package.json from its fields: two-space JSON and a final line break. */
 export function manifestFileOf(manifest: object): PackageFile {
   return { path: packagePaths.manifest, text: `${JSON.stringify(manifest, null, 2)}\n` };
-}
-
-/** The peer ranges a package declares: a caret on each version it is built with. */
-export function peerRangesOf(peers: Peers): PeerRanges {
-  return { '@cf-loom/contract': `^${peers.contract}`, zod: `^${peers.zod}` };
 }
 
 /**

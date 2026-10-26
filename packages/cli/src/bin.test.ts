@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodeSnapshot } from '@cf-loom/contract/internal';
+import { decodeSnapshot, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
@@ -27,16 +27,13 @@ import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
 import { entriesOf } from '../test/tarball.ts';
 import { usage } from '../test/usage.ts';
+import { peerRangesOf } from './internal/index.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const cliVersion: string = JSON.parse(readFileSync(join(cliDir, 'package.json'), 'utf8')).version;
 const rootDir = join(cliDir, '..', '..');
 const zodDir = realpathSync(join(cliDir, 'node_modules/zod'));
-const zodVersion: string = JSON.parse(readFileSync(join(zodDir, 'package.json'), 'utf8')).version;
 const contractDir = join(cliDir, '..', 'contract');
-const contractVersion: string = JSON.parse(
-  readFileSync(join(contractDir, 'package.json'), 'utf8'),
-).version;
 const projects: string[] = [];
 
 afterEach(() => {
@@ -2776,7 +2773,8 @@ async function aGeneratedProject(lab: Lab, files: Files): Promise<string> {
 }
 
 /** The peer ranges `publish` stamps on a package built with the zod and the contract the lab installs. */
-const installedPeers = { '@cf-loom/contract': `^${contractVersion}`, zod: `^${zodVersion}` };
+/** The peer ranges the CLI under test declares in every package it publishes. */
+const publishedPeers = peerRangesOf(cliVersion);
 
 /** The Snapshot `generate` wrote, as a registry serves it once published as `version`. */
 function publishedAs(
@@ -2788,7 +2786,7 @@ function publishedAs(
   const published = { ...snapshot, ...more, version, generator: '@cf-loom/cli@0.0.0' };
   const declared = { kind: snapshot.kind, name: snapshot.name };
   const snapshotJson = canonicalTextOf(published);
-  return aVersion(version, { declared, snapshotJson, peers: installedPeers });
+  return aVersion(version, { declared, snapshotJson, peers: publishedPeers });
 }
 
 function servedAs(packageName: string, ...versions: readonly ServedVersion[]): RegistryOptions {
@@ -3011,7 +3009,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
         endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
       },
     };
-    const published = publishedAs(project, '1.0.0', { dependencies: dependency });
+    const published = withPeers(publishedAs(project, '1.0.0', { dependencies: dependency }), {});
     const served = servedAs('@org/contract-web-admin', published);
 
     const { ran } = await checkedAgainst(lab, { project, served });
@@ -3024,6 +3022,28 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
         'dependencies.orders-service removed: Neutral',
         'No Change needs a Breaking Change Approval',
         'Would publish @org/contract-web-admin@1.0.1 (patch)',
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('an Application whose Baseline declared peers drops them, which publishes a minor', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, anApplicationRoot);
+    const published = withPeers(publishedAs(project, '1.0.0'), publishedPeers);
+    const served = servedAs('@org/contract-web-admin', published);
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        'Checked against @org/contract-web-admin@1.0.0',
+        `Peer @cf-loom/contract dropped ${publishedPeers['@cf-loom/contract']}: minor`,
+        `Peer zod dropped ${publishedPeers['zod']}: minor`,
+        'Would publish @org/contract-web-admin@1.1.0 (minor)',
         '',
       ].join('\n'),
       stderr: '',
@@ -4236,6 +4256,18 @@ function leftBehindIn(project: string): string[] {
   return [...staged, ...strays];
 }
 
+/** Installs a zod of another version in the project: its files as they are, its package.json naming `version`. */
+function withInstalledZod(project: string, version: string): void {
+  const installed = join(project, 'node_modules/zod');
+  rmSync(installed);
+  mkdirSync(installed);
+  for (const entry of readdirSync(zodDir).filter((name) => name !== 'package.json')) {
+    symlinkSync(join(zodDir, entry), join(installed, entry));
+  }
+  const manifest = JSON.parse(readFileSync(join(zodDir, 'package.json'), 'utf8'));
+  writeFileSync(join(installed, 'package.json'), JSON.stringify({ ...manifest, version }));
+}
+
 /** Puts a package named typescript in the project, whose `tsc` runs the script given and is called with `-p <folder>`. */
 function withTsc(project: string, script: string): void {
   rmSync(join(project, 'node_modules/typescript'));
@@ -4293,7 +4325,7 @@ function withOtherPeer(range: string): Readonly<Record<string, unknown>> {
 /** A version of `@org/definitions` as its project would publish it with the peer `@org/other` at `range`. */
 function publishedWithOtherPeer(project: string, range: string): ServedVersion {
   const baseline = publishedAs(project, '1.0.0');
-  const peerDependencies = { ...installedPeers, '@org/other': range };
+  const peerDependencies = { ...publishedPeers, '@org/other': range };
   return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 }
 
@@ -4306,7 +4338,7 @@ describe.concurrent('cf-loom check, the version publish would take', {
   const noApprovalNeeded = 'No Change needs a Breaking Change Approval';
   const reworded = { before: aRoot(), after: aRoot({ description: 'Reads' }) };
   const refusedGap = { before: aMessagingRoot(), after: aMessagingRoot({ eventVersions: [1, 3] }) };
-  const zodLine = Number(zodVersion.split('.')[0]);
+  const zodLine = Number(zodPeerRange.slice(1).split('.')[0]);
 
   test('a Neutral Change is printed, and check closes with the patch publish would take', async ({
     lab,
@@ -4484,7 +4516,7 @@ describe.concurrent('cf-loom check, the version publish would take', {
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
     const older = withPeers(publishedAs(project, '1.0.0'), {
-      ...installedPeers,
+      ...publishedPeers,
       zod: `^${zodLine - 1}.0.0`,
     });
 
@@ -4495,7 +4527,7 @@ describe.concurrent('cf-loom check, the version publish would take', {
       '--json',
     );
 
-    const move = `Peer zod moves from ^${zodLine - 1}.0.0 to ^${zodVersion}: major`;
+    const move = `Peer zod moves from ^${zodLine - 1}.0.0 to ${zodPeerRange}: major`;
     expect(lines.ran).toEqual({
       status: 0,
       stdout: [checkedAgainstOrders, move, wouldPublish('2.0.0', 'major'), ''].join('\n'),
@@ -4503,7 +4535,7 @@ describe.concurrent('cf-loom check, the version publish would take', {
     });
     expect(JSON.parse(json.ran.stdout)).toMatchObject({
       changes: [],
-      peers: [{ name: 'zod', from: `^${zodLine - 1}.0.0`, to: `^${zodVersion}`, bump: 'major' }],
+      peers: [{ name: 'zod', from: `^${zodLine - 1}.0.0`, to: zodPeerRange, bump: 'major' }],
       bump: 'major',
       version: '2.0.0',
     });
@@ -4512,13 +4544,13 @@ describe.concurrent('cf-loom check, the version publish would take', {
   test('a peer moving within its line is printed as minor and derives a minor', async ({ lab }) => {
     const project = await aGeneratedProject(lab, aRoot());
     const older = withPeers(publishedAs(project, '1.0.0'), {
-      ...installedPeers,
+      ...publishedPeers,
       zod: `^${zodLine}.0.0`,
     });
 
     const { ran } = await checkedAgainst(lab, { project, served: servedAs(ordersPackage, older) });
 
-    const move = `Peer zod moves from ^${zodLine}.0.0 to ^${zodVersion}: minor`;
+    const move = `Peer zod moves from ^${zodLine}.0.0 to ${zodPeerRange}: minor`;
     expect(ran.stdout).toBe(
       [checkedAgainstOrders, move, wouldPublish('1.1.0', 'minor'), ''].join('\n'),
     );
@@ -4876,7 +4908,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
     const baseline = publishedAs(project, '1.0.0');
-    const peerDependencies = { ...installedPeers, zod: '^3.0.0' };
+    const peerDependencies = { ...publishedPeers, zod: '^3.0.0' };
     const older = { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 
     const { ran } = await publishedAgainst(lab, {
@@ -4884,12 +4916,33 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       served: servedAs(ordersPackage, older),
     });
 
-    const move = `Peer zod moves from ^3.0.0 to ^${zodVersion}: major`;
+    const move = `Peer zod moves from ^3.0.0 to ${zodPeerRange}: major`;
     expect(ran).toEqual({
       status: 0,
       stdout: `${checkedAgainstOrders}\n${move}\nPublished ${ordersPackage}@2.0.0\n`,
       stderr: '',
     });
+  });
+
+  test('a zod whose patch moved leaves the peer ranges as they were, so nothing is published', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    withInstalledZod(project, '4.9.9');
+    const baseline = servedAs(ordersPackage, publishedAs(project, '1.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: baseline });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        `Nothing to publish: the Snapshot and peer ranges are those of ${ordersPackage}@1.0.0; --force publishes anyway`,
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check then compares with it', async ({
@@ -5199,7 +5252,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       },
       files: ['dist', 'snapshot.json'],
       sideEffects: false,
-      peerDependencies: installedPeers,
+      peerDependencies: publishedPeers,
       cfLoom: cfLoomMetadata,
     });
     expect(registry.published[0]?.manifest).toMatchObject({ cfLoom: cfLoomMetadata });
@@ -5305,7 +5358,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       exports: './dist/index.js',
       files: ['dist', 'snapshot.json'],
       description: 'Shared',
-      peerDependencies: installedPeers,
+      peerDependencies: publishedPeers,
       cfLoom: {
         format: 1,
         snapshotHash: snapshotHashOf(files['snapshot.json']!),
@@ -5314,6 +5367,18 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       },
     });
     expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package declares the CLI’s peers, whichever zod is installed beside it', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    withInstalledZod(project, '4.9.9');
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    const files = publishedFilesOf(registry);
+    expect(JSON.parse(files['package.json']!).peerDependencies).toEqual(publishedPeers);
   });
 
   test('a Definitions Package built from its source publishes, and one that imports another Definitions Package too', async ({
@@ -5487,7 +5552,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { registry } = await publishedAgainst(lab, { project, served: {} });
 
     expect(registry.published[0]?.manifest).toMatchObject({
-      peerDependencies: { ...installedPeers, '@org/other': '^2.0.0' },
+      peerDependencies: { ...publishedPeers, '@org/other': '^2.0.0' },
       peerDependenciesMeta: otherPeerMeta,
     });
   });
@@ -5523,7 +5588,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       stderr: '',
     });
     expect(registry.published[0]?.manifest).toMatchObject({
-      peerDependencies: { ...installedPeers, '@org/other': '^3.0.0' },
+      peerDependencies: { ...publishedPeers, '@org/other': '^3.0.0' },
     });
   });
 
@@ -5535,7 +5600,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const { registry } = await publishedAgainst(lab, { project, served: {} });
 
-    expect(registry.published[0]?.manifest).toMatchObject({ peerDependencies: installedPeers });
+    expect(registry.published[0]?.manifest).toMatchObject({ peerDependencies: publishedPeers });
   });
 
   test.for([
@@ -5653,23 +5718,6 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 3,
       stdout: `${neverPublished(registry)}\n`,
       stderr: 'typescript is not installed: publish builds the Contract Package with its tsc\n',
-    });
-    expect(putRequestsOf(registry)).toEqual([]);
-    expect(leftBehindIn(project)).toEqual([]);
-  });
-
-  test('a Definitions Package without zod installed is a tooling error naming the peer, and nothing is put or left behind', async ({
-    lab,
-  }) => {
-    const project = await aGeneratedProject(lab, aBuiltDefinitions());
-    rmSync(join(project, 'node_modules/zod'));
-
-    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
-
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: "zod is not installed: the package's peer range is taken from it\n",
     });
     expect(putRequestsOf(registry)).toEqual([]);
     expect(leftBehindIn(project)).toEqual([]);
@@ -6021,7 +6069,7 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
 describe.concurrent('cf-loom check and publish derive one version', {
   timeout: publishTimeout,
 }, () => {
-  const zodLine = Number(zodVersion.split('.')[0]);
+  const zodLine = Number(zodPeerRange.slice(1).split('.')[0]);
   const rows = [
     {
       name: 'a Neutral Change',
@@ -6068,7 +6116,7 @@ describe.concurrent('cf-loom check and publish derive one version', {
     { name: 'a peer minor', zod: `^${zodLine}.0.0` },
   ])('over $name', async ({ zod }, { lab }) => {
     const project = await aGeneratedProject(lab, aRoot());
-    const older = withPeers(publishedAs(project, '1.0.0'), { ...installedPeers, zod });
+    const older = withPeers(publishedAs(project, '1.0.0'), { ...publishedPeers, zod });
     const changed = { project, served: servedAs(ordersPackage, older) };
 
     const checked = await checkedAgainst(lab, changed, '--json');

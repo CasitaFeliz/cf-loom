@@ -27,6 +27,7 @@ export {
   publishedSnapshotOf,
   snapshotPathOf,
   versionBumpOf,
+  zodPeerRange,
 } from '../compatibility/index.ts';
 export type {
   AttachedGuardsOf,
