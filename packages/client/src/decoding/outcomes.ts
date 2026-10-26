@@ -5,12 +5,15 @@ import type {
   RejectionsOf,
   SuccessOf,
 } from '@cf-loom/contract';
-import { headerValuesOf, reservedFaults, type ShapeFields } from '@cf-loom/contract/internal';
+import {
+  headerValuesOf,
+  type ReceivedShapeOf,
+  reservedFaults,
+  type ShapeFields,
+} from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { AnyDependency, CalledShape, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';
-
-type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : undefined;
 
 /** A Success as decoded, before its Endpoint types it: its status, and the headers and body it declares, read. */
 export type DecodedSuccess = {
@@ -30,7 +33,7 @@ export type Arrival = {
   readonly source: RejectionSource;
 };
 
-/** A Rejection as decoded, before its Endpoint types it: one it answers, its body where its code declares one. */
+/** A Rejection as decoded, before its Endpoint types it: one it answers, its headers and body where its code declares them. */
 export type DecodedRejection = {
   readonly kind: 'rejection';
   readonly source: RejectionSource;
@@ -72,16 +75,6 @@ type Received<Code, Source extends RejectionSource> = {
   readonly message: string;
 };
 
-/** A declared Rejection's headers, present only where its code declares them. */
-type DeclaredHeadersOf<Answerable> = Answerable extends { readonly headers: infer Headers }
-  ? { readonly headers: Output<Headers> }
-  : Readonly<Record<never, never>>;
-
-/** A declared Rejection's body, present only where its code declares one. */
-type DeclaredBodyOf<Answerable> = Answerable extends { readonly body: infer Body }
-  ? { readonly body: Output<Body> }
-  : Readonly<Record<never, never>>;
-
 /** A Standard Rejection by its Provider's code; only invalid input has a body, and the client may have answered it. */
 type StandardRejectionOf<
   Name extends keyof ProvidedStandardRejections,
@@ -102,7 +95,7 @@ type KnownRejectionOf<
 }
   ? StandardRejectionOf<Name, Standards>
   : Answerable extends { readonly kind: 'rejection'; readonly code: infer Code }
-    ? Received<Code, 'provider'> & DeclaredHeadersOf<Answerable> & DeclaredBodyOf<Answerable>
+    ? Received<Code, 'provider'> & ReceivedShapeOf<Answerable>
     : never;
 
 /** The Rejections an Endpoint answers as a Caller receives them, each with the headers and body its code declares. */

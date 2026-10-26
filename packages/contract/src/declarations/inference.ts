@@ -87,9 +87,9 @@ export type DemandsOf<Target extends Guard> = Target extends { readonly demands:
 
 /** The Success an EndpointHandler returns and a Caller receives: its status, headers and body. */
 export type SuccessOf<Target extends Endpoint> = {
-  readonly [Part in keyof Target['success']]: Part extends 'status'
-    ? Target['success'][Part]
-    : Output<Target['success'][Part]>;
+  readonly [Part in keyof Target['success']]: Part extends keyof ReceivedShapeOf<Target['success']>
+    ? ReceivedShapeOf<Target['success']>[Part]
+    : Target['success'][Part];
 };
 
 /**

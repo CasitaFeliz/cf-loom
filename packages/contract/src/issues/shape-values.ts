@@ -16,27 +16,40 @@ export type ShapeValues = {
   readonly body?: unknown;
 };
 
+type Side = (typeof shapeSides)[number];
+
 type PartCheck = (part: IssuePart, schema: core.$ZodType | undefined, given: GivenPart) => Checked;
+
+/** Each side of a shape checked: the values of those that passed, and the Issues of those that did not. */
+type CheckedSides = {
+  readonly values: Partial<Record<Side, unknown>>;
+  readonly issues: readonly Issue[];
+};
 
 /**
  * What a Handler gave, parsed with the schema of each side its shape declares, unknown keys
- * stripped, and its headers checked to travel as text; a value for a side it declares none for is an Issue.
+ * stripped, and its headers checked to travel as text once both sides parse; a value for a side it
+ * declares none for is an Issue.
  */
 export function parsedShapeOf(shape: ReadShape, fields: ShapeFields): Checked<ShapeValues> {
-  return travellingHeadersOf(shape, checkedSidesOf(shape, fields, parsedPartOf));
+  const { values, issues } = checkedSidesOf(shape, fields, parsedPartOf);
+  return resultOf(shape, values, issues.length > 0 ? issues : unsendableIssuesOf(shape, values));
 }
 
 /**
  * What a test scripted, written back through the Reader of each side its shape declares, as it
- * travels, and its headers checked to travel as text; a value for a side it declares none for is an Issue.
+ * travels, and the headers written checked to travel as text, whatever the body's Issues; a value
+ * for a side it declares none for is an Issue.
  */
 export function writtenShapeOf(shape: ReadShape, fields: ShapeFields): Checked<ShapeValues> {
-  return travellingHeadersOf(shape, checkedSidesOf(shape, fields, writtenPartOf));
+  const { values, issues } = checkedSidesOf(shape, fields, writtenPartOf);
+  return resultOf(shape, values, [...issues, ...unsendableIssuesOf(shape, values)]);
 }
 
 /** What a party received, read with the Reader of each side its shape declares; a side it declares none for is ignored. */
 export function readShapeOf(shape: ReadShape, fields: ShapeFields): Checked<ShapeValues> {
-  return checkedSidesOf(shape, fields, readPartOf);
+  const { values, issues } = checkedSidesOf(shape, fields, readPartOf);
+  return resultOf(shape, values, issues);
 }
 
 function readPartOf(part: IssuePart, schema: core.$ZodType | undefined, given: GivenPart): Checked {
@@ -45,12 +58,8 @@ function readPartOf(part: IssuePart, schema: core.$ZodType | undefined, given: G
     : parsedPartOf(part, schema, given);
 }
 
-function checkedSidesOf(
-  shape: ReadShape,
-  fields: ShapeFields,
-  check: PartCheck,
-): Checked<ShapeValues> {
-  const values: Partial<Record<(typeof shapeSides)[number], unknown>> = {};
+function checkedSidesOf(shape: ReadShape, fields: ShapeFields, check: PartCheck): CheckedSides {
+  const values: Partial<Record<Side, unknown>> = {};
   const issues: Issue[] = [];
   for (const side of shapeSides) {
     const { part, schema } = shape[side];
@@ -61,30 +70,30 @@ function checkedSidesOf(
       values[side] = checked.value;
     }
   }
+  return { values, issues };
+}
+
+/** The Issues of the headers written that cannot travel as field text. */
+function unsendableIssuesOf(shape: ReadShape, values: Partial<Record<Side, unknown>>) {
+  const headers = isPlainObject(values.headers) ? values.headers : undefined;
+  const texts = headerTextsOf(shape.headers.part, headers);
+  return texts.kind === 'issues' ? texts.issues : [];
+}
+
+function resultOf(
+  shape: ReadShape,
+  values: Partial<Record<Side, unknown>>,
+  issues: readonly Issue[],
+): Checked<ShapeValues> {
   if (issues.length > 0) {
     return { kind: 'issues', issues };
   }
-  return { kind: 'value', value: declaredValuesOf(shape, values) };
-}
-
-function declaredValuesOf(
-  shape: ReadShape,
-  values: Partial<Record<(typeof shapeSides)[number], unknown>>,
-): ShapeValues {
   const headers = isPlainObject(values.headers) ? values.headers : {};
   return {
-    ...(shape.headers.schema === undefined ? {} : { headers }),
-    ...(shape.body.schema === undefined ? {} : { body: values.body }),
+    kind: 'value',
+    value: {
+      ...(shape.headers.schema === undefined ? {} : { headers }),
+      ...(shape.body.schema === undefined ? {} : { body: values.body }),
+    },
   };
-}
-
-function travellingHeadersOf(
-  shape: ReadShape,
-  checked: Checked<ShapeValues>,
-): Checked<ShapeValues> {
-  if (checked.kind === 'issues') {
-    return checked;
-  }
-  const texts = headerTextsOf(shape.headers.part, checked.value.headers);
-  return texts.kind === 'issues' ? texts : checked;
 }

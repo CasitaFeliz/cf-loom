@@ -110,6 +110,34 @@ describe('parsedShapeOf', () => {
   });
 });
 
+describe('what a header that cannot travel is listed beside', () => {
+  const given = {
+    headers: { 'retry-after': 1, 'x-note': 'a\nb' },
+    body: { limit: 'many' },
+  };
+
+  test('writtenShapeOf lists it after the Issues of the sides, whatever the body’s', () => {
+    const written = writtenShapeOf(rejectionShapeOf(rateLimited), given);
+
+    expect(written).toMatchObject({
+      kind: 'issues',
+      issues: [
+        { part: 'body', path: ['limit'], code: 'invalid_type' },
+        { part: 'headers', path: ['x-note'], code: 'invalid_format' },
+      ],
+    });
+  });
+
+  test('parsedShapeOf stops at the Issues of the sides', () => {
+    const parsed = parsedShapeOf(rejectionShapeOf(rateLimited), given);
+
+    expect(parsed).toMatchObject({
+      kind: 'issues',
+      issues: [{ part: 'body', path: ['limit'], code: 'invalid_type' }],
+    });
+  });
+});
+
 describe('writtenShapeOf', () => {
   const readers = providedRejection({
     code: 'STAGED',

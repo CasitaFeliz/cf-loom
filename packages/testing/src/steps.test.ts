@@ -572,6 +572,26 @@ describe('fakeProvider: steps', () => {
     );
   });
 
+  test('a Success whose body breaks its reader and whose header cannot travel is one mistake listing both', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) =>
+      r.success({
+        headers: { 'x-stage': { unknown: 'a\nb' }, 'x-count': 1 },
+        body: { id: 'pay-1', amount: -1, stage: 'pending' },
+      }),
+    );
+
+    const error = await payments.fetch(new Request(at)).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    const lines = (error as Error).message.split('\n');
+    expect(lines).toEqual([
+      'payments-service: getPayment: the scripted Success breaks its readers',
+      expect.stringMatching(/^payments-service: getPayment: success\.body\.amount too_small: /),
+      'payments-service: getPayment: success.headers.x-stage invalid_format: The header value cannot travel as HTTP field text',
+    ]);
+  });
+
   test('unknownRejection options cannot replace the kind or the code it scripts', async () => {
     const payments = fakeProvider(paymentsDependency);
     const options = { kind: 'success', code: 'NO_PAYMENT' } as never;
