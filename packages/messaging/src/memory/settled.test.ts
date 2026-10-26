@@ -408,7 +408,7 @@ describe('settled(): a chain of Messages that keeps producing', () => {
     await expect(broker.settled()).resolves.toBeUndefined();
   });
 
-  /** Two Handlers that trigger each other forever: the Subscription sends, the CommandHandler publishes. */
+  /** Two Handlers that trigger each other forever: the Subscription's Message Handler sends, the Command's publishes. */
   function chaining(connection: Running, count: { deliveries: number }) {
     return {
       notify: async () => {

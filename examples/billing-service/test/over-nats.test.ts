@@ -85,7 +85,7 @@ describe('orders-service and billing-service over NATS JetStream', { timeout: 20
     expect(drafting).toMatchObject({ pending: 0, ackPending: 0, redelivered: 0 });
   });
 
-  test('orders’ own Subscription sends ChargeCard and orders’ CommandHandler handles it', async () => {
+  test('orders’ own Subscription sends ChargeCard and orders’ Message Handler handles it', async () => {
     const orderId = await placeAnOrder();
 
     const created = await sequenceOf(createdSubject, `${orderId}:created`);
