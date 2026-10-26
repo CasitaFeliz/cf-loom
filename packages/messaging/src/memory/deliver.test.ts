@@ -287,7 +287,7 @@ describe('deliver()', () => {
     ]);
   });
 
-  test('deliver to a Command reaches its CommandHandler', async () => {
+  test('deliver to a Command reaches its Message Handler', async () => {
     const { broker, received } = await running();
 
     await broker.deliver(chargeCardV1, charge);

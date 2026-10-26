@@ -2,13 +2,9 @@ export type { DirectMeta, MessageMeta, Pairing } from './calls/index.ts';
 export { InvalidInputError, InvalidOutcomeError } from './calls/index.ts';
 export type { HandledRequest, Issue } from './checks/index.ts';
 export type {
-  CommandHandler,
-  CommandImplementation,
   EndpointCall,
   EndpointHandler,
   EndpointImplementation,
-  EventHandler,
-  EventImplementation,
   GuardCall,
   GuardHandler,
   GuardImplementation,
@@ -16,6 +12,8 @@ export type {
   HandlerMap,
   HandlerMapOf,
   MessageFault,
+  MessageHandler,
+  MessageImplementation,
   Readers,
   ResourcesNotAnnotated,
   ResourcesOf,

@@ -125,7 +125,7 @@ A Command or an Event: what travels through the Broker rather than over HTTP.
 _Avoid_: payload (for the Message itself), envelope (for the Message itself)
 
 **Command**:
-An instruction a Service sends to itself, handled by one CommandHandler.
+An instruction a Service sends to itself, handled by one Message Handler.
 _Avoid_: job, task, request, operation
 
 **Event**:
@@ -196,8 +196,8 @@ _Avoid_: imported Element, foreign Element, external Element, carried Element
 
 ### Implementation
 
-**Handler**: **EndpointHandler**, **CommandHandler**, **EventHandler**, **GuardHandler**:
-The code the runtime invokes with something incoming: a call to an Endpoint, a Command, an Event through a Subscription, or a request a Guard must judge (the GuardHandler decides whether to admit it). CommandHandlers and EventHandlers together are Message Handlers.
+**Handler**: **EndpointHandler**, **GuardHandler**, **Message Handler**:
+The code the runtime invokes with something incoming: a call to an Endpoint, a request a Guard must judge (the GuardHandler decides whether to admit it), or a Message (the Message Handler, the Handler of a Command's Message Version or of a Subscription).
 _Avoid_: controller, listener, resolver, processor
 
 **Admission**:

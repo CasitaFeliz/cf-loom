@@ -18,7 +18,7 @@ type WrittenSubscription = Omit<SubscriptionDeclaration, 'event'> & {
 
 /** Why a Subscription never receives a Command, as the types and `generate` both say it. */
 export const commandSubscribedRefusal =
-  'A Subscription receives an Event; a Command is handled by its CommandHandler';
+  "A Subscription receives an Event; a Command's Message Version has its own Message Handler";
 
 /** What a Subscription must also satisfy: it receives an Event, never a Command. */
 type SubscribedEventRule<Declaration extends WrittenSubscription> =
