@@ -222,7 +222,8 @@ describe('serve: what it checks before the first request', () => {
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
     });
 
-    const serving = () => serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} });
+    const serving = () =>
+      serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} });
 
     expect(serving).toThrow(' header-names: ');
   });

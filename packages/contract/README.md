@@ -150,7 +150,7 @@ export const orderLocked = defineRejection({
 });
 ```
 
-A Rejection may declare `headers`, as a Success does: an object of the HTTP headers it promises, which nothing implies, so RFC 9110's `WWW-Authenticate` of a 401 or `Retry-After` of a 429 is sent only where a Rejection declares it. They follow the text rules and the name rules of a Success's headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md). A Handler gives them with the body: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })` (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README).
+A Rejection may declare `headers`, as a Success does: an object of the HTTP headers it promises, which nothing implies, so RFC 9110's `WWW-Authenticate` of a 401 or `Retry-After` of a 429 is sent only where a Rejection declares it. They follow the text rules and the name rules of a Success's headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md). A Handler gives them with the body: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })` (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README).
 
 ```ts
 // src/contract/rejections/unauthenticated.rejection.ts

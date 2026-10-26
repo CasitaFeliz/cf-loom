@@ -776,6 +776,7 @@ describe('an EndpointHandler’s Rejections with headers', () => {
   });
 
   test('reject() of a Rejection with headers takes { headers, body } and refuses a bare body or none', () => {
+    const withBody = { headers: { 'www-authenticate': 'B' }, body: {} };
     const write = () => [
       handle(searchOrders, () =>
         reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
@@ -790,9 +791,7 @@ describe('an EndpointHandler’s Rejections with headers', () => {
       // @ts-expect-error a Rejection with a body takes it beside its headers
       handle(searchOrders, () => reject(rateLimited, { headers: { 'retry-after': 30 } })),
       // @ts-expect-error a Rejection without a body takes none beside its headers
-      handle(searchOrders, () =>
-        reject(sessionExpired, { headers: { 'www-authenticate': 'B' }, body: {} }),
-      ),
+      handle(searchOrders, () => reject(sessionExpired, withBody)),
       // @ts-expect-error a header is typed by its schema
       handle(searchOrders, () => reject(sessionExpired, { headers: { 'www-authenticate': 3 } })),
     ];
