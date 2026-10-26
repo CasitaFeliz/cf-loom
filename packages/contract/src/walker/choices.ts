@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { isOpen } from '../open/index.ts';
 import { canonicalJson, inCanonicalJsonOrder, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
-import { inside, type Place } from './location.ts';
+import { inside } from './location.ts';
 import type {
   EnumNode,
   JsonPrimitive,
@@ -18,13 +18,14 @@ import {
   failed,
   failuresOf,
   type Outline,
+  type Reached,
   type Walked,
   type Walker,
   walked,
 } from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` declared it or zod derived it from one. */
-export function walkEnum(schema: core.$ZodEnum, at: Place): Walked {
+export function walkEnum(schema: core.$ZodEnum, at: Reached): Walked {
   const values: readonly unknown[] = Object.values(schema._zod.def.entries);
   const strings = values.filter(isString);
   if (strings.length !== values.length) {
@@ -38,7 +39,7 @@ export function walkEnum(schema: core.$ZodEnum, at: Place): Walked {
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
-export function walkUnion(schema: core.$ZodUnion, at: Place, walker: Walker): Walked {
+export function walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): Walked {
   const def = schema._zod.def;
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyUnion, { type: 'union' });
@@ -56,7 +57,11 @@ export function walkUnion(schema: core.$ZodUnion, at: Place, walker: Walker): Wa
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
-export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Place, walker: Walker): Walked {
+export function walkTagged(
+  schema: core.$ZodDiscriminatedUnion,
+  at: Reached,
+  walker: Walker,
+): Walked {
   const def = schema._zod.def;
   const tagged: Outline = { type: 'tagged' };
   if (def.options.length === 0) {
@@ -65,7 +70,10 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Place, walke
   const variants = allWalked(
     def.options.map((option, index) => {
       const values = option._zod.propValues?.[def.discriminator];
-      const variantAt = inside(at, variantStepOf(def.discriminator, values, index));
+      const variantAt = walker.reach(
+        option,
+        inside(at, variantStepOf(def.discriminator, values, index)),
+      );
       const variant = walker.schema(option, variantAt);
       const refusal = variantRefusalOf(option, def.discriminator);
       if (refusal !== undefined) {
@@ -109,7 +117,7 @@ function variantStepOf(
 function taggedVariant(
   variant: Walked,
   values: ReadonlySet<unknown> | undefined,
-  at: Place,
+  at: Reached,
 ): Walked<[string, TaggedNode['variants'][string]]> {
   if (variant.kind === 'not-allowed') {
     return variant;
@@ -149,7 +157,7 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
  * intersection, and is nullable when any of its literals is. Any other union keeps its options in
  * declared order, since zod's union returns the first option that parses.
  */
-function choiceOf(options: readonly SchemaNode[], at: Place): Walked {
+function choiceOf(options: readonly SchemaNode[], at: Reached): Walked {
   const literals = options.filter(isClosedEnum);
   if (literals.length !== options.length) {
     return walked({ type: 'union', options: [...options] });
@@ -166,7 +174,7 @@ function choiceOf(options: readonly SchemaNode[], at: Place): Walked {
 }
 
 /** A closed enum of literal values, each once, in canonical order; one without values is refused. */
-export function enumOf(values: readonly JsonPrimitive[], at: Place): Walked<EnumNode> {
+export function enumOf(values: readonly JsonPrimitive[], at: Reached): Walked<EnumNode> {
   if (values.length === 0) {
     return notAllowed(at, refused.emptyEnum, { type: 'enum' });
   }

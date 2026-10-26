@@ -1,5 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
+import { type Compositions, kept, replayed, startCompositions } from './compositions.ts';
+import { movedFrom } from './location.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
 import {
   notAllowed,
@@ -9,16 +11,21 @@ import {
   refusedNullableDef,
 } from './not-allowed.ts';
 import {
+  type Composition,
   type Failed,
   failed,
-  type LocatedSchema,
+  type Reached,
+  type ReachedSchema,
   refusedBeside,
   type Walked,
   walked,
 } from './walked.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
-export type Entering = LocatedSchema & { readonly id: string | undefined };
+export type Entering = ReachedSchema & { readonly id: string | undefined };
+
+/** What the walk of a schema reported, and where it was first entered, so later reaches say it at their own place. */
+type Reported = { readonly at: Reached; readonly failed: Failed };
 
 /**
  * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
@@ -42,12 +49,13 @@ type State = {
   readonly nameBySchema: Map<core.$ZodType, string>;
   readonly schemaById: Map<string, core.$ZodType>;
   readonly defById: Map<string, SchemaNode>;
-  readonly reportedBySchema: Map<core.$ZodType, Failed>;
+  readonly reportedBySchema: Map<core.$ZodType, Reported>;
+  readonly compositions: Compositions;
   count: number;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
-export function startRecursion(): Recursion {
+export function startRecursion(sink: Composition[]): Recursion {
   const state: State = {
     ancestors: [],
     openDefs: [],
@@ -55,6 +63,7 @@ export function startRecursion(): Recursion {
     schemaById: new Map(),
     defById: new Map(),
     reportedBySchema: new Map(),
+    compositions: startCompositions(sink),
     count: 0,
   };
   return {
@@ -71,11 +80,13 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   const index = state.count++;
   const ancestor: Ancestor = { ...entering, index, low: index, reached: false };
   state.ancestors.push(ancestor);
+  const start = state.compositions.built.length;
   const node = walk();
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
   const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
+  keepCompositions(state, ancestor, start);
   closeGroup(state, ancestor);
   return result;
 }
@@ -90,12 +101,21 @@ function refOf(state: State, entering: Entering): Walked | undefined {
   if (open !== undefined) {
     reachBack(state, open.low);
   }
+  replayed(state.compositions, entering);
   return walked({ type: 'ref', name });
 }
 
-/** The very failure already reported for a cycle the schema lies on. */
+/** The failure already reported for a cycle the schema lies on, said at the place it is entered now. */
 function reportedOf(state: State, entering: Entering): Walked | undefined {
-  return state.reportedBySchema.get(entering.schema);
+  const reported = state.reportedBySchema.get(entering.schema);
+  if (reported === undefined) {
+    return undefined;
+  }
+  replayed(state.compositions, entering);
+  const moved = reported.failed.failures.map((failure) =>
+    movedFrom(failure, reported.at, entering.at),
+  );
+  return failed(moved, reported.failed.outline);
 }
 
 /**
@@ -116,12 +136,12 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   if (entering.id !== undefined) {
     return walked({ type: 'ref', name: entering.id });
   }
-  if (cycle.some(hasId)) {
+  if (cycle.some((member) => member.id !== undefined)) {
     return undefined;
   }
   const failure = notAllowed(entering.at, refused.unnamedCycle);
   for (const ancestor of cycle) {
-    state.reportedBySchema.set(ancestor.schema, failure);
+    state.reportedBySchema.set(ancestor.schema, { at: ancestor.at, failed: failure });
   }
   return failure;
 }
@@ -188,7 +208,8 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
  * later failure higher up does not record itself over the first.
  */
 function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walked {
-  state.reportedBySchema.set(ancestor.schema, failure);
+  const reported: Reported = { at: ancestor.at, failed: failure };
+  state.reportedBySchema.set(ancestor.schema, reported);
   const dropped = state.openDefs.filter((def) => def.index > ancestor.index);
   for (const { schema } of dropped) {
     const name = state.nameBySchema.get(schema);
@@ -196,7 +217,7 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
       state.defById.delete(name);
     }
     state.nameBySchema.delete(schema);
-    state.reportedBySchema.set(schema, failure);
+    state.reportedBySchema.set(schema, reported);
   }
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
@@ -217,6 +238,11 @@ function withoutOutline(node: Walked): Walked {
   return node.kind === 'not-allowed' ? failed(node.failures) : node;
 }
 
-function hasId(ancestor: Ancestor): boolean {
-  return ancestor.id !== undefined;
+/** Keeps the compositions the walk of a schema built when a later reach of it will be answered from memory. */
+function keepCompositions(state: State, ancestor: Ancestor, start: number): void {
+  const isRemembered =
+    state.nameBySchema.has(ancestor.schema) || state.reportedBySchema.has(ancestor.schema);
+  if (isRemembered) {
+    kept(state.compositions, ancestor, state.compositions.built.slice(start));
+  }
 }

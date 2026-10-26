@@ -3,48 +3,43 @@ import {
   byCodePoint,
   type NotAllowed,
   type Site,
+  sameSite,
   siteLocationOf,
-  siteTextOf,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
 
 /**
- * What the walk refused, as one failure for each construct of each schema: a schema several places
- * reach is told once, at the first place in code point order, with the other sites that reach it.
- * A construct that holds no schema of its own is a failure of its own.
+ * What the walk refused, as one failure for each construct of each schema: a schema several
+ * places reach is told once, at the first place in code point order, with the other sites that
+ * reach it.
  */
 export function notAllowedFailuresOf(
   refusals: readonly NotAllowed[],
 ): readonly NotAllowedFailure[] {
+  return reachesOf(refusals).map(failureOf);
+}
+
+/** The refusals grouped by the schema and the construct, the groups in the order they were first met. */
+function reachesOf(refusals: readonly NotAllowed[]): readonly (readonly NotAllowed[])[] {
   const bySchema = new Map<$ZodType, Map<string, NotAllowed[]>>();
-  const reached: NotAllowed[][] = [];
+  const groups: NotAllowed[][] = [];
   for (const refusal of refusals) {
-    const sameConstruct = reachedOf(bySchema, refusal);
-    if (sameConstruct.length === 0) {
-      reached.push(sameConstruct);
+    const byConstruct = bySchema.get(refusal.schema) ?? new Map<string, NotAllowed[]>();
+    bySchema.set(refusal.schema, byConstruct);
+    const same = byConstruct.get(refusal.construct);
+    if (same === undefined) {
+      const group = [refusal];
+      byConstruct.set(refusal.construct, group);
+      groups.push(group);
+    } else {
+      same.push(refusal);
     }
-    sameConstruct.push(refusal);
   }
-  return reached.map(failureOf);
+  return groups;
 }
 
-/** The refusals already met of the construct of the schema, a new list when there are none; a construct with no schema gets a list of its own. */
-function reachedOf(
-  bySchema: Map<$ZodType, Map<string, NotAllowed[]>>,
-  { schema, construct }: NotAllowed,
-): NotAllowed[] {
-  if (schema === undefined) {
-    return [];
-  }
-  const byConstruct = bySchema.get(schema) ?? new Map<string, NotAllowed[]>();
-  const sameConstruct = byConstruct.get(construct) ?? [];
-  byConstruct.set(construct, sameConstruct);
-  bySchema.set(schema, byConstruct);
-  return sameConstruct;
-}
-
-function failureOf(refusals: readonly NotAllowed[]): NotAllowedFailure {
-  const [first, ...others] = [...refusals].sort(byLocation);
+function failureOf(group: readonly NotAllowed[]): NotAllowedFailure {
+  const [first, ...others] = [...group].sort(byLocation);
   if (first === undefined) {
     throw new Error('A construct that is not allowed is reached from at least one place: a bug.');
   }
@@ -62,21 +57,17 @@ function failureOf(refusals: readonly NotAllowed[]): NotAllowedFailure {
 }
 
 function byLocation(left: NotAllowed, right: NotAllowed): number {
-  return byCodePoint(locationTextOf(left), locationTextOf(right));
-}
-
-function locationTextOf({ site, steps }: NotAllowed): string {
-  return siteLocationOf(site, steps);
+  return byCodePoint(
+    siteLocationOf(left.site, left.steps),
+    siteLocationOf(right.site, right.steps),
+  );
 }
 
 /** The sites, other than the first's, that reach the schema, each once, in the order given. */
 function otherSitesOf(first: Site, others: readonly NotAllowed[]): readonly Site[] {
-  const texts = new Set([siteTextOf(first)]);
   const sites: Site[] = [];
   for (const { site } of others) {
-    const text = siteTextOf(site);
-    if (!texts.has(text)) {
-      texts.add(text);
+    if (!sameSite(site, first) && !sites.some((known) => sameSite(known, site))) {
       sites.push(site);
     }
   }

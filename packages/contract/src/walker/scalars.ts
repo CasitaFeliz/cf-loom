@@ -2,16 +2,15 @@ import type * as core from 'zod/v4/core';
 import { isJsonPrimitive } from './canonical-json.ts';
 import { enumOf } from './choices.ts';
 import { innerOfLazy } from './lazy.ts';
-import type { Place } from './location.ts';
 import type { JsonPrimitive } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
-import { allWalked, failed, type Walked, walked } from './walked.ts';
+import { allWalked, failed, type Reached, type Walked, walked } from './walked.ts';
 
 /**
  * A closed `enum` of the literal's JSON values; `null`, `undefined` and bigints have no JSON value
  * of their own.
  */
-export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Place): Walked {
+export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Reached): Walked {
   const values = allWalked(def.values.map((value) => jsonValueOf(value, at)));
   if (values.kind === 'not-allowed') {
     return failed(values.failures, { type: 'enum' });
@@ -43,7 +42,7 @@ export function isJsonUnion(union: core.$ZodUnion): boolean {
   );
 }
 
-function jsonValueOf(value: core.util.Literal, at: Place): Walked<JsonPrimitive> {
+function jsonValueOf(value: core.util.Literal, at: Reached): Walked<JsonPrimitive> {
   if (isJsonPrimitive(value)) {
     return walked(value);
   }

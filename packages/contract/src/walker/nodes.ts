@@ -132,14 +132,14 @@ export type SchemaNode =
   | RefNode;
 
 /**
- * A zod construct no node or check maps, where it was written, and what to use instead. The walk
- * adds the schema that holds the construct, so one construct reached from many places is told
- * once, and the origin of the Definitions Package that declares it, when one does.
+ * A zod construct no node or check maps, where it was written, and what to use instead, with the
+ * schema it sits in, so a construct reached from many places is told once, and the origin of the
+ * Definitions Package that declares that schema, or the nearest one around it.
  */
 export type NotAllowed = Place & {
   readonly kind: 'not-allowed';
   readonly construct: string;
   readonly instead?: string;
-  readonly schema?: core.$ZodType;
-  readonly origin?: Origin;
+  readonly schema: core.$ZodType;
+  readonly origin: Origin | undefined;
 };

@@ -16,10 +16,10 @@ import type { Defs } from './walk.ts';
 export type Child = { readonly steps: readonly Step[]; readonly node: SchemaNode };
 
 /** A node and the steps from the node the search began at. */
-export type LocatedNode = { readonly at: readonly Step[]; readonly node: SchemaNode };
+export type NodeWithin = { readonly at: readonly Step[]; readonly node: SchemaNode };
 
 /** A node and every node inside it, each with its steps from the node; a `ref` is not entered. */
-export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonly LocatedNode[] {
+export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonly NodeWithin[] {
   const inside = childrenOf(node).flatMap(({ steps, node: child }) =>
     nodesWithin(child, [...at, ...steps]),
   );

@@ -68,6 +68,11 @@ export function siteTextOf(site: Site): string {
   }
 }
 
+/** Whether two sites are the one site, which names the same declaration. */
+export function sameSite(left: Site, right: Site): boolean {
+  return siteTextOf(left) === siteTextOf(right);
+}
+
 /** Where a failure sits on one line: its site, then its steps in the author's terms. */
 export function siteLocationOf(site: Site, steps: readonly Step[]): string {
   const path = authorPathOf(steps);
@@ -100,11 +105,17 @@ export function placeOf(site: Site, declaration: unknown): Place {
 }
 
 /** A place further inside the same declaration, down the steps. */
-export function inside(place: Place, ...steps: readonly Step[]): Place {
+export function inside<Held extends Place>(place: Held, ...steps: readonly Step[]): Held {
   return { ...place, steps: [...place.steps, ...steps] };
 }
 
 /** A place down the fields of the same declaration, such as `visibility` or `success`, `status`. */
-export function inFields(place: Place, ...names: readonly string[]): Place {
+export function inFields<Held extends Place>(place: Held, ...names: readonly string[]): Held {
   return inside(place, ...names.map(fieldStep));
+}
+
+/** What the walk built or reported at `from`, as it stands when the walk enters the same schema at `to`. */
+export function movedFrom<Held extends Place>(held: Held, from: Place, to: Place): Held {
+  const below = held.steps.slice(from.steps.length);
+  return { ...held, site: to.site, declaration: to.declaration, steps: [...to.steps, ...below] };
 }

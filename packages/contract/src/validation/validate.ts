@@ -135,7 +135,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
     ...notAllowedFailuresOf([
-      ...openCompositionsOf(nodes.slots, nodes.defs),
+      ...openCompositionsOf(walked.compositions, walked.defs),
       ...walked.located.flatMap(failuresAt),
     ]),
   ];
