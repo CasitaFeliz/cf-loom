@@ -4357,36 +4357,36 @@ const archiveFile = lines([
   '});',
 ]);
 
-/**
- * `service` with its Provider exporting an Endpoint, `getPayment`, which its Dependency lists, so a
- * file under `src/contract/` re-exports what a Contract Package exports.
- */
+/** `payments`, the Provider's Contract Package, also exporting an Endpoint, `getPayment`. */
+const paymentsWithEndpoint = payments
+  .replace(
+    'export const payments = {',
+    [
+      "export const getPayment = providedEndpoint('payments-service', {",
+      "  name: 'getPayment',",
+      "  method: 'GET',",
+      "  path: '/payments',",
+      "  visibility: 'internal',",
+      "  description: 'getPayment',",
+      '  success: { status: 200, body: z.object({ id: z.string() }) },',
+      '});',
+      '',
+      'export const payments = {',
+    ].join('\n'),
+  )
+  .replace(
+    'import { openEnumReader, providedEvent }',
+    'import { openEnumReader, providedEndpoint, providedEvent }',
+  )
+  .replace('endpoints: {},', 'endpoints: { getPayment },');
+
+/** `service` with its Dependency on the Provider listing the Endpoint `getPayment`, which the Provider exports. */
 function withProviderEndpoint(
   service: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   return {
     ...service,
-    'src/contract/payments.ts': payments
-      .replace(
-        'export const payments = {',
-        [
-          "export const getPayment = providedEndpoint('payments-service', {",
-          "  name: 'getPayment',",
-          "  method: 'GET',",
-          "  path: '/payments',",
-          "  visibility: 'internal',",
-          "  description: 'getPayment',",
-          '  success: { status: 200, body: z.object({ id: z.string() }) },',
-          '});',
-          '',
-          'export const payments = {',
-        ].join('\n'),
-      )
-      .replace(
-        'import { openEnumReader, providedEvent }',
-        'import { openEnumReader, providedEndpoint, providedEvent }',
-      )
-      .replace('endpoints: {},', 'endpoints: { getPayment },'),
+    'src/contract/payments.ts': paymentsWithEndpoint,
     'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
       .replace(
         'import { paymentSettledV1, payments }',
@@ -4571,6 +4571,21 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
 
   test('a Provider’s Endpoint that a file under src/contract exports is not reported', () => {
     const project = aProject(withProviderEndpoint(aMessagingService()));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Provider’s Event and Endpoint that a file under src/contract re-exports are not reported, with no Dependency on the Provider', () => {
+    const project = aProject({
+      ...aService(),
+      'src/contract/payments.ts': paymentsWithEndpoint,
+      'src/contract/provider-elements.ts': lines([
+        importOf('{ getPayment, paymentSettledV1 }', './payments.ts'),
+        'export { getPayment, paymentSettledV1 };',
+      ]),
+    });
 
     const ran = cfLoom(project, 'generate');
 

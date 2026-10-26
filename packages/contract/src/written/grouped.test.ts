@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { ping, pingedV1 } from '../../test/ping-package.ts';
 import {
   defineCommand,
   defineEndpoint,
@@ -82,6 +83,20 @@ describe('declarationsListedBy', () => {
 
     expect(listed).toEqual([listOrders]);
   });
+  test('a Group lists its Contract’s own declarations: a Provider’s Element a cast put there is left out', () => {
+    const cast = defineGroup({
+      name: 'orders',
+      description: 'Order lifecycle',
+      // @ts-expect-error a Group lists its Contract’s own Elements
+      endpoints: [listOrders, ping],
+      // @ts-expect-error a Group lists its Contract’s own Elements
+      events: [pingedV1, orderCreatedV1],
+    });
+
+    const listed = declarationsListedBy(cast);
+
+    expect(listed).toEqual([listOrders, orderCreatedV1]);
+  });
 });
 
 describe('isListable', () => {
@@ -97,5 +112,11 @@ describe('isListable', () => {
 
     expect(listable).toEqual([true, true, true, true]);
     expect(others).toEqual([false, false, false, false]);
+  });
+
+  test('a Provider’s Element is not listable', () => {
+    const listable = [ping, pingedV1].map(isListable);
+
+    expect(listable).toEqual([false, false]);
   });
 });

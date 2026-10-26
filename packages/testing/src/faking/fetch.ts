@@ -10,10 +10,10 @@ import {
 import { responseOf } from '../answering/index.ts';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import {
+  type FakedProvider,
   type ListedEndpoint,
   type Matched,
   matchedOf,
-  type Provided,
   whoOf,
 } from '../provided/index.ts';
 import {
@@ -33,7 +33,7 @@ import { type CallLog, callLogOf } from './calls.ts';
  * received, and every mistake its `fetch` threw.
  */
 export type Faking = {
-  readonly provided: Provided;
+  readonly faked: FakedProvider;
   readonly calls: CallLog;
   readonly scripted: ReadonlyMap<string, Scripted>;
   readonly scriptedByNameOf: (name: string) => Scripted;
@@ -41,14 +41,14 @@ export type Faking = {
 };
 
 /** A fake with no script and no call yet. */
-export function fakingOf(provided: Provided): Faking {
+export function fakingOf(faked: FakedProvider): Faking {
   const scripted = new Map<string, Scripted>();
   const scriptedByNameOf = (name: string): Scripted => {
     const found = scripted.get(name) ?? scriptedOf();
     scripted.set(name, found);
     return found;
   };
-  return { provided, calls: callLogOf(), scripted, scriptedByNameOf, mistakes: [] };
+  return { faked, calls: callLogOf(), scripted, scriptedByNameOf, mistakes: [] };
 }
 
 /**
@@ -88,7 +88,7 @@ async function withMistakesRecorded(
  * that Endpoint is Deprecated, whatever it answers.
  */
 async function fakeResponseOf(faking: Faking, request: Request): Promise<Response> {
-  const matched = matchedOf(faking.provided, request);
+  const matched = matchedOf(faking.faked, request);
   const response = await answeredOf(faking, matched, request);
   return withDeprecation(response, matched.listed.deprecatedAt);
 }

@@ -3,7 +3,7 @@ import { stringLiteralOf } from '../source-text/index.ts';
 import { elementLinesOf } from './element-lines.ts';
 import type { ExportedEvent } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
-import { bindingOf, fileOf } from './names.ts';
+import { fileOf, providedOpeningOf } from './names.ts';
 import { schemaLineOf } from './schema-lines.ts';
 
 /**
@@ -17,7 +17,7 @@ export function eventModuleOf(
   const declared = { kind: 'event', name, version } as const;
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    `export const ${bindingOf(declared)} = loom.providedEvent(${stringLiteralOf(provider)}, {`,
+    providedOpeningOf(declared, provider),
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${version},`,
     ...elementLinesOf(event),

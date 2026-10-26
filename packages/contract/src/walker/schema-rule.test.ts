@@ -85,15 +85,18 @@ describe('schema types in every declaration', () => {
     expectTypeOf<Slot>().toExtend<Refusal<'not allowed: .default()'>>();
   });
 
-  test('a z.coerce.number() in an Endpoint’s query is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        // @ts-expect-error a Contract declares no coercion
-        input: { query: z.object({ page: z.coerce.number() }) },
-      });
+  test('a z.coerce.number() in an Endpoint’s query is a type error naming it', () => {
+    const written = {
+      ...listOrders,
+      input: { query: z.object({ page: z.coerce.number() }) },
+    } as const;
+    type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['input']['query'];
+
+    // @ts-expect-error a Contract declares no coercion
+    const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.coerce.*'>>();
   });
 
   test('a z.date() in a Success body is a type error, and generate names z.iso.datetime() for it', () => {
@@ -116,101 +119,116 @@ describe('schema types in every declaration', () => {
     ]);
   });
 
-  test('a z.map() in Success headers is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        success: {
-          status: 200,
-          // @ts-expect-error a Map is not JSON
-          headers: z.object({ 'x-totals': z.map(z.string(), z.string()) }),
-          body: z.object({ id: z.uuid() }),
-        },
-      });
+  test('a z.map() in Success headers is a type error naming it', () => {
+    const written = {
+      ...listOrders,
+      success: {
+        status: 200,
+        headers: z.object({ 'x-totals': z.map(z.string(), z.string()) }),
+        body: z.object({ id: z.uuid() }),
+      },
+    } as const;
+    type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['headers'];
+
+    // @ts-expect-error a Map is not JSON
+    const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.map()'>>();
   });
 
-  test('a .transform() in an Event’s body is a type error', () => {
-    const declare = () =>
-      defineEvent({
-        ...base,
-        // @ts-expect-error what a transform produces is not what travels
-        body: z.object({ total: z.string().transform(Number) }),
-      });
+  test('a .transform() in an Event’s body is a type error naming it', () => {
+    const written = { ...base, body: z.object({ total: z.string().transform(Number) }) } as const;
+    type Slot = Parameters<typeof defineEvent<typeof written>>[0]['body'];
+
+    // @ts-expect-error what a transform produces is not what travels
+    const declare = () => defineEvent(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: .transform()'>>();
   });
 
-  test('a zod/mini default in a Command’s body is a type error', () => {
-    const declare = () =>
-      defineCommand({
-        ...chargeCard,
-        // @ts-expect-error a Contract declares no defaults, whichever zod it is written with
-        body: zm.object({ total: zm._default(zm.number(), 1) }),
-      });
+  test('a zod/mini default in a Command’s body is a type error naming it', () => {
+    const written = {
+      ...chargeCard,
+      body: zm.object({ total: zm._default(zm.number(), 1) }),
+    } as const;
+    type Slot = Parameters<typeof defineCommand<typeof written>>[0]['body'];
+
+    // @ts-expect-error a Contract declares no defaults, whichever zod it is written with
+    const declare = () => defineCommand(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: .default()'>>();
   });
 
-  test('a z.bigint() in a Rejection’s body is a type error', () => {
-    const declare = () =>
-      defineRejection({
-        code: 'ORDER_LOCKED',
-        status: 409,
-        message: 'The order can no longer be changed',
-        // @ts-expect-error a bigint is not JSON
-        body: z.object({ version: z.bigint() }),
-      });
+  test('a z.bigint() in a Rejection’s body is a type error naming it', () => {
+    const written = {
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'The order can no longer be changed',
+      body: z.object({ version: z.bigint() }),
+    } as const;
+    type Slot = Parameters<typeof defineRejection<typeof written>>[0]['body'];
+
+    // @ts-expect-error a bigint is not JSON
+    const declare = () => defineRejection(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.bigint()'>>();
   });
 
-  test('a z.coerce in a Guard’s demanded query is a type error', () => {
-    const declare = () =>
-      defineGuard({
-        ...apiKey,
-        // @ts-expect-error a Contract declares no coercion
-        demands: { query: z.object({ page: z.coerce.number() }) },
-      });
+  test('a z.coerce in a Guard’s demanded query is a type error naming it', () => {
+    const written = {
+      ...apiKey,
+      demands: { query: z.object({ page: z.coerce.number() }) },
+    } as const;
+    type Slot = Parameters<typeof defineGuard<typeof written>>[0]['demands']['query'];
+
+    // @ts-expect-error a Contract declares no coercion
+    const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.coerce.*'>>();
   });
 
-  test('a z.date() in a Guard’s Context is a type error', () => {
-    const declare = () =>
-      defineGuard({
-        ...apiKey,
-        // @ts-expect-error a date travels as a string
-        context: z.object({ since: z.date() }),
-      });
+  test('a z.date() in a Guard’s Context is a type error naming it', () => {
+    const written = { ...apiKey, context: z.object({ since: z.date() }) } as const;
+    type Slot = Parameters<typeof defineGuard<typeof written>>[0]['context'];
+
+    // @ts-expect-error a date travels as a string
+    const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.date() (use z.iso.datetime())'>>();
   });
 
-  test('a .default() in a Guard’s Qualifier is a type error', () => {
-    const declare = () =>
-      defineGuard({
-        ...apiKey,
-        // @ts-expect-error a Contract declares no defaults
-        qualifier: z.object({ scope: z.string().default('all') }),
-      });
+  test('a .default() in a Guard’s Qualifier is a type error naming it', () => {
+    const written = {
+      ...apiKey,
+      qualifier: z.object({ scope: z.string().default('all') }),
+    } as const;
+    type Slot = Parameters<typeof defineGuard<typeof written>>[0]['qualifier'];
+
+    // @ts-expect-error a Contract declares no defaults
+    const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: .default()'>>();
   });
 
-  test('a refused construct inside an array of objects is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        success: {
-          status: 200,
-          // @ts-expect-error a date travels as a string
-          body: z.array(z.object({ placedAt: z.date() })),
-        },
-      });
+  test('a refused construct inside an array of objects is a type error naming it', () => {
+    const written = {
+      ...listOrders,
+      success: { status: 200, body: z.array(z.object({ placedAt: z.date() })) },
+    } as const;
+    type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['body'];
+
+    // @ts-expect-error a date travels as a string
+    const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
+    expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.date() (use z.iso.datetime())'>>();
   });
 
   test('a z.null() as a union option is a type error, and inside z.json() it is not', () => {
@@ -338,268 +356,160 @@ type DefTypeThatIs<Kind> = {
 /** An Event declared with one schema as a field of its body, and what `generate` says of it. */
 type Row = { readonly name: string; readonly event: () => Event };
 
-/** Each refused def type has rows, each declared under `@ts-expect-error`. */
-const refusedRows: Record<DefTypeThatIs<'refused'>, readonly Row[]> = {
-  default: [
-    {
-      name: '.default()',
-      // @ts-expect-error a Contract declares no defaults
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().default('a') }) }),
-    },
-    {
-      name: '.default()',
-      // @ts-expect-error a Contract declares no defaults
-      event: () => defineEvent({ ...base, body: z.object({ f: zm._default(zm.string(), 'a') }) }),
-    },
-  ],
-  prefault: [
-    {
-      name: '.prefault()',
-      // @ts-expect-error a Contract declares no defaults
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().prefault('a') }) }),
-    },
-  ],
-  catch: [
-    {
-      name: '.catch()',
-      // @ts-expect-error a Contract declares no fallbacks
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().catch('a') }) }),
-    },
-  ],
-  readonly: [
-    {
-      name: '.readonly()',
-      // @ts-expect-error a Contract declares no freezing
-      event: () => defineEvent({ ...base, body: z.object({ f: z.object({}).readonly() }) }),
-    },
-  ],
-  transform: [
-    {
-      name: '.transform()',
-      // @ts-expect-error what a transform produces is not what travels
-      event: () => defineEvent({ ...base, body: z.object({ f: z.transform((text) => text) }) }),
-    },
-  ],
-  pipe: [
-    {
-      name: '.transform()',
-      // @ts-expect-error what a transform produces is not what travels
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().transform(Number) }) }),
-    },
-    {
-      name: '.preprocess()',
-      event: () =>
-        // @ts-expect-error what a preprocess reads is not what travels
-        defineEvent({ ...base, body: z.object({ f: z.preprocess(String, z.string()) }) }),
-    },
-    {
-      name: '.pipe()',
-      // @ts-expect-error a pipe has two shapes
-      event: () => defineEvent({ ...base, body: z.object({ f: z.string().pipe(z.string()) }) }),
-    },
-    {
-      name: 'z.codec()',
-      // @ts-expect-error a codec has two shapes
-      event: () => defineEvent({ ...base, body: z.object({ f: aCodec }) }),
-    },
-    {
-      name: 'z.stringbool()',
-      // @ts-expect-error a stringbool reads text as a boolean
-      event: () => defineEvent({ ...base, body: z.object({ f: z.stringbool() }) }),
-    },
-    {
-      name: 'z.codec()',
-      // @ts-expect-error an Open Enum’s Reader is a codec
-      event: () => defineEvent({ ...base, body: z.object({ f: openEnumReader(['a']) }) }),
-    },
-  ],
-  custom: [
-    {
-      name: 'z.custom()',
-      // @ts-expect-error a custom schema has no shape
-      event: () => defineEvent({ ...base, body: z.object({ f: z.custom<string>() }) }),
-    },
-  ],
-  date: [
-    {
-      name: 'z.date()',
-      // @ts-expect-error a date travels as a string
-      event: () => defineEvent({ ...base, body: z.object({ f: z.date() }) }),
-    },
-    {
-      name: 'z.date()',
-      // @ts-expect-error a date travels as a string
-      event: () => defineEvent({ ...base, body: z.object({ f: z.coerce.date() }) }),
-    },
-  ],
-  null: [
-    {
-      name: 'z.null()',
-      // @ts-expect-error null is written .nullable()
-      event: () => defineEvent({ ...base, body: z.object({ f: z.null() }) }),
-    },
-    {
-      name: 'z.null()',
-      // @ts-expect-error null is written .nullable()
-      event: () => defineEvent({ ...base, body: z.object({ f: z.union([z.string(), z.null()]) }) }),
-    },
-  ],
-  undefined: [
-    {
-      name: 'z.undefined()',
-      // @ts-expect-error undefined is written .nullable()
-      event: () => defineEvent({ ...base, body: z.object({ f: z.undefined() }) }),
-    },
-  ],
-  any: [
-    {
-      name: 'z.any()',
-      // @ts-expect-error any has no shape
-      event: () => defineEvent({ ...base, body: z.object({ f: z.any() }) }),
-    },
-  ],
-  unknown: [
-    {
-      name: 'z.unknown()',
-      // @ts-expect-error unknown has no shape
-      event: () => defineEvent({ ...base, body: z.object({ f: z.unknown() }) }),
-    },
-  ],
-  bigint: [
-    {
-      name: 'z.bigint()',
-      // @ts-expect-error a bigint is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.bigint() }) }),
-    },
-    {
-      name: 'z.bigint()',
-      // @ts-expect-error a bigint is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.coerce.bigint() }) }),
-    },
-  ],
-  symbol: [
-    {
-      name: 'z.symbol()',
-      // @ts-expect-error a symbol is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.symbol() }) }),
-    },
-  ],
-  void: [
-    {
-      name: 'z.void()',
-      // @ts-expect-error void is no value
-      event: () => defineEvent({ ...base, body: z.object({ f: z.void() }) }),
-    },
-  ],
-  never: [
-    {
-      name: 'z.never()',
-      // @ts-expect-error never is no value
-      event: () => defineEvent({ ...base, body: z.object({ f: z.never() }) }),
-    },
-  ],
-  nan: [
-    {
-      name: 'z.nan()',
-      // @ts-expect-error NaN is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.nan() }) }),
-    },
-  ],
-  map: [
-    {
-      name: 'z.map()',
-      // @ts-expect-error a Map is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.map(z.string(), z.string()) }) }),
-    },
-  ],
-  set: [
-    {
-      name: 'z.set()',
-      // @ts-expect-error a Set is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.set(z.string()) }) }),
-    },
-  ],
-  file: [
-    {
-      name: 'z.file()',
-      // @ts-expect-error a File is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.file() }) }),
-    },
-  ],
-  promise: [
-    {
-      name: 'z.promise()',
-      // @ts-expect-error a Promise is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.promise(z.string()) }) }),
-    },
-  ],
-  function: [
-    {
-      name: 'z.function()',
-      // @ts-expect-error a function is not JSON
-      event: () => defineEvent({ ...base, body: z.object({ f: z.function() }) }),
-    },
-  ],
-  success: [
-    {
-      name: 'z.success()',
-      // @ts-expect-error a success flag is not what travels
-      event: () => defineEvent({ ...base, body: z.object({ f: z.success(z.string()) }) }),
-    },
-  ],
-  // biome-ignore lint/style/useNamingConvention: zod's name of the def type
-  template_literal: [
-    {
-      name: 'z.templateLiteral()',
-      // @ts-expect-error a template literal has no shape
-      event: () => defineEvent({ ...base, body: z.object({ f: aTemplateLiteral }) }),
-    },
-  ],
-};
+/** A schema that holds a refused construct, and the construct as the Not allowed list names it. */
+type RefusedRow = { readonly name: string; readonly schema: core.$ZodType };
 
+/** Each refused def type has rows. */
 const aCodec = z.codec(z.string(), z.number(), { decode: Number, encode: String });
 const aTemplateLiteral = z.templateLiteral([z.string(), '-', z.number()]);
 
-/** Refused beside their def type, which is otherwise walked: coercion and a catchall. */
-const refusedBesideRows: readonly Row[] = [
+const refusedRows = {
+  default: [
+    { name: '.default()', schema: z.object({ f: z.string().default('a') }) },
+    { name: '.default()', schema: z.object({ f: zm._default(zm.string(), 'a') }) },
+  ],
+  prefault: [{ name: '.prefault()', schema: z.object({ f: z.string().prefault('a') }) }],
+  catch: [{ name: '.catch()', schema: z.object({ f: z.string().catch('a') }) }],
+  readonly: [{ name: '.readonly()', schema: z.object({ f: z.object({}).readonly() }) }],
+  transform: [{ name: '.transform()', schema: z.object({ f: z.transform((text) => text) }) }],
+  pipe: [
+    { name: '.transform()', schema: z.object({ f: z.string().transform(Number) }) },
+    { name: '.preprocess()', schema: z.object({ f: z.preprocess(String, z.string()) }) },
+    { name: '.pipe()', schema: z.object({ f: z.string().pipe(z.string()) }) },
+    { name: 'z.codec()', schema: z.object({ f: aCodec }) },
+    { name: 'z.stringbool()', schema: z.object({ f: z.stringbool() }) },
+    { name: 'z.codec()', schema: z.object({ f: openEnumReader(['a']) }) },
+  ],
+  custom: [{ name: 'z.custom()', schema: z.object({ f: z.custom<string>() }) }],
+  date: [
+    { name: 'z.date()', schema: z.object({ f: z.date() }) },
+    { name: 'z.date()', schema: z.object({ f: z.coerce.date() }) },
+  ],
+  null: [
+    { name: 'z.null()', schema: z.object({ f: z.null() }) },
+    { name: 'z.null()', schema: z.object({ f: z.union([z.string(), z.null()]) }) },
+  ],
+  undefined: [{ name: 'z.undefined()', schema: z.object({ f: z.undefined() }) }],
+  any: [{ name: 'z.any()', schema: z.object({ f: z.any() }) }],
+  unknown: [{ name: 'z.unknown()', schema: z.object({ f: z.unknown() }) }],
+  bigint: [
+    { name: 'z.bigint()', schema: z.object({ f: z.bigint() }) },
+    { name: 'z.bigint()', schema: z.object({ f: z.coerce.bigint() }) },
+  ],
+  symbol: [{ name: 'z.symbol()', schema: z.object({ f: z.symbol() }) }],
+  void: [{ name: 'z.void()', schema: z.object({ f: z.void() }) }],
+  never: [{ name: 'z.never()', schema: z.object({ f: z.never() }) }],
+  nan: [{ name: 'z.nan()', schema: z.object({ f: z.nan() }) }],
+  map: [{ name: 'z.map()', schema: z.object({ f: z.map(z.string(), z.string()) }) }],
+  set: [{ name: 'z.set()', schema: z.object({ f: z.set(z.string()) }) }],
+  file: [{ name: 'z.file()', schema: z.object({ f: z.file() }) }],
+  promise: [{ name: 'z.promise()', schema: z.object({ f: z.promise(z.string()) }) }],
+  function: [{ name: 'z.function()', schema: z.object({ f: z.function() }) }],
+  success: [{ name: 'z.success()', schema: z.object({ f: z.success(z.string()) }) }],
+  // biome-ignore lint/style/useNamingConvention: zod's name of the def type
+  template_literal: [{ name: 'z.templateLiteral()', schema: z.object({ f: aTemplateLiteral }) }],
+} as const satisfies Record<DefTypeThatIs<'refused'>, readonly RefusedRow[]>;
+
+/** Refused beside their def type, which is otherwise walked: coercion and a catchall of a typed schema or `z.any()`. */
+const refusedBesideRows = [
+  { name: 'z.coerce.*', schema: z.object({ f: z.coerce.string() }) },
+  { name: 'z.coerce.*', schema: z.object({ f: z.coerce.number() }) },
+  { name: 'z.coerce.*', schema: z.object({ f: z.coerce.boolean() }) },
+  { name: 'z.coerce.*', schema: z.object({ f: zm.coerce.number() }) },
+  { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.string()) }) },
+  { name: '.catchall()', schema: z.object({ f: z.object({}).catchall(z.any()) }) },
+  { name: '.catchall()', schema: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) },
+] as const satisfies readonly RefusedRow[];
+
+/** A refused construct inside each kind of schema the types walk, so the walk drops none. */
+const refusedInsideRows = [
+  { name: 'z.date()', schema: z.object({ f: z.object({ at: z.date() }) }) },
+  { name: 'z.date()', schema: z.object({ f: z.array(z.date()) }) },
+  { name: 'z.date()', schema: z.object({ f: z.union([z.string(), z.date()]) }) },
   {
-    name: 'z.coerce.*',
-    // @ts-expect-error a Contract declares no coercion
-    event: () => defineEvent({ ...base, body: z.object({ f: z.coerce.string() }) }),
+    name: 'z.date()',
+    schema: z.object({
+      f: z.discriminatedUnion('kind', [z.object({ kind: z.literal('a'), at: z.date() })]),
+    }),
+  },
+  { name: 'z.date()', schema: z.object({ f: z.record(z.string(), z.date()) }) },
+  {
+    name: '.transform()',
+    schema: z.object({
+      f: z.record(
+        z.string().transform((text) => text),
+        z.string(),
+      ),
+    }),
+  },
+  { name: 'z.date()', schema: z.object({ f: z.tuple([z.date()]) }) },
+  { name: 'z.date()', schema: z.object({ f: z.tuple([z.string()], z.date()) }) },
+  {
+    name: 'z.date()',
+    schema: z.object({ f: z.intersection(z.object({ a: z.date() }), z.object({ b: z.string() })) }),
   },
   {
-    name: 'z.coerce.*',
-    // @ts-expect-error a Contract declares no coercion
-    event: () => defineEvent({ ...base, body: z.object({ f: z.coerce.number() }) }),
+    name: 'z.date()',
+    schema: z.object({ f: z.intersection(z.object({ a: z.string() }), z.object({ b: z.date() })) }),
   },
-  {
-    name: 'z.coerce.*',
-    // @ts-expect-error a Contract declares no coercion
-    event: () => defineEvent({ ...base, body: z.object({ f: z.coerce.boolean() }) }),
-  },
-  {
-    name: 'z.coerce.*',
-    // @ts-expect-error a Contract declares no coercion, whichever zod it is written with
-    event: () => defineEvent({ ...base, body: z.object({ f: zm.coerce.number() }) }),
-  },
-  {
-    name: '.catchall()',
-    // @ts-expect-error a catchall is dynamic keys, written z.record()
-    event: () => defineEvent({ ...base, body: z.object({ f: z.object({}).catchall(z.string()) }) }),
-  },
-  {
-    name: '.catchall()',
-    event: () =>
-      // @ts-expect-error a catchall is dynamic keys, written z.record()
-      defineEvent({ ...base, body: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) }),
-  },
-];
+  { name: 'z.date()', schema: z.object({ f: z.lazy(() => z.date()) }) },
+  { name: 'z.date()', schema: z.object({ f: z.date().nullable() }) },
+  { name: 'z.date()', schema: z.object({ f: z.date().optional() }) },
+  { name: 'z.date()', schema: z.object({ f: z.date().optional().nonoptional() }) },
+] as const satisfies readonly RefusedRow[];
+
+type RefusedRows =
+  | (typeof refusedRows)[keyof typeof refusedRows][number]
+  | (typeof refusedBesideRows)[number]
+  | (typeof refusedInsideRows)[number];
+
+/** What an Event's body is judged by, as the editor reads it, when its body is one schema. */
+type BodyOf<Schema extends core.$ZodType> = Parameters<
+  typeof defineEvent<{
+    readonly name: 'Probed';
+    readonly version: 1;
+    readonly visibility: 'internal';
+    readonly description: 'Probed';
+    readonly body: Schema;
+  }>
+>[0]['body'];
+
+/** The sentences of a body's type error that say `not allowed`. */
+type RefusalsOf<Schema extends core.$ZodType> = Extract<
+  keyof BodyOf<Schema>,
+  `not allowed: ${string}`
+>;
+
+/** Whether a row's type error names exactly the construct the row names, as `generate` does. */
+type NamesItsConstruct<Row extends RefusedRow> = [RefusalsOf<Row['schema']>] extends [never]
+  ? false
+  : [RefusalsOf<Row['schema']>] extends [
+        `not allowed: ${Row['name']}` | `not allowed: ${Row['name']} (use ${string})`,
+      ]
+    ? true
+    : false;
+
+/** The names of the rows whose type error is missing, or names another construct. */
+type Misnamed<Row extends RefusedRow> = Row extends unknown
+  ? NamesItsConstruct<Row> extends true
+    ? never
+    : Row['name']
+  : never;
 
 describe('every construct the types refuse', () => {
-  test.each([...Object.values(refusedRows).flat(), ...refusedBesideRows])(
+  test('each type error names the construct its row names, and no row is left without one', () => {
+    expectTypeOf<Misnamed<RefusedRows>>().toEqualTypeOf<never>();
+  });
+
+  test.each([
+    ...Object.values(refusedRows).flat(),
+    ...refusedBesideRows,
+    ...refusedInsideRows,
+  ] as readonly RefusedRow[])(
     '$name fails generate with the construct its type error names',
-    ({ name, event }) => {
-      const failures = failuresOfEvent(event());
+    ({ name, schema }) => {
+      const body: Parameters<typeof defineEvent>[0] = { ...base, body: schema };
+      const failures = failuresOfEvent(defineEvent(body));
 
       expect(failures).toContainEqual(
         expect.objectContaining({ kind: 'not-allowed', construct: name }),

@@ -12,18 +12,20 @@ import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
 import { elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
-import { bindingOf, fileOf, siblingOf } from './names.ts';
+import { bindingOf, fileOf, providedOpeningOf, siblingOf } from './names.ts';
 import { partsLinesOf } from './schema-lines.ts';
 
 /**
- * An exported Endpoint rebuilt from its Snapshot entry, so its Input, Success and Rejections type
- * as the Service's do: its Input as declared, since Consumers write what the Service reads.
+ * An exported Endpoint rebuilt from its Snapshot entry and marked as the Service's, so its Input,
+ * Success and Rejections type as the Service's do: its Input as declared, since Consumers write
+ * what the Service reads.
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
   snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
 ): SchemaFile {
   const { endpoint } = exported;
+  const packaged = { kind: 'endpoint', name: endpoint.name } as const;
   const needs = loomNeeds();
   const rejections = ownRejectionsOf(endpoint, snapshot);
   const guards = endpoint.guards.map(({ guard }) => siblingOf({ kind: 'guard', name: guard }));
@@ -31,20 +33,20 @@ export function endpointModuleOf(
     .filter(isDeclaredRejection)
     .map(({ code }) => siblingOf({ kind: 'rejection', code }));
   const file = packageModuleOf({
-    path: fileOf({ kind: 'endpoint', name: endpoint.name }),
-    body: endpointBodyOf({ ...exported, provider: snapshot.name }, rejections, needs),
+    path: fileOf(packaged),
+    body: [
+      providedOpeningOf(packaged, snapshot.name),
+      ...endpointBodyOf(exported, rejections, needs),
+    ],
     siblings: [...guards, ...declared],
     needs,
   });
   return { file, defUses: [...needs.defs.values()] };
 }
 
-/**
- * Its Success and Rejections as readers, since Consumers read them; its Guards attached, and the
- * Provider that exports it named, so a Group never lists it as the Service's own.
- */
+/** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */
 function endpointBodyOf(
-  { id, endpoint, provider }: ExportedEndpoint & { readonly provider: string },
+  { id, endpoint }: ExportedEndpoint,
   rejections: readonly ListedRejection[],
   needs: Needs,
 ): readonly string[] {
@@ -52,7 +54,6 @@ function endpointBodyOf(
   const reader: Writing = { mode: 'reader', needs };
   const listed = rejections.map(rejectionNameOf);
   return [
-    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.providedEndpoint(${stringLiteralOf(provider)}, {`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),

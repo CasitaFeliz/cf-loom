@@ -37,13 +37,20 @@ type PipeOutRefusal<Def> = Def extends { readonly out: infer Out }
 /** Whether a schema reads more than it writes, as `z.coerce.*` does: its input type is `unknown`. */
 type IsCoerced<Schema> = unknown extends core.input<Schema & core.$ZodType> ? true : false;
 
-/** Whether an object takes keys beyond its fields, as `.catchall()` does: its config's output is indexed. */
+/** Whether a type is `any`, which no other type is as `0` is assignable to its intersection with `1`. */
+type IsAny<Value> = 0 extends 1 & Value ? true : false;
+
+/**
+ * Whether an object takes keys beyond its fields, as `.catchall()` does: its config's output is
+ * indexed by a typed schema or `any`. A catchall of `unknown` is a loose object's output, which
+ * TypeScript cannot tell from it.
+ */
 type HasCatchall<Schema> = Schema extends {
   readonly _zod: { readonly config: { readonly out: infer Out } };
 }
   ? string extends keyof Out
     ? unknown extends Out[string]
-      ? false
+      ? IsAny<Out[string]>
       : true
     : false
   : false;
@@ -90,10 +97,18 @@ type ChildrenOf<Schema, Def> = Def extends { readonly type: 'object'; readonly s
       ? IsJson<Schema> extends true
         ? never
         : Option
-      : Def extends { readonly type: 'record'; readonly valueType: infer Value }
-        ? Value
-        : Def extends { readonly type: 'tuple'; readonly items: readonly (infer Item)[] }
-          ? Item
+      : Def extends {
+            readonly type: 'record';
+            readonly keyType: infer Key;
+            readonly valueType: infer Value;
+          }
+        ? Key | Value
+        : Def extends {
+              readonly type: 'tuple';
+              readonly items: readonly (infer Item)[];
+              readonly rest: infer Rest;
+            }
+          ? Item | Exclude<Rest, null>
           : Def extends {
                 readonly type: 'intersection';
                 readonly left: infer Left;
