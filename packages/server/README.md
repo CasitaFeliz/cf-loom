@@ -4,6 +4,8 @@
 
 ## Serving
 
+A Service without messaging serves HTTP alone:
+
 ```ts
 // src/main.ts
 import { serve } from '@cf-loom/server';

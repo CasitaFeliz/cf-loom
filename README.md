@@ -11,7 +11,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declaring a Contract, an Application or a Definitions Package |
 | [`@cf-loom/handlers`](packages/handlers/README.md) | Services | Implementing a Contract's Endpoints, Guards, Commands and Subscriptions, and calling the Handlers directly in tests |
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | Answering a Contract's Endpoints over HTTP with their Handlers |
-| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The adapter that connects `serve` to `node:http` |
+| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The server's adapter for `node:http` |
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a broker plan |
