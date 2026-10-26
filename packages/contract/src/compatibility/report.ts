@@ -25,17 +25,18 @@ export type ChangeSite =
    * it before or after the change, or Private when none does, or Public in a Definitions Package.
    */
   | { readonly kind: 'code'; readonly code: string; readonly visibility: Visibility }
-  /**
-   * A Subscription or a Dependency by name, Private since no Consumer relies on what a Service
-   * itself consumes; a Service's Guard by name, with the widest Visibility of the Endpoints that
-   * attach it; or a Definitions Package's export or Guard by name, Public since the Services that
-   * import it may use all of it.
-   */
+  /** A Subscription or a Dependency by name, Private since no Consumer relies on what a Service itself consumes. */
   | {
-      readonly kind: 'subscription' | 'dependency' | 'export' | 'guard';
+      readonly kind: 'subscription' | 'dependency';
       readonly name: string;
       readonly visibility: Visibility;
     }
+  /** A Service's Guard by name, with the widest Visibility of the Endpoints that attach it, or a Definitions Package's, Public. */
+  | { readonly kind: 'guard'; readonly name: string; readonly visibility: Visibility }
+  /** A Service's Group by name, with the widest Visibility of the Endpoints and Events that are not Retired and that it lists, Private when none. */
+  | { readonly kind: 'group'; readonly name: string; readonly visibility: Visibility }
+  /** A Definitions Package's export by name, Public since the Services that import it may use all of it. */
+  | { readonly kind: 'export'; readonly name: string; readonly visibility: Visibility }
   /**
    * A Standard Rejection by name, whose resolved code the Snapshot records; its Visibility is the
    * widest of the Endpoints that list either code, or Private when none does, or Public in a
@@ -125,7 +126,9 @@ export type Difference =
   | { readonly kind: 'rejection-added'; readonly code: string }
   /** A code an Endpoint or a Guard no longer answers. */
   | { readonly kind: 'rejection-removed'; readonly code: string }
-  /** An Endpoint's, Message Version's, Guard's or Subscription's description changed. */
+  /** A Deprecated Endpoint's `deprecatedAt` moved: its `Deprecation` header names another instant. */
+  | { readonly kind: 'deprecation-moved'; readonly from: string; readonly to: string }
+  /** An Endpoint's, Message Version's, Guard's, Subscription's or Group's description changed. */
   | { readonly kind: 'description-changed' }
   /** An Endpoint, Message Version or Subscription moved to another Group. */
   | { readonly kind: 'group-changed'; readonly from: string; readonly to: string }

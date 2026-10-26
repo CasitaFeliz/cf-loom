@@ -4,15 +4,15 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 ## Where it lives
 
-- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version`; `cf-loom package` writes the declared Snapshot into the package it writes, without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Dependency it declares, each as the Snapshot records it with `events`, the identities of the Provider's Events its Subscriptions receive, sorted (empty for an Application), and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, into which `publish` writes `version`, `cfLoom` (with `dependencies` empty) and `peerDependencies` (a caret on each version of `zod` and `@cf-loom/contract` installed beside the Root), and beside which it adds `snapshot.json`, listed in its `files` when it has them.
+- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version` and `generator`; `cf-loom package` writes the declared Snapshot into the package it writes, with the `generator` of the CLI that runs it and without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Dependency it declares, each as the Snapshot records it with `events`, the identities of the Provider's Events its Subscriptions receive, sorted (empty for an Application), and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, into which `publish` writes `version`, `cfLoom` (with `dependencies` empty) and `peerDependencies` (a caret on each version of `zod` and `@cf-loom/contract` installed beside the Root), and beside which it adds `snapshot.json`, listed in its `files` when it has them.
 - A Service's Contract Package also exports `contract.exportedSnapshot`, the Snapshot cut to what the package exports, keyed as here, with `format` and no other heading (see [The Contract Package](ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). The client and `@cf-loom/testing` read Snapshot nodes from it at runtime, so they too read every format the CLI ever wrote, as the Compatibility Check does, and refuse any other, never reading it as far as it goes (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README).
-- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to package.json, so every Contract change shows up in review. It is built offline, a function of the source and the installed packages and, for each Deprecated Endpoint, of the `deprecatedAt` in the committed file, or of the clock otherwise (see [Endpoints](#endpoints)). `cf-loom verify` fails if it differs from what `generate` would write, apart from `generator`, so upgrading the CLI alone never fails it.
-- The declared Snapshot leaves out `version` and the history only the Baseline knows: the version each Retired Element was Retired in, tombstones of deleted Retired Elements, removed codes and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, and keep its `deprecatedAt`, so the published `snapshot.json` is complete.
+- `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to package.json, so every Contract change shows up in review. It is built offline, a function of the source and the installed packages. `cf-loom verify` fails if it differs from what `generate` would write.
+- The declared Snapshot leaves out `version`, `generator` and the history only the Baseline knows: the version each Retired Element was Retired in, tombstones of deleted Retired Elements, removed codes (each with the `removedIn` that first published it removed) and removed Subscriptions. `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
 - The Baseline is always read from the registry, never from the committed file (see [The Baseline](COMPATIBILITY.md#the-baseline)).
 
 ## Canonical form
 
-- JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
+- JSON, UTF-8, two-space indentation, a final newline. The heading comes first, in this order: `format`, `kind`, `name`, then `version` and `generator` where the file holds them; the other top-level keys follow, and every nested key, sorted by code point. The same Contract always produces the same bytes, apart from `version` and `generator`, which only a published or packaged file holds.
 - A Snapshot's JSON nests at most 256 levels, the outermost object being the first; `generate` fails on a Contract whose Snapshot would nest deeper, so every Snapshot it writes reads back.
 - The Snapshot writes one spelling for one shape. A text part (`input.query`, `input.headers`, `success.headers`, a Guard's `demands.headers` and `demands.query`) is always an open object, with no field when none is declared, so a part declared with `z.object({})` and one not declared write the same Snapshot. A def is never `nullable`: `.nullable()` belongs to a use, so `.meta({ id })` on a schema that admits `null` fails `generate` (put it on the schema inside, and `.nullable()` on each use); every `ref` to a def carries its own `nullable`.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id`, and `enum.values` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a union's `options`, since zod's union returns the first option that parses, a Qualifier's list) keep it.
@@ -27,21 +27,24 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
   "name": "orders-service",
   "version": "3.4.0",
   "generator": "@cf-loom/cli@2.1.0",
-  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" },
+  "codes": {},
+  "commands": {},
   "defs": {},
+  "dependencies": {},
   "endpoints": {},
   "events": {},
-  "commands": {},
+  "groups": { "orders": { "description": "Order lifecycle" } },
   "guards": {},
-  "codes": {},
-  "subscriptions": {},
-  "dependencies": {}
+  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" },
+  "subscriptions": {}
 }
 ```
 
-- `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file. From the first released format on, anything this specification adds or changes is a new format.
-- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, a Standard Rejection names or an export names, or a Guard an Endpoint attaches, a Guard lists or an export names; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; a text part that is not an object, a def that is `nullable`, and an Endpoint's `params` that are not its identity's `{}`, each once, or an `input.params` that is not `null` for a path without params, or not exactly those params as required fields; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
+- `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote a published or packaged file; the declared file has none. From the first released format on, anything this specification adds or changes is a new format.
+- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, a Standard Rejection names or an export names, a Guard an Endpoint attaches, a Guard lists or an export names, or the Group a declared Endpoint, Event, Command or Subscription records; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; a text part that is not an object, a def that is `nullable`, and an Endpoint's `params` that are not its identity's `{}`, each once, or an `input.params` that is not `null` for a path without params, or not exactly those params as required fields; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
 - `kind` is `service`, `application` or `definitions`. `name` is a Service's or Application's Root name, and a Definitions Package's package.json name, scope included. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `exports` (what its Root file exports, by name: a Guard by its name, a Rejection by its code, a shared schema's node), `guards`, `codes`, `standardRejections` and `defs`.
+
+A Service's `groups` holds each of its Groups by name with its `description`, which is Neutral; every `group` a declared Element or Subscription records is held there, and every Group lists at least one Element or Subscription.
 
 A Definitions Package's Snapshot:
 
@@ -52,7 +55,7 @@ A Definitions Package's Snapshot:
   "name": "@org/definitions",
   "version": "4.2.0",
   "generator": "@cf-loom/cli@2.1.0",
-  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" },
+  "codes": {},
   "defs": {},
   "exports": {
     "apiKey": { "kind": "guard", "guard": "apiKey" },
@@ -60,7 +63,7 @@ A Definitions Package's Snapshot:
     "unauthenticated": { "kind": "rejection", "code": "UNAUTHENTICATED" }
   },
   "guards": {},
-  "codes": {}
+  "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" }
 }
 ```
 
@@ -110,7 +113,7 @@ A Definitions Package's Snapshot:
 - `guards` lists the Endpoint's Attachments in order: each Guard by name, with its Qualifier as canonical JSON, or `null` when the Guard declares no `qualifier`.
 - `input.headers` and `input.query` are resolved: the Endpoint's own plus every attached Guard's demands, header names lower-cased. Two declarations of one name agree on the shape (see [Headers, path and query](COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md); the `description`, `examples` and `origin` written are the first declaration's, the Endpoint's own before its Guards', in Attachment order.
 - `rejections` is resolved too: the Endpoint's own, `notFound` included when it lists it, its Guards', and the invalid-input and not-implemented Rejections, by code.
-- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant (`"deprecatedAt": "2026-10-17T09:30:00Z"`): `generate` takes it from the committed `contract.snapshot.json` when it is written that way, to the second, else stamps it; `check` and `publish` keep the Baseline's `deprecatedAt` when it has one, so the published Snapshot carries it too. It is Neutral; `generate` also writes it into the Handler map, from which `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
+- A Deprecated Endpoint carries `deprecatedAt`, an ISO 8601 UTC instant to the second (`"deprecatedAt": "2026-10-17T09:30:00Z"`), the one its declaration states, which may lie in the future. It is Neutral, and moving it is a Neutral Change, `deprecation-moved`; `serve` sends it in the `Deprecation` header (see [Lifecycle](packages/contract/README.md#lifecycle) in the contract README).
 
 ## Messages
 
@@ -147,11 +150,11 @@ Subjects, Stream names and Durable consumer names are derived from these identit
 
 ```json
 "codes": {
-  "ORDER_LOCKED": { "origin": "local", "status": 409, "message": "The order can no longer be changed", "body": {}, "removed": false }
+  "ORDER_LOCKED": { "origin": "local", "status": 409, "message": "The order can no longer be changed", "body": {} }
 }
 ```
 
-Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. Each code has one declaration (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md), whose status, message, body and `origin` are written. A Service's Snapshot writes the codes its Endpoints answer, themselves or through the Guards they reach, and every code a Standard Rejection has had; a Definitions Package's other codes stay out; a Definitions Package's own Snapshot writes every code it exports, or its Guards answer. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. `removed` marks one no Endpoint answers any more, or, in a Definitions Package, one it no longer declares. `standardRejections` names the code each Standard Rejection resolved to; its status, message, `origin` and body are that code's, under `codes`, and only the invalid-input Rejection has a body (see [Rejections](packages/contract/README.md#rejections) in the contract README).
+Every code that ever existed in the Contract stays here, with the status and body it last had and its `origin`: the Contract's own codes, those reached through imported Guards, and every code a Standard Rejection has had. Each code has one declaration (see [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md), whose status, message, body and `origin` are written. A Service's Snapshot writes the codes its Endpoints answer, themselves or through the Guards they reach, and every code a Standard Rejection has had; a Definitions Package's other codes stay out; a Definitions Package's own Snapshot writes every code it exports, or its Guards answer. The allowed `status` values are in [Rejections](COMPATIBILITY.md#rejections) in COMPATIBILITY.md. A published Snapshot keeps a code no Endpoint answers any more, or, in a Definitions Package, one it no longer declares, with `removedIn`, the version that first published it removed, a prerelease included; the declared Snapshot has none. `standardRejections` names the code each Standard Rejection resolved to; its status, message, `origin` and body are that code's, under `codes`, and only the invalid-input Rejection has a body (see [Rejections](packages/contract/README.md#rejections) in the contract README).
 
 ## Subscriptions and Dependencies
 

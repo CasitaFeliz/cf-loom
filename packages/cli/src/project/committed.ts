@@ -8,10 +8,10 @@ import { type Tooling, tooling } from './failures.ts';
 /** The file `generate` writes the declared Snapshot to, next to `cf-loom.config.ts`. */
 export const snapshotFile = 'contract.snapshot.json';
 
-/** The committed `contract.snapshot.json` as read: none, its bytes and their JSON, or no JSON. */
+/** The committed `contract.snapshot.json` as read: none, its bytes, or no JSON. */
 export type Committed =
   | { readonly kind: 'none' }
-  | { readonly kind: 'json'; readonly bytes: Buffer; readonly parsed: unknown }
+  | { readonly kind: 'json'; readonly bytes: Buffer }
   | { readonly kind: 'no-json'; readonly reason: string };
 
 /**
@@ -40,7 +40,7 @@ function jsonOf(bytes: Buffer, parsed: unknown): Committed | Tooling {
   if (format.kind === 'newer-format') {
     return tooling(newerFormatTextOf(snapshotFile, format.format));
   }
-  return { kind: 'json', bytes, parsed };
+  return { kind: 'json', bytes };
 }
 
 function bytesOf(path: string, directory: string): Buffer | Tooling {

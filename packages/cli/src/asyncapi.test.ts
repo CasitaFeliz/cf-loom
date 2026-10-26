@@ -241,11 +241,11 @@ describe('cf-loom asyncapi', () => {
     expect(valueAt(document, 'info', 'version')).toBe('0.0.0');
   });
 
-  test('the document’s tags are the Groups of its Events that are not Retired, each once, in code point order', () => {
+  test('the document’s tags are the Groups of its Events that are not Retired, each once, in code point order, with their descriptions', () => {
     expect(valueAt(document, 'info', 'tags')).toEqual([
-      { name: 'notes' },
-      { name: 'orders' },
-      { name: 'trees' },
+      { name: 'notes', description: 'Notes' },
+      { name: 'orders', description: 'Orders' },
+      { name: 'trees', description: 'Trees' },
     ]);
   });
 
@@ -675,7 +675,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused.status).toBe(3);
     expect(refused.stdout).toBe('');
     expect(refused.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 

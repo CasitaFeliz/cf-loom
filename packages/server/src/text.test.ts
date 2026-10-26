@@ -65,7 +65,6 @@ const http = serve(contract, {
     lookup: handle(lookup, (input) => success({ received: input as never })),
   },
   guards: { tenant: handle(tenant, () => admit()) },
-  deprecatedAt: {},
 });
 
 /** What every Handler here answers: the Input it received, part by part. */

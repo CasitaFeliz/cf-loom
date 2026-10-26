@@ -57,6 +57,7 @@ function endpointBodyOf(
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),
+    ...deprecationLinesOf(endpoint),
     ...guardsLinesOf(endpoint.guards),
     ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
@@ -79,6 +80,11 @@ function declaredInputOf({ params, query, headers, body }: EndpointSnapshot['inp
 function identityLinesOf(id: string, endpoint: EndpointSnapshot): readonly string[] {
   const { method, path } = methodAndPathOf(id, endpoint.params);
   return [`  method: ${stringLiteralOf(method)},`, `  path: ${stringLiteralOf(path)},`];
+}
+
+/** The instant a Deprecated Endpoint is Deprecated as of, which `defineEndpoint` requires beside its lifecycle. */
+function deprecationLinesOf({ deprecatedAt }: EndpointSnapshot): readonly string[] {
+  return deprecatedAt === undefined ? [] : [`  deprecatedAt: ${stringLiteralOf(deprecatedAt)},`];
 }
 
 /** The Attachments in order: a Guard bare, or with its Qualifier as the JSON recorded. */

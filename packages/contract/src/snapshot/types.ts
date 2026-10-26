@@ -63,7 +63,6 @@ export type CodeSnapshot = {
   readonly status: number;
   readonly message: string;
   readonly body: SchemaNode | null;
-  readonly removed: boolean;
 };
 
 /** The code each Standard Rejection resolved to; its status, message, origin and body are that code's, under `codes`. */
@@ -88,18 +87,20 @@ export type SubscriptionSnapshot = {
   readonly event: string;
 };
 
+/** A Group by its name: what it is for, which is all a Snapshot keeps of it; each Element and Subscription it lists names it. */
+export type GroupSnapshot = { readonly description: string };
+
 /** What a Contract uses of one Provider: the version it relied on and the Endpoints it selects. */
 export type DependencySnapshot = {
   readonly against: string;
   readonly endpoints: readonly { readonly id: string; readonly name: string }[];
 };
 
-/** What every Snapshot starts with; `version` is left to `publish`. */
+/** What every declared Snapshot starts with; `version` and `generator` are left to `package` and `publish`. */
 type Heading<Kind extends string> = {
   readonly format: SnapshotFormat;
   readonly kind: Kind;
   readonly name: string;
-  readonly generator: string;
 };
 
 /** A map of a Snapshot, keyed by identity or name. */
@@ -108,6 +109,7 @@ export type ByKey<Value> = Readonly<Record<string, Value>>;
 /** The declared Snapshot of a Service's Contract. */
 export type ServiceSnapshot = Heading<'service'> & {
   readonly standardRejections: StandardRejectionsSnapshot;
+  readonly groups: ByKey<GroupSnapshot>;
   readonly defs: ByKey<SchemaNode>;
   readonly endpoints: ByKey<EndpointSnapshot>;
   readonly events: ByKey<EventSnapshot>;

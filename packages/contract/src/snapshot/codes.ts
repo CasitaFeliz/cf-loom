@@ -34,8 +34,8 @@ export function standardRejectionsOf({
 }
 
 /**
- * The codes a Root reaches with their declaration, then every Standard Rejection's code;
- * none is removed, since only the Baseline knows a removed code.
+ * The codes a Root reaches with their declaration, then every Standard Rejection's code; the
+ * declared Snapshot has no removed code, since only the Baseline knows one.
  */
 export function codeSnapshotsOf(
   codes: readonly ValidatedCode[],
@@ -66,7 +66,7 @@ function codeOf(
   const origin = packageOriginOf(from);
   const { status, message } = rejection;
   const body = nodeOf(rejection, 'body') ?? null;
-  return [code, { origin, status, message, body, removed: false }];
+  return [code, { origin, status, message, body }];
 }
 
 function standardCodeOf(
@@ -76,7 +76,7 @@ function standardCodeOf(
   const { name, code, status, message } = standard;
   const origin = standardOriginOf(standard, standardRejectionsSource);
   const body = name === 'invalidInput' ? invalidInputNode(code) : null;
-  return [code, { origin, status, message, body, removed: false }];
+  return [code, { origin, status, message, body }];
 }
 
 function invalidInputNode(code: string): SchemaNode {

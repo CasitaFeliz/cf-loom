@@ -35,7 +35,7 @@ export type Comparison =
  * command that reads the registry acts on the file that was reviewed.
  */
 export async function committedBuiltOf(run: Run): Promise<BuiltProject | Stopped> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

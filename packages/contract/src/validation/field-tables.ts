@@ -1,6 +1,7 @@
 import type {
   Endpoint,
   Guard,
+  Lifecycle,
   QualifiedAttachment,
   Rejection,
   StandardRejectionDeclaration,
@@ -10,6 +11,12 @@ import type { Fields } from './declared-fields.ts';
 
 /** The parts of a Guard's `demands` the Guard demands rule leaves to this one. */
 type Demanded = Pick<NonNullable<Guard['demands']>, 'headers' | 'query'>;
+
+/** An Endpoint with each field optional that the types tie together, whose pairing the rules judge. */
+type EndpointFieldsShape = Omit<Endpoint, 'lifecycle' | 'deprecatedAt'> & {
+  readonly lifecycle?: Lifecycle;
+  readonly deprecatedAt?: string;
+};
 
 /** The fields of an Endpoint. */
 export const endpointFields = {
@@ -25,6 +32,7 @@ export const endpointFields = {
     guards: true,
     rejections: true,
     lifecycle: true,
+    deprecatedAt: true,
   },
   required: {
     kind: true,
@@ -43,10 +51,11 @@ export const endpointFields = {
     visibility: true,
     description: true,
     lifecycle: true,
+    deprecatedAt: true,
   },
   nonBlank: { description: true },
   objects: { input: true, success: true },
-} satisfies Fields<Endpoint>;
+} satisfies Fields<EndpointFieldsShape>;
 
 /** The parts of an Endpoint's `input`. */
 export const inputFields = {

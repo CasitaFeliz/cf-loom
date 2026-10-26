@@ -55,18 +55,13 @@ export function failureExitOf(failure: ProjectFailure): Exit {
   }
 }
 
-/**
- * The stop of a command that writes from the Snapshot when the committed file is no JSON: its
- * author restores or deletes it, since its `deprecatedAt` stamps would be lost.
- */
-export function noJsonExitOf(committed: Committed): Exit | undefined {
+/** The stop of a command that works from the committed Snapshot when it is no JSON, as a merge conflict leaves it. */
+function noJsonExitOf(committed: Committed): Exit | undefined {
   if (committed.kind !== 'no-json') {
     return undefined;
   }
   const { reason } = committed;
-  return toolingError(
-    `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
-  );
+  return toolingError(`${snapshotFile} is no JSON (${reason}): run cf-loom generate`);
 }
 
 /**

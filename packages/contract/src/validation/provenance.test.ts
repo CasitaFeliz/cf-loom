@@ -24,8 +24,6 @@ import {
   validateRoot,
 } from '../internal/index.ts';
 
-const context = { generator: 'test', committed: undefined, now: 0 };
-
 /** A Service whose one Endpoint attaches the Guards, answers the Rejections and returns the body given. */
 function aService(
   { guards = [], rejections = [], body = z.object({ ok: z.boolean() }) }: Reached,
@@ -64,7 +62,7 @@ function snapshotIn(root: Root, packages: readonly ImportedDefinitions[]): Snaps
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, context);
+  return snapshotOf(validated);
 }
 
 function serviceIn(root: Root, packages: readonly ImportedDefinitions[]) {
@@ -319,7 +317,7 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
       root,
       aRootPackage(root, { packages: [p2], rootExports: { apiKey, own } }),
     );
-    const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
+    const snapshot = validated.kind === 'valid' ? snapshotOf(validated) : undefined;
 
     expect(snapshot?.kind === 'definitions' && snapshot.guards['apiKey']?.origin).toBe(
       '@p2/defs@1.0.0',

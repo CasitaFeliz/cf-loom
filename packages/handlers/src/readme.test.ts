@@ -281,7 +281,6 @@ describe('the handlers README', () => {
       guards: { apiKey: apiKeyHandler, permission: permissionHandler },
       commands: {},
       subscriptions: { notifyOnSettled: notifyOnSettledHandler },
-      deprecatedAt: {},
     };
 
     expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<

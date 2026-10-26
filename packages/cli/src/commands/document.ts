@@ -29,7 +29,7 @@ export async function committedServiceOf(
   run: Run,
   noDocumentLineOf: (root: string) => string,
 ): Promise<CommittedService | Stopped> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

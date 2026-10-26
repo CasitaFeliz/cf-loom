@@ -4,7 +4,7 @@ import type { DeprecationNotice, OnDeprecation } from './client-types.ts';
 
 /** Without `onDeprecation`, a Deprecation goes to the console, naming the Provider, the Endpoint and when. */
 export function warnDeprecation({ provider, endpoint, deprecatedAt }: DeprecationNotice): void {
-  console.warn(`${provider}: ${endpoint} is Deprecated since ${deprecatedAt}`);
+  console.warn(`${provider}: ${endpoint} is Deprecated as of ${deprecatedAt}`);
 }
 
 /**

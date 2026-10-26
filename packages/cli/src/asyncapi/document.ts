@@ -8,6 +8,7 @@ import {
   subjectOf,
 } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
+import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeaders, brokerHeadersName } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
@@ -18,7 +19,7 @@ export type AsyncApiDocument = {
   readonly info: {
     readonly title: string;
     readonly version: string;
-    readonly tags: readonly { readonly name: string }[];
+    readonly tags: readonly GroupTag[];
   };
   readonly defaultContentType: string;
   readonly channels: Readonly<Record<string, AsyncApiObject>>;
@@ -43,7 +44,14 @@ export function asyncApiDocumentOf(
   );
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
-    info: { title: snapshot.name, version, tags: tagsOf(published) },
+    info: {
+      title: snapshot.name,
+      version,
+      tags: groupTagsOf(
+        snapshot.groups,
+        published.map(({ event }) => event.group),
+      ),
+    },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
@@ -65,12 +73,6 @@ function publishedVersionsOf(
       const subject = subjectOf(snapshot.name, { kind: 'event', name, version });
       return { identity, name, address: prefixedSubjectOf(prefix, subject), event };
     });
-}
-
-/** The Groups of the written Message Versions, each once, in code point order. */
-function tagsOf(published: readonly PublishedVersion[]): readonly { readonly name: string }[] {
-  const groups = [...new Set(published.map(({ event }) => event.group))];
-  return groups.sort(byCodePoint).map((name) => ({ name }));
 }
 
 /** What each Message Version writes, by its identity, in the order given. */

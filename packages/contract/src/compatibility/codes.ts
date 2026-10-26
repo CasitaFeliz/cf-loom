@@ -1,9 +1,11 @@
-import type {
-  CodeSnapshot,
-  DefinitionsSnapshot,
-  PublishedDefinitionsSnapshot,
-  PublishedServiceSnapshot,
-  ServiceSnapshot,
+import {
+  type CodeSnapshot,
+  type DefinitionsSnapshot,
+  isRemoved,
+  type PublishedCode,
+  type PublishedDefinitionsSnapshot,
+  type PublishedServiceSnapshot,
+  type ServiceSnapshot,
 } from '../snapshot/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
@@ -85,7 +87,7 @@ export function statusDifferencesOf(baseline: number, proposed: number): readonl
  * nothing to compare.
  */
 function comparedDifferencesOf(
-  code: Counterpart<CodeSnapshot>,
+  code: Counterpart<PublishedCode, CodeSnapshot>,
   defs: BothDefs,
 ): readonly Difference[] {
   switch (code.kind) {
@@ -109,16 +111,16 @@ function comparedDifferencesOf(
  * Rejection resolved to, which Services never name.
  */
 function presenceDifferencesOf(
-  code: Counterpart<CodeSnapshot>,
+  code: Counterpart<PublishedCode, CodeSnapshot>,
   standard: ReadonlySet<string>,
 ): readonly Difference[] {
   switch (code.kind) {
     case 'added':
       return [{ kind: 'added' }];
     case 'removed':
-      return code.baseline.removed || standard.has(code.key) ? [] : [{ kind: 'removed' }];
+      return isRemoved(code.baseline) || standard.has(code.key) ? [] : [{ kind: 'removed' }];
     case 'kept':
-      return code.baseline.removed ? [{ kind: 'added' }] : [];
+      return isRemoved(code.baseline) ? [{ kind: 'added' }] : [];
   }
 }
 

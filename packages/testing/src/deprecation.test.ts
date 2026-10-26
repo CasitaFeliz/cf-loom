@@ -22,6 +22,7 @@ const getPayment = defineEndpoint({
   visibility: 'internal',
   description: 'One payment',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   input: { params: z.object({ paymentId: z.string().min(3) }) },
   success: { status: 200, body: z.object({ id: z.string() }) },
   rejections: [notFound],
@@ -36,7 +37,7 @@ const listPayments = defineEndpoint({
   success: { status: 200, body: z.array(z.string()) },
 });
 
-/** The Provider's Contract Package, its Deprecated Endpoint stamped when the clock read `now`. */
+/** The Provider's Contract Package, its Deprecated Endpoints dated as they declare. */
 function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
 ) {
@@ -48,9 +49,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const now = Date.parse('2026-10-17T09:30:00Z');
-  const context = { generator: 'test', packages: [], committed: undefined, now };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -106,6 +105,30 @@ describe('fakeProvider: Deprecation', () => {
     const response = await payments.fetch(new Request('https://payments-service.test/payments/ab'));
 
     expect([response.status, response.headers.get('deprecation')]).toEqual([400, deprecation]);
+  });
+
+  test('a Deprecated Endpoint whose deprecatedAt lies in the future carries Deprecation too', async () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'internal',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const provided = contractPackageOf({ scheduled });
+    const dependency = defineDependency({
+      provider: provided,
+      endpoints: [provided.endpoints.scheduled],
+    });
+    const payments = fakeProvider(dependency);
+    payments.on('scheduled').otherwise((r) => r.success());
+
+    const response = await payments.fetch(new Request('https://payments-service.test/scheduled'));
+
+    expect(response.headers.get('deprecation')).toBe('@32472144000');
   });
 
   test('onDeprecation is told once per method, and never for an Active Endpoint', async () => {

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
   type ContractPackage,
   defineCommand,
@@ -56,21 +56,18 @@ const standardCodes = {
     status: 400,
     message: 'Invalid',
     body: { type: 'object', fields: {} },
-    removed: false,
   },
   [notFoundCode]: {
     origin: 'standard',
     status: 404,
     message: 'Not found',
     body: null,
-    removed: false,
   },
   [notImplementedCode]: {
     origin: 'standard',
     status: 501,
     message: 'No',
     body: null,
-    removed: false,
   },
 } as const satisfies PublishedServiceSnapshot['codes'];
 
@@ -82,6 +79,7 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
+    groups: { orders: { description: 'Order lifecycle' } },
     defs: {},
     endpoints: {},
     events: {},
@@ -179,7 +177,7 @@ const orderLocked = 'ORDER_LOCKED';
 const unauthenticated = 'UNAUTHENTICATED';
 const gone = 'GONE';
 
-const aCode = { origin: 'local', status: 409, message: 'Locked', body: null, removed: false };
+const aCode = { origin: 'local', status: 409, message: 'Locked', body: null };
 
 const retiredEndpoint = { ...anEndpoint, lifecycle: 'retired', retiredIn: '3.0.0' } as const;
 const endpointTombstone = {
@@ -353,9 +351,9 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a Snapshot built from a Contract decodes once it has a version', () => {
+    test('a Snapshot built from a Contract decodes once it has a version and a generator', () => {
       const snapshot = declaredSnapshot();
-      const published = { ...snapshot, version: '1.0.0' };
+      const published = { ...snapshot, ...publishedAt('1.0.0') };
 
       const result = decodedFrom(published);
 
@@ -401,7 +399,7 @@ describe('decodeSnapshot', () => {
         codes: {
           ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
-          [gone]: { ...aCode, status: 410, removed: true },
+          [gone]: { ...aCode, status: 410, removedIn: '3.2.0' },
         },
       });
 
@@ -453,10 +451,10 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a removed code decodes with removed true and the status and body it last had', () => {
+    test('a removed code decodes with its removedIn and the status and body it last had', () => {
       const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removed: true } },
+        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0' } },
       });
 
       const result = roundTrip(published);
@@ -1552,7 +1550,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
     });
 
-    test('a deprecatedAt that is not a stamp is malformed in the Endpoint', () => {
+    test('a deprecatedAt that is not a UTC instant to the second is malformed in the Endpoint', () => {
       const endpoint = { ...anEndpoint, lifecycle: 'deprecated', deprecatedAt: 'yesterday' };
 
       const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
@@ -1782,6 +1780,71 @@ describe('decodeSnapshot', () => {
         expect([service, definitions]).toEqual([malformed, malformed]);
       },
     );
+
+    test.each([
+      { name: 'an Endpoint', section: 'endpoints', key: 'GET /orders/{}', declared: anEndpoint },
+      { name: 'an Event', section: 'events', key: 'OrderPlaced@1', declared: anEvent },
+      { name: 'a Command', section: 'commands', key: 'ChargeCard@1', declared: aCommand },
+      {
+        name: 'a Subscription',
+        section: 'subscriptions',
+        key: 'notifyOnPlaced',
+        declared: {
+          group: 'orders',
+          description: 'Receives it',
+          event: 'orders-service:OrderPlaced@1',
+        },
+      },
+    ])('$name whose Group the Snapshot does not hold is malformed at its group', (element) => {
+      const { section, key, declared } = element;
+
+      const result = serviceWith({ [section]: { [key]: { ...declared, group: 'payments' } } });
+
+      const reason = 'names a Group the Snapshot does not hold: payments';
+      expect(result).toEqual(malformedAt([section, key, 'group'], reason));
+    });
+
+    test('a Snapshot whose Elements are all tombstones holds no Group and decodes', () => {
+      const tombstones = {
+        groups: {},
+        endpoints: { 'GET /orders/{}': endpointTombstone },
+        events: { 'OrderPlaced@1': messageTombstone },
+        commands: { 'ChargeCard@1': messageTombstone },
+        subscriptions: {
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        },
+      };
+
+      const result = serviceWith(tombstones);
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a Group the Snapshot holds and no Element names decodes', () => {
+      const result = serviceWith({
+        groups: { orders: { description: 'Orders' }, spare: { description: 'Spare' } },
+      });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each([
+      ['no description', { orders: {} }],
+      ['a description that is no text', { orders: { description: 1 } }],
+      ['a key it does not define', { orders: { description: 'Orders', tags: [] } }],
+    ])('a Group with %s is malformed at the Group', (_name, groups) => {
+      const result = serviceWith({ groups });
+
+      expect(elementOf(result)).toEqual(['groups', 'orders']);
+    });
+
+    test('a Service without groups is malformed at groups: it is missing', () => {
+      const { groups: _groups, ...withoutGroups } = aService();
+
+      const result = decodedFrom(withoutGroups);
+
+      expect(result).toEqual(malformedAt(['groups'], 'is missing'));
+    });
 
     test('a Guard an Endpoint attaches, or a Guard lists, that guards does not hold is malformed', () => {
       const attaching = { ...anEndpoint, guards: [{ guard: 'apiKey', qualifier: null }] };
@@ -2017,13 +2080,27 @@ describe('decodeSnapshot', () => {
           [gone]: standardCodes[notImplementedCode],
         },
       };
-      const published = publishedSnapshotOf(aService(), proposed, '3.5.0');
+      const published = publishedSnapshotOf(aService(), proposed, publishedAt('3.5.0'));
 
       const result = roundTrip(published);
 
-      expect(published.codes[notImplementedCode]).toMatchObject({ status: 501, removed: true });
+      expect(published.codes[notImplementedCode]).toMatchObject({
+        status: 501,
+        removedIn: '3.5.0',
+      });
       expect(result.kind).toBe('decoded');
     });
+
+    test.each(['3', '3.2', 'v3.2.0', 'soon', 3, null])(
+      'a code whose removedIn is %j is malformed at removedIn',
+      (removedIn) => {
+        const codes = { ...standardCodes, [gone]: { ...aCode, status: 410, removedIn } };
+
+        const result = serviceWith({ codes });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'removedIn']));
+      },
+    );
 
     test('a Success status no Endpoint may declare is malformed in the Endpoint', () => {
       const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, status: 299 } };
@@ -2162,21 +2239,20 @@ function declaredSnapshot() {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, { generator: 'test', committed: undefined, now: 0 });
+  return snapshotOf(validated);
 }
 
 const formatOneFixture = `{
   "codes": {
-    "GONE": { "body": null, "message": "Gone", "origin": "local", "removed": true, "status": 410 },
+    "GONE": { "body": null, "message": "Gone", "origin": "local", "removedIn": "3.2.0", "status": 410 },
     "INVALID_INPUT": {
       "body": { "fields": {}, "type": "object" },
       "message": "Invalid",
       "origin": "standard",
-      "removed": false,
       "status": 400
     },
-    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "removed": false, "status": 404 },
-    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
+    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "status": 404 },
+    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "status": 501 }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
   "defs": {},
@@ -2221,6 +2297,7 @@ const formatOneFixture = `{
   },
   "format": 1,
   "generator": "@cf-loom/cli@2.1.0",
+  "groups": { "orders": { "description": "Order lifecycle" } },
   "guards": {
     "apiKey": {
       "context": null,
@@ -2381,7 +2458,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     const published = examples.map((example) => {
       const file = new URL(`${example}/contract.snapshot.json`, examplesDirectory);
       const declared: Snapshot = JSON.parse(readFileSync(file, 'utf8'));
-      return [example, publishedSnapshotOf(undefined, declared, '1.0.0')] as const;
+      return [example, publishedSnapshotOf(undefined, declared, publishedAt('1.0.0'))] as const;
     });
     return [...published, ['the format-1 fixture', JSON.parse(formatOneFixture)]];
   }
@@ -2448,7 +2525,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
       return undefined;
     }
     const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };
-    return publishedSnapshotOf(undefined, { ...committed, defs }, '1.0.0');
+    return publishedSnapshotOf(undefined, { ...committed, defs }, publishedAt('1.0.0'));
   }
 
   /** What the decoder makes of each order-free array of the probe def reversed or holding an item twice. */

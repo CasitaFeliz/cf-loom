@@ -60,7 +60,6 @@ const handlers = {
     nest: handle(nest, () => success()),
   },
   guards: {},
-  deprecatedAt: {},
 };
 
 const http = serve(contract, handlers);

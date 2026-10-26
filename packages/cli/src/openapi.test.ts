@@ -195,6 +195,7 @@ const orders = [
   "  visibility: 'public',",
   "  description: 'Deletes an order',",
   "  lifecycle: 'deprecated',",
+  "  deprecatedAt: '2026-10-17T09:30:00Z',",
   '  input: { params: z.object({ orderId: z.uuid() }) },',
   '  success: { status: 204 },',
   '  rejections: [orderLocked],',
@@ -746,11 +747,11 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'tags')).toEqual(['orders']);
   });
 
-  test('the Groups are the document’s tags, in code point order', () => {
+  test('the Groups are the document’s tags, in code point order, each with its description', () => {
     expect(valueAt(document, 'tags')).toEqual([
-      { name: 'infrastructure' },
-      { name: 'orders' },
-      { name: 'shapes' },
+      { name: 'infrastructure', description: 'Infrastructure' },
+      { name: 'orders', description: 'Order lifecycle' },
+      { name: 'shapes', description: 'Shapes' },
     ]);
   });
 
@@ -759,7 +760,7 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
 
     const written = JSON.parse(cfLoom(project, 'openapi').stdout);
 
-    expect(valueAt(written, 'tags')).toEqual([{ name: 'orders' }]);
+    expect(valueAt(written, 'tags')).toEqual([{ name: 'orders', description: 'Orders' }]);
   });
 
   test('public, internal and private Endpoints are all written, each with its Visibility', () => {
@@ -1367,7 +1368,7 @@ describe('cf-loom openapi: what it refuses', () => {
     expect(refused.status).toBe(3);
     expect(refused.stdout).toBe('');
     expect(refused.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 

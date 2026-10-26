@@ -32,6 +32,7 @@ const getOrder = defineEndpoint({
   visibility: 'public',
   description: 'One order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   guards: [apiKey],
   input: { params: z.object({ orderId: z.string() }) },
   success: { status: 200, body: z.object({ secret: z.string().min(10) }) },
@@ -78,8 +79,6 @@ const contract = defineService({
   ],
 });
 
-const deprecatedAt = { getOrder: '2026-10-17T09:30:00Z', listOrders: '2020-01-01T00:00:00Z' };
-
 /** The Handlers, `getOrder` answering by its param: a Success, a Rejection, a Fault or a broken body. */
 const handlers = {
   endpoints: {
@@ -104,7 +103,6 @@ const handlers = {
     importOrders: handle(importOrders, () => success()),
   },
   guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
-  deprecatedAt,
 };
 
 const downFault = { committed: 'no', retryable: true } as const;
@@ -519,7 +517,32 @@ describe('serve: the Deprecation header', () => {
     );
   });
 
-  test('an Active Endpoint’s response carries none, whatever stamp the map holds', async () => {
+  test('a Deprecated Endpoint whose deprecatedAt lies in the future carries it too', async () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'public',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const service = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [scheduled] })],
+    });
+    const http = serve(service, {
+      endpoints: { scheduled: handle(scheduled, () => success()) },
+      guards: {},
+    });
+
+    const response = await http(get('/scheduled'));
+
+    expect(response.headers.get('deprecation')).toBe('@32472144000');
+  });
+
+  test('an Active Endpoint’s response carries none', async () => {
     const response = await serve(contract, handlers)(get('/orders'));
 
     expect(response.headers.get('deprecation')).toBeNull();

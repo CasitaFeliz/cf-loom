@@ -90,8 +90,7 @@ function contractPackageOf<
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -316,7 +315,6 @@ describe('what a call sends', () => {
         ),
       },
       guards: {},
-      deprecatedAt: {},
     };
     const provider = defineService({
       name: 'orders-service',
@@ -772,7 +770,6 @@ describe('every header and query param the Provider reads reaches the request, w
     const http = serve(provider, {
       endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
       guards: { keyed: handle(keyedByHeader, () => admit()) },
-      deprecatedAt: {},
     });
     const keyed = keyedClient(headerOnlyGuardDemands, http);
 
@@ -804,7 +801,6 @@ describe('a number literal in exponent form, end to end against serve', () => {
         echoLarge: handle(echoLarge, () => success({ headers: { 'x-small': 1.5e-7 } })),
       },
       guards: {},
-      deprecatedAt: {},
     };
     const provider = defineService({
       name: 'orders-service',

@@ -25,5 +25,4 @@ export default {
     chargeOnCreated: chargeOnCreatedSubscriptionHandler,
   },
   readers,
-  deprecatedAt: {},
 } satisfies HandlerMapOf<typeof contract>;

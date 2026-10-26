@@ -82,7 +82,6 @@ const handlers = {
     getRoot: handle(getRoot, () => success({ root: true })),
   },
   guards: {},
-  deprecatedAt: {},
 };
 
 function contractOf(endpoints: readonly [Endpoint, ...Endpoint[]]) {

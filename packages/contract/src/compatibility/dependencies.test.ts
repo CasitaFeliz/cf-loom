@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
@@ -21,8 +22,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -42,7 +43,7 @@ function aDependency(fields: Partial<DependencySnapshot> = {}): DependencySnapsh
 function aBaseline(
   dependencies: Readonly<Record<string, DependencySnapshot>> = {},
 ): PublishedServiceSnapshot {
-  return { ...heading, version: '3.4.0', dependencies };
+  return { ...heading, version: '3.4.0', generator: publishedBy, dependencies };
 }
 
 function aProposed(
@@ -186,10 +187,13 @@ describe('compatibilityReportOf, an Application’s Dependencies', () => {
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
   };
-  const baseline: PublishedApplicationSnapshot = { ...application, version: '1.0.0' };
+  const baseline: PublishedApplicationSnapshot = {
+    ...application,
+    version: '1.0.0',
+    generator: publishedBy,
+  };
 
   test('a new Dependency is a Neutral Change, and the bump is patch', () => {
     const proposed = { ...application, dependencies: { 'payments-service': aDependency() } };

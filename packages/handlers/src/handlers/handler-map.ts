@@ -33,5 +33,4 @@ export type HandlerMapOf<C extends ServiceContract> = {
     readonly [S in GroupedOf<C, 'subscriptions'> as S['name']]: HandledBy<S>;
   };
   readonly readers: Readers;
-  readonly deprecatedAt: Readonly<Record<string, string>>;
 };

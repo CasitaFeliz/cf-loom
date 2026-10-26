@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
+import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
@@ -96,12 +97,12 @@ function cfLoomInRemovedFolder(...args: string[]) {
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
-/** Runs the CLI with a clock that throws `message`, so the command ends as a throw of cf-loom does. */
+/** Runs the CLI with a working directory that throws `message`, so the command ends as a throw of cf-loom does. */
 function cfLoomThrowing(message: string, ...args: string[]) {
   const project = aProject({
-    'throwing-clock.mjs': `Date.now = () => { throw new Error(${JSON.stringify(message)}); };\n`,
+    'throwing-cwd.mjs': `process.cwd = () => { throw new Error(${JSON.stringify(message)}); };\n`,
   });
-  const preload = pathToFileURL(join(project, 'throwing-clock.mjs')).href;
+  const preload = pathToFileURL(join(project, 'throwing-cwd.mjs')).href;
   const env = Object.fromEntries([
     ...Object.entries(process.env),
     ['NODE_OPTIONS', `--import ${preload}`],
@@ -130,6 +131,8 @@ function aRoot({
   body = 'z.object({ ok: z.boolean() })',
   status = 200,
   description = 'Answers',
+  deprecatedAt = undefined as string | undefined,
+  groupDescription = 'Health',
 } = {}): Readonly<Record<string, string>> {
   return {
     'src/contract/ping.endpoint.ts': [
@@ -143,6 +146,7 @@ function aRoot({
       "  visibility: 'public',",
       `  description: '${description}',`,
       `  lifecycle: '${lifecycle}',`,
+      ...(deprecatedAt === undefined ? [] : [`  deprecatedAt: '${deprecatedAt}',`]),
       `  success: { status: ${status}, body: ${body} },`,
       '});',
       '',
@@ -151,7 +155,7 @@ function aRoot({
       "import { defineService, defineGroup } from '@cf-loom/contract';",
       "import { ping } from './ping.endpoint.ts';",
       '',
-      "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
+      `const health = defineGroup({ name: 'health', description: '${groupDescription}', endpoints: [ping] });`,
       '',
       "export const contract = defineService({ name: 'orders-service', groups: [health] });",
       '',
@@ -209,18 +213,6 @@ const brokenManifests = [
   ['an upper-case name', JSON.stringify({ name: '@org/Orders', type: 'module' })],
   ['a scope alone', JSON.stringify({ name: '@org', type: 'module' })],
 ];
-
-/** A value with every object's keys sorted, as the canonical form writes them. */
-function sortedKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortedKeys);
-  }
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-  const keys = Object.keys(value).sort();
-  return Object.fromEntries(keys.map((key) => [key, sortedKeys(Reflect.get(value, key))]));
-}
 
 describe('cf-loom init', () => {
   test('init service writes the Root, named after package.json, and no configuration', () => {
@@ -411,14 +403,17 @@ describe('cf-loom generate', () => {
     expect(ran.stdout).toMatch(/^Wrote contract\.snapshot\.json\n/);
     const text = read(project, 'contract.snapshot.json');
     const snapshot = JSON.parse(text);
-    expect(text).toBe(`${JSON.stringify(sortedKeys(snapshot), null, 2)}\n`);
+    expect(text).toBe(canonicalTextOf(snapshot));
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: `@cf-loom/cli@${cliVersion}`,
       endpoints: { 'GET /ping': { name: 'ping', group: 'health', lifecycle: 'active' } },
     });
+    expect(snapshot).not.toHaveProperty('generator');
+    expect(
+      text.startsWith('{\n  "format": 1,\n  "kind": "service",\n  "name": "orders-service",\n'),
+    ).toBe(true);
   });
 
   test('generate gives the same bytes every time', () => {
@@ -609,45 +604,56 @@ describe('cf-loom generate', () => {
       status: 404,
       message: 'Missing',
       body: null,
-      removed: false,
     });
   });
 
-  test('a Deprecated Endpoint keeps the deprecatedAt of the committed file', () => {
+  test('a Deprecated Endpoint carries the deprecatedAt its declaration states', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
-      ...aRoot({ lifecycle: 'deprecated' }),
+      ...aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-01-02T03:04:05Z' }),
     });
-    const generated = cfLoom(project, 'generate');
-    expect(generated.status).toBe(0);
-    const committed = JSON.parse(read(project, 'contract.snapshot.json'));
-    committed.endpoints['GET /ping'].deprecatedAt = '2026-01-02T03:04:05Z';
-    write(project, { 'contract.snapshot.json': JSON.stringify(committed) });
 
-    cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     expect(snapshot.endpoints['GET /ping'].deprecatedAt).toBe('2026-01-02T03:04:05Z');
   });
 
-  test('an Endpoint first seen Deprecated is stamped with the clock, to the second', () => {
+  test('generate gives the same bytes when the committed file is deleted', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-01-02T03:04:05Z' }),
+    });
+    cfLoom(project, 'generate');
+    const first = read(project, 'contract.snapshot.json');
+    rmSync(join(project, 'contract.snapshot.json'));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'contract.snapshot.json')).toBe(first);
+    expect(JSON.parse(first).endpoints['GET /ping'].deprecatedAt).toBe('2026-01-02T03:04:05Z');
+  });
+
+  test('a Deprecated Endpoint with no deprecatedAt exits 1 with the line that asks for it', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot({ lifecycle: 'deprecated' }),
     });
-    const before = Math.floor(Date.now() / 1000) * 1000;
 
-    cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-    const after = Date.now();
-    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    const stamp: string = snapshot.endpoints['GET /ping'].deprecatedAt;
-    expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
-    expect(Date.parse(stamp)).toBeGreaterThanOrEqual(before);
-    expect(Date.parse(stamp)).toBeLessThanOrEqual(after);
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "groups.health.endpoints.GET /ping.deprecatedAt deprecated-at: A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z\n",
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
-  test('a committed file that is no JSON is a tooling error', () => {
+  test('generate overwrites a committed file that is no JSON', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
       ...aRoot(),
@@ -656,10 +662,8 @@ describe('cf-loom generate', () => {
 
     const ran = cfLoom(project, 'generate');
 
-    expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
-    );
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(JSON.parse(read(project, 'contract.snapshot.json'))).toMatchObject({ kind: 'service' });
   });
 });
 
@@ -1472,7 +1476,7 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
       const fits = levels <= 256;
       expect(ran.status).toBe(fits ? 0 : 1);
       const written = fits ? read(project, 'contract.snapshot.json') : nestedOnceMore(levels);
-      const decoded = decodeSnapshot(withVersion(written));
+      const decoded = decodeSnapshot(published(written));
       expect(decoded.kind).toBe(fits ? 'decoded' : 'malformed');
     },
   );
@@ -1491,8 +1495,10 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
     );
   }
 
-  function withVersion(snapshotJson: string): string {
-    return JSON.stringify({ ...JSON.parse(snapshotJson), version: '1.0.0' });
+  /** The Snapshot as a publish would write it, which is what the decoder reads. */
+  function published(snapshotJson: string): string {
+    const heading = { version: '1.0.0', generator: `@cf-loom/cli@${cliVersion}` };
+    return JSON.stringify({ ...JSON.parse(snapshotJson), ...heading });
   }
 });
 
@@ -2529,28 +2535,6 @@ describe('cf-loom generate: the package a module belongs to', () => {
   });
 });
 
-describe('cf-loom generate: deprecatedAt', () => {
-  test('an Endpoint Deprecated again after being Active is stamped anew', () => {
-    const project = aProject({
-      'cf-loom.config.ts': config,
-      ...aRoot({ lifecycle: 'deprecated' }),
-    });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(/"deprecatedAt": "[^"]+"/, '"deprecatedAt": "2020-01-02T03:04:05Z"'),
-    );
-    write(project, aRoot({ lifecycle: 'active' }));
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    write(project, aRoot({ lifecycle: 'deprecated' }));
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran.status).toBe(0);
-    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    expect(snapshot.endpoints['GET /ping'].deprecatedAt).not.toBe('2020-01-02T03:04:05Z');
-  });
-});
-
 describe('cf-loom verify', () => {
   test('verify exits 0 when contract.snapshot.json is up to date', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
@@ -2597,48 +2581,26 @@ describe('cf-loom verify', () => {
     expect(ran.stderr).toMatch(/^contract\.snapshot\.json is missing: run cf-loom generate\n/);
   });
 
-  test('verify ignores which CLI wrote contract.snapshot.json', () => {
+  test('verify exits 1 for a committed file that still names a generator', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
+      text.replace('"kind"', `"generator": "@cf-loom/cli@${cliVersion}",\n  "kind"`),
     );
 
     const ran = cfLoom(project, 'verify');
 
-    expect(ran.status).toBe(0);
-  });
-
-  test('verify exits 1 when the Contract changed, whichever CLI wrote the file', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
-    );
-    write(project, aRoot({ body: 'z.object({ ok: z.boolean(), at: z.iso.datetime() })' }));
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran.status).toBe(1);
-  });
-
-  test('generate writes the CLI that runs it', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
-    expect(cfLoom(project, 'generate').status).toBe(0);
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(`@cf-loom/cli@${cliVersion}`, '@cf-loom/cli@0.0.1'),
-    );
-
-    cfLoom(project, 'generate');
-
-    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    expect(snapshot.generator).toBe(`@cf-loom/cli@${cliVersion}`);
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: 'contract.snapshot.json was edited or is out of date: run cf-loom generate\n',
+    });
   });
 
   test('verify exits 1 when a deprecatedAt was edited into no instant', () => {
     const project = aProject({
       'cf-loom.config.ts': config,
-      ...aRoot({ lifecycle: 'deprecated' }),
+      ...aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
     });
     expect(cfLoom(project, 'generate').status).toBe(0);
     edit(project, 'contract.snapshot.json', (text) =>
@@ -2823,9 +2785,9 @@ function publishedAs(
   more: Readonly<Record<string, unknown>> = {},
 ): ServedVersion {
   const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-  const published = { ...snapshot, ...more, version };
+  const published = { ...snapshot, ...more, version, generator: '@cf-loom/cli@0.0.0' };
   const declared = { kind: snapshot.kind, name: snapshot.name };
-  const snapshotJson = `${JSON.stringify(published, null, 2)}\n`;
+  const snapshotJson = canonicalTextOf(published);
   return aVersion(version, { declared, snapshotJson, peers: installedPeers });
 }
 
@@ -3000,7 +2962,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(ran.status).toBe(3);
     expect(ran.stdout).toBe('');
     expect(ran.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
     expect(registry.requests).toEqual([]);
   });
@@ -4307,8 +4269,7 @@ const leftBehindLine =
 /** The SHA-256 of a Snapshot's canonical text without its version and generator, as `cfLoom` records it. */
 function snapshotHashOf(snapshotJson: string): string {
   const { generator: _generator, version: _version, ...hashed } = JSON.parse(snapshotJson);
-  const text = `${JSON.stringify(sortedKeys(hashed), null, 2)}\n`;
-  return createHash('sha256').update(text, 'utf8').digest('hex');
+  return createHash('sha256').update(canonicalTextOf(hashed), 'utf8').digest('hex');
 }
 
 function neverPublished(registry: Registry, packageName = ordersPackage): string {
@@ -4359,6 +4320,52 @@ describe.concurrent('cf-loom check, the version publish would take', {
       stdout: [
         checkedAgainstOrders,
         neutralLine,
+        noApprovalNeeded,
+        wouldPublish('1.0.1', 'patch'),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('a moved deprecatedAt is a Neutral Change, and check closes with the patch publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' }),
+      after: aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'endpoints.GET /ping (ping) deprecation-moved from="2026-01-01T00:00:00Z" to="2026-06-01T00:00:00Z": Neutral',
+        noApprovalNeeded,
+        wouldPublish('1.0.1', 'patch'),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('a changed Group description is a Neutral Change at the Group, and check closes with the patch publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot(),
+      after: aRoot({ groupDescription: 'Whether the Service is up' }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'groups.health description-changed: Neutral',
         noApprovalNeeded,
         wouldPublish('1.0.1', 'patch'),
         '',
@@ -5064,6 +5071,40 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(published.endpoints).toEqual({
       'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0' },
     });
+  });
+
+  test('the published snapshot.json names the CLI that runs publish, after the version in its heading', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+
+    const { registry } = await publishedAgainst(lab, changed);
+
+    const text = publishedFilesOf(registry)['snapshot.json']!;
+    const published = JSON.parse(text);
+    expect(published.generator).toBe(`@cf-loom/cli@${cliVersion}`);
+    expect(Object.keys(published).slice(0, 5)).toEqual([
+      'format',
+      'kind',
+      'name',
+      'version',
+      'generator',
+    ]);
+    expect(text).toBe(canonicalTextOf(published));
+  });
+
+  test('the published snapshot.json carries the deprecatedAt the declaration states, not the Baseline’s', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' }),
+      after: aRoot({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
+    });
+
+    const { registry } = await publishedAgainst(lab, changed);
+
+    const published = JSON.parse(publishedFilesOf(registry)['snapshot.json']!);
+    expect(published.endpoints['GET /ping'].deprecatedAt).toBe('2026-06-01T00:00:00Z');
   });
 
   test('publish --prerelease over a prerelease Baseline merges its history: a deleted Retired Endpoint stays as a tombstone that keeps its retiredIn', async ({
@@ -6257,18 +6298,18 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
     },
   );
 
-  test.for([...offline.filter((command) => command !== 'verify'), ...registered])(
-    '%s on a Snapshot that is no JSON, exit 3',
-    (command) => {
-      const project = brokenJson();
+  test.for([
+    ...offline.filter((command) => command !== 'verify' && command !== 'generate'),
+    ...registered,
+  ])('%s on a Snapshot that is no JSON, exit 3', (command) => {
+    const project = brokenJson();
 
-      const ran = cfLoom(project, command, '--json');
+    const ran = cfLoom(project, command, '--json');
 
-      const [line] = ran.stderr.split('\n');
-      expect(ran.status).toBe(3);
-      expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
-    },
-  );
+    const [line] = ran.stderr.split('\n');
+    expect(ran.status).toBe(3);
+    expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
+  });
 
   test.for([
     'init',

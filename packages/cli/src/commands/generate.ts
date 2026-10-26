@@ -7,7 +7,7 @@ import {
   moveFiles,
   writeFiles,
 } from '../writing/index.ts';
-import { checkFailed, done, type Exit, failureExitOf, noJsonExitOf, toolingError } from './exit.ts';
+import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 import { noFileLinesOf, placedOf } from './handler-files.ts';
 import { recordOf } from './record.ts';
 import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
@@ -19,13 +19,9 @@ import { unreachedLinesOf } from './unreached.ts';
  * review; a Service also gets its Handler map, its readers and its missing Handlers' Stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
-  const built = await builtOf(run, 'running');
+  const built = await builtOf(run);
   if (built.kind !== 'built') {
     return failureExitOf(built);
-  }
-  const noJson = noJsonExitOf(built.committed);
-  if (noJson !== undefined) {
-    return noJson;
   }
   if (!isBuiltService(built)) {
     return writtenExit(run, { moves: [], stale: [] }, [snapshotFileOf(built)]);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -32,8 +32,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: { orders: { description: 'Orders' } },
   defs: {},
   codes: {},
   dependencies: {},
@@ -105,7 +105,6 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     status: 409,
     message: 'The order is locked',
     body: null,
-    removed: false,
     ...fields,
   };
 }
@@ -116,6 +115,7 @@ function aBaseline(fields: Partial<ServiceSnapshot> = {}): PublishedServiceSnaps
   return {
     ...rest,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: stamped(endpoints),
     events: stamped(events),
     commands: stamped(commands),
@@ -154,7 +154,6 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
     exports: schemaExports({}),
@@ -167,7 +166,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
 function neutral(site: ChangeSite, difference: Difference): Change {
@@ -244,6 +243,39 @@ describe('compatibilityReportOf, an Endpoint’s Neutral Changes', () => {
     ]);
   });
 
+  test('moving the deprecatedAt of a Deprecated Endpoint gives one Neutral deprecation-moved with both instants', () => {
+    const from = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' });
+
+    const changes = endpointChangesOf(from, to);
+
+    const difference = {
+      kind: 'deprecation-moved',
+      from: '2026-01-01T00:00:00Z',
+      to: '2026-06-01T00:00:00Z',
+    } as const;
+    expect(changes).toEqual([neutral(endpointSite(), difference)]);
+  });
+
+  test('a Deprecated Endpoint left as it is gives no Change', () => {
+    const deprecated = anEndpoint({
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-01-01T00:00:00Z',
+    });
+
+    const changes = endpointChangesOf(deprecated, deprecated);
+
+    expect(changes).toEqual([]);
+  });
+
+  test('deprecating an Endpoint at an instant gives deprecated alone', () => {
+    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+
+    const changes = endpointChangesOf(anEndpoint(), to);
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['deprecated']);
+  });
+
   test('a Neutral Change on a Private Endpoint is still Neutral, on its Private site', () => {
     const from = anEndpoint({ visibility: 'private' });
     const to = anEndpoint({ visibility: 'private', description: 'Reads one order' });
@@ -294,6 +326,118 @@ describe('compatibilityReportOf, a Message Version’s Neutral Changes', () => {
 
     const difference = { kind: 'group-changed', from: 'orders', to: 'billing' } as const;
     expect(report.changes).toEqual([neutral(site, difference)]);
+  });
+});
+
+describe('compatibilityReportOf, a Service’s Group', () => {
+  const reworded = { orders: { description: 'Order lifecycle' } };
+
+  function groupSite(visibility: Visibility): ChangeSite {
+    return { kind: 'group', name: 'orders', visibility };
+  }
+
+  test('changing only a Group’s description gives one Neutral description-changed at its site', () => {
+    const held = { endpoints: { [identity]: anEndpoint() } };
+
+    const report = compatibilityReportOf(aBaseline(held), aProposed({ ...held, groups: reworded }));
+
+    expect(report.changes).toEqual([neutral(groupSite('public'), { kind: 'description-changed' })]);
+  });
+
+  test('a Group left as it is gives no Change', () => {
+    const held = { endpoints: { [identity]: anEndpoint() } };
+
+    const report = compatibilityReportOf(aBaseline(held), aProposed(held));
+
+    expect(report.changes).toEqual([]);
+  });
+
+  test.each([
+    {
+      name: 'the widest of the Endpoints and Events it lists',
+      held: {
+        endpoints: { [identity]: anEndpoint({ visibility: 'private' }) },
+        events: { 'OrderPlaced@1': anEvent({ visibility: 'internal' }) },
+      },
+      visibility: 'internal',
+    },
+    {
+      name: 'Private when it lists only a Command',
+      held: { commands: { 'ChargeCard@1': aCommand() } },
+      visibility: 'private',
+    },
+    {
+      name: 'Private when the Elements it lists are Retired',
+      held: { endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } },
+      visibility: 'private',
+    },
+    {
+      name: 'Private when the only Event it lists is Retired',
+      held: {
+        events: { 'OrderPlaced@1': anEvent({ lifecycle: 'retired', visibility: 'internal' }) },
+      },
+      visibility: 'private',
+    },
+    {
+      name: 'only the Elements it lists, never those of another Group',
+      held: {
+        endpoints: {
+          [identity]: anEndpoint({ visibility: 'private' }),
+          'GET /other': anEndpoint({ group: 'other', visibility: 'public' }),
+        },
+        events: { 'OrderPlaced@1': anEvent({ visibility: 'internal', group: 'other' }) },
+      },
+      visibility: 'private',
+    },
+  ] as const)('a Group’s site takes $name', ({ held, visibility }) => {
+    const groups = { ...heading.groups, other: { description: 'Other' } };
+
+    const report = compatibilityReportOf(
+      aBaseline({ ...held, groups }),
+      aProposed({ ...held, groups: { ...groups, ...reworded } }),
+    );
+
+    expect(report.changes).toEqual([
+      neutral(groupSite(visibility), { kind: 'description-changed' }),
+    ]);
+  });
+
+  test('a Group’s site counts an Event that only the Baseline holds', () => {
+    const event = { events: { 'OrderPlaced@1': anEvent({ visibility: 'internal' }) } };
+    const endpoint = { endpoints: { [identity]: anEndpoint({ visibility: 'private' }) } };
+
+    const { changes } = compatibilityReportOf(
+      aBaseline({ ...endpoint, ...event }),
+      aProposed({ ...endpoint, groups: reworded }),
+    );
+
+    expect(changes.map(({ site }) => site)).toContainEqual(groupSite('internal'));
+  });
+
+  test('a Group’s site takes the widest Visibility of either Snapshot', () => {
+    const before = { endpoints: { [identity]: anEndpoint({ visibility: 'public' }) } };
+    const after = { endpoints: { [identity]: anEndpoint({ visibility: 'private' }) } };
+
+    const { changes } = compatibilityReportOf(
+      aBaseline(before),
+      aProposed({ ...after, groups: reworded }),
+    );
+
+    const sites = changes.map(({ site }) => site);
+    expect(sites).toContainEqual(groupSite('public'));
+  });
+
+  test('a Group added or removed gives no Change of its own: the Elements it lists give theirs', () => {
+    const baseline = aBaseline({ endpoints: { [identity]: anEndpoint() } });
+    const moved = anEndpoint({ group: 'fulfilment' });
+    const groups = { fulfilment: { description: 'Fulfilment' } };
+
+    const { changes } = compatibilityReportOf(
+      baseline,
+      aProposed({ endpoints: { [identity]: moved }, groups }),
+    );
+
+    expect(changes.map(({ site }) => site.kind)).toEqual(['endpoint']);
   });
 });
 
@@ -642,6 +786,19 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
     ]);
   });
 
+  test('retiring a Deprecated Endpoint, whose deprecatedAt goes with its lifecycle, gives retired alone', () => {
+    const deprecated = anEndpoint({
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-01-01T00:00:00Z',
+    });
+    const baseline = aBaseline({ endpoints: { [identity]: deprecated } });
+    const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
+
+    const { changes } = compatibilityReportOf(baseline, proposed);
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
+  });
+
   test('a Retired Endpoint left as it is gives no Change', () => {
     const baseline = aBaseline({ endpoints: { [identity]: retired() } });
     const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
@@ -664,6 +821,27 @@ describe('compatibilityReportOf, every Neutral Change', () => {
       aBaseline({ endpoints: { [identity]: anEndpoint() } }),
       aProposed({
         endpoints: { [identity]: anEndpoint({ description: 'Reworded', group: 'archive' }) },
+      }),
+    ],
+    [
+      'a Deprecated Endpoint’s deprecatedAt',
+      aBaseline({
+        endpoints: {
+          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' }),
+        },
+      }),
+      aProposed({
+        endpoints: {
+          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
+        },
+      }),
+    ],
+    [
+      'a Group’s description',
+      aBaseline({ endpoints: { [identity]: anEndpoint() } }),
+      aProposed({
+        endpoints: { [identity]: anEndpoint() },
+        groups: { orders: { description: 'Order lifecycle' } },
       }),
     ],
     [

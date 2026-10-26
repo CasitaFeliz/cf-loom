@@ -74,7 +74,7 @@ A call whose signal was aborted before anything was sent is never offered: its F
 
 ### Deprecation
 
-A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [Lifecycle](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#lifecycle) in the contract README). The first response of a method that carries it calls `onDeprecation({ provider, endpoint, deprecatedAt })`, once per method of each client, with the instant as a `deprecatedAt` stamp; without `onDeprecation`, `console.warn` writes `<provider>: <endpoint> is Deprecated since <deprecatedAt>`. A client created per request warns per request. What `onDeprecation` throws is caught and written with `console.error`, `<provider>: <endpoint>: onDeprecation threw` and the error, so the Outcome is never lost.
+A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [Lifecycle](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#lifecycle) in the contract README). The first response of a method that carries it calls `onDeprecation({ provider, endpoint, deprecatedAt })`, once per method of each client, with the instant as a UTC instant to the second; without `onDeprecation`, `console.warn` writes `<provider>: <endpoint> is Deprecated as of <deprecatedAt>`, true whether the instant has passed or is still to come. A client created per request warns per request. What `onDeprecation` throws is caught and written with `console.error`, `<provider>: <endpoint>: onDeprecation threw` and the error, so the Outcome is never lost.
 
 ## In a browser (Applications)
 

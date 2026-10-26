@@ -81,7 +81,6 @@ const handlers = {
     greet: handle(greet, ({ query }) => success({ headers: { 'x-greeted': query.name } })),
   },
   guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
-  deprecatedAt: {},
 };
 
 const servers: ReturnType<typeof nodeHttp>[] = [];

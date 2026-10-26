@@ -41,6 +41,7 @@ export function hintOf(change: Change): string | null {
     case 'param-renamed':
     case 'rejection-added':
     case 'rejection-removed':
+    case 'deprecation-moved':
     case 'description-changed':
     case 'group-changed':
     case 'attachments-changed':

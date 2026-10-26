@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
+import { publishedBy } from '../../test/snapshots.ts';
 import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   type Change,
@@ -14,6 +15,7 @@ import {
   type Field,
   type ObjectNode,
   type PeerMove,
+  type PublishedCode,
   type PublishedEndpoint,
   type PublishedServiceSnapshot,
   type SchemaNode,
@@ -37,8 +39,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -88,13 +90,12 @@ function aLive(endpoint: EndpointSnapshot): PublishedEndpoint {
   return { ...endpoint, lifecycle: 'active' };
 }
 
-function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
+function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
   return {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
     body: null,
-    removed: false,
     ...fields,
   };
 }
@@ -114,7 +115,7 @@ function aCommand(): CommandSnapshot {
 }
 
 function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
-  return { ...heading, version: '3.4.0', endpoints: {}, ...fields };
+  return { ...heading, version: '3.4.0', generator: publishedBy, endpoints: {}, ...fields };
 }
 
 function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
@@ -150,6 +151,7 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
+    case 'group':
     case 'export':
     case 'subscription':
     case 'dependency':
@@ -328,7 +330,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('a removed code not declared again is carried with no Change', () => {
-    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removed: true }) } });
+    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) } });
     const proposed = aProposed();
 
     const report = reportOf(baseline, proposed);
@@ -453,7 +455,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
 describe('compatibilityReportOf, a removed code declared again', () => {
   const removedBody = anOpenObject({ id: required(aString), note: required(aString) });
-  const removed = aCode({ removed: true, body: removedBody });
+  const removed = aCode({ removedIn: '3.2.0', body: removedBody });
 
   function declaredAgain(code: CodeSnapshot): readonly Change[] {
     const baseline = aBaseline({ codes: { [orderLocked]: removed } });
@@ -580,7 +582,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
       ...publishedAnswering(notFound),
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ removed: true, status: 409 }),
+        [orderGone]: aCode({ removedIn: '3.2.0', status: 409 }),
       },
     });
     const proposed = aProposed({
@@ -645,8 +647,7 @@ function generatedCodeOf(code: string): CodeSnapshot {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: '@cf-loom/cli@2.1.0', committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   const generated = snapshot.kind === 'service' ? snapshot.codes[code] : undefined;
   if (generated === undefined) {
     throw new Error(`The fixture holds no ${code}`);

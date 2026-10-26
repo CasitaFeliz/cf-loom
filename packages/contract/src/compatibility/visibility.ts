@@ -68,14 +68,44 @@ export function widestVisibilitiesOf(
   proposed: ServiceSnapshot,
   namesOf: (endpoint: EndpointSnapshot) => readonly string[],
 ): ReadonlyMap<string, Visibility> {
-  const endpoints = [
+  return widestOf(liveEndpointsOf(baseline, proposed), namesOf);
+}
+
+/**
+ * The widest Visibility of the Endpoints and Events of either Snapshot, those Retired left out,
+ * that each Group lists; a Command or a Subscription is Private, so it widens none.
+ */
+export function widestGroupVisibilitiesOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+): ReadonlyMap<string, Visibility> {
+  const events = [
+    ...Object.values(baseline.events).filter(isDeclared),
+    ...Object.values(proposed.events),
+  ].filter(isLive);
+  const listed = [...liveEndpointsOf(baseline, proposed), ...events];
+  return widestOf(listed, (element) => [element.group]);
+}
+
+/** The Endpoints of either Snapshot that are declared and not Retired. */
+function liveEndpointsOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+): readonly EndpointSnapshot[] {
+  return [
     ...Object.values(baseline.endpoints).filter(isDeclared),
     ...Object.values(proposed.endpoints),
   ].filter(isLive);
+}
+
+function widestOf<Element extends Visible>(
+  elements: readonly Element[],
+  namesOf: (element: Element) => readonly string[],
+): ReadonlyMap<string, Visibility> {
   const visibilities = new Map<string, Visibility>();
-  for (const endpoint of endpoints) {
-    for (const name of namesOf(endpoint)) {
-      visibilities.set(name, widerOf(visibilities.get(name) ?? 'private', endpoint.visibility));
+  for (const element of elements) {
+    for (const name of namesOf(element)) {
+      visibilities.set(name, widerOf(visibilities.get(name) ?? 'private', element.visibility));
     }
   }
   return visibilities;

@@ -15,5 +15,4 @@ export default {
     draftInvoiceOnCreated: draftInvoiceOnCreatedSubscriptionHandler,
   },
   readers,
-  deprecatedAt: {},
 } satisfies HandlerMapOf<typeof contract>;

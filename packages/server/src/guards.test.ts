@@ -132,7 +132,6 @@ const handlers = {
     permission: permissionHandler,
     tenant: handle(tenant, () => admit()),
   },
-  deprecatedAt: {},
 };
 
 function put(
@@ -309,7 +308,6 @@ describe('serve: Guards', () => {
     const stubbed = {
       endpoints: { addNote: handlers.endpoints.addNote },
       guards: { userToken: handle.stub(userToken) },
-      deprecatedAt: {},
     };
     const headers = { authorization: 'Bearer u-1', 'content-type': 'application/json' };
     const body = JSON.stringify({ text: 'hi' });

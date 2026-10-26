@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -24,7 +24,7 @@ const resolved: Standard = {
 const remapped: Standard = { ...resolved, notFound: 'ORDER_GONE' };
 
 function aStandardCode(status: number): CodeSnapshot {
-  return { origin: 'standard', status, message: 'Standard', body: null, removed: false };
+  return { origin: 'standard', status, message: 'Standard', body: null };
 }
 
 /** The codes a Snapshot holds for a resolution: each Standard Rejection's. */
@@ -64,8 +64,8 @@ function aService(
     format: 1,
     kind: 'service',
     name: 'orders-service',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections: standard,
+    groups: {},
     defs: {},
     endpoints,
     events: {},
@@ -85,6 +85,7 @@ function published({ endpoints, ...snapshot }: ServiceSnapshot): PublishedServic
   return {
     ...snapshot,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: Object.fromEntries(live),
     events: {},
     commands: {},
@@ -96,7 +97,6 @@ function aDefinitions(standard: Standard): DefinitionsSnapshot {
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections: standard,
     defs: {},
     exports: schemaExports({}),
@@ -177,7 +177,11 @@ describe('compatibilityReportOf, a Service’s Standard Rejections', () => {
 
 describe('compatibilityReportOf, a Definitions Package’s Standard Rejections', () => {
   test('a Standard Rejection resolving to another code is one Neutral code-changed, Public, beside the code it adds', () => {
-    const baseline: PublishedDefinitionsSnapshot = { ...aDefinitions(resolved), version: '4.2.0' };
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...aDefinitions(resolved),
+      version: '4.2.0',
+      generator: publishedBy,
+    };
 
     const { changes } = compatibilityReportOf(baseline, aDefinitions(remapped));
 

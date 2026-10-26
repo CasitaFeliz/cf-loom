@@ -1,4 +1,7 @@
 {
+  "format": 1,
+  "kind": "service",
+  "name": "orders-service",
   "codes": {
     "BAD_REQUEST": {
       "body": {
@@ -73,14 +76,12 @@
       },
       "message": "The request is invalid",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 400
     },
     "NOT_YET_IMPLEMENTED": {
       "body": null,
       "message": "Not implemented yet",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 501
     },
     "ORDER_LOCKED": {
@@ -98,21 +99,18 @@
       },
       "message": "The order can no longer be changed",
       "origin": "local",
-      "removed": false,
       "status": 409
     },
     "RESOURCE_NOT_FOUND": {
       "body": null,
       "message": "The resource does not exist",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 404
     },
     "UNAUTHENTICATED": {
       "body": null,
       "message": "The API key is missing or unknown",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 401
     }
   },
@@ -538,8 +536,14 @@
       "visibility": "internal"
     }
   },
-  "format": 1,
-  "generator": "@cf-loom/cli@0.0.0",
+  "groups": {
+    "infrastructure": {
+      "description": "What the Service’s own infrastructure calls"
+    },
+    "orders": {
+      "description": "Order lifecycle"
+    }
+  },
   "guards": {
     "apiKey": {
       "context": {
@@ -579,8 +583,6 @@
       ]
     }
   },
-  "kind": "service",
-  "name": "orders-service",
   "standardRejections": {
     "invalidInput": "BAD_REQUEST",
     "notFound": "RESOURCE_NOT_FOUND",

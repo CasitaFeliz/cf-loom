@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -20,8 +21,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -32,6 +33,7 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: {},
     events: {},
     commands: {},
@@ -58,7 +60,7 @@ function aRemovedSubscription(event = 'orders-service:OrderPlaced@1'): Subscript
 }
 
 function aCode(status: number): CodeSnapshot {
-  return { origin: 'local', status, message: 'The order is locked', body: null, removed: false };
+  return { origin: 'local', status, message: 'The order is locked', body: null };
 }
 
 function subscriptionSite(name: string): ChangeSite {

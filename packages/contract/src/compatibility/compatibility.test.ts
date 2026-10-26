@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { schemaExports } from '../../test/snapshots.ts';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
@@ -36,8 +36,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -108,6 +108,7 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: {},
     events: {},
     commands: {},
@@ -121,7 +122,6 @@ function anApplication(fields: Partial<ApplicationSnapshot> = {}): ApplicationSn
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
     ...fields,
   };
@@ -132,7 +132,6 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
     exports: schemaExports({}),
@@ -154,6 +153,7 @@ function identityOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
+    case 'group':
     case 'export':
     case 'subscription':
     case 'dependency':
@@ -221,7 +221,12 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Service against a Baseline of another kind',
     proposed: aProposed(),
-    baseline: { ...anApplication(), name: 'orders-service', version: '1.0.0' },
+    baseline: {
+      ...anApplication(),
+      name: 'orders-service',
+      version: '1.0.0',
+      generator: publishedBy,
+    },
   },
   {
     name: 'a Service against a Baseline of another name',
@@ -236,7 +241,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'an Application against a Baseline of another name',
     proposed: anApplication(),
-    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0' },
+    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0', generator: publishedBy },
   },
   {
     name: 'a Definitions Package against a Baseline of another kind',
@@ -246,7 +251,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Definitions Package against a Baseline of another name',
     proposed: aDefinitions(),
-    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0' },
+    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0', generator: publishedBy },
   },
 ];
 
@@ -808,7 +813,11 @@ describe('compatibilityReportOf, the report', () => {
   });
 
   test('an Application’s Dependencies give Dependency Changes, never Element Changes', () => {
-    const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
+    const baseline: PublishedApplicationSnapshot = {
+      ...anApplication(),
+      version: '1.0.0',
+      generator: publishedBy,
+    };
     const proposed = anApplication({
       dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder] } },
     });
@@ -826,7 +835,11 @@ describe('compatibilityReportOf, the report', () => {
   });
 
   test('a Snapshot that differs where no rule looks is a bug, so the check throws', () => {
-    const baseline: PublishedDefinitionsSnapshot = { ...aDefinitions(), version: '4.2.0' };
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...aDefinitions(),
+      version: '4.2.0',
+      generator: publishedBy,
+    };
     const proposed = aDefinitions({ defs: { money: emptyObject } });
 
     const check = () => compatibilityReportOf(baseline, proposed);

@@ -2,11 +2,13 @@ import type { Lifecycle } from '../declarations/index.ts';
 import type {
   ApplicationSnapshot,
   ByKey,
+  CodeSnapshot,
   CommandSnapshot,
   DefinitionsSnapshot,
   EndpointSnapshot,
   EventSnapshot,
   ServiceSnapshot,
+  Snapshot,
   SubscriptionSnapshot,
 } from './types.ts';
 
@@ -37,23 +39,34 @@ export type PublishedEvent = PublishedElement<EventSnapshot> | MessageTombstone;
 /** A Command's Message Version in a published Snapshot: still declared, or its tombstone. */
 export type PublishedCommand = PublishedElement<CommandSnapshot> | MessageTombstone;
 
-/** The published Snapshot of a Service: its declared Snapshot with `version` and the history only the Baseline knows. */
+/** What a published Snapshot adds to the declared one's heading: its version and the CLI that wrote it. */
+export type PublishedHeading = { readonly version: string; readonly generator: string };
+
+/** The Snapshot `package` writes: the declared one with the CLI that wrote it. */
+export type PackagedSnapshot = Snapshot & { readonly generator: string };
+
+/** A code in a published Snapshot: declared, or removed in the version that first left it out. */
+export type PublishedCode = CodeSnapshot & { readonly removedIn?: string };
+
+/** The published Snapshot of a Service: its declared Snapshot with its heading and the history only the Baseline knows. */
 export type PublishedServiceSnapshot = Omit<
   ServiceSnapshot,
-  'endpoints' | 'events' | 'commands' | 'subscriptions'
-> & {
-  readonly version: string;
-  readonly endpoints: ByKey<PublishedEndpoint>;
-  readonly events: ByKey<PublishedEvent>;
-  readonly commands: ByKey<PublishedCommand>;
-  readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
-};
+  'endpoints' | 'events' | 'commands' | 'subscriptions' | 'codes'
+> &
+  PublishedHeading & {
+    readonly endpoints: ByKey<PublishedEndpoint>;
+    readonly events: ByKey<PublishedEvent>;
+    readonly commands: ByKey<PublishedCommand>;
+    readonly codes: ByKey<PublishedCode>;
+    readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
+  };
 
 /** The published Snapshot of an Application: its Dependencies at a version. */
-export type PublishedApplicationSnapshot = ApplicationSnapshot & { readonly version: string };
+export type PublishedApplicationSnapshot = ApplicationSnapshot & PublishedHeading;
 
 /** The published Snapshot of a Definitions Package: its declared Snapshot at a version, removed codes included. */
-export type PublishedDefinitionsSnapshot = DefinitionsSnapshot & { readonly version: string };
+export type PublishedDefinitionsSnapshot = Omit<DefinitionsSnapshot, 'codes'> &
+  PublishedHeading & { readonly codes: ByKey<PublishedCode> };
 
 /** A Snapshot as `publish` writes it to `snapshot.json` and `check` reads it as the Baseline. */
 export type PublishedSnapshot =
@@ -72,6 +85,11 @@ export function isDeclared<Element extends DeclaredElement>(
   element: Element | EndpointTombstone | MessageTombstone,
 ): element is Element {
   return 'description' in element;
+}
+
+/** Whether a published code is one no Endpoint answers any more, kept with what it last had. */
+export function isRemoved(code: PublishedCode): boolean {
+  return code.removedIn !== undefined;
 }
 
 /** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */

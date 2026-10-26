@@ -59,7 +59,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
         // @ts-expect-error findOrder has no Handler
         endpoints: { getOrder: getOrderHandler },
         guards: { apiKey: apiKeyHandler },
-        deprecatedAt: {},
       });
 
     expect(serving).toBeTypeOf('function');
@@ -71,7 +70,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
         endpoints: { getOrder: getOrderHandler, findOrder: findOrderHandler },
         // @ts-expect-error apiKey has no Handler
         guards: {},
-        deprecatedAt: {},
       });
 
     expect(serving).toBeTypeOf('function');
@@ -83,7 +81,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
         // @ts-expect-error findOrder holds getOrder's Handler
         endpoints: { getOrder: getOrderHandler, findOrder: getOrderHandler },
         guards: { apiKey: apiKeyHandler },
-        deprecatedAt: {},
       });
 
     expect(serving).toBeTypeOf('function');
@@ -97,7 +94,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
         // @ts-expect-error a wrapper is no Handler handle() returned
         endpoints: { getOrder: getOrderHandler, findOrder: wrapped },
         guards: { apiKey: apiKeyHandler },
-        deprecatedAt: {},
       });
 
     expect(serving).toBeTypeOf('function');
@@ -105,7 +101,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
 
   test('a Retired Endpoint needs no Handler, and a map spread from a variable may hold an extra key', () => {
     const endpoints = { getOrder: getOrderHandler, findOrder: findOrderHandler };
-    const handlers = { endpoints, guards: { apiKey: apiKeyHandler }, deprecatedAt: {} };
+    const handlers = { endpoints, guards: { apiKey: apiKeyHandler } };
     const extra = { ...handlers, endpoints: { ...endpoints, other: getOrderHandler } };
 
     const served = [serve(contract, handlers), serve(contract, extra)];
@@ -120,9 +116,8 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(contract, {
         endpoints,
         guards: { apiKey: apiKeyHandler, legacyKey: handle(legacyKey, () => admit()) },
-        deprecatedAt: {},
       }),
-      serve(contract, { endpoints, guards: { apiKey: apiKeyHandler }, deprecatedAt: {} }),
+      serve(contract, { endpoints, guards: { apiKey: apiKeyHandler } }),
     ];
 
     expect(served).toHaveLength(2);
@@ -137,7 +132,6 @@ describe('serve: the Handler map, typed by the Contract', () => {
     const handlers = {
       endpoints: { getOrder: getOrderHandler, findOrder: loose },
       guards: { apiKey: apiKeyHandler },
-      deprecatedAt: {},
     };
 
     const serving = () => [

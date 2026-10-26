@@ -1,11 +1,15 @@
 import {
+  type CommandSnapshot,
   type EndpointSnapshot,
+  type EventSnapshot,
   isDeclared,
+  isSubscriptionTombstone,
   type PublishedCommand,
   type PublishedDefinitionsSnapshot,
   type PublishedElement,
   type PublishedEvent,
   type PublishedServiceSnapshot,
+  type SubscriptionSnapshot,
 } from '../snapshot/index.ts';
 import {
   type LocatedNode,
@@ -17,20 +21,21 @@ import {
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, the code a
- * Standard Rejection resolved to, or a Guard.
+ * Standard Rejection resolved to, a Guard, or the Group a declared Element or Subscription names.
  */
 export type Use = {
-  readonly kind: 'def' | 'code' | 'standard-code' | 'guard';
+  readonly kind: 'def' | 'code' | 'standard-code' | 'guard' | 'group';
   readonly name: string;
   readonly at: Path;
 };
 
 type Used = PublishedServiceSnapshot | PublishedDefinitionsSnapshot;
 type DeclaredEndpoint = PublishedElement<EndpointSnapshot>;
+type DeclaredMessage = PublishedElement<EventSnapshot> | PublishedElement<CommandSnapshot>;
 type Keyed<Value> = readonly [string, Value];
 type Parts = Readonly<Record<string, SchemaNode | null>>;
 
-/** Every name a Service's or a Definitions Package's Snapshot uses: its refs, then codes, then Guards. */
+/** Every name a Service's or a Definitions Package's Snapshot uses: its refs, codes, Guards, then Groups. */
 export function usesOf(snapshot: Used): readonly Use[] {
   const endpoints = declaredEndpointsOf(snapshot);
   const guards = Object.entries(snapshot.guards);
@@ -58,7 +63,32 @@ export function usesOf(snapshot: Used): readonly Use[] {
       namesAt(['guards', name, 'guards'], listed.guards, 'guard'),
     ),
     ...exportUsesOf(snapshot),
+    ...groupUsesOf(snapshot),
   ];
+}
+
+/** The Group each declared Endpoint, Event, Command and Subscription of a Service names; a tombstone names none. */
+function groupUsesOf(snapshot: Used): readonly Use[] {
+  if (snapshot.kind !== 'service') {
+    return [];
+  }
+  return [
+    ...groupUsesAt('endpoints', declaredEndpointsOf(snapshot)),
+    ...groupUsesAt('events', declaredMessagesOf(snapshot.events)),
+    ...groupUsesAt('commands', declaredMessagesOf(snapshot.commands)),
+    ...groupUsesAt('subscriptions', declaredSubscriptionsOf(snapshot.subscriptions)),
+  ];
+}
+
+function groupUsesAt(
+  section: string,
+  declared: readonly Keyed<{ readonly group: string }>[],
+): readonly Use[] {
+  return declared.map(([key, { group }]) => ({
+    kind: 'group',
+    name: group,
+    at: [section, key, 'group'],
+  }));
 }
 
 /** The Guard or code each export of a Definitions Package names, which its Snapshot must hold. */
@@ -147,13 +177,36 @@ function declaredBodiesAt(
   section: string,
   messages: Readonly<Record<string, PublishedEvent | PublishedCommand>>,
 ): readonly LocatedNode[] {
-  const located: LocatedNode[] = [];
+  return declaredMessagesOf(messages).map(([identity, { body }]) => ({
+    at: [section, identity, 'body'],
+    node: body,
+  }));
+}
+
+/** The Message Versions of one map that are still declared, by identity. */
+function declaredMessagesOf(
+  messages: Readonly<Record<string, PublishedEvent | PublishedCommand>>,
+): readonly Keyed<DeclaredMessage>[] {
+  const declared: Keyed<DeclaredMessage>[] = [];
   for (const [identity, message] of Object.entries(messages)) {
     if (isDeclared(message)) {
-      located.push({ at: [section, identity, 'body'], node: message.body });
+      declared.push([identity, message]);
     }
   }
-  return located;
+  return declared;
+}
+
+/** The Subscriptions that are not removed ones' tombstones, by name. */
+function declaredSubscriptionsOf(
+  subscriptions: PublishedServiceSnapshot['subscriptions'],
+): readonly Keyed<SubscriptionSnapshot>[] {
+  const declared: Keyed<SubscriptionSnapshot>[] = [];
+  for (const [name, subscription] of Object.entries(subscriptions)) {
+    if (!isSubscriptionTombstone(subscription)) {
+      declared.push([name, subscription]);
+    }
+  }
+  return declared;
 }
 
 /** The parts that hold a node, each where it sits under `at`. */

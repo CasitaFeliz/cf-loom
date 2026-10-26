@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type Change,
   type ComparedReport,
@@ -24,8 +25,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -93,6 +94,7 @@ function aBaseline(
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
     endpoints: Object.fromEntries([...published, ...retired]),
   };
 }

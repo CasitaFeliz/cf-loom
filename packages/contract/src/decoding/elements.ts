@@ -4,14 +4,14 @@ import type { PublishedCommand, PublishedEndpoint, PublishedEvent } from '../sna
 import { byCodePoint } from '../walker/index.ts';
 import { inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
-import { semanticVersionText, stampText } from './texts.ts';
+import { instantText, semanticVersionText } from './texts.ts';
 import { declaredOrTombstone } from './tombstones.ts';
 
 const retired = { lifecycle: z.literal('retired'), retiredIn: semanticVersionText };
 
 /**
  * A published Element: still declared with its lifecycle, a Deprecated one also with what only
- * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone,
+ * Deprecation declares, a Retired one with the version that first published it so, or its tombstone,
  * which keeps no Group.
  */
 function published<
@@ -54,7 +54,7 @@ export const publishedEndpoint: z.ZodType<PublishedEndpoint> = published(
     success,
     rejections: inCanonicalOrder(z.string(), byCodePoint),
   },
-  { deprecatedAt: stampText.exactOptional() },
+  { deprecatedAt: instantText.exactOptional() },
   z.strictObject({ ...retired, name: z.string() }),
 );
 

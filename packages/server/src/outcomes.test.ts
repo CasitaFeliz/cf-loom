@@ -94,7 +94,6 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
         orderTotal: handle(orderTotal, () => success({ headers: { 'x-total': 3 } })),
       },
       guards: {},
-      deprecatedAt: {},
     },
     {
       onServiceFault: (serviceFault) => {
@@ -281,7 +280,6 @@ describe('serve: a Success body that is JSON null', () => {
     const http = serve(withNote, {
       endpoints: { findNote: handle(findNote, () => success(null)) },
       guards: {},
-      deprecatedAt: {},
     });
 
     const response = await http(new Request('http://test/note'));

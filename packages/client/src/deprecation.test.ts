@@ -21,6 +21,7 @@ const listOrders = defineEndpoint({
   visibility: 'public',
   description: 'Every order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
 });
 
@@ -31,6 +32,7 @@ const listCarts = defineEndpoint({
   visibility: 'public',
   description: 'Every cart',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
 });
 
@@ -59,8 +61,7 @@ function contractPackageOf<
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -131,8 +132,23 @@ describe('the Deprecation warning', () => {
     await second.listOrders();
 
     expect(warn.mock.calls).toEqual([
-      ['orders-service: listOrders is Deprecated since 2026-10-17T09:30:00Z'],
-      ['orders-service: listOrders is Deprecated since 2026-10-17T09:30:00Z'],
+      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
+      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
+    ]);
+  });
+
+  test('a response carrying an instant still to come warns with the same wording', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const scheduled = async () =>
+      new Response(JSON.stringify({ ids: [] }), {
+        headers: { deprecation: '@32472144000', 'content-type': 'application/json' },
+      });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: scheduled });
+
+    await orders.listOrders();
+
+    expect(warn.mock.calls).toEqual([
+      ['orders-service: listOrders is Deprecated as of 2999-01-01T00:00:00Z'],
     ]);
   });
 

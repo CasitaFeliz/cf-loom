@@ -1,7 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { SchemaRule } from '../walker/index.ts';
 import type { AttachedGuardOf, Attachment, AttachmentsRule } from './attachment.ts';
-import type { Lifecycle, Visibility } from './element.ts';
+import type { Visibility } from './element.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
@@ -32,6 +32,11 @@ type SuccessDeclaration = {
   readonly body?: core.$ZodType;
 };
 
+/** When an Endpoint is Deprecated: the instant its `Deprecation` header names, in UTC to the second. */
+type DeprecationDeclaration =
+  | { readonly lifecycle?: 'active' | 'retired'; readonly deprecatedAt?: never }
+  | { readonly lifecycle: 'deprecated'; readonly deprecatedAt: string };
+
 /** What an author writes to declare an Endpoint; a `lifecycle` left out is Active, a list empty. */
 export type EndpointDeclaration = {
   readonly name: string;
@@ -46,8 +51,7 @@ export type EndpointDeclaration = {
     | Rejection
     | StandardRejection<Exclude<StandardRejection['name'], AddedStandardRejectionName>>
   )[];
-  readonly lifecycle?: Lifecycle;
-};
+} & DeprecationDeclaration;
 
 /** A declared Endpoint, kept as written so its Handlers, client and the walker read one schema. */
 export type Endpoint<Declaration extends EndpointDeclaration = EndpointDeclaration> =

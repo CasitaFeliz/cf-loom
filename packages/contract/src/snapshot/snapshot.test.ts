@@ -21,11 +21,11 @@ import {
 import {
   canonicalTextOf,
   isEmptyTextPart,
+  publishedSnapshotOf,
   type ResolvedDefinitions,
   type Root,
   type RootKind,
   type Snapshot,
-  type SnapshotContext,
   snapshotOf,
   validateRoot,
 } from '../internal/index.ts';
@@ -98,6 +98,8 @@ function aGetOrder(
 
 const getOrder = aGetOrder([orderLocked, notFound]);
 
+const deprecatedAt = '2026-10-17T09:30:00Z';
+
 const editOrder = defineEndpoint({
   name: 'editOrder',
   method: 'PATCH',
@@ -105,6 +107,7 @@ const editOrder = defineEndpoint({
   visibility: 'internal',
   description: 'Edits one line',
   lifecycle: 'deprecated',
+  deprecatedAt,
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
     params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
@@ -221,21 +224,9 @@ const contract = defineService({
   dependencies: [paymentsDependency],
 });
 
-const stampedAt = '2026-10-17T09:30:00Z';
-
-function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
-  return {
-    generator: '@cf-loom/cli@2.1.0',
-    committed: undefined,
-    now: Date.parse('2026-10-18T12:00:00.750Z'),
-    ...overrides,
-  };
-}
-
 /** The Snapshot of a Root, beside the Definitions Packages installed, `@org/definitions` by default. */
 function snapshotFor(
   root: Root,
-  context: SnapshotContext = aContext(),
   packages: readonly ResolvedDefinitions[] = [orgPackage],
 ): Snapshot {
   const { definitions: _root, ...exported } = orgPackage.exports;
@@ -244,15 +235,14 @@ function snapshotFor(
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, context);
+  return snapshotOf(validated);
 }
 
 function serviceSnapshot(
   root: Root = contract,
-  context: SnapshotContext = aContext(),
   packages: readonly ResolvedDefinitions[] = [orgPackage],
 ) {
-  const snapshot = snapshotFor(root, context, packages);
+  const snapshot = snapshotFor(root, packages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -284,7 +274,7 @@ function searchQueryOf({
   });
   const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
   const root = defineService({ name: 'search-service', groups: [group] });
-  return serviceSnapshot(root, aContext(), []).endpoints['GET /search']?.input.query;
+  return serviceSnapshot(root, []).endpoints['GET /search']?.input.query;
 }
 
 /**
@@ -333,19 +323,28 @@ function textOf(snapshot: Snapshot): string {
 }
 
 describe('snapshotOf: a Service', () => {
-  test('the top level names the format, the kind, the Contract and the generator, and no Definitions Package', () => {
+  test('the top level names the format, the kind and the Contract, and no CLI, version or Definitions Package', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: '@cf-loom/cli@2.1.0',
       events: {},
       commands: {},
       subscriptions: {},
     });
+    expect(snapshot).not.toHaveProperty('generator');
     expect(snapshot).not.toHaveProperty('version');
+  });
+
+  test('groups holds each Group by name with its description', () => {
+    const snapshot = serviceSnapshot();
+
+    expect(snapshot.groups).toEqual({
+      messages: { description: 'Messages' },
+      orders: { description: 'Order lifecycle' },
+    });
   });
 
   test('an Endpoint is written by its identity with its Group, Visibility, lifecycle, description and param names', () => {
@@ -536,14 +535,12 @@ describe('snapshotOf: a Service', () => {
         type: 'object',
         fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
       },
-      removed: false,
     });
     expect(snapshot.codes['UNAUTHENTICATED']).toEqual({
       origin: '@org/definitions@4.2.0',
       status: 401,
       message: 'Unauthenticated',
       body: null,
-      removed: false,
     });
   });
 
@@ -570,7 +567,6 @@ describe('snapshotOf: a Service', () => {
       status: 404,
       message: 'Not found',
       body: null,
-      removed: false,
     });
     expect(snapshot.codes['NOT_IMPLEMENTED']).toMatchObject({
       origin: 'standard',
@@ -670,7 +666,7 @@ describe('snapshotOf: a Service', () => {
     const group = defineGroup({ name: 'tree', description: 'Tree', endpoints: [tree] });
     const root = defineService({ name: 'tree-service', groups: [group] });
 
-    const snapshot = serviceSnapshot(root, aContext(), []);
+    const snapshot = serviceSnapshot(root, []);
 
     expect(snapshot.endpoints['GET /tree']?.success.body).toEqual({
       type: 'ref',
@@ -731,7 +727,7 @@ function messagingSnapshot(declared: {
     ],
     dependencies: [paymentsDependency],
   });
-  return serviceSnapshot(root, aContext(), []);
+  return serviceSnapshot(root, []);
 }
 
 const orderIdBody = {
@@ -776,15 +772,15 @@ describe('snapshotOf: one Snapshot for one Contract', () => {
   ])(
     '%s declared with no field writes the same Snapshot as one not declared',
     (_name, declared) => {
-      const empty = canonicalTextOf(snapshotFor(aPingService(declared), aContext(), []));
-      const undeclared = canonicalTextOf(snapshotFor(aPingService({}), aContext(), []));
+      const empty = canonicalTextOf(snapshotFor(aPingService(declared), []));
+      const undeclared = canonicalTextOf(snapshotFor(aPingService({}), []));
 
       expect(empty).toBe(undeclared);
     },
   );
 
   test('a text part with no field is an open object with no field, never null', () => {
-    const snapshot = snapshotFor(aPingService({}), aContext(), []);
+    const snapshot = snapshotFor(aPingService({}), []);
     if (snapshot.kind !== 'service') {
       throw new Error('The fixture is no Service');
     }
@@ -816,7 +812,7 @@ function aPingServiceWithQuery() {
 
 describe('isEmptyTextPart', () => {
   test('is the text part the Snapshot writes where none is declared, and no other', () => {
-    const snapshot = snapshotFor(aPingServiceWithQuery(), aContext(), []);
+    const snapshot = snapshotFor(aPingServiceWithQuery(), []);
     if (snapshot.kind !== 'service') {
       throw new Error('The fixture is no Service');
     }
@@ -926,7 +922,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const snapshot = serviceSnapshot(root, aContext(), []);
+    const snapshot = serviceSnapshot(root, []);
 
     expect(snapshot.commands).toMatchObject({
       'ChargeCard@1': { group: 'orders' },
@@ -965,7 +961,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const snapshot = serviceSnapshot(root, aContext(), []);
+    const snapshot = serviceSnapshot(root, []);
 
     expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2Xy', 'settle2xy']);
   });
@@ -989,54 +985,42 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       ],
     });
 
-    const text = textOf(serviceSnapshot(root, aContext(), []));
+    const text = textOf(serviceSnapshot(root, []));
 
     expect(text.indexOf('"OrderCreated@10"')).toBeLessThan(text.indexOf('"OrderCreated@2"'));
   });
 });
 
 describe('snapshotOf: deprecatedAt', () => {
-  test('a Deprecated Endpoint keeps the deprecatedAt of the committed Snapshot', () => {
-    const committed = {
-      endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stampedAt } },
-    };
-
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
-
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(stampedAt);
-  });
-
-  test('an Endpoint first seen Deprecated is stamped with the clock, to the second', () => {
+  test('a Deprecated Endpoint carries the deprecatedAt its declaration states', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-      '2026-10-18T12:00:00Z',
-    );
+    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(deprecatedAt);
   });
 
-  test.each([
-    '2026-10-17T09:30:00.000Z',
-    '2026-10-17T09:30:00+00:00',
-    '2026-02-30T09:30:00Z',
-    'yesterday',
-    1760693400,
-  ])(
-    'a committed deprecatedAt that is no UTC instant to the second, %s, is stamped again',
-    (stamp) => {
-      const committed = { endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stamp } } };
+  test('a future deprecatedAt is carried as declared', () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'public',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const root = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [scheduled] })],
+    });
 
-      const snapshot = serviceSnapshot(contract, aContext({ committed }));
+    const snapshot = serviceSnapshot(root, []);
 
-      expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-        '2026-10-18T12:00:00Z',
-      );
-    },
-  );
+    expect(snapshot.endpoints['GET /scheduled']?.deprecatedAt).toBe('2999-01-01T00:00:00Z');
+  });
 
-  test('an Active Endpoint carries no deprecatedAt, whatever the committed Snapshot says', () => {
-    const committed = { endpoints: { 'GET /orders/{}': { deprecatedAt: stampedAt } } };
-
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
+  test('an Active Endpoint carries no deprecatedAt', () => {
+    const snapshot = serviceSnapshot();
 
     expect(snapshot.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
   });
@@ -1050,13 +1034,12 @@ describe('snapshotOf: an Application', () => {
     });
     const application = defineApplication({ name: 'web-admin', dependencies: [adminDependency] });
 
-    const snapshot = snapshotFor(application, aContext(), []);
+    const snapshot = snapshotFor(application, []);
 
     expect(snapshot).toEqual({
       format: 1,
       kind: 'application',
       name: 'web-admin',
-      generator: '@cf-loom/cli@2.1.0',
       dependencies: {
         'payments-service': {
           against: '5.1.0',
@@ -1069,13 +1052,12 @@ describe('snapshotOf: an Application', () => {
 
 describe('snapshotOf: a Definitions Package', () => {
   test('a Definitions Package’s Snapshot writes every Guard, shared schema and code it declares, as local', () => {
-    const snapshot = snapshotFor(orgDefinitions, aContext(), []);
+    const snapshot = snapshotFor(orgDefinitions, []);
 
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'definitions',
       name: '@org/definitions',
-      generator: '@cf-loom/cli@2.1.0',
       defs: {},
       exports: {
         forbidden: { kind: 'rejection', code: 'FORBIDDEN' },
@@ -1108,7 +1090,7 @@ describe('snapshotOf: a Definitions Package', () => {
   });
 
   test('a Definitions Package’s standardRejections maps each Standard Rejection to its code', () => {
-    const snapshot = snapshotFor(orgDefinitions, aContext(), []);
+    const snapshot = snapshotFor(orgDefinitions, []);
 
     expect(snapshot.kind === 'definitions' && snapshot.standardRejections).toEqual({
       invalidInput: 'BAD_REQUEST',
@@ -1126,7 +1108,7 @@ describe('the kind of a Root', () => {
       defineDefinitions({}),
     ] satisfies readonly Root[];
 
-    const kinds = roots.map((root) => snapshotFor(root, aContext(), []).kind);
+    const kinds = roots.map((root) => snapshotFor(root, []).kind);
 
     expect(kinds).toEqual(['service', 'application', 'definitions']);
     expect(kinds).toEqual(roots.map((root) => root.kind));
@@ -1135,7 +1117,7 @@ describe('the kind of a Root', () => {
   test('the kind of a Root is the kind of its Snapshot', () => {
     const service = defineService({ name: 'orders-service' });
 
-    const kind: RootKind = snapshotFor(service, aContext(), []).kind;
+    const kind: RootKind = snapshotFor(service, []).kind;
 
     expectTypeOf<RootKind>().toEqualTypeOf<Snapshot['kind']>();
     expect(kind).toBe(service.kind);
@@ -1143,23 +1125,65 @@ describe('the kind of a Root', () => {
 });
 
 describe('canonicalTextOf', () => {
-  test('keys are sorted by code point, indented by two spaces, with a final newline', () => {
+  test('the heading comes first, then keys by code point, indented by two spaces, with a final newline', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
-    const text = textOf(snapshotFor(application, aContext(), []));
+    const text = textOf(snapshotFor(application, []));
 
     expect(text).toBe(
       [
         '{',
-        '  "dependencies": {},',
         '  "format": 1,',
-        '  "generator": "@cf-loom/cli@2.1.0",',
         '  "kind": "application",',
-        '  "name": "web-admin"',
+        '  "name": "web-admin",',
+        '  "dependencies": {}',
         '}',
         '',
       ].join('\n'),
     );
+  });
+
+  test('a published Snapshot’s heading runs format, kind, name, version, generator', () => {
+    const application = defineApplication({ name: 'web-admin', dependencies: [] });
+    const declared = snapshotFor(application, []);
+    const heading = { version: '3.4.0', generator: '@cf-loom/cli@2.1.0' };
+
+    const published = publishedSnapshotOf(undefined, declared, heading);
+
+    expect(canonicalTextOf(published).split('\n').slice(0, 7)).toEqual([
+      '{',
+      '  "format": 1,',
+      '  "kind": "application",',
+      '  "name": "web-admin",',
+      '  "version": "3.4.0",',
+      '  "generator": "@cf-loom/cli@2.1.0",',
+      '  "dependencies": {}',
+    ]);
+  });
+
+  test('a published Definitions Package’s heading runs format, kind, name, version, generator', () => {
+    const declared = snapshotFor(orgDefinitions, []);
+    const heading = { version: '4.2.0', generator: '@cf-loom/cli@2.1.0' };
+
+    const published = publishedSnapshotOf(undefined, declared, heading);
+
+    expect(canonicalTextOf(published).split('\n').slice(1, 6)).toEqual([
+      '  "format": 1,',
+      '  "kind": "definitions",',
+      '  "name": "@org/definitions",',
+      '  "version": "4.2.0",',
+      '  "generator": "@cf-loom/cli@2.1.0",',
+    ]);
+  });
+
+  test('a nested object that holds a heading key keeps its keys sorted by code point', () => {
+    const written = JSON.parse(textOf(serviceSnapshot()));
+
+    const endpointKeys = Object.keys(written.endpoints['GET /orders/{}']);
+
+    expect(Object.keys(written).slice(0, 3)).toEqual(['format', 'kind', 'name']);
+    expect(endpointKeys).toContain('name');
+    expect(endpointKeys).toEqual([...endpointKeys].sort());
   });
 
   test('the same Contract written in another order gives the same bytes', () => {
@@ -1208,7 +1232,7 @@ describe('canonicalTextOf', () => {
     const group = defineGroup({ name: 'tagged', description: 'Tagged', endpoints: [tagged] });
     const root = defineService({ name: 'tagged-service', groups: [group] });
 
-    const text = textOf(snapshotFor(root, aContext(), []));
+    const text = textOf(snapshotFor(root, []));
 
     expect(text.indexOf('"\\"a\\"": {')).toBeLessThan(text.indexOf('"1": {'));
   });

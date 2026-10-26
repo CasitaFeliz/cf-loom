@@ -55,6 +55,7 @@ export type {
   SuccessOf,
   SuccessValueOf,
 } from './inference.ts';
+export { instantTextOf, isInstantInRange, isUtcInstant } from './instants.ts';
 export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
@@ -88,7 +89,6 @@ export type {
 export { defineApplication, defineService } from './roots.ts';
 export type { IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
 export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
-export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {
   IssueCode,
   ProvidedStandardRejections,

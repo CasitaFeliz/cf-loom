@@ -2,9 +2,10 @@ import type { ServiceContract } from '../declarations/index.ts';
 import type { ValidRoot } from '../validation/index.ts';
 import type { Member } from '../written/index.ts';
 import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
-import type { SnapshotContext, SnapshotSources } from './context.ts';
+import type { SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
+import { groupSnapshotsOf } from './groups.ts';
 import { guardSnapshotsOf } from './guards.ts';
 import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
 import {
@@ -17,31 +18,27 @@ import {
 
 /**
  * The declared Snapshot of a valid Root, as `generate` writes it: every map keyed by identity or
- * name, every array whose order means nothing sorted, and no `version`, which `publish` fills in.
+ * name, every array whose order means nothing sorted, and no `version` or `generator`, which
+ * `package` and `publish` fill in.
  */
-export function snapshotOf(validated: ValidRoot, context: SnapshotContext): Snapshot {
+export function snapshotOf(validated: ValidRoot): Snapshot {
   const { root } = validated.declarations;
   switch (root.kind) {
     case 'service':
-      return serviceSnapshotOf(validated, root, context);
+      return serviceSnapshotOf(validated, root);
     case 'application':
       return {
         format: writtenSnapshotFormat,
         kind: 'application',
         name: root.name,
-        generator: context.generator,
         dependencies: dependencySnapshotsOf(validated.declarations.dependencies),
       };
     case 'definitions':
-      return definitionsSnapshotOf(validated, context);
+      return definitionsSnapshotOf(validated);
   }
 }
 
-function serviceSnapshotOf(
-  validated: ValidRoot,
-  root: ServiceContract,
-  context: SnapshotContext,
-): ServiceSnapshot {
+function serviceSnapshotOf(validated: ValidRoot, root: ServiceContract): ServiceSnapshot {
   const { schemas, declarations } = validated;
   const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
@@ -49,10 +46,10 @@ function serviceSnapshotOf(
     format: writtenSnapshotFormat,
     kind: 'service',
     name: root.name,
-    generator: context.generator,
     standardRejections,
+    groups: groupSnapshotsOf(declarations.groups),
     defs: schemas.defs,
-    endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
+    endpoints: endpointSnapshotsOf(declarations.endpoints, sources),
     events: eventSnapshotsOf(declarations.events, sources),
     commands: commandSnapshotsOf(declarations.commands, sources),
     guards: guardSnapshotsOf(declarations.guards, sources),
@@ -62,10 +59,7 @@ function serviceSnapshotOf(
   };
 }
 
-function definitionsSnapshotOf(
-  validated: ValidRoot,
-  context: SnapshotContext,
-): DefinitionsSnapshot {
+function definitionsSnapshotOf(validated: ValidRoot): DefinitionsSnapshot {
   const { schemas, declarations } = validated;
   const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
@@ -80,7 +74,6 @@ function definitionsSnapshotOf(
     format: writtenSnapshotFormat,
     kind: 'definitions',
     name: declarations.packageName,
-    generator: context.generator,
     standardRejections,
     defs: schemas.defs,
     exports: Object.fromEntries(exports),

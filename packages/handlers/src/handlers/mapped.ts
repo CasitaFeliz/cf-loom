@@ -11,7 +11,7 @@ import { isWrittenForPairing, writtenElementOf } from './written.ts';
 
 /** Where in the Handler map a Handler sits: its map and its key there, which an error names. */
 export type MapKey = {
-  readonly map: Exclude<keyof HandlerMap, 'deprecatedAt' | 'readers'>;
+  readonly map: Exclude<keyof HandlerMap, 'readers'>;
   readonly key: string;
 };
 

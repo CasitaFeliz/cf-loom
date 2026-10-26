@@ -1,5 +1,5 @@
 import { canonicalTextOf, publishedSnapshotOf } from '@cf-loom/contract/internal';
-import type { Run } from '../project/index.ts';
+import { type Run, runningGeneratorOf } from '../project/index.ts';
 import type { Derived, DerivedVersion, DeriveOptions } from '../versioning/index.ts';
 import { comparedLinesOf, notAboveOf, nothingToPublishOf, wouldPublishOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
@@ -92,7 +92,7 @@ async function putExit(run: Run, { prepared, checked, derived, mode }: Ready): P
   }
 }
 
-/** The Snapshot as published at the derived version, with the Baseline's history merged in. */
+/** The Snapshot as published at the derived version by the CLI that runs, with the Baseline's history merged in. */
 function toPublishOf(
   { comparison, peerRanges }: Prepared,
   { version, tag }: DerivedVersion,
@@ -100,7 +100,10 @@ function toPublishOf(
 ): ToPublish {
   const { project, snapshot } = comparison.built;
   const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
-  const published = publishedSnapshotOf(baseline, snapshot, version);
+  const published = publishedSnapshotOf(baseline, snapshot, {
+    version,
+    generator: runningGeneratorOf(),
+  });
   const highest = baseline?.version;
   const text = canonicalTextOf(published);
   const declared = comparison.built;

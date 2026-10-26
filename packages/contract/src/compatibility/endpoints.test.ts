@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -32,8 +33,8 @@ const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -111,7 +112,13 @@ function aBaseline(
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
   const live = { ...endpoint, lifecycle: 'active' } as const;
-  return { ...heading, version: '3.4.0', endpoints: { [identity]: live }, ...fields };
+  return {
+    ...heading,
+    version: '3.4.0',
+    generator: publishedBy,
+    endpoints: { [identity]: live },
+    ...fields,
+  };
 }
 
 function aProposed(
@@ -755,7 +762,7 @@ describe('compatibilityReportOf, Neutral', () => {
 });
 
 function aCode(message: string): CodeSnapshot {
-  return { origin: 'local', status: 409, message, body: null, removed: false };
+  return { origin: 'local', status: 409, message, body: null };
 }
 
 describe('compatibilityReportOf, an Endpoint’s order', () => {
@@ -834,13 +841,13 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
     status: 409,
     message: 'Locked',
     body: null,
-    removed: false,
   };
 
   function retiringChangesOf(retired: EndpointSnapshot): readonly Change[] {
     const baseline: PublishedServiceSnapshot = {
       ...heading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
       codes: { [orderLocked]: locked },
     };
@@ -877,6 +884,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
     const baseline: PublishedServiceSnapshot = {
       ...heading,
       version: '3.4.0',
+      generator: publishedBy,
       endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
     };
     const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });

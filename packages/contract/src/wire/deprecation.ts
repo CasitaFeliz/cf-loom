@@ -1,9 +1,9 @@
-import { isStamp, isStampable, stampOf } from '../declarations/index.ts';
+import { instantTextOf, isInstantInRange, isUtcInstant } from '../declarations/index.ts';
 
 /** The header every response of a Deprecated Endpoint carries (RFC 9745). */
 export const deprecationHeader = 'deprecation';
 
-/** The `Deprecation` header's value for a `deprecatedAt` stamp: `@<unix seconds>`. */
+/** The `Deprecation` header's value for a `deprecatedAt`: `@<unix seconds>`. */
 export function deprecationHeaderOf(deprecatedAt: string): string {
   return `@${Math.floor(Date.parse(deprecatedAt) / 1000)}`;
 }
@@ -17,8 +17,8 @@ export function withDeprecation(response: Response, deprecatedAt: string | undef
 }
 
 /**
- * A received `Deprecation` header's instant as a `deprecatedAt` stamp; none for any other text,
- * or for an instant no stamp can hold, beyond a `Date`'s range or its four-digit years.
+ * A received `Deprecation` header's instant as a `deprecatedAt`; none for any other text, or for
+ * an instant no `deprecatedAt` can hold, beyond a `Date`'s range or its four-digit years.
  */
 export function deprecatedAtOfHeader(header: string): string | undefined {
   const seconds = /^@(-?\d+)$/.exec(header)?.[1];
@@ -26,9 +26,9 @@ export function deprecatedAtOfHeader(header: string): string | undefined {
     return undefined;
   }
   const instant = Number(seconds) * 1000;
-  if (!isStampable(instant)) {
+  if (!isInstantInRange(instant)) {
     return undefined;
   }
-  const stamp = stampOf(instant);
-  return isStamp(stamp) ? stamp : undefined;
+  const text = instantTextOf(instant);
+  return isUtcInstant(text) ? text : undefined;
 }

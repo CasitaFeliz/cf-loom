@@ -27,6 +27,7 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
       return isConsumption(site) ? neutral : breakingClassificationOf(site);
     case 'reactivated':
     case 'tombstoned':
+    case 'deprecation-moved':
     case 'description-changed':
     case 'group-changed':
     case 'attachments-changed':
@@ -112,6 +113,7 @@ function breakingClassificationOf(site: ChangeSite): Classification {
     case 'code':
     case 'export':
     case 'guard':
+    case 'group':
     case 'subscription':
     case 'dependency':
     case 'standard-rejection':
@@ -132,6 +134,7 @@ function retiredOrNarrowedClassificationOf(site: ChangeSite): Classification {
     case 'code':
     case 'export':
     case 'guard':
+    case 'group':
     case 'subscription':
     case 'dependency':
     case 'standard-rejection':

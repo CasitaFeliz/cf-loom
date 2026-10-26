@@ -8,11 +8,10 @@ import {
   moduleTextOf,
   namedImportOf,
   relativeSpecifierOf,
-  stringLiteralOf,
   typeImportOf,
 } from '../source-text/index.ts';
 import { handlerLocalOf, nameInCodeOf } from './code-names.ts';
-import type { DeprecationStamp, Handled } from './handled.ts';
+import type { Handled } from './handled.ts';
 import type { HandlerPath } from './handler-paths.ts';
 import { handlersPackage, readersTable } from './readers.ts';
 
@@ -28,12 +27,11 @@ type HandlerMapPlace = {
 
 /**
  * The Handler map written at `file`: plain data importing each Handler and the `readers` of the
- * readers file, with the stamps of the Deprecated Endpoints, which `serve` takes as it is; it
- * `satisfies HandlerMapOf<typeof contract>`, so a missing or misplaced Handler is a type error.
+ * readers file; it `satisfies HandlerMapOf<typeof contract>`, so a missing or misplaced Handler is
+ * a type error.
  */
 export function handlerMapTextOf(
   mapped: readonly HandlerPath[],
-  stamps: readonly DeprecationStamp[],
   { file, readersFile, root }: HandlerMapPlace,
 ): string {
   const handlerImports = mapped.map(({ handled, path }) => {
@@ -66,7 +64,6 @@ export function handlerMapTextOf(
     ...mapLinesOf('commands', commands),
     ...mapLinesOf('subscriptions', subscriptions),
     `  ${readersTable},`,
-    ...stampLinesOf(stamps),
     `} satisfies HandlerMapOf<typeof ${rootLocal}>;`,
   ];
   return moduleTextOf({ first: [headerOf('generate')], imports, body });
@@ -119,14 +116,4 @@ function mapLinesOf(key: string, handled: readonly Handled[]): readonly string[]
     (element) => `    ${keyOf(nameInCodeOf(element))}: ${handlerLocalOf(element)},`,
   );
   return [`  ${key}: {`, ...entries, '  },'];
-}
-
-function stampLinesOf(stamps: readonly DeprecationStamp[]): readonly string[] {
-  if (stamps.length === 0) {
-    return ['  deprecatedAt: {},'];
-  }
-  const entries = stamps.map(
-    ({ name, deprecatedAt }) => `    ${keyOf(name)}: ${stringLiteralOf(deprecatedAt)},`,
-  );
-  return ['  deprecatedAt: {', ...entries, '  },'];
 }

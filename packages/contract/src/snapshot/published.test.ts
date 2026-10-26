@@ -25,21 +25,18 @@ const standardCodes = {
     status: 400,
     message: 'Invalid',
     body: { type: 'object', fields: {} },
-    removed: false,
   },
   [notFoundCode]: {
     origin: 'standard',
     status: 404,
     message: 'Not found',
     body: null,
-    removed: false,
   },
   [notImplementedCode]: {
     origin: 'standard',
     status: 501,
     message: 'No',
     body: null,
-    removed: false,
   },
 } as const;
 
@@ -57,6 +54,7 @@ function aPublishedService(
       notFound: notFoundCode,
       notImplemented: notImplementedCode,
     },
+    groups: { orders: { description: 'Orders' } },
     defs: {},
     endpoints: {},
     events: {},
