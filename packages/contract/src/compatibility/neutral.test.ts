@@ -314,11 +314,20 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
   }
 
   test.each([
-    { field: { description: 'Checks the session' }, difference: { kind: 'description-changed' } },
-    { field: { guards: ['session'] }, difference: { kind: 'guards-changed' } },
-    { field: { qualifier: { type: 'string' } }, difference: { kind: 'qualifier-changed' } },
-    { field: { context: anObject }, difference: { kind: 'context-changed' } },
     {
+      what: 'description',
+      field: { description: 'Checks the session' },
+      difference: { kind: 'description-changed' },
+    },
+    { what: 'Guards', field: { guards: ['session'] }, difference: { kind: 'guards-changed' } },
+    {
+      what: 'Qualifier',
+      field: { qualifier: { type: 'string' } },
+      difference: { kind: 'qualifier-changed' },
+    },
+    { what: 'Context', field: { context: anObject }, difference: { kind: 'context-changed' } },
+    {
+      what: 'origin',
       field: { origin: '@org/definitions@5.0.0#authenticated' },
       difference: {
         kind: 'origin-changed',
@@ -326,7 +335,7 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
         to: '@org/definitions@5.0.0#authenticated',
       },
     },
-  ] as const)('a Guard whose $difference.kind changed gives that Neutral Change', (row) => {
+  ] as const)('a Guard whose $what changed gives that Neutral Change', (row) => {
     const changes = guardChangesOf(aGuard(), aGuard(row.field), attaching('internal'));
 
     expect(changes).toEqual([neutral(guardSite('internal'), row.difference)]);
@@ -457,11 +466,20 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
 
 describe('compatibilityReportOf, a Definitions Package’s Guard', () => {
   test.each([
-    { field: { description: 'Checks the session' }, difference: { kind: 'description-changed' } },
-    { field: { guards: ['session'] }, difference: { kind: 'guards-changed' } },
-    { field: { qualifier: { type: 'string' } }, difference: { kind: 'qualifier-changed' } },
-    { field: { context: anObject }, difference: { kind: 'context-changed' } },
     {
+      what: 'description',
+      field: { description: 'Checks the session' },
+      difference: { kind: 'description-changed' },
+    },
+    { what: 'Guards', field: { guards: ['session'] }, difference: { kind: 'guards-changed' } },
+    {
+      what: 'Qualifier',
+      field: { qualifier: { type: 'string' } },
+      difference: { kind: 'qualifier-changed' },
+    },
+    { what: 'Context', field: { context: anObject }, difference: { kind: 'context-changed' } },
+    {
+      what: 'origin',
       field: { origin: '@org/definitions@5.0.0#authenticated' },
       difference: {
         kind: 'origin-changed',
@@ -469,7 +487,7 @@ describe('compatibilityReportOf, a Definitions Package’s Guard', () => {
         to: '@org/definitions@5.0.0#authenticated',
       },
     },
-  ] as const)('a Guard whose $difference.kind changed gives that Neutral Change, Public', (row) => {
+  ] as const)('a Guard whose $what changed gives that Neutral Change, Public', (row) => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
     const proposed = aDefinitions({ guards: { authenticated: aGuard(row.field) } });
 

@@ -4,6 +4,7 @@ import type {
   EndpointSnapshot,
   EventSnapshot,
   GuardSnapshot,
+  MessageTombstone,
 } from '../snapshot/index.ts';
 import { canonicalJson, type Defs, reachedDefsOf, type SchemaNode } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
@@ -162,11 +163,16 @@ function nodeKeyOf(node: SchemaNode | null, defs: Defs): string {
 }
 
 /** What the Baseline records of an Element's history, which a declaration does not carry. */
-const historyKeys: readonly string[] = ['lifecycle', 'retiredIn', 'deprecatedAt'];
+const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'] as const satisfies readonly (
+  | keyof EndpointSnapshot
+  | keyof MessageTombstone
+)[];
 
 /** A declaration as text with the defs it reaches, without the history the Baseline keeps of it. */
 function declarationKeyOf(declaration: Declaration, defs: Defs): string {
-  const declared = Object.entries(declaration).filter(([key]) => !historyKeys.includes(key));
+  const declared = Object.entries(declaration).filter(
+    ([key]) => !historyKeys.some((history) => history === key),
+  );
   return canonicalJson([Object.fromEntries(declared), reachedKeyOf(nodesOf(declaration), defs)]);
 }
 

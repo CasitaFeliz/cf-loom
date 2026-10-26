@@ -144,6 +144,28 @@ describe('compatibilityReportOf, a Service’s Standard Rejections', () => {
     expect(changes.at(-1)).toEqual(neutral('internal', 'NOT_FOUND', 'ORDER_GONE'));
   });
 
+  test.each([
+    ['the old code', [['NOT_FOUND'], 'public'], [[], 'internal']],
+    ['the new code', [[], 'internal'], [['ORDER_GONE'], 'public']],
+    [
+      'the old code, and an Internal one the new',
+      [['NOT_FOUND'], 'public'],
+      [['ORDER_GONE'], 'internal'],
+    ],
+    [
+      'the new code, and an Internal one the old',
+      [['NOT_FOUND'], 'internal'],
+      [['ORDER_GONE'], 'public'],
+    ],
+  ] as const)('the site is Public when a Public Endpoint lists %s', (_name, was, now) => {
+    const baseline = published(aService(resolved, { [identity]: anEndpoint(was[0], was[1]) }));
+    const proposed = aService(remapped, { [identity]: anEndpoint(now[0], now[1]) });
+
+    const { changes } = compatibilityReportOf(baseline, proposed);
+
+    expect(changes.at(-1)).toEqual(neutral('public', 'NOT_FOUND', 'ORDER_GONE'));
+  });
+
   test('a Standard Rejection resolved as before gives no Change', () => {
     const baseline = published(aService(resolved));
 

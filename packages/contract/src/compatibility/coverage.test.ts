@@ -4,7 +4,6 @@ import { seededNext } from '../../test/random-schemas.ts';
 import {
   compatibilityReportOf,
   decodeSnapshot,
-  hashedTextOf,
   type Path,
   type PublishedSnapshot,
   publishedSnapshotOf,
@@ -186,10 +185,17 @@ function writableAfter(declared: Json, mutations: readonly Mutation[]): Snapshot
   return decodeSnapshot(published).kind === 'decoded' ? (mutated as Snapshot) : undefined;
 }
 
-/** Whether publishing the proposed Snapshot over the Baseline writes other text than the Baseline's. */
-function differs(baseline: PublishedSnapshot, proposed: Snapshot): boolean {
-  const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
-  return hashedTextOf(merged) !== hashedTextOf(baseline);
+/** Whether the Check finds a difference in the text published over the Baseline and names no Change for it: the bug it then throws. */
+function isUnnamed(baseline: PublishedSnapshot, proposed: Snapshot): boolean {
+  try {
+    compatibilityReportOf(baseline, proposed);
+    return false;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('no Change was found')) {
+      return true;
+    }
+    throw error;
+  }
 }
 
 function describeMutations(mutations: readonly Mutation[]): string {
@@ -209,8 +215,7 @@ describe('compatibilityReportOf, every difference in the published text is a Cha
         continue;
       }
       checked++;
-      const report = compatibilityReportOf(baseline, proposed);
-      if (differs(baseline, proposed) && report.changes.length === 0) {
+      if (isUnnamed(baseline, proposed)) {
         missed.push(describeMutations([mutation]));
       }
     }
@@ -238,8 +243,7 @@ describe('compatibilityReportOf, every difference in the published text is a Cha
         if (proposed === undefined) {
           continue;
         }
-        const report = compatibilityReportOf(baseline, proposed);
-        if (differs(baseline, proposed) && report.changes.length === 0) {
+        if (isUnnamed(baseline, proposed)) {
           missed.push(describeMutations(chosen));
         }
       }
